@@ -55,6 +55,7 @@ objc2-metal = "0.2"
 
 # Async runtime
 tokio = { version = "1.35", features = ["rt-multi-thread", "sync", "time"] }
+pollster = "0.4"
 
 # Utilities
 thiserror = "2.0"

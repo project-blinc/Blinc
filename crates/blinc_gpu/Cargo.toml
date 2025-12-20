@@ -35,3 +35,6 @@ smallvec.workspace = true
 
 # Logging
 tracing.workspace = true
+
+# Async
+pollster.workspace = true
