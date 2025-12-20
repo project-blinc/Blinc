@@ -12,7 +12,9 @@ crate-type = ["lib"]
 default = []
 
 [dependencies]
-# Note: blinc_paint is a leaf crate - no blinc_core dependency to avoid cycles
+# Core types (unified with blinc_core)
+blinc_core = { path = "../blinc_core" }
+
 # GPU types (shared with blinc_gpu)
 bytemuck.workspace = true
 
