@@ -22,8 +22,8 @@ pub mod shaders;
 pub use backbuffer::{Backbuffer, BackbufferConfig, FrameContext};
 pub use paint::GpuPaintContext;
 pub use primitives::{
-    CompositeUniforms, FillType, GlassType, GlassUniforms, GpuGlassPrimitive, GpuGlyph,
+    ClipType, CompositeUniforms, FillType, GlassType, GlassUniforms, GpuGlassPrimitive, GpuGlyph,
     GpuPrimitive, PrimitiveBatch, PrimitiveType, Uniforms,
 };
-pub use renderer::GpuRenderer;
+pub use renderer::{GpuRenderer, RendererConfig};
 pub use shaders::{COMPOSITE_SHADER, GLASS_SHADER, SDF_SHADER, TEXT_SHADER};

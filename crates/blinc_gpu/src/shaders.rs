@@ -41,6 +41,12 @@ const FILL_SOLID: u32 = 0u;
 const FILL_LINEAR_GRADIENT: u32 = 1u;
 const FILL_RADIAL_GRADIENT: u32 = 2u;
 
+// Clip types
+const CLIP_NONE: u32 = 0u;
+const CLIP_RECT: u32 = 1u;
+const CLIP_CIRCLE: u32 = 2u;
+const CLIP_ELLIPSE: u32 = 3u;
+
 struct Primitive {
     // Bounds (x, y, width, height)
     bounds: vec4<f32>,
@@ -58,7 +64,11 @@ struct Primitive {
     shadow: vec4<f32>,
     // Shadow color
     shadow_color: vec4<f32>,
-    // Type info (primitive_type, fill_type, 0, 0)
+    // Clip bounds (x, y, width, height) for rect clips, (cx, cy, rx, ry) for circle/ellipse
+    clip_bounds: vec4<f32>,
+    // Clip corner radii (for rounded rect) or (radius_x, radius_y, 0, 0) for ellipse
+    clip_radius: vec4<f32>,
+    // Type info (primitive_type, fill_type, clip_type, 0)
     type_info: vec4<u32>,
 }
 
@@ -128,19 +138,23 @@ fn vs_main(
 fn sd_rounded_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec4<f32>) -> f32 {
     let half_size = size * 0.5;
     let center = origin + half_size;
-    let q = abs(p - center) - half_size;
+    let rel = p - center;  // Relative position from center (signed)
+    let q = abs(rel) - half_size;
 
     // Select corner radius based on quadrant
     // radius: (top-left, top-right, bottom-right, bottom-left)
+    // In screen coords: Y increases downward, so rel.y < 0 means top half
     var r: f32;
-    if q.y > 0.0 {
-        if q.x > 0.0 {
+    if rel.y < 0.0 {
+        // Top half (y is above center)
+        if rel.x > 0.0 {
             r = radius.y; // top-right
         } else {
             r = radius.x; // top-left
         }
     } else {
-        if q.x > 0.0 {
+        // Bottom half (y is below center)
+        if rel.x > 0.0 {
             r = radius.z; // bottom-right
         } else {
             r = radius.w; // bottom-left
@@ -195,6 +209,44 @@ fn shadow_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, sigma: f32) -> 
     return x * y;
 }
 
+// Calculate clip alpha (1.0 = inside clip, 0.0 = outside)
+fn calculate_clip_alpha(p: vec2<f32>, clip_bounds: vec4<f32>, clip_radius: vec4<f32>, clip_type: u32) -> f32 {
+    // If no clip, return 1.0 (fully visible)
+    if clip_type == CLIP_NONE {
+        return 1.0;
+    }
+
+    var clip_d: f32;
+
+    switch clip_type {
+        case CLIP_RECT: {
+            // Rectangular clip with optional rounded corners
+            let clip_origin = clip_bounds.xy;
+            let clip_size = clip_bounds.zw;
+            clip_d = sd_rounded_rect(p, clip_origin, clip_size, clip_radius);
+        }
+        case CLIP_CIRCLE: {
+            // Circle clip: clip_bounds = (cx, cy, radius, radius)
+            let center = clip_bounds.xy;
+            let radius = clip_radius.x;
+            clip_d = sd_circle(p, center, radius);
+        }
+        case CLIP_ELLIPSE: {
+            // Ellipse clip: clip_bounds = (cx, cy, rx, ry)
+            let center = clip_bounds.xy;
+            let radii = clip_radius.xy;
+            clip_d = sd_ellipse(p, center, radii);
+        }
+        default: {
+            return 1.0;
+        }
+    }
+
+    // Anti-aliased clip edge
+    let aa_width = fwidth(clip_d) * 0.5;
+    return 1.0 - smoothstep(-aa_width, aa_width, clip_d);
+}
+
 // ============================================================================
 // Fragment Shader
 // ============================================================================
@@ -206,6 +258,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let prim_type = prim.type_info.x;
     let fill_type = prim.type_info.y;
+    let clip_type = prim.type_info.z;
+
+    // Early clip test - discard if completely outside clip region
+    let clip_alpha = calculate_clip_alpha(p, prim.clip_bounds, prim.clip_radius, clip_type);
+    if clip_alpha < 0.001 {
+        discard;
+    }
 
     let origin = prim.bounds.xy;
     let size = prim.bounds.zw;
@@ -296,6 +355,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     fill_color.a *= fill_alpha;
+
+    // Apply clip alpha to both shadow and fill
+    fill_color.a *= clip_alpha;
+    result.a *= clip_alpha;
 
     // Blend over shadow (assuming premultiplied alpha)
     result = fill_color + result * (1.0 - fill_color.a);
@@ -501,20 +564,24 @@ fn vs_main(
 fn sd_rounded_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec4<f32>) -> f32 {
     let half_size = size * 0.5;
     let center = origin + half_size;
-    let q = abs(p - center) - half_size;
+    let rel = p - center;
+    let q = abs(rel) - half_size;
 
+    // Select corner radius based on quadrant
+    // radius: (top-left, top-right, bottom-right, bottom-left)
+    // In screen coords: Y increases downward, so rel.y < 0 means top half
     var r: f32;
-    if q.y > 0.0 {
-        if q.x > 0.0 {
-            r = radius.y;
+    if rel.y < 0.0 {
+        if rel.x > 0.0 {
+            r = radius.y; // top-right
         } else {
-            r = radius.x;
+            r = radius.x; // top-left
         }
     } else {
-        if q.x > 0.0 {
-            r = radius.z;
+        if rel.x > 0.0 {
+            r = radius.z; // bottom-right
         } else {
-            r = radius.w;
+            r = radius.w; // bottom-left
         }
     }
 

@@ -55,3 +55,6 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+test_output/
+test_references/

@@ -9,6 +9,7 @@ members = [
     "crates/blinc_paint",
     "crates/blinc_widgets",
     "crates/blinc_embed",
+    "crates/blinc_test_suite",
     "extensions/blinc_platform_desktop",
     "extensions/blinc_platform_android",
     "extensions/blinc_platform_ios",

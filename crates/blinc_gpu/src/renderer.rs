@@ -748,13 +748,39 @@ impl GpuRenderer {
         &self.device
     }
 
+    /// Get the wgpu device as Arc
+    pub fn device_arc(&self) -> Arc<wgpu::Device> {
+        self.device.clone()
+    }
+
     /// Get the wgpu queue
     pub fn queue(&self) -> &wgpu::Queue {
         &self.queue
     }
 
+    /// Get the wgpu queue as Arc
+    pub fn queue_arc(&self) -> Arc<wgpu::Queue> {
+        self.queue.clone()
+    }
+
     /// Render a batch of primitives to a texture view
+    /// Render primitives with transparent background (default)
     pub fn render(&mut self, target: &wgpu::TextureView, batch: &PrimitiveBatch) {
+        self.render_with_clear(target, batch, [0.0, 0.0, 0.0, 0.0]);
+    }
+
+    /// Render primitives with a specified clear color
+    ///
+    /// # Arguments
+    /// * `target` - The texture view to render to
+    /// * `batch` - The primitive batch to render
+    /// * `clear_color` - RGBA clear color (0.0-1.0 range)
+    pub fn render_with_clear(
+        &mut self,
+        target: &wgpu::TextureView,
+        batch: &PrimitiveBatch,
+        clear_color: [f64; 4],
+    ) {
         // Update uniforms
         let uniforms = Uniforms {
             viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
@@ -788,10 +814,10 @@ impl GpuRenderer {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 0.0,
+                            r: clear_color[0],
+                            g: clear_color[1],
+                            b: clear_color[2],
+                            a: clear_color[3],
                         }),
                         store: wgpu::StoreOp::Store,
                     },
@@ -806,6 +832,78 @@ impl GpuRenderer {
                 render_pass.set_pipeline(&self.pipelines.sdf);
                 render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
                 // 6 vertices per quad (2 triangles), one instance per primitive
+                render_pass.draw(0..6, 0..batch.primitives.len() as u32);
+            }
+        }
+
+        // Submit commands
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Render primitives with MSAA (multi-sample anti-aliasing)
+    ///
+    /// # Arguments
+    /// * `msaa_target` - The multisampled texture view to render to
+    /// * `resolve_target` - The single-sampled texture view to resolve to
+    /// * `batch` - The primitive batch to render
+    /// * `clear_color` - RGBA clear color (0.0-1.0 range)
+    pub fn render_msaa(
+        &mut self,
+        msaa_target: &wgpu::TextureView,
+        resolve_target: &wgpu::TextureView,
+        batch: &PrimitiveBatch,
+        clear_color: [f64; 4],
+    ) {
+        // Update uniforms
+        let uniforms = Uniforms {
+            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            _padding: [0.0; 2],
+        };
+        self.queue
+            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+
+        // Update primitives buffer
+        if !batch.primitives.is_empty() {
+            self.queue.write_buffer(
+                &self.buffers.primitives,
+                0,
+                bytemuck::cast_slice(&batch.primitives),
+            );
+        }
+
+        // Create command encoder
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Blinc MSAA Render Encoder"),
+            });
+
+        // Begin render pass with MSAA resolve
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Blinc MSAA Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: msaa_target,
+                    resolve_target: Some(resolve_target),
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: clear_color[0],
+                            g: clear_color[1],
+                            b: clear_color[2],
+                            a: clear_color[3],
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            // Render SDF primitives
+            if !batch.primitives.is_empty() {
+                render_pass.set_pipeline(&self.pipelines.sdf);
+                render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
                 render_pass.draw(0..6, 0..batch.primitives.len() as u32);
             }
         }

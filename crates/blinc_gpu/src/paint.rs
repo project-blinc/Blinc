@@ -48,7 +48,7 @@ use blinc_core::{
     Size, Stroke, TextStyle, Transform,
 };
 
-use crate::primitives::{FillType, GpuPrimitive, PrimitiveBatch, PrimitiveType};
+use crate::primitives::{ClipType, FillType, GpuPrimitive, PrimitiveBatch, PrimitiveType};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Transform Stack
@@ -163,6 +163,119 @@ impl GpuPaintContext {
         )
     }
 
+    /// Transform a clip shape by the current transform
+    /// Note: For rotated transforms, this computes the axis-aligned bounding box
+    fn transform_clip_shape(&self, shape: ClipShape) -> ClipShape {
+        let affine = self.current_affine();
+
+        // Check if this is identity transform (common case)
+        if affine == Affine2D::IDENTITY {
+            return shape;
+        }
+
+        match shape {
+            ClipShape::Rect(rect) => {
+                // Transform all four corners and compute AABB
+                let corners = [
+                    Point::new(rect.x(), rect.y()),
+                    Point::new(rect.x() + rect.width(), rect.y()),
+                    Point::new(rect.x() + rect.width(), rect.y() + rect.height()),
+                    Point::new(rect.x(), rect.y() + rect.height()),
+                ];
+
+                let transformed: Vec<Point> = corners.iter().map(|p| self.transform_point(*p)).collect();
+
+                let min_x = transformed.iter().map(|p| p.x).fold(f32::INFINITY, f32::min);
+                let max_x = transformed.iter().map(|p| p.x).fold(f32::NEG_INFINITY, f32::max);
+                let min_y = transformed.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
+                let max_y = transformed.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max);
+
+                ClipShape::Rect(Rect::new(min_x, min_y, max_x - min_x, max_y - min_y))
+            }
+            ClipShape::RoundedRect { rect, corner_radius } => {
+                // Transform corners and compute AABB
+                let corners = [
+                    Point::new(rect.x(), rect.y()),
+                    Point::new(rect.x() + rect.width(), rect.y()),
+                    Point::new(rect.x() + rect.width(), rect.y() + rect.height()),
+                    Point::new(rect.x(), rect.y() + rect.height()),
+                ];
+
+                let transformed: Vec<Point> = corners.iter().map(|p| self.transform_point(*p)).collect();
+
+                let min_x = transformed.iter().map(|p| p.x).fold(f32::INFINITY, f32::min);
+                let max_x = transformed.iter().map(|p| p.x).fold(f32::NEG_INFINITY, f32::max);
+                let min_y = transformed.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
+                let max_y = transformed.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max);
+
+                // Scale the corner radii by the average scale factor
+                let a = affine.elements[0];
+                let b = affine.elements[1];
+                let c = affine.elements[2];
+                let d = affine.elements[3];
+                let scale_x = (a * a + b * b).sqrt();
+                let scale_y = (c * c + d * d).sqrt();
+                let avg_scale = (scale_x + scale_y) * 0.5;
+
+                let scaled_radius = CornerRadius::new(
+                    corner_radius.top_left * avg_scale,
+                    corner_radius.top_right * avg_scale,
+                    corner_radius.bottom_right * avg_scale,
+                    corner_radius.bottom_left * avg_scale,
+                );
+
+                ClipShape::RoundedRect {
+                    rect: Rect::new(min_x, min_y, max_x - min_x, max_y - min_y),
+                    corner_radius: scaled_radius,
+                }
+            }
+            ClipShape::Circle { center, radius } => {
+                let transformed_center = self.transform_point(center);
+
+                // For non-uniform scale, circle becomes ellipse - compute approximate radius
+                let a = affine.elements[0];
+                let b = affine.elements[1];
+                let c = affine.elements[2];
+                let d = affine.elements[3];
+                let scale_x = (a * a + b * b).sqrt();
+                let scale_y = (c * c + d * d).sqrt();
+
+                if (scale_x - scale_y).abs() < 0.001 {
+                    // Uniform scale - keep as circle
+                    ClipShape::Circle {
+                        center: transformed_center,
+                        radius: radius * scale_x,
+                    }
+                } else {
+                    // Non-uniform scale - convert to ellipse
+                    ClipShape::Ellipse {
+                        center: transformed_center,
+                        radii: blinc_core::Vec2::new(radius * scale_x, radius * scale_y),
+                    }
+                }
+            }
+            ClipShape::Ellipse { center, radii } => {
+                let transformed_center = self.transform_point(center);
+
+                let a = affine.elements[0];
+                let b = affine.elements[1];
+                let c = affine.elements[2];
+                let d = affine.elements[3];
+                let scale_x = (a * a + b * b).sqrt();
+                let scale_y = (c * c + d * d).sqrt();
+
+                ClipShape::Ellipse {
+                    center: transformed_center,
+                    radii: blinc_core::Vec2::new(radii.x * scale_x, radii.y * scale_y),
+                }
+            }
+            ClipShape::Path(path) => {
+                // Path clipping with transforms not supported - keep as-is
+                ClipShape::Path(path)
+            }
+        }
+    }
+
     /// Convert a Brush to GPU color components
     fn brush_to_colors(&self, brush: &Brush) -> ([f32; 4], [f32; 4], FillType) {
         let opacity = self.combined_opacity();
@@ -195,6 +308,59 @@ impl GpuPaintContext {
                 };
 
                 (c1, c2, fill_type)
+            }
+        }
+    }
+
+    /// Get clip data from the current clip stack
+    /// Returns (clip_bounds, clip_radius, clip_type)
+    fn get_clip_data(&self) -> ([f32; 4], [f32; 4], ClipType) {
+        if self.clip_stack.is_empty() {
+            // No clip - use large bounds
+            return (
+                [-10000.0, -10000.0, 100000.0, 100000.0],
+                [0.0; 4],
+                ClipType::None,
+            );
+        }
+
+        // Use the topmost clip shape
+        // Note: For multiple clips, a more sophisticated approach would be needed
+        // (e.g., stencil buffer or computing intersection)
+        let clip = self.clip_stack.last().unwrap();
+        match clip {
+            ClipShape::Rect(rect) => (
+                [rect.x(), rect.y(), rect.width(), rect.height()],
+                [0.0; 4],
+                ClipType::Rect,
+            ),
+            ClipShape::RoundedRect { rect, corner_radius } => (
+                [rect.x(), rect.y(), rect.width(), rect.height()],
+                [
+                    corner_radius.top_left,
+                    corner_radius.top_right,
+                    corner_radius.bottom_right,
+                    corner_radius.bottom_left,
+                ],
+                ClipType::Rect,
+            ),
+            ClipShape::Circle { center, radius } => (
+                [center.x, center.y, *radius, *radius],
+                [*radius, *radius, 0.0, 0.0],
+                ClipType::Circle,
+            ),
+            ClipShape::Ellipse { center, radii } => (
+                [center.x, center.y, radii.x, radii.y],
+                [radii.x, radii.y, 0.0, 0.0],
+                ClipType::Ellipse,
+            ),
+            ClipShape::Path(_) => {
+                // Path clipping not supported in GPU - fall back to no clip
+                (
+                    [-10000.0, -10000.0, 100000.0, 100000.0],
+                    [0.0; 4],
+                    ClipType::None,
+                )
             }
         }
     }
@@ -327,8 +493,11 @@ impl DrawContext for GpuPaintContext {
     }
 
     fn push_clip(&mut self, shape: ClipShape) {
-        self.clip_stack.push(shape);
-        // Note: Actual clipping would be handled in the shader or via stencil buffer
+        // Transform the clip shape by the current transform
+        // Note: This only works correctly for translate + uniform scale transforms.
+        // Rotation transforms are approximated (the bounding box is used).
+        let transformed_shape = self.transform_clip_shape(shape);
+        self.clip_stack.push(transformed_shape);
     }
 
     fn pop_clip(&mut self) {
@@ -370,6 +539,7 @@ impl DrawContext for GpuPaintContext {
     fn fill_rect(&mut self, rect: Rect, corner_radius: CornerRadius, brush: Brush) {
         let transformed = self.transform_rect(rect);
         let (color, _color2, fill_type) = self.brush_to_colors(&brush);
+        let (clip_bounds, clip_radius, clip_type) = self.get_clip_data();
 
         let primitive = GpuPrimitive {
             bounds: [
@@ -390,7 +560,9 @@ impl DrawContext for GpuPaintContext {
             border_color: [0.0; 4],
             shadow: [0.0; 4],
             shadow_color: [0.0; 4],
-            type_info: [PrimitiveType::Rect as u32, fill_type as u32, 0, 0],
+            clip_bounds,
+            clip_radius,
+            type_info: [PrimitiveType::Rect as u32, fill_type as u32, clip_type as u32, 0],
         };
 
         self.batch.push(primitive);
@@ -405,6 +577,7 @@ impl DrawContext for GpuPaintContext {
     ) {
         let transformed = self.transform_rect(rect);
         let (color, _color2, fill_type) = self.brush_to_colors(&brush);
+        let (clip_bounds, clip_radius, clip_type) = self.get_clip_data();
 
         let primitive = GpuPrimitive {
             bounds: [
@@ -425,7 +598,9 @@ impl DrawContext for GpuPaintContext {
             border_color: color,
             shadow: [0.0; 4],
             shadow_color: [0.0; 4],
-            type_info: [PrimitiveType::Rect as u32, fill_type as u32, 0, 0],
+            clip_bounds,
+            clip_radius,
+            type_info: [PrimitiveType::Rect as u32, fill_type as u32, clip_type as u32, 0],
         };
 
         self.batch.push(primitive);
@@ -442,6 +617,7 @@ impl DrawContext for GpuPaintContext {
         let transformed_radius = radius * scale;
 
         let (color, color2, fill_type) = self.brush_to_colors(&brush);
+        let (clip_bounds, clip_radius, clip_type) = self.get_clip_data();
 
         let primitive = GpuPrimitive {
             bounds: [
@@ -457,7 +633,9 @@ impl DrawContext for GpuPaintContext {
             border_color: [0.0; 4],
             shadow: [0.0; 4],
             shadow_color: [0.0; 4],
-            type_info: [PrimitiveType::Circle as u32, fill_type as u32, 0, 0],
+            clip_bounds,
+            clip_radius,
+            type_info: [PrimitiveType::Circle as u32, fill_type as u32, clip_type as u32, 0],
         };
 
         self.batch.push(primitive);
@@ -474,6 +652,7 @@ impl DrawContext for GpuPaintContext {
         let transformed_radius = radius * scale;
 
         let (color, _, fill_type) = self.brush_to_colors(&brush);
+        let (clip_bounds, clip_radius, clip_type) = self.get_clip_data();
 
         let primitive = GpuPrimitive {
             bounds: [
@@ -489,7 +668,9 @@ impl DrawContext for GpuPaintContext {
             border_color: color,
             shadow: [0.0; 4],
             shadow_color: [0.0; 4],
-            type_info: [PrimitiveType::Circle as u32, fill_type as u32, 0, 0],
+            clip_bounds,
+            clip_radius,
+            type_info: [PrimitiveType::Circle as u32, fill_type as u32, clip_type as u32, 0],
         };
 
         self.batch.push(primitive);
@@ -513,6 +694,7 @@ impl DrawContext for GpuPaintContext {
     fn draw_shadow(&mut self, rect: Rect, corner_radius: CornerRadius, shadow: Shadow) {
         let transformed = self.transform_rect(rect);
         let opacity = self.combined_opacity();
+        let (clip_bounds, clip_radius, clip_type) = self.get_clip_data();
 
         let primitive = GpuPrimitive {
             bounds: [
@@ -538,7 +720,9 @@ impl DrawContext for GpuPaintContext {
                 shadow.color.b,
                 shadow.color.a * opacity,
             ],
-            type_info: [PrimitiveType::Shadow as u32, FillType::Solid as u32, 0, 0],
+            clip_bounds,
+            clip_radius,
+            type_info: [PrimitiveType::Shadow as u32, FillType::Solid as u32, clip_type as u32, 0],
         };
 
         self.batch.push(primitive);

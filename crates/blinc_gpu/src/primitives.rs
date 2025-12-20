@@ -37,6 +37,21 @@ pub enum GlassType {
     Chrome = 4,
 }
 
+/// Clip types for primitives
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ClipType {
+    /// No clipping
+    #[default]
+    None = 0,
+    /// Rectangular clip (with optional rounded corners)
+    Rect = 1,
+    /// Circular clip
+    Circle = 2,
+    /// Elliptical clip
+    Ellipse = 3,
+}
+
 /// A GPU primitive ready for rendering (matches shader `Primitive` struct)
 ///
 /// Memory layout:
@@ -48,8 +63,10 @@ pub enum GlassType {
 /// - border_color: vec4<f32>  (16 bytes)
 /// - shadow: vec4<f32>        (16 bytes)
 /// - shadow_color: vec4<f32>  (16 bytes)
-/// - type_info: vec4<u32>     (16 bytes)
-/// Total: 144 bytes
+/// - clip_bounds: vec4<f32>   (16 bytes) - clip region (x, y, width, height)
+/// - clip_radius: vec4<f32>   (16 bytes) - clip corner radii or circle/ellipse radii
+/// - type_info: vec4<u32>     (16 bytes) - (primitive_type, fill_type, clip_type, 0)
+/// Total: 176 bytes
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct GpuPrimitive {
@@ -69,7 +86,11 @@ pub struct GpuPrimitive {
     pub shadow: [f32; 4],
     /// Shadow color
     pub shadow_color: [f32; 4],
-    /// Type info (primitive_type, fill_type, 0, 0)
+    /// Clip bounds (x, y, width, height) - set to large values for no clip
+    pub clip_bounds: [f32; 4],
+    /// Clip corner radii (for rounded rect) or (radius_x, radius_y, 0, 0) for ellipse
+    pub clip_radius: [f32; 4],
+    /// Type info (primitive_type, fill_type, clip_type, 0)
     pub type_info: [u32; 4],
 }
 
@@ -84,7 +105,10 @@ impl Default for GpuPrimitive {
             border_color: [0.0, 0.0, 0.0, 1.0],
             shadow: [0.0; 4],
             shadow_color: [0.0, 0.0, 0.0, 0.0],
-            type_info: [0; 4],
+            // Default: no clip (large bounds that won't clip anything)
+            clip_bounds: [-10000.0, -10000.0, 100000.0, 100000.0],
+            clip_radius: [0.0; 4],
+            type_info: [0; 4], // clip_type defaults to None (0)
         }
     }
 }
@@ -183,6 +207,56 @@ impl GpuPrimitive {
         self.color = [r1, g1, b1, a1];
         self.color2 = [r2, g2, b2, a2];
         self.type_info[1] = FillType::RadialGradient as u32;
+        self
+    }
+
+    /// Set rectangular clip region
+    pub fn with_clip_rect(mut self, x: f32, y: f32, width: f32, height: f32) -> Self {
+        self.clip_bounds = [x, y, width, height];
+        self.clip_radius = [0.0; 4];
+        self.type_info[2] = ClipType::Rect as u32;
+        self
+    }
+
+    /// Set rounded rectangular clip region
+    pub fn with_clip_rounded_rect(
+        mut self,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        tl: f32,
+        tr: f32,
+        br: f32,
+        bl: f32,
+    ) -> Self {
+        self.clip_bounds = [x, y, width, height];
+        self.clip_radius = [tl, tr, br, bl];
+        self.type_info[2] = ClipType::Rect as u32;
+        self
+    }
+
+    /// Set circular clip region
+    pub fn with_clip_circle(mut self, cx: f32, cy: f32, radius: f32) -> Self {
+        self.clip_bounds = [cx, cy, radius, radius];
+        self.clip_radius = [radius, radius, 0.0, 0.0];
+        self.type_info[2] = ClipType::Circle as u32;
+        self
+    }
+
+    /// Set elliptical clip region
+    pub fn with_clip_ellipse(mut self, cx: f32, cy: f32, rx: f32, ry: f32) -> Self {
+        self.clip_bounds = [cx, cy, rx, ry];
+        self.clip_radius = [rx, ry, 0.0, 0.0];
+        self.type_info[2] = ClipType::Ellipse as u32;
+        self
+    }
+
+    /// Clear clip region
+    pub fn with_no_clip(mut self) -> Self {
+        self.clip_bounds = [-10000.0, -10000.0, 100000.0, 100000.0];
+        self.clip_radius = [0.0; 4];
+        self.type_info[2] = ClipType::None as u32;
         self
     }
 }

@@ -440,6 +440,12 @@ impl Color {
     pub const RED: Color = Color::rgb(1.0, 0.0, 0.0);
     pub const GREEN: Color = Color::rgb(0.0, 1.0, 0.0);
     pub const BLUE: Color = Color::rgb(0.0, 0.0, 1.0);
+    pub const YELLOW: Color = Color::rgb(1.0, 1.0, 0.0);
+    pub const CYAN: Color = Color::rgb(0.0, 1.0, 1.0);
+    pub const MAGENTA: Color = Color::rgb(1.0, 0.0, 1.0);
+    pub const PURPLE: Color = Color::rgb(0.5, 0.0, 0.5);
+    pub const ORANGE: Color = Color::rgb(1.0, 0.5, 0.0);
+    pub const GRAY: Color = Color::rgb(0.5, 0.5, 0.5);
     pub const TRANSPARENT: Color = Color::rgba(0.0, 0.0, 0.0, 0.0);
 
     pub const fn rgb(r: f32, g: f32, b: f32) -> Self {
@@ -692,6 +698,17 @@ impl CornerRadius {
         bottom_right: 0.0,
         bottom_left: 0.0,
     };
+
+    /// Create a corner radius with different values for each corner.
+    /// Order: top_left, top_right, bottom_right, bottom_left (clockwise from top-left)
+    pub fn new(top_left: f32, top_right: f32, bottom_right: f32, bottom_left: f32) -> Self {
+        Self {
+            top_left,
+            top_right,
+            bottom_right,
+            bottom_left,
+        }
+    }
 
     pub fn uniform(radius: f32) -> Self {
         Self {

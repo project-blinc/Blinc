@@ -1,0 +1,47 @@
+[package]
+name = "blinc_test_suite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Visual test suite for Blinc UI framework rendering capabilities"
+
+[lib]
+crate-type = ["lib"]
+
+[[bin]]
+name = "blinc-visual-tests"
+path = "src/main.rs"
+
+[features]
+default = []
+# Enable interactive window tests (requires display)
+interactive = []
+
+[dependencies]
+# Core Blinc crates
+blinc_core = { path = "../blinc_core" }
+blinc_gpu = { path = "../blinc_gpu" }
+blinc_paint = { path = "../blinc_paint" }
+
+# GPU and windowing
+wgpu.workspace = true
+winit.workspace = true
+raw-window-handle.workspace = true
+pollster.workspace = true
+
+# Utilities
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+
+# Image comparison for visual regression tests
+image = "0.25"
+png = "0.17"
+
+# Benchmarks (uncomment when ready)
+# [dev-dependencies]
+# criterion.workspace = true
+#
+# [[bench]]
+# name = "render_benchmarks"
+# harness = false
