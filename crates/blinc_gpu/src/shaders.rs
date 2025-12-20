@@ -302,7 +302,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             d = sd_ellipse(p, center, size * 0.5);
         }
         case PRIM_SHADOW: {
-            // Shadow-only primitive (already handled above)
+            // Shadow-only primitive - mask out the shape area so shadow doesn't render under it
+            let shape_d = sd_rounded_rect(p, origin, size, prim.corner_radius);
+            let aa_width = fwidth(shape_d) * 0.5;
+            let shape_mask = smoothstep(-aa_width, aa_width, shape_d); // 0 inside shape, 1 outside
+            result.a *= shape_mask;
+            result.a *= clip_alpha;
             return result;
         }
         default: {
