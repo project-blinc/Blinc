@@ -1,0 +1,71 @@
+// counter - Counter Example
+//
+// Demonstrates reactive state and FSM-driven interactions.
+
+@widget Counter {
+    @state count: i32 = 0
+
+    @derived doubled: i32 = count * 2
+
+    @machine state {
+        initial: idle
+
+        idle -> active: pointer_enter
+        active -> idle: pointer_leave
+    }
+
+    @spring opacity: f32 = 1.0 {
+        stiffness: 300
+        damping: 25
+    }
+
+    @effect {
+        // Animate opacity based on state
+        when state == active {
+            opacity = 1.0
+        } else {
+            opacity = 0.7
+        }
+    }
+
+    @render {
+        Column {
+            spacing: 16
+            padding: 24
+
+            Row {
+                spacing: 12
+
+                Button {
+                    label: "-"
+                    on_click: { count -= 1 }
+                }
+
+                Text {
+                    content: "{count}"
+                    font_size: 32
+                    opacity: opacity
+                }
+
+                Button {
+                    label: "+"
+                    on_click: { count += 1 }
+                }
+            }
+
+            Text {
+                content: "Doubled: {doubled}"
+                font_size: 14
+                color: #666
+            }
+        }
+    }
+}
+
+@widget App {
+    @render {
+        Center {
+            Counter {}
+        }
+    }
+}

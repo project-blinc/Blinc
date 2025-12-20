@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=counter
+Comment=A Blinc application
+Exec=counter
+Icon=counter
+Terminal=false
+Categories=Utility;
+StartupWMClass=counter

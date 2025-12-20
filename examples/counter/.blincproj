@@ -1,0 +1,29 @@
+[project]
+name = "counter"
+version = "0.1.0"
+authors = []
+
+[dependencies]
+plugins = []
+external = []
+
+[platforms.android]
+package = "com.example.counter"
+min_sdk = 24
+target_sdk = 35
+version_code = 1
+
+[platforms.ios]
+bundle_id = "com.example.counter"
+deployment_target = "15.0"
+
+[platforms.macos]
+bundle_id = "com.example.counter"
+deployment_target = "12.0"
+
+[platforms.windows]
+product_name = "counter"
+
+[platforms.linux]
+desktop_name = "counter"
+categories = ["Utility"]

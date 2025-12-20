@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+    <id>com.example.counter</id>
+    <name>counter</name>
+    <summary>A Blinc application</summary>
+    <metadata_license>CC0-1.0</metadata_license>
+    <project_license>MIT</project_license>
+    <description>
+        <p>
+            counter is a cross-platform application built with Blinc.
+        </p>
+    </description>
+    <launchable type="desktop-id">counter.desktop</launchable>
+    <provides>
+        <binary>counter</binary>
+    </provides>
+</component>

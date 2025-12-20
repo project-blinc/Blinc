@@ -1,0 +1,28 @@
+# Blinc build artifacts
+/target/
+*.zrtl
+
+# Platform-specific build outputs
+/platforms/android/build/
+/platforms/android/.gradle/
+/platforms/ios/build/
+/platforms/ios/Pods/
+/platforms/macos/build/
+/platforms/windows/build/
+/platforms/linux/build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.keystore
+*.jks
+*.p12
+*.mobileprovision

@@ -309,8 +309,11 @@ fn cmd_init(template: &str) -> Result<()> {
     );
 
     // Check if already initialized
+    if cwd.join(".blincproj").exists() {
+        anyhow::bail!("This directory already contains a .blincproj");
+    }
     if cwd.join("blinc.toml").exists() {
-        anyhow::bail!("This directory already contains a blinc.toml");
+        anyhow::bail!("This directory already contains a blinc.toml (legacy format)");
     }
 
     project::create_project(&cwd, name, template)?;

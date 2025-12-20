@@ -1,0 +1,36 @@
+// Windows Resource File for counter
+
+#include <windows.h>
+
+// Version info
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     1,0,0,0
+PRODUCTVERSION  1,0,0,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS__WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "CompanyName",      "\0"
+            VALUE "FileDescription",  "counter\0"
+            VALUE "FileVersion",      "1.0.0\0"
+            VALUE "InternalName",     "counter\0"
+            VALUE "LegalCopyright",   "\0"
+            VALUE "OriginalFilename", "counter.exe\0"
+            VALUE "ProductName",      "counter\0"
+            VALUE "ProductVersion",   "1.0.0\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1252
+    END
+END
+
+// Application icon
+// 1 ICON "icon.ico"

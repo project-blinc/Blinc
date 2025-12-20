@@ -236,14 +236,8 @@ fn check_rust_toolchain() -> CheckCategory {
     // Check installed targets
     if let Some(targets) = get_installed_targets() {
         let target_count = targets.len();
-        let android_targets: Vec<_> = targets
-            .iter()
-            .filter(|t| t.contains("android"))
-            .collect();
-        let ios_targets: Vec<_> = targets
-            .iter()
-            .filter(|t| t.contains("apple-ios"))
-            .collect();
+        let android_targets: Vec<_> = targets.iter().filter(|t| t.contains("android")).collect();
+        let ios_targets: Vec<_> = targets.iter().filter(|t| t.contains("apple-ios")).collect();
 
         let mut target_info = format!("{} targets installed", target_count);
         if !android_targets.is_empty() {
@@ -264,15 +258,16 @@ fn check_desktop_platform() -> CheckCategory {
     let mut cat = CheckCategory::new("Desktop Platform");
 
     let os = env::consts::OS;
-    cat.add(CheckResult::ok("Host OS", &format!("{} ({})", os, env::consts::ARCH)));
+    cat.add(CheckResult::ok(
+        "Host OS",
+        &format!("{} ({})", os, env::consts::ARCH),
+    ));
 
     // Platform-specific checks
     match os {
         "macos" => {
             // Check xcode-select path
-            let xcode_select_result = Command::new("xcode-select")
-                .arg("-p")
-                .output();
+            let xcode_select_result = Command::new("xcode-select").arg("-p").output();
 
             match xcode_select_result {
                 Ok(output) if output.status.success() => {
@@ -315,13 +310,14 @@ fn check_desktop_platform() -> CheckCategory {
             }
 
             // Check if CLI tools are actually installed by verifying clang exists
-            let clang_check = Command::new("xcrun")
-                .args(["--find", "clang"])
-                .output();
+            let clang_check = Command::new("xcrun").args(["--find", "clang"]).output();
 
             match clang_check {
                 Ok(output) if output.status.success() => {
-                    cat.add(CheckResult::ok("Xcode CLI Tools", "clang available via xcrun"));
+                    cat.add(CheckResult::ok(
+                        "Xcode CLI Tools",
+                        "clang available via xcrun",
+                    ));
                 }
                 _ => {
                     cat.add(CheckResult::error(
@@ -399,7 +395,10 @@ fn check_android_platform() -> CheckCategory {
     let sdk_path = find_android_sdk();
     match &sdk_path {
         Some(path) => {
-            cat.add(CheckResult::ok("Android SDK", &format!("{}", path.display())));
+            cat.add(CheckResult::ok(
+                "Android SDK",
+                &format!("{}", path.display()),
+            ));
 
             // Check for NDK
             let ndk_path = find_android_ndk(path);
@@ -409,7 +408,10 @@ fn check_android_platform() -> CheckCategory {
                         .file_name()
                         .and_then(|n| n.to_str())
                         .unwrap_or("unknown");
-                    cat.add(CheckResult::ok("Android NDK", &format!("{} at {}", version, ndk.display())));
+                    cat.add(CheckResult::ok(
+                        "Android NDK",
+                        &format!("{} at {}", version, ndk.display()),
+                    ));
 
                     // Check for clang
                     let toolchain_bin = get_ndk_toolchain_bin(ndk);
@@ -420,11 +422,15 @@ fn check_android_platform() -> CheckCategory {
                         } else {
                             // Try other API levels
                             let found_api = (21..=35).rev().find(|api| {
-                                bin.join(format!("aarch64-linux-android{}-clang", api)).exists()
+                                bin.join(format!("aarch64-linux-android{}-clang", api))
+                                    .exists()
                             });
                             match found_api {
                                 Some(api) => {
-                                    cat.add(CheckResult::ok("NDK Clang", &format!("API {} toolchain available", api)));
+                                    cat.add(CheckResult::ok(
+                                        "NDK Clang",
+                                        &format!("API {} toolchain available", api),
+                                    ));
                                 }
                                 None => {
                                     cat.add(CheckResult::warning(
@@ -538,8 +544,14 @@ fn check_ios_platform() -> CheckCategory {
                 "not installed",
                 "Install Xcode from the Mac App Store",
             ));
-            cat.add(CheckResult::not_applicable("iOS Simulator", "Xcode not installed"));
-            cat.add(CheckResult::not_applicable("Rust iOS targets", "Xcode not installed"));
+            cat.add(CheckResult::not_applicable(
+                "iOS Simulator",
+                "Xcode not installed",
+            ));
+            cat.add(CheckResult::not_applicable(
+                "Rust iOS targets",
+                "Xcode not installed",
+            ));
             return cat;
         }
     }
@@ -577,10 +589,7 @@ fn check_ios_platform() -> CheckCategory {
                 "Run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios",
             ));
         } else {
-            cat.add(CheckResult::ok(
-                "Rust iOS targets",
-                &ios_targets.join(", "),
-            ));
+            cat.add(CheckResult::ok("Rust iOS targets", &ios_targets.join(", ")));
         }
     }
 
@@ -645,9 +654,11 @@ fn find_android_sdk() -> Option<PathBuf> {
     // Check common locations
     let home = dirs::home_dir()?;
     let common_paths = [
-        home.join("Library/Android/sdk"),                    // macOS
-        home.join("Android/Sdk"),                            // Linux
-        PathBuf::from("C:\\Users").join(env::var("USERNAME").unwrap_or_default()).join("AppData\\Local\\Android\\Sdk"), // Windows
+        home.join("Library/Android/sdk"), // macOS
+        home.join("Android/Sdk"),         // Linux
+        PathBuf::from("C:\\Users")
+            .join(env::var("USERNAME").unwrap_or_default())
+            .join("AppData\\Local\\Android\\Sdk"), // Windows
     ];
 
     common_paths.into_iter().find(|p| p.exists())
@@ -745,12 +756,7 @@ pub fn print_doctor_results(categories: &[CheckCategory]) {
             println!("    [{}] {}: {}", icon, check.name, check.message);
 
             if let Some(hint) = &check.hint {
-                println!(
-                    "        {}→ {}{}",
-                    colors::CYAN,
-                    hint,
-                    colors::RESET
-                );
+                println!("        {}→ {}{}", colors::CYAN, hint, colors::RESET);
             }
 
             match check.status {

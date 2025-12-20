@@ -7,12 +7,12 @@
 ### Quick Install (macOS/Linux)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/anthropics/blinc/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/project-blinc/blinc/main/scripts/install.sh | bash
 ```
 
 ### Manual Installation
 
-Download the appropriate binary from [Releases](https://github.com/anthropics/blinc/releases):
+Download the appropriate binary from [Releases](https://github.com/project-blinc/blinc/releases):
 
 | Platform              | Download                                 |
 | --------------------- | ---------------------------------------- |
@@ -25,7 +25,7 @@ Download the appropriate binary from [Releases](https://github.com/anthropics/bl
 ### Build from Source
 
 ```bash
-git clone https://github.com/anthropics/blinc
+git clone https://github.com/project-blinc/blinc
 cd blinc
 cargo install --path crates/blinc_cli
 ```
@@ -73,42 +73,6 @@ Blinc is a next-generation UI framework that combines:
 │  │  fsm)      │ │  keyframes)│ │  paint)    │ │  desktop)         ││
 │  └────────────┘ └────────────┘ └────────────┘ └────────────────────┘│
 └─────────────────────────────────────────────────────────────────────┘
-```
-
-## Project Structure
-
-```text
-blinc/
-├── Cargo.toml                 # Workspace manifest
-├── blinc.toml                 # Blinc toolchain configuration
-├── grammars/
-│   └── blinc.zyn              # Blinc DSL grammar
-├── crates/
-│   ├── blinc_cli/             # CLI toolchain (build, run, hot-reload)
-│   ├── blinc_core/            # Reactive system, FSM runtime
-│   ├── blinc_animation/       # Spring physics, keyframes, timelines
-│   ├── blinc_layout/          # Flexbox layout (Taffy-based)
-│   ├── blinc_gpu/             # GPU renderer, SDF shaders
-│   ├── blinc_paint/           # Canvas/Paint 2D drawing API
-│   ├── blinc_widgets/         # Core widget library
-│   └── blinc_embed/           # Embedding SDK
-├── extensions/                # ZRTL plugins (dynamic or static)
-│   ├── blinc_platform_desktop/
-│   ├── blinc_platform_android/
-│   └── blinc_platform_ios/
-├── examples/
-│   └── counter/
-│       └── main.blinc
-├── resource/
-│   └── spec.md                # Design specification
-└── toolchain/
-    ├── targets/               # Platform target configurations
-    │   ├── android.toml
-    │   ├── ios.toml
-    │   ├── macos.toml
-    │   ├── windows.toml
-    │   └── linux.toml
-    └── templates/             # Project templates
 ```
 
 ## Toolchain

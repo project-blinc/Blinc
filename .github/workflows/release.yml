@@ -168,25 +168,25 @@ jobs:
 
             ### macOS (Apple Silicon)
             ```bash
-            curl -fsSL https://github.com/anthropics/blinc/releases/download/${{ steps.version.outputs.tag }}/blinc-aarch64-apple-darwin.tar.gz | tar -xz
+            curl -fsSL https://github.com/project-blinc/blinc/releases/download/${{ steps.version.outputs.tag }}/blinc-aarch64-apple-darwin.tar.gz | tar -xz
             sudo mv blinc /usr/local/bin/
             ```
 
             ### macOS (Intel)
             ```bash
-            curl -fsSL https://github.com/anthropics/blinc/releases/download/${{ steps.version.outputs.tag }}/blinc-x86_64-apple-darwin.tar.gz | tar -xz
+            curl -fsSL https://github.com/project-blinc/blinc/releases/download/${{ steps.version.outputs.tag }}/blinc-x86_64-apple-darwin.tar.gz | tar -xz
             sudo mv blinc /usr/local/bin/
             ```
 
             ### Linux (x86_64)
             ```bash
-            curl -fsSL https://github.com/anthropics/blinc/releases/download/${{ steps.version.outputs.tag }}/blinc-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+            curl -fsSL https://github.com/project-blinc/blinc/releases/download/${{ steps.version.outputs.tag }}/blinc-x86_64-unknown-linux-gnu.tar.gz | tar -xz
             sudo mv blinc /usr/local/bin/
             ```
 
             ### Linux (ARM64)
             ```bash
-            curl -fsSL https://github.com/anthropics/blinc/releases/download/${{ steps.version.outputs.tag }}/blinc-aarch64-unknown-linux-gnu.tar.gz | tar -xz
+            curl -fsSL https://github.com/project-blinc/blinc/releases/download/${{ steps.version.outputs.tag }}/blinc-aarch64-unknown-linux-gnu.tar.gz | tar -xz
             sudo mv blinc /usr/local/bin/
             ```
 

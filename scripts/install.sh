@@ -1,10 +1,10 @@
 #!/bin/bash
 # Blinc CLI installer script
-# Usage: curl -fsSL https://raw.githubusercontent.com/anthropics/blinc/main/scripts/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/project-blinc/blinc/main/scripts/install.sh | bash
 
 set -e
 
-REPO="anthropics/blinc"
+REPO="project-blinc/blinc"
 INSTALL_DIR="${BLINC_INSTALL_DIR:-/usr/local/bin}"
 
 # Colors
