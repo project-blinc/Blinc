@@ -143,11 +143,19 @@ pub fn run_doctor() -> Vec<CheckCategory> {
 fn check_blinc_ecosystem() -> CheckCategory {
     let mut cat = CheckCategory::new("Blinc Ecosystem");
 
-    // Check blinc CLI version with git hash
+    // Get version info (shared across CLI and runtime since they're in the same repo)
     let version = env!("CARGO_PKG_VERSION");
     let git_hash = option_env!("BLINC_GIT_HASH").unwrap_or("unknown");
+
+    // Check blinc CLI version
     cat.add(CheckResult::ok(
         "Blinc CLI",
+        &format!("v{} ({})", version, git_hash),
+    ));
+
+    // Blinc Runtime (same repo, same version)
+    cat.add(CheckResult::ok(
+        "Blinc Runtime",
         &format!("v{} ({})", version, git_hash),
     ));
 
@@ -157,13 +165,6 @@ fn check_blinc_ecosystem() -> CheckCategory {
         "Zyntax Compiler",
         "not yet available",
         "Zyntax Grammar2 compiler is in development",
-    ));
-
-    // TODO: Check for Blinc runtime when available
-    cat.add(CheckResult::warning(
-        "Blinc Runtime",
-        "not yet available",
-        "Zyntax Runtime2 is in development",
     ));
 
     // Check for blinc.toml in current directory (optional)
