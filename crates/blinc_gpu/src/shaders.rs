@@ -717,36 +717,51 @@ fn noise(p: vec2<f32>) -> f32 {
     );
 }
 
-// Kawase blur kernel (efficient single-pass approximation)
-fn kawase_blur(uv: vec2<f32>, offset: f32) -> vec4<f32> {
-    let texel_size = 1.0 / uniforms.viewport_size;
-    let o = offset * texel_size;
-
-    var color = textureSample(backdrop_texture, backdrop_sampler, uv);
-    color += textureSample(backdrop_texture, backdrop_sampler, uv + vec2<f32>(-o.x, -o.y));
-    color += textureSample(backdrop_texture, backdrop_sampler, uv + vec2<f32>(o.x, -o.y));
-    color += textureSample(backdrop_texture, backdrop_sampler, uv + vec2<f32>(-o.x, o.y));
-    color += textureSample(backdrop_texture, backdrop_sampler, uv + vec2<f32>(o.x, o.y));
-
-    return color / 5.0;
+// Gaussian weight function
+fn gaussian_weight(x: f32, sigma: f32) -> f32 {
+    return exp(-(x * x) / (2.0 * sigma * sigma));
 }
 
-// Multi-pass Kawase blur approximation in single pass
+// High quality blur using a proper Gaussian kernel with rotated samples
+// This avoids the checkered pattern by using more samples with proper weighting
 fn blur_backdrop(uv: vec2<f32>, blur_radius: f32) -> vec4<f32> {
     if blur_radius < 0.5 {
         return textureSample(backdrop_texture, backdrop_sampler, uv);
     }
 
-    // Approximate multi-pass Kawase with weighted samples
-    var color = vec4<f32>(0.0);
-    let passes = 4;
+    let texel_size = 1.0 / uniforms.viewport_size;
+    let sigma = blur_radius * 0.5;
 
-    for (var i = 0; i < passes; i++) {
-        let offset = blur_radius * f32(i + 1) * 0.5;
-        color += kawase_blur(uv, offset);
+    // Start with center sample (highest weight)
+    var color = textureSample(backdrop_texture, backdrop_sampler, uv);
+    var total_weight = 1.0;
+
+    // Use rotated sample pattern to avoid axis-aligned artifacts
+    // Golden angle rotation provides good distribution
+    let golden_angle = 2.39996323; // radians
+
+    // Number of samples scales with blur radius for quality
+    let num_rings = 3;
+    let samples_per_ring = 8;
+
+    for (var ring = 1; ring <= num_rings; ring++) {
+        let ring_radius = blur_radius * f32(ring) / f32(num_rings);
+        let ring_offset = ring_radius * texel_size;
+
+        for (var i = 0; i < samples_per_ring; i++) {
+            // Rotate each sample by golden angle offset
+            let angle = f32(i) * (6.283185 / f32(samples_per_ring)) + f32(ring) * golden_angle;
+            let offset = vec2<f32>(cos(angle), sin(angle)) * ring_offset;
+
+            let sample_pos = uv + offset;
+            let weight = gaussian_weight(ring_radius, sigma);
+
+            color += textureSample(backdrop_texture, backdrop_sampler, sample_pos) * weight;
+            total_weight += weight;
+        }
     }
 
-    return color / f32(passes);
+    return color / total_weight;
 }
 
 // Apply saturation adjustment
@@ -755,8 +770,28 @@ fn adjust_saturation(color: vec3<f32>, saturation: f32) -> vec3<f32> {
     return mix(vec3<f32>(luminance), color, saturation);
 }
 
+// Calculate SDF gradient (normal direction pointing outward from shape)
+fn sdf_gradient(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec4<f32>) -> vec2<f32> {
+    let eps = 0.5;
+    let d = sd_rounded_rect(p, origin, size, radius);
+    let dx = sd_rounded_rect(p + vec2<f32>(eps, 0.0), origin, size, radius) - d;
+    let dy = sd_rounded_rect(p + vec2<f32>(0.0, eps), origin, size, radius) - d;
+    let g = vec2<f32>(dx, dy);
+    let len = length(g);
+    if len < 0.001 {
+        return vec2<f32>(0.0, -1.0);
+    }
+    return g / len;
+}
+
+// Fresnel effect for glass edge highlights
+fn fresnel(normal: vec2<f32>, view_dir: vec2<f32>, power: f32) -> f32 {
+    let ndotv = max(dot(normal, view_dir), 0.0);
+    return pow(1.0 - ndotv, power);
+}
+
 // ============================================================================
-// Fragment Shader
+// Fragment Shader - Liquid Glass Effect
 // ============================================================================
 
 @fragment
@@ -766,6 +801,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let origin = prim.bounds.xy;
     let size = prim.bounds.zw;
+    let center = origin + size * 0.5;
 
     // Calculate shape mask
     let d = sd_rounded_rect(p, origin, size, prim.corner_radius);
@@ -782,8 +818,37 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let brightness = prim.params.z;
     let noise_amount = prim.params.w;
 
-    // Sample and blur backdrop
-    var backdrop = blur_backdrop(in.screen_uv, blur_radius);
+    // ========================================================================
+    // LIQUID GLASS EFFECT
+    // ========================================================================
+
+    // Edge zone calculations
+    let edge_zone = max(8.0, blur_radius * 0.6);
+    let edge_factor = 1.0 - smoothstep(0.0, edge_zone, abs(d));
+    let inner_factor = smoothstep(0.0, edge_zone * 2.0, abs(d)); // 1.0 in center
+
+    // Get surface normal (gradient of SDF)
+    let normal = sdf_gradient(p, origin, size, prim.corner_radius);
+
+    // Simulated view direction (from top-left light source)
+    let light_dir = normalize(vec2<f32>(-0.6, -0.8));
+    let view_dir = normalize(center - p);
+
+    // Fresnel for edge brightness (glass reflects more at glancing angles)
+    let edge_fresnel = fresnel(normal, view_dir, 2.5);
+
+    // ========================================================================
+    // REFRACTION - Light bends through the glass surface
+    // ========================================================================
+    let refraction_strength = 0.02 * blur_radius;
+    let texel_size = 1.0 / uniforms.viewport_size;
+
+    // Refraction offset based on surface normal and edge proximity
+    let refraction_offset = normal * edge_factor * refraction_strength;
+    let refracted_uv = in.screen_uv + refraction_offset * texel_size * uniforms.viewport_size.y;
+
+    // Sample blurred backdrop with refraction
+    var backdrop = blur_backdrop(refracted_uv, blur_radius);
 
     // Apply saturation
     backdrop = vec4<f32>(adjust_saturation(backdrop.rgb, saturation), backdrop.a);
@@ -791,47 +856,95 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Apply brightness
     backdrop = vec4<f32>(backdrop.rgb * brightness, backdrop.a);
 
-    // Add subtle noise for texture (like frosted glass)
+    // ========================================================================
+    // DEPTH SHADING - Glass appears thicker at edges
+    // ========================================================================
+    // Darken edges to simulate light absorption through thicker glass
+    let depth_darkening = mix(0.92, 1.0, inner_factor);
+    backdrop = vec4<f32>(backdrop.rgb * depth_darkening, backdrop.a);
+
+    // ========================================================================
+    // SPECULAR HIGHLIGHTS - Bright reflections on edges
+    // ========================================================================
+    // Edge highlight (rim lighting effect)
+    let rim_intensity = edge_fresnel * 0.4;
+
+    // Specular highlight from light direction
+    let reflect_dir = reflect(light_dir, normal);
+    let spec_angle = max(dot(reflect_dir, view_dir), 0.0);
+    let specular = pow(spec_angle, 16.0) * edge_factor * 0.6;
+
+    // Top edge highlight (stronger on upper edges facing light)
+    let top_highlight = max(-normal.y, 0.0) * edge_factor * 0.25;
+
+    // Combine highlights
+    let total_highlight = rim_intensity + specular + top_highlight;
+    let highlight_color = vec3<f32>(1.0, 1.0, 1.0);
+
+    // ========================================================================
+    // INNER GLOW - Subtle brightness in center
+    // ========================================================================
+    let inner_glow = inner_factor * 0.05;
+
+    // ========================================================================
+    // COMBINE EFFECTS
+    // ========================================================================
+
+    // Add subtle noise for texture
+    var noise_contrib = 0.0;
     if noise_amount > 0.0 {
         let n = noise(p * 0.5 + vec2<f32>(uniforms.time * 0.1, 0.0));
-        backdrop = vec4<f32>(backdrop.rgb + (n - 0.5) * noise_amount * 0.1, backdrop.a);
+        noise_contrib = (n - 0.5) * noise_amount * 0.08;
     }
 
     // Apply tint color
     let tint = prim.tint_color;
-    var result = vec4<f32>(
-        mix(backdrop.rgb, tint.rgb, tint.a),
-        1.0
+    var result = vec3<f32>(
+        mix(backdrop.rgb, tint.rgb, tint.a)
     );
+
+    // Add highlights
+    result = result + highlight_color * total_highlight;
+
+    // Add inner glow
+    result = result + vec3<f32>(inner_glow);
+
+    // Add noise
+    result = result + vec3<f32>(noise_contrib);
 
     // Apply glass type specific adjustments
     let glass_type = prim.type_info.x;
     switch glass_type {
         case GLASS_ULTRA_THIN: {
-            // Very subtle effect
-            result = vec4<f32>(mix(backdrop.rgb, result.rgb, 0.3), 1.0);
+            // Very subtle effect - reduce highlights
+            result = mix(backdrop.rgb, result, 0.4);
         }
         case GLASS_THIN: {
-            result = vec4<f32>(mix(backdrop.rgb, result.rgb, 0.5), 1.0);
+            result = mix(backdrop.rgb, result, 0.6);
         }
         case GLASS_REGULAR: {
-            // Default - no additional adjustment
+            // Default - full liquid glass effect
         }
         case GLASS_THICK: {
-            result = vec4<f32>(mix(backdrop.rgb, result.rgb, 0.8), 1.0);
+            // Enhance depth and highlights
+            result = mix(backdrop.rgb, result, 1.0);
+            result = result + highlight_color * total_highlight * 0.3; // Extra highlights
         }
         case GLASS_CHROME: {
-            // Metallic look with stronger tint
-            let chrome_tint = vec3<f32>(0.9, 0.9, 0.92);
-            result = vec4<f32>(mix(result.rgb, chrome_tint, 0.2), 1.0);
+            // Metallic liquid glass
+            let chrome_tint = vec3<f32>(0.92, 0.92, 0.96);
+            result = mix(result, chrome_tint, 0.15);
+            result = result + highlight_color * total_highlight * 0.5; // Strong highlights
         }
         default: {
             // Regular glass
         }
     }
 
-    result.a = mask;
-    return result;
+    // Clamp to valid range
+    result = clamp(result, vec3<f32>(0.0), vec3<f32>(1.0));
+
+    return vec4<f32>(result, mask);
 }
 "#;
 
