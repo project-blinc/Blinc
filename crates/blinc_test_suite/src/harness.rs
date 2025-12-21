@@ -348,10 +348,11 @@ impl TestHarness {
     /// Render a batch with glass effects to a PNG file
     ///
     /// This performs multi-pass rendering:
-    /// 1. Render background primitives to a texture
-    /// 2. Copy to backdrop texture for glass sampling
-    /// 3. Render glass primitives with backdrop blur
-    /// 4. Copy final result to PNG
+    /// 1. Render background primitives to a texture (with MSAA if enabled)
+    /// 2. Resolve MSAA to single-sampled texture
+    /// 3. Copy to backdrop texture for glass sampling
+    /// 4. Render glass primitives with backdrop blur
+    /// 5. Copy final result to PNG
     pub fn render_with_glass_to_png(
         &self,
         batch: &PrimitiveBatch,
@@ -359,12 +360,9 @@ impl TestHarness {
         height: u32,
         path: &Path,
     ) -> Result<()> {
-        // For glass rendering, we always use non-MSAA for simplicity
-        // (glass shader samples from backdrop which needs to be single-sampled)
-
-        // Create render texture (final output)
-        let render_texture = self.create_resolve_texture(width, height);
-        let render_view = render_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        // Create resolve texture (single-sampled, final output for readback)
+        let resolve_texture = self.create_resolve_texture(width, height);
+        let resolve_view = resolve_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         // Create backdrop texture (copy of rendered content for glass to sample)
         let backdrop_texture = self.device.create_texture(&wgpu::TextureDescriptor {
@@ -385,14 +383,27 @@ impl TestHarness {
         });
         let backdrop_view = backdrop_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Step 1: Render background primitives (non-glass)
-        {
-            let mut renderer = self.renderer.borrow_mut();
-            renderer.resize(width, height);
-            renderer.render_with_clear(&render_view, batch, [1.0, 1.0, 1.0, 1.0]);
+        // Step 1: Render background primitives with MSAA (if enabled)
+        if self.sample_count > 1 {
+            // MSAA path: render to multisampled texture, resolve to single-sampled
+            let msaa_texture = self.create_render_texture(width, height, self.sample_count);
+            let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+            {
+                let mut renderer = self.renderer.borrow_mut();
+                renderer.resize(width, height);
+                renderer.render_msaa(&msaa_view, &resolve_view, batch, [1.0, 1.0, 1.0, 1.0]);
+            }
+        } else {
+            // Non-MSAA path: render directly to single-sampled texture
+            {
+                let mut renderer = self.renderer.borrow_mut();
+                renderer.resize(width, height);
+                renderer.render_with_clear(&resolve_view, batch, [1.0, 1.0, 1.0, 1.0]);
+            }
         }
 
-        // Step 2: Copy rendered content to backdrop texture
+        // Step 2: Copy resolved content to backdrop texture for glass sampling
         if !batch.glass_primitives.is_empty() {
             let mut encoder = self
                 .device
@@ -402,7 +413,7 @@ impl TestHarness {
 
             encoder.copy_texture_to_texture(
                 wgpu::ImageCopyTexture {
-                    texture: &render_texture,
+                    texture: &resolve_texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d::ZERO,
                     aspect: wgpu::TextureAspect::All,
@@ -422,14 +433,14 @@ impl TestHarness {
 
             self.queue.submit(std::iter::once(encoder.finish()));
 
-            // Step 3: Render glass primitives on top
+            // Step 3: Render glass primitives on top of resolved texture
             {
                 let mut renderer = self.renderer.borrow_mut();
-                renderer.render_glass(&render_view, &backdrop_view, batch);
+                renderer.render_glass(&resolve_view, &backdrop_view, batch);
             }
         }
 
-        // Step 4: Read back to PNG (reuse existing logic)
+        // Step 4: Read back to PNG
         let buffer = self.create_readback_buffer(width, height);
         let bytes_per_row = Self::padded_bytes_per_row(width);
 
@@ -441,7 +452,7 @@ impl TestHarness {
 
         encoder.copy_texture_to_buffer(
             wgpu::ImageCopyTexture {
-                texture: &render_texture,
+                texture: &resolve_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,

@@ -608,7 +608,14 @@ impl GpuRenderer {
             cache: None,
         });
 
-        // Glass pipeline
+        // Glass pipeline - always uses sample_count=1 since it renders on resolved textures
+        // (glass effects require sampling from a single-sampled backdrop texture)
+        let glass_multisample_state = wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        };
+
         let glass_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Glass Pipeline Layout"),
             bind_group_layouts: &[&layouts.glass],
@@ -632,7 +639,7 @@ impl GpuRenderer {
             }),
             primitive: primitive_state,
             depth_stencil: None,
-            multisample: multisample_state,
+            multisample: glass_multisample_state,
             multiview: None,
             cache: None,
         });
