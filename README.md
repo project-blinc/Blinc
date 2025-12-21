@@ -1,7 +1,7 @@
 # Blinc
 
-[![Build Status](https://github.com/project-blinc/blinc/actions/workflows/ci.yml/badge.svg)](https://github.com/project-blinc/blinc/actions/workflows/ci.yml)
-[![Tests](https://github.com/project-blinc/blinc/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/project-blinc/blinc/actions/workflows/ci.yml)
+[![Build Status](https://github.com/project-blinc/Blinc/actions/workflows/ci.yml/badge.svg)](https://github.com/project-blinc/Blinc/actions/workflows/ci.yml)
+[![Tests](https://github.com/project-blinc/Blinc/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/project-blinc/Blinc/actions/workflows/ci.yml)
 [![Rust Version](https://img.shields.io/badge/rust-1.75%2B-blue.svg)](https://www.rust-lang.org)
 [![Crate Version](https://img.shields.io/badge/crates.io-v0.1.0-orange.svg)](https://crates.io/crates/blinc)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
@@ -13,12 +13,12 @@
 ### Quick Install (macOS/Linux)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/project-blinc/blinc/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/project-blinc/Blinc/main/scripts/install.sh | bash
 ```
 
 ### Manual Installation
 
-Download the appropriate binary from [Releases](https://github.com/project-blinc/blinc/releases):
+Download the appropriate binary from [Releases](https://github.com/project-blinc/Blinc/releases):
 
 | Platform              | Download                                 |
 | --------------------- | ---------------------------------------- |
@@ -31,7 +31,7 @@ Download the appropriate binary from [Releases](https://github.com/project-blinc
 ### Build from Source
 
 ```bash
-git clone https://github.com/project-blinc/blinc
+git clone https://github.com/project-blinc/Blinc
 cd blinc
 cargo install --path crates/blinc_cli
 ```
