@@ -211,9 +211,7 @@ impl RunResult {
     pub fn by_category(&self) -> HashMap<String, Vec<&TestRun>> {
         let mut map: HashMap<String, Vec<&TestRun>> = HashMap::new();
         for result in &self.results {
-            map.entry(result.category.clone())
-                .or_default()
-                .push(result);
+            map.entry(result.category.clone()).or_default().push(result);
         }
         map
     }
@@ -231,14 +229,8 @@ impl RunResult {
             "║  Failed:  {:>5}                          ║",
             self.failed()
         );
-        println!(
-            "║  Total:   {:>5}                          ║",
-            self.total()
-        );
-        println!(
-            "║  Time:    {:>8.2?}                      ║",
-            self.duration
-        );
+        println!("║  Total:   {:>5}                          ║", self.total());
+        println!("║  Time:    {:>8.2?}                      ║", self.duration);
         println!("╚══════════════════════════════════════════╝");
 
         if self.failed() > 0 {

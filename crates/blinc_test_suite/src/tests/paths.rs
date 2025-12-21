@@ -85,7 +85,8 @@ pub fn suite() -> TestSuite {
 
         let mut path = Path::new();
         for i in 0..(points * 2) {
-            let angle = (i as f32 * std::f32::consts::PI / points as f32) - std::f32::consts::FRAC_PI_2;
+            let angle =
+                (i as f32 * std::f32::consts::PI / points as f32) - std::f32::consts::FRAC_PI_2;
             let r = if i % 2 == 0 { outer_r } else { inner_r };
             let x = center.x + r * angle.cos();
             let y = center.y + r * angle.sin();
@@ -99,7 +100,11 @@ pub fn suite() -> TestSuite {
         path = path.close();
 
         c.fill_path(&path, Color::YELLOW.into());
-        c.stroke_path(&path, &Stroke::new(2.0), Color::rgba(0.8, 0.6, 0.0, 1.0).into());
+        c.stroke_path(
+            &path,
+            &Stroke::new(2.0),
+            Color::rgba(0.8, 0.6, 0.0, 1.0).into(),
+        );
     });
 
     // Quadratic bezier curve
@@ -228,7 +233,12 @@ pub fn suite() -> TestSuite {
 
         // Get and draw bounds
         let bounds = path.bounds();
-        c.stroke_rect(bounds, 0.0.into(), &Stroke::new(1.0), Color::rgba(0.5, 0.5, 0.5, 1.0).into());
+        c.stroke_rect(
+            bounds,
+            0.0.into(),
+            &Stroke::new(1.0),
+            Color::rgba(0.5, 0.5, 0.5, 1.0).into(),
+        );
 
         // Draw the path
         c.fill_path(&path, Color::BLUE.with_alpha(0.5).into());

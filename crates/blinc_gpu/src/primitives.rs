@@ -58,17 +58,17 @@ pub enum ClipType {
 /// A GPU primitive ready for rendering (matches shader `Primitive` struct)
 ///
 /// Memory layout:
-/// - bounds: vec4<f32>        (16 bytes)
-/// - corner_radius: vec4<f32> (16 bytes)
-/// - color: vec4<f32>         (16 bytes)
-/// - color2: vec4<f32>        (16 bytes)
-/// - border: vec4<f32>        (16 bytes)
-/// - border_color: vec4<f32>  (16 bytes)
-/// - shadow: vec4<f32>        (16 bytes)
-/// - shadow_color: vec4<f32>  (16 bytes)
-/// - clip_bounds: vec4<f32>   (16 bytes) - clip region (x, y, width, height)
-/// - clip_radius: vec4<f32>   (16 bytes) - clip corner radii or circle/ellipse radii
-/// - type_info: vec4<u32>     (16 bytes) - (primitive_type, fill_type, clip_type, 0)
+/// - bounds: `vec4<f32>`        (16 bytes)
+/// - corner_radius: `vec4<f32>` (16 bytes)
+/// - color: `vec4<f32>`         (16 bytes)
+/// - color2: `vec4<f32>`        (16 bytes)
+/// - border: `vec4<f32>`        (16 bytes)
+/// - border_color: `vec4<f32>`  (16 bytes)
+/// - shadow: `vec4<f32>`        (16 bytes)
+/// - shadow_color: `vec4<f32>`  (16 bytes)
+/// - clip_bounds: `vec4<f32>`   (16 bytes) - clip region (x, y, width, height)
+/// - clip_radius: `vec4<f32>`   (16 bytes) - clip corner radii or circle/ellipse radii
+/// - type_info: `vec4<u32>`     (16 bytes) - (primitive_type, fill_type, clip_type, 0)
 /// Total: 176 bytes
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -267,11 +267,11 @@ impl GpuPrimitive {
 /// A GPU glass primitive for vibrancy/blur effects (matches shader `GlassPrimitive` struct)
 ///
 /// Memory layout:
-/// - bounds: vec4<f32>        (16 bytes)
-/// - corner_radius: vec4<f32> (16 bytes)
-/// - tint_color: vec4<f32>    (16 bytes)
-/// - params: vec4<f32>        (16 bytes)
-/// - type_info: vec4<u32>     (16 bytes)
+/// - bounds: `vec4<f32>`        (16 bytes)
+/// - corner_radius: `vec4<f32>` (16 bytes)
+/// - tint_color: `vec4<f32>`    (16 bytes)
+/// - params: `vec4<f32>`        (16 bytes)
+/// - type_info: `vec4<u32>`     (16 bytes)
 /// Total: 80 bytes
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -438,12 +438,12 @@ pub struct CompositeUniforms {
 
 /// Uniform buffer for path rendering
 /// Layout matches shader struct exactly:
-/// - viewport_size: vec2<f32> (8 bytes)
+/// - viewport_size: `vec2<f32>` (8 bytes)
 /// - opacity: f32 (4 bytes)
 /// - _pad0: f32 (4 bytes)
-/// - transform_row0: vec4<f32> (16 bytes)
-/// - transform_row1: vec4<f32> (16 bytes)
-/// - transform_row2: vec4<f32> (16 bytes)
+/// - transform_row0: `vec4<f32>` (16 bytes)
+/// - transform_row1: `vec4<f32>` (16 bytes)
+/// - transform_row2: `vec4<f32>` (16 bytes)
 /// Total: 64 bytes
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -527,7 +527,9 @@ impl PrimitiveBatch {
         // Offset indices by current vertex count
         let base_vertex = self.paths.vertices.len() as u32;
         self.paths.vertices.extend(tessellated.vertices);
-        self.paths.indices.extend(tessellated.indices.iter().map(|i| i + base_vertex));
+        self.paths
+            .indices
+            .extend(tessellated.indices.iter().map(|i| i + base_vertex));
     }
 
     pub fn is_empty(&self) -> bool {

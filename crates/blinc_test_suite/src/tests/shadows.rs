@@ -171,7 +171,11 @@ pub fn suite() -> TestSuite {
         // Button with inner shadow (pressed state)
         let button_rect = Rect::new(100.0, 100.0, 200.0, 50.0);
 
-        c.fill_rect(button_rect, 8.0.into(), Color::rgba(0.85, 0.85, 0.88, 1.0).into());
+        c.fill_rect(
+            button_rect,
+            8.0.into(),
+            Color::rgba(0.85, 0.85, 0.88, 1.0).into(),
+        );
 
         // Subtle inner shadow for pressed effect
         c.draw_inner_shadow(
@@ -291,7 +295,11 @@ pub fn suite() -> TestSuite {
                 Shadow::new(*ox, *oy, 12.0, Color::BLACK.with_alpha(0.3)),
             );
 
-            c.fill_rect(Rect::new(x, y, 100.0, 80.0), 8.0.into(), Color::WHITE.into());
+            c.fill_rect(
+                Rect::new(x, y, 100.0, 80.0),
+                8.0.into(),
+                Color::WHITE.into(),
+            );
         }
     });
 

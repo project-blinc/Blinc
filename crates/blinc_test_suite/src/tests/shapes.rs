@@ -132,7 +132,11 @@ pub fn suite() -> TestSuite {
             );
 
             // Small circles
-            c.fill_circle(Point::new(x + size / 2.0, 100.0), size / 2.0, Color::RED.into());
+            c.fill_circle(
+                Point::new(x + size / 2.0, 100.0),
+                size / 2.0,
+                Color::RED.into(),
+            );
         }
     });
 

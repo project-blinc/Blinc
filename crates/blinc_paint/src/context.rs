@@ -6,8 +6,8 @@
 use blinc_core::{
     BillboardFacing, BlendMode, Brush, Camera, ClipShape, CornerRadius, DrawCommand, DrawContext,
     Environment, ImageId, ImageOptions, LayerConfig, LayerId, Light, Mat4, MaterialId, MeshId,
-    MeshInstance, Path, Point, Rect, RecordingContext, SdfBuilder, Shadow, Size, Stroke,
-    TextStyle, Transform,
+    MeshInstance, Path, Point, RecordingContext, Rect, SdfBuilder, Shadow, Size, Stroke, TextStyle,
+    Transform,
 };
 
 // Re-export stroke types for convenience
@@ -241,7 +241,8 @@ impl DrawContext for PaintContext {
     }
 
     fn draw_inner_shadow(&mut self, rect: Rect, corner_radius: CornerRadius, shadow: Shadow) {
-        self.recording.draw_inner_shadow(rect, corner_radius, shadow);
+        self.recording
+            .draw_inner_shadow(rect, corner_radius, shadow);
     }
 
     fn draw_circle_shadow(&mut self, center: Point, radius: f32, shadow: Shadow) {
@@ -249,7 +250,8 @@ impl DrawContext for PaintContext {
     }
 
     fn draw_circle_inner_shadow(&mut self, center: Point, radius: f32, shadow: Shadow) {
-        self.recording.draw_circle_inner_shadow(center, radius, shadow);
+        self.recording
+            .draw_circle_inner_shadow(center, radius, shadow);
     }
 
     fn sdf_build(&mut self, f: &mut dyn FnMut(&mut dyn SdfBuilder)) {

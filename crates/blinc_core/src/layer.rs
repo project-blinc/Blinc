@@ -395,7 +395,10 @@ impl Affine2D {
 
     pub fn transform_point(&self, point: Point) -> Point {
         let [a, b, c, d, tx, ty] = self.elements;
-        Point::new(a * point.x + c * point.y + tx, b * point.x + d * point.y + ty)
+        Point::new(
+            a * point.x + c * point.y + tx,
+            b * point.x + d * point.y + ty,
+        )
     }
 
     /// Concatenate this transform with another (self * other)
@@ -410,10 +413,10 @@ impl Affine2D {
         // [0  0  1  ]   [0  0  1  ]
         Affine2D {
             elements: [
-                a1 * a2 + c1 * b2,       // a
-                b1 * a2 + d1 * b2,       // b
-                a1 * c2 + c1 * d2,       // c
-                b1 * c2 + d1 * d2,       // d
+                a1 * a2 + c1 * b2,         // a
+                b1 * a2 + d1 * b2,         // b
+                a1 * c2 + c1 * d2,         // c
+                b1 * c2 + d1 * d2,         // d
                 a1 * tx2 + c1 * ty2 + tx1, // tx
                 b1 * tx2 + d1 * ty2 + ty1, // ty
             ],
@@ -570,10 +573,7 @@ impl Gradient {
         Gradient::Linear {
             start,
             end,
-            stops: vec![
-                GradientStop::new(0.0, from),
-                GradientStop::new(1.0, to),
-            ],
+            stops: vec![GradientStop::new(0.0, from), GradientStop::new(1.0, to)],
             space: GradientSpace::UserSpace,
             spread: GradientSpread::Pad,
         }
@@ -596,10 +596,7 @@ impl Gradient {
             center,
             radius,
             focal: None,
-            stops: vec![
-                GradientStop::new(0.0, from),
-                GradientStop::new(1.0, to),
-            ],
+            stops: vec![GradientStop::new(0.0, from), GradientStop::new(1.0, to)],
             space: GradientSpace::UserSpace,
             spread: GradientSpread::Pad,
         }
@@ -622,10 +619,7 @@ impl Gradient {
         Gradient::Conic {
             center,
             start_angle: 0.0,
-            stops: vec![
-                GradientStop::new(0.0, from),
-                GradientStop::new(1.0, to),
-            ],
+            stops: vec![GradientStop::new(0.0, from), GradientStop::new(1.0, to)],
             space: GradientSpace::UserSpace,
         }
     }
@@ -641,7 +635,10 @@ impl Gradient {
 
     /// Get the first color in the gradient (or BLACK if no stops)
     pub fn first_color(&self) -> Color {
-        self.stops().first().map(|s| s.color).unwrap_or(Color::BLACK)
+        self.stops()
+            .first()
+            .map(|s| s.color)
+            .unwrap_or(Color::BLACK)
     }
 
     /// Get the last color in the gradient (or BLACK if no stops)
@@ -912,15 +909,9 @@ pub enum ClipShape {
         corner_radius: CornerRadius,
     },
     /// Circular clip
-    Circle {
-        center: Point,
-        radius: f32,
-    },
+    Circle { center: Point, radius: f32 },
     /// Elliptical clip
-    Ellipse {
-        center: Point,
-        radii: Vec2,
-    },
+    Ellipse { center: Point, radii: Vec2 },
     /// Arbitrary path clip (requires tessellation or stencil buffer)
     Path(crate::draw::Path),
 }
@@ -1735,11 +1726,7 @@ mod tests {
 
     #[test]
     fn test_layer_stack() {
-        let stack = Layer::stack(vec![
-            Layer::empty(),
-            Layer::empty(),
-            Layer::empty(),
-        ]);
+        let stack = Layer::stack(vec![Layer::empty(), Layer::empty(), Layer::empty()]);
 
         let mut count = 0;
         stack.visit_children(|_| count += 1);

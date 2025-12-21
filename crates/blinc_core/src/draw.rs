@@ -407,9 +407,7 @@ impl Path {
 
     /// Create a line path
     pub fn line(from: Point, to: Point) -> Self {
-        Self::new()
-            .move_to(from.x, from.y)
-            .line_to(to.x, to.y)
+        Self::new().move_to(from.x, from.y).line_to(to.x, to.y)
     }
 
     /// Get the path commands
@@ -793,13 +791,7 @@ pub trait DrawContext {
     fn fill_circle(&mut self, center: Point, radius: f32, brush: Brush);
 
     /// Stroke a circle (convenience method)
-    fn stroke_circle(
-        &mut self,
-        center: Point,
-        radius: f32,
-        stroke: &Stroke,
-        brush: Brush,
-    );
+    fn stroke_circle(&mut self, center: Point, radius: f32, stroke: &Stroke, brush: Brush);
 
     /// Draw text at a position
     fn draw_text(&mut self, text: &str, origin: Point, style: &TextStyle);
@@ -1105,7 +1097,8 @@ impl RecordingContext {
 
 impl DrawContext for RecordingContext {
     fn push_transform(&mut self, transform: Transform) {
-        self.commands.push(DrawCommand::PushTransform(transform.clone()));
+        self.commands
+            .push(DrawCommand::PushTransform(transform.clone()));
         self.transform_stack.push(transform);
     }
 
@@ -1199,13 +1192,7 @@ impl DrawContext for RecordingContext {
         });
     }
 
-    fn stroke_circle(
-        &mut self,
-        center: Point,
-        radius: f32,
-        stroke: &Stroke,
-        brush: Brush,
-    ) {
+    fn stroke_circle(&mut self, center: Point, radius: f32, stroke: &Stroke, brush: Brush) {
         self.commands.push(DrawCommand::StrokeCircle {
             center,
             radius,
@@ -1270,7 +1257,10 @@ impl DrawContext for RecordingContext {
         for (shape_id, shadow) in &builder.shadows {
             if let Some(shape) = builder.shapes.get(shape_id.0 as usize) {
                 match shape {
-                    SdfShape::Rect { rect, corner_radius } => {
+                    SdfShape::Rect {
+                        rect,
+                        corner_radius,
+                    } => {
                         self.draw_shadow(*rect, *corner_radius, shadow.clone());
                     }
                     SdfShape::Circle { center, radius } => {
@@ -1278,7 +1268,8 @@ impl DrawContext for RecordingContext {
                         self.draw_circle_shadow(*center, *radius, shadow.clone());
                     }
                     SdfShape::Ellipse { center, radii } => {
-                        let rect = Rect::from_center(*center, Size::new(radii.x * 2.0, radii.y * 2.0));
+                        let rect =
+                            Rect::from_center(*center, Size::new(radii.x * 2.0, radii.y * 2.0));
                         // Use smaller radius for corner approximation
                         self.draw_shadow(rect, radii.x.min(radii.y).into(), shadow.clone());
                     }
@@ -1293,7 +1284,10 @@ impl DrawContext for RecordingContext {
         for (shape_id, brush) in builder.fills {
             if let Some(shape) = builder.shapes.get(shape_id.0 as usize) {
                 match shape {
-                    SdfShape::Rect { rect, corner_radius } => {
+                    SdfShape::Rect {
+                        rect,
+                        corner_radius,
+                    } => {
                         self.fill_rect(*rect, *corner_radius, brush);
                     }
                     SdfShape::Circle { center, radius } => {
@@ -1320,7 +1314,10 @@ impl DrawContext for RecordingContext {
         for (shape_id, stroke, brush) in builder.strokes {
             if let Some(shape) = builder.shapes.get(shape_id.0 as usize) {
                 match shape {
-                    SdfShape::Rect { rect, corner_radius } => {
+                    SdfShape::Rect {
+                        rect,
+                        corner_radius,
+                    } => {
                         self.stroke_rect(*rect, *corner_radius, &stroke, brush);
                     }
                     SdfShape::Circle { center, radius } => {
@@ -1430,7 +1427,10 @@ impl DrawContext for RecordingContext {
     }
 
     fn current_blend_mode(&self) -> BlendMode {
-        self.blend_mode_stack.last().copied().unwrap_or(BlendMode::Normal)
+        self.blend_mode_stack
+            .last()
+            .copied()
+            .unwrap_or(BlendMode::Normal)
     }
 }
 
@@ -1440,21 +1440,75 @@ impl DrawContext for RecordingContext {
 
 #[derive(Clone, Debug)]
 enum SdfShape {
-    Rect { rect: Rect, corner_radius: CornerRadius },
-    Circle { center: Point, radius: f32 },
-    Ellipse { center: Point, radii: Vec2 },
-    Line { from: Point, to: Point, width: f32 },
-    Arc { center: Point, radius: f32, start: f32, end: f32, width: f32 },
-    QuadBezier { p0: Point, p1: Point, p2: Point, width: f32 },
-    Union { a: ShapeId, b: ShapeId },
-    Subtract { a: ShapeId, b: ShapeId },
-    Intersect { a: ShapeId, b: ShapeId },
-    SmoothUnion { a: ShapeId, b: ShapeId, radius: f32 },
-    SmoothSubtract { a: ShapeId, b: ShapeId, radius: f32 },
-    SmoothIntersect { a: ShapeId, b: ShapeId, radius: f32 },
-    Round { shape: ShapeId, radius: f32 },
-    Outline { shape: ShapeId, width: f32 },
-    Offset { shape: ShapeId, distance: f32 },
+    Rect {
+        rect: Rect,
+        corner_radius: CornerRadius,
+    },
+    Circle {
+        center: Point,
+        radius: f32,
+    },
+    Ellipse {
+        center: Point,
+        radii: Vec2,
+    },
+    Line {
+        from: Point,
+        to: Point,
+        width: f32,
+    },
+    Arc {
+        center: Point,
+        radius: f32,
+        start: f32,
+        end: f32,
+        width: f32,
+    },
+    QuadBezier {
+        p0: Point,
+        p1: Point,
+        p2: Point,
+        width: f32,
+    },
+    Union {
+        a: ShapeId,
+        b: ShapeId,
+    },
+    Subtract {
+        a: ShapeId,
+        b: ShapeId,
+    },
+    Intersect {
+        a: ShapeId,
+        b: ShapeId,
+    },
+    SmoothUnion {
+        a: ShapeId,
+        b: ShapeId,
+        radius: f32,
+    },
+    SmoothSubtract {
+        a: ShapeId,
+        b: ShapeId,
+        radius: f32,
+    },
+    SmoothIntersect {
+        a: ShapeId,
+        b: ShapeId,
+        radius: f32,
+    },
+    Round {
+        shape: ShapeId,
+        radius: f32,
+    },
+    Outline {
+        shape: ShapeId,
+        width: f32,
+    },
+    Offset {
+        shape: ShapeId,
+        distance: f32,
+    },
 }
 
 struct RecordingSdfBuilder {
@@ -1483,7 +1537,10 @@ impl RecordingSdfBuilder {
 
 impl SdfBuilder for RecordingSdfBuilder {
     fn rect(&mut self, rect: Rect, corner_radius: CornerRadius) -> ShapeId {
-        self.add_shape(SdfShape::Rect { rect, corner_radius })
+        self.add_shape(SdfShape::Rect {
+            rect,
+            corner_radius,
+        })
     }
 
     fn circle(&mut self, center: Point, radius: f32) -> ShapeId {
@@ -1499,7 +1556,13 @@ impl SdfBuilder for RecordingSdfBuilder {
     }
 
     fn arc(&mut self, center: Point, radius: f32, start: f32, end: f32, width: f32) -> ShapeId {
-        self.add_shape(SdfShape::Arc { center, radius, start, end, width })
+        self.add_shape(SdfShape::Arc {
+            center,
+            radius,
+            start,
+            end,
+            width,
+        })
     }
 
     fn quad_bezier(&mut self, p0: Point, p1: Point, p2: Point, width: f32) -> ShapeId {
@@ -1564,7 +1627,11 @@ mod tests {
         let mut ctx = RecordingContext::new(Size::new(800.0, 600.0));
 
         ctx.push_transform(Transform::translate(10.0, 20.0));
-        ctx.fill_rect(Rect::new(0.0, 0.0, 100.0, 50.0), 8.0.into(), Color::BLUE.into());
+        ctx.fill_rect(
+            Rect::new(0.0, 0.0, 100.0, 50.0),
+            8.0.into(),
+            Color::BLUE.into(),
+        );
         ctx.draw_text("Hello", Point::new(10.0, 30.0), &TextStyle::default());
         ctx.pop_transform();
 

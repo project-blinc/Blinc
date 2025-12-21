@@ -42,10 +42,10 @@
 //! ```
 
 use blinc_core::{
-    Affine2D, BillboardFacing, BlendMode, Brush, Camera, ClipShape, CornerRadius,
-    DrawCommand, DrawContext, Environment, ImageId, ImageOptions, LayerConfig, LayerId,
-    Light, Mat4, MeshId, MeshInstance, MaterialId, Path, Point, Rect, SdfBuilder, Shadow, ShapeId,
-    Size, Stroke, TextStyle, Transform,
+    Affine2D, BillboardFacing, BlendMode, Brush, Camera, ClipShape, CornerRadius, DrawCommand,
+    DrawContext, Environment, ImageId, ImageOptions, LayerConfig, LayerId, Light, Mat4, MaterialId,
+    MeshId, MeshInstance, Path, Point, Rect, SdfBuilder, Shadow, ShapeId, Size, Stroke, TextStyle,
+    Transform,
 };
 
 use crate::path::{tessellate_fill, tessellate_stroke};
@@ -121,7 +121,10 @@ impl GpuPaintContext {
 
     /// Get the current transform
     fn current_affine(&self) -> Affine2D {
-        self.transform_stack.last().copied().unwrap_or(Affine2D::IDENTITY)
+        self.transform_stack
+            .last()
+            .copied()
+            .unwrap_or(Affine2D::IDENTITY)
     }
 
     /// Get the current combined opacity
@@ -184,16 +187,32 @@ impl GpuPaintContext {
                     Point::new(rect.x(), rect.y() + rect.height()),
                 ];
 
-                let transformed: Vec<Point> = corners.iter().map(|p| self.transform_point(*p)).collect();
+                let transformed: Vec<Point> =
+                    corners.iter().map(|p| self.transform_point(*p)).collect();
 
-                let min_x = transformed.iter().map(|p| p.x).fold(f32::INFINITY, f32::min);
-                let max_x = transformed.iter().map(|p| p.x).fold(f32::NEG_INFINITY, f32::max);
-                let min_y = transformed.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
-                let max_y = transformed.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max);
+                let min_x = transformed
+                    .iter()
+                    .map(|p| p.x)
+                    .fold(f32::INFINITY, f32::min);
+                let max_x = transformed
+                    .iter()
+                    .map(|p| p.x)
+                    .fold(f32::NEG_INFINITY, f32::max);
+                let min_y = transformed
+                    .iter()
+                    .map(|p| p.y)
+                    .fold(f32::INFINITY, f32::min);
+                let max_y = transformed
+                    .iter()
+                    .map(|p| p.y)
+                    .fold(f32::NEG_INFINITY, f32::max);
 
                 ClipShape::Rect(Rect::new(min_x, min_y, max_x - min_x, max_y - min_y))
             }
-            ClipShape::RoundedRect { rect, corner_radius } => {
+            ClipShape::RoundedRect {
+                rect,
+                corner_radius,
+            } => {
                 // Transform corners and compute AABB
                 let corners = [
                     Point::new(rect.x(), rect.y()),
@@ -202,12 +221,25 @@ impl GpuPaintContext {
                     Point::new(rect.x(), rect.y() + rect.height()),
                 ];
 
-                let transformed: Vec<Point> = corners.iter().map(|p| self.transform_point(*p)).collect();
+                let transformed: Vec<Point> =
+                    corners.iter().map(|p| self.transform_point(*p)).collect();
 
-                let min_x = transformed.iter().map(|p| p.x).fold(f32::INFINITY, f32::min);
-                let max_x = transformed.iter().map(|p| p.x).fold(f32::NEG_INFINITY, f32::max);
-                let min_y = transformed.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
-                let max_y = transformed.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max);
+                let min_x = transformed
+                    .iter()
+                    .map(|p| p.x)
+                    .fold(f32::INFINITY, f32::min);
+                let max_x = transformed
+                    .iter()
+                    .map(|p| p.x)
+                    .fold(f32::NEG_INFINITY, f32::max);
+                let min_y = transformed
+                    .iter()
+                    .map(|p| p.y)
+                    .fold(f32::INFINITY, f32::min);
+                let max_y = transformed
+                    .iter()
+                    .map(|p| p.y)
+                    .fold(f32::NEG_INFINITY, f32::max);
 
                 // Scale the corner radii by the average scale factor
                 let a = affine.elements[0];
@@ -335,7 +367,10 @@ impl GpuPaintContext {
                 [0.0; 4],
                 ClipType::Rect,
             ),
-            ClipShape::RoundedRect { rect, corner_radius } => (
+            ClipShape::RoundedRect {
+                rect,
+                corner_radius,
+            } => (
                 [rect.x(), rect.y(), rect.width(), rect.height()],
                 [
                     corner_radius.top_left,
@@ -411,9 +446,11 @@ impl GpuPaintContext {
             DrawCommand::PushBlendMode(m) => self.push_blend_mode(*m),
             DrawCommand::PopBlendMode => self.pop_blend_mode(),
             DrawCommand::FillPath { path, brush } => self.fill_path(path, brush.clone()),
-            DrawCommand::StrokePath { path, stroke, brush } => {
-                self.stroke_path(path, stroke, brush.clone())
-            }
+            DrawCommand::StrokePath {
+                path,
+                stroke,
+                brush,
+            } => self.stroke_path(path, stroke, brush.clone()),
             DrawCommand::FillRect {
                 rect,
                 corner_radius,
@@ -436,12 +473,16 @@ impl GpuPaintContext {
                 stroke,
                 brush,
             } => self.stroke_circle(*center, *radius, stroke, brush.clone()),
-            DrawCommand::DrawText { text, origin, style } => {
-                self.draw_text(text, *origin, style)
-            }
-            DrawCommand::DrawImage { image, rect, options } => {
-                self.draw_image(*image, *rect, options)
-            }
+            DrawCommand::DrawText {
+                text,
+                origin,
+                style,
+            } => self.draw_text(text, *origin, style),
+            DrawCommand::DrawImage {
+                image,
+                rect,
+                options,
+            } => self.draw_image(*image, *rect, options),
             DrawCommand::DrawShadow {
                 rect,
                 corner_radius,
@@ -582,7 +623,12 @@ impl DrawContext for GpuPaintContext {
             shadow_color: [0.0; 4],
             clip_bounds,
             clip_radius,
-            type_info: [PrimitiveType::Rect as u32, fill_type as u32, clip_type as u32, 0],
+            type_info: [
+                PrimitiveType::Rect as u32,
+                fill_type as u32,
+                clip_type as u32,
+                0,
+            ],
         };
 
         self.batch.push(primitive);
@@ -620,7 +666,12 @@ impl DrawContext for GpuPaintContext {
             shadow_color: [0.0; 4],
             clip_bounds,
             clip_radius,
-            type_info: [PrimitiveType::Rect as u32, fill_type as u32, clip_type as u32, 0],
+            type_info: [
+                PrimitiveType::Rect as u32,
+                fill_type as u32,
+                clip_type as u32,
+                0,
+            ],
         };
 
         self.batch.push(primitive);
@@ -655,7 +706,12 @@ impl DrawContext for GpuPaintContext {
             shadow_color: [0.0; 4],
             clip_bounds,
             clip_radius,
-            type_info: [PrimitiveType::Circle as u32, fill_type as u32, clip_type as u32, 0],
+            type_info: [
+                PrimitiveType::Circle as u32,
+                fill_type as u32,
+                clip_type as u32,
+                0,
+            ],
         };
 
         self.batch.push(primitive);
@@ -690,7 +746,12 @@ impl DrawContext for GpuPaintContext {
             shadow_color: [0.0; 4],
             clip_bounds,
             clip_radius,
-            type_info: [PrimitiveType::Circle as u32, fill_type as u32, clip_type as u32, 0],
+            type_info: [
+                PrimitiveType::Circle as u32,
+                fill_type as u32,
+                clip_type as u32,
+                0,
+            ],
         };
 
         self.batch.push(primitive);
@@ -742,7 +803,12 @@ impl DrawContext for GpuPaintContext {
             ],
             clip_bounds,
             clip_radius,
-            type_info: [PrimitiveType::Shadow as u32, FillType::Solid as u32, clip_type as u32, 0],
+            type_info: [
+                PrimitiveType::Shadow as u32,
+                FillType::Solid as u32,
+                clip_type as u32,
+                0,
+            ],
         };
 
         self.batch.push(primitive);
@@ -779,7 +845,12 @@ impl DrawContext for GpuPaintContext {
             ],
             clip_bounds,
             clip_radius,
-            type_info: [PrimitiveType::InnerShadow as u32, FillType::Solid as u32, clip_type as u32, 0],
+            type_info: [
+                PrimitiveType::InnerShadow as u32,
+                FillType::Solid as u32,
+                clip_type as u32,
+                0,
+            ],
         };
 
         self.batch.push(primitive);
@@ -813,7 +884,12 @@ impl DrawContext for GpuPaintContext {
             ],
             clip_bounds,
             clip_radius,
-            type_info: [PrimitiveType::CircleShadow as u32, FillType::Solid as u32, clip_type as u32, 0],
+            type_info: [
+                PrimitiveType::CircleShadow as u32,
+                FillType::Solid as u32,
+                clip_type as u32,
+                0,
+            ],
         };
 
         self.batch.push(primitive);
@@ -846,7 +922,12 @@ impl DrawContext for GpuPaintContext {
             ],
             clip_bounds,
             clip_radius,
-            type_info: [PrimitiveType::CircleInnerShadow as u32, FillType::Solid as u32, clip_type as u32, 0],
+            type_info: [
+                PrimitiveType::CircleInnerShadow as u32,
+                FillType::Solid as u32,
+                clip_type as u32,
+                0,
+            ],
         };
 
         self.batch.push(primitive);
@@ -936,7 +1017,10 @@ impl DrawContext for GpuPaintContext {
     }
 
     fn current_blend_mode(&self) -> BlendMode {
-        self.blend_mode_stack.last().copied().unwrap_or(BlendMode::Normal)
+        self.blend_mode_stack
+            .last()
+            .copied()
+            .unwrap_or(BlendMode::Normal)
     }
 }
 
@@ -952,9 +1036,18 @@ struct GpuSdfBuilder<'a> {
 
 #[derive(Clone, Debug)]
 enum SdfShapeData {
-    Rect { rect: Rect, corner_radius: CornerRadius },
-    Circle { center: Point, radius: f32 },
-    Ellipse { center: Point, radii: (f32, f32) },
+    Rect {
+        rect: Rect,
+        corner_radius: CornerRadius,
+    },
+    Circle {
+        center: Point,
+        radius: f32,
+    },
+    Ellipse {
+        center: Point,
+        radii: (f32, f32),
+    },
 }
 
 impl<'a> GpuSdfBuilder<'a> {
@@ -974,7 +1067,10 @@ impl<'a> GpuSdfBuilder<'a> {
 
 impl<'a> SdfBuilder for GpuSdfBuilder<'a> {
     fn rect(&mut self, rect: Rect, corner_radius: CornerRadius) -> ShapeId {
-        self.add_shape(SdfShapeData::Rect { rect, corner_radius })
+        self.add_shape(SdfShapeData::Rect {
+            rect,
+            corner_radius,
+        })
     }
 
     fn circle(&mut self, center: Point, radius: f32) -> ShapeId {
@@ -1048,7 +1144,10 @@ impl<'a> SdfBuilder for GpuSdfBuilder<'a> {
     fn fill(&mut self, shape: ShapeId, brush: Brush) {
         if let Some(shape_data) = self.shapes.get(shape.0 as usize) {
             match shape_data.clone() {
-                SdfShapeData::Rect { rect, corner_radius } => {
+                SdfShapeData::Rect {
+                    rect,
+                    corner_radius,
+                } => {
                     self.ctx.fill_rect(rect, corner_radius, brush);
                 }
                 SdfShapeData::Circle { center, radius } => {
@@ -1067,7 +1166,10 @@ impl<'a> SdfBuilder for GpuSdfBuilder<'a> {
     fn stroke(&mut self, shape: ShapeId, stroke: &Stroke, brush: Brush) {
         if let Some(shape_data) = self.shapes.get(shape.0 as usize) {
             match shape_data.clone() {
-                SdfShapeData::Rect { rect, corner_radius } => {
+                SdfShapeData::Rect {
+                    rect,
+                    corner_radius,
+                } => {
                     self.ctx.stroke_rect(rect, corner_radius, stroke, brush);
                 }
                 SdfShapeData::Circle { center, radius } => {
@@ -1084,7 +1186,10 @@ impl<'a> SdfBuilder for GpuSdfBuilder<'a> {
     fn shadow(&mut self, shape: ShapeId, shadow: Shadow) {
         if let Some(shape_data) = self.shapes.get(shape.0 as usize) {
             match shape_data.clone() {
-                SdfShapeData::Rect { rect, corner_radius } => {
+                SdfShapeData::Rect {
+                    rect,
+                    corner_radius,
+                } => {
                     self.ctx.draw_shadow(rect, corner_radius, shadow);
                 }
                 SdfShapeData::Circle { center, radius } => {

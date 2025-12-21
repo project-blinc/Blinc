@@ -3,7 +3,7 @@
 //! Tests for clip regions (rect, rounded rect, circle, path)
 
 use crate::runner::TestSuite;
-use blinc_core::{ClipShape, Color, DrawContext, Point, Rect, CornerRadius, Vec2};
+use blinc_core::{ClipShape, Color, CornerRadius, DrawContext, Point, Rect, Vec2};
 
 /// Create the clipping test suite
 pub fn suite() -> TestSuite {

@@ -28,7 +28,10 @@ pub enum TestResult {
 
 impl TestResult {
     pub fn is_passed(&self) -> bool {
-        matches!(self, TestResult::Passed | TestResult::PassedWithNewReference)
+        matches!(
+            self,
+            TestResult::Passed | TestResult::PassedWithNewReference
+        )
     }
 }
 
@@ -120,8 +123,7 @@ impl TestHarness {
         let queue = renderer.queue_arc();
 
         // Create output directories
-        std::fs::create_dir_all(&config.output_dir)
-            .context("Failed to create output directory")?;
+        std::fs::create_dir_all(&config.output_dir).context("Failed to create output directory")?;
         std::fs::create_dir_all(&config.reference_dir)
             .context("Failed to create reference directory")?;
 
@@ -230,12 +232,7 @@ impl TestHarness {
             {
                 let mut renderer = self.renderer.borrow_mut();
                 renderer.resize(width, height);
-                renderer.render_msaa(
-                    &msaa_view,
-                    &resolve_view,
-                    batch,
-                    [1.0, 1.0, 1.0, 1.0],
-                );
+                renderer.render_msaa(&msaa_view, &resolve_view, batch, [1.0, 1.0, 1.0, 1.0]);
             }
 
             copy_texture = resolve_texture;
@@ -314,7 +311,12 @@ impl TestHarness {
                 img.put_pixel(
                     x,
                     y,
-                    Rgba([row_data[i], row_data[i + 1], row_data[i + 2], row_data[i + 3]]),
+                    Rgba([
+                        row_data[i],
+                        row_data[i + 1],
+                        row_data[i + 2],
+                        row_data[i + 3],
+                    ]),
                 );
             }
         }
@@ -396,7 +398,12 @@ impl TestHarness {
     where
         F: FnOnce(&mut TestContext),
     {
-        self.run_test_with_size(name, self.default_size.width, self.default_size.height, test_fn)
+        self.run_test_with_size(
+            name,
+            self.default_size.width,
+            self.default_size.height,
+            test_fn,
+        )
     }
 
     /// Run a test with custom size and save output as PNG
@@ -529,6 +536,7 @@ impl Default for TestHarnessConfig {
 mod tests {
     use super::*;
     use blinc_core::Color;
+    use blinc_core::DrawContext;
 
     #[test]
     #[ignore] // Requires GPU

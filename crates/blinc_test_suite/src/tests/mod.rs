@@ -1,15 +1,15 @@
 //! Visual test cases organized by category
 
-pub mod shapes;
-pub mod transforms;
-pub mod opacity;
-pub mod gradients;
-pub mod paths;
-pub mod text;
-pub mod shadows;
 pub mod clipping;
-pub mod sdf;
+pub mod gradients;
+pub mod opacity;
 pub mod paint_context;
+pub mod paths;
+pub mod sdf;
+pub mod shadows;
+pub mod shapes;
+pub mod text;
+pub mod transforms;
 
 use crate::runner::TestSuite;
 

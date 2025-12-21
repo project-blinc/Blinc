@@ -63,7 +63,10 @@ pub fn suite() -> TestSuite {
 
         c.sdf_build(&mut |sdf| {
             let shape = sdf.rect(Rect::new(100.0, 100.0, 200.0, 100.0), 12.0.into());
-            sdf.shadow(shape, blinc_core::Shadow::new(4.0, 4.0, 10.0, Color::BLACK.with_alpha(0.3)));
+            sdf.shadow(
+                shape,
+                blinc_core::Shadow::new(4.0, 4.0, 10.0, Color::BLACK.with_alpha(0.3)),
+            );
             sdf.fill(shape, Color::WHITE.into());
         });
     });
@@ -104,7 +107,10 @@ pub fn suite() -> TestSuite {
 
         c.sdf_build(&mut |sdf| {
             let shape = sdf.rect(Rect::new(125.0, 120.0, 150.0, 40.0), 8.0.into());
-            sdf.shadow(shape, blinc_core::Shadow::new(0.0, 2.0, 4.0, Color::BLACK.with_alpha(0.2)));
+            sdf.shadow(
+                shape,
+                blinc_core::Shadow::new(0.0, 2.0, 4.0, Color::BLACK.with_alpha(0.2)),
+            );
             sdf.fill(shape, Color::BLUE.into());
         });
     });
@@ -123,13 +129,19 @@ pub fn suite() -> TestSuite {
         // Soft outer shadow
         c.sdf_build(&mut |sdf| {
             let shape = sdf.rect(Rect::new(100.0, 75.0, 200.0, 150.0), 16.0.into());
-            sdf.shadow(shape, blinc_core::Shadow::new(0.0, 12.0, 24.0, Color::BLACK.with_alpha(0.1)));
+            sdf.shadow(
+                shape,
+                blinc_core::Shadow::new(0.0, 12.0, 24.0, Color::BLACK.with_alpha(0.1)),
+            );
         });
 
         // Sharper close shadow
         c.sdf_build(&mut |sdf| {
             let shape = sdf.rect(Rect::new(100.0, 75.0, 200.0, 150.0), 16.0.into());
-            sdf.shadow(shape, blinc_core::Shadow::new(0.0, 4.0, 8.0, Color::BLACK.with_alpha(0.15)));
+            sdf.shadow(
+                shape,
+                blinc_core::Shadow::new(0.0, 4.0, 8.0, Color::BLACK.with_alpha(0.15)),
+            );
         });
 
         // Card fill

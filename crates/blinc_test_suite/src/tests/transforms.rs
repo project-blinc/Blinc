@@ -220,7 +220,11 @@ pub fn suite() -> TestSuite {
         c.pop_transform();
 
         // Draw markers at each transform state
-        c.fill_rect(Rect::new(0.0, 0.0, 20.0, 20.0), 4.0.into(), Color::RED.into());
+        c.fill_rect(
+            Rect::new(0.0, 0.0, 20.0, 20.0),
+            4.0.into(),
+            Color::RED.into(),
+        );
     });
 
     suite

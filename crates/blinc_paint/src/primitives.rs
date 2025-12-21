@@ -47,7 +47,10 @@ pub struct RoundedRect {
 
 impl RoundedRect {
     pub fn new(rect: Rect, corner_radius: CornerRadius) -> Self {
-        Self { rect, corner_radius }
+        Self {
+            rect,
+            corner_radius,
+        }
     }
 
     pub fn uniform(rect: Rect, radius: f32) -> Self {

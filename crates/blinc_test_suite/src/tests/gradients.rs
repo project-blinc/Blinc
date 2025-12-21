@@ -90,12 +90,7 @@ pub fn suite() -> TestSuite {
     suite.add("radial_basic", |ctx| {
         let c = ctx.ctx();
 
-        let gradient = Gradient::radial(
-            Point::new(200.0, 150.0),
-            100.0,
-            Color::WHITE,
-            Color::BLUE,
-        );
+        let gradient = Gradient::radial(Point::new(200.0, 150.0), 100.0, Color::WHITE, Color::BLUE);
 
         c.fill_rect(
             Rect::new(100.0, 50.0, 200.0, 200.0),
@@ -160,7 +155,11 @@ pub fn suite() -> TestSuite {
             Color::RED,
             Color::YELLOW,
         );
-        c.fill_rect(Rect::new(50.0, 50.0, 100.0, 50.0), 8.0.into(), Brush::Gradient(g1));
+        c.fill_rect(
+            Rect::new(50.0, 50.0, 100.0, 50.0),
+            8.0.into(),
+            Brush::Gradient(g1),
+        );
 
         // Radial gradient
         let g2 = Gradient::radial(Point::new(275.0, 75.0), 40.0, Color::WHITE, Color::GREEN);
