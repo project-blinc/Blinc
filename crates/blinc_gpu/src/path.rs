@@ -2,7 +2,7 @@
 //!
 //! Converts vector paths into GPU-renderable triangle meshes using lyon.
 
-use blinc_core::{Brush, Color, Path, PathCommand, Point, Stroke, Vec2};
+use blinc_core::{Brush, Color, Gradient, Path, PathCommand, Point, Stroke, Vec2};
 use lyon::lyon_tessellation::{
     BuffersBuilder, FillOptions, FillTessellator, FillVertex, StrokeOptions, StrokeTessellator,
     StrokeVertex, VertexBuffers,
@@ -14,9 +14,15 @@ use lyon::path::PathEvent;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PathVertex {
-    pub position: [f32; 2],
-    pub color: [f32; 4],
+    pub position: [f32; 2],       // 8 bytes, offset 0
+    pub color: [f32; 4],          // 16 bytes, offset 8 (start color for gradients)
+    pub end_color: [f32; 4],      // 16 bytes, offset 24 (end color for gradients)
+    pub uv: [f32; 2],             // 8 bytes, offset 40, UV coordinates for gradient sampling (0-1 range)
+    pub gradient_params: [f32; 4],// 16 bytes, offset 48, gradient parameters (linear: x1,y1,x2,y2; radial: cx,cy,r,0)
+    pub gradient_type: u32,       // 4 bytes, offset 64, 0 = solid, 1 = linear, 2 = radial
+    pub _padding: [u32; 3],       // 12 bytes, offset 68, Padding for 16-byte alignment
 }
+// Total: 80 bytes
 
 /// Tessellated path geometry ready for GPU rendering
 #[derive(Default)]
@@ -309,14 +315,82 @@ fn path_to_lyon_events(path: &Path) -> Vec<PathEvent> {
     events
 }
 
+/// Compute the bounding box of a path
+fn compute_path_bounds(path: &Path) -> (f32, f32, f32, f32) {
+    let mut min_x = f32::MAX;
+    let mut min_y = f32::MAX;
+    let mut max_x = f32::MIN;
+    let mut max_y = f32::MIN;
+
+    for cmd in path.commands() {
+        let points: Vec<Point> = match cmd {
+            PathCommand::MoveTo(p) => vec![*p],
+            PathCommand::LineTo(p) => vec![*p],
+            PathCommand::QuadTo { control, end } => vec![*control, *end],
+            PathCommand::CubicTo { control1, control2, end } => vec![*control1, *control2, *end],
+            PathCommand::ArcTo { end, .. } => vec![*end],
+            PathCommand::Close => vec![],
+        };
+
+        for p in points {
+            min_x = min_x.min(p.x);
+            min_y = min_y.min(p.y);
+            max_x = max_x.max(p.x);
+            max_y = max_y.max(p.y);
+        }
+    }
+
+    if min_x == f32::MAX {
+        (0.0, 0.0, 1.0, 1.0)
+    } else {
+        (min_x, min_y, max_x, max_y)
+    }
+}
+
+/// Extract gradient info from brush
+fn extract_gradient_info(brush: &Brush) -> (u32, Color, Color, [f32; 4]) {
+    match brush {
+        Brush::Solid(color) => (0, *color, *color, [0.0, 0.0, 1.0, 1.0]),
+        Brush::Gradient(gradient) => {
+            let start_color = gradient.first_color();
+            let end_color = gradient.last_color();
+
+            match gradient {
+                Gradient::Linear { start, end, .. } => {
+                    tracing::debug!(
+                        "Linear gradient: start=({}, {}), end=({}, {}), colors=({:?} -> {:?})",
+                        start.x, start.y, end.x, end.y, start_color, end_color
+                    );
+                    (1, start_color, end_color, [start.x, start.y, end.x, end.y])
+                }
+                Gradient::Radial { center, radius, .. } => {
+                    tracing::debug!(
+                        "Radial gradient: center=({}, {}), radius={}, colors=({:?} -> {:?})",
+                        center.x, center.y, radius, start_color, end_color
+                    );
+                    (2, start_color, end_color, [center.x, center.y, *radius, 0.0])
+                }
+                Gradient::Conic { center, start_angle, .. } => {
+                    // Treat conic as radial for now
+                    (2, start_color, end_color, [center.x, center.y, 100.0, *start_angle])
+                }
+            }
+        }
+    }
+}
+
 /// Tessellate a path for filling
 pub fn tessellate_fill(path: &Path, brush: &Brush) -> TessellatedPath {
-    let color = brush_to_color(brush);
     let events = path_to_lyon_events(path);
 
     if events.is_empty() {
         return TessellatedPath::new();
     }
+
+    let (gradient_type, start_color, end_color, gradient_params) = extract_gradient_info(brush);
+    let (min_x, min_y, max_x, max_y) = compute_path_bounds(path);
+    let bounds_width = (max_x - min_x).max(1.0);
+    let bounds_height = (max_y - min_y).max(1.0);
 
     let mut geometry: VertexBuffers<PathVertex, u32> = VertexBuffers::new();
     let mut tessellator = FillTessellator::new();
@@ -326,9 +400,25 @@ pub fn tessellate_fill(path: &Path, brush: &Brush) -> TessellatedPath {
     let result = tessellator.tessellate(
         events.iter().cloned(),
         &options,
-        &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| PathVertex {
-            position: vertex.position().to_array(),
-            color: [color.r, color.g, color.b, color.a],
+        &mut BuffersBuilder::new(&mut geometry, |vertex: FillVertex| {
+            let pos = vertex.position();
+
+            // Compute UV based on position in bounding box
+            // For ObjectBoundingBox gradients, UV is used directly as gradient parameter
+            let u = (pos.x - min_x) / bounds_width;
+            let v = (pos.y - min_y) / bounds_height;
+
+            // For gradients, we pass start/end colors and gradient params
+            // The shader computes the gradient based on UV and gradient direction
+            PathVertex {
+                position: pos.to_array(),
+                color: [start_color.r, start_color.g, start_color.b, start_color.a],
+                end_color: [end_color.r, end_color.g, end_color.b, end_color.a],
+                uv: [u, v],
+                gradient_params,
+                gradient_type,
+                _padding: [0, 0, 0],
+            }
         }),
     );
 
@@ -345,12 +435,16 @@ pub fn tessellate_fill(path: &Path, brush: &Brush) -> TessellatedPath {
 
 /// Tessellate a path for stroking
 pub fn tessellate_stroke(path: &Path, stroke: &Stroke, brush: &Brush) -> TessellatedPath {
-    let color = brush_to_color(brush);
     let events = path_to_lyon_events(path);
 
     if events.is_empty() {
         return TessellatedPath::new();
     }
+
+    let (gradient_type, start_color, end_color, gradient_params) = extract_gradient_info(brush);
+    let (min_x, min_y, max_x, max_y) = compute_path_bounds(path);
+    let bounds_width = (max_x - min_x).max(1.0);
+    let bounds_height = (max_y - min_y).max(1.0);
 
     let mut geometry: VertexBuffers<PathVertex, u32> = VertexBuffers::new();
     let mut tessellator = StrokeTessellator::new();
@@ -378,9 +472,23 @@ pub fn tessellate_stroke(path: &Path, stroke: &Stroke, brush: &Brush) -> Tessell
     let result = tessellator.tessellate(
         events.iter().cloned(),
         &options,
-        &mut BuffersBuilder::new(&mut geometry, |vertex: StrokeVertex| PathVertex {
-            position: vertex.position().to_array(),
-            color: [color.r, color.g, color.b, color.a],
+        &mut BuffersBuilder::new(&mut geometry, |vertex: StrokeVertex| {
+            let pos = vertex.position();
+
+            // Compute UV based on position in bounding box
+            let u = (pos.x - min_x) / bounds_width;
+            let v = (pos.y - min_y) / bounds_height;
+
+            // For gradients, we pass start/end colors and gradient params
+            PathVertex {
+                position: pos.to_array(),
+                color: [start_color.r, start_color.g, start_color.b, start_color.a],
+                end_color: [end_color.r, end_color.g, end_color.b, end_color.a],
+                uv: [u, v],
+                gradient_params,
+                gradient_type,
+                _padding: [0, 0, 0],
+            }
         }),
     );
 

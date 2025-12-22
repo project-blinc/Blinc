@@ -1118,7 +1118,7 @@ pub const PATH_SHADER: &str = r#"
 // ============================================================================
 //
 // Renders tessellated vector paths as colored triangles.
-// Uses per-vertex colors for fills and strokes.
+// Supports solid colors and gradients via per-vertex UV coordinates.
 
 struct Uniforms {
     // viewport_size (vec2) + padding (vec2) = 16 bytes, offset 0
@@ -1136,12 +1136,20 @@ struct Uniforms {
 
 struct VertexInput {
     @location(0) position: vec2<f32>,
-    @location(1) color: vec4<f32>,
+    @location(1) color: vec4<f32>,           // start color for gradients, solid color otherwise
+    @location(2) end_color: vec4<f32>,       // end color for gradients
+    @location(3) uv: vec2<f32>,
+    @location(4) gradient_params: vec4<f32>, // linear: (x1,y1,x2,y2); radial: (cx,cy,r,0)
+    @location(5) gradient_type: u32,
 }
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) color: vec4<f32>,
+    @location(1) end_color: vec4<f32>,
+    @location(2) uv: vec2<f32>,
+    @location(3) @interpolate(flat) gradient_params: vec4<f32>,
+    @location(4) @interpolate(flat) gradient_type: u32,
 }
 
 @vertex
@@ -1164,13 +1172,48 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
     out.position = vec4<f32>(clip_pos, 0.0, 1.0);
     out.color = in.color;
+    out.end_color = in.end_color;
+    out.uv = in.uv;
+    out.gradient_params = in.gradient_params;
+    out.gradient_type = in.gradient_type;
 
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    var color = in.color;
+    var color: vec4<f32>;
+
+    // gradient_type: 0 = solid, 1 = linear, 2 = radial
+    if (in.gradient_type == 0u) {
+        // Solid color
+        color = in.color;
+    } else if (in.gradient_type == 1u) {
+        // Linear gradient - use gradient_params for direction
+        // params: (x1, y1, x2, y2) in ObjectBoundingBox space (0-1)
+        let g_start = in.gradient_params.xy;
+        let g_end = in.gradient_params.zw;
+        let g_dir = g_end - g_start;
+        let g_len_sq = dot(g_dir, g_dir);
+
+        // Project UV onto gradient line
+        var t: f32;
+        if (g_len_sq > 0.0001) {
+            let p = in.uv - g_start;
+            t = clamp(dot(p, g_dir) / g_len_sq, 0.0, 1.0);
+        } else {
+            t = 0.0;
+        }
+        color = mix(in.color, in.end_color, t);
+    } else {
+        // Radial gradient - params: (cx, cy, r, 0) in ObjectBoundingBox space
+        let center = in.gradient_params.xy;
+        let radius = in.gradient_params.z;
+        let dist = length(in.uv - center);
+        let t = clamp(dist / max(radius, 0.001), 0.0, 1.0);
+        color = mix(in.color, in.end_color, t);
+    }
+
     color.a *= uniforms.opacity;
     return color;
 }
