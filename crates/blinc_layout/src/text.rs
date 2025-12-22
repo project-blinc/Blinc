@@ -13,7 +13,7 @@
 use blinc_core::Color;
 use taffy::prelude::*;
 
-use crate::div::ElementBuilder;
+use crate::div::{ElementBuilder, ElementTypeId, TextRenderInfo};
 use crate::element::{RenderLayer, RenderProps};
 use crate::tree::{LayoutNodeId, LayoutTree};
 
@@ -157,6 +157,18 @@ impl ElementBuilder for Text {
 
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
         &[] // Text has no children
+    }
+
+    fn element_type_id(&self) -> ElementTypeId {
+        ElementTypeId::Text
+    }
+
+    fn text_render_info(&self) -> Option<TextRenderInfo> {
+        Some(TextRenderInfo {
+            content: self.content.clone(),
+            font_size: self.font_size,
+            color: [self.color.r, self.color.g, self.color.b, self.color.a],
+        })
     }
 }
 

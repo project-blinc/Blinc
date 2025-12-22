@@ -3,7 +3,7 @@
 //! Tests for the GPUI-style layout builder API powered by Taffy flexbox.
 
 use crate::runner::TestSuite;
-use blinc_core::{Color, DrawContext};
+use blinc_core::{Color, DrawContext, Rect};
 use blinc_layout::prelude::*;
 
 /// Create the layout test suite
@@ -761,5 +761,220 @@ pub fn suite() -> TestSuite {
         tree.render_to_layer(fg, RenderLayer::Foreground);
     });
 
+    // Music player widget using layout API with SVG elements
+    // Recreates the iOS Control Center music player with layout-based positioning
+    // ALL positioning is handled by Taffy - NO manual coordinate calculations
+    suite.add_glass("music_player", |ctx| {
+        let c = ctx.ctx();
+        let scale = 2.0;
+
+        // SVG icon definitions
+        let rewind_svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><path d="M236.3 107.1C247.9 96 265 92.9 279.7 99.2C294.4 105.5 304 120 304 136L304 272.3L476.3 107.2C487.9 96 505 92.9 519.7 99.2C534.4 105.5 544 120 544 136L544 504C544 520 534.4 534.5 519.7 540.8C505 547.1 487.9 544 476.3 532.9L304 367.7L304 504C304 520 294.4 534.5 279.7 540.8C265 547.1 247.9 544 236.3 532.9L44.3 348.9C36.4 341.4 32 330.9 32 320C32 309.1 36.5 298.7 44.3 291.1L236.3 107.1z" fill="white"/></svg>"#;
+        let pause_svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><path d="M176 96C149.5 96 128 117.5 128 144L128 496C128 522.5 149.5 544 176 544L240 544C266.5 544 288 522.5 288 496L288 144C288 117.5 266.5 96 240 96L176 96zM400 96C373.5 96 352 117.5 352 144L352 496C352 522.5 373.5 544 400 544L464 544C490.5 544 512 522.5 512 496L512 144C512 117.5 490.5 96 464 96L400 96z" fill="white"/></svg>"#;
+        let forward_svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><path d="M403.7 107.1C392.1 96 375 92.9 360.3 99.2C345.6 105.5 336 120 336 136L336 272.3L163.7 107.2C152.1 96 135 92.9 120.3 99.2C105.6 105.5 96 120 96 136L96 504C96 520 105.6 534.5 120.3 540.8C135 547.1 152.1 544 163.7 532.9L336 367.7L336 504C336 520 345.6 534.5 360.3 540.8C375 547.1 392.1 544 403.7 532.9L595.7 348.9C603.6 341.4 608 330.9 608 320C608 309.1 603.5 298.7 595.7 291.1L403.7 107.1z" fill="white"/></svg>"#;
+        let airplay_svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"/><path d="m12 15 5 6H7Z"/></svg>"##;
+        let radio_svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.247 7.761a6 6 0 0 1 0 8.478"/><path d="M19.075 4.933a10 10 0 0 1 0 14.134"/><path d="M4.925 19.067a10 10 0 0 1 0-14.134"/><path d="M7.753 16.239a6 6 0 0 1 0-8.478"/><circle cx="12" cy="12" r="2.5" fill="white"/></svg>"##;
+
+        // Import svg function
+        use blinc_layout::svg;
+
+        // Dimensions
+        let player_radius = 28.0 * scale;
+        let bar_h = 7.0 * scale;
+        let icon_size = 32.0 * scale;
+        let pill_icon_size = 20.0 * scale;
+        let pill_padding = 12.0 * scale;
+
+        // Vibrant multicolor background (blurred behind glass)
+        c.fill_rect(
+            Rect::new(0.0, 0.0, 400.0 * scale, 300.0 * scale),
+            0.0.into(),
+            Color::rgba(0.4, 0.2, 0.6, 1.0).into(),
+        );
+
+        // Colorful shapes for blur effect
+        c.fill_circle(
+            blinc_core::Point::new(80.0 * scale, 60.0 * scale),
+            100.0 * scale,
+            Color::rgba(0.95, 0.3, 0.5, 1.0).into(),
+        );
+        c.fill_circle(
+            blinc_core::Point::new(320.0 * scale, 120.0 * scale),
+            90.0 * scale,
+            Color::rgba(0.2, 0.8, 0.85, 1.0).into(),
+        );
+        c.fill_circle(
+            blinc_core::Point::new(180.0 * scale, 260.0 * scale),
+            80.0 * scale,
+            Color::rgba(1.0, 0.5, 0.2, 1.0).into(),
+        );
+        c.fill_circle(
+            blinc_core::Point::new(350.0 * scale, 240.0 * scale),
+            60.0 * scale,
+            Color::rgba(1.0, 0.85, 0.2, 1.0).into(),
+        );
+        c.fill_circle(
+            blinc_core::Point::new(50.0 * scale, 220.0 * scale),
+            70.0 * scale,
+            Color::rgba(0.3, 0.9, 0.4, 1.0).into(),
+        );
+        c.fill_rect(
+            Rect::new(280.0 * scale, 0.0, 120.0 * scale, 80.0 * scale),
+            (20.0 * scale).into(),
+            Color::rgba(0.3, 0.4, 0.95, 1.0).into(),
+        );
+
+        // SINGLE layout tree - ALL elements positioned by Taffy
+        let ui = div()
+            .w(400.0 * scale)
+            .h(300.0 * scale)
+            .p_px(30.0 * scale)
+            // Main player card with glass effect
+            .child(
+                div()
+                    .w(340.0 * scale)
+                    .h(140.0 * scale)
+                    .rounded(player_radius)
+                    .flex_col()
+                    .p_px(20.0 * scale)
+                    .gap_px(8.0 * scale)
+                    .effect(
+                        GlassMaterial::new()
+                            .blur(30.0 * scale)
+                            .tint_rgba(0.12, 0.12, 0.14, 0.55)
+                            .saturation(0.85)
+                            .brightness(1.05)
+                            .border(0.6 * scale)
+                            .shadow(MaterialShadow::new().blur(20.0 * scale).offset(0.0, 10.0 * scale).opacity(0.35)),
+                    )
+                    // Title row
+                    .child(
+                        div()
+                            .w_full()
+                            .h(20.0 * scale)
+                            .flex_row()
+                            .justify_center()
+                            .items_center()
+                            .child(text("Blinc UI 0.1.0").size(14.0 * scale).color(Color::rgba(1.0, 1.0, 1.0, 0.95)))
+                    )
+                    // Progress bar row: time - slider - time
+                    .child(
+                        div()
+                            .w_full()
+                            .h(bar_h + 8.0 * scale)
+                            .flex_row()
+                            .items_center()
+                            .gap_px(8.0 * scale)
+                            // Left time label
+                            .child(
+                                div()
+                                    .w(35.0 * scale)
+                                    .h(bar_h + 8.0 * scale)
+                                    .flex_row()
+                                    .justify_end()
+                                    .items_center()
+                                    .child(text("0:10").size(11.0 * scale).color(Color::rgba(1.0, 1.0, 1.0, 0.85)))
+                            )
+                            // Slider track (glass)
+                            .child(
+                                div()
+                                    .flex_grow()
+                                    .h(bar_h)
+                                    .rounded(bar_h / 2.0)
+                                    .effect(
+                                        GlassMaterial::new()
+                                            .blur(25.0 * scale)
+                                            .tint_rgba(1.0, 1.0, 1.0, 0.65)
+                                            .saturation(0.3)
+                                            .brightness(1.3)
+                                            .border(0.0),
+                                    )
+                                    // Progress fill (child of slider, auto foreground)
+                                    .child(
+                                        div()
+                                            .w(20.0 * scale) // ~8% progress
+                                            .h_full()
+                                            .rounded(bar_h / 2.0)
+                                            .bg(Color::rgba(1.0, 1.0, 1.0, 1.0))
+                                    )
+                            )
+                            // Right time label
+                            .child(
+                                div()
+                                    .w(40.0 * scale)
+                                    .h(bar_h + 8.0 * scale)
+                                    .flex_row()
+                                    .justify_start()
+                                    .items_center()
+                                    .child(text("-3:24").size(11.0 * scale).color(Color::rgba(1.0, 1.0, 1.0, 0.85)))
+                            )
+                    )
+                    // Controls row: pill - icons - pill
+                    .child(
+                        div()
+                            .w_full()
+                            .flex_grow()
+                            .flex_row()
+                            .justify_between()
+                            .items_center()
+                            // Left pill with airplay icon
+                            .child(
+                                div()
+                                    .w(pill_icon_size + pill_padding * 2.0)
+                                    .h(pill_icon_size + pill_padding * 2.0)
+                                    .rounded_full()
+                                    .flex_row()
+                                    .justify_center()
+                                    .items_center()
+                                    .effect(
+                                        GlassMaterial::new()
+                                            .blur(20.0 * scale)
+                                            .tint_rgba(0.92, 0.92, 0.94, 0.4)
+                                            .saturation(0.8)
+                                            .brightness(0.95)
+                                            .border(1.0 * scale),
+                                    )
+                                    .child(svg(airplay_svg).square(pill_icon_size))
+                            )
+                            // Center icons: rewind - pause - forward
+                            .child(
+                                div()
+                                    .flex_row()
+                                    .gap_px(38.0 * scale)
+                                    .items_center()
+                                    .child(svg(rewind_svg).square(icon_size))
+                                    .child(svg(pause_svg).square(icon_size))
+                                    .child(svg(forward_svg).square(icon_size))
+                            )
+                            // Right pill with radio icon
+                            .child(
+                                div()
+                                    .w(pill_icon_size + pill_padding * 2.0)
+                                    .h(pill_icon_size + pill_padding * 2.0)
+                                    .rounded_full()
+                                    .flex_row()
+                                    .justify_center()
+                                    .items_center()
+                                    .effect(
+                                        GlassMaterial::new()
+                                            .blur(20.0 * scale)
+                                            .tint_rgba(0.92, 0.92, 0.94, 0.4)
+                                            .saturation(0.8)
+                                            .brightness(0.95)
+                                            .border(1.0 * scale),
+                                    )
+                                    .child(svg(radio_svg).square(pill_icon_size))
+                            )
+                    )
+            );
+
+        // Build, layout, render - that's it
+        let mut tree = RenderTree::from_element(&ui);
+        tree.compute_layout(400.0 * scale, 300.0 * scale);
+        ctx.render_layout(&tree);
+    });
+
     suite
 }
+
+

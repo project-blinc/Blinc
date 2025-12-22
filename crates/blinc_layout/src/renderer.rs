@@ -5,12 +5,11 @@
 
 use indexmap::IndexMap;
 
-use blinc_core::{Brush, CornerRadius, DrawContext, GlassStyle, Rect, Transform};
+use blinc_core::{Brush, Color, CornerRadius, DrawContext, GlassStyle, Rect, Transform};
 use taffy::prelude::*;
 
-use crate::div::ElementBuilder;
+use crate::div::{ElementBuilder, ElementTypeId};
 use crate::element::{ElementBounds, GlassMaterial, Material, RenderLayer, RenderProps};
-use crate::text::Text;
 use crate::tree::{LayoutNodeId, LayoutTree};
 
 /// A computed glass panel ready for GPU rendering
@@ -44,6 +43,8 @@ pub enum ElementType {
     Div,
     /// A text element with content
     Text(TextData),
+    /// An SVG element
+    Svg(SvgData),
 }
 
 /// Text data for rendering
@@ -54,6 +55,13 @@ pub struct TextData {
     pub color: [f32; 4],
 }
 
+/// SVG data for rendering
+#[derive(Clone)]
+pub struct SvgData {
+    pub source: String,
+    pub tint: Option<Color>,
+}
+
 /// Node data for rendering
 #[derive(Clone)]
 pub struct RenderNode {
@@ -61,6 +69,70 @@ pub struct RenderNode {
     pub props: RenderProps,
     /// Element type
     pub element_type: ElementType,
+}
+
+/// Trait for rendering layout trees with text, SVG, and glass support
+///
+/// Implement this trait to provide custom rendering for your platform.
+/// The renderer handles:
+/// - Background/foreground DrawContext separation for glass effects
+/// - Text rendering at layout-computed positions
+/// - SVG rendering at layout-computed positions
+pub trait LayoutRenderer {
+    /// Get the background DrawContext (for elements behind glass)
+    fn background(&mut self) -> &mut dyn DrawContext;
+
+    /// Get the foreground DrawContext (for elements on top of glass)
+    fn foreground(&mut self) -> &mut dyn DrawContext;
+
+    /// Render text to the foreground layer at absolute position
+    ///
+    /// Called for text elements that are children of glass elements.
+    /// Position is absolute (after applying all parent transforms).
+    fn render_text_foreground(
+        &mut self,
+        content: &str,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        font_size: f32,
+        color: [f32; 4],
+    );
+
+    /// Render text to the background layer at absolute position
+    fn render_text_background(
+        &mut self,
+        content: &str,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        font_size: f32,
+        color: [f32; 4],
+    );
+
+    /// Render an SVG to the foreground layer at absolute position
+    fn render_svg_foreground(
+        &mut self,
+        source: &str,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        tint: Option<Color>,
+    );
+
+    /// Render an SVG to the background layer at absolute position
+    fn render_svg_background(
+        &mut self,
+        source: &str,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        tint: Option<Color>,
+    );
 }
 
 /// RenderTree - bridges layout computation and rendering
@@ -115,21 +187,8 @@ impl RenderTree {
         let mut props = element.render_props();
         props.node_id = Some(node_id);
 
-        // Determine element type
-        let element_type = if let Some(text) = Self::try_as_text(element) {
-            ElementType::Text(TextData {
-                content: text.content().to_string(),
-                font_size: text.font_size(),
-                color: [
-                    text.text_color().r,
-                    text.text_color().g,
-                    text.text_color().b,
-                    text.text_color().a,
-                ],
-            })
-        } else {
-            ElementType::Div
-        };
+        // Determine element type using the trait methods
+        let element_type = Self::determine_element_type(element);
 
         self.render_nodes.insert(
             node_id,
@@ -154,9 +213,31 @@ impl RenderTree {
         let mut props = element.render_props();
         props.node_id = Some(node_id);
 
-        // For boxed elements, we can't easily determine if it's Text
-        // This would need trait-based type detection in production
-        let element_type = ElementType::Div;
+        // Use the element_type_id to determine type
+        let element_type = match element.element_type_id() {
+            ElementTypeId::Text => {
+                if let Some(info) = element.text_render_info() {
+                    ElementType::Text(TextData {
+                        content: info.content,
+                        font_size: info.font_size,
+                        color: info.color,
+                    })
+                } else {
+                    ElementType::Div
+                }
+            }
+            ElementTypeId::Svg => {
+                if let Some(info) = element.svg_render_info() {
+                    ElementType::Svg(SvgData {
+                        source: info.source,
+                        tint: info.tint,
+                    })
+                } else {
+                    ElementType::Div
+                }
+            }
+            ElementTypeId::Div => ElementType::Div,
+        };
 
         self.render_nodes.insert(
             node_id,
@@ -176,11 +257,32 @@ impl RenderTree {
         }
     }
 
-    /// Try to cast element as Text (type detection helper)
-    fn try_as_text<E: ElementBuilder>(_element: &E) -> Option<&Text> {
-        // This requires specialization or Any-based downcasting
-        // For now, return None and handle Text specially at call sites
-        None
+    /// Determine element type from an element builder
+    fn determine_element_type<E: ElementBuilder>(element: &E) -> ElementType {
+        match element.element_type_id() {
+            ElementTypeId::Text => {
+                if let Some(info) = element.text_render_info() {
+                    ElementType::Text(TextData {
+                        content: info.content,
+                        font_size: info.font_size,
+                        color: info.color,
+                    })
+                } else {
+                    ElementType::Div
+                }
+            }
+            ElementTypeId::Svg => {
+                if let Some(info) = element.svg_render_info() {
+                    ElementType::Svg(SvgData {
+                        source: info.source,
+                        tint: info.tint,
+                    })
+                } else {
+                    ElementType::Div
+                }
+            }
+            ElementTypeId::Div => ElementType::Div,
+        }
     }
 
     /// Get the root node ID
@@ -401,6 +503,13 @@ impl RenderTree {
         self.layout_tree.get_bounds(node, (0.0, 0.0))
     }
 
+    /// Get absolute bounds for a node (traversing up the tree)
+    pub fn get_absolute_bounds(&self, node: LayoutNodeId) -> Option<ElementBounds> {
+        // For now, just return bounds from root (0,0)
+        // A more complete implementation would track parent offsets
+        self.layout_tree.get_bounds(node, (0.0, 0.0))
+    }
+
     /// Get render node data
     pub fn get_render_node(&self, node: LayoutNodeId) -> Option<&RenderNode> {
         self.render_nodes.get(&node)
@@ -409,6 +518,241 @@ impl RenderTree {
     /// Iterate over all nodes with their bounds and render props
     pub fn iter_nodes(&self) -> impl Iterator<Item = (LayoutNodeId, &RenderNode)> {
         self.render_nodes.iter().map(|(&id, node)| (id, node))
+    }
+
+    /// Check if this tree contains any glass elements
+    pub fn has_glass(&self) -> bool {
+        self.render_nodes.values().any(|node| {
+            matches!(node.props.material, Some(Material::Glass(_)))
+        })
+    }
+
+    /// Render the tree using a LayoutRenderer
+    ///
+    /// This is the primary rendering method. The LayoutRenderer handles:
+    /// - Background/foreground layer separation (automatically if glass is present)
+    /// - Text rendering at layout-computed positions
+    /// - SVG rendering at layout-computed positions
+    ///
+    /// Example:
+    /// ```ignore
+    /// tree.render_to(&mut my_renderer);
+    /// ```
+    pub fn render_to<R: LayoutRenderer>(&self, renderer: &mut R) {
+        if let Some(root) = self.root {
+            // Pass 1: Background elements
+            {
+                let ctx = renderer.background();
+                self.render_layer_with_content(ctx, root, (0.0, 0.0), RenderLayer::Background, false);
+            }
+
+            // Pass 2: Glass elements (to background context)
+            {
+                let ctx = renderer.background();
+                self.render_layer_with_content(ctx, root, (0.0, 0.0), RenderLayer::Glass, false);
+            }
+
+            // Pass 3: Foreground elements (including glass children)
+            {
+                let ctx = renderer.foreground();
+                self.render_layer_with_content(ctx, root, (0.0, 0.0), RenderLayer::Foreground, false);
+            }
+
+            // Pass 4: Render text elements
+            self.render_text_elements(renderer);
+
+            // Pass 5: Render SVG elements
+            self.render_svg_elements(renderer);
+        }
+    }
+
+    /// Render a layer (divs only - text/SVG handled separately)
+    fn render_layer_with_content(
+        &self,
+        ctx: &mut dyn DrawContext,
+        node: LayoutNodeId,
+        parent_offset: (f32, f32),
+        target_layer: RenderLayer,
+        inside_glass: bool,
+    ) {
+        let Some(bounds) = self.layout_tree.get_bounds(node, parent_offset) else {
+            return;
+        };
+
+        let Some(render_node) = self.render_nodes.get(&node) else {
+            return;
+        };
+
+        // Always push transform for proper child positioning
+        ctx.push_transform(Transform::translate(bounds.x, bounds.y));
+
+        // Determine if this node is a glass element
+        let is_glass = matches!(render_node.props.material, Some(Material::Glass(_)));
+
+        // Determine the effective layer for this node
+        let effective_layer = if inside_glass && !is_glass {
+            RenderLayer::Foreground
+        } else if is_glass {
+            RenderLayer::Glass
+        } else {
+            render_node.props.layer
+        };
+
+        // Only render divs here (text/SVG handled in separate passes)
+        if effective_layer == target_layer {
+            if let ElementType::Div = &render_node.element_type {
+                let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
+                let radius = render_node.props.border_radius;
+
+                if let Some(Material::Glass(glass)) = &render_node.props.material {
+                    let glass_brush = Brush::Glass(GlassStyle {
+                        blur: glass.blur,
+                        tint: glass.tint,
+                        saturation: glass.saturation,
+                        brightness: glass.brightness,
+                        noise: glass.noise,
+                        border_thickness: glass.border_thickness,
+                    });
+                    ctx.fill_rect(rect, radius, glass_brush);
+                } else if let Some(ref bg) = render_node.props.background {
+                    ctx.fill_rect(rect, radius, bg.clone());
+                }
+            }
+        }
+
+        // Track if children should be considered inside glass
+        let children_inside_glass = inside_glass || is_glass;
+
+        // Traverse children
+        for child_id in self.layout_tree.children(node) {
+            self.render_layer_with_content(ctx, child_id, (0.0, 0.0), target_layer, children_inside_glass);
+        }
+
+        ctx.pop_transform();
+    }
+
+    /// Render all text elements via the LayoutRenderer
+    fn render_text_elements<R: LayoutRenderer>(&self, renderer: &mut R) {
+        if let Some(root) = self.root {
+            self.render_text_recursive(renderer, root, (0.0, 0.0), false);
+        }
+    }
+
+    /// Recursively render text elements
+    fn render_text_recursive<R: LayoutRenderer>(
+        &self,
+        renderer: &mut R,
+        node: LayoutNodeId,
+        parent_offset: (f32, f32),
+        inside_glass: bool,
+    ) {
+        let Some(bounds) = self.layout_tree.get_bounds(node, parent_offset) else {
+            return;
+        };
+
+        let Some(render_node) = self.render_nodes.get(&node) else {
+            return;
+        };
+
+        let is_glass = matches!(render_node.props.material, Some(Material::Glass(_)));
+        let children_inside_glass = inside_glass || is_glass;
+
+        // Text inside glass goes to foreground
+        let to_foreground = children_inside_glass || render_node.props.layer == RenderLayer::Foreground;
+
+        if let ElementType::Text(text_data) = &render_node.element_type {
+            // Absolute position for text
+            let abs_x = parent_offset.0 + bounds.x;
+            let abs_y = parent_offset.1 + bounds.y;
+
+            if to_foreground {
+                renderer.render_text_foreground(
+                    &text_data.content,
+                    abs_x,
+                    abs_y,
+                    bounds.width,
+                    bounds.height,
+                    text_data.font_size,
+                    text_data.color,
+                );
+            } else {
+                renderer.render_text_background(
+                    &text_data.content,
+                    abs_x,
+                    abs_y,
+                    bounds.width,
+                    bounds.height,
+                    text_data.font_size,
+                    text_data.color,
+                );
+            }
+        }
+
+        let new_offset = (parent_offset.0 + bounds.x, parent_offset.1 + bounds.y);
+        for child_id in self.layout_tree.children(node) {
+            self.render_text_recursive(renderer, child_id, new_offset, children_inside_glass);
+        }
+    }
+
+    /// Render all SVG elements via the LayoutRenderer
+    fn render_svg_elements<R: LayoutRenderer>(&self, renderer: &mut R) {
+        if let Some(root) = self.root {
+            self.render_svg_recursive(renderer, root, (0.0, 0.0), false);
+        }
+    }
+
+    /// Recursively render SVG elements
+    fn render_svg_recursive<R: LayoutRenderer>(
+        &self,
+        renderer: &mut R,
+        node: LayoutNodeId,
+        parent_offset: (f32, f32),
+        inside_glass: bool,
+    ) {
+        let Some(bounds) = self.layout_tree.get_bounds(node, parent_offset) else {
+            return;
+        };
+
+        let Some(render_node) = self.render_nodes.get(&node) else {
+            return;
+        };
+
+        let is_glass = matches!(render_node.props.material, Some(Material::Glass(_)));
+        let children_inside_glass = inside_glass || is_glass;
+
+        // SVG inside glass goes to foreground
+        let to_foreground = children_inside_glass || render_node.props.layer == RenderLayer::Foreground;
+
+        if let ElementType::Svg(svg_data) = &render_node.element_type {
+            // Absolute position for SVG
+            let abs_x = parent_offset.0 + bounds.x;
+            let abs_y = parent_offset.1 + bounds.y;
+
+            if to_foreground {
+                renderer.render_svg_foreground(
+                    &svg_data.source,
+                    abs_x,
+                    abs_y,
+                    bounds.width,
+                    bounds.height,
+                    svg_data.tint,
+                );
+            } else {
+                renderer.render_svg_background(
+                    &svg_data.source,
+                    abs_x,
+                    abs_y,
+                    bounds.width,
+                    bounds.height,
+                    svg_data.tint,
+                );
+            }
+        }
+
+        let new_offset = (parent_offset.0 + bounds.x, parent_offset.1 + bounds.y);
+        for child_id in self.layout_tree.children(node) {
+            self.render_svg_recursive(renderer, child_id, new_offset, children_inside_glass);
+        }
     }
 
     /// Collect all glass panels from the layout tree
@@ -457,6 +801,104 @@ impl RenderTree {
         let new_offset = (parent_offset.0 + bounds.x, parent_offset.1 + bounds.y);
         for child_id in self.layout_tree.children(node) {
             self.collect_glass_panels_recursive(child_id, new_offset, panels);
+        }
+    }
+
+    // =========================================================================
+    // Element iterators - for platform-specific text/SVG rendering
+    // =========================================================================
+
+    /// Get all text elements with their computed bounds
+    ///
+    /// Returns an iterator of (TextData, ElementBounds) for each text element
+    /// in the tree. Use this to render text with your platform's text renderer.
+    ///
+    /// # Example
+    /// ```ignore
+    /// for (text, bounds) in tree.text_elements() {
+    ///     my_renderer.draw_text(&text.content, bounds.x, bounds.y, text.font_size);
+    /// }
+    /// ```
+    pub fn text_elements(&self) -> Vec<(TextData, ElementBounds)> {
+        let mut result = Vec::new();
+        if let Some(root) = self.root {
+            self.collect_text_elements(root, (0.0, 0.0), &mut result);
+        }
+        result
+    }
+
+    fn collect_text_elements(
+        &self,
+        node: LayoutNodeId,
+        parent_offset: (f32, f32),
+        result: &mut Vec<(TextData, ElementBounds)>,
+    ) {
+        let Some(bounds) = self.layout_tree.get_bounds(node, parent_offset) else {
+            return;
+        };
+
+        if let Some(render_node) = self.render_nodes.get(&node) {
+            if let ElementType::Text(text_data) = &render_node.element_type {
+                let abs_bounds = ElementBounds {
+                    x: parent_offset.0 + bounds.x,
+                    y: parent_offset.1 + bounds.y,
+                    width: bounds.width,
+                    height: bounds.height,
+                };
+                result.push((text_data.clone(), abs_bounds));
+            }
+        }
+
+        let new_offset = (parent_offset.0 + bounds.x, parent_offset.1 + bounds.y);
+        for child_id in self.layout_tree.children(node) {
+            self.collect_text_elements(child_id, new_offset, result);
+        }
+    }
+
+    /// Get all SVG elements with their computed bounds
+    ///
+    /// Returns an iterator of (SvgData, ElementBounds) for each SVG element
+    /// in the tree. Use this to render SVGs with your platform's SVG renderer.
+    ///
+    /// # Example
+    /// ```ignore
+    /// for (svg, bounds) in tree.svg_elements() {
+    ///     my_renderer.draw_svg(&svg.source, bounds.x, bounds.y, bounds.width, bounds.height);
+    /// }
+    /// ```
+    pub fn svg_elements(&self) -> Vec<(SvgData, ElementBounds)> {
+        let mut result = Vec::new();
+        if let Some(root) = self.root {
+            self.collect_svg_elements(root, (0.0, 0.0), &mut result);
+        }
+        result
+    }
+
+    fn collect_svg_elements(
+        &self,
+        node: LayoutNodeId,
+        parent_offset: (f32, f32),
+        result: &mut Vec<(SvgData, ElementBounds)>,
+    ) {
+        let Some(bounds) = self.layout_tree.get_bounds(node, parent_offset) else {
+            return;
+        };
+
+        if let Some(render_node) = self.render_nodes.get(&node) {
+            if let ElementType::Svg(svg_data) = &render_node.element_type {
+                let abs_bounds = ElementBounds {
+                    x: parent_offset.0 + bounds.x,
+                    y: parent_offset.1 + bounds.y,
+                    width: bounds.width,
+                    height: bounds.height,
+                };
+                result.push((svg_data.clone(), abs_bounds));
+            }
+        }
+
+        let new_offset = (parent_offset.0 + bounds.x, parent_offset.1 + bounds.y);
+        for child_id in self.layout_tree.children(node) {
+            self.collect_svg_elements(child_id, new_offset, result);
         }
     }
 }

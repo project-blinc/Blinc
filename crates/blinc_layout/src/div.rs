@@ -656,6 +656,29 @@ impl Div {
     }
 }
 
+/// Element type identifier for downcasting
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ElementTypeId {
+    Div,
+    Text,
+    Svg,
+}
+
+/// Text render data extracted from element
+#[derive(Clone)]
+pub struct TextRenderInfo {
+    pub content: String,
+    pub font_size: f32,
+    pub color: [f32; 4],
+}
+
+/// SVG render data extracted from element
+#[derive(Clone)]
+pub struct SvgRenderInfo {
+    pub source: String,
+    pub tint: Option<blinc_core::Color>,
+}
+
 /// Trait for types that can build into layout elements
 pub trait ElementBuilder: Send {
     /// Build this element into a layout tree, returning the node ID
@@ -666,6 +689,21 @@ pub trait ElementBuilder: Send {
 
     /// Get children builders (for recursive traversal)
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>];
+
+    /// Get the element type identifier
+    fn element_type_id(&self) -> ElementTypeId {
+        ElementTypeId::Div
+    }
+
+    /// Get text render info if this is a text element
+    fn text_render_info(&self) -> Option<TextRenderInfo> {
+        None
+    }
+
+    /// Get SVG render info if this is an SVG element
+    fn svg_render_info(&self) -> Option<SvgRenderInfo> {
+        None
+    }
 }
 
 impl ElementBuilder for Div {

@@ -6,11 +6,14 @@
 //! - Reference image comparison
 
 use anyhow::{Context, Result};
-use blinc_core::Size;
+use blinc_core::{Rect, Size};
 use blinc_gpu::{
     GpuGlassPrimitive, GpuGlyph, GpuPaintContext, GpuRenderer, PrimitiveBatch, RendererConfig,
     TextRenderingContext,
 };
+use blinc_layout::prelude::*;
+use blinc_layout::renderer::ElementType;
+use blinc_svg::SvgDocument;
 use blinc_text::TextAnchor;
 use image::{ImageBuffer, Rgba, RgbaImage};
 use std::cell::RefCell;
@@ -187,6 +190,109 @@ impl TestContext {
     /// Create a glass rectangle with default settings
     pub fn glass_rect(&mut self, x: f32, y: f32, width: f32, height: f32) -> GpuGlassPrimitive {
         GpuGlassPrimitive::new(x, y, width, height)
+    }
+
+    /// Render a layout tree - handles everything automatically
+    ///
+    /// This is the simplest way to render a layout tree. It handles:
+    /// - Background/foreground layer separation for glass
+    /// - Text rendering at layout-computed positions
+    /// - SVG rendering at layout-computed positions
+    ///
+    /// # Example
+    /// ```ignore
+    /// let ui = div().w(400.0).h(300.0)
+    ///     .child(div().w(100.0).h(100.0).bg(Color::RED));
+    ///
+    /// let mut tree = RenderTree::from_element(&ui);
+    /// tree.compute_layout(400.0, 300.0);
+    /// ctx.render_layout(&tree);
+    /// ```
+    pub fn render_layout(&mut self, tree: &RenderTree) {
+        // Render divs with layer separation
+        {
+            let bg = self.ctx();
+            tree.render_to_layer(bg, RenderLayer::Background);
+            tree.render_to_layer(bg, RenderLayer::Glass);
+        }
+        {
+            let fg = self.foreground();
+            tree.render_to_layer(fg, RenderLayer::Foreground);
+        }
+
+        // Collect and render text/SVG elements
+        self.render_layout_content(tree);
+    }
+
+    /// Render text and SVG content from the layout tree
+    fn render_layout_content(&mut self, tree: &RenderTree) {
+        // Collect text and SVG data first
+        let mut texts: Vec<(String, f32, f32, f32, f32, f32, [f32; 4])> = Vec::new();
+        let mut svgs: Vec<(String, f32, f32, f32, f32)> = Vec::new();
+
+        if let Some(root) = tree.root() {
+            Self::collect_layout_elements(tree, root, (0.0, 0.0), &mut texts, &mut svgs);
+        }
+
+        // Render text elements
+        for (content, x, y, _w, h, font_size, color) in texts {
+            self.draw_text_centered(&content, x, y + h / 2.0, font_size, color);
+        }
+
+        // Render SVG elements to foreground
+        let fg = self.foreground();
+        for (source, x, y, w, h) in svgs {
+            if let Ok(doc) = SvgDocument::from_str(&source) {
+                doc.render_fit(fg, Rect::new(x, y, w, h));
+            }
+        }
+    }
+
+    /// Recursively collect text/SVG elements from layout tree
+    fn collect_layout_elements(
+        tree: &RenderTree,
+        node: LayoutNodeId,
+        parent_offset: (f32, f32),
+        texts: &mut Vec<(String, f32, f32, f32, f32, f32, [f32; 4])>,
+        svgs: &mut Vec<(String, f32, f32, f32, f32)>,
+    ) {
+        let Some(bounds) = tree.layout().get_bounds(node, parent_offset) else {
+            return;
+        };
+
+        let abs_x = bounds.x;
+        let abs_y = bounds.y;
+
+        if let Some(render_node) = tree.get_render_node(node) {
+            match &render_node.element_type {
+                ElementType::Text(text_data) => {
+                    texts.push((
+                        text_data.content.clone(),
+                        abs_x,
+                        abs_y,
+                        bounds.width,
+                        bounds.height,
+                        text_data.font_size,
+                        text_data.color,
+                    ));
+                }
+                ElementType::Svg(svg_data) => {
+                    svgs.push((
+                        svg_data.source.clone(),
+                        abs_x,
+                        abs_y,
+                        bounds.width,
+                        bounds.height,
+                    ));
+                }
+                ElementType::Div => {}
+            }
+        }
+
+        let new_offset = (abs_x, abs_y);
+        for child_id in tree.layout().children(node) {
+            Self::collect_layout_elements(tree, child_id, new_offset, texts, svgs);
+        }
     }
 }
 
