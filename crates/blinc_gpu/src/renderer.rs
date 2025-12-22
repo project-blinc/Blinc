@@ -91,6 +91,16 @@ struct Pipelines {
     path_overlay: wgpu::RenderPipeline,
 }
 
+/// Cached MSAA pipelines for dynamic sample counts
+struct MsaaPipelines {
+    /// SDF pipeline for this sample count
+    sdf: wgpu::RenderPipeline,
+    /// Path pipeline for this sample count
+    path: wgpu::RenderPipeline,
+    /// Sample count these pipelines were created for
+    sample_count: u32,
+}
+
 /// GPU buffers for rendering
 struct Buffers {
     /// Uniform buffer for viewport size
@@ -142,6 +152,8 @@ pub struct GpuRenderer {
     queue: Arc<wgpu::Queue>,
     /// Render pipelines
     pipelines: Pipelines,
+    /// Cached MSAA pipelines for overlay rendering
+    msaa_pipelines: Option<MsaaPipelines>,
     /// GPU buffers
     buffers: Buffers,
     /// Bind groups
@@ -154,6 +166,8 @@ pub struct GpuRenderer {
     config: RendererConfig,
     /// Current frame time (for animations)
     time: f32,
+    /// Resolved texture format used by pipelines
+    texture_format: wgpu::TextureFormat,
 }
 
 struct BindGroupLayouts {
@@ -347,12 +361,14 @@ impl GpuRenderer {
             device,
             queue,
             pipelines,
+            msaa_pipelines: None,
             buffers,
             bind_groups,
             bind_group_layouts,
             viewport_size,
             config,
             time: 0.0,
+            texture_format,
         })
     }
 
@@ -1004,6 +1020,166 @@ impl GpuRenderer {
         }
     }
 
+    /// Create MSAA-specific pipelines for a given sample count
+    fn create_msaa_pipelines(
+        device: &wgpu::Device,
+        layouts: &BindGroupLayouts,
+        texture_format: wgpu::TextureFormat,
+        sample_count: u32,
+    ) -> MsaaPipelines {
+        let blend_state = wgpu::BlendState {
+            color: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::SrcAlpha,
+                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                operation: wgpu::BlendOperation::Add,
+            },
+            alpha: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                operation: wgpu::BlendOperation::Add,
+            },
+        };
+
+        let color_targets = &[Some(wgpu::ColorTargetState {
+            format: texture_format,
+            blend: Some(blend_state),
+            write_mask: wgpu::ColorWrites::ALL,
+        })];
+
+        let primitive_state = wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,
+            unclipped_depth: false,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            conservative: false,
+        };
+
+        let multisample_state = wgpu::MultisampleState {
+            count: sample_count,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        };
+
+        // Create SDF shader
+        let sdf_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("SDF Shader (MSAA)"),
+            source: wgpu::ShaderSource::Wgsl(SDF_SHADER.into()),
+        });
+
+        let sdf_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("SDF Pipeline Layout (MSAA)"),
+            bind_group_layouts: &[&layouts.sdf],
+            push_constant_ranges: &[],
+        });
+
+        let sdf = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("SDF Pipeline (MSAA)"),
+            layout: Some(&sdf_layout),
+            vertex: wgpu::VertexState {
+                module: &sdf_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &sdf_shader,
+                entry_point: Some("fs_main"),
+                targets: color_targets,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: primitive_state,
+            depth_stencil: None,
+            multisample: multisample_state,
+            multiview: None,
+            cache: None,
+        });
+
+        // Create path shader
+        let path_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Path Shader (MSAA)"),
+            source: wgpu::ShaderSource::Wgsl(PATH_SHADER.into()),
+        });
+
+        let path_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Path Pipeline Layout (MSAA)"),
+            bind_group_layouts: &[&layouts.path],
+            push_constant_ranges: &[],
+        });
+
+        // PathVertex layout
+        let path_vertex_layout = wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<PathVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x2,
+                    offset: 0,
+                    shader_location: 0,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: 8,
+                    shader_location: 1,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: 24,
+                    shader_location: 2,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x2,
+                    offset: 40,
+                    shader_location: 3,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32x4,
+                    offset: 48,
+                    shader_location: 4,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Uint32,
+                    offset: 64,
+                    shader_location: 5,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float32,
+                    offset: 68,
+                    shader_location: 6,
+                },
+            ],
+        };
+
+        let path = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Path Pipeline (MSAA)"),
+            layout: Some(&path_layout),
+            vertex: wgpu::VertexState {
+                module: &path_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[path_vertex_layout],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &path_shader,
+                entry_point: Some("fs_main"),
+                targets: color_targets,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: primitive_state,
+            depth_stencil: None,
+            multisample: multisample_state,
+            multiview: None,
+            cache: None,
+        });
+
+        MsaaPipelines {
+            sdf,
+            path,
+            sample_count,
+        }
+    }
+
     /// Resize the viewport
     pub fn resize(&mut self, width: u32, height: u32) {
         self.viewport_size = (width, height);
@@ -1478,9 +1654,23 @@ impl GpuRenderer {
             return;
         }
 
+        // Ensure we have MSAA pipelines for this sample count
+        let need_new_pipelines = match &self.msaa_pipelines {
+            Some(p) => p.sample_count != sample_count,
+            None => true,
+        };
+        if need_new_pipelines && sample_count > 1 {
+            self.msaa_pipelines = Some(Self::create_msaa_pipelines(
+                &self.device,
+                &self.bind_group_layouts,
+                self.texture_format,
+                sample_count,
+            ));
+        }
+
         let (width, height) = self.viewport_size;
 
-        // Create temporary MSAA texture for rendering
+        // Create temporary MSAA texture for rendering (use same format as pipelines)
         let msaa_texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Overlay MSAA Texture"),
             size: wgpu::Extent3d {
@@ -1491,13 +1681,13 @@ impl GpuRenderer {
             mip_level_count: 1,
             sample_count,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: self.texture_format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         });
         let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Create temporary resolve texture
+        // Create temporary resolve texture (use same format as pipelines)
         let resolve_texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("Overlay Resolve Texture"),
             size: wgpu::Extent3d {
@@ -1508,7 +1698,7 @@ impl GpuRenderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
+            format: self.texture_format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
@@ -1544,6 +1734,7 @@ impl GpuRenderer {
             });
 
         // Pass 1: Render to MSAA texture with resolve
+        // Use cached MSAA pipelines for sample_count > 1, otherwise fall back to base pipelines
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Overlay MSAA Render Pass"),
@@ -1560,12 +1751,24 @@ impl GpuRenderer {
                 occlusion_query_set: None,
             });
 
+            // Get the appropriate pipelines for the sample count
+            let (path_pipeline, sdf_pipeline) = if sample_count > 1 {
+                if let Some(ref msaa) = self.msaa_pipelines {
+                    (&msaa.path, &msaa.sdf)
+                } else {
+                    // Fallback (shouldn't happen due to creation above)
+                    (&self.pipelines.path, &self.pipelines.sdf)
+                }
+            } else {
+                (&self.pipelines.path, &self.pipelines.sdf)
+            };
+
             // Render paths using MSAA pipeline
             if has_paths {
                 if let (Some(vb), Some(ib)) =
                     (&self.buffers.path_vertices, &self.buffers.path_indices)
                 {
-                    render_pass.set_pipeline(&self.pipelines.path);
+                    render_pass.set_pipeline(path_pipeline);
                     render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
                     render_pass.set_vertex_buffer(0, vb.slice(..));
                     render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
@@ -1575,7 +1778,7 @@ impl GpuRenderer {
 
             // Render SDF primitives using MSAA pipeline
             if !batch.primitives.is_empty() {
-                render_pass.set_pipeline(&self.pipelines.sdf);
+                render_pass.set_pipeline(sdf_pipeline);
                 render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
                 render_pass.draw(0..6, 0..batch.primitives.len() as u32);
             }

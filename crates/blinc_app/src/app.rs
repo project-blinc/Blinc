@@ -66,11 +66,13 @@ impl BlincApp {
 
     /// Create a new Blinc application with custom configuration
     pub fn with_config(config: BlincConfig) -> Result<Self> {
+        // Create renderer with sample_count=1 for SDF pipelines.
+        // MSAA is handled separately via render_overlay_msaa for foreground paths.
         let renderer_config = RendererConfig {
             max_primitives: config.max_primitives,
             max_glass_primitives: config.max_glass_primitives,
             max_glyphs: config.max_glyphs,
-            sample_count: config.sample_count,
+            sample_count: 1, // SDF pipelines always use single-sampled textures
             texture_format: None,
         };
 

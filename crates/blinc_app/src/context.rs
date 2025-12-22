@@ -22,6 +22,8 @@ pub struct RenderContext {
     // Cached textures for glass rendering
     pre_glass_texture: Option<CachedTexture>,
     backdrop_texture: Option<CachedTexture>,
+    // Cached MSAA texture for anti-aliased rendering
+    msaa_texture: Option<CachedTexture>,
 }
 
 struct CachedTexture {
@@ -48,6 +50,7 @@ impl RenderContext {
             sample_count,
             pre_glass_texture: None,
             backdrop_texture: None,
+            msaa_texture: None,
         }
     }
 
@@ -100,24 +103,29 @@ impl RenderContext {
         let fg_batch = fg_ctx.take_batch();
 
         self.renderer.resize(width, height);
+        self.ensure_textures(width, height);
 
         let has_glass = bg_batch.glass_count() > 0;
+        let use_msaa_overlay = self.sample_count > 1;
+
+        // Background layer uses SDF rendering (shader-based AA, no MSAA needed)
+        // Foreground layer (SVGs as tessellated paths) uses MSAA for smooth edges
 
         if has_glass {
             // Glass path:
-            // 1. Render background (non-glass) to internal texture
+            // 1. Render background to pre-glass texture (for backdrop capture)
             // 2. Copy to backdrop for glass sampling
-            // 3. Render background again to target (to start fresh)
+            // 3. Render background to target
             // 4. Render glass on top with backdrop blur
-            // 5. Render foreground and text
-            self.ensure_textures(width, height);
+            // 5. Render foreground (with MSAA if enabled)
+            // 6. Render text
 
             let pre_glass_view = &self.pre_glass_texture.as_ref().unwrap().view;
             let pre_glass_tex = &self.pre_glass_texture.as_ref().unwrap().texture;
             let backdrop_tex = &self.backdrop_texture.as_ref().unwrap().texture;
             let backdrop_view = &self.backdrop_texture.as_ref().unwrap().view;
 
-            // Step 1: Render background to pre-glass texture (for backdrop capture)
+            // Step 1: Render background to pre-glass texture
             self.renderer
                 .render_with_clear(pre_glass_view, &bg_batch, [1.0, 1.0, 1.0, 1.0]);
 
@@ -131,10 +139,14 @@ impl RenderContext {
             // Step 4: Render glass with backdrop blur onto target
             self.renderer.render_glass(target, backdrop_view, &bg_batch);
 
-            // Step 5: Render foreground on top
-            if fg_batch.primitive_count() > 0 {
-                self.renderer
-                    .render_overlay_msaa(target, &fg_batch, self.sample_count);
+            // Step 5: Render foreground with MSAA for smooth SVG edges
+            if !fg_batch.is_empty() {
+                if use_msaa_overlay {
+                    self.renderer
+                        .render_overlay_msaa(target, &fg_batch, self.sample_count);
+                } else {
+                    self.renderer.render_overlay(target, &fg_batch);
+                }
             }
 
             // Step 6: Render text
@@ -142,14 +154,22 @@ impl RenderContext {
                 self.render_text(target, &all_glyphs);
             }
         } else {
-            // Simple path: render directly to user's target
+            // Simple path (no glass):
+            // Background uses SDF rendering (no MSAA needed)
+            // Foreground uses MSAA for smooth SVG edges
+
+            // Render background directly to target
             self.renderer
                 .render_with_clear(target, &bg_batch, [1.0, 1.0, 1.0, 1.0]);
 
-            // Render foreground on top
-            if fg_batch.primitive_count() > 0 {
-                self.renderer
-                    .render_overlay_msaa(target, &fg_batch, self.sample_count);
+            // Render foreground with MSAA for smooth SVG edges
+            if !fg_batch.is_empty() {
+                if use_msaa_overlay {
+                    self.renderer
+                        .render_overlay_msaa(target, &fg_batch, self.sample_count);
+                } else {
+                    self.renderer.render_overlay(target, &fg_batch);
+                }
             }
 
             // Render text
@@ -210,6 +230,9 @@ impl RenderContext {
             let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
             self.backdrop_texture = Some(CachedTexture { texture, view, width, height });
         }
+
+        // Note: MSAA textures for overlay rendering are created internally by
+        // render_overlay_msaa, so we don't need to cache them here.
     }
 
     /// Copy one texture to another

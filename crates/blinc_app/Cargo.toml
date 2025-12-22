@@ -31,6 +31,9 @@ anyhow.workspace = true
 # Logging
 tracing.workspace = true
 
+[dev-dependencies]
+image.workspace = true
+
 [features]
 default = []
 windowed = ["winit"]
