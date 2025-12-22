@@ -10,7 +10,7 @@
 //!     .color(Color::WHITE);
 //! ```
 
-use blinc_core::Color;
+use blinc_core::{Color, Shadow, Transform};
 use taffy::prelude::*;
 
 use crate::div::{ElementBuilder, ElementTypeId, TextRenderInfo};
@@ -29,6 +29,10 @@ pub struct Text {
     style: Style,
     /// Render layer
     render_layer: RenderLayer,
+    /// Drop shadow
+    shadow: Option<Shadow>,
+    /// Transform
+    transform: Option<Transform>,
 }
 
 impl Text {
@@ -40,6 +44,8 @@ impl Text {
             color: Color::BLACK,
             style: Style::default(),
             render_layer: RenderLayer::default(),
+            shadow: None,
+            transform: None,
         }
     }
 
@@ -138,6 +144,52 @@ impl Text {
         self.style.flex_shrink = 1.0;
         self
     }
+
+    // =========================================================================
+    // Shadow
+    // =========================================================================
+
+    /// Apply a drop shadow to this text
+    pub fn shadow(mut self, shadow: Shadow) -> Self {
+        self.shadow = Some(shadow);
+        self
+    }
+
+    /// Apply a drop shadow with the given parameters
+    pub fn shadow_params(
+        self,
+        offset_x: f32,
+        offset_y: f32,
+        blur: f32,
+        color: Color,
+    ) -> Self {
+        self.shadow(Shadow::new(offset_x, offset_y, blur, color))
+    }
+
+    // =========================================================================
+    // Transform
+    // =========================================================================
+
+    /// Apply a transform to this text
+    pub fn transform(mut self, transform: Transform) -> Self {
+        self.transform = Some(transform);
+        self
+    }
+
+    /// Translate this text by the given x and y offset
+    pub fn translate(self, x: f32, y: f32) -> Self {
+        self.transform(Transform::translate(x, y))
+    }
+
+    /// Scale this text uniformly
+    pub fn scale(self, factor: f32) -> Self {
+        self.transform(Transform::scale(factor, factor))
+    }
+
+    /// Rotate this text by the given angle in radians
+    pub fn rotate(self, angle: f32) -> Self {
+        self.transform(Transform::rotate(angle))
+    }
 }
 
 impl ElementBuilder for Text {
@@ -152,6 +204,8 @@ impl ElementBuilder for Text {
             layer: self.render_layer,
             material: None,
             node_id: None,
+            shadow: self.shadow,
+            transform: self.transform.clone(),
         }
     }
 

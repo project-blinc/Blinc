@@ -197,4 +197,96 @@ impl BlincApp {
     pub fn queue(&self) -> &Arc<wgpu::Queue> {
         self.ctx.queue()
     }
+
+    /// Get the texture format used by the renderer's pipelines
+    ///
+    /// This should match the format used for the surface configuration
+    /// to avoid format mismatches.
+    pub fn texture_format(&self) -> wgpu::TextureFormat {
+        self.ctx.texture_format()
+    }
+
+    /// Create a new Blinc application with a window surface
+    ///
+    /// This creates a GPU renderer optimized for the given window and returns
+    /// both the application and the wgpu surface for rendering.
+    ///
+    /// # Arguments
+    ///
+    /// * `window` - The window to create a surface for (must implement raw-window-handle traits)
+    /// * `config` - Optional configuration (uses defaults if None)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let (app, surface) = BlincApp::with_window(window_arc, None)?;
+    /// ```
+    #[cfg(feature = "windowed")]
+    pub fn with_window<W>(
+        window: Arc<W>,
+        config: Option<BlincConfig>,
+    ) -> Result<(Self, wgpu::Surface<'static>)>
+    where
+        W: raw_window_handle::HasWindowHandle
+            + raw_window_handle::HasDisplayHandle
+            + Send
+            + Sync
+            + 'static,
+    {
+        let config = config.unwrap_or_default();
+
+        let renderer_config = RendererConfig {
+            max_primitives: config.max_primitives,
+            max_glass_primitives: config.max_glass_primitives,
+            max_glyphs: config.max_glyphs,
+            sample_count: 1,
+            texture_format: None,
+        };
+
+        let (renderer, surface) = pollster::block_on(GpuRenderer::with_surface(window, renderer_config))
+            .map_err(|e| BlincError::GpuInit(e.to_string()))?;
+
+        let device = renderer.device_arc();
+        let queue = renderer.queue_arc();
+
+        let mut text_ctx = TextRenderingContext::new(device.clone(), queue.clone());
+
+        // Try to load a default system font
+        #[cfg(target_os = "macos")]
+        {
+            let font_path = std::path::Path::new("/System/Library/Fonts/Helvetica.ttc");
+            if font_path.exists() {
+                if let Ok(data) = std::fs::read(font_path) {
+                    let _ = text_ctx.load_font_data(data);
+                }
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            let font_paths = [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans.ttf",
+            ];
+            for path in &font_paths {
+                if let Ok(data) = std::fs::read(path) {
+                    let _ = text_ctx.load_font_data(data);
+                    break;
+                }
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let font_path = "C:\\Windows\\Fonts\\segoeui.ttf";
+            if let Ok(data) = std::fs::read(font_path) {
+                let _ = text_ctx.load_font_data(data);
+            }
+        }
+
+        let ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        let app = Self { ctx, config };
+
+        Ok((app, surface))
+    }
 }

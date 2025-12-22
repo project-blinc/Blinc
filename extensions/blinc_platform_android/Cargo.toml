@@ -17,6 +17,7 @@ zrtl-plugin = []
 # Core dependencies (always available)
 blinc_core = { path = "../../crates/blinc_core" }
 blinc_animation = { path = "../../crates/blinc_animation" }
+blinc_platform = { path = "../../crates/blinc_platform" }
 
 # Logging (platform-independent)
 tracing.workspace = true

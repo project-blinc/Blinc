@@ -276,14 +276,34 @@ impl GpuRenderer {
         let queue = Arc::new(queue);
 
         let surface_caps = surface.get_capabilities(&adapter);
+        tracing::debug!("Surface capabilities - formats: {:?}", surface_caps.formats);
+        tracing::debug!("Surface capabilities - alpha modes: {:?}", surface_caps.alpha_modes);
+
+        // Select texture format based on platform
         let texture_format = config.texture_format.unwrap_or_else(|| {
-            surface_caps
-                .formats
-                .iter()
-                .find(|f| f.is_srgb())
-                .copied()
-                .unwrap_or(surface_caps.formats[0])
+            // On macOS, prefer non-sRGB format to avoid automatic gamma correction
+            // which causes colors to appear washed out. Other platforms may behave
+            // differently, so we use sRGB there for now.
+            #[cfg(target_os = "macos")]
+            {
+                surface_caps
+                    .formats
+                    .iter()
+                    .find(|f| !f.is_srgb())
+                    .copied()
+                    .unwrap_or(surface_caps.formats[0])
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                surface_caps
+                    .formats
+                    .iter()
+                    .find(|f| f.is_srgb())
+                    .copied()
+                    .unwrap_or(surface_caps.formats[0])
+            }
         });
+        tracing::info!("Selected texture format: {:?}", texture_format);
 
         let renderer = Self::create_renderer(
             instance,
@@ -1208,6 +1228,11 @@ impl GpuRenderer {
     /// Get the wgpu queue as Arc
     pub fn queue_arc(&self) -> Arc<wgpu::Queue> {
         self.queue.clone()
+    }
+
+    /// Get the texture format used by this renderer's pipelines
+    pub fn texture_format(&self) -> wgpu::TextureFormat {
+        self.texture_format
     }
 
     /// Render a batch of primitives to a texture view

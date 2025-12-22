@@ -25,6 +25,10 @@ pub enum BlincError {
     #[error("SVG parsing failed: {0}")]
     SvgParse(String),
 
+    /// Platform error (windowing, input, etc.)
+    #[error("Platform error: {0}")]
+    Platform(String),
+
     /// Generic error
     #[error("{0}")]
     Other(String),

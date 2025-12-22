@@ -66,4 +66,7 @@ pub mod prelude {
     pub use crate::svg::{svg, Svg};
     pub use crate::text::{text, Text};
     pub use crate::tree::{LayoutNodeId, LayoutTree};
+
+    // Re-export Shadow and Transform from blinc_core for convenience
+    pub use blinc_core::{Shadow, Transform};
 }

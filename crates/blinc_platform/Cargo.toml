@@ -1,0 +1,15 @@
+[package]
+name = "blinc_platform"
+description = "Platform abstraction layer for Blinc UI - unified windowing, input, and lifecycle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[features]
+default = []
+
+[dependencies]
+thiserror.workspace = true

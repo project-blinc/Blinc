@@ -784,6 +784,8 @@ pub struct GlassStyle {
     pub noise: f32,
     /// Border highlight thickness
     pub border_thickness: f32,
+    /// Optional drop shadow
+    pub shadow: Option<Shadow>,
 }
 
 impl Default for GlassStyle {
@@ -795,6 +797,7 @@ impl Default for GlassStyle {
             brightness: 1.0,
             noise: 0.0,
             border_thickness: 0.8,
+            shadow: None,
         }
     }
 }
@@ -838,6 +841,12 @@ impl GlassStyle {
     /// Set border thickness
     pub fn border(mut self, thickness: f32) -> Self {
         self.border_thickness = thickness;
+        self
+    }
+
+    /// Set drop shadow
+    pub fn shadow(mut self, shadow: Shadow) -> Self {
+        self.shadow = Some(shadow);
         self
     }
 

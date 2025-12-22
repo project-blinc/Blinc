@@ -8,6 +8,7 @@ members = [
     "crates/blinc_layout",
     "crates/blinc_gpu",
     "crates/blinc_paint",
+    "crates/blinc_platform",
     "crates/blinc_text",
     "crates/blinc_svg",
     "crates/blinc_widgets",

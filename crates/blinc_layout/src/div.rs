@@ -13,7 +13,7 @@
 //!     .child(text("Hello"));
 //! ```
 
-use blinc_core::{Brush, Color, CornerRadius};
+use blinc_core::{Brush, Color, CornerRadius, Shadow, Transform};
 use taffy::prelude::*;
 
 use crate::element::{
@@ -29,6 +29,8 @@ pub struct Div {
     border_radius: CornerRadius,
     render_layer: RenderLayer,
     material: Option<Material>,
+    shadow: Option<Shadow>,
+    transform: Option<Transform>,
 }
 
 impl Default for Div {
@@ -47,6 +49,8 @@ impl Div {
             border_radius: CornerRadius::default(),
             render_layer: RenderLayer::default(),
             material: None,
+            shadow: None,
+            transform: None,
         }
     }
 
@@ -631,6 +635,82 @@ impl Div {
     }
 
     // =========================================================================
+    // Shadow
+    // =========================================================================
+
+    /// Apply a drop shadow to this element
+    pub fn shadow(mut self, shadow: Shadow) -> Self {
+        self.shadow = Some(shadow);
+        self
+    }
+
+    /// Apply a drop shadow with the given parameters
+    pub fn shadow_params(
+        self,
+        offset_x: f32,
+        offset_y: f32,
+        blur: f32,
+        color: Color,
+    ) -> Self {
+        self.shadow(Shadow::new(offset_x, offset_y, blur, color))
+    }
+
+    /// Apply a small drop shadow (2px offset, 4px blur)
+    pub fn shadow_sm(self) -> Self {
+        self.shadow(Shadow::new(0.0, 2.0, 4.0, Color::rgba(0.0, 0.0, 0.0, 0.1)))
+    }
+
+    /// Apply a medium drop shadow (4px offset, 8px blur)
+    pub fn shadow_md(self) -> Self {
+        self.shadow(Shadow::new(0.0, 4.0, 8.0, Color::rgba(0.0, 0.0, 0.0, 0.15)))
+    }
+
+    /// Apply a large drop shadow (8px offset, 16px blur)
+    pub fn shadow_lg(self) -> Self {
+        self.shadow(Shadow::new(0.0, 8.0, 16.0, Color::rgba(0.0, 0.0, 0.0, 0.2)))
+    }
+
+    /// Apply an extra large drop shadow (12px offset, 24px blur)
+    pub fn shadow_xl(self) -> Self {
+        self.shadow(Shadow::new(0.0, 12.0, 24.0, Color::rgba(0.0, 0.0, 0.0, 0.25)))
+    }
+
+    // =========================================================================
+    // Transform
+    // =========================================================================
+
+    /// Apply a transform to this element
+    pub fn transform(mut self, transform: Transform) -> Self {
+        self.transform = Some(transform);
+        self
+    }
+
+    /// Translate this element by the given x and y offset
+    pub fn translate(self, x: f32, y: f32) -> Self {
+        self.transform(Transform::translate(x, y))
+    }
+
+    /// Scale this element uniformly
+    pub fn scale(self, factor: f32) -> Self {
+        self.transform(Transform::scale(factor, factor))
+    }
+
+    /// Scale this element with different x and y factors
+    pub fn scale_xy(self, sx: f32, sy: f32) -> Self {
+        self.transform(Transform::scale(sx, sy))
+    }
+
+    /// Rotate this element by the given angle in radians
+    pub fn rotate(self, angle: f32) -> Self {
+        self.transform(Transform::rotate(angle))
+    }
+
+    /// Rotate this element by the given angle in degrees
+    pub fn rotate_deg(self, degrees: f32) -> Self {
+        self.rotate(degrees * std::f32::consts::PI / 180.0)
+    }
+
+    // =========================================================================
     // Children
     // =========================================================================
 
@@ -728,6 +808,8 @@ impl ElementBuilder for Div {
             layer: self.render_layer,
             material: self.material.clone(),
             node_id: None,
+            shadow: self.shadow,
+            transform: self.transform.clone(),
         }
     }
 

@@ -3,7 +3,7 @@
 //! Provides the core abstractions for building layout trees that can be
 //! rendered via the DrawContext API.
 
-use blinc_core::{Brush, Color, CornerRadius, Rect};
+use blinc_core::{Brush, Color, CornerRadius, Rect, Shadow, Transform};
 use taffy::Layout;
 
 use crate::tree::LayoutNodeId;
@@ -425,6 +425,31 @@ impl Default for MaterialShadow {
     }
 }
 
+/// Convert from blinc_core::Shadow to MaterialShadow
+impl From<Shadow> for MaterialShadow {
+    fn from(shadow: Shadow) -> Self {
+        Self {
+            color: shadow.color,
+            blur: shadow.blur,
+            offset: (shadow.offset_x, shadow.offset_y),
+            // Use the shadow color's alpha as opacity
+            opacity: shadow.color.a,
+        }
+    }
+}
+
+/// Convert from &Shadow to MaterialShadow
+impl From<&Shadow> for MaterialShadow {
+    fn from(shadow: &Shadow) -> Self {
+        Self {
+            color: shadow.color,
+            blur: shadow.blur,
+            offset: (shadow.offset_x, shadow.offset_y),
+            opacity: shadow.color.a,
+        }
+    }
+}
+
 impl MaterialShadow {
     /// Create a new shadow
     pub fn new() -> Self {
@@ -559,6 +584,10 @@ pub struct RenderProps {
     pub material: Option<Material>,
     /// Node ID for looking up children
     pub node_id: Option<LayoutNodeId>,
+    /// Drop shadow applied to this element
+    pub shadow: Option<Shadow>,
+    /// Transform applied to this element (translate, scale, rotate)
+    pub transform: Option<Transform>,
 }
 
 impl RenderProps {
@@ -620,5 +649,17 @@ impl RenderProps {
             Some(Material::Glass(glass)) => Some(glass),
             _ => None,
         }
+    }
+
+    /// Set drop shadow
+    pub fn with_shadow(mut self, shadow: Shadow) -> Self {
+        self.shadow = Some(shadow);
+        self
+    }
+
+    /// Set transform
+    pub fn with_transform(mut self, transform: Transform) -> Self {
+        self.transform = Some(transform);
+        self
     }
 }

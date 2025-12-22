@@ -126,15 +126,17 @@ impl RenderContext {
             let backdrop_view = &self.backdrop_texture.as_ref().unwrap().view;
 
             // Step 1: Render background to pre-glass texture
+            // Use transparent clear - the UI elements provide their own background colors
             self.renderer
-                .render_with_clear(pre_glass_view, &bg_batch, [1.0, 1.0, 1.0, 1.0]);
+                .render_with_clear(pre_glass_view, &bg_batch, [0.0, 0.0, 0.0, 0.0]);
 
             // Step 2: Copy pre-glass to backdrop for glass sampling
             self.copy_texture(pre_glass_tex, backdrop_tex, width, height);
 
             // Step 3: Render background to target
+            // Use opaque black clear for window surfaces
             self.renderer
-                .render_with_clear(target, &bg_batch, [1.0, 1.0, 1.0, 1.0]);
+                .render_with_clear(target, &bg_batch, [0.0, 0.0, 0.0, 1.0]);
 
             // Step 4: Render glass with backdrop blur onto target
             self.renderer.render_glass(target, backdrop_view, &bg_batch);
@@ -159,8 +161,9 @@ impl RenderContext {
             // Foreground uses MSAA for smooth SVG edges
 
             // Render background directly to target
+            // Use opaque black clear - transparent clear can cause issues with window surfaces
             self.renderer
-                .render_with_clear(target, &bg_batch, [1.0, 1.0, 1.0, 1.0]);
+                .render_with_clear(target, &bg_batch, [0.0, 0.0, 0.0, 1.0]);
 
             // Render foreground with MSAA for smooth SVG edges
             if !fg_batch.is_empty() {
@@ -183,6 +186,9 @@ impl RenderContext {
 
     /// Ensure internal textures exist and are the right size
     fn ensure_textures(&mut self, width: u32, height: u32) {
+        // Use the same texture format as the renderer's pipelines
+        let format = self.renderer.texture_format();
+
         let needs_pre_glass = self
             .pre_glass_texture
             .as_ref()
@@ -200,7 +206,7 @@ impl RenderContext {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                format,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
             });
@@ -230,7 +236,7 @@ impl RenderContext {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Bgra8UnormSrgb,
+                format,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                 view_formats: &[],
             });
@@ -359,5 +365,10 @@ impl RenderContext {
     /// Get queue arc
     pub fn queue(&self) -> &Arc<wgpu::Queue> {
         &self.queue
+    }
+
+    /// Get the texture format used by the renderer
+    pub fn texture_format(&self) -> wgpu::TextureFormat {
+        self.renderer.texture_format()
     }
 }

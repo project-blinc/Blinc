@@ -43,7 +43,7 @@
 
 use blinc_core::{
     Affine2D, BillboardFacing, BlendMode, Brush, Camera, ClipShape, CornerRadius, DrawCommand,
-    DrawContext, Environment, GlassStyle, ImageId, ImageOptions, LayerConfig, LayerId, Light, Mat4,
+    DrawContext, Environment, ImageId, ImageOptions, LayerConfig, LayerId, Light, Mat4,
     MaterialId, MeshId, MeshInstance, Path, Point, Rect, SdfBuilder, Shadow, ShapeId, Size, Stroke,
     TextStyle, Transform,
 };
@@ -642,7 +642,7 @@ impl DrawContext for GpuPaintContext {
 
         // Handle glass brush specially - push to glass primitives
         if let Brush::Glass(style) = &brush {
-            let glass = GpuGlassPrimitive::new(
+            let mut glass = GpuGlassPrimitive::new(
                 transformed.x(),
                 transformed.y(),
                 transformed.width(),
@@ -660,6 +660,17 @@ impl DrawContext for GpuPaintContext {
             .with_brightness(style.brightness)
             .with_noise(style.noise)
             .with_border_thickness(style.border_thickness);
+
+            // Apply shadow if present in the glass style
+            if let Some(ref shadow) = style.shadow {
+                glass = glass.with_shadow_offset(
+                    shadow.blur,
+                    shadow.color.a, // Use color alpha as opacity
+                    shadow.offset_x,
+                    shadow.offset_y,
+                );
+            }
+
             self.batch.push_glass(glass);
             return;
         }

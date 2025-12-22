@@ -13,11 +13,12 @@ blinc_layout = { path = "../blinc_layout" }
 blinc_gpu = { path = "../blinc_gpu" }
 blinc_svg = { path = "../blinc_svg" }
 blinc_text = { path = "../blinc_text" }
+blinc_platform = { path = "../blinc_platform" }
 
 # GPU
 wgpu.workspace = true
 
-# Windowing
+# Windowing (optional - used by windowed feature)
 winit = { workspace = true, optional = true }
 raw-window-handle = { workspace = true }
 
@@ -31,9 +32,17 @@ anyhow.workspace = true
 # Logging
 tracing.workspace = true
 
+[target.'cfg(not(target_os = "android"))'.dependencies]
+blinc_platform_desktop = { path = "../../extensions/blinc_platform_desktop", optional = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+blinc_platform_android = { path = "../../extensions/blinc_platform_android", optional = true }
+
 [dev-dependencies]
 image.workspace = true
+tracing-subscriber.workspace = true
 
 [features]
 default = []
-windowed = ["winit"]
+windowed = ["winit", "blinc_platform_desktop"]
+android = ["blinc_platform_android"]

@@ -12,15 +12,12 @@ crate-type = ["lib"]
 default = []
 
 [dependencies]
-blinc_core = { path = "../../crates/blinc_core" }
-blinc_gpu = { path = "../../crates/blinc_gpu" }
+# Platform abstraction
+blinc_platform = { path = "../../crates/blinc_platform" }
 
 # Windowing
 winit.workspace = true
 raw-window-handle.workspace = true
-
-# Async
-tokio.workspace = true
 
 # Logging
 tracing.workspace = true

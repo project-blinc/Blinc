@@ -333,11 +333,18 @@ impl RenderTree {
         // Push transform for this node's position
         ctx.push_transform(Transform::translate(bounds.x, bounds.y));
 
+        // Apply element-specific transform if present
+        let has_element_transform = render_node.props.transform.is_some();
+        if let Some(ref transform) = render_node.props.transform {
+            ctx.push_transform(transform.clone());
+        }
+
         let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
         let radius = render_node.props.border_radius;
 
-        // Check if this node has a glass material - if so, render as glass
+        // Check if this node has a glass material - if so, render as glass with shadow
         if let Some(Material::Glass(glass)) = &render_node.props.material {
+            // For glass elements, pass shadow through GlassStyle to use GPU glass shadow system
             let glass_brush = Brush::Glass(GlassStyle {
                 blur: glass.blur,
                 tint: glass.tint,
@@ -345,16 +352,28 @@ impl RenderTree {
                 brightness: glass.brightness,
                 noise: glass.noise,
                 border_thickness: glass.border_thickness,
+                shadow: render_node.props.shadow.clone(),
             });
             ctx.fill_rect(rect, radius, glass_brush);
-        } else if let Some(ref bg) = render_node.props.background {
+        } else {
+            // For non-glass elements, draw shadow first (renders behind the element)
+            if let Some(ref shadow) = render_node.props.shadow {
+                ctx.draw_shadow(rect, radius, shadow.clone());
+            }
             // Draw regular background
-            ctx.fill_rect(rect, radius, bg.clone());
+            if let Some(ref bg) = render_node.props.background {
+                ctx.fill_rect(rect, radius, bg.clone());
+            }
         }
 
         // Render children (relative to this node's transform)
         for child_id in self.layout_tree.children(node) {
             self.render_node(ctx, child_id, (0.0, 0.0));
+        }
+
+        // Pop element-specific transform if we pushed one
+        if has_element_transform {
+            ctx.pop_transform();
         }
 
         // Pop transform
@@ -463,6 +482,12 @@ impl RenderTree {
         // Always push transform for proper child positioning
         ctx.push_transform(Transform::translate(bounds.x, bounds.y));
 
+        // Apply element-specific transform if present
+        let has_element_transform = render_node.props.transform.is_some();
+        if let Some(ref transform) = render_node.props.transform {
+            ctx.push_transform(transform.clone());
+        }
+
         // Determine if this node is a glass element
         let is_glass = matches!(render_node.props.material, Some(Material::Glass(_)));
 
@@ -485,8 +510,9 @@ impl RenderTree {
             let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
             let radius = render_node.props.border_radius;
 
-            // Check if this node has a glass material - if so, render as glass
+            // Check if this node has a glass material - if so, render as glass with shadow
             if let Some(Material::Glass(glass)) = &render_node.props.material {
+                // For glass elements, pass shadow through GlassStyle to use GPU glass shadow system
                 let glass_brush = Brush::Glass(GlassStyle {
                     blur: glass.blur,
                     tint: glass.tint,
@@ -494,11 +520,18 @@ impl RenderTree {
                     brightness: glass.brightness,
                     noise: glass.noise,
                     border_thickness: glass.border_thickness,
+                    shadow: render_node.props.shadow.clone(),
                 });
                 ctx.fill_rect(rect, radius, glass_brush);
-            } else if let Some(ref bg) = render_node.props.background {
+            } else {
+                // For non-glass elements, draw shadow first (renders behind the element)
+                if let Some(ref shadow) = render_node.props.shadow {
+                    ctx.draw_shadow(rect, radius, shadow.clone());
+                }
                 // Draw regular background
-                ctx.fill_rect(rect, radius, bg.clone());
+                if let Some(ref bg) = render_node.props.background {
+                    ctx.fill_rect(rect, radius, bg.clone());
+                }
             }
         }
 
@@ -515,6 +548,11 @@ impl RenderTree {
                 target_layer,
                 children_inside_glass,
             );
+        }
+
+        // Pop element-specific transform if we pushed one
+        if has_element_transform {
+            ctx.pop_transform();
         }
 
         ctx.pop_transform();
@@ -620,6 +658,12 @@ impl RenderTree {
         // Always push transform for proper child positioning
         ctx.push_transform(Transform::translate(bounds.x, bounds.y));
 
+        // Apply element-specific transform if present
+        let has_element_transform = render_node.props.transform.is_some();
+        if let Some(ref transform) = render_node.props.transform {
+            ctx.push_transform(transform.clone());
+        }
+
         // Determine if this node is a glass element
         let is_glass = matches!(render_node.props.material, Some(Material::Glass(_)));
 
@@ -638,7 +682,9 @@ impl RenderTree {
                 let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
                 let radius = render_node.props.border_radius;
 
+                // Check if this node has a glass material - if so, render as glass with shadow
                 if let Some(Material::Glass(glass)) = &render_node.props.material {
+                    // For glass elements, pass shadow through GlassStyle to use GPU glass shadow system
                     let glass_brush = Brush::Glass(GlassStyle {
                         blur: glass.blur,
                         tint: glass.tint,
@@ -646,10 +692,18 @@ impl RenderTree {
                         brightness: glass.brightness,
                         noise: glass.noise,
                         border_thickness: glass.border_thickness,
+                        shadow: render_node.props.shadow.clone(),
                     });
                     ctx.fill_rect(rect, radius, glass_brush);
-                } else if let Some(ref bg) = render_node.props.background {
-                    ctx.fill_rect(rect, radius, bg.clone());
+                } else {
+                    // For non-glass elements, draw shadow first (renders behind the element)
+                    if let Some(ref shadow) = render_node.props.shadow {
+                        ctx.draw_shadow(rect, radius, shadow.clone());
+                    }
+                    // Draw regular background
+                    if let Some(ref bg) = render_node.props.background {
+                        ctx.fill_rect(rect, radius, bg.clone());
+                    }
                 }
             }
         }
@@ -666,6 +720,11 @@ impl RenderTree {
                 target_layer,
                 children_inside_glass,
             );
+        }
+
+        // Pop element-specific transform if we pushed one
+        if has_element_transform {
+            ctx.pop_transform();
         }
 
         ctx.pop_transform();
