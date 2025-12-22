@@ -16,6 +16,9 @@ ttf-parser = { workspace = true }
 # Text shaping (HarfBuzz)
 rustybuzz = { workspace = true }
 
+# Glyph rasterization
+ab_glyph_rasterizer = "0.1"
+
 # Unicode handling
 unicode-bidi = { workspace = true }
 unicode-linebreak = { workspace = true }

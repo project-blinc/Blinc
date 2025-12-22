@@ -22,6 +22,8 @@ interactive = []
 blinc_core = { path = "../blinc_core" }
 blinc_gpu = { path = "../blinc_gpu" }
 blinc_paint = { path = "../blinc_paint" }
+blinc_text = { path = "../blinc_text" }
+blinc_svg = { path = "../blinc_svg" }
 
 # GPU and windowing
 wgpu.workspace = true

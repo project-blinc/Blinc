@@ -20,6 +20,7 @@ pub mod path;
 pub mod primitives;
 pub mod renderer;
 pub mod shaders;
+pub mod text;
 
 pub use backbuffer::{Backbuffer, BackbufferConfig, FrameContext};
 pub use paint::GpuPaintContext;
@@ -30,3 +31,4 @@ pub use primitives::{
 };
 pub use renderer::{GpuRenderer, RendererConfig};
 pub use shaders::{COMPOSITE_SHADER, GLASS_SHADER, PATH_SHADER, SDF_SHADER, TEXT_SHADER};
+pub use text::TextRenderingContext;

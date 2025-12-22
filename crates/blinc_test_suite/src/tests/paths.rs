@@ -219,6 +219,155 @@ pub fn suite() -> TestSuite {
         c.fill_path(&p3, Color::BLUE.into());
     });
 
+    // SVG Arc - simple arc
+    suite.add("arc_simple", |ctx| {
+        let c = ctx.ctx();
+
+        // Draw a simple arc from left to right using SVG arc command
+        let path = Path::new()
+            .move_to(100.0, 150.0)
+            .arc_to(
+                blinc_core::Vec2::new(50.0, 50.0), // radii
+                0.0,                                // rotation
+                false,                              // large_arc
+                true,                               // sweep (clockwise)
+                200.0,
+                150.0, // end point
+            );
+
+        c.stroke_path(&path, &Stroke::new(4.0), Color::BLUE.into());
+
+        // Markers for start and end
+        c.fill_circle(Point::new(100.0, 150.0), 5.0, Color::GREEN.into());
+        c.fill_circle(Point::new(200.0, 150.0), 5.0, Color::RED.into());
+    });
+
+    // SVG Arc - large arc flag
+    suite.add("arc_large", |ctx| {
+        let c = ctx.ctx();
+
+        // Two arcs with different large_arc flags
+        // Small arc (large_arc = false)
+        let small_arc = Path::new()
+            .move_to(100.0, 150.0)
+            .arc_to(
+                blinc_core::Vec2::new(60.0, 60.0),
+                0.0,
+                false, // small arc
+                true,
+                200.0,
+                150.0,
+            );
+        c.stroke_path(&small_arc, &Stroke::new(3.0), Color::BLUE.into());
+
+        // Large arc (large_arc = true)
+        let large_arc = Path::new()
+            .move_to(100.0, 150.0)
+            .arc_to(
+                blinc_core::Vec2::new(60.0, 60.0),
+                0.0,
+                true, // large arc
+                true,
+                200.0,
+                150.0,
+            );
+        c.stroke_path(&large_arc, &Stroke::new(3.0), Color::RED.into());
+
+        // Markers
+        c.fill_circle(Point::new(100.0, 150.0), 4.0, Color::GREEN.into());
+        c.fill_circle(Point::new(200.0, 150.0), 4.0, Color::GREEN.into());
+    });
+
+    // SVG Arc - sweep flag
+    suite.add("arc_sweep", |ctx| {
+        let c = ctx.ctx();
+
+        // Sweep = true (clockwise)
+        let cw_arc = Path::new()
+            .move_to(100.0, 150.0)
+            .arc_to(
+                blinc_core::Vec2::new(50.0, 50.0),
+                0.0,
+                false,
+                true, // clockwise
+                200.0,
+                150.0,
+            );
+        c.stroke_path(&cw_arc, &Stroke::new(3.0), Color::BLUE.into());
+
+        // Sweep = false (counter-clockwise)
+        let ccw_arc = Path::new()
+            .move_to(250.0, 150.0)
+            .arc_to(
+                blinc_core::Vec2::new(50.0, 50.0),
+                0.0,
+                false,
+                false, // counter-clockwise
+                350.0,
+                150.0,
+            );
+        c.stroke_path(&ccw_arc, &Stroke::new(3.0), Color::RED.into());
+    });
+
+    // SVG Arc - elliptical arc with rotation
+    suite.add("arc_elliptical", |ctx| {
+        let c = ctx.ctx();
+
+        // Elliptical arc with different x/y radii
+        let ellipse_arc = Path::new()
+            .move_to(100.0, 150.0)
+            .arc_to(
+                blinc_core::Vec2::new(80.0, 40.0), // different radii
+                0.0,
+                false,
+                true,
+                300.0,
+                150.0,
+            );
+        c.stroke_path(&ellipse_arc, &Stroke::new(3.0), Color::PURPLE.into());
+
+        // Rotated elliptical arc
+        let rotated_arc = Path::new()
+            .move_to(100.0, 220.0)
+            .arc_to(
+                blinc_core::Vec2::new(80.0, 40.0),
+                std::f32::consts::FRAC_PI_4, // 45 degree rotation
+                false,
+                true,
+                300.0,
+                220.0,
+            );
+        c.stroke_path(&rotated_arc, &Stroke::new(3.0), Color::CYAN.into());
+    });
+
+    // SVG Arc - pie chart slice
+    suite.add("arc_pie_slice", |ctx| {
+        let c = ctx.ctx();
+
+        // Create a pie slice using arcs
+        let cx = 200.0;
+        let cy = 150.0;
+        let r = 80.0;
+
+        // Calculate points on circle
+        let angle1 = 0.0f32;
+        let angle2 = std::f32::consts::FRAC_PI_2; // 90 degrees
+
+        let x1 = cx + r * angle1.cos();
+        let y1 = cy + r * angle1.sin();
+        let x2 = cx + r * angle2.cos();
+        let y2 = cy + r * angle2.sin();
+
+        let slice = Path::new()
+            .move_to(cx, cy) // center
+            .line_to(x1, y1) // to edge
+            .arc_to(blinc_core::Vec2::new(r, r), 0.0, false, true, x2, y2)
+            .close();
+
+        c.fill_path(&slice, Color::rgba(1.0, 0.5, 0.0, 0.8).into());
+        c.stroke_path(&slice, &Stroke::new(2.0), Color::BLACK.into());
+    });
+
     // Path bounds test
     suite.add("path_bounds", |ctx| {
         let c = ctx.ctx();

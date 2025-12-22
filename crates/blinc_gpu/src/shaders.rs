@@ -554,19 +554,16 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Sample SDF value from atlas
-    let sdf = textureSample(glyph_atlas, glyph_sampler, in.uv).r;
+    // Sample coverage value from atlas (0.0 = background, 1.0 = inside glyph)
+    let coverage = textureSample(glyph_atlas, glyph_sampler, in.uv).r;
 
-    // SDF threshold (0.5 is the edge)
-    let threshold = 0.5;
+    // Use coverage directly with slight gamma correction for cleaner edges
+    // The rasterizer provides good coverage values - we just need to
+    // apply a subtle curve to sharpen without losing anti-aliasing
+    // pow(x, 0.7) brightens mid-tones, making strokes appear crisper
+    let aa_alpha = pow(coverage, 0.7);
 
-    // Anti-aliasing width based on screen-space derivatives
-    let aa_width = length(vec2<f32>(dpdx(sdf), dpdy(sdf))) * 0.75;
-
-    // Smooth alpha transition
-    let alpha = smoothstep(threshold - aa_width, threshold + aa_width, sdf);
-
-    return vec4<f32>(in.color.rgb, in.color.a * alpha);
+    return vec4<f32>(in.color.rgb, in.color.a * aa_alpha);
 }
 "#;
 
@@ -612,9 +609,9 @@ struct GlassPrimitive {
     tint_color: vec4<f32>,
     // Glass parameters (blur_radius, saturation, brightness, noise_amount)
     params: vec4<f32>,
-    // Glass parameters 2 (border_thickness, light_angle, 0, 0)
+    // Glass parameters 2 (border_thickness, light_angle, shadow_blur, shadow_opacity)
     params2: vec4<f32>,
-    // Type info (glass_type, 0, 0, 0)
+    // Type info (glass_type, shadow_offset_x_bits, shadow_offset_y_bits, 0)
     type_info: vec4<u32>,
 }
 
@@ -635,7 +632,19 @@ fn vs_main(
     var out: VertexOutput;
 
     let prim = primitives[instance_index];
-    let bounds = prim.bounds;
+
+    // Expand bounds for shadow blur
+    let shadow_blur = prim.params2.z;
+    let shadow_offset_x = bitcast<f32>(prim.type_info.y);
+    let shadow_offset_y = bitcast<f32>(prim.type_info.z);
+    let shadow_expand = shadow_blur * 3.0 + abs(shadow_offset_x) + abs(shadow_offset_y);
+
+    let bounds = vec4<f32>(
+        prim.bounds.x - shadow_expand,
+        prim.bounds.y - shadow_expand,
+        prim.bounds.z + shadow_expand * 2.0,
+        prim.bounds.w + shadow_expand * 2.0
+    );
 
     // Generate quad vertices
     let quad_verts = array<vec2<f32>, 6>(
@@ -670,6 +679,33 @@ fn vs_main(
 // ============================================================================
 // SDF and Blur Functions
 // ============================================================================
+
+// Error function approximation for Gaussian blur
+fn erf(x: f32) -> f32 {
+    let s = sign(x);
+    let a = abs(x);
+    let t = 1.0 / (1.0 + 0.3275911 * a);
+    let y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * exp(-a * a);
+    return s * y;
+}
+
+// Gaussian shadow for rounded rectangle using SDF
+// This properly respects corner radii for accurate rounded rect shadows
+fn shadow_rounded_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec4<f32>, sigma: f32) -> f32 {
+    // Get SDF distance (negative inside, positive outside)
+    let d = sd_rounded_rect(p, origin, size, radius);
+
+    if sigma < 0.001 {
+        // No blur - hard edge
+        return select(0.0, 1.0, d < 0.0);
+    }
+
+    // Use SDF for Gaussian-like falloff
+    // erf-based smooth transition from inside to outside
+    // This creates a proper soft shadow that follows the rounded rect shape
+    let blur_factor = 0.5 * sqrt(2.0) * sigma;
+    return 0.5 * (1.0 - erf(d / blur_factor));
+}
 
 fn sd_rounded_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec4<f32>) -> f32 {
     let half_size = size * 0.5;
@@ -802,6 +838,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let origin = prim.bounds.xy;
     let size = prim.bounds.zw;
 
+    // Shadow parameters
+    let shadow_blur = prim.params2.z;
+    let shadow_opacity = prim.params2.w;
+    let shadow_offset_x = bitcast<f32>(prim.type_info.y);
+    let shadow_offset_y = bitcast<f32>(prim.type_info.z);
+
     // Calculate SDF with smooth anti-aliasing
     let d = sd_rounded_rect(p, origin, size, prim.corner_radius);
     let aa = fwidth(d) * 2.0; // Wide AA for smooth edges
@@ -809,8 +851,28 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Smooth mask
     let mask = 1.0 - smoothstep(-aa, aa, d);
 
-    if mask < 0.001 {
-        discard;
+    // ========================================================================
+    // DROP SHADOW (rendered as pure shadow, no glass effects)
+    // ========================================================================
+    // Shadow is a simple soft rectangle behind the glass - no bevel, no refraction
+    let has_shadow = shadow_opacity > 0.001 && shadow_blur > 0.001;
+
+    if has_shadow {
+        let shadow_origin = origin + vec2<f32>(shadow_offset_x, shadow_offset_y);
+        let shadow_alpha = shadow_rounded_rect(p, shadow_origin, size, prim.corner_radius, shadow_blur);
+
+        // If we're completely outside the glass panel, just render the shadow
+        if mask < 0.001 {
+            if shadow_alpha > 0.001 {
+                return vec4<f32>(0.0, 0.0, 0.0, shadow_alpha * shadow_opacity);
+            }
+            discard;
+        }
+    } else {
+        // No shadow - discard if outside glass
+        if mask < 0.001 {
+            discard;
+        }
     }
 
     // Glass parameters

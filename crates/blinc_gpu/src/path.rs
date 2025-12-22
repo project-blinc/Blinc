@@ -2,7 +2,7 @@
 //!
 //! Converts vector paths into GPU-renderable triangle meshes using lyon.
 
-use blinc_core::{Brush, Color, Path, PathCommand, Point, Stroke};
+use blinc_core::{Brush, Color, Path, PathCommand, Point, Stroke, Vec2};
 use lyon::lyon_tessellation::{
     BuffersBuilder, FillOptions, FillTessellator, FillVertex, StrokeOptions, StrokeTessellator,
     StrokeVertex, VertexBuffers,
@@ -38,6 +38,143 @@ impl TessellatedPath {
         self.vertices.clear();
         self.indices.clear();
     }
+}
+
+/// Convert an SVG arc to cubic bezier curves
+/// Based on the SVG arc implementation algorithm from the W3C spec
+fn arc_to_cubics(
+    from: Point,
+    radii: Vec2,
+    x_rotation: f32,
+    large_arc: bool,
+    sweep: bool,
+    to: Point,
+) -> Vec<(Point, Point, Point)> {
+    let mut curves = Vec::new();
+
+    // Handle degenerate cases
+    if from.x == to.x && from.y == to.y {
+        return curves;
+    }
+
+    let mut rx = radii.x.abs();
+    let mut ry = radii.y.abs();
+
+    if rx == 0.0 || ry == 0.0 {
+        // Treat as a line
+        return curves;
+    }
+
+    let cos_phi = x_rotation.cos();
+    let sin_phi = x_rotation.sin();
+
+    // Step 1: Compute (x1', y1') - transformed start point
+    let dx = (from.x - to.x) / 2.0;
+    let dy = (from.y - to.y) / 2.0;
+    let x1p = cos_phi * dx + sin_phi * dy;
+    let y1p = -sin_phi * dx + cos_phi * dy;
+
+    // Step 2: Compute center point (cx', cy')
+    let x1p_sq = x1p * x1p;
+    let y1p_sq = y1p * y1p;
+    let rx_sq = rx * rx;
+    let ry_sq = ry * ry;
+
+    // Ensure radii are large enough
+    let lambda = x1p_sq / rx_sq + y1p_sq / ry_sq;
+    if lambda > 1.0 {
+        let lambda_sqrt = lambda.sqrt();
+        rx *= lambda_sqrt;
+        ry *= lambda_sqrt;
+    }
+
+    let rx_sq = rx * rx;
+    let ry_sq = ry * ry;
+
+    // Compute center point
+    let sq_numer = (rx_sq * ry_sq - rx_sq * y1p_sq - ry_sq * x1p_sq).max(0.0);
+    let sq_denom = rx_sq * y1p_sq + ry_sq * x1p_sq;
+    let sq = if sq_denom > 0.0 {
+        (sq_numer / sq_denom).sqrt()
+    } else {
+        0.0
+    };
+
+    let sign = if large_arc == sweep { -1.0 } else { 1.0 };
+    let cxp = sign * sq * rx * y1p / ry;
+    let cyp = sign * sq * -ry * x1p / rx;
+
+    // Step 3: Compute (cx, cy) from (cx', cy')
+    let cx = cos_phi * cxp - sin_phi * cyp + (from.x + to.x) / 2.0;
+    let cy = sin_phi * cxp + cos_phi * cyp + (from.y + to.y) / 2.0;
+
+    // Step 4: Compute theta1 and dtheta
+    fn angle(ux: f32, uy: f32, vx: f32, vy: f32) -> f32 {
+        let dot = ux * vx + uy * vy;
+        let len = (ux * ux + uy * uy).sqrt() * (vx * vx + vy * vy).sqrt();
+        let cos_val = (dot / len).clamp(-1.0, 1.0);
+        let angle = cos_val.acos();
+        if ux * vy - uy * vx < 0.0 {
+            -angle
+        } else {
+            angle
+        }
+    }
+
+    let theta1 = angle(1.0, 0.0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+    let mut dtheta = angle(
+        (x1p - cxp) / rx,
+        (y1p - cyp) / ry,
+        (-x1p - cxp) / rx,
+        (-y1p - cyp) / ry,
+    );
+
+    // Adjust dtheta based on sweep flag
+    if sweep && dtheta < 0.0 {
+        dtheta += std::f32::consts::TAU;
+    } else if !sweep && dtheta > 0.0 {
+        dtheta -= std::f32::consts::TAU;
+    }
+
+    // Split arc into segments (max 90 degrees each)
+    let num_segments = ((dtheta.abs() / (std::f32::consts::PI / 2.0)).ceil() as usize).max(1);
+    let segment_angle = dtheta / num_segments as f32;
+
+    for i in 0..num_segments {
+        let t1 = theta1 + i as f32 * segment_angle;
+        let t2 = t1 + segment_angle;
+
+        // Approximate arc segment with cubic bezier
+        let alpha = (segment_angle / 2.0).tan() * 4.0 / 3.0;
+
+        let cos_t1 = t1.cos();
+        let sin_t1 = t1.sin();
+        let cos_t2 = t2.cos();
+        let sin_t2 = t2.sin();
+
+        // Start point of this segment
+        let p0x = cx + rx * (cos_phi * cos_t1 - sin_phi * sin_t1);
+        let p0y = cy + rx * (sin_phi * cos_t1 + cos_phi * sin_t1);
+
+        // End point of this segment
+        let p3x = cx + rx * (cos_phi * cos_t2 - sin_phi * sin_t2);
+        let p3y = cy + ry * (sin_phi * cos_t2 + cos_phi * sin_t2);
+
+        // Control points
+        let p1x = p0x - alpha * rx * (-cos_phi * sin_t1 - sin_phi * cos_t1);
+        let p1y = p0y - alpha * ry * (-sin_phi * sin_t1 + cos_phi * cos_t1);
+
+        let p2x = p3x + alpha * rx * (-cos_phi * sin_t2 - sin_phi * cos_t2);
+        let p2y = p3y + alpha * ry * (-sin_phi * sin_t2 + cos_phi * cos_t2);
+
+        curves.push((
+            Point::new(p1x, p1y),
+            Point::new(p2x, p2y),
+            Point::new(p3x, p3y),
+        ));
+    }
+
+    curves
 }
 
 /// Convert blinc_core Path to lyon path events
@@ -123,14 +260,28 @@ fn path_to_lyon_events(path: &Path) -> Vec<PathEvent> {
                     });
                     first_point = Some(Point::new(0.0, 0.0));
                 }
-                // Lyon doesn't have direct arc support in PathEvent, so we approximate with cubic beziers
-                // For a proper implementation, we'd use lyon's arc_to on a PathBuilder
-                // For now, treat as a line to the endpoint
-                events.push(PathEvent::Line {
-                    from: point(current_point.x, current_point.y),
-                    to: point(end.x, end.y),
-                });
-                let _ = (radii, rotation, large_arc, sweep); // Suppress warnings
+                // Convert SVG arc to cubic bezier curves
+                let cubics = arc_to_cubics(current_point, *radii, *rotation, *large_arc, *sweep, *end);
+
+                if cubics.is_empty() {
+                    // Degenerate arc - treat as line
+                    events.push(PathEvent::Line {
+                        from: point(current_point.x, current_point.y),
+                        to: point(end.x, end.y),
+                    });
+                } else {
+                    // Add cubic bezier curves approximating the arc
+                    let mut prev = current_point;
+                    for (ctrl1, ctrl2, end_pt) in cubics {
+                        events.push(PathEvent::Cubic {
+                            from: point(prev.x, prev.y),
+                            ctrl1: point(ctrl1.x, ctrl1.y),
+                            ctrl2: point(ctrl2.x, ctrl2.y),
+                            to: point(end_pt.x, end_pt.y),
+                        });
+                        prev = end_pt;
+                    }
+                }
                 current_point = *end;
             }
             PathCommand::Close => {

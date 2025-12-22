@@ -8,6 +8,7 @@ members = [
     "crates/blinc_gpu",
     "crates/blinc_paint",
     "crates/blinc_text",
+    "crates/blinc_svg",
     "crates/blinc_widgets",
     "crates/blinc_embed",
     "crates/blinc_test_suite",
@@ -84,6 +85,9 @@ unicode-linebreak = "0.1"
 
 # Image processing (for glyph atlas)
 image = { version = "0.25", default-features = false, features = ["png"] }
+
+# SVG parsing
+usvg = "0.44"
 
 # CLI
 clap = { version = "4.4", features = ["derive"] }

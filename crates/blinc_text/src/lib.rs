@@ -3,18 +3,23 @@
 //! This crate provides:
 //! - Font loading and parsing (TTF/OTF via ttf-parser)
 //! - Text shaping (HarfBuzz via rustybuzz)
-//! - Glyph atlas management with SDF rasterization
+//! - Glyph rasterization
+//! - Glyph atlas management
 //! - Text layout engine (line breaking, alignment)
 
 pub mod font;
 pub mod shaper;
+pub mod rasterizer;
 pub mod atlas;
 pub mod layout;
+pub mod renderer;
 
 pub use font::{Font, FontFace, FontWeight, FontStyle, FontMetrics};
 pub use shaper::{ShapedGlyph, ShapedText, TextShaper};
+pub use rasterizer::{GlyphRasterizer, RasterizedGlyph};
 pub use atlas::{GlyphAtlas, GlyphInfo, AtlasRegion};
-pub use layout::{TextLayout, LayoutOptions, TextAlignment, LineBreakMode};
+pub use layout::{TextLayout, LayoutOptions, TextAlignment, LineBreakMode, PositionedGlyph};
+pub use renderer::{TextRenderer, GlyphInstance, PreparedText};
 
 use thiserror::Error;
 

@@ -69,16 +69,22 @@ impl Default for RendererConfig {
 struct Pipelines {
     /// Pipeline for SDF primitives (rects, circles, etc.)
     sdf: wgpu::RenderPipeline,
+    /// Pipeline for SDF primitives rendering on top of existing content (1x sampled)
+    sdf_overlay: wgpu::RenderPipeline,
     /// Pipeline for glass/vibrancy effects
     glass: wgpu::RenderPipeline,
-    /// Pipeline for text rendering
+    /// Pipeline for text rendering (MSAA)
     #[allow(dead_code)]
     text: wgpu::RenderPipeline,
+    /// Pipeline for text rendering on top of existing content (1x sampled)
+    text_overlay: wgpu::RenderPipeline,
     /// Pipeline for final compositing
     #[allow(dead_code)]
     composite: wgpu::RenderPipeline,
     /// Pipeline for tessellated path rendering
     path: wgpu::RenderPipeline,
+    /// Pipeline for tessellated path overlay (1x sampled)
+    path_overlay: wgpu::RenderPipeline,
 }
 
 /// GPU buffers for rendering
@@ -608,6 +614,35 @@ impl GpuRenderer {
             cache: None,
         });
 
+        // SDF overlay pipeline - uses sample_count=1 for rendering on resolved textures
+        let overlay_multisample_state = wgpu::MultisampleState {
+            count: 1,
+            mask: !0,
+            alpha_to_coverage_enabled: false,
+        };
+
+        let sdf_overlay = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("SDF Overlay Pipeline"),
+            layout: Some(&sdf_layout),
+            vertex: wgpu::VertexState {
+                module: sdf_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: sdf_shader,
+                entry_point: Some("fs_main"),
+                targets: color_targets,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: primitive_state,
+            depth_stencil: None,
+            multisample: overlay_multisample_state,
+            multiview: None,
+            cache: None,
+        });
+
         // Glass pipeline - always uses sample_count=1 since it renders on resolved textures
         // (glass effects require sampling from a single-sampled backdrop texture)
         let glass_multisample_state = wgpu::MultisampleState {
@@ -669,6 +704,29 @@ impl GpuRenderer {
             primitive: primitive_state,
             depth_stencil: None,
             multisample: multisample_state,
+            multiview: None,
+            cache: None,
+        });
+
+        // Text overlay pipeline - uses sample_count=1 for rendering on resolved textures
+        let text_overlay = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Text Overlay Pipeline"),
+            layout: Some(&text_layout),
+            vertex: wgpu::VertexState {
+                module: text_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: text_shader,
+                entry_point: Some("fs_main"),
+                targets: color_targets,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: primitive_state,
+            depth_stencil: None,
+            multisample: overlay_multisample_state,
             multiview: None,
             cache: None,
         });
@@ -735,7 +793,7 @@ impl GpuRenderer {
             vertex: wgpu::VertexState {
                 module: path_shader,
                 entry_point: Some("vs_main"),
-                buffers: &[path_vertex_layout],
+                buffers: &[path_vertex_layout.clone()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -751,12 +809,38 @@ impl GpuRenderer {
             cache: None,
         });
 
+        // Path overlay pipeline - uses sample_count=1 for rendering on resolved textures
+        let path_overlay = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Path Overlay Pipeline"),
+            layout: Some(&path_layout),
+            vertex: wgpu::VertexState {
+                module: path_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[path_vertex_layout],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: path_shader,
+                entry_point: Some("fs_main"),
+                targets: color_targets,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: primitive_state,
+            depth_stencil: None,
+            multisample: overlay_multisample_state,
+            multiview: None,
+            cache: None,
+        });
+
         Pipelines {
             sdf,
+            sdf_overlay,
             glass,
             text,
+            text_overlay,
             composite,
             path,
+            path_overlay,
         }
     }
 
@@ -1219,6 +1303,179 @@ impl GpuRenderer {
             render_pass.set_pipeline(&self.pipelines.glass);
             render_pass.set_bind_group(0, &glass_bind_group, &[]);
             render_pass.draw(0..6, 0..batch.glass_primitives.len() as u32);
+        }
+
+        // Submit commands
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Render primitives as an overlay on existing content (1x sampled)
+    ///
+    /// This uses the overlay pipeline which is configured for sample_count=1,
+    /// making it suitable for rendering on top of already-resolved content
+    /// (e.g., after glass effects have been applied).
+    ///
+    /// # Arguments
+    /// * `target` - The single-sampled texture view to render to (existing content is preserved)
+    /// * `batch` - The primitive batch to render
+    pub fn render_overlay(&mut self, target: &wgpu::TextureView, batch: &PrimitiveBatch) {
+        // Update uniforms
+        let uniforms = Uniforms {
+            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            _padding: [0.0; 2],
+        };
+        self.queue
+            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+
+        // Update primitives buffer
+        if !batch.primitives.is_empty() {
+            self.queue.write_buffer(
+                &self.buffers.primitives,
+                0,
+                bytemuck::cast_slice(&batch.primitives),
+            );
+        }
+
+        // Update path buffers if we have path geometry
+        let has_paths = !batch.paths.vertices.is_empty() && !batch.paths.indices.is_empty();
+        if has_paths {
+            self.update_path_buffers(batch);
+        }
+
+        // Create command encoder
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Blinc Overlay Render Encoder"),
+            });
+
+        // Begin render pass (load existing content, don't clear)
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Blinc Overlay Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None, // No MSAA resolve needed for overlay
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load, // Keep existing content
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            // Render paths first (they're typically backgrounds)
+            if has_paths {
+                if let (Some(vb), Some(ib)) =
+                    (&self.buffers.path_vertices, &self.buffers.path_indices)
+                {
+                    render_pass.set_pipeline(&self.pipelines.path_overlay);
+                    render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
+                    render_pass.set_vertex_buffer(0, vb.slice(..));
+                    render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
+                }
+            }
+
+            // Render SDF primitives using overlay pipeline
+            if !batch.primitives.is_empty() {
+                render_pass.set_pipeline(&self.pipelines.sdf_overlay);
+                render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
+                render_pass.draw(0..6, 0..batch.primitives.len() as u32);
+            }
+        }
+
+        // Submit commands
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Render text glyphs with a provided atlas texture
+    ///
+    /// # Arguments
+    /// * `target` - The texture view to render to
+    /// * `glyphs` - The glyph instances to render
+    /// * `atlas_view` - The glyph atlas texture view
+    /// * `atlas_sampler` - The sampler for the atlas
+    pub fn render_text(
+        &mut self,
+        target: &wgpu::TextureView,
+        glyphs: &[GpuGlyph],
+        atlas_view: &wgpu::TextureView,
+        atlas_sampler: &wgpu::Sampler,
+    ) {
+        if glyphs.is_empty() {
+            return;
+        }
+
+        // Update uniforms
+        let uniforms = Uniforms {
+            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            _padding: [0.0; 2],
+        };
+        self.queue
+            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+
+        // Update glyphs buffer
+        self.queue.write_buffer(
+            &self.buffers.glyphs,
+            0,
+            bytemuck::cast_slice(glyphs),
+        );
+
+        // Create text bind group with the provided atlas
+        let text_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Text Bind Group"),
+            layout: &self.bind_group_layouts.text,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.buffers.uniforms.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: self.buffers.glyphs.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(atlas_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(atlas_sampler),
+                },
+            ],
+        });
+
+        // Create command encoder
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Blinc Text Render Encoder"),
+            });
+
+        // Begin render pass (load existing content)
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Blinc Text Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load, // Keep existing content
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            // Use text_overlay pipeline since we're rendering to 1x sampled texture
+            render_pass.set_pipeline(&self.pipelines.text_overlay);
+            render_pass.set_bind_group(0, &text_bind_group, &[]);
+            render_pass.draw(0..6, 0..glyphs.len() as u32);
         }
 
         // Submit commands

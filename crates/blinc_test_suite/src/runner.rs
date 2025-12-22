@@ -7,6 +7,17 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+/// Type of test case
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum TestType {
+    /// Standard test using DrawContext
+    Standard,
+    /// Glass test using multi-pass rendering
+    Glass,
+    /// Text test using text rendering pipeline
+    Text,
+}
+
 /// A single test case
 pub struct TestCase {
     /// Test name
@@ -15,8 +26,15 @@ pub struct TestCase {
     pub category: String,
     /// Test function
     pub test_fn: Box<dyn FnOnce(&mut crate::harness::TestContext) + Send>,
-    /// Whether this test uses glass effects (requires multi-pass rendering)
-    pub uses_glass: bool,
+    /// Type of test
+    pub test_type: TestType,
+}
+
+/// Backward compatibility alias
+impl TestCase {
+    pub fn uses_glass(&self) -> bool {
+        self.test_type == TestType::Glass
+    }
 }
 
 impl TestCase {
@@ -28,7 +46,7 @@ impl TestCase {
             name: name.to_string(),
             category: category.to_string(),
             test_fn: Box::new(test_fn),
-            uses_glass: false,
+            test_type: TestType::Standard,
         }
     }
 
@@ -40,7 +58,19 @@ impl TestCase {
             name: name.to_string(),
             category: category.to_string(),
             test_fn: Box::new(test_fn),
-            uses_glass: true,
+            test_type: TestType::Glass,
+        }
+    }
+
+    pub fn new_text<F>(name: &str, category: &str, test_fn: F) -> Self
+    where
+        F: FnOnce(&mut crate::harness::TestContext) + Send + 'static,
+    {
+        Self {
+            name: name.to_string(),
+            category: category.to_string(),
+            test_fn: Box::new(test_fn),
+            test_type: TestType::Text,
         }
     }
 }
@@ -160,26 +190,42 @@ impl TestRunner {
 
                 tracing::debug!("Running test: {}", full_name);
 
-                // Use glass test runner if this test uses glass effects
-                let result = if case.uses_glass {
-                    match self.harness.run_glass_test(&full_name, case.test_fn) {
-                        Ok(result) => result,
-                        Err(e) => {
-                            tracing::error!("Glass test {} failed with error: {}", full_name, e);
-                            TestResult::Failed {
-                                difference: 1.0,
-                                diff_path: self.harness.diff_path(&full_name),
+                // Use appropriate test runner based on test type
+                let result = match case.test_type {
+                    TestType::Glass => {
+                        match self.harness.run_glass_test(&full_name, case.test_fn) {
+                            Ok(result) => result,
+                            Err(e) => {
+                                tracing::error!("Glass test {} failed with error: {}", full_name, e);
+                                TestResult::Failed {
+                                    difference: 1.0,
+                                    diff_path: self.harness.diff_path(&full_name),
+                                }
                             }
                         }
                     }
-                } else {
-                    match self.harness.run_test(&full_name, case.test_fn) {
-                        Ok(result) => result,
-                        Err(e) => {
-                            tracing::error!("Test {} failed with error: {}", full_name, e);
-                            TestResult::Failed {
-                                difference: 1.0,
-                                diff_path: self.harness.diff_path(&full_name),
+                    TestType::Text => {
+                        // Text tests use the same runner as standard but will render text
+                        match self.harness.run_test(&full_name, case.test_fn) {
+                            Ok(result) => result,
+                            Err(e) => {
+                                tracing::error!("Text test {} failed with error: {}", full_name, e);
+                                TestResult::Failed {
+                                    difference: 1.0,
+                                    diff_path: self.harness.diff_path(&full_name),
+                                }
+                            }
+                        }
+                    }
+                    TestType::Standard => {
+                        match self.harness.run_test(&full_name, case.test_fn) {
+                            Ok(result) => result,
+                            Err(e) => {
+                                tracing::error!("Test {} failed with error: {}", full_name, e);
+                                TestResult::Failed {
+                                    difference: 1.0,
+                                    diff_path: self.harness.diff_path(&full_name),
+                                }
                             }
                         }
                     }

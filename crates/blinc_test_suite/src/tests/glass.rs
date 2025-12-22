@@ -491,6 +491,106 @@ pub fn suite() -> TestSuite {
         ctx.add_glass(dock);
     });
 
+    // Glass with drop shadows
+    suite.add_glass("glass_shadows", |ctx| {
+        let c = ctx.ctx();
+
+        // Light background to show shadows clearly
+        c.fill_rect(
+            Rect::new(0.0, 0.0, 400.0, 300.0),
+            0.0.into(),
+            Color::rgba(0.95, 0.95, 0.97, 1.0).into(),
+        );
+
+        // Subtle pattern
+        for i in 0..20 {
+            for j in 0..15 {
+                c.fill_rect(
+                    Rect::new(i as f32 * 20.0, j as f32 * 20.0, 18.0, 18.0),
+                    2.0.into(),
+                    Color::rgba(0.85, 0.85, 0.87, 1.0).into(),
+                );
+            }
+        }
+
+        // Glass with subtle shadow
+        let glass_subtle = GpuGlassPrimitive::new(30.0, 80.0, 100.0, 120.0)
+            .with_corner_radius(16.0)
+            .with_blur(15.0)
+            .with_tint(1.0, 1.0, 1.0, 0.3)
+            .with_shadow(10.0, 0.15);
+        ctx.add_glass(glass_subtle);
+
+        // Glass with medium shadow
+        let glass_medium = GpuGlassPrimitive::new(150.0, 80.0, 100.0, 120.0)
+            .with_corner_radius(16.0)
+            .with_blur(15.0)
+            .with_tint(1.0, 1.0, 1.0, 0.3)
+            .with_shadow(20.0, 0.3);
+        ctx.add_glass(glass_medium);
+
+        // Glass with strong shadow
+        let glass_strong = GpuGlassPrimitive::new(270.0, 80.0, 100.0, 120.0)
+            .with_corner_radius(16.0)
+            .with_blur(15.0)
+            .with_tint(1.0, 1.0, 1.0, 0.3)
+            .with_shadow(30.0, 0.5);
+        ctx.add_glass(glass_strong);
+    });
+
+    // Glass with offset shadows (floating card effect)
+    suite.add_glass("glass_shadow_offset", |ctx| {
+        let c = ctx.ctx();
+
+        // Gradient-like background
+        c.fill_rect(
+            Rect::new(0.0, 0.0, 400.0, 150.0),
+            0.0.into(),
+            Color::rgba(0.4, 0.5, 0.7, 1.0).into(),
+        );
+        c.fill_rect(
+            Rect::new(0.0, 150.0, 400.0, 150.0),
+            0.0.into(),
+            Color::rgba(0.5, 0.4, 0.6, 1.0).into(),
+        );
+
+        // Some colorful shapes
+        c.fill_circle(
+            blinc_core::Point::new(80.0, 150.0),
+            40.0,
+            Color::rgba(1.0, 0.5, 0.3, 0.8).into(),
+        );
+        c.fill_circle(
+            blinc_core::Point::new(320.0, 150.0),
+            40.0,
+            Color::rgba(0.3, 0.8, 0.5, 0.8).into(),
+        );
+
+        // Floating card with bottom-right shadow
+        let card1 = GpuGlassPrimitive::new(60.0, 60.0, 120.0, 80.0)
+            .with_corner_radius(12.0)
+            .with_blur(20.0)
+            .with_tint(1.0, 1.0, 1.0, 0.4)
+            .with_shadow_offset(15.0, 0.4, 8.0, 8.0);
+        ctx.add_glass(card1);
+
+        // Floating card with bottom shadow (iOS style)
+        let card2 = GpuGlassPrimitive::new(220.0, 60.0, 120.0, 80.0)
+            .with_corner_radius(12.0)
+            .with_blur(20.0)
+            .with_tint(1.0, 1.0, 1.0, 0.4)
+            .with_shadow_offset(20.0, 0.35, 0.0, 12.0);
+        ctx.add_glass(card2);
+
+        // Bottom notification with spread shadow
+        let notification = GpuGlassPrimitive::new(50.0, 200.0, 300.0, 60.0)
+            .with_corner_radius(20.0)
+            .with_blur(25.0)
+            .with_tint(0.1, 0.1, 0.15, 0.7)
+            .with_shadow_offset(25.0, 0.5, 0.0, 15.0);
+        ctx.add_glass(notification);
+    });
+
     // iOS 26 Liquid Glass Music Player (based on reference image)
     // This test recreates the Apple Control Center music player widget
     suite.add_glass("music_player", |ctx| {
@@ -516,7 +616,7 @@ pub fn suite() -> TestSuite {
         let airplay_y = controls_y + 8.0;
         let toolbar_y = 280.0;
 
-        // First, draw all background primitives
+        // First, draw all background primitives (will be blurred behind glass)
         {
             let c = ctx.ctx();
 
@@ -539,107 +639,9 @@ pub fn suite() -> TestSuite {
                 0.0.into(),
                 Color::rgba(0.30, 0.35, 0.25, 1.0).into(),
             );
-
-            // Progress bar track
-            c.fill_rect(
-                Rect::new(bar_x, bar_y, bar_w, bar_h),
-                2.0.into(),
-                Color::rgba(0.3, 0.3, 0.35, 0.6).into(),
-            );
-
-            // Progress fill
-            c.fill_rect(
-                Rect::new(bar_x, bar_y, bar_w * progress, bar_h),
-                2.0.into(),
-                Color::rgba(1.0, 1.0, 1.0, 0.9).into(),
-            );
-
-            // Scrubber knob
-            c.fill_rect(
-                Rect::new(knob_x, bar_y - 4.0, 12.0, 12.0),
-                6.0.into(),
-                Color::WHITE.into(),
-            );
-
-            // Rewind button
-            c.fill_rect(
-                Rect::new(rewind_x - 12.0, controls_y, 16.0, 32.0),
-                2.0.into(),
-                Color::WHITE.into(),
-            );
-            c.fill_rect(
-                Rect::new(rewind_x + 4.0, controls_y, 16.0, 32.0),
-                2.0.into(),
-                Color::WHITE.into(),
-            );
-
-            // Pause button
-            c.fill_rect(
-                Rect::new(pause_x, controls_y, 12.0, 36.0),
-                3.0.into(),
-                Color::WHITE.into(),
-            );
-            c.fill_rect(
-                Rect::new(pause_x + 20.0, controls_y, 12.0, 36.0),
-                3.0.into(),
-                Color::WHITE.into(),
-            );
-
-            // Fast-forward button
-            c.fill_rect(
-                Rect::new(ff_x, controls_y, 16.0, 32.0),
-                2.0.into(),
-                Color::WHITE.into(),
-            );
-            c.fill_rect(
-                Rect::new(ff_x + 16.0, controls_y, 16.0, 32.0),
-                2.0.into(),
-                Color::WHITE.into(),
-            );
-
-            // Volume indicator (5 bars)
-            for i in 0..5 {
-                let bar_height = 8.0 + i as f32 * 4.0;
-                c.fill_rect(
-                    Rect::new(vol_x + i as f32 * 6.0, vol_y + 20.0 - bar_height, 4.0, bar_height),
-                    1.0.into(),
-                    Color::WHITE.into(),
-                );
-            }
-
-            // AirPlay button
-            c.fill_rect(
-                Rect::new(airplay_x, airplay_y, 24.0, 24.0),
-                12.0.into(),
-                Color::rgba(1.0, 1.0, 1.0, 0.3).into(),
-            );
-            c.fill_rect(
-                Rect::new(airplay_x + 8.0, airplay_y + 8.0, 8.0, 8.0),
-                4.0.into(),
-                Color::WHITE.into(),
-            );
-
-            // Flashlight icon
-            c.fill_rect(
-                Rect::new(122.0, toolbar_y + 15.0, 16.0, 30.0),
-                2.0.into(),
-                Color::WHITE.into(),
-            );
-
-            // Camera icon
-            c.fill_rect(
-                Rect::new(252.0, toolbar_y + 18.0, 36.0, 24.0),
-                4.0.into(),
-                Color::WHITE.into(),
-            );
-            c.fill_rect(
-                Rect::new(262.0, toolbar_y + 22.0, 16.0, 16.0),
-                8.0.into(),
-                Color::rgba(0.3, 0.3, 0.35, 1.0).into(),
-            );
         }
 
-        // Then add all glass primitives
+        // Add all glass primitives
         // Main player card
         let player_glass = GpuGlassPrimitive::new(player_x, player_y, player_w, player_h)
             .with_corner_radius(24.0)
@@ -667,6 +669,109 @@ pub fn suite() -> TestSuite {
             .with_border_thickness(0.8)
             .with_light_angle_degrees(-45.0);
         ctx.add_glass(camera_glass);
+
+        // Draw foreground elements ON TOP of glass (not blurred)
+        {
+            let fg = ctx.foreground();
+
+            // Progress bar track
+            fg.fill_rect(
+                Rect::new(bar_x, bar_y, bar_w, bar_h),
+                2.0.into(),
+                Color::rgba(0.3, 0.3, 0.35, 0.6).into(),
+            );
+
+            // Progress fill
+            fg.fill_rect(
+                Rect::new(bar_x, bar_y, bar_w * progress, bar_h),
+                2.0.into(),
+                Color::rgba(1.0, 1.0, 1.0, 0.9).into(),
+            );
+
+            // Scrubber knob
+            fg.fill_rect(
+                Rect::new(knob_x, bar_y - 4.0, 12.0, 12.0),
+                6.0.into(),
+                Color::WHITE.into(),
+            );
+
+            // Rewind button (two bars representing << icon)
+            fg.fill_rect(
+                Rect::new(rewind_x - 12.0, controls_y, 16.0, 32.0),
+                2.0.into(),
+                Color::WHITE.into(),
+            );
+            fg.fill_rect(
+                Rect::new(rewind_x + 4.0, controls_y, 16.0, 32.0),
+                2.0.into(),
+                Color::WHITE.into(),
+            );
+
+            // Pause button (two vertical bars)
+            fg.fill_rect(
+                Rect::new(pause_x, controls_y, 12.0, 36.0),
+                3.0.into(),
+                Color::WHITE.into(),
+            );
+            fg.fill_rect(
+                Rect::new(pause_x + 20.0, controls_y, 12.0, 36.0),
+                3.0.into(),
+                Color::WHITE.into(),
+            );
+
+            // Fast-forward button (two bars representing >> icon)
+            fg.fill_rect(
+                Rect::new(ff_x, controls_y, 16.0, 32.0),
+                2.0.into(),
+                Color::WHITE.into(),
+            );
+            fg.fill_rect(
+                Rect::new(ff_x + 16.0, controls_y, 16.0, 32.0),
+                2.0.into(),
+                Color::WHITE.into(),
+            );
+
+            // Volume indicator (5 bars increasing in height)
+            for i in 0..5 {
+                let bar_height = 8.0 + i as f32 * 4.0;
+                fg.fill_rect(
+                    Rect::new(vol_x + i as f32 * 6.0, vol_y + 20.0 - bar_height, 4.0, bar_height),
+                    1.0.into(),
+                    Color::WHITE.into(),
+                );
+            }
+
+            // AirPlay button (circle with inner dot)
+            fg.fill_rect(
+                Rect::new(airplay_x, airplay_y, 24.0, 24.0),
+                12.0.into(),
+                Color::rgba(1.0, 1.0, 1.0, 0.3).into(),
+            );
+            fg.fill_rect(
+                Rect::new(airplay_x + 8.0, airplay_y + 8.0, 8.0, 8.0),
+                4.0.into(),
+                Color::WHITE.into(),
+            );
+
+            // Flashlight icon (vertical bar)
+            fg.fill_rect(
+                Rect::new(122.0, toolbar_y + 15.0, 16.0, 30.0),
+                2.0.into(),
+                Color::WHITE.into(),
+            );
+
+            // Camera icon (rounded rect with lens circle)
+            fg.fill_rect(
+                Rect::new(252.0, toolbar_y + 18.0, 36.0, 24.0),
+                4.0.into(),
+                Color::WHITE.into(),
+            );
+            fg.fill_rect(
+                Rect::new(262.0, toolbar_y + 22.0, 16.0, 16.0),
+                8.0.into(),
+                Color::rgba(0.3, 0.3, 0.35, 1.0).into(),
+            );
+        }
     });
 
     suite

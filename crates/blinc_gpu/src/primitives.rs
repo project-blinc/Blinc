@@ -285,9 +285,11 @@ pub struct GpuGlassPrimitive {
     pub tint_color: [f32; 4],
     /// Glass parameters (blur_radius, saturation, brightness, noise_amount)
     pub params: [f32; 4],
-    /// Glass parameters 2 (border_thickness, light_angle, 0, 0)
+    /// Glass parameters 2 (border_thickness, light_angle, shadow_blur, shadow_opacity)
     /// - border_thickness: thickness of edge highlight in pixels (default 0.8)
-    /// - light_angle: angle of simulated light source in radians (default 0 = top-left)
+    /// - light_angle: angle of simulated light source in radians (default -PI/4 = top-left)
+    /// - shadow_blur: blur radius for drop shadow (default 0 = no shadow)
+    /// - shadow_opacity: opacity of the drop shadow (default 0 = no shadow)
     pub params2: [f32; 4],
     /// Type info (glass_type, 0, 0, 0)
     pub type_info: [u32; 4],
@@ -411,6 +413,27 @@ impl GpuGlassPrimitive {
     /// Set light angle in degrees (convenience method)
     pub fn with_light_angle_degrees(mut self, angle_degrees: f32) -> Self {
         self.params2[1] = angle_degrees * std::f32::consts::PI / 180.0;
+        self
+    }
+
+    /// Set drop shadow for the glass panel
+    /// - blur: blur radius in pixels (0 = no shadow)
+    /// - opacity: shadow opacity (0.0 - 1.0)
+    pub fn with_shadow(mut self, blur: f32, opacity: f32) -> Self {
+        self.params2[2] = blur;
+        self.params2[3] = opacity;
+        self
+    }
+
+    /// Set drop shadow with offset and color
+    /// For more advanced shadow control, use the full shadow parameters
+    /// Note: Offset is stored in type_info[1] and type_info[2] as bits
+    pub fn with_shadow_offset(mut self, blur: f32, opacity: f32, offset_x: f32, offset_y: f32) -> Self {
+        self.params2[2] = blur;
+        self.params2[3] = opacity;
+        // Store offset in type_info (as f32 bits reinterpreted as u32)
+        self.type_info[1] = offset_x.to_bits();
+        self.type_info[2] = offset_y.to_bits();
         self
     }
 }

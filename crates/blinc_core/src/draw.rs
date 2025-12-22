@@ -341,6 +341,11 @@ impl Path {
         }
     }
 
+    /// Create a path from a vector of commands
+    pub fn from_commands(commands: Vec<PathCommand>) -> Self {
+        Self { commands }
+    }
+
     /// Move to a point
     pub fn move_to(mut self, x: f32, y: f32) -> Self {
         self.commands.push(PathCommand::MoveTo(Point::new(x, y)));
@@ -375,6 +380,32 @@ impl Path {
     /// Close the path
     pub fn close(mut self) -> Self {
         self.commands.push(PathCommand::Close);
+        self
+    }
+
+    /// SVG Arc to a point
+    ///
+    /// - `radii`: The x and y radii of the ellipse
+    /// - `rotation`: Rotation angle of the ellipse in radians
+    /// - `large_arc`: If true, use the larger arc (> 180 degrees)
+    /// - `sweep`: If true, draw clockwise; if false, counter-clockwise
+    /// - `x`, `y`: End point of the arc
+    pub fn arc_to(
+        mut self,
+        radii: Vec2,
+        rotation: f32,
+        large_arc: bool,
+        sweep: bool,
+        x: f32,
+        y: f32,
+    ) -> Self {
+        self.commands.push(PathCommand::ArcTo {
+            radii,
+            rotation,
+            large_arc,
+            sweep,
+            end: Point::new(x, y),
+        });
         self
     }
 

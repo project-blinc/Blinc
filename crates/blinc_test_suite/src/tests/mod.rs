@@ -9,6 +9,7 @@ pub mod paths;
 pub mod sdf;
 pub mod shadows;
 pub mod shapes;
+pub mod svg;
 pub mod text;
 pub mod transforms;
 
@@ -28,5 +29,6 @@ pub fn all_suites() -> Vec<TestSuite> {
         sdf::suite(),
         paint_context::suite(),
         glass::suite(),
+        svg::suite(),
     ]
 }

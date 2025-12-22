@@ -19,6 +19,7 @@ webgl = ["wgpu/webgl"]  # For WebGL/OpenGL ES support
 blinc_core = { path = "../blinc_core" }
 blinc_layout = { path = "../blinc_layout" }
 blinc_paint = { path = "../blinc_paint" }
+blinc_text = { path = "../blinc_text" }
 
 # GPU
 wgpu.workspace = true

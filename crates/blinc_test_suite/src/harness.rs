@@ -7,7 +7,10 @@
 
 use anyhow::{Context, Result};
 use blinc_core::Size;
-use blinc_gpu::{GpuGlassPrimitive, GpuPaintContext, GpuRenderer, PrimitiveBatch, RendererConfig};
+use blinc_gpu::{
+    GpuGlassPrimitive, GpuGlyph, GpuPaintContext, GpuRenderer, PrimitiveBatch, RendererConfig,
+    TextRenderingContext,
+};
 use image::{ImageBuffer, Rgba, RgbaImage};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -35,10 +38,29 @@ impl TestResult {
     }
 }
 
+/// A text rendering command
+#[derive(Clone)]
+pub struct TextCommand {
+    /// The text to render
+    pub text: String,
+    /// X position
+    pub x: f32,
+    /// Y position
+    pub y: f32,
+    /// Font size
+    pub font_size: f32,
+    /// Text color as RGBA
+    pub color: [f32; 4],
+}
+
 /// Context for a single test
 pub struct TestContext {
-    /// Paint context for drawing
+    /// Paint context for drawing background (behind glass)
     pub paint_ctx: GpuPaintContext,
+    /// Paint context for drawing foreground (on top of glass)
+    pub foreground_ctx: GpuPaintContext,
+    /// Text commands to render
+    pub text_commands: Vec<TextCommand>,
     /// Viewport size
     pub size: Size,
     /// Test name
@@ -52,15 +74,22 @@ impl TestContext {
     pub fn new(name: &str, width: f32, height: f32) -> Self {
         Self {
             paint_ctx: GpuPaintContext::new(width, height),
+            foreground_ctx: GpuPaintContext::new(width, height),
+            text_commands: Vec::new(),
             size: Size::new(width, height),
             name: name.to_string(),
             output_dir: PathBuf::from("test_output"),
         }
     }
 
-    /// Get the paint context for drawing
+    /// Get the paint context for drawing background (behind glass)
     pub fn ctx(&mut self) -> &mut GpuPaintContext {
         &mut self.paint_ctx
+    }
+
+    /// Get the foreground paint context for drawing on top of glass
+    pub fn foreground(&mut self) -> &mut GpuPaintContext {
+        &mut self.foreground_ctx
     }
 
     /// Get the primitive batch after drawing
@@ -73,9 +102,32 @@ impl TestContext {
         self.paint_ctx.take_batch()
     }
 
+    /// Take the foreground batch
+    pub fn take_foreground_batch(&mut self) -> PrimitiveBatch {
+        self.foreground_ctx.take_batch()
+    }
+
     /// Clear and reset the paint context
     pub fn clear(&mut self) {
         self.paint_ctx = GpuPaintContext::new(self.size.width, self.size.height);
+        self.foreground_ctx = GpuPaintContext::new(self.size.width, self.size.height);
+        self.text_commands.clear();
+    }
+
+    /// Add a text rendering command
+    pub fn draw_text(&mut self, text: &str, x: f32, y: f32, font_size: f32, color: [f32; 4]) {
+        self.text_commands.push(TextCommand {
+            text: text.to_string(),
+            x,
+            y,
+            font_size,
+            color,
+        });
+    }
+
+    /// Take the text commands
+    pub fn take_text_commands(&mut self) -> Vec<TextCommand> {
+        std::mem::take(&mut self.text_commands)
     }
 
     /// Get a mutable reference to the batch for adding glass primitives
@@ -98,6 +150,8 @@ impl TestContext {
 pub struct TestHarness {
     /// GPU renderer (wrapped in RefCell for interior mutability)
     renderer: RefCell<GpuRenderer>,
+    /// Text rendering context (for text tests)
+    text_ctx: RefCell<TextRenderingContext>,
     /// wgpu device
     device: Arc<wgpu::Device>,
     /// wgpu queue
@@ -137,6 +191,21 @@ impl TestHarness {
         let device = renderer.device_arc();
         let queue = renderer.queue_arc();
 
+        // Create text rendering context
+        let mut text_ctx = TextRenderingContext::new(device.clone(), queue.clone());
+
+        // Try to load a default system font
+        #[cfg(target_os = "macos")]
+        {
+            let font_path = std::path::Path::new("/System/Library/Fonts/Helvetica.ttc");
+            if font_path.exists() {
+                // Load the font data and use first font in collection
+                if let Ok(data) = std::fs::read(font_path) {
+                    let _ = text_ctx.load_font_data(data);
+                }
+            }
+        }
+
         // Create output directories
         std::fs::create_dir_all(&config.output_dir).context("Failed to create output directory")?;
         std::fs::create_dir_all(&config.reference_dir)
@@ -144,6 +213,7 @@ impl TestHarness {
 
         Ok(Self {
             renderer: RefCell::new(renderer),
+            text_ctx: RefCell::new(text_ctx),
             device,
             queue,
             output_dir: config.output_dir,
@@ -164,6 +234,36 @@ impl TestHarness {
         let mut ctx = TestContext::new(name, width, height);
         ctx.output_dir = self.output_dir.clone();
         ctx
+    }
+
+    /// Prepare text for rendering
+    ///
+    /// Returns GPU glyphs that can be rendered with render_text
+    pub fn prepare_text(
+        &self,
+        text: &str,
+        x: f32,
+        y: f32,
+        font_size: f32,
+        color: [f32; 4],
+    ) -> Result<Vec<GpuGlyph>> {
+        self.text_ctx
+            .borrow_mut()
+            .prepare_text(text, x, y, font_size, color)
+            .map_err(|e| anyhow::anyhow!("Text preparation failed: {}", e))
+    }
+
+    /// Render text to a target texture
+    pub fn render_text(&self, target: &wgpu::TextureView, glyphs: &[GpuGlyph]) {
+        let text_ctx = self.text_ctx.borrow();
+        if let Some(atlas_view) = text_ctx.atlas_view() {
+            self.renderer.borrow_mut().render_text(
+                target,
+                glyphs,
+                atlas_view,
+                text_ctx.sampler(),
+            );
+        }
     }
 
     /// Create an offscreen texture for rendering (multisampled if sample_count > 1)
@@ -352,10 +452,12 @@ impl TestHarness {
     /// 2. Resolve MSAA to single-sampled texture
     /// 3. Copy to backdrop texture for glass sampling
     /// 4. Render glass primitives with backdrop blur
-    /// 5. Copy final result to PNG
+    /// 5. Render foreground primitives on top of glass (no blur)
+    /// 6. Copy final result to PNG
     pub fn render_with_glass_to_png(
         &self,
         batch: &PrimitiveBatch,
+        foreground: Option<&PrimitiveBatch>,
         width: u32,
         height: u32,
         path: &Path,
@@ -440,7 +542,16 @@ impl TestHarness {
             }
         }
 
-        // Step 4: Read back to PNG
+        // Step 4: Render foreground primitives on top of glass (no blur)
+        // Uses the overlay pipeline which is configured for 1x sampling
+        if let Some(fg_batch) = foreground {
+            if fg_batch.primitive_count() > 0 {
+                let mut renderer = self.renderer.borrow_mut();
+                renderer.render_overlay(&resolve_view, fg_batch);
+            }
+        }
+
+        // Step 5: Read back to PNG
         let buffer = self.create_readback_buffer(width, height);
         let bytes_per_row = Self::padded_bytes_per_row(width);
 
@@ -605,19 +716,34 @@ impl TestHarness {
         test_fn(&mut ctx);
 
         let batch = ctx.take_batch();
+        let text_commands = ctx.take_text_commands();
         let output_path = self.output_path(name);
         let reference_path = self.reference_path(name);
 
+        // Prepare text glyphs if there are text commands
+        let mut all_glyphs = Vec::new();
+        for cmd in &text_commands {
+            match self.prepare_text(&cmd.text, cmd.x, cmd.y, cmd.font_size, cmd.color) {
+                Ok(glyphs) => all_glyphs.extend(glyphs),
+                Err(e) => tracing::warn!("Failed to prepare text '{}': {}", cmd.text, e),
+            }
+        }
+
         tracing::info!(
-            "Test '{}': {} primitives, {} glass, {} glyphs",
+            "Test '{}': {} primitives, {} glass, {} glyphs, {} text glyphs",
             name,
             batch.primitive_count(),
             batch.glass_count(),
-            batch.glyph_count()
+            batch.glyph_count(),
+            all_glyphs.len()
         );
 
-        // Render to PNG
-        self.render_to_png(&batch, width as u32, height as u32, &output_path)?;
+        // Render to PNG (with text if present)
+        if all_glyphs.is_empty() {
+            self.render_to_png(&batch, width as u32, height as u32, &output_path)?;
+        } else {
+            self.render_with_text_to_png(&batch, &all_glyphs, width as u32, height as u32, &output_path)?;
+        }
         tracing::info!("Rendered test '{}' to {:?}", name, output_path);
 
         // Compare with reference if it exists
@@ -692,19 +818,26 @@ impl TestHarness {
         test_fn(&mut ctx);
 
         let batch = ctx.take_batch();
+        let foreground_batch = ctx.take_foreground_batch();
         let output_path = self.output_path(name);
         let reference_path = self.reference_path(name);
 
         tracing::info!(
-            "Glass test '{}': {} primitives, {} glass, {} glyphs",
+            "Glass test '{}': {} primitives, {} glass, {} glyphs, {} foreground",
             name,
             batch.primitive_count(),
             batch.glass_count(),
-            batch.glyph_count()
+            batch.glyph_count(),
+            foreground_batch.primitive_count()
         );
 
-        // Render with glass to PNG
-        self.render_with_glass_to_png(&batch, width as u32, height as u32, &output_path)?;
+        // Render with glass to PNG (foreground renders on top of glass)
+        let fg = if foreground_batch.primitive_count() > 0 {
+            Some(&foreground_batch)
+        } else {
+            None
+        };
+        self.render_with_glass_to_png(&batch, fg, width as u32, height as u32, &output_path)?;
         tracing::info!("Rendered glass test '{}' to {:?}", name, output_path);
 
         // Compare with reference if it exists
@@ -751,6 +884,118 @@ impl TestHarness {
             );
             Ok(TestResult::PassedWithNewReference)
         }
+    }
+
+    /// Render a batch with text to a PNG file
+    ///
+    /// This renders the batch first, then overlays text on top.
+    pub fn render_with_text_to_png(
+        &self,
+        batch: &PrimitiveBatch,
+        glyphs: &[GpuGlyph],
+        width: u32,
+        height: u32,
+        path: &Path,
+    ) -> Result<()> {
+        // Create resolve texture (single-sampled, final output for readback)
+        let resolve_texture = self.create_resolve_texture(width, height);
+        let resolve_view = resolve_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        // Step 1: Render background with MSAA
+        if self.sample_count > 1 {
+            let msaa_texture = self.create_render_texture(width, height, self.sample_count);
+            let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+            {
+                let mut renderer = self.renderer.borrow_mut();
+                renderer.resize(width, height);
+                renderer.render_msaa(&msaa_view, &resolve_view, batch, [1.0, 1.0, 1.0, 1.0]);
+            }
+        } else {
+            {
+                let mut renderer = self.renderer.borrow_mut();
+                renderer.resize(width, height);
+                renderer.render_with_clear(&resolve_view, batch, [1.0, 1.0, 1.0, 1.0]);
+            }
+        }
+
+        // Step 2: Render text on top
+        if !glyphs.is_empty() {
+            self.render_text(&resolve_view, glyphs);
+        }
+
+        // Step 3: Read back to PNG
+        let buffer = self.create_readback_buffer(width, height);
+        let bytes_per_row = Self::padded_bytes_per_row(width);
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Text Test Copy Encoder"),
+            });
+
+        encoder.copy_texture_to_buffer(
+            wgpu::ImageCopyTexture {
+                texture: &resolve_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyBuffer {
+                buffer: &buffer,
+                layout: wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        // Map buffer and read pixels
+        let buffer_slice = buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            tx.send(result).unwrap();
+        });
+        self.device.poll(wgpu::Maintain::Wait);
+        rx.recv()
+            .context("Failed to receive buffer map result")?
+            .context("Failed to map buffer")?;
+
+        let data = buffer_slice.get_mapped_range();
+        let mut img: RgbaImage = ImageBuffer::new(width, height);
+        for y in 0..height {
+            let row_start = (y * bytes_per_row) as usize;
+            let row_end = row_start + (width * 4) as usize;
+            let row_data = &data[row_start..row_end];
+
+            for x in 0..width {
+                let i = (x * 4) as usize;
+                img.put_pixel(
+                    x,
+                    y,
+                    Rgba([
+                        row_data[i],
+                        row_data[i + 1],
+                        row_data[i + 2],
+                        row_data[i + 3],
+                    ]),
+                );
+            }
+        }
+
+        drop(data);
+        buffer.unmap();
+        img.save(path).context("Failed to save PNG")?;
+
+        Ok(())
     }
 
     /// Get the reference image path for a test

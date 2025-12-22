@@ -1,0 +1,11 @@
+[package]
+name = "blinc_svg"
+version = "0.1.0"
+edition = "2021"
+description = "SVG loading and rendering for Blinc UI framework"
+license = "Apache-2.0"
+
+[dependencies]
+blinc_core = { path = "../blinc_core" }
+usvg = "0.44"
+thiserror = "2.0"

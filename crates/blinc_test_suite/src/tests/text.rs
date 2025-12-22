@@ -1,10 +1,14 @@
 //! Text rendering tests
 //!
-//! Tests for text drawing capabilities
-//! Note: Actual text rendering requires font infrastructure which may not be fully implemented
+//! Tests for text drawing capabilities using the blinc_text rendering pipeline.
 
 use crate::runner::TestSuite;
-use blinc_core::{Color, DrawContext, FontWeight, Point, Rect, TextStyle};
+use blinc_core::{Color, DrawContext, Rect};
+
+/// Helper to convert Color to [f32; 4]
+fn color_to_array(color: Color) -> [f32; 4] {
+    [color.r, color.g, color.b, color.a]
+}
 
 /// Create the text test suite
 pub fn suite() -> TestSuite {
@@ -12,58 +16,40 @@ pub fn suite() -> TestSuite {
 
     // Basic text
     suite.add("text_basic", |ctx| {
-        let c = ctx.ctx();
-
-        c.draw_text(
-            "Hello, Blinc!",
-            Point::new(50.0, 100.0),
-            &TextStyle::new(24.0).with_color(Color::BLACK),
-        );
+        ctx.draw_text("Hello, Blinc!", 50.0, 100.0, 24.0, color_to_array(Color::BLACK));
     });
 
     // Different font sizes
     suite.add("text_sizes", |ctx| {
-        let c = ctx.ctx();
-
         let sizes = [12.0, 16.0, 20.0, 24.0, 32.0, 48.0];
         for (i, size) in sizes.iter().enumerate() {
-            c.draw_text(
+            ctx.draw_text(
                 &format!("Size {}", size),
-                Point::new(50.0, 50.0 + i as f32 * 50.0),
-                &TextStyle::new(*size).with_color(Color::BLACK),
+                50.0,
+                50.0 + i as f32 * 50.0,
+                *size,
+                color_to_array(Color::BLACK),
             );
         }
     });
 
-    // Different font weights
+    // Font weight labels (actual weights require multiple font files)
     suite.add("text_weights", |ctx| {
-        let c = ctx.ctx();
-
-        let weights = [
-            FontWeight::Thin,
-            FontWeight::Light,
-            FontWeight::Regular,
-            FontWeight::Medium,
-            FontWeight::Bold,
-            FontWeight::Black,
-        ];
         let names = ["Thin", "Light", "Regular", "Medium", "Bold", "Black"];
 
-        for (i, (weight, name)) in weights.iter().zip(names.iter()).enumerate() {
-            c.draw_text(
+        for (i, name) in names.iter().enumerate() {
+            ctx.draw_text(
                 *name,
-                Point::new(50.0, 50.0 + i as f32 * 40.0),
-                &TextStyle::new(20.0)
-                    .with_color(Color::BLACK)
-                    .with_weight(*weight),
+                50.0,
+                50.0 + i as f32 * 40.0,
+                20.0,
+                color_to_array(Color::BLACK),
             );
         }
     });
 
     // Colored text
     suite.add("text_colors", |ctx| {
-        let c = ctx.ctx();
-
         let colors = [
             ("Red", Color::RED),
             ("Green", Color::GREEN),
@@ -72,53 +58,51 @@ pub fn suite() -> TestSuite {
         ];
 
         for (i, (name, color)) in colors.iter().enumerate() {
-            c.draw_text(
+            ctx.draw_text(
                 *name,
-                Point::new(50.0, 50.0 + i as f32 * 40.0),
-                &TextStyle::new(24.0).with_color(*color),
+                50.0,
+                50.0 + i as f32 * 40.0,
+                24.0,
+                color_to_array(*color),
             );
         }
     });
 
     // Text with background
     suite.add("text_with_background", |ctx| {
-        let c = ctx.ctx();
-
-        // Draw background
-        c.fill_rect(
-            Rect::new(40.0, 90.0, 200.0, 40.0),
+        // Draw background first
+        ctx.ctx().fill_rect(
+            Rect::new(40.0, 90.0, 220.0, 40.0),
             8.0.into(),
             Color::rgba(0.9, 0.9, 0.9, 1.0).into(),
         );
 
         // Draw text on top
-        c.draw_text(
+        ctx.draw_text(
             "Text on background",
-            Point::new(50.0, 120.0),
-            &TextStyle::new(20.0).with_color(Color::BLACK),
+            50.0,
+            120.0,
+            20.0,
+            color_to_array(Color::BLACK),
         );
     });
 
-    // Text with opacity
+    // Text with different opacities
     suite.add("text_opacity", |ctx| {
-        let c = ctx.ctx();
-
         for i in 0..5 {
             let opacity = (i + 1) as f32 * 0.2;
-            c.push_opacity(opacity);
-            c.draw_text(
+            ctx.draw_text(
                 &format!("Opacity {:.0}%", opacity * 100.0),
-                Point::new(50.0, 50.0 + i as f32 * 40.0),
-                &TextStyle::new(20.0).with_color(Color::BLACK),
+                50.0,
+                50.0 + i as f32 * 40.0,
+                20.0,
+                [0.0, 0.0, 0.0, opacity], // Black with varying alpha
             );
-            c.pop_opacity();
         }
     });
 
     // Lorem ipsum paragraph
     suite.add("text_paragraph", |ctx| {
-        let c = ctx.ctx();
-
         let lines = [
             "Lorem ipsum dolor sit amet, consectetur",
             "adipiscing elit. Sed do eiusmod tempor",
@@ -128,10 +112,12 @@ pub fn suite() -> TestSuite {
         ];
 
         for (i, line) in lines.iter().enumerate() {
-            c.draw_text(
+            ctx.draw_text(
                 *line,
-                Point::new(50.0, 50.0 + i as f32 * 24.0),
-                &TextStyle::new(16.0).with_color(Color::BLACK),
+                50.0,
+                50.0 + i as f32 * 24.0,
+                16.0,
+                color_to_array(Color::BLACK),
             );
         }
     });
@@ -145,7 +131,7 @@ mod tests {
     use crate::harness::TestHarness;
 
     #[test]
-    #[ignore] // Requires GPU + font infrastructure
+    #[ignore] // Requires GPU
     fn run_text_suite() {
         let harness = TestHarness::new().unwrap();
         let mut suite = suite();
