@@ -175,19 +175,24 @@ Signal → Subscribers → Effects/Derived
 - [x] Implement `AnimationScheduler` for frame updates
 - [x] Add easing function library (cubic bezier support)
 - [x] Implement stagger utilities
+- [x] Spring presets (gentle, wobbly, stiff, snappy, molasses)
 - [ ] Export ZRTL C-ABI functions
 
 ### 2.2 Layout Engine (`blinc_layout`)
 
-**Goal**: Flexbox layout via Taffy.
+**Goal**: Flexbox layout via Taffy with GPUI-style builder API.
 
 #### Tasks
 
 - [x] Integrate Taffy layout engine
 - [x] Map Blinc style properties to Taffy styles
 - [x] Implement layout tree management
-- [ ] Implement dirty tracking for incremental layout
+- [x] Implement GPUI-style builder API (`div()`, `text()`, `svg()`)
 - [x] Support percentage, pixel, and auto sizing
+- [x] Implement RenderTree for layout-to-rendering bridge
+- [x] Implement layer separation (Background/Glass/Foreground)
+- [x] 100+ Tailwind-style builder methods (`.flex_col()`, `.p()`, `.gap()`, etc.)
+- [ ] Implement dirty tracking for incremental layout
 - [ ] Export ZRTL C-ABI functions
 
 ---
@@ -203,7 +208,7 @@ Signal → Subscribers → Effects/Derived
 1. Collect primitives from widget tree
 2. Sort by z-order
 3. Batch by primitive type
-4. Render: shadows → backgrounds → borders → content
+4. Render: shadows → backgrounds → borders → content → glass → foreground → text
 
 #### SDF Shaders
 
@@ -217,8 +222,15 @@ Signal → Subscribers → Effects/Derived
 - [x] Set up wgpu device and surface
 - [x] Implement rounded rectangle SDF shader
 - [x] Implement shadow shader (Gaussian blur)
-- [x] Implement gradient shader
+- [x] Implement gradient shader (linear, radial, conic)
 - [x] Implement primitive batching
+- [x] Implement glass/vibrancy shader (Apple-style glassmorphism)
+- [x] Implement backdrop blur rendering
+- [x] Implement path tessellation via lyon
+- [x] Implement MSAA support (4x anti-aliasing for SVG)
+- [x] Implement dynamic MSAA pipeline creation
+- [x] Implement composite shader with blend modes
+- [x] Implement backbuffer for glass effects
 - [ ] Implement texture atlas for caching
 - [ ] Optimize draw call batching
 
@@ -229,10 +241,11 @@ Signal → Subscribers → Effects/Derived
 #### API Design
 
 ```rust
-ctx.fill_rect(x, y, w, h, color);
-ctx.stroke_path(path, stroke_style);
-ctx.draw_text(text, x, y, font);
-ctx.draw_sdf(shape, position, fill);
+ctx.fill_rect(rect, corner_radius, brush);
+ctx.stroke_rect(rect, corner_radius, brush, stroke_width);
+ctx.fill_circle(center, radius, brush);
+ctx.stroke_circle(center, radius, brush, stroke_width);
+ctx.draw_path(path, brush);
 ctx.push_clip(rect);
 ctx.push_transform(matrix);
 ```
@@ -240,26 +253,45 @@ ctx.push_transform(matrix);
 #### Tasks
 
 - [x] Implement `PaintContext` with command recording
-- [x] Implement path building API
+- [x] Implement path building API (PathBuilder)
 - [x] Implement color and gradient types
 - [x] Implement shape primitives (rect, circle, rounded rect)
 - [x] Implement transform stack
 - [x] Implement clip stack
-- [ ] Integrate with GPU renderer for execution
+- [x] Implement shadow presets (small, medium, large, xl)
+- [x] Integrate with GPU renderer (GpuPaintContext)
 - [ ] Export ZRTL C-ABI functions
 
-### 3.3 Text Rendering
+### 3.3 Text Rendering (`blinc_text`)
 
-**Goal**: High-quality text with SDF glyphs.
+**Goal**: High-quality text with proper shaping and rendering.
 
 #### Tasks
 
-- [ ] Integrate font loading (fontdb or similar)
-- [ ] Implement glyph rasterization to SDF
-- [ ] Implement glyph atlas with LRU eviction
-- [ ] Implement text shaping (harfbuzz or similar)
-- [ ] Implement text layout (line breaking, alignment)
-- [ ] Implement text shader
+- [x] Integrate font loading (ttf-parser)
+- [x] Implement glyph rasterization
+- [x] Implement glyph atlas with region tracking
+- [x] Implement text shaping (rustybuzz/HarfBuzz)
+- [x] Implement text layout (line breaking, alignment)
+- [x] Implement text anchoring (left, center, right)
+- [x] Implement optical text centering
+- [x] Implement TextRenderingContext for GPU integration
+- [x] System font loading (Helvetica/macOS, DejaVu/Linux, Segoe/Windows)
+- [ ] Implement SDF-based glyph rendering
+- [ ] Implement glyph atlas LRU eviction
+
+### 3.4 SVG Rendering (`blinc_svg`)
+
+**Goal**: Load and render SVG graphics.
+
+#### Tasks
+
+- [x] Implement SVG parsing (usvg)
+- [x] Implement SVG to draw commands conversion
+- [x] Implement SVG path rendering
+- [x] Implement SVG styling support
+- [x] Implement SVG element builder for layout system
+- [x] Support fill and stroke rendering
 
 ---
 
@@ -273,8 +305,7 @@ ctx.push_transform(matrix);
 
 - [x] Implement window creation via winit
 - [x] Implement event loop integration
-- [ ] Implement keyboard input handling
-- [ ] Implement mouse/trackpad input
+- [x] Implement input handling (keyboard, mouse, touch)
 - [ ] Implement DPI scaling
 - [ ] Implement clipboard access
 - [ ] Implement system theme detection
@@ -287,7 +318,7 @@ ctx.push_transform(matrix);
 
 - [x] Implement NativeActivity integration
 - [x] Implement JNI bridge for system APIs
-- [ ] Implement touch input handling
+- [x] Implement touch input handling
 - [x] Implement Vulkan/GLES surface creation
 - [ ] Implement lifecycle management (pause/resume)
 - [ ] Implement soft keyboard handling
@@ -306,9 +337,9 @@ ctx.push_transform(matrix);
 
 #### Tasks
 
-- [ ] Implement UIKit application delegate
-- [ ] Implement Metal surface creation
-- [ ] Implement touch input handling
+- [x] Implement UIKit integration via objc2
+- [x] Implement Metal rendering support
+- [x] Implement touch input handling
 - [ ] Implement safe area insets
 - [ ] Implement keyboard handling
 - [ ] Implement lifecycle management
@@ -316,9 +347,25 @@ ctx.push_transform(matrix);
 
 ---
 
-## Phase 5: Widget Library
+## Phase 5: Application Framework
 
-### 5.1 Core Widgets
+### 5.1 App Delegate (`blinc_app`)
+
+**Goal**: High-level API for building Blinc applications.
+
+#### Tasks
+
+- [x] Implement BlincApp with configuration
+- [x] Implement single render() function API
+- [x] Implement RenderContext for unified rendering
+- [x] Implement automatic glass backdrop handling
+- [x] Implement automatic text/SVG positioning from layout
+- [x] Implement MSAA configuration
+- [x] Implement comprehensive visual test suite
+
+### 5.2 Widget Library (`blinc_widgets`)
+
+**Goal**: Core UI widgets with FSM-driven interactions.
 
 | Widget | States | Animations |
 |--------|--------|------------|
@@ -336,7 +383,10 @@ ctx.push_transform(matrix);
 
 #### Tasks
 
-- [ ] Implement Button with FSM and ripple
+- [x] Implement base Widget trait and WidgetId
+- [x] Implement Button widget with click handling
+- [x] Implement Container widget
+- [x] Implement Text widget
 - [ ] Implement Checkbox with animation
 - [ ] Implement Toggle with spring animation
 - [ ] Implement TextField with floating label
@@ -345,7 +395,7 @@ ctx.push_transform(matrix);
 - [ ] Implement Tabs with indicator animation
 - [ ] Implement ScrollView with momentum
 
-### 5.2 Theming System
+### 5.3 Theming System
 
 #### Tasks
 
@@ -416,8 +466,22 @@ File Change → Grammar Recompile → JIT Update → State Preserved
 - [x] Unit tests for state machines
 - [x] Unit tests for animation
 - [x] Integration tests for blinc_core
-- [ ] Integration tests for widget rendering
-- [ ] Visual regression tests
+- [x] Visual test suite (blinc_test_suite) with 14 test categories
+  - [x] Clipping tests
+  - [x] Glass/vibrancy tests
+  - [x] Gradient tests
+  - [x] Layout tests
+  - [x] Opacity tests
+  - [x] Paint context tests
+  - [x] Path rendering tests
+  - [x] SDF primitive tests
+  - [x] Shadow tests
+  - [x] Shape tests
+  - [x] SVG tests
+  - [x] Text tests
+  - [x] Transform tests
+- [x] blinc_app API tests
+- [ ] Visual regression tests (reference image comparison)
 - [ ] Performance benchmarks
 
 ### 7.3 Documentation
@@ -436,19 +500,48 @@ File Change → Grammar Recompile → JIT Update → State Preserved
 
 ## Current Status Summary
 
+### Crates Overview
+
+| Crate | Lines | Tests | Status |
+|-------|-------|-------|--------|
+| **blinc_core** | ~3,000 | ✓ | Reactive signals, FSM runtime, draw context |
+| **blinc_animation** | ~1,500 | ✓ | Springs (RK4), keyframes, timelines, easing |
+| **blinc_layout** | ~2,500 | ✓ | Taffy + GPUI-style builder API |
+| **blinc_gpu** | ~4,000 | ✓ | SDF rendering, glass, MSAA, compositing |
+| **blinc_paint** | ~1,500 | ✓ | Canvas API, paths, shapes, transforms |
+| **blinc_text** | ~2,000 | ✓ | Font loading, shaping, atlas, layout |
+| **blinc_svg** | ~800 | ✓ | SVG parsing and rendering |
+| **blinc_app** | ~600 | ✓ | High-level app framework |
+| **blinc_widgets** | ~400 | - | Button, container, text (basic) |
+| **blinc_runtime** | ~200 | - | Embedding SDK |
+| **blinc_cli** | ~2,000 | - | CLI tool |
+| **blinc_test_suite** | ~3,000 | 107 | Comprehensive visual testing |
+
+### Platform Extensions
+
+| Extension | Status |
+|-----------|--------|
+| **blinc_platform_desktop** | Window creation, input handling via winit |
+| **blinc_platform_android** | NativeActivity, JNI, Vulkan (~530KB binary) |
+| **blinc_platform_ios** | UIKit, Metal, touch input |
+
 ### Completed ✓
 
-| Component | Status |
-|-----------|--------|
-| **blinc_core** | Reactive signals, FSM runtime, tests passing |
-| **blinc_animation** | Springs (RK4), keyframes, timelines, easing |
-| **blinc_layout** | Taffy integration, style mapping |
-| **blinc_gpu** | wgpu setup, SDF shaders, gradients |
-| **blinc_paint** | Paint context, paths, shapes, transforms |
+| Component | Features |
+|-----------|----------|
+| **blinc_core** | Reactive signals, FSM runtime, draw context, layer model |
+| **blinc_animation** | Springs (RK4), keyframes, timelines, easing, presets |
+| **blinc_layout** | Taffy integration, GPUI-style builder, RenderTree, materials |
+| **blinc_gpu** | SDF shaders, gradients, glass/blur, MSAA, path tessellation |
+| **blinc_paint** | Paint context, paths, shapes, transforms, shadows |
+| **blinc_text** | Font loading, text shaping, glyph atlas, layout |
+| **blinc_svg** | SVG parsing, rendering, element builder |
+| **blinc_app** | BlincApp, RenderContext, visual tests |
 | **blinc_cli** | Full CLI with new/init/build/dev/doctor/info |
 | **blinc_platform_android** | NDK integration, JNI bridge, Vulkan |
+| **blinc_platform_ios** | UIKit, Metal, touch input |
 | **CI/CD** | GitHub Actions for CI, Android, releases |
-| **Project Scaffolding** | .blincproj, platforms/, plugins/, templates |
+| **Test Suite** | 107 tests across 14 categories |
 
 ### In Progress
 
@@ -456,16 +549,15 @@ File Change → Grammar Recompile → JIT Update → State Preserved
 |-----------|--------|
 | **Zyntax Integration** | Waiting for Grammar2/Runtime2 |
 | **ZRTL C-ABI exports** | Pending Zyntax integration |
-| **Text Rendering** | Not started |
-| **Widget Library** | Not started |
+| **Widget Library** | Basic widgets only (Button, Container, Text) |
 
 ### Next Priorities
 
 1. **Zyntax Grammar2 Integration** - Enable .blinc file parsing
 2. **ZRTL Function Exports** - Bridge Rust runtime to Zyntax
-3. **Text Rendering** - Font loading and glyph rendering
-4. **Core Widgets** - Button, Text, Container basics
-5. **Hot Reload** - File watcher + JIT recompilation
+3. **Core Widgets** - Complete widget library with FSM + animations
+4. **Hot Reload** - File watcher + JIT recompilation
+5. **Theming System** - Colors, typography, dark/light mode
 
 ---
 
@@ -505,6 +597,29 @@ File Change → Grammar Recompile → JIT Update → State Preserved
 
 1. **Performance**: 120 FPS on target devices
 2. **Hot Reload**: < 100ms from save to update
-3. **Binary Size**: < 5MB for minimal app (Android ~530KB achieved)
+3. **Binary Size**: < 5MB for minimal app (Android ~530KB achieved ✓)
 4. **Memory**: < 50MB for typical app
 5. **Developer Experience**: Intuitive DSL, helpful errors
+
+---
+
+## Demo Applications
+
+### Music Player UI
+A complete music player interface demonstrating:
+- Glass/vibrancy effects with backdrop blur
+- SVG icons (rewind, pause, forward)
+- Text rendering with proper anchoring
+- Progress bar with nested glass elements
+- GPUI-style builder API usage
+
+Location: `crates/blinc_test_suite/src/tests/layout.rs` (music_player test)
+
+### Glass Card UI
+Demonstrates glassmorphism with:
+- Multiple layered glass panels
+- Background elements visible through blur
+- Foreground children rendered on top
+- Automatic layer separation
+
+Location: `crates/blinc_test_suite/src/tests/layout.rs` (glass_card test)

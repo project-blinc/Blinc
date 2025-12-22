@@ -6,14 +6,14 @@ use crate::events::EventDispatcher;
 use crate::fsm::FsmRuntime;
 use crate::reactive::ReactiveGraph;
 
-/// The Blinc runtime - owns all reactive state, state machines, and event handling
-pub struct BlincRuntime {
+/// The Blinc reactive runtime - owns all reactive state, state machines, and event handling
+pub struct BlincReactiveRuntime {
     pub reactive: ReactiveGraph,
     pub fsm: FsmRuntime,
     pub events: EventDispatcher,
 }
 
-impl BlincRuntime {
+impl BlincReactiveRuntime {
     pub fn new() -> Self {
         Self {
             reactive: ReactiveGraph::new(),
@@ -31,7 +31,7 @@ impl BlincRuntime {
     }
 }
 
-impl Default for BlincRuntime {
+impl Default for BlincReactiveRuntime {
     fn default() -> Self {
         Self::new()
     }
@@ -51,7 +51,7 @@ mod tests {
 
     #[test]
     fn test_runtime_integration() {
-        let mut runtime = BlincRuntime::new();
+        let mut runtime = BlincReactiveRuntime::new();
 
         // Create a signal
         let count = runtime.reactive.create_signal(0i32);

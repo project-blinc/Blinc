@@ -55,4 +55,4 @@ pub use layer::{
     Scene3DCommands, SceneGraph, Shadow, Size, TextureFormat, UiNode, Vec2, Vec3,
 };
 pub use reactive::{Derived, DerivedId, Effect, EffectId, ReactiveGraph, Signal, SignalId};
-pub use runtime::BlincRuntime;
+pub use runtime::BlincReactiveRuntime;
