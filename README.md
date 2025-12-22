@@ -6,7 +6,7 @@
 [![Crate Version](https://img.shields.io/badge/crates.io-v0.1.0-orange.svg)](https://crates.io/crates/blinc)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
-![Blinc UI](test_output/glass::music_player.png)
+![Blinc UI](glass_music_player.png)
 
 
 **Native UI Framework powered by Zyntax** - A declarative, reactive UI system with first-class state machines, spring physics animations, and GPU-accelerated rendering.
