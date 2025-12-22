@@ -19,6 +19,16 @@ pub struct RenderContext {
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
     sample_count: u32,
+    // Cached textures for glass rendering
+    pre_glass_texture: Option<CachedTexture>,
+    backdrop_texture: Option<CachedTexture>,
+}
+
+struct CachedTexture {
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    width: u32,
+    height: u32,
 }
 
 impl RenderContext {
@@ -36,6 +46,8 @@ impl RenderContext {
             device,
             queue,
             sample_count,
+            pre_glass_texture: None,
+            backdrop_texture: None,
         }
     }
 
@@ -89,69 +101,146 @@ impl RenderContext {
 
         self.renderer.resize(width, height);
 
-        // Render background
-        self.renderer
-            .render_with_clear(target, &bg_batch, [1.0, 1.0, 1.0, 1.0]);
+        let has_glass = bg_batch.glass_count() > 0;
 
-        // Render glass if present
-        if bg_batch.glass_count() > 0 {
-            // Create backdrop texture for glass sampling
-            let backdrop = self.create_backdrop_texture(width, height);
-            let backdrop_view = backdrop.create_view(&wgpu::TextureViewDescriptor::default());
+        if has_glass {
+            // Glass path:
+            // 1. Render background (non-glass) to internal texture
+            // 2. Copy to backdrop for glass sampling
+            // 3. Render background again to target (to start fresh)
+            // 4. Render glass on top with backdrop blur
+            // 5. Render foreground and text
+            self.ensure_textures(width, height);
 
-            // Copy current content to backdrop
-            self.copy_texture_to_texture(target, &backdrop, width, height);
+            let pre_glass_view = &self.pre_glass_texture.as_ref().unwrap().view;
+            let pre_glass_tex = &self.pre_glass_texture.as_ref().unwrap().texture;
+            let backdrop_tex = &self.backdrop_texture.as_ref().unwrap().texture;
+            let backdrop_view = &self.backdrop_texture.as_ref().unwrap().view;
 
-            // Render glass with backdrop blur
-            self.renderer.render_glass(target, &backdrop_view, &bg_batch);
-        }
-
-        // Render foreground on top
-        if fg_batch.primitive_count() > 0 {
+            // Step 1: Render background to pre-glass texture (for backdrop capture)
             self.renderer
-                .render_overlay_msaa(target, &fg_batch, self.sample_count);
-        }
+                .render_with_clear(pre_glass_view, &bg_batch, [1.0, 1.0, 1.0, 1.0]);
 
-        // Render text
-        if !all_glyphs.is_empty() {
-            self.render_text(target, &all_glyphs);
+            // Step 2: Copy pre-glass to backdrop for glass sampling
+            self.copy_texture(pre_glass_tex, backdrop_tex, width, height);
+
+            // Step 3: Render background to target
+            self.renderer
+                .render_with_clear(target, &bg_batch, [1.0, 1.0, 1.0, 1.0]);
+
+            // Step 4: Render glass with backdrop blur onto target
+            self.renderer.render_glass(target, backdrop_view, &bg_batch);
+
+            // Step 5: Render foreground on top
+            if fg_batch.primitive_count() > 0 {
+                self.renderer
+                    .render_overlay_msaa(target, &fg_batch, self.sample_count);
+            }
+
+            // Step 6: Render text
+            if !all_glyphs.is_empty() {
+                self.render_text(target, &all_glyphs);
+            }
+        } else {
+            // Simple path: render directly to user's target
+            self.renderer
+                .render_with_clear(target, &bg_batch, [1.0, 1.0, 1.0, 1.0]);
+
+            // Render foreground on top
+            if fg_batch.primitive_count() > 0 {
+                self.renderer
+                    .render_overlay_msaa(target, &fg_batch, self.sample_count);
+            }
+
+            // Render text
+            if !all_glyphs.is_empty() {
+                self.render_text(target, &all_glyphs);
+            }
         }
 
         Ok(())
     }
 
-    /// Create a backdrop texture for glass effects
-    fn create_backdrop_texture(&self, width: u32, height: u32) -> wgpu::Texture {
-        self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Glass Backdrop"),
-            size: wgpu::Extent3d {
+    /// Ensure internal textures exist and are the right size
+    fn ensure_textures(&mut self, width: u32, height: u32) {
+        let needs_pre_glass = self.pre_glass_texture.as_ref()
+            .map(|t| t.width != width || t.height != height)
+            .unwrap_or(true);
+
+        if needs_pre_glass {
+            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Pre-Glass Texture"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            self.pre_glass_texture = Some(CachedTexture { texture, view, width, height });
+        }
+
+        let needs_backdrop = self.backdrop_texture.as_ref()
+            .map(|t| t.width != width || t.height != height)
+            .unwrap_or(true);
+
+        if needs_backdrop {
+            let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Glass Backdrop"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            self.backdrop_texture = Some(CachedTexture { texture, view, width, height });
+        }
+    }
+
+    /// Copy one texture to another
+    fn copy_texture(&self, src: &wgpu::Texture, dst: &wgpu::Texture, width: u32, height: u32) {
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Backdrop Copy Encoder"),
+            });
+
+        encoder.copy_texture_to_texture(
+            wgpu::ImageCopyTexture {
+                texture: src,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyTexture {
+                texture: dst,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
                 width,
                 height,
                 depth_or_array_layers: 1,
             },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_DST
-                | wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        })
-    }
+        );
 
-    /// Copy texture contents
-    fn copy_texture_to_texture(
-        &self,
-        _src_view: &wgpu::TextureView,
-        _dst: &wgpu::Texture,
-        _width: u32,
-        _height: u32,
-    ) {
-        // Note: wgpu doesn't allow copying from a view directly.
-        // In a real implementation, we'd need the source texture handle.
-        // For now, glass will sample from a potentially stale backdrop.
-        // This would be fixed by tracking textures alongside views.
+        self.queue.submit(std::iter::once(encoder.finish()));
     }
 
     /// Render text glyphs
