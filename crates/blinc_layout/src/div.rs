@@ -246,6 +246,16 @@ impl Div {
         self
     }
 
+    /// Set width to fit content (shrink-wrap to children)
+    ///
+    /// This sets width to auto and prevents flex shrinking, so the element
+    /// will size exactly to fit its content without being compressed.
+    pub fn w_fit(mut self) -> Self {
+        self.style.size.width = Dimension::Auto;
+        self.style.flex_shrink = 0.0;
+        self
+    }
+
     /// Set height in pixels
     pub fn h(mut self, px: f32) -> Self {
         self.style.size.height = Dimension::Length(px);
@@ -261,6 +271,26 @@ impl Div {
     /// Set height to auto
     pub fn h_auto(mut self) -> Self {
         self.style.size.height = Dimension::Auto;
+        self
+    }
+
+    /// Set height to fit content (shrink-wrap to children)
+    ///
+    /// This sets height to auto and prevents flex shrinking, so the element
+    /// will size exactly to fit its content without being compressed.
+    pub fn h_fit(mut self) -> Self {
+        self.style.size.height = Dimension::Auto;
+        self.style.flex_shrink = 0.0;
+        self
+    }
+
+    /// Set both width and height to fit content
+    ///
+    /// This makes the element shrink-wrap to its content in both dimensions.
+    pub fn size_fit(mut self) -> Self {
+        self.style.size.width = Dimension::Auto;
+        self.style.size.height = Dimension::Auto;
+        self.style.flex_shrink = 0.0;
         self
     }
 
