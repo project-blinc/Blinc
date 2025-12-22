@@ -47,7 +47,7 @@ pub use element::{
 };
 
 // Builder API
-pub use div::{div, Div, ElementBuilder, ElementTypeId};
+pub use div::{div, Div, ElementBuilder, ElementTypeId, FontWeight, TextAlign};
 pub use svg::{svg, Svg};
 pub use text::{text, Text};
 
@@ -56,7 +56,7 @@ pub use renderer::{GlassPanel, LayoutRenderer, RenderTree, SvgData, TextData};
 
 /// Prelude module - import everything commonly needed
 pub mod prelude {
-    pub use crate::div::{div, Div, ElementBuilder, ElementTypeId};
+    pub use crate::div::{div, Div, ElementBuilder, ElementTypeId, FontWeight, TextAlign};
     pub use crate::element::{ElementBounds, RenderLayer, RenderProps};
     // Material system
     pub use crate::element::{

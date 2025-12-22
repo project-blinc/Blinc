@@ -222,7 +222,7 @@ fn info_item(label: &str, value: &str) -> impl ElementBuilder {
 fn feature_card(label: &str, accent: Color) -> impl ElementBuilder {
     div()
         .flex()
-        .w(200.0)
+        .w_auto()
         .p(4.0)
         .bg(accent)
         .shadow_md()

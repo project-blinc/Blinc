@@ -53,6 +53,8 @@ pub struct TextData {
     pub content: String,
     pub font_size: f32,
     pub color: [f32; 4],
+    pub align: crate::div::TextAlign,
+    pub weight: crate::div::FontWeight,
 }
 
 /// SVG data for rendering
@@ -221,6 +223,8 @@ impl RenderTree {
                         content: info.content,
                         font_size: info.font_size,
                         color: info.color,
+                        align: info.align,
+                        weight: info.weight,
                     })
                 } else {
                     ElementType::Div
@@ -266,6 +270,8 @@ impl RenderTree {
                         content: info.content,
                         font_size: info.font_size,
                         color: info.color,
+                        align: info.align,
+                        weight: info.weight,
                     })
                 } else {
                     ElementType::Div

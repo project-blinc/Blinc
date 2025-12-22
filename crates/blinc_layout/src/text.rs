@@ -13,7 +13,7 @@
 use blinc_core::{Color, Shadow, Transform};
 use taffy::prelude::*;
 
-use crate::div::{ElementBuilder, ElementTypeId, TextRenderInfo};
+use crate::div::{ElementBuilder, ElementTypeId, FontWeight, TextAlign, TextRenderInfo};
 use crate::element::{RenderLayer, RenderProps};
 use crate::tree::{LayoutNodeId, LayoutTree};
 
@@ -25,6 +25,10 @@ pub struct Text {
     font_size: f32,
     /// Text color
     color: Color,
+    /// Text alignment
+    align: TextAlign,
+    /// Font weight
+    weight: FontWeight,
     /// Taffy style for layout
     style: Style,
     /// Render layer
@@ -42,6 +46,8 @@ impl Text {
             content: content.into(),
             font_size: 14.0,
             color: Color::BLACK,
+            align: TextAlign::default(),
+            weight: FontWeight::default(),
             style: Style::default(),
             render_layer: RenderLayer::default(),
             shadow: None,
@@ -62,6 +68,86 @@ impl Text {
     pub fn color(mut self, color: Color) -> Self {
         self.color = color;
         self
+    }
+
+    // =========================================================================
+    // Text Alignment
+    // =========================================================================
+
+    /// Set text alignment
+    pub fn align(mut self, align: TextAlign) -> Self {
+        self.align = align;
+        self
+    }
+
+    /// Align text to the left (default)
+    pub fn text_left(self) -> Self {
+        self.align(TextAlign::Left)
+    }
+
+    /// Center text
+    pub fn text_center(self) -> Self {
+        self.align(TextAlign::Center)
+    }
+
+    /// Align text to the right
+    pub fn text_right(self) -> Self {
+        self.align(TextAlign::Right)
+    }
+
+    // =========================================================================
+    // Font Weight
+    // =========================================================================
+
+    /// Set font weight
+    pub fn weight(mut self, weight: FontWeight) -> Self {
+        self.weight = weight;
+        self
+    }
+
+    /// Set font weight to thin (100)
+    pub fn thin(self) -> Self {
+        self.weight(FontWeight::Thin)
+    }
+
+    /// Set font weight to extra light (200)
+    pub fn extra_light(self) -> Self {
+        self.weight(FontWeight::ExtraLight)
+    }
+
+    /// Set font weight to light (300)
+    pub fn light(self) -> Self {
+        self.weight(FontWeight::Light)
+    }
+
+    /// Set font weight to normal/regular (400)
+    pub fn normal(self) -> Self {
+        self.weight(FontWeight::Normal)
+    }
+
+    /// Set font weight to medium (500)
+    pub fn medium(self) -> Self {
+        self.weight(FontWeight::Medium)
+    }
+
+    /// Set font weight to semi-bold (600)
+    pub fn semibold(self) -> Self {
+        self.weight(FontWeight::SemiBold)
+    }
+
+    /// Set font weight to bold (700)
+    pub fn bold(self) -> Self {
+        self.weight(FontWeight::Bold)
+    }
+
+    /// Set font weight to extra bold (800)
+    pub fn extra_bold(self) -> Self {
+        self.weight(FontWeight::ExtraBold)
+    }
+
+    /// Set font weight to black (900)
+    pub fn black(self) -> Self {
+        self.weight(FontWeight::Black)
     }
 
     /// Set the render layer
@@ -222,6 +308,8 @@ impl ElementBuilder for Text {
             content: self.content.clone(),
             font_size: self.font_size,
             color: [self.color.r, self.color.g, self.color.b, self.color.a],
+            align: self.align,
+            weight: self.weight,
         })
     }
 }
