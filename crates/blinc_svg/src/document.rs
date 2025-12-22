@@ -337,6 +337,9 @@ mod tests {
             .count();
 
         assert_eq!(fill_count, 1, "Should have exactly 1 fill command");
-        assert_eq!(stroke_count, 0, "Should have NO stroke commands when stroke is not specified");
+        assert_eq!(
+            stroke_count, 0,
+            "Should have NO stroke commands when stroke is not specified"
+        );
     }
 }

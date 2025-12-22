@@ -131,7 +131,14 @@ impl TestContext {
 
     /// Add a text rendering command with vertical centering
     /// The y coordinate will be the vertical center of the text
-    pub fn draw_text_centered(&mut self, text: &str, x: f32, y: f32, font_size: f32, color: [f32; 4]) {
+    pub fn draw_text_centered(
+        &mut self,
+        text: &str,
+        x: f32,
+        y: f32,
+        font_size: f32,
+        color: [f32; 4],
+    ) {
         self.text_commands.push(TextCommand {
             text: text.to_string(),
             x,
@@ -143,7 +150,15 @@ impl TestContext {
     }
 
     /// Add a text rendering command with specified anchor
-    pub fn draw_text_with_anchor(&mut self, text: &str, x: f32, y: f32, font_size: f32, color: [f32; 4], anchor: TextAnchor) {
+    pub fn draw_text_with_anchor(
+        &mut self,
+        text: &str,
+        x: f32,
+        y: f32,
+        font_size: f32,
+        color: [f32; 4],
+        anchor: TextAnchor,
+    ) {
         self.text_commands.push(TextCommand {
             text: text.to_string(),
             x,
@@ -772,7 +787,14 @@ impl TestHarness {
         // Prepare text glyphs if there are text commands
         let mut all_glyphs = Vec::new();
         for cmd in &text_commands {
-            match self.prepare_text_with_anchor(&cmd.text, cmd.x, cmd.y, cmd.font_size, cmd.color, cmd.anchor) {
+            match self.prepare_text_with_anchor(
+                &cmd.text,
+                cmd.x,
+                cmd.y,
+                cmd.font_size,
+                cmd.color,
+                cmd.anchor,
+            ) {
                 Ok(glyphs) => all_glyphs.extend(glyphs),
                 Err(e) => tracing::warn!("Failed to prepare text '{}': {}", cmd.text, e),
             }
@@ -881,8 +903,14 @@ impl TestHarness {
         // Prepare text glyphs if any
         let mut all_glyphs = Vec::new();
         for cmd in &text_commands {
-            if let Ok(glyphs) = self.prepare_text_with_anchor(&cmd.text, cmd.x, cmd.y, cmd.font_size, cmd.color, cmd.anchor)
-            {
+            if let Ok(glyphs) = self.prepare_text_with_anchor(
+                &cmd.text,
+                cmd.x,
+                cmd.y,
+                cmd.font_size,
+                cmd.color,
+                cmd.anchor,
+            ) {
                 all_glyphs.extend(glyphs);
             }
         }
@@ -908,7 +936,14 @@ impl TestHarness {
         } else {
             Some(all_glyphs.as_slice())
         };
-        self.render_with_glass_to_png(&batch, fg, glyphs, width as u32, height as u32, &output_path)?;
+        self.render_with_glass_to_png(
+            &batch,
+            fg,
+            glyphs,
+            width as u32,
+            height as u32,
+            &output_path,
+        )?;
         tracing::info!("Rendered glass test '{}' to {:?}", name, output_path);
 
         // Compare with reference if it exists
@@ -1112,7 +1147,7 @@ impl Default for TestHarnessConfig {
             output_dir: PathBuf::from("test_output"),
             reference_dir: PathBuf::from("test_output/references"),
             default_size: Size::new(800.0, 600.0), // 2x resolution for better quality
-            threshold: 0.001, // 0.1% difference allowed
+            threshold: 0.001,                      // 0.1% difference allowed
             max_primitives: 10_000,
             max_glass_primitives: 1_000,
             max_glyphs: 50_000,

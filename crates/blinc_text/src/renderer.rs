@@ -139,7 +139,10 @@ impl TextRenderer {
         let (ascender, descender) = {
             let font = self.default_font.as_ref().unwrap();
             let metrics = font.metrics();
-            (metrics.ascender_px(font_size), metrics.descender_px(font_size))
+            (
+                metrics.ascender_px(font_size),
+                metrics.descender_px(font_size),
+            )
         };
 
         // Layout the text - borrow font temporarily

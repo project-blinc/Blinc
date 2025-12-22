@@ -16,7 +16,9 @@ pub mod shaper;
 
 pub use atlas::{AtlasRegion, GlyphAtlas, GlyphInfo};
 pub use font::{Font, FontFace, FontMetrics, FontStyle, FontWeight};
-pub use layout::{LayoutOptions, LineBreakMode, PositionedGlyph, TextAlignment, TextAnchor, TextLayout};
+pub use layout::{
+    LayoutOptions, LineBreakMode, PositionedGlyph, TextAlignment, TextAnchor, TextLayout,
+};
 pub use rasterizer::{GlyphRasterizer, RasterizedGlyph};
 pub use renderer::{GlyphInstance, PreparedText, TextRenderer};
 pub use shaper::{ShapedGlyph, ShapedText, TextShaper};
