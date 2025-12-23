@@ -28,7 +28,7 @@ fn main() -> Result<()> {
 }
 
 /// Build the UI based on the current window context
-fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
+fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder {
     // Scale factor based on window size (baseline 800x600)
     let scale_x = ctx.width / 800.0;
     let scale_y = ctx.height / 600.0;

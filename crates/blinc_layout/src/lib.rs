@@ -31,6 +31,7 @@
 pub mod div;
 pub mod element;
 pub mod element_style;
+pub mod event_router;
 pub mod image;
 pub mod interactive;
 pub mod renderer;
@@ -42,6 +43,7 @@ pub mod tree;
 
 // Core types
 pub use element::{ElementBounds, RenderLayer, RenderProps};
+pub use event_router::{EventRouter, HitTestResult, MouseButton};
 pub use interactive::{DirtyTracker, InteractiveContext, NodeState};
 pub use style::LayoutStyle;
 pub use tree::{LayoutNodeId, LayoutTree};
@@ -70,6 +72,8 @@ pub mod prelude {
     // Reference binding for external element access
     pub use crate::div::{DivRef, ElementRef};
     pub use crate::element::{ElementBounds, RenderLayer, RenderProps};
+    // Event routing
+    pub use crate::event_router::{EventRouter, HitTestResult, MouseButton};
     // Image element
     pub use crate::image::{image, img, Image, ImageFilter, ObjectFit, ObjectPosition};
     // Interactive state management

@@ -21,7 +21,8 @@
 
 use blinc_layout::prelude::*;
 use blinc_platform::{
-    ControlFlow, Event, EventLoop, LifecycleEvent, Platform, Window, WindowConfig, WindowEvent,
+    ControlFlow, Event, EventLoop, InputEvent, KeyState, LifecycleEvent, MouseEvent, Platform,
+    TouchEvent, Window, WindowConfig, WindowEvent,
 };
 
 use crate::app::BlincApp;
@@ -40,10 +41,12 @@ pub struct WindowedContext {
     pub scale_factor: f64,
     /// Whether the window is focused
     pub focused: bool,
+    /// Event router for input event handling
+    pub event_router: EventRouter,
 }
 
 impl WindowedContext {
-    fn from_window<W: Window>(window: &W) -> Self {
+    fn from_window<W: Window>(window: &W, event_router: EventRouter) -> Self {
         // Use physical size for rendering - the surface is in physical pixels
         // UI layout and rendering must use physical dimensions to match the surface
         let (width, height) = window.size();
@@ -52,7 +55,17 @@ impl WindowedContext {
             height: height as f32,
             scale_factor: window.scale_factor(),
             focused: window.is_focused(),
+            event_router,
         }
+    }
+
+    /// Update context from window (preserving event router)
+    fn update_from_window<W: Window>(&mut self, window: &W) {
+        let (width, height) = window.size();
+        self.width = width as f32;
+        self.height = height as f32;
+        self.scale_factor = window.scale_factor();
+        self.focused = window.is_focused();
     }
 }
 
@@ -105,7 +118,7 @@ impl WindowedApp {
     #[cfg(all(feature = "windowed", not(target_os = "android")))]
     pub fn run<F, E>(config: WindowConfig, ui_builder: F) -> Result<()>
     where
-        F: FnMut(&WindowedContext) -> E + 'static,
+        F: FnMut(&mut WindowedContext) -> E + 'static,
         E: ElementBuilder,
     {
         Self::run_desktop(config, ui_builder)
@@ -114,7 +127,7 @@ impl WindowedApp {
     #[cfg(all(feature = "windowed", not(target_os = "android")))]
     fn run_desktop<F, E>(config: WindowConfig, mut ui_builder: F) -> Result<()>
     where
-        F: FnMut(&WindowedContext) -> E + 'static,
+        F: FnMut(&mut WindowedContext) -> E + 'static,
         E: ElementBuilder,
     {
         // Initialize the platform asset loader for cross-platform asset loading
@@ -129,6 +142,13 @@ impl WindowedApp {
         let mut app: Option<BlincApp> = None;
         let mut surface: Option<wgpu::Surface<'static>> = None;
         let mut surface_config: Option<wgpu::SurfaceConfiguration> = None;
+
+        // Persistent context with event router
+        let mut ctx: Option<WindowedContext> = None;
+        // Persistent render tree for hit testing
+        let mut render_tree: Option<RenderTree> = None;
+        // Track if we need to rebuild UI (e.g., after state change)
+        let mut needs_rebuild = true;
 
         event_loop
             .run(move |event, window| {
@@ -159,6 +179,12 @@ impl WindowedApp {
                                     surface_config = Some(config);
                                     app = Some(blinc_app);
 
+                                    // Initialize context with event router
+                                    ctx = Some(WindowedContext::from_window(
+                                        window,
+                                        EventRouter::new(),
+                                    ));
+
                                     tracing::info!("Blinc windowed app initialized");
                                 }
                                 Err(e) => {
@@ -177,6 +203,7 @@ impl WindowedApp {
                                 config.width = width;
                                 config.height = height;
                                 surf.configure(&blinc_app.device(), config);
+                                needs_rebuild = true;
                             }
                         }
                     }
@@ -185,9 +212,74 @@ impl WindowedApp {
                         return ControlFlow::Exit;
                     }
 
+                    // Handle input events
+                    Event::Input(input_event) => {
+                        if let (Some(ref mut windowed_ctx), Some(ref tree)) =
+                            (&mut ctx, &render_tree)
+                        {
+                            let router = &mut windowed_ctx.event_router;
+
+                            match input_event {
+                                InputEvent::Mouse(mouse_event) => match mouse_event {
+                                    MouseEvent::Moved { x, y } => {
+                                        router.on_mouse_move(tree, x, y);
+                                    }
+                                    MouseEvent::ButtonPressed { button, x, y } => {
+                                        let btn = convert_mouse_button(button);
+                                        router.on_mouse_down(tree, x, y, btn);
+                                    }
+                                    MouseEvent::ButtonReleased { button, x, y } => {
+                                        let btn = convert_mouse_button(button);
+                                        router.on_mouse_up(tree, x, y, btn);
+                                    }
+                                    MouseEvent::Left => {
+                                        router.on_mouse_leave();
+                                    }
+                                    MouseEvent::Entered => {
+                                        // Re-trigger hover on enter
+                                        let (mx, my) = router.mouse_position();
+                                        router.on_mouse_move(tree, mx, my);
+                                    }
+                                },
+                                InputEvent::Keyboard(kb_event) => match kb_event.state {
+                                    KeyState::Pressed => {
+                                        router.on_key_down(0); // TODO: proper key code
+                                    }
+                                    KeyState::Released => {
+                                        router.on_key_up(0);
+                                    }
+                                },
+                                InputEvent::Touch(touch_event) => {
+                                    // Map touch to mouse events for simplicity
+                                    match touch_event {
+                                        TouchEvent::Started { x, y, .. } => {
+                                            router.on_mouse_down(tree, x, y, MouseButton::Left);
+                                        }
+                                        TouchEvent::Moved { x, y, .. } => {
+                                            router.on_mouse_move(tree, x, y);
+                                        }
+                                        TouchEvent::Ended { x, y, .. } => {
+                                            router.on_mouse_up(tree, x, y, MouseButton::Left);
+                                        }
+                                        TouchEvent::Cancelled { .. } => {
+                                            router.on_mouse_leave();
+                                        }
+                                    }
+                                }
+                                InputEvent::Scroll { delta_x, delta_y } => {
+                                    router.on_scroll(tree, delta_x, delta_y);
+                                }
+                            }
+                        }
+                    }
+
                     Event::Frame => {
-                        if let (Some(ref mut blinc_app), Some(ref surf), Some(ref config)) =
-                            (&mut app, &surface, &surface_config)
+                        if let (
+                            Some(ref mut blinc_app),
+                            Some(ref surf),
+                            Some(ref config),
+                            Some(ref mut windowed_ctx),
+                        ) = (&mut app, &surface, &surface_config, &mut ctx)
                         {
                             // Get current frame
                             let frame = match surf.get_current_texture() {
@@ -210,12 +302,24 @@ impl WindowedApp {
                                 .texture
                                 .create_view(&wgpu::TextureViewDescriptor::default());
 
-                            // Build UI - context provides physical size to match surface
-                            let ctx = WindowedContext::from_window(window);
-                            let ui = ui_builder(&ctx);
+                            // Update context from window
+                            windowed_ctx.update_from_window(window);
+
+                            // Build UI - context provides physical size and event router
+                            let ui = ui_builder(windowed_ctx);
+
+                            // Build render tree for hit testing (needed for event routing)
+                            if needs_rebuild || render_tree.is_none() {
+                                let mut tree = RenderTree::from_element(&ui);
+                                tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
+                                render_tree = Some(tree);
+                                needs_rebuild = false;
+                            }
 
                             // Render at physical size (matches surface dimensions)
-                            if let Err(e) = blinc_app.render(&ui, &view, ctx.width, ctx.height) {
+                            if let Err(e) =
+                                blinc_app.render(&ui, &view, windowed_ctx.width, windowed_ctx.height)
+                            {
                                 tracing::error!("Render error: {}", e);
                             }
 
@@ -237,7 +341,7 @@ impl WindowedApp {
     #[cfg(not(feature = "windowed"))]
     pub fn run<F, E>(_config: WindowConfig, _ui_builder: F) -> Result<()>
     where
-        F: FnMut(&WindowedContext) -> E + 'static,
+        F: FnMut(&mut WindowedContext) -> E + 'static,
         E: ElementBuilder,
     {
         Err(BlincError::Platform(
@@ -246,11 +350,24 @@ impl WindowedApp {
     }
 }
 
+/// Convert platform mouse button to layout mouse button
+#[cfg(all(feature = "windowed", not(target_os = "android")))]
+fn convert_mouse_button(button: blinc_platform::MouseButton) -> MouseButton {
+    match button {
+        blinc_platform::MouseButton::Left => MouseButton::Left,
+        blinc_platform::MouseButton::Right => MouseButton::Right,
+        blinc_platform::MouseButton::Middle => MouseButton::Middle,
+        blinc_platform::MouseButton::Back => MouseButton::Back,
+        blinc_platform::MouseButton::Forward => MouseButton::Forward,
+        blinc_platform::MouseButton::Other(n) => MouseButton::Other(n),
+    }
+}
+
 /// Convenience function to run a windowed app with default configuration
 #[cfg(feature = "windowed")]
 pub fn run_windowed<F, E>(ui_builder: F) -> Result<()>
 where
-    F: FnMut(&WindowedContext) -> E + 'static,
+    F: FnMut(&mut WindowedContext) -> E + 'static,
     E: ElementBuilder,
 {
     WindowedApp::run(WindowConfig::default(), ui_builder)
@@ -260,7 +377,7 @@ where
 #[cfg(feature = "windowed")]
 pub fn run_windowed_with_title<F, E>(title: &str, ui_builder: F) -> Result<()>
 where
-    F: FnMut(&WindowedContext) -> E + 'static,
+    F: FnMut(&mut WindowedContext) -> E + 'static,
     E: ElementBuilder,
 {
     let config = WindowConfig {
