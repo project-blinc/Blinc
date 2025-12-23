@@ -178,9 +178,10 @@ impl Text {
 
     /// Update size estimate based on content and font size
     fn update_size_estimate(&mut self) {
-        // Rough estimate: average character width is ~0.5 * font_size
+        // Rough estimate: average character width is ~0.6 * font_size for proportional fonts
+        // Using 0.6 as it provides better fit for most UI text
         let char_count = self.content.chars().count() as f32;
-        let estimated_width = char_count * self.font_size * 0.5;
+        let estimated_width = char_count * self.font_size * 0.6;
         let estimated_height = self.font_size * 1.2; // Line height
 
         self.style.size.width = Dimension::Length(estimated_width);

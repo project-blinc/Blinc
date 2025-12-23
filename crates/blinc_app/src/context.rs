@@ -3,11 +3,13 @@
 //! Wraps the GPU rendering pipeline with a clean API.
 
 use blinc_core::Rect;
-use blinc_gpu::{GpuGlyph, GpuPaintContext, GpuRenderer, TextRenderingContext};
+use blinc_gpu::{
+    GpuGlyph, GpuPaintContext, GpuRenderer, TextAlignment, TextAnchor, TextRenderingContext,
+};
+use blinc_layout::div::{FontWeight, TextAlign};
 use blinc_layout::prelude::*;
 use blinc_layout::renderer::ElementType;
 use blinc_svg::SvgDocument;
-use blinc_text::TextAnchor;
 use std::sync::Arc;
 
 use crate::error::Result;
@@ -31,6 +33,19 @@ struct CachedTexture {
     view: wgpu::TextureView,
     width: u32,
     height: u32,
+}
+
+/// Text element data for rendering
+struct TextElement {
+    content: String,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    font_size: f32,
+    color: [f32; 4],
+    align: TextAlign,
+    weight: FontWeight,
 }
 
 impl RenderContext {
@@ -78,14 +93,23 @@ impl RenderContext {
 
         // Prepare text glyphs
         let mut all_glyphs = Vec::new();
-        for (content, x, y, _w, h, font_size, color) in &texts {
-            if let Ok(glyphs) = self.text_ctx.prepare_text_with_anchor(
-                content,
-                *x,
-                *y + *h / 2.0,
-                *font_size,
-                *color,
+        for text in &texts {
+            // Convert layout TextAlign to GPU TextAlignment
+            let alignment = match text.align {
+                TextAlign::Left => TextAlignment::Left,
+                TextAlign::Center => TextAlignment::Center,
+                TextAlign::Right => TextAlignment::Right,
+            };
+
+            if let Ok(glyphs) = self.text_ctx.prepare_text_with_options(
+                &text.content,
+                text.x,
+                text.y + text.height / 2.0,
+                text.font_size,
+                text.color,
                 TextAnchor::Center,
+                alignment,
+                Some(text.width),
             ) {
                 all_glyphs.extend(glyphs);
             }
@@ -296,10 +320,7 @@ impl RenderContext {
     fn collect_render_elements(
         &self,
         tree: &RenderTree,
-    ) -> (
-        Vec<(String, f32, f32, f32, f32, f32, [f32; 4])>,
-        Vec<(String, f32, f32, f32, f32)>,
-    ) {
+    ) -> (Vec<TextElement>, Vec<(String, f32, f32, f32, f32)>) {
         let mut texts = Vec::new();
         let mut svgs = Vec::new();
 
@@ -315,7 +336,7 @@ impl RenderContext {
         tree: &RenderTree,
         node: LayoutNodeId,
         parent_offset: (f32, f32),
-        texts: &mut Vec<(String, f32, f32, f32, f32, f32, [f32; 4])>,
+        texts: &mut Vec<TextElement>,
         svgs: &mut Vec<(String, f32, f32, f32, f32)>,
     ) {
         let Some(bounds) = tree.layout().get_bounds(node, parent_offset) else {
@@ -328,15 +349,17 @@ impl RenderContext {
         if let Some(render_node) = tree.get_render_node(node) {
             match &render_node.element_type {
                 ElementType::Text(text_data) => {
-                    texts.push((
-                        text_data.content.clone(),
-                        abs_x,
-                        abs_y,
-                        bounds.width,
-                        bounds.height,
-                        text_data.font_size,
-                        text_data.color,
-                    ));
+                    texts.push(TextElement {
+                        content: text_data.content.clone(),
+                        x: abs_x,
+                        y: abs_y,
+                        width: bounds.width,
+                        height: bounds.height,
+                        font_size: text_data.font_size,
+                        color: text_data.color,
+                        align: text_data.align,
+                        weight: text_data.weight,
+                    });
                 }
                 ElementType::Svg(svg_data) => {
                     svgs.push((

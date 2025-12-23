@@ -32,3 +32,6 @@ pub use primitives::{
 pub use renderer::{GpuRenderer, RendererConfig};
 pub use shaders::{COMPOSITE_SHADER, GLASS_SHADER, PATH_SHADER, SDF_SHADER, TEXT_SHADER};
 pub use text::TextRenderingContext;
+
+// Re-export text types for convenience
+pub use blinc_text::{TextAlignment, TextAnchor};

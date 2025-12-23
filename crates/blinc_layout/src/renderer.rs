@@ -100,6 +100,8 @@ pub trait LayoutRenderer {
         height: f32,
         font_size: f32,
         color: [f32; 4],
+        align: crate::div::TextAlign,
+        weight: crate::div::FontWeight,
     );
 
     /// Render text to the background layer at absolute position
@@ -112,6 +114,8 @@ pub trait LayoutRenderer {
         height: f32,
         font_size: f32,
         color: [f32; 4],
+        align: crate::div::TextAlign,
+        weight: crate::div::FontWeight,
     );
 
     /// Render an SVG to the foreground layer at absolute position
@@ -780,6 +784,8 @@ impl RenderTree {
                     bounds.height,
                     text_data.font_size,
                     text_data.color,
+                    text_data.align,
+                    text_data.weight,
                 );
             } else {
                 renderer.render_text_background(
@@ -790,6 +796,8 @@ impl RenderTree {
                     bounds.height,
                     text_data.font_size,
                     text_data.color,
+                    text_data.align,
+                    text_data.weight,
                 );
             }
         }

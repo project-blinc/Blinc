@@ -156,10 +156,12 @@ fn build_content(ctx: &WindowedContext) -> impl ElementBuilder {
                 .p(40.0)
                 .flex_col()
                 .items_center()
+                .justify_center()
                 .gap(16.0)
-                .child(text("Welcome to Blinc").size(64.0).color(Color::WHITE))
+                .child(text("Welcome to Blinc").text_center().size(64.0).color(Color::WHITE))
                 .child(
                     text("A modern UI framework for Rust")
+                    .text_center()
                         .size(32.0)
                         .color(Color::WHITE),
                 ),
@@ -185,6 +187,7 @@ fn build_content(ctx: &WindowedContext) -> impl ElementBuilder {
             div()
                 .flex_row()
                 .gap(16.0)
+                .items_center()
                 .child(feature_card(
                     "Glass Effects",
                     Color::rgba(1.0, 0.4, 0.6, 0.8),
@@ -222,7 +225,7 @@ fn info_item(label: &str, value: &str) -> impl ElementBuilder {
 fn feature_card(label: &str, accent: Color) -> impl ElementBuilder {
     div()
         .flex()
-        .w_auto()
+        .w_fit()
         .p(4.0)
         .bg(accent)
         .shadow_md()
@@ -230,5 +233,5 @@ fn feature_card(label: &str, accent: Color) -> impl ElementBuilder {
         .flex_col()
         .items_center()
         .justify_center()
-        .child(text(label).size(24.0).color(Color::WHITE))
+        .child(text(label).align(TextAlign::Center).size(24.0).color(Color::WHITE))
 }

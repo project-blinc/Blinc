@@ -3,7 +3,7 @@
 //! This module provides integration between blinc_text's TextRenderer
 //! and the GPU rendering pipeline.
 
-use blinc_text::{LayoutOptions, TextAnchor, TextRenderer};
+use blinc_text::{LayoutOptions, TextAlignment, TextAnchor, TextRenderer};
 use std::sync::Arc;
 
 use crate::primitives::GpuGlyph;
@@ -96,8 +96,39 @@ impl TextRenderingContext {
         color: [f32; 4],
         anchor: TextAnchor,
     ) -> Result<Vec<GpuGlyph>, blinc_text::TextError> {
+        self.prepare_text_with_options(text, x, y, font_size, color, anchor, TextAlignment::Left, None)
+    }
+
+    /// Prepare text for GPU rendering with full options
+    ///
+    /// Returns a list of GPU glyphs ready for rendering.
+    ///
+    /// # Arguments
+    /// * `text` - The text string to render
+    /// * `x` - X position (left edge for Left align, center for Center, right for Right)
+    /// * `y` - Y position (interpreted based on anchor)
+    /// * `font_size` - Font size in pixels
+    /// * `color` - RGBA color as [r, g, b, a] in 0.0-1.0 range
+    /// * `anchor` - Vertical anchor (Top, Center, Baseline)
+    /// * `alignment` - Horizontal alignment (Left, Center, Right)
+    /// * `width` - Optional width for alignment (if None, text is positioned at x)
+    pub fn prepare_text_with_options(
+        &mut self,
+        text: &str,
+        x: f32,
+        y: f32,
+        font_size: f32,
+        color: [f32; 4],
+        anchor: TextAnchor,
+        alignment: TextAlignment,
+        width: Option<f32>,
+    ) -> Result<Vec<GpuGlyph>, blinc_text::TextError> {
         let mut options = LayoutOptions::default();
         options.anchor = anchor;
+        options.alignment = alignment;
+        if let Some(w) = width {
+            options.max_width = Some(w);
+        }
         let prepared = self
             .renderer
             .prepare_text(text, font_size, color, &options)?;
@@ -124,13 +155,25 @@ impl TextRenderingContext {
             }
         };
 
+        // Calculate x offset based on alignment
+        // When max_width is set, the layout engine already aligns glyphs within that width.
+        // We just need to add the container's x position as base offset.
+        // When no width is provided, we manually apply alignment offset.
+        let x_offset = if width.is_some() {
+            // Layout engine already aligned within max_width, just offset by container x
+            x
+        } else {
+            // No container width - just position at x (left-aligned)
+            x
+        };
+
         // Convert to GPU glyphs with position offset
         let glyphs = prepared
             .glyphs
             .iter()
             .map(|g| GpuGlyph {
                 bounds: [
-                    g.bounds[0] + x,
+                    g.bounds[0] + x_offset,
                     g.bounds[1] + y_offset,
                     g.bounds[2],
                     g.bounds[3],
