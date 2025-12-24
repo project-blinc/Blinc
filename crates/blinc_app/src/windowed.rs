@@ -922,9 +922,10 @@ impl WindowedApp {
                                 let mut tree = RenderTree::from_element(&ui);
                                 tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
 
-                                // Transfer node states from old tree to preserve state across rebuilds
+                                // Transfer node states and scroll offsets from old tree to preserve state across rebuilds
                                 if let Some(ref old_tree) = render_tree {
                                     tree.transfer_states_from(old_tree);
+                                    tree.transfer_scroll_offsets_from(old_tree);
                                 }
 
                                 render_tree = Some(tree);

@@ -73,7 +73,7 @@ fn build_scroll_container(ctx: &WindowedContext) -> impl ElementBuilder {
         .rounded(24.0)
         .bg(Color::rgba(0.15, 0.15, 0.2, 1.0))
         .on_scroll(|e| {
-            tracing::debug!(
+            tracing::info!(
                 "Scroll delta: ({:.1}, {:.1})",
                 e.scroll_delta_x,
                 e.scroll_delta_y

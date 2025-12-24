@@ -336,32 +336,55 @@ impl Default for Scroll {
 impl Scroll {
     /// Create a new scroll container
     pub fn new() -> Self {
+        let physics = Arc::new(Mutex::new(ScrollPhysics::default()));
+        let handlers = Self::create_internal_handlers(Arc::clone(&physics));
+
         Self {
             inner: Div::new().overflow_clip(),
             child: None,
-            physics: Arc::new(Mutex::new(ScrollPhysics::default())),
-            handlers: EventHandlers::new(),
+            physics,
+            handlers,
         }
     }
 
     /// Create with custom configuration
     pub fn with_config(config: ScrollConfig) -> Self {
+        let physics = Arc::new(Mutex::new(ScrollPhysics::new(config)));
+        let handlers = Self::create_internal_handlers(Arc::clone(&physics));
+
         Self {
             inner: Div::new().overflow_clip(),
             child: None,
-            physics: Arc::new(Mutex::new(ScrollPhysics::new(config))),
-            handlers: EventHandlers::new(),
+            physics,
+            handlers,
         }
     }
 
     /// Create with external shared physics (for state persistence)
     pub fn with_physics(physics: SharedScrollPhysics) -> Self {
+        let handlers = Self::create_internal_handlers(Arc::clone(&physics));
+
         Self {
             inner: Div::new().overflow_clip(),
             child: None,
             physics,
-            handlers: EventHandlers::new(),
+            handlers,
         }
+    }
+
+    /// Create internal event handlers that update physics state
+    fn create_internal_handlers(physics: SharedScrollPhysics) -> EventHandlers {
+        let mut handlers = EventHandlers::new();
+
+        // Internal handler that applies scroll delta to physics
+        handlers.on_scroll({
+            let physics = Arc::clone(&physics);
+            move |ctx| {
+                physics.lock().unwrap().apply_scroll_delta(ctx.scroll_delta_y);
+            }
+        });
+
+        handlers
     }
 
     /// Get the shared physics handle

@@ -311,24 +311,37 @@ impl EventRouter {
 
     /// Handle scroll event
     ///
-    /// Emits SCROLL to the element under the pointer.
-    /// Returns the target node and stores the scroll delta for event handlers.
+    /// Emits SCROLL to the element under the pointer AND all its ancestors.
+    /// This allows scroll events to bubble up to scroll containers even when
+    /// the mouse is over a child element inside the scroll.
+    ///
+    /// Returns all nodes that received the scroll event.
     pub fn on_scroll(
         &mut self,
         tree: &RenderTree,
         delta_x: f32,
         delta_y: f32,
-    ) -> Option<(LayoutNodeId, u32)> {
+    ) -> Vec<(LayoutNodeId, u32)> {
         // Store delta for event dispatch
         self.scroll_delta_x = delta_x;
         self.scroll_delta_y = delta_y;
 
+        let mut events = Vec::new();
+
         if let Some(hit) = self.hit_test(tree, self.mouse_x, self.mouse_y) {
+            // Emit to the hit node first
             self.emit_event(hit.node, event_types::SCROLL);
-            Some((hit.node, event_types::SCROLL))
-        } else {
-            None
+            events.push((hit.node, event_types::SCROLL));
+
+            // Then bubble up through ancestors (excluding the hit node which is last in ancestors)
+            // Ancestors are stored from root to leaf, so iterate in reverse to go leaf-to-root
+            for &ancestor in hit.ancestors.iter().rev().skip(1) {
+                self.emit_event(ancestor, event_types::SCROLL);
+                events.push((ancestor, event_types::SCROLL));
+            }
         }
+
+        events
     }
 
     /// Get the last scroll delta

@@ -183,6 +183,8 @@ pub struct RenderTree {
     dirty_tracker: crate::interactive::DirtyTracker,
     /// Per-node state storage (survives across rebuilds if tree is reused)
     node_states: HashMap<LayoutNodeId, NodeStateStorage>,
+    /// Scroll offsets for scroll containers (node_id -> (offset_x, offset_y))
+    scroll_offsets: HashMap<LayoutNodeId, (f32, f32)>,
 }
 
 impl Default for RenderTree {
@@ -201,6 +203,7 @@ impl RenderTree {
             handler_registry: crate::event_handler::HandlerRegistry::new(),
             dirty_tracker: crate::interactive::DirtyTracker::new(),
             node_states: HashMap::new(),
+            scroll_offsets: HashMap::new(),
         }
     }
 
@@ -451,7 +454,9 @@ impl RenderTree {
 
     /// Dispatch a scroll event with scroll delta
     ///
-    /// This automatically marks the tree as dirty after dispatching.
+    /// Updates the scroll offset for this node and dispatches to handlers.
+    /// Does NOT mark the tree as dirty since scroll only affects rendering,
+    /// not the UI tree structure.
     pub fn dispatch_scroll_event(
         &mut self,
         node_id: LayoutNodeId,
@@ -467,12 +472,43 @@ impl RenderTree {
         .with_mouse_pos(mouse_x, mouse_y)
         .with_scroll_delta(scroll_delta_x, scroll_delta_y);
 
-        if self
+        let has_handler = self
             .handler_registry
-            .has_handler(node_id, blinc_core::events::event_types::SCROLL)
-        {
+            .has_handler(node_id, blinc_core::events::event_types::SCROLL);
+
+        if has_handler {
+            // Update the scroll offset for this node
+            self.apply_scroll_delta(node_id, scroll_delta_x, scroll_delta_y);
+            // Dispatch to handlers (for user callbacks like logging)
             self.handler_registry.dispatch(&ctx);
-            self.dirty_tracker.mark(node_id);
+            // Don't mark dirty - scroll doesn't require tree rebuild
+        }
+    }
+
+    // =========================================================================
+    // Scroll Offset Management
+    // =========================================================================
+
+    /// Apply a scroll delta to a node's scroll offset
+    pub fn apply_scroll_delta(&mut self, node_id: LayoutNodeId, delta_x: f32, delta_y: f32) {
+        let (current_x, current_y) = self.scroll_offsets.get(&node_id).copied().unwrap_or((0.0, 0.0));
+        self.scroll_offsets.insert(node_id, (current_x + delta_x, current_y + delta_y));
+    }
+
+    /// Set the scroll offset for a node
+    pub fn set_scroll_offset(&mut self, node_id: LayoutNodeId, offset_x: f32, offset_y: f32) {
+        self.scroll_offsets.insert(node_id, (offset_x, offset_y));
+    }
+
+    /// Get the scroll offset for a node
+    pub fn get_scroll_offset(&self, node_id: LayoutNodeId) -> (f32, f32) {
+        self.scroll_offsets.get(&node_id).copied().unwrap_or((0.0, 0.0))
+    }
+
+    /// Transfer scroll offsets from another tree (preserves scroll position across rebuilds)
+    pub fn transfer_scroll_offsets_from(&mut self, other: &RenderTree) {
+        for (node_id, offset) in &other.scroll_offsets {
+            self.scroll_offsets.insert(*node_id, *offset);
         }
     }
 
@@ -634,9 +670,24 @@ impl RenderTree {
             }
         }
 
-        // Render children (relative to this node's transform)
+        // Check if this node has a scroll offset and apply it to children
+        let scroll_offset = self.scroll_offsets.get(&node).copied().unwrap_or((0.0, 0.0));
+        let has_scroll = scroll_offset.0.abs() > 0.001 || scroll_offset.1.abs() > 0.001;
+
+        if has_scroll {
+            // Apply scroll offset as a transform
+            // Positive offset_y = scrolled down = content moves up = negative translation
+            ctx.push_transform(Transform::translate(scroll_offset.0, scroll_offset.1));
+        }
+
+        // Render children (relative to this node's transform + scroll offset)
         for child_id in self.layout_tree.children(node) {
             self.render_node(ctx, child_id, (0.0, 0.0));
+        }
+
+        // Pop scroll transform if we pushed one
+        if has_scroll {
+            ctx.pop_transform();
         }
 
         // Pop element-specific transform if we pushed one
@@ -807,6 +858,16 @@ impl RenderTree {
         // Once inside glass, stay inside glass for all descendants
         let children_inside_glass = inside_glass || is_glass;
 
+        // Check if this node has a scroll offset and apply it to children
+        let scroll_offset = self.scroll_offsets.get(&node).copied().unwrap_or((0.0, 0.0));
+        let has_scroll = scroll_offset.0.abs() > 0.001 || scroll_offset.1.abs() > 0.001;
+
+        if has_scroll {
+            // Apply scroll offset as a transform
+            // Positive offset_y = scrolled down = content moves up = negative translation
+            ctx.push_transform(Transform::translate(scroll_offset.0, scroll_offset.1));
+        }
+
         // Traverse children (they inherit our transform)
         for child_id in self.layout_tree.children(node) {
             self.render_layer(
@@ -816,6 +877,11 @@ impl RenderTree {
                 target_layer,
                 children_inside_glass,
             );
+        }
+
+        // Pop scroll transform if we pushed one
+        if has_scroll {
+            ctx.pop_transform();
         }
 
         // Pop element-specific transform if we pushed one
@@ -979,6 +1045,16 @@ impl RenderTree {
         // Track if children should be considered inside glass
         let children_inside_glass = inside_glass || is_glass;
 
+        // Check if this node has a scroll offset and apply it to children
+        let scroll_offset = self.scroll_offsets.get(&node).copied().unwrap_or((0.0, 0.0));
+        let has_scroll = scroll_offset.0.abs() > 0.001 || scroll_offset.1.abs() > 0.001;
+
+        if has_scroll {
+            // Apply scroll offset as a transform
+            // Positive offset_y = scrolled down = content moves up = negative translation
+            ctx.push_transform(Transform::translate(scroll_offset.0, scroll_offset.1));
+        }
+
         // Traverse children
         for child_id in self.layout_tree.children(node) {
             self.render_layer_with_content(
@@ -988,6 +1064,11 @@ impl RenderTree {
                 target_layer,
                 children_inside_glass,
             );
+        }
+
+        // Pop scroll transform if we pushed one
+        if has_scroll {
+            ctx.pop_transform();
         }
 
         // Pop element-specific transform if we pushed one
