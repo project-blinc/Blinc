@@ -123,6 +123,35 @@ impl RenderContext {
         // Collect text, SVG, and image elements
         let (texts, svgs, images) = self.collect_render_elements(tree);
 
+        // DEBUG: Uncomment to draw text element bounds for debugging layout issues
+        // #[cfg(debug_assertions)]
+        // {
+        //     use blinc_core::{Brush, Color, CornerRadius, DrawCommand, Stroke};
+        //     for text in &texts {
+        //         // Red rectangle: text element bounds from Taffy
+        //         bg_ctx.execute_command(&DrawCommand::StrokeRect {
+        //             rect: Rect::new(text.x, text.y, text.width, text.height),
+        //             corner_radius: CornerRadius::default(),
+        //             stroke: Stroke::new(1.0),
+        //             brush: Brush::Solid(Color::rgba(1.0, 0.0, 0.0, 0.8)),
+        //         });
+        //         // Blue dot: center point for vertical centering
+        //         let cx = text.x + text.width / 2.0;
+        //         let cy = text.y + text.height / 2.0;
+        //         bg_ctx.execute_command(&DrawCommand::FillRect {
+        //             rect: Rect::new(cx - 3.0, cy - 3.0, 6.0, 6.0),
+        //             corner_radius: CornerRadius::default(),
+        //             brush: Brush::Solid(Color::rgba(0.0, 0.0, 1.0, 0.9)),
+        //         });
+        //         // Green dot: left edge marker
+        //         bg_ctx.execute_command(&DrawCommand::FillRect {
+        //             rect: Rect::new(text.x - 2.0, cy - 2.0, 4.0, 4.0),
+        //             corner_radius: CornerRadius::default(),
+        //             brush: Brush::Solid(Color::rgba(0.0, 1.0, 0.0, 0.9)),
+        //         });
+        //     }
+        // }
+
         // Pre-load all images into cache before rendering
         self.preload_images(&images);
 

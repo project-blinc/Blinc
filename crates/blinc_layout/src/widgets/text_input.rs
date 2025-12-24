@@ -567,8 +567,13 @@ impl TextInput {
     fn create_inner(config: &TextInputConfig, state: &SharedTextInputState) -> Div {
         let state_guard = state.lock().unwrap();
 
+        // Use state's placeholder if value is empty (state.placeholder takes precedence)
         let display = if state_guard.value.is_empty() {
-            config.placeholder.clone()
+            if !state_guard.placeholder.is_empty() {
+                state_guard.placeholder.clone()
+            } else {
+                config.placeholder.clone()
+            }
         } else {
             state_guard.display_text()
         };
@@ -606,12 +611,13 @@ impl TextInput {
 
         drop(state_guard);
 
+        // Build inner content with raw pixel padding (config.padding_x is already in pixels)
         let inner_content = div()
             .w_full()
             .h_full()
             .bg(bg)
             .rounded(config.corner_radius - 1.0)
-            .px(config.padding_x)
+            .padding_x_px(config.padding_x)  // Use raw pixels, not 4x units
             .flex_row()
             .justify_start()  // Text starts from left
             .items_center()   // Vertically centered

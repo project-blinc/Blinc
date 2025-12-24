@@ -615,8 +615,14 @@ impl TextArea {
         let mut content = div().flex_col().justify_start().items_start().gap(2.0);
 
         if state_guard.is_empty() {
+            // Use state's placeholder if available, otherwise fall back to config
+            let placeholder = if !state_guard.placeholder.is_empty() {
+                &state_guard.placeholder
+            } else {
+                &config.placeholder
+            };
             content = content.child(
-                text(&config.placeholder)
+                text(placeholder)
                     .size(config.font_size)
                     .color(text_color)
                     .text_left(),
@@ -640,8 +646,8 @@ impl TextArea {
             .h_full()
             .bg(bg)
             .rounded(config.corner_radius - 1.0)
-            .p(config.padding_y)
-            .px(config.padding_x)
+            .padding_y_px(config.padding_y)  // Use raw pixels, not 4x units
+            .padding_x_px(config.padding_x)  // Use raw pixels, not 4x units
             .flex_col()
             .justify_start()  // Text starts from top
             .items_start()    // Text starts from left

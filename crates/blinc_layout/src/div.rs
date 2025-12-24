@@ -793,6 +793,26 @@ impl Div {
         self
     }
 
+    // =========================================================================
+    // Raw Pixel Padding (for internal/widget use)
+    // =========================================================================
+
+    /// Set horizontal padding in raw pixels (no unit conversion)
+    pub fn padding_x_px(mut self, pixels: f32) -> Self {
+        let px = LengthPercentage::Length(pixels);
+        self.style.padding.left = px;
+        self.style.padding.right = px;
+        self
+    }
+
+    /// Set vertical padding in raw pixels (no unit conversion)
+    pub fn padding_y_px(mut self, pixels: f32) -> Self {
+        let px = LengthPercentage::Length(pixels);
+        self.style.padding.top = px;
+        self.style.padding.bottom = px;
+        self
+    }
+
     /// Set margin on all sides (in 4px units)
     pub fn m(mut self, units: f32) -> Self {
         let px = LengthPercentageAuto::Length(units * 4.0);
