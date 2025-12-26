@@ -137,6 +137,23 @@ struct BindGroups {
     path: wgpu::BindGroup,
 }
 
+/// Cached MSAA textures and resources for overlay rendering
+struct CachedMsaaTextures {
+    msaa_texture: wgpu::Texture,
+    msaa_view: wgpu::TextureView,
+    resolve_texture: wgpu::Texture,
+    resolve_view: wgpu::TextureView,
+    width: u32,
+    height: u32,
+    sample_count: u32,
+    /// Sampler for compositing (reused across frames)
+    sampler: wgpu::Sampler,
+    /// Uniform buffer for compositing (reused across frames)
+    composite_uniform_buffer: wgpu::Buffer,
+    /// Bind group for compositing (recreated when textures change)
+    composite_bind_group: wgpu::BindGroup,
+}
+
 /// The GPU renderer using wgpu
 ///
 /// This is the main rendering engine that:
@@ -175,6 +192,8 @@ pub struct GpuRenderer {
     texture_format: wgpu::TextureFormat,
     /// Lazily-created image pipeline and resources
     image_pipeline: Option<ImagePipeline>,
+    /// Cached MSAA textures for overlay rendering (avoids per-frame allocation)
+    cached_msaa: Option<CachedMsaaTextures>,
 }
 
 /// Image rendering pipeline (created lazily on first image render)
@@ -440,6 +459,7 @@ impl GpuRenderer {
             time: 0.0,
             texture_format,
             image_pipeline: None,
+            cached_msaa: None,
         })
     }
 
@@ -1746,39 +1766,113 @@ impl GpuRenderer {
 
         let (width, height) = self.viewport_size;
 
-        // Create temporary MSAA texture for rendering (use same format as pipelines)
-        let msaa_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Overlay MSAA Texture"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count,
-            dimension: wgpu::TextureDimension::D2,
-            format: self.texture_format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
-        let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        // Check if we need to recreate cached MSAA textures
+        let need_new_textures = match &self.cached_msaa {
+            Some(cached) => {
+                cached.width != width
+                    || cached.height != height
+                    || cached.sample_count != sample_count
+            }
+            None => true,
+        };
 
-        // Create temporary resolve texture (use same format as pipelines)
-        let resolve_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("Overlay Resolve Texture"),
-            size: wgpu::Extent3d {
+        if need_new_textures {
+            // Create MSAA texture for rendering
+            let msaa_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Overlay MSAA Texture"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count,
+                dimension: wgpu::TextureDimension::D2,
+                format: self.texture_format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+            // Create resolve texture
+            let resolve_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Overlay Resolve Texture"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: self.texture_format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            let resolve_view = resolve_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+            // Create sampler (reused across frames)
+            let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("Overlay Blend Sampler"),
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                ..Default::default()
+            });
+
+            // Create composite uniforms (opacity=1.0, blend_mode=normal)
+            #[repr(C)]
+            #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+            struct CompositeUniforms {
+                opacity: f32,
+                blend_mode: u32,
+                _padding: [f32; 2],
+            }
+            let composite_uniforms = CompositeUniforms {
+                opacity: 1.0,
+                blend_mode: 0,
+                _padding: [0.0; 2],
+            };
+            let composite_uniform_buffer =
+                self.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Composite Uniforms Buffer"),
+                        contents: bytemuck::bytes_of(&composite_uniforms),
+                        usage: wgpu::BufferUsages::UNIFORM,
+                    });
+
+            // Create bind group for compositing
+            let composite_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Overlay Composite Bind Group"),
+                layout: &self.bind_group_layouts.composite,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: composite_uniform_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&resolve_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                ],
+            });
+
+            self.cached_msaa = Some(CachedMsaaTextures {
+                msaa_texture,
+                msaa_view,
+                resolve_texture,
+                resolve_view,
                 width,
                 height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: self.texture_format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let resolve_view = resolve_texture.create_view(&wgpu::TextureViewDescriptor::default());
+                sample_count,
+                sampler,
+                composite_uniform_buffer,
+                composite_bind_group,
+            });
+        }
 
         // Update uniforms
         let uniforms = Uniforms {
@@ -1803,6 +1897,9 @@ impl GpuRenderer {
             self.update_path_buffers(batch);
         }
 
+        // Get references to the cached textures (after mutable borrows are done)
+        let cached = self.cached_msaa.as_ref().unwrap();
+
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1815,8 +1912,8 @@ impl GpuRenderer {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Overlay MSAA Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &msaa_view,
-                    resolve_target: Some(&resolve_view),
+                    view: &cached.msaa_view,
+                    resolve_target: Some(&cached.resolve_view),
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                         store: wgpu::StoreOp::Discard, // MSAA texture discarded after resolve
@@ -1860,59 +1957,7 @@ impl GpuRenderer {
             }
         }
 
-        // Pass 2: Blend resolved texture onto target
-        // Create composite uniforms buffer (opacity=1.0, blend_mode=normal)
-        #[repr(C)]
-        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-        struct CompositeUniforms {
-            opacity: f32,
-            blend_mode: u32,
-            _padding: [f32; 2],
-        }
-
-        let composite_uniforms = CompositeUniforms {
-            opacity: 1.0,
-            blend_mode: 0, // BLEND_NORMAL
-            _padding: [0.0; 2],
-        };
-
-        let composite_uniform_buffer =
-            self.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Composite Uniforms Buffer"),
-                    contents: bytemuck::bytes_of(&composite_uniforms),
-                    usage: wgpu::BufferUsages::UNIFORM,
-                });
-
-        // Create a sampler for the resolved texture
-        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("Overlay Blend Sampler"),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
-
-        // Create bind group for compositing
-        let composite_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Overlay Composite Bind Group"),
-            layout: &self.bind_group_layouts.composite,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: composite_uniform_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&resolve_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-        });
-
-        // Blend pass
+        // Pass 2: Blend resolved texture onto target using cached resources
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Overlay Blend Pass"),
@@ -1930,7 +1975,7 @@ impl GpuRenderer {
             });
 
             render_pass.set_pipeline(&self.pipelines.composite_overlay);
-            render_pass.set_bind_group(0, &composite_bind_group, &[]);
+            render_pass.set_bind_group(0, &cached.composite_bind_group, &[]);
             render_pass.draw(0..3, 0..1); // Fullscreen triangle
         }
 
