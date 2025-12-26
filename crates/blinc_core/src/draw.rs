@@ -56,14 +56,59 @@ impl Transform {
         Transform::Affine2D(Affine2D::translation(x, y))
     }
 
-    /// Create a 2D scale
+    /// Create a 2D scale around the origin (0, 0)
+    ///
+    /// Note: This scales around the top-left corner. For centered scaling,
+    /// use `scale_centered()` instead.
     pub fn scale(sx: f32, sy: f32) -> Self {
         Transform::Affine2D(Affine2D::scale(sx, sy))
     }
 
-    /// Create a 2D rotation
+    /// Create a 2D scale centered around a specific point
+    ///
+    /// This creates a transform that:
+    /// 1. Translates the center point to the origin
+    /// 2. Applies the scale
+    /// 3. Translates back
+    ///
+    /// This results in scaling that appears to grow/shrink from the center point.
+    pub fn scale_centered(sx: f32, sy: f32, center_x: f32, center_y: f32) -> Self {
+        // Combined transform: translate(cx, cy) * scale(sx, sy) * translate(-cx, -cy)
+        // This can be computed directly in the affine matrix:
+        // tx = cx * (1 - sx)
+        // ty = cy * (1 - sy)
+        let tx = center_x * (1.0 - sx);
+        let ty = center_y * (1.0 - sy);
+        Transform::Affine2D(Affine2D {
+            elements: [sx, 0.0, 0.0, sy, tx, ty],
+        })
+    }
+
+    /// Create a 2D rotation around the origin (0, 0)
+    ///
+    /// Note: This rotates around the top-left corner. For centered rotation,
+    /// use `rotate_centered()` instead.
     pub fn rotate(angle: f32) -> Self {
         Transform::Affine2D(Affine2D::rotation(angle))
+    }
+
+    /// Create a 2D rotation centered around a specific point
+    ///
+    /// This creates a transform that:
+    /// 1. Translates the center point to the origin
+    /// 2. Applies the rotation
+    /// 3. Translates back
+    pub fn rotate_centered(angle: f32, center_x: f32, center_y: f32) -> Self {
+        // Combined transform: translate(cx, cy) * rotate(angle) * translate(-cx, -cy)
+        let c = angle.cos();
+        let s = angle.sin();
+        // tx = cx - cx*cos + cy*sin
+        // ty = cy - cx*sin - cy*cos
+        let tx = center_x - center_x * c + center_y * s;
+        let ty = center_y - center_x * s - center_y * c;
+        Transform::Affine2D(Affine2D {
+            elements: [c, s, -s, c, tx, ty],
+        })
     }
 
     /// Create a 3D translation

@@ -872,9 +872,18 @@ impl RenderTree {
         ctx.push_transform(Transform::translate(bounds.x, bounds.y));
 
         // Apply element-specific transform if present
+        // Transforms are applied around the element's center (like CSS transform-origin: 50% 50%)
         let has_element_transform = render_node.props.transform.is_some();
         if let Some(ref transform) = render_node.props.transform {
+            // To center transforms:
+            // 1. Translate so element center is at origin
+            // 2. Apply the user's transform
+            // 3. Translate back
+            let center_x = bounds.width / 2.0;
+            let center_y = bounds.height / 2.0;
+            ctx.push_transform(Transform::translate(center_x, center_y));
             ctx.push_transform(transform.clone());
+            ctx.push_transform(Transform::translate(-center_x, -center_y));
         }
 
         let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
@@ -943,9 +952,11 @@ impl RenderTree {
             ctx.pop_clip();
         }
 
-        // Pop element-specific transform if we pushed one
+        // Pop element-specific transforms if we pushed them (3 transforms for centering)
         if has_element_transform {
-            ctx.pop_transform();
+            ctx.pop_transform(); // pop translate(-center_x, -center_y)
+            ctx.pop_transform(); // pop the actual transform
+            ctx.pop_transform(); // pop translate(center_x, center_y)
         }
 
         // Pop transform
@@ -1055,9 +1066,18 @@ impl RenderTree {
         ctx.push_transform(Transform::translate(bounds.x, bounds.y));
 
         // Apply element-specific transform if present
+        // Transforms are applied around the element's center (like CSS transform-origin: 50% 50%)
         let has_element_transform = render_node.props.transform.is_some();
         if let Some(ref transform) = render_node.props.transform {
+            // To center transforms:
+            // 1. Translate so element center is at origin
+            // 2. Apply the user's transform
+            // 3. Translate back
+            let center_x = bounds.width / 2.0;
+            let center_y = bounds.height / 2.0;
+            ctx.push_transform(Transform::translate(center_x, center_y));
             ctx.push_transform(transform.clone());
+            ctx.push_transform(Transform::translate(-center_x, -center_y));
         }
 
         // Determine if this node is a glass element
@@ -1174,9 +1194,11 @@ impl RenderTree {
             ctx.pop_clip();
         }
 
-        // Pop element-specific transform if we pushed one
+        // Pop element-specific transforms if we pushed them (3 transforms for centering)
         if has_element_transform {
-            ctx.pop_transform();
+            ctx.pop_transform(); // pop translate(-center_x, -center_y)
+            ctx.pop_transform(); // pop the actual transform
+            ctx.pop_transform(); // pop translate(center_x, center_y)
         }
 
         ctx.pop_transform();
@@ -1283,9 +1305,18 @@ impl RenderTree {
         ctx.push_transform(Transform::translate(bounds.x, bounds.y));
 
         // Apply element-specific transform if present
+        // Transforms are applied around the element's center (like CSS transform-origin: 50% 50%)
         let has_element_transform = render_node.props.transform.is_some();
         if let Some(ref transform) = render_node.props.transform {
+            // To center transforms:
+            // 1. Translate so element center is at origin
+            // 2. Apply the user's transform
+            // 3. Translate back
+            let center_x = bounds.width / 2.0;
+            let center_y = bounds.height / 2.0;
+            ctx.push_transform(Transform::translate(center_x, center_y));
             ctx.push_transform(transform.clone());
+            ctx.push_transform(Transform::translate(-center_x, -center_y));
         }
 
         // Determine if this node is a glass element
@@ -1401,9 +1432,11 @@ impl RenderTree {
             ctx.pop_clip();
         }
 
-        // Pop element-specific transform if we pushed one
+        // Pop element-specific transforms if we pushed them (3 transforms for centering)
         if has_element_transform {
-            ctx.pop_transform();
+            ctx.pop_transform(); // pop translate(-center_x, -center_y)
+            ctx.pop_transform(); // pop the actual transform
+            ctx.pop_transform(); // pop translate(center_x, center_y)
         }
 
         ctx.pop_transform();
