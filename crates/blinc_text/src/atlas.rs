@@ -256,8 +256,9 @@ impl GlyphAtlas {
 
 impl Default for GlyphAtlas {
     fn default() -> Self {
-        // Default to 1024x1024 atlas
-        Self::new(1024, 1024)
+        // Default to 512x512 atlas (256 KB instead of 1 MB)
+        // This is sufficient for most UI text; can be resized if needed
+        Self::new(512, 512)
     }
 }
 

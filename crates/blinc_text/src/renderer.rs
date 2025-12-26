@@ -51,11 +51,11 @@ pub struct TextRenderer {
 }
 
 impl TextRenderer {
-    /// Create a new text renderer with default atlas size (1024x1024)
+    /// Create a new text renderer with default atlas size
     pub fn new() -> Self {
         Self {
             default_font: None,
-            atlas: GlyphAtlas::new(1024, 1024),
+            atlas: GlyphAtlas::default(), // Uses 512x512 for lower memory footprint
             rasterizer: GlyphRasterizer::new(),
             layout_engine: TextLayoutEngine::new(),
             glyph_cache: FxHashMap::default(),

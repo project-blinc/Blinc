@@ -61,9 +61,11 @@ pub struct RendererConfig {
 impl Default for RendererConfig {
     fn default() -> Self {
         Self {
-            max_primitives: 10_000,
-            max_glass_primitives: 1_000,
-            max_glyphs: 50_000,
+            // Reduced defaults for lower memory footprint (~1 MB total vs ~5+ MB)
+            // These can still handle typical UI scenes while using less memory
+            max_primitives: 2_000,      // ~384 KB (was 1.92 MB)
+            max_glass_primitives: 100,  // ~25 KB (was 256 KB)
+            max_glyphs: 10_000,         // ~640 KB (was 3.2 MB)
             sample_count: 1,
             texture_format: None,
         }
