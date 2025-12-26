@@ -367,6 +367,33 @@ impl HandlerRegistry {
     pub fn clear(&mut self) {
         self.nodes.clear();
     }
+
+    /// Broadcast an event to ALL nodes that have handlers for the given event type
+    ///
+    /// This is used for keyboard events (TEXT_INPUT, KEY_DOWN) after a tree rebuild,
+    /// when the router's focused node ID may be stale. Each handler can check its own
+    /// internal focus state to determine if it should process the event.
+    pub fn broadcast(&self, event_type: EventType, base_ctx: &EventContext) {
+        for (node_id, handlers) in &self.nodes {
+            if handlers.get(event_type).is_some() {
+                let ctx = EventContext {
+                    event_type,
+                    node_id: *node_id,
+                    ..base_ctx.clone()
+                };
+                handlers.dispatch(&ctx);
+            }
+        }
+    }
+
+    /// Get all node IDs that have handlers for a specific event type
+    pub fn nodes_with_handler(&self, event_type: EventType) -> Vec<LayoutNodeId> {
+        self.nodes
+            .iter()
+            .filter(|(_, handlers)| handlers.get(event_type).is_some())
+            .map(|(node_id, _)| *node_id)
+            .collect()
+    }
 }
 
 #[cfg(test)]

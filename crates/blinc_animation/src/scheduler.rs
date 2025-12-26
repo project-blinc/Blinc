@@ -6,16 +6,16 @@
 //! - `AnimatedKeyframe` - Keyframe-based timed animations
 //! - `AnimatedTimeline` - Timeline orchestration of multiple animations
 
-use blinc_core::AnimationAccess;
 use crate::easing::Easing;
 use crate::keyframe::{Keyframe, KeyframeAnimation};
 use crate::spring::{Spring, SpringConfig};
 use crate::timeline::Timeline;
+use blinc_core::AnimationAccess;
 use slotmap::{new_key_type, SlotMap};
-use std::sync::{Arc, Mutex, Weak};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex, Weak};
 use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 new_key_type! {
     /// Handle to a registered spring animation
@@ -479,12 +479,7 @@ impl AnimationAccess for AnimationScheduler {
         let tid = TimelineId::from(key_data);
         // For now, return None as timeline access requires entry IDs
         // Future: parse property as "entry_{id}" and look up
-        self.inner
-            .lock()
-            .unwrap()
-            .timelines
-            .get(tid)
-            .map(|_t| 0.0) // Placeholder
+        self.inner.lock().unwrap().timelines.get(tid).map(|_t| 0.0) // Placeholder
     }
 }
 
@@ -684,7 +679,8 @@ impl SchedulerHandle {
 impl AnimationAccess for SchedulerHandle {
     fn get_spring_value(&self, id: u64, generation: u32) -> Option<f32> {
         self.inner.upgrade().and_then(|inner| {
-            let key_data = slotmap::KeyData::from_ffi((id as u32 as u64) | ((generation as u64) << 32));
+            let key_data =
+                slotmap::KeyData::from_ffi((id as u32 as u64) | ((generation as u64) << 32));
             let spring_id = SpringId::from(key_data);
             inner
                 .lock()

@@ -26,7 +26,7 @@ pub enum CursorAnimation {
 /// Cursor state for smooth animation
 ///
 /// Shared between the canvas render callback and the text input widget.
-/// Uses Arc<Mutex> for thread-safe sharing.
+/// Uses `Arc<Mutex>` for thread-safe sharing.
 #[derive(Clone, Debug)]
 pub struct CursorState {
     /// Whether the cursor should be visible (focused state)
@@ -122,14 +122,18 @@ impl CursorState {
             CursorAnimation::Blink => {
                 // Classic on/off blink
                 let phase = (elapsed / period) as u64 % 2;
-                if phase == 0 { 1.0 } else { 0.0 }
+                if phase == 0 {
+                    1.0
+                } else {
+                    0.0
+                }
             }
             CursorAnimation::SmoothFade => {
                 // Smooth sine wave between 0.3 and 1.0
                 // This creates a gentle pulsing effect instead of harsh on/off
                 let t = (elapsed / period) * std::f64::consts::PI;
                 let sine = (t.sin() + 1.0) / 2.0; // 0.0 to 1.0
-                // Map to 0.3-1.0 range for subtle effect (never fully invisible)
+                                                  // Map to 0.3-1.0 range for subtle effect (never fully invisible)
                 0.3 + (sine as f32 * 0.7)
             }
         }
@@ -189,12 +193,7 @@ pub fn cursor_canvas(state: &SharedCursorState, height: f32) -> Canvas {
         }
 
         // Create color with current opacity
-        let color = Color::rgba(
-            s.color.r,
-            s.color.g,
-            s.color.b,
-            s.color.a * opacity,
-        );
+        let color = Color::rgba(s.color.r, s.color.g, s.color.b, s.color.a * opacity);
 
         // Draw the cursor bar
         // The cursor is drawn relative to the canvas position
@@ -219,11 +218,7 @@ pub fn cursor_canvas(state: &SharedCursorState, height: f32) -> Canvas {
 /// * `state` - Shared cursor state controlling visibility and position
 /// * `height` - Height of the cursor in pixels
 /// * `top` - Top offset for vertical centering
-pub fn cursor_canvas_absolute(
-    state: &SharedCursorState,
-    height: f32,
-    top: f32,
-) -> Canvas {
+pub fn cursor_canvas_absolute(state: &SharedCursorState, height: f32, top: f32) -> Canvas {
     let state = Arc::clone(state);
 
     canvas(move |ctx: &mut dyn DrawContext, bounds: CanvasBounds| {
@@ -243,12 +238,7 @@ pub fn cursor_canvas_absolute(
         }
 
         // Create color with current opacity
-        let color = Color::rgba(
-            s.color.r,
-            s.color.g,
-            s.color.b,
-            s.color.a * opacity,
-        );
+        let color = Color::rgba(s.color.r, s.color.g, s.color.b, s.color.a * opacity);
 
         // Draw the cursor bar at the x position from state
         // The canvas is sized to cover the full text area,

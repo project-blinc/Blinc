@@ -431,7 +431,12 @@ impl TextInputState {
     }
 
     /// Validate the value against input type and constraints
-    pub fn validate(&mut self, input_type: InputType, constraints: &NumberConstraints, required: bool) {
+    pub fn validate(
+        &mut self,
+        input_type: InputType,
+        constraints: &NumberConstraints,
+        required: bool,
+    ) {
         // Check required
         if required && self.value.is_empty() {
             self.is_valid = false;
@@ -446,7 +451,9 @@ impl TextInputState {
                 InputType::Number => "Please enter a valid number".to_string(),
                 InputType::Integer => "Please enter a valid integer".to_string(),
                 InputType::Email => "Please enter a valid email address".to_string(),
-                InputType::Url => "Please enter a valid URL (starting with http:// or https://)".to_string(),
+                InputType::Url => {
+                    "Please enter a valid URL (starting with http:// or https://)".to_string()
+                }
                 _ => "Invalid input".to_string(),
             });
             return;
@@ -487,7 +494,8 @@ impl TextInputState {
     /// Update animations (call each frame)
     pub fn update(&mut self, dt: f32, is_focused: bool) {
         // Update focus spring
-        self.focus_spring.set_target(if is_focused { 1.0 } else { 0.0 });
+        self.focus_spring
+            .set_target(if is_focused { 1.0 } else { 0.0 });
         self.focus_spring.step(dt);
         self.focus_value = self.focus_spring.value();
 
@@ -521,7 +529,10 @@ impl TextInputState {
         self.delete_selection();
 
         // Filter characters based on input type
-        let filtered: String = text.chars().filter(|c| input_type.allows_char(*c)).collect();
+        let filtered: String = text
+            .chars()
+            .filter(|c| input_type.allows_char(*c))
+            .collect();
 
         if filtered.is_empty() {
             return;
@@ -782,14 +793,34 @@ impl TextInput {
                 .on(states::HOVERED, event_types::FOCUS, states::FOCUSED_HOVERED)
                 // Focused transitions
                 .on(states::FOCUSED, event_types::BLUR, states::IDLE)
-                .on(states::FOCUSED, event_types::POINTER_ENTER, states::FOCUSED_HOVERED)
-                .on(states::FOCUSED, event_types::POINTER_DOWN, states::SELECTING)
+                .on(
+                    states::FOCUSED,
+                    event_types::POINTER_ENTER,
+                    states::FOCUSED_HOVERED,
+                )
+                .on(
+                    states::FOCUSED,
+                    event_types::POINTER_DOWN,
+                    states::SELECTING,
+                )
                 // Focused+Hovered transitions
-                .on(states::FOCUSED_HOVERED, event_types::POINTER_LEAVE, states::FOCUSED)
+                .on(
+                    states::FOCUSED_HOVERED,
+                    event_types::POINTER_LEAVE,
+                    states::FOCUSED,
+                )
                 .on(states::FOCUSED_HOVERED, event_types::BLUR, states::HOVERED)
-                .on(states::FOCUSED_HOVERED, event_types::POINTER_DOWN, states::SELECTING)
+                .on(
+                    states::FOCUSED_HOVERED,
+                    event_types::POINTER_DOWN,
+                    states::SELECTING,
+                )
                 // Selecting transitions (back to focused on release)
-                .on(states::SELECTING, event_types::POINTER_UP, states::FOCUSED_HOVERED)
+                .on(
+                    states::SELECTING,
+                    event_types::POINTER_UP,
+                    states::FOCUSED_HOVERED,
+                )
                 .on(states::SELECTING, event_types::BLUR, states::IDLE)
                 .build()
         }
@@ -855,7 +886,11 @@ impl TextInput {
             match &event.data {
                 EventData::TextInput { text } => {
                     if let Some(state) = ctx.get_widget_state_mut::<TextInputState>(self.id) {
-                        state.insert_with_filter(text, self.config.max_length, self.config.input_type);
+                        state.insert_with_filter(
+                            text,
+                            self.config.max_length,
+                            self.config.input_type,
+                        );
                         // Validate after change
                         state.validate(
                             self.config.input_type,
@@ -874,7 +909,11 @@ impl TextInput {
                 }
                 EventData::Clipboard { text } => {
                     if let Some(state) = ctx.get_widget_state_mut::<TextInputState>(self.id) {
-                        state.insert_with_filter(text, self.config.max_length, self.config.input_type);
+                        state.insert_with_filter(
+                            text,
+                            self.config.max_length,
+                            self.config.input_type,
+                        );
                         // Validate after change
                         state.validate(
                             self.config.input_type,
@@ -990,8 +1029,7 @@ impl TextInput {
             state.update(dt, is_focused);
 
             // Mark dirty if visual state changed
-            if (state.focus_value - old_focus).abs() > 0.001
-                || state.cursor_visible != old_visible
+            if (state.focus_value - old_focus).abs() > 0.001 || state.cursor_visible != old_visible
             {
                 ctx.mark_dirty(self.id);
             }
@@ -1010,10 +1048,7 @@ impl TextInput {
             fsm_state,
             states::FOCUSED | states::FOCUSED_HOVERED | states::SELECTING
         );
-        let _is_hovered = matches!(
-            fsm_state,
-            states::HOVERED | states::FOCUSED_HOVERED
-        );
+        let _is_hovered = matches!(fsm_state, states::HOVERED | states::FOCUSED_HOVERED);
 
         // Interpolate colors based on focus and validation state
         let bg_color = Color::lerp(

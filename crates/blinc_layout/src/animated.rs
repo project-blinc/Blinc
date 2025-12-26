@@ -297,11 +297,30 @@ impl AnimatedProperties {
 
     /// Check if any animations are still running
     pub fn is_animating(&self) -> bool {
-        self.opacity.as_ref().map(|a| a.is_animating()).unwrap_or(false)
-            || self.scale.as_ref().map(|a| a.is_animating()).unwrap_or(false)
-            || self.translate_x.as_ref().map(|a| a.is_animating()).unwrap_or(false)
-            || self.translate_y.as_ref().map(|a| a.is_animating()).unwrap_or(false)
-            || self.rotate.as_ref().map(|a| a.is_animating()).unwrap_or(false)
+        self.opacity
+            .as_ref()
+            .map(|a| a.is_animating())
+            .unwrap_or(false)
+            || self
+                .scale
+                .as_ref()
+                .map(|a| a.is_animating())
+                .unwrap_or(false)
+            || self
+                .translate_x
+                .as_ref()
+                .map(|a| a.is_animating())
+                .unwrap_or(false)
+            || self
+                .translate_y
+                .as_ref()
+                .map(|a| a.is_animating())
+                .unwrap_or(false)
+            || self
+                .rotate
+                .as_ref()
+                .map(|a| a.is_animating())
+                .unwrap_or(false)
     }
 }
 

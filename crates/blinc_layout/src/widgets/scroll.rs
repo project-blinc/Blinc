@@ -84,7 +84,7 @@ impl Default for ScrollConfig {
         Self {
             bounce_enabled: true,
             bounce_spring: SpringConfig::wobbly(),
-            deceleration: 1500.0, // Decelerate at 1500 px/s²
+            deceleration: 1500.0,     // Decelerate at 1500 px/s²
             velocity_threshold: 10.0, // Stop when below 10 px/s
             max_overscroll: 0.3,
             direction: ScrollDirection::Vertical,
@@ -264,7 +264,10 @@ impl ScrollPhysics {
         let old_offset_y = self.offset_y;
 
         // Apply vertical delta based on direction
-        if matches!(self.config.direction, ScrollDirection::Vertical | ScrollDirection::Both) {
+        if matches!(
+            self.config.direction,
+            ScrollDirection::Vertical | ScrollDirection::Both
+        ) {
             // If overscrolling, apply rubber-band resistance
             if self.is_overscrolling_y() && self.config.bounce_enabled {
                 let resistance = 0.3; // 30% resistance when overscrolling
@@ -275,11 +278,15 @@ impl ScrollPhysics {
 
             // Clamp to bounds (or max overscroll if bounce enabled)
             if !self.config.bounce_enabled {
-                self.offset_y = self.offset_y.clamp(self.max_offset_y(), self.min_offset_y());
+                self.offset_y = self
+                    .offset_y
+                    .clamp(self.max_offset_y(), self.min_offset_y());
             } else {
                 // Clamp to max overscroll distance
                 let max_over = self.viewport_height * self.config.max_overscroll;
-                self.offset_y = self.offset_y.clamp(self.max_offset_y() - max_over, max_over);
+                self.offset_y = self
+                    .offset_y
+                    .clamp(self.max_offset_y() - max_over, max_over);
             }
 
             tracing::trace!(
@@ -290,7 +297,10 @@ impl ScrollPhysics {
         }
 
         // Apply horizontal delta based on direction
-        if matches!(self.config.direction, ScrollDirection::Horizontal | ScrollDirection::Both) {
+        if matches!(
+            self.config.direction,
+            ScrollDirection::Horizontal | ScrollDirection::Both
+        ) {
             // If overscrolling, apply rubber-band resistance
             if self.is_overscrolling_x() && self.config.bounce_enabled {
                 let resistance = 0.3;
@@ -301,10 +311,14 @@ impl ScrollPhysics {
 
             // Clamp to bounds (or max overscroll if bounce enabled)
             if !self.config.bounce_enabled {
-                self.offset_x = self.offset_x.clamp(self.max_offset_x(), self.min_offset_x());
+                self.offset_x = self
+                    .offset_x
+                    .clamp(self.max_offset_x(), self.min_offset_x());
             } else {
                 let max_over = self.viewport_width * self.config.max_overscroll;
-                self.offset_x = self.offset_x.clamp(self.max_offset_x() - max_over, max_over);
+                self.offset_x = self
+                    .offset_x
+                    .clamp(self.max_offset_x() - max_over, max_over);
             }
         }
     }
@@ -327,7 +341,12 @@ impl ScrollPhysics {
     /// Start bounce animation to return to bounds
     fn start_bounce(&mut self) {
         // Start vertical bounce if needed
-        if self.is_overscrolling_y() && matches!(self.config.direction, ScrollDirection::Vertical | ScrollDirection::Both) {
+        if self.is_overscrolling_y()
+            && matches!(
+                self.config.direction,
+                ScrollDirection::Vertical | ScrollDirection::Both
+            )
+        {
             let target = if self.offset_y > self.min_offset_y() {
                 self.min_offset_y()
             } else {
@@ -340,7 +359,12 @@ impl ScrollPhysics {
         }
 
         // Start horizontal bounce if needed
-        if self.is_overscrolling_x() && matches!(self.config.direction, ScrollDirection::Horizontal | ScrollDirection::Both) {
+        if self.is_overscrolling_x()
+            && matches!(
+                self.config.direction,
+                ScrollDirection::Horizontal | ScrollDirection::Both
+            )
+        {
             let target = if self.offset_x > self.min_offset_x() {
                 self.min_offset_x()
             } else {
@@ -574,7 +598,10 @@ impl Scroll {
         handlers.on_scroll({
             let physics = Arc::clone(&physics);
             move |ctx| {
-                physics.lock().unwrap().apply_scroll_delta(ctx.scroll_delta_x, ctx.scroll_delta_y);
+                physics
+                    .lock()
+                    .unwrap()
+                    .apply_scroll_delta(ctx.scroll_delta_x, ctx.scroll_delta_y);
             }
         });
 
@@ -667,7 +694,10 @@ impl Scroll {
 
     /// Apply scroll delta (called by event router)
     pub fn apply_scroll_delta(&self, delta_x: f32, delta_y: f32) {
-        self.physics.lock().unwrap().apply_scroll_delta(delta_x, delta_y);
+        self.physics
+            .lock()
+            .unwrap()
+            .apply_scroll_delta(delta_x, delta_y);
     }
 
     /// Called when scroll gesture ends
@@ -1139,10 +1169,7 @@ mod tests {
     fn test_scroll_element_builder() {
         use crate::text::text;
 
-        let s = scroll()
-            .h(400.0)
-            .rounded(8.0)
-            .child(text("Hello"));
+        let s = scroll().h(400.0).rounded(8.0).child(text("Hello"));
 
         let mut tree = LayoutTree::new();
         let _node = s.build(&mut tree);

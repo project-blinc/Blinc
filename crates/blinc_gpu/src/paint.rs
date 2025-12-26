@@ -472,7 +472,10 @@ impl<'a> GpuPaintContext<'a> {
                     intersect_max_y = intersect_max_y.min(rect.y() + rect.height());
                     has_rect_clips = true;
                 }
-                ClipShape::RoundedRect { rect, corner_radius } => {
+                ClipShape::RoundedRect {
+                    rect,
+                    corner_radius,
+                } => {
                     // Intersect with this rect
                     intersect_min_x = intersect_min_x.max(rect.x());
                     intersect_min_y = intersect_min_y.max(rect.y());

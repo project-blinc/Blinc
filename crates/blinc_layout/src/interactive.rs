@@ -172,13 +172,8 @@ impl InteractiveContext {
 
     /// Register a node with optional FSM
     pub fn register(&mut self, id: LayoutNodeId, fsm: Option<StateMachine>) {
-        self.nodes.insert(
-            Self::key(id),
-            NodeData {
-                fsm,
-                state: None,
-            },
-        );
+        self.nodes
+            .insert(Self::key(id), NodeData { fsm, state: None });
         self.dirty.mark(id);
     }
 
@@ -428,7 +423,13 @@ mod tests {
         let mut ctx = InteractiveContext::new();
         let id = create_node_id();
 
-        ctx.set_state(id, ButtonState { scale: 1.0, clicked: false });
+        ctx.set_state(
+            id,
+            ButtonState {
+                scale: 1.0,
+                clicked: false,
+            },
+        );
 
         if let Some(state) = ctx.get_state_mut::<ButtonState>(id) {
             state.scale = 0.95;

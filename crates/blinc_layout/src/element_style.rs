@@ -142,7 +142,12 @@ impl ElementStyle {
 
     /// Extra large shadow preset (12px offset, 24px blur)
     pub fn shadow_xl(self) -> Self {
-        self.shadow(Shadow::new(0.0, 12.0, 24.0, Color::rgba(0.0, 0.0, 0.0, 0.25)))
+        self.shadow(Shadow::new(
+            0.0,
+            12.0,
+            24.0,
+            Color::rgba(0.0, 0.0, 0.0, 0.25),
+        ))
     }
 
     /// Explicitly clear shadow (override any inherited shadow)
@@ -324,11 +329,7 @@ mod tests {
 
     #[test]
     fn test_style_builder() {
-        let s = style()
-            .bg(Color::BLUE)
-            .rounded(8.0)
-            .shadow_md()
-            .scale(1.05);
+        let s = style().bg(Color::BLUE).rounded(8.0).shadow_md().scale(1.05);
 
         assert!(s.background.is_some());
         assert!(s.corner_radius.is_some());

@@ -42,7 +42,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use blinc_animation::{AnimationScheduler, SchedulerHandle, SpringId, SpringConfig, Spring};
+use blinc_animation::{AnimationScheduler, SchedulerHandle, Spring, SpringConfig, SpringId};
 use blinc_core::{Color, Transform};
 
 use crate::tree::LayoutNodeId;
@@ -56,7 +56,6 @@ pub struct NodeRenderState {
     // =========================================================================
     // Animated visual properties
     // =========================================================================
-
     /// Current opacity (0.0 - 1.0)
     pub opacity: f32,
 
@@ -75,7 +74,6 @@ pub struct NodeRenderState {
     // =========================================================================
     // Animation handles (for tracking which properties are animating)
     // =========================================================================
-
     /// Spring ID for opacity animation
     pub opacity_spring: Option<SpringId>,
 
@@ -88,7 +86,6 @@ pub struct NodeRenderState {
     // =========================================================================
     // Interaction state
     // =========================================================================
-
     /// Whether this node is currently hovered
     pub hovered: bool,
 
@@ -290,7 +287,9 @@ impl RenderState {
 
     /// Get or create render state for a node
     pub fn get_or_create(&mut self, node_id: LayoutNodeId) -> &mut NodeRenderState {
-        self.node_states.entry(node_id).or_insert_with(NodeRenderState::new)
+        self.node_states
+            .entry(node_id)
+            .or_insert_with(NodeRenderState::new)
     }
 
     /// Get render state for a node (if exists)
@@ -321,7 +320,10 @@ impl RenderState {
     pub fn animate_opacity(&mut self, node_id: LayoutNodeId, target: f32, config: SpringConfig) {
         // Get current values first
         let (current, old_spring) = {
-            let state = self.node_states.entry(node_id).or_insert_with(NodeRenderState::new);
+            let state = self
+                .node_states
+                .entry(node_id)
+                .or_insert_with(NodeRenderState::new);
             (state.opacity, state.opacity_spring.take())
         };
 
@@ -342,10 +344,18 @@ impl RenderState {
     }
 
     /// Animate background color for a node
-    pub fn animate_background(&mut self, node_id: LayoutNodeId, target: Color, config: SpringConfig) {
+    pub fn animate_background(
+        &mut self,
+        node_id: LayoutNodeId,
+        target: Color,
+        config: SpringConfig,
+    ) {
         // Get current values first
         let (current, old_springs) = {
-            let state = self.node_states.entry(node_id).or_insert_with(NodeRenderState::new);
+            let state = self
+                .node_states
+                .entry(node_id)
+                .or_insert_with(NodeRenderState::new);
             let current = state.background_color.unwrap_or(Color::TRANSPARENT);
             (current, state.bg_color_springs.take())
         };
@@ -395,7 +405,10 @@ impl RenderState {
     pub fn set_background(&mut self, node_id: LayoutNodeId, color: Color) {
         // Get old springs first
         let old_springs = {
-            let state = self.node_states.entry(node_id).or_insert_with(NodeRenderState::new);
+            let state = self
+                .node_states
+                .entry(node_id)
+                .or_insert_with(NodeRenderState::new);
             state.bg_color_springs.take()
         };
 
@@ -417,7 +430,10 @@ impl RenderState {
     pub fn set_opacity(&mut self, node_id: LayoutNodeId, opacity: f32) {
         // Get old spring first
         let old_spring = {
-            let state = self.node_states.entry(node_id).or_insert_with(NodeRenderState::new);
+            let state = self
+                .node_states
+                .entry(node_id)
+                .or_insert_with(NodeRenderState::new);
             state.opacity_spring.take()
         };
 
@@ -452,7 +468,16 @@ impl RenderState {
     }
 
     /// Add a focus ring overlay
-    pub fn add_focus_ring(&mut self, x: f32, y: f32, width: f32, height: f32, radius: f32, color: Color, thickness: f32) {
+    pub fn add_focus_ring(
+        &mut self,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        radius: f32,
+        color: Color,
+        thickness: f32,
+    ) {
         self.overlays.push(Overlay::FocusRing {
             position: (x, y),
             size: (width, height),

@@ -323,10 +323,7 @@ mod tests {
 
     #[test]
     fn test_canvas_absolute_positioning() {
-        let c = canvas(|_ctx, _bounds| {})
-            .absolute()
-            .left(10.0)
-            .top(20.0);
+        let c = canvas(|_ctx, _bounds| {}).absolute().left(10.0).top(20.0);
 
         assert!(matches!(c.style.position, Position::Absolute));
     }

@@ -168,6 +168,10 @@ where
                 let input_event =
                     input::convert_keyboard_event(&event.logical_key, event.state, self.modifiers);
                 self.handle_event(Event::Input(input_event));
+                // Request immediate redraw so text input changes render instantly
+                if let Some(ref window) = self.window {
+                    window.request_redraw();
+                }
             }
 
             WinitWindowEvent::CursorMoved { position, .. } => {

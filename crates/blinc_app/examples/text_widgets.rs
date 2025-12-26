@@ -57,14 +57,14 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
         .child(
             text("Text Input Elements")
                 .size(48.0)
-                 .text_center()
+                .text_center()
                 .weight(FontWeight::Bold)
                 .color(Color::WHITE),
         )
         // Subtitle
         .child(
             text("Ready-to-use text_input() and text_area() from blinc_layout")
-            .text_center()
+                .text_center()
                 .size(20.0)
                 .color(Color::rgba(0.7, 0.7, 0.7, 1.0)),
         )
@@ -101,7 +101,6 @@ fn build_input_section(
         .child(
             text("TextInput Element")
                 .size(28.0)
-               
                 .weight(FontWeight::SemiBold)
                 .color(Color::rgba(0.4, 0.8, 1.0, 1.0)),
         )

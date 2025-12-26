@@ -28,7 +28,12 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
     // Use logical pixel values for consistent testing
     // The scale factor is applied at render time
     let scale = ctx.scale_factor;
-    tracing::info!("Window: {}x{}, scale_factor: {}", ctx.width, ctx.height, scale);
+    tracing::info!(
+        "Window: {}x{}, scale_factor: {}",
+        ctx.width,
+        ctx.height,
+        scale
+    );
 
     div()
         .w(ctx.width)
@@ -37,7 +42,7 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
         .flex_col()
         .gap(20.0)
         .p(40.0)
-        .items_center()  // Center all children horizontally
+        .items_center() // Center all children horizontally
         // Test 1: Simple centered text
         .child(
             div()
@@ -50,8 +55,8 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                 .child(
                     text("Centered Text (items_center + justify_center)")
                         .size(16.0)
-                        .color(Color::WHITE)
-                )
+                        .color(Color::WHITE),
+                ),
         )
         // Test 2: Centered text with text_center()
         .child(
@@ -66,8 +71,8 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                     text("Centered + text_center()")
                         .size(16.0)
                         .color(Color::WHITE)
-                        .text_center()
-                )
+                        .text_center(),
+                ),
         )
         // Test 3: Button-like container with v_center
         .child(
@@ -82,8 +87,8 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                     text("Button (v_center)")
                         .size(18.0)
                         .color(Color::WHITE)
-                        .v_center()
-                )
+                        .v_center(),
+                ),
         )
         // Test 4: Left-aligned text (default)
         .child(
@@ -97,7 +102,7 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                 .child(
                     text("Left-aligned (items_center only)")
                         .size(16.0)
-                        .color(Color::WHITE)
-                )
+                        .color(Color::WHITE),
+                ),
         )
 }

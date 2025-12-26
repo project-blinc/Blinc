@@ -54,7 +54,9 @@ pub mod widget;
 pub use button::{button, Button, ButtonBuilder, ButtonConfig, ButtonState};
 pub use checkbox::{checkbox, Checkbox, CheckboxBuilder, CheckboxConfig, CheckboxState};
 pub use context::{DirtyTracker, WidgetContext, WidgetContextExt, WidgetState};
-pub use text_area::{text_area, TextArea, TextAreaBuilder, TextAreaConfig, TextAreaState, TextPosition};
+pub use text_area::{
+    text_area, TextArea, TextAreaBuilder, TextAreaConfig, TextAreaState, TextPosition,
+};
 pub use text_input::{
     text_input, InputType, NumberConstraints, TextInput, TextInputBuilder, TextInputConfig,
     TextInputState,

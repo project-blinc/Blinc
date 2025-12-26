@@ -119,7 +119,12 @@ impl Button {
             .rounded(8.0)
             .items_center()
             .justify_center()
-            .child(text(&label).size(config.font_size).color(config.text_color).v_center());
+            .child(
+                text(&label)
+                    .size(config.font_size)
+                    .color(config.text_color)
+                    .v_center(),
+            );
 
         Self { inner, config }
     }

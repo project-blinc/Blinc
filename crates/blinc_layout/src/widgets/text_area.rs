@@ -21,9 +21,8 @@ use crate::text::text;
 use crate::tree::{LayoutNodeId, LayoutTree};
 use crate::widgets::cursor::{cursor_state, CursorAnimation, SharedCursorState};
 use crate::widgets::text_input::{
-    elapsed_ms, increment_focus_count, decrement_focus_count,
-    set_focused_text_area, clear_focused_text_area, request_rebuild,
-    request_continuous_redraw_pub,
+    clear_focused_text_area, decrement_focus_count, elapsed_ms, increment_focus_count,
+    request_continuous_redraw_pub, request_rebuild, set_focused_text_area,
 };
 
 /// Position in a multi-line text (line and column)
@@ -317,7 +316,8 @@ impl TextAreaState {
         }
 
         if self.cursor.column > 0 {
-            let start_byte = char_to_byte_pos(&self.lines[self.cursor.line], self.cursor.column - 1);
+            let start_byte =
+                char_to_byte_pos(&self.lines[self.cursor.line], self.cursor.column - 1);
             let end_byte = char_to_byte_pos(&self.lines[self.cursor.line], self.cursor.column);
             self.lines[self.cursor.line].replace_range(start_byte..end_byte, "");
             self.cursor.column -= 1;
@@ -508,20 +508,14 @@ impl TextAreaState {
             self.selection_start = None;
         }
         let last_line = self.lines.len().saturating_sub(1);
-        self.cursor = TextPosition::new(
-            last_line,
-            self.lines[last_line].chars().count(),
-        );
+        self.cursor = TextPosition::new(last_line, self.lines[last_line].chars().count());
     }
 
     /// Select all text
     pub fn select_all(&mut self) {
         self.selection_start = Some(TextPosition::new(0, 0));
         let last_line = self.lines.len().saturating_sub(1);
-        self.cursor = TextPosition::new(
-            last_line,
-            self.lines[last_line].chars().count(),
-        );
+        self.cursor = TextPosition::new(last_line, self.lines[last_line].chars().count());
     }
 
     /// Get selected text
@@ -649,7 +643,10 @@ impl TextArea {
         };
 
         // Check if cursor should be shown (focused state)
-        let is_focused = matches!(state_guard.visual, TextFieldState::Focused | TextFieldState::FocusedHovered);
+        let is_focused = matches!(
+            state_guard.visual,
+            TextFieldState::Focused | TextFieldState::FocusedHovered
+        );
         let cursor_color = config.cursor_color;
 
         // Get cursor position
@@ -688,8 +685,8 @@ impl TextArea {
                     text(placeholder)
                         .size(config.font_size)
                         .color(text_color)
-                        .text_left()
-                )
+                        .text_left(),
+                ),
             );
         } else {
             for (_line_idx, line) in state_guard.lines.iter().enumerate() {
@@ -700,8 +697,8 @@ impl TextArea {
                         text(line_text)
                             .size(config.font_size)
                             .color(text_color)
-                            .text_left()
-                    )
+                            .text_left(),
+                    ),
                 );
             }
         }
@@ -713,12 +710,12 @@ impl TextArea {
             .h_full()
             .bg(bg)
             .rounded(config.corner_radius - 1.0)
-            .padding_y_px(config.padding_y)  // Use raw pixels, not 4x units
-            .padding_x_px(config.padding_x)  // Use raw pixels, not 4x units
-            .relative()  // Enable absolute positioning for cursor overlay
+            .padding_y_px(config.padding_y) // Use raw pixels, not 4x units
+            .padding_x_px(config.padding_x) // Use raw pixels, not 4x units
+            .relative() // Enable absolute positioning for cursor overlay
             .flex_col()
-            .justify_start()  // Text starts from top
-            .items_start()    // Text starts from left
+            .justify_start() // Text starts from top
+            .items_start() // Text starts from left
             .overflow_clip()
             .child(content);
 
@@ -726,7 +723,9 @@ impl TextArea {
         // The canvas handles its own opacity animation without tree rebuilds
         if is_focused {
             // Calculate cursor position
-            let cursor_top = config.padding_y + (cursor_line as f32 * line_height) + (line_height - cursor_height) / 2.0;
+            let cursor_top = config.padding_y
+                + (cursor_line as f32 * line_height)
+                + (line_height - cursor_height) / 2.0;
             let cursor_left = config.padding_x + cursor_x;
 
             // Update cursor state for the canvas to read
@@ -741,31 +740,34 @@ impl TextArea {
 
             // Create canvas-based cursor with smooth fade animation
             let cursor_state_clone = Arc::clone(&cursor_state_for_canvas);
-            let cursor_canvas = canvas(move |ctx: &mut dyn blinc_core::DrawContext, bounds: crate::canvas::CanvasBounds| {
-                let cs = cursor_state_clone.lock().unwrap();
+            let cursor_canvas = canvas(
+                move |ctx: &mut dyn blinc_core::DrawContext,
+                      bounds: crate::canvas::CanvasBounds| {
+                    let cs = cursor_state_clone.lock().unwrap();
 
-                if !cs.visible {
-                    return;
-                }
+                    if !cs.visible {
+                        return;
+                    }
 
-                let opacity = cs.current_opacity();
-                if opacity < 0.01 {
-                    return;
-                }
+                    let opacity = cs.current_opacity();
+                    if opacity < 0.01 {
+                        return;
+                    }
 
-                let color = blinc_core::Color::rgba(
-                    cs.color.r,
-                    cs.color.g,
-                    cs.color.b,
-                    cs.color.a * opacity,
-                );
+                    let color = blinc_core::Color::rgba(
+                        cs.color.r,
+                        cs.color.g,
+                        cs.color.b,
+                        cs.color.a * opacity,
+                    );
 
-                ctx.fill_rect(
-                    blinc_core::Rect::new(0.0, 0.0, cs.width, bounds.height),
-                    blinc_core::CornerRadius::default(),
-                    blinc_core::Brush::Solid(color),
-                );
-            })
+                    ctx.fill_rect(
+                        blinc_core::Rect::new(0.0, 0.0, cs.width, bounds.height),
+                        blinc_core::CornerRadius::default(),
+                        blinc_core::Brush::Solid(color),
+                    );
+                },
+            )
             .absolute()
             .left(cursor_left)
             .top(cursor_top)
@@ -782,8 +784,8 @@ impl TextArea {
 
         // Build the outer container with size from config
         // Use FSM transitions via StateTransitions::on_event
-        use blinc_core::events::event_types;
         use crate::stateful::StateTransitions;
+        use blinc_core::events::event_types;
 
         let state_for_click = Arc::clone(state);
         let state_for_blur = Arc::clone(state);
@@ -810,7 +812,9 @@ impl TextArea {
                         // Try POINTER_DOWN first (Hovered -> Focused)
                         // Then try FOCUS as fallback (Idle -> Focused)
                         let was_focused = s.visual.is_focused();
-                        let new_state = s.visual.on_event(event_types::POINTER_DOWN)
+                        let new_state = s
+                            .visual
+                            .on_event(event_types::POINTER_DOWN)
                             .or_else(|| s.visual.on_event(event_types::FOCUS));
                         if let Some(new_state) = new_state {
                             s.visual = new_state;
@@ -875,7 +879,11 @@ impl TextArea {
                             s.insert(&c.to_string());
                             // Reset cursor blink to keep it visible while typing
                             s.reset_cursor_blink(elapsed_ms());
-                            tracing::debug!("TextArea received char: {:?}, value: {}", c, s.value());
+                            tracing::debug!(
+                                "TextArea received char: {:?}, value: {}",
+                                c,
+                                s.value()
+                            );
                             request_rebuild();
                         }
                     }

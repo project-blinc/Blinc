@@ -193,7 +193,8 @@ impl BlincApp {
         width: u32,
         height: u32,
     ) -> Result<()> {
-        self.ctx.render_tree_with_state(tree, render_state, width, height, target)
+        self.ctx
+            .render_tree_with_state(tree, render_state, width, height, target)
     }
 
     /// Get the render context for advanced usage

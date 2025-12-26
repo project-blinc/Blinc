@@ -48,10 +48,20 @@ pub use checkbox::{
 
 // Re-export text input widget
 pub use text_input::{
-    text_input, text_input_state, text_input_state_with_placeholder, InputType,
-    NumberConstraints, SharedTextInputState, TextInput, TextInputConfig, TextInputState,
     // Cursor blink timing utilities
-    elapsed_ms, has_focused_text_input, take_needs_rebuild, take_needs_continuous_redraw,
+    elapsed_ms,
+    has_focused_text_input,
+    take_needs_continuous_redraw,
+    take_needs_rebuild,
+    text_input,
+    text_input_state,
+    text_input_state_with_placeholder,
+    InputType,
+    NumberConstraints,
+    SharedTextInputState,
+    TextInput,
+    TextInputConfig,
+    TextInputState,
     CURSOR_BLINK_INTERVAL_MS,
 };
 

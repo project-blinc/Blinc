@@ -231,13 +231,12 @@ impl<T: Clone + Send + Sync + 'static> DynValue<T> {
     pub fn get(&self, ctx: &ValueContext) -> T {
         match self {
             DynValue::Static(v) => v.clone(),
-            DynValue::Signal { id, default } => {
-                ctx.reactive
-                    .get_signal_value_raw(*id)
-                    .and_then(|boxed| boxed.downcast::<T>().ok())
-                    .map(|b| *b)
-                    .unwrap_or_else(|| default.clone())
-            }
+            DynValue::Signal { id, default } => ctx
+                .reactive
+                .get_signal_value_raw(*id)
+                .and_then(|boxed| boxed.downcast::<T>().ok())
+                .map(|b| *b)
+                .unwrap_or_else(|| default.clone()),
         }
     }
 
@@ -261,7 +260,11 @@ pub enum DynFloat {
     /// Value from a reactive signal
     Signal { id: u64, default: f32 },
     /// Value from a spring animation
-    Spring { id: u64, generation: u32, default: f32 },
+    Spring {
+        id: u64,
+        generation: u32,
+        default: f32,
+    },
 }
 
 impl DynFloat {
@@ -269,18 +272,20 @@ impl DynFloat {
     pub fn get(&self, ctx: &ValueContext) -> f32 {
         match self {
             DynFloat::Static(v) => *v,
-            DynFloat::Signal { id, default } => {
-                ctx.reactive
-                    .get_signal_value_raw(*id)
-                    .and_then(|boxed| boxed.downcast::<f32>().ok())
-                    .map(|b| *b)
-                    .unwrap_or(*default)
-            }
-            DynFloat::Spring { id, generation, default } => {
-                ctx.animations
-                    .get_spring_value(*id, *generation)
-                    .unwrap_or(*default)
-            }
+            DynFloat::Signal { id, default } => ctx
+                .reactive
+                .get_signal_value_raw(*id)
+                .and_then(|boxed| boxed.downcast::<f32>().ok())
+                .map(|b| *b)
+                .unwrap_or(*default),
+            DynFloat::Spring {
+                id,
+                generation,
+                default,
+            } => ctx
+                .animations
+                .get_spring_value(*id, *generation)
+                .unwrap_or(*default),
         }
     }
 
@@ -353,7 +358,11 @@ mod tests {
         let static_val = DynFloat::Static(10.0);
         assert_eq!(static_val.get(&ctx), 10.0);
 
-        let spring_val = DynFloat::Spring { id: 1, generation: 1, default: 0.0 };
+        let spring_val = DynFloat::Spring {
+            id: 1,
+            generation: 1,
+            default: 0.0,
+        };
         assert_eq!(spring_val.get(&ctx), 42.0);
     }
 }

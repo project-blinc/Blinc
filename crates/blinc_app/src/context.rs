@@ -195,7 +195,7 @@ impl RenderContext {
                 text.color,
                 anchor,
                 alignment,
-                Some(text.width),  // Width for alignment (wrapping disabled internally)
+                Some(text.width), // Width for alignment (wrapping disabled internally)
             ) {
                 // Apply clip bounds to all glyphs if the text element has clip bounds
                 if let Some(clip) = text.clip_bounds {
@@ -340,7 +340,8 @@ impl RenderContext {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
             let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -762,7 +763,8 @@ impl RenderContext {
                 } => {
                     if *opacity > 0.0 {
                         // Apply opacity to cursor color
-                        let cursor_color = Color::rgba(color.r, color.g, color.b, color.a * opacity);
+                        let cursor_color =
+                            Color::rgba(color.r, color.g, color.b, color.a * opacity);
                         overlay_ctx.execute_command(&DrawCommand::FillRect {
                             rect: Rect::new(position.0, position.1, size.0, size.1),
                             corner_radius: CornerRadius::default(),

@@ -147,7 +147,9 @@ impl TextRenderingContext {
     ) -> Result<Vec<GpuGlyph>, blinc_text::TextError> {
         // For regular text, disable wrapping (LineBreakMode::None)
         // This allows width to be used for alignment only
-        self.prepare_text_full(text, x, y, font_size, color, anchor, alignment, width, false)
+        self.prepare_text_full(
+            text, x, y, font_size, color, anchor, alignment, width, false,
+        )
     }
 
     /// Prepare text with full control over wrapping behavior
@@ -246,7 +248,10 @@ impl TextRenderingContext {
     /// for accurate measurement.
     pub fn measure_text(&mut self, text: &str, font_size: f32) -> (f32, f32) {
         let options = LayoutOptions::default();
-        match self.renderer.prepare_text(text, font_size, [0.0; 4], &options) {
+        match self
+            .renderer
+            .prepare_text(text, font_size, [0.0; 4], &options)
+        {
             Ok(prepared) => (prepared.width, prepared.height),
             Err(_) => {
                 // Fallback to estimation if font not loaded
@@ -263,7 +268,10 @@ impl TextRenderingContext {
     /// Returns TextMeasurement with width, height, ascender, and descender.
     pub fn measure_text_full(&mut self, text: &str, font_size: f32) -> TextMeasurement {
         let options = LayoutOptions::default();
-        match self.renderer.prepare_text(text, font_size, [0.0; 4], &options) {
+        match self
+            .renderer
+            .prepare_text(text, font_size, [0.0; 4], &options)
+        {
             Ok(prepared) => TextMeasurement {
                 width: prepared.width,
                 height: prepared.height,

@@ -3,7 +3,9 @@
 //! Provides the core abstractions for building layout trees that can be
 //! rendered via the DrawContext API.
 
-use blinc_core::{Brush, Color, CornerRadius, DynFloat, DynValue, Rect, Shadow, Transform, ValueContext};
+use blinc_core::{
+    Brush, Color, CornerRadius, DynFloat, DynValue, Rect, Shadow, Transform, ValueContext,
+};
 use taffy::Layout;
 
 use crate::tree::LayoutNodeId;
@@ -807,7 +809,10 @@ impl DynRenderProps {
 
     /// Set background from a signal reference
     pub fn with_background_signal(mut self, signal_id: u64, default: Brush) -> Self {
-        self.background = Some(DynValue::Signal { id: signal_id, default });
+        self.background = Some(DynValue::Signal {
+            id: signal_id,
+            default,
+        });
         self
     }
 
@@ -819,13 +824,20 @@ impl DynRenderProps {
 
     /// Set opacity from a signal reference
     pub fn with_opacity_signal(mut self, signal_id: u64, default: f32) -> Self {
-        self.opacity = DynFloat::Signal { id: signal_id, default };
+        self.opacity = DynFloat::Signal {
+            id: signal_id,
+            default,
+        };
         self
     }
 
     /// Set opacity from a spring animation
     pub fn with_opacity_spring(mut self, spring_id: u64, generation: u32, default: f32) -> Self {
-        self.opacity = DynFloat::Spring { id: spring_id, generation, default };
+        self.opacity = DynFloat::Spring {
+            id: spring_id,
+            generation,
+            default,
+        };
         self
     }
 }

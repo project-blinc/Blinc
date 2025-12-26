@@ -15,7 +15,7 @@
 
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
-use blinc_layout::prelude::{ScrollPhysics, SharedScrollPhysics, Scroll};
+use blinc_layout::prelude::{Scroll, ScrollPhysics, SharedScrollPhysics};
 use std::sync::{Arc, Mutex};
 
 fn main() -> Result<()> {
@@ -224,13 +224,13 @@ fn build_scroll_content(direction: ScrollDirection) -> impl ElementBuilder {
 }
 
 /// Build a glass content card with title, description, and accent color
-fn content_card(title: &str, description: &str, accent: Color, is_horizontal: bool) -> impl ElementBuilder {
-    let card = div()
-        .glass()
-        .rounded(16.0)
-        .p(20.0)
-        .flex_col()
-        .gap(8.0);
+fn content_card(
+    title: &str,
+    description: &str,
+    accent: Color,
+    is_horizontal: bool,
+) -> impl ElementBuilder {
+    let card = div().glass().rounded(16.0).p(20.0).flex_col().gap(8.0);
 
     let card = if is_horizontal {
         // Fixed width, no shrinking, full height in horizontal mode
@@ -241,13 +241,7 @@ fn content_card(title: &str, description: &str, accent: Color, is_horizontal: bo
 
     card
         // Accent bar at top
-        .child(
-            div()
-                .w_full()
-                .h(4.0)
-                .bg(accent)
-                .rounded(2.0),
-        )
+        .child(div().w_full().h(4.0).bg(accent).rounded(2.0))
         // Title
         .child(
             text(title)
@@ -280,14 +274,14 @@ fn simple_card(title: &str, description: &str, is_horizontal: bool) -> impl Elem
     };
 
     card.child(
-            text(title)
-                .size(20.0)
-                .weight(FontWeight::SemiBold)
-                .color(Color::WHITE),
-        )
-        .child(
-            text(description)
-                .size(14.0)
-                .color(Color::rgba(1.0, 1.0, 1.0, 0.6)),
-        )
+        text(title)
+            .size(20.0)
+            .weight(FontWeight::SemiBold)
+            .color(Color::WHITE),
+    )
+    .child(
+        text(description)
+            .size(14.0)
+            .color(Color::rgba(1.0, 1.0, 1.0, 0.6)),
+    )
 }

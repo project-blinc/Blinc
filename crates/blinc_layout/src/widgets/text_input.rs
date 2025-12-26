@@ -46,7 +46,8 @@ static NEEDS_REBUILD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicB
 
 /// Global flag indicating continuous redraws are needed (e.g., cursor blink)
 /// Unlike NEEDS_REBUILD, this doesn't trigger tree rebuild, just visual refresh
-static NEEDS_CONTINUOUS_REDRAW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static NEEDS_CONTINUOUS_REDRAW: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// Global reference to the currently focused text input state
 /// Used to forcibly blur the previous input when a new one gains focus
@@ -54,7 +55,8 @@ static FOCUSED_TEXT_INPUT: Mutex<Option<Weak<Mutex<TextInputState>>>> = Mutex::n
 
 /// Global reference to the currently focused text area state
 /// Stored separately since TextAreaState is a different type
-static FOCUSED_TEXT_AREA: Mutex<Option<Weak<Mutex<crate::widgets::text_area::TextAreaState>>>> = Mutex::new(None);
+static FOCUSED_TEXT_AREA: Mutex<Option<Weak<Mutex<crate::widgets::text_area::TextAreaState>>>> =
+    Mutex::new(None);
 
 /// Check if any text input is currently focused
 /// This is used by the windowed app to trigger cursor blink rebuilds
@@ -116,8 +118,8 @@ pub(crate) fn decrement_focus_count() {
 /// Set the currently focused text input state (called when gaining focus)
 /// This will forcibly blur any previously focused text input
 pub(crate) fn set_focused_text_input(state: &SharedTextInputState) {
-    use blinc_core::events::event_types;
     use crate::stateful::StateTransitions;
+    use blinc_core::events::event_types;
 
     let mut focused = FOCUSED_TEXT_INPUT.lock().unwrap();
 
@@ -160,8 +162,8 @@ pub(crate) fn clear_focused_text_input(state: &SharedTextInputState) {
 /// Set the currently focused text area state (called when gaining focus)
 /// This will forcibly blur any previously focused text input or area
 pub(crate) fn set_focused_text_area(state: &crate::widgets::text_area::SharedTextAreaState) {
-    use blinc_core::events::event_types;
     use crate::stateful::StateTransitions;
+    use blinc_core::events::event_types;
 
     // First, blur any focused text input
     {
@@ -217,8 +219,8 @@ pub(crate) fn clear_focused_text_area(state: &crate::widgets::text_area::SharedT
 
 /// Helper to blur focused text area (called from set_focused_text_input)
 fn blur_focused_text_area() {
-    use blinc_core::events::event_types;
     use crate::stateful::StateTransitions;
+    use blinc_core::events::event_types;
 
     let mut focused = FOCUSED_TEXT_AREA.lock().unwrap();
     if let Some(weak) = focused.take() {
@@ -241,9 +243,9 @@ use crate::div::{div, Div, ElementBuilder};
 use crate::element::RenderProps;
 use crate::stateful::TextFieldState;
 use crate::text::text;
-use crate::text_selection::{set_selection, clear_selection, SelectionSource};
+use crate::text_selection::{clear_selection, set_selection, SelectionSource};
 use crate::tree::{LayoutNodeId, LayoutTree};
-use crate::widgets::cursor::{CursorAnimation, SharedCursorState, cursor_state};
+use crate::widgets::cursor::{cursor_state, CursorAnimation, SharedCursorState};
 
 /// Input type enum similar to HTML input types
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -294,9 +296,7 @@ impl InputType {
                 let parts: Vec<&str> = value.split('@').collect();
                 parts.len() == 2 && !parts[0].is_empty() && parts[1].contains('.')
             }
-            InputType::Url => {
-                value.starts_with("http://") || value.starts_with("https://")
-            }
+            InputType::Url => value.starts_with("http://") || value.starts_with("https://"),
         }
     }
 
@@ -572,14 +572,25 @@ impl TextInputState {
             if let Ok(num) = self.value.parse::<f64>() {
                 if !self.constraints.validate(num) {
                     self.is_valid = false;
-                    let min = self.constraints.min.map(|v| v.to_string()).unwrap_or_default();
-                    let max = self.constraints.max.map(|v| v.to_string()).unwrap_or_default();
-                    self.validation_error = Some(match (self.constraints.min, self.constraints.max) {
-                        (Some(_), Some(_)) => format!("Value must be between {} and {}", min, max),
-                        (Some(_), None) => format!("Value must be at least {}", min),
-                        (None, Some(_)) => format!("Value must be at most {}", max),
-                        (None, None) => "Invalid value".to_string(),
-                    });
+                    let min = self
+                        .constraints
+                        .min
+                        .map(|v| v.to_string())
+                        .unwrap_or_default();
+                    let max = self
+                        .constraints
+                        .max
+                        .map(|v| v.to_string())
+                        .unwrap_or_default();
+                    self.validation_error =
+                        Some(match (self.constraints.min, self.constraints.max) {
+                            (Some(_), Some(_)) => {
+                                format!("Value must be between {} and {}", min, max)
+                            }
+                            (Some(_), None) => format!("Value must be at least {}", min),
+                            (None, Some(_)) => format!("Value must be at most {}", max),
+                            (None, None) => "Invalid value".to_string(),
+                        });
                     return;
                 }
             }
@@ -603,7 +614,8 @@ impl TextInputState {
         self.delete_selection();
 
         // Filter characters based on input type
-        let filtered: String = text.chars()
+        let filtered: String = text
+            .chars()
             .filter(|c| self.input_type.allows_char(*c))
             .collect();
 
@@ -891,7 +903,10 @@ impl TextInput {
         };
 
         // Check if cursor should be shown (focused state)
-        let is_focused = matches!(state_guard.visual, TextFieldState::Focused | TextFieldState::FocusedHovered);
+        let is_focused = matches!(
+            state_guard.visual,
+            TextFieldState::Focused | TextFieldState::FocusedHovered
+        );
         let cursor_color = config.cursor_color;
         let selection_color = config.selection_color;
 
@@ -931,20 +946,18 @@ impl TextInput {
             .h_full()
             .bg(bg)
             .rounded(config.corner_radius - 1.0)
-            .padding_x_px(config.padding_x)  // Use raw pixels, not 4x units
-            .relative()  // Enable absolute positioning for children
+            .padding_x_px(config.padding_x) // Use raw pixels, not 4x units
+            .relative() // Enable absolute positioning for children
             .flex_row()
-            .justify_start()  // Text starts from left
-            .items_center()   // Vertically centered
+            .justify_start() // Text starts from left
+            .items_center() // Vertically centered
             .overflow_clip();
 
         // Always render the full text (if any)
         if !display.is_empty() {
             if let Some((sel_start, sel_end)) = selection_range {
                 // Has selection: render in three parts with highlighting
-                let mut text_container = div()
-                    .flex_row()
-                    .items_center();
+                let mut text_container = div().flex_row().items_center();
 
                 // 1. Text before selection (normal)
                 let before_sel: String = display.chars().take(sel_start).collect();
@@ -954,24 +967,25 @@ impl TextInput {
                             .size(config.font_size)
                             .color(text_color)
                             .text_left()
-                            .v_center()
+                            .v_center(),
                     );
                 }
 
                 // 2. Selected text (highlighted)
-                let selected: String = display.chars().skip(sel_start).take(sel_end - sel_start).collect();
+                let selected: String = display
+                    .chars()
+                    .skip(sel_start)
+                    .take(sel_end - sel_start)
+                    .collect();
                 if !selected.is_empty() {
                     text_container = text_container.child(
-                        div()
-                            .bg(selection_color)
-                            .rounded(2.0)
-                            .child(
-                                text(&selected)
-                                    .size(config.font_size)
-                                    .color(text_color)
-                                    .text_left()
-                                    .v_center()
-                            )
+                        div().bg(selection_color).rounded(2.0).child(
+                            text(&selected)
+                                .size(config.font_size)
+                                .color(text_color)
+                                .text_left()
+                                .v_center(),
+                        ),
                     );
                 }
 
@@ -983,7 +997,7 @@ impl TextInput {
                             .size(config.font_size)
                             .color(text_color)
                             .text_left()
-                            .v_center()
+                            .v_center(),
                     );
                 }
 
@@ -1017,31 +1031,34 @@ impl TextInput {
 
             // Create canvas-based cursor with smooth fade animation
             let cursor_state_clone = Arc::clone(&cursor_state_for_canvas);
-            let cursor_canvas = canvas(move |ctx: &mut dyn blinc_core::DrawContext, bounds: crate::canvas::CanvasBounds| {
-                let cs = cursor_state_clone.lock().unwrap();
+            let cursor_canvas = canvas(
+                move |ctx: &mut dyn blinc_core::DrawContext,
+                      bounds: crate::canvas::CanvasBounds| {
+                    let cs = cursor_state_clone.lock().unwrap();
 
-                if !cs.visible {
-                    return;
-                }
+                    if !cs.visible {
+                        return;
+                    }
 
-                let opacity = cs.current_opacity();
-                if opacity < 0.01 {
-                    return;
-                }
+                    let opacity = cs.current_opacity();
+                    if opacity < 0.01 {
+                        return;
+                    }
 
-                let color = blinc_core::Color::rgba(
-                    cs.color.r,
-                    cs.color.g,
-                    cs.color.b,
-                    cs.color.a * opacity,
-                );
+                    let color = blinc_core::Color::rgba(
+                        cs.color.r,
+                        cs.color.g,
+                        cs.color.b,
+                        cs.color.a * opacity,
+                    );
 
-                ctx.fill_rect(
-                    blinc_core::Rect::new(0.0, 0.0, cs.width, bounds.height),
-                    blinc_core::CornerRadius::default(),
-                    blinc_core::Brush::Solid(color),
-                );
-            })
+                    ctx.fill_rect(
+                        blinc_core::Rect::new(0.0, 0.0, cs.width, bounds.height),
+                        blinc_core::CornerRadius::default(),
+                        blinc_core::Brush::Solid(color),
+                    );
+                },
+            )
             .absolute()
             .left(config.padding_x + cursor_x)
             .top(cursor_top)
@@ -1058,8 +1075,8 @@ impl TextInput {
 
         // Build the outer container with size from config
         // Use FSM transitions via StateTransitions::on_event
-        use blinc_core::events::event_types;
         use crate::stateful::StateTransitions;
+        use blinc_core::events::event_types;
 
         let state_for_click = Arc::clone(state);
         let config_for_click = config.clone();
@@ -1088,7 +1105,9 @@ impl TextInput {
                         // Then try FOCUS as fallback (Idle -> Focused)
                         let was_focused = s.visual.is_focused();
                         let old_state = s.visual;
-                        if let Some(new_state) = s.visual.on_event(event_types::POINTER_DOWN)
+                        if let Some(new_state) = s
+                            .visual
+                            .on_event(event_types::POINTER_DOWN)
                             .or_else(|| s.visual.on_event(event_types::FOCUS))
                         {
                             s.visual = new_state;
@@ -1097,7 +1116,11 @@ impl TextInput {
                                 increment_focus_count();
                                 request_continuous_redraw();
                             }
-                            tracing::info!("TextInput mouse_down: {:?} -> {:?}", old_state, new_state);
+                            tracing::info!(
+                                "TextInput mouse_down: {:?} -> {:?}",
+                                old_state,
+                                new_state
+                            );
                         } else {
                             tracing::info!("TextInput mouse_down: already focused {:?}", old_state);
                         }
@@ -1105,7 +1128,9 @@ impl TextInput {
                         // Always position cursor on click (even if already focused)
                         // local_x is relative to the text input element
                         // We need to account for padding and border
-                        let click_x = ctx.local_x - config_for_click.padding_x - config_for_click.border_width;
+                        let click_x = ctx.local_x
+                            - config_for_click.padding_x
+                            - config_for_click.border_width;
 
                         if click_x <= 0.0 || s.value.is_empty() {
                             // Click before text or empty - cursor at start
@@ -1120,8 +1145,16 @@ impl TextInput {
                                 let text_before: String = display_text.chars().take(i).collect();
                                 let text_at: String = display_text.chars().take(i + 1).collect();
 
-                                let width_before = crate::text_measure::measure_text(&text_before, config_for_click.font_size).width;
-                                let width_at = crate::text_measure::measure_text(&text_at, config_for_click.font_size).width;
+                                let width_before = crate::text_measure::measure_text(
+                                    &text_before,
+                                    config_for_click.font_size,
+                                )
+                                .width;
+                                let width_at = crate::text_measure::measure_text(
+                                    &text_at,
+                                    config_for_click.font_size,
+                                )
+                                .width;
 
                                 // Check if click is between these two positions
                                 let char_center = (width_before + width_at) / 2.0;
@@ -1138,7 +1171,11 @@ impl TextInput {
                         s.selection_start = None;
                         s.reset_cursor_blink(elapsed_ms());
                         s.sync_global_selection();
-                        tracing::debug!("TextInput clicked, was_focused: {}, cursor: {}", was_focused, s.cursor);
+                        tracing::debug!(
+                            "TextInput clicked, was_focused: {}, cursor: {}",
+                            was_focused,
+                            s.cursor
+                        );
                     }
                 }
                 // Request rebuild for focus/cursor change
@@ -1156,9 +1193,16 @@ impl TextInput {
                             if was_focused && !new_state.is_focused() {
                                 decrement_focus_count();
                             }
-                            tracing::info!("TextInput blur received: {:?} -> {:?}", old_state, new_state);
+                            tracing::info!(
+                                "TextInput blur received: {:?} -> {:?}",
+                                old_state,
+                                new_state
+                            );
                         } else {
-                            tracing::info!("TextInput blur received but no transition from {:?}", old_state);
+                            tracing::info!(
+                                "TextInput blur received but no transition from {:?}",
+                                old_state
+                            );
                         }
                     }
                 }

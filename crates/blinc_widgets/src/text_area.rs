@@ -349,7 +349,8 @@ impl TextAreaState {
     /// Update animations
     pub fn update(&mut self, dt: f32, is_focused: bool) {
         // Update focus spring
-        self.focus_spring.set_target(if is_focused { 1.0 } else { 0.0 });
+        self.focus_spring
+            .set_target(if is_focused { 1.0 } else { 0.0 });
         self.focus_spring.step(dt);
         self.focus_value = self.focus_spring.value();
 
@@ -460,7 +461,8 @@ impl TextAreaState {
         }
 
         if self.cursor.column > 0 {
-            let start_byte = char_to_byte_pos(&self.lines[self.cursor.line], self.cursor.column - 1);
+            let start_byte =
+                char_to_byte_pos(&self.lines[self.cursor.line], self.cursor.column - 1);
             let end_byte = char_to_byte_pos(&self.lines[self.cursor.line], self.cursor.column);
             self.lines[self.cursor.line].replace_range(start_byte..end_byte, "");
             self.cursor.column -= 1;
@@ -675,10 +677,7 @@ impl TextAreaState {
             self.selection_start = None;
         }
         let last_line = self.lines.len().saturating_sub(1);
-        self.cursor = TextPosition::new(
-            last_line,
-            self.lines[last_line].chars().count(),
-        );
+        self.cursor = TextPosition::new(last_line, self.lines[last_line].chars().count());
         self.reset_blink();
     }
 
@@ -686,10 +685,7 @@ impl TextAreaState {
     pub fn select_all(&mut self) {
         self.selection_start = Some(TextPosition::new(0, 0));
         let last_line = self.lines.len().saturating_sub(1);
-        self.cursor = TextPosition::new(
-            last_line,
-            self.lines[last_line].chars().count(),
-        );
+        self.cursor = TextPosition::new(last_line, self.lines[last_line].chars().count());
         self.reset_blink();
     }
 
@@ -730,7 +726,6 @@ impl TextAreaState {
     pub fn take_changed(&mut self) -> bool {
         std::mem::take(&mut self.changed)
     }
-
 }
 
 /// Convert character index to byte index (helper function)
@@ -784,12 +779,32 @@ impl TextArea {
                 .on(states::HOVERED, event_types::POINTER_DOWN, states::FOCUSED)
                 .on(states::HOVERED, event_types::FOCUS, states::FOCUSED_HOVERED)
                 .on(states::FOCUSED, event_types::BLUR, states::IDLE)
-                .on(states::FOCUSED, event_types::POINTER_ENTER, states::FOCUSED_HOVERED)
-                .on(states::FOCUSED, event_types::POINTER_DOWN, states::SELECTING)
-                .on(states::FOCUSED_HOVERED, event_types::POINTER_LEAVE, states::FOCUSED)
+                .on(
+                    states::FOCUSED,
+                    event_types::POINTER_ENTER,
+                    states::FOCUSED_HOVERED,
+                )
+                .on(
+                    states::FOCUSED,
+                    event_types::POINTER_DOWN,
+                    states::SELECTING,
+                )
+                .on(
+                    states::FOCUSED_HOVERED,
+                    event_types::POINTER_LEAVE,
+                    states::FOCUSED,
+                )
                 .on(states::FOCUSED_HOVERED, event_types::BLUR, states::HOVERED)
-                .on(states::FOCUSED_HOVERED, event_types::POINTER_DOWN, states::SELECTING)
-                .on(states::SELECTING, event_types::POINTER_UP, states::FOCUSED_HOVERED)
+                .on(
+                    states::FOCUSED_HOVERED,
+                    event_types::POINTER_DOWN,
+                    states::SELECTING,
+                )
+                .on(
+                    states::SELECTING,
+                    event_types::POINTER_UP,
+                    states::FOCUSED_HOVERED,
+                )
                 .on(states::SELECTING, event_types::BLUR, states::IDLE)
                 .build()
         }
@@ -803,7 +818,10 @@ impl TextArea {
     /// Check if the text area is focused
     pub fn is_focused(&self, ctx: &WidgetContext) -> bool {
         let state = ctx.get_fsm_state(self.id).unwrap_or(states::IDLE);
-        matches!(state, states::FOCUSED | states::FOCUSED_HOVERED | states::SELECTING)
+        matches!(
+            state,
+            states::FOCUSED | states::FOCUSED_HOVERED | states::SELECTING
+        )
     }
 
     /// Get the current value
@@ -957,7 +975,8 @@ impl TextArea {
 
             state.update(dt, is_focused);
 
-            if (state.focus_value - old_focus).abs() > 0.001 || state.cursor_visible != old_visible {
+            if (state.focus_value - old_focus).abs() > 0.001 || state.cursor_visible != old_visible
+            {
                 ctx.mark_dirty(self.id);
             }
         }
@@ -991,10 +1010,7 @@ impl TextArea {
         let line_height = self.config.font_size * self.config.line_height;
         let is_empty = state.lines.len() == 1 && state.lines[0].is_empty();
 
-        let mut content = div()
-            .w_full()
-            .flex_col()
-            .gap(0.0);
+        let mut content = div().w_full().flex_col().gap(0.0);
 
         if is_empty {
             // Show placeholder

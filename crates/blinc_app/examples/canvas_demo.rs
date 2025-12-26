@@ -11,10 +11,12 @@
 //!
 //! Run with: cargo run -p blinc_app --example canvas_demo --features windowed
 
+use blinc_animation::{AnimatedValue, SpringConfig};
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
-use blinc_animation::{AnimatedValue, SpringConfig};
-use blinc_core::{Brush, Color, CornerRadius, DrawContext, Gradient, GradientStop, Point, Rect, TextStyle};
+use blinc_core::{
+    Brush, Color, CornerRadius, DrawContext, Gradient, GradientStop, Point, Rect, TextStyle,
+};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -43,11 +45,7 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
         .gap(20.0)
         .p(30.0)
         // Title
-        .child(
-            text("Canvas Element Demo")
-                .size(28.0)
-                .color(Color::WHITE),
-        )
+        .child(text("Canvas Element Demo").size(28.0).color(Color::WHITE))
         .child(
             text("Custom GPU drawing within the layout system")
                 .size(14.0)
@@ -56,7 +54,7 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
         // Demo grid
         .child(
             div()
-            .w_fit()
+                .w_fit()
                 .flex_row()
                 .flex_wrap()
                 .gap(20.0)
@@ -235,7 +233,7 @@ fn progress_bar_canvas(progress: f32) -> Canvas {
         // Draw the percentage text
         ctx.draw_text(
             &format!("{}%", percent),
-            Point::new(text_x, bar_y ),
+            Point::new(text_x, bar_y),
             &TextStyle::new(18.0).with_color(Color::WHITE),
         );
     })

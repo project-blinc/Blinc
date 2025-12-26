@@ -183,7 +183,10 @@ pub enum CheckboxState {
 impl CheckboxState {
     /// Returns true if the checkbox is checked
     pub fn is_checked(&self) -> bool {
-        matches!(self, CheckboxState::CheckedIdle | CheckboxState::CheckedHovered)
+        matches!(
+            self,
+            CheckboxState::CheckedIdle | CheckboxState::CheckedHovered
+        )
     }
 
     /// Returns true if the checkbox is hovered
@@ -403,7 +406,7 @@ pub struct Stateful<S: StateTransitions> {
     shared_state: Arc<Mutex<StatefulInner<S>>>,
 }
 
-/// Internal state for Stateful<S>, wrapped in Arc<Mutex<...>> for event handler access
+/// Internal state for `Stateful<S>`, wrapped in `Arc<Mutex<...>>` for event handler access
 ///
 /// This is exposed publicly so that `SharedState<S>` can be created externally
 /// for state persistence across rebuilds.
@@ -1322,7 +1325,6 @@ pub type TextField = Stateful<TextFieldState>;
 /// A scroll container element with momentum scrolling
 pub type ScrollContainer = Stateful<ScrollState>;
 
-
 // =========================================================================
 // Convenience Constructors
 // =========================================================================
@@ -1395,8 +1397,11 @@ mod tests {
 
     #[test]
     fn test_stateful_basic() {
-        let elem: Stateful<ButtonState> =
-            Stateful::new(ButtonState::Idle).w(100.0).h(40.0).bg(Color::BLUE).rounded(8.0);
+        let elem: Stateful<ButtonState> = Stateful::new(ButtonState::Idle)
+            .w(100.0)
+            .h(40.0)
+            .bg(Color::BLUE)
+            .rounded(8.0);
 
         let mut tree = LayoutTree::new();
         let _node = elem.build(&mut tree);
@@ -1493,11 +1498,9 @@ mod tests {
         let call_count = Arc::new(AtomicU32::new(0));
         let call_count_clone = Arc::clone(&call_count);
 
-        let _elem = stateful_button()
-            .w(100.0)
-            .on_state(move |_state, _div| {
-                call_count_clone.fetch_add(1, Ordering::SeqCst);
-            });
+        let _elem = stateful_button().w(100.0).on_state(move |_state, _div| {
+            call_count_clone.fetch_add(1, Ordering::SeqCst);
+        });
 
         assert_eq!(call_count.load(Ordering::SeqCst), 1);
     }

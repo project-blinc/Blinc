@@ -3,7 +3,9 @@
 //! Wraps the android-activity event polling to implement the blinc_platform EventLoop trait.
 
 use crate::window::AndroidWindow;
-use blinc_platform::{ControlFlow, Event, EventLoop, LifecycleEvent, PlatformError, WindowEvent};
+use blinc_platform::{
+    ControlFlow, Event, EventLoop, LifecycleEvent, PlatformError, Window, WindowEvent,
+};
 
 #[cfg(target_os = "android")]
 use android_activity::{AndroidApp, MainEvent, PollEvent};

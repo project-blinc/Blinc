@@ -395,15 +395,27 @@ impl WidgetContextExt for WidgetContext {
 
         StateMachine::builder(UNCHECKED_IDLE)
             // Unchecked hover transitions
-            .on(UNCHECKED_IDLE, event_types::POINTER_ENTER, UNCHECKED_HOVERED)
-            .on(UNCHECKED_HOVERED, event_types::POINTER_LEAVE, UNCHECKED_IDLE)
+            .on(
+                UNCHECKED_IDLE,
+                event_types::POINTER_ENTER,
+                UNCHECKED_HOVERED,
+            )
+            .on(
+                UNCHECKED_HOVERED,
+                event_types::POINTER_LEAVE,
+                UNCHECKED_IDLE,
+            )
             .on(
                 UNCHECKED_HOVERED,
                 event_types::POINTER_DOWN,
                 UNCHECKED_PRESSED,
             )
             .on(UNCHECKED_PRESSED, event_types::POINTER_UP, CHECKED_HOVERED) // Toggle on click
-            .on(UNCHECKED_PRESSED, event_types::POINTER_LEAVE, UNCHECKED_IDLE)
+            .on(
+                UNCHECKED_PRESSED,
+                event_types::POINTER_LEAVE,
+                UNCHECKED_IDLE,
+            )
             // Checked hover transitions
             .on(CHECKED_IDLE, event_types::POINTER_ENTER, CHECKED_HOVERED)
             .on(CHECKED_HOVERED, event_types::POINTER_LEAVE, CHECKED_IDLE)

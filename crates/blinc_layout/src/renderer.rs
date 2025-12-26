@@ -317,11 +317,9 @@ impl RenderTree {
                     ElementType::Div
                 }
             }
-            ElementTypeId::Canvas => {
-                ElementType::Canvas(CanvasData {
-                    render_fn: element.canvas_render_info(),
-                })
-            }
+            ElementTypeId::Canvas => ElementType::Canvas(CanvasData {
+                render_fn: element.canvas_render_info(),
+            }),
             ElementTypeId::Div => ElementType::Div,
         };
 
@@ -395,11 +393,9 @@ impl RenderTree {
                     ElementType::Div
                 }
             }
-            ElementTypeId::Canvas => {
-                ElementType::Canvas(CanvasData {
-                    render_fn: element.canvas_render_info(),
-                })
-            }
+            ElementTypeId::Canvas => ElementType::Canvas(CanvasData {
+                render_fn: element.canvas_render_info(),
+            }),
             ElementTypeId::Div => ElementType::Div,
         }
     }
@@ -438,7 +434,8 @@ impl RenderTree {
 
             // Get content size from Taffy's content_size (enabled via feature)
             // This tells us the total size of all content that may overflow
-            let (content_width, content_height) = self.layout_tree
+            let (content_width, content_height) = self
+                .layout_tree
                 .get_content_size(node_id)
                 .unwrap_or((viewport_width, viewport_height));
 
@@ -628,6 +625,53 @@ impl RenderTree {
         }
     }
 
+    /// Broadcast a text input event to ALL text input handlers
+    ///
+    /// This is used when the router's focused node ID may be stale after a tree rebuild.
+    /// Each text input handler checks its own internal focus state (`s.visual.is_focused()`)
+    /// to determine if it should process the event.
+    pub fn broadcast_text_input_event(
+        &mut self,
+        key_char: char,
+        shift: bool,
+        ctrl: bool,
+        alt: bool,
+        meta: bool,
+    ) {
+        let ctx = crate::event_handler::EventContext::new(
+            blinc_core::events::event_types::TEXT_INPUT,
+            crate::tree::LayoutNodeId::default(), // Will be overwritten per-node
+        )
+        .with_key_char(key_char)
+        .with_modifiers(shift, ctrl, alt, meta);
+
+        self.handler_registry
+            .broadcast(blinc_core::events::event_types::TEXT_INPUT, &ctx);
+    }
+
+    /// Broadcast a key event to ALL key handlers
+    ///
+    /// This is used when the router's focused node ID may be stale after a tree rebuild.
+    /// Each handler checks its own internal focus state to determine if it should process.
+    pub fn broadcast_key_event(
+        &mut self,
+        event_type: blinc_core::events::EventType,
+        key_code: u32,
+        shift: bool,
+        ctrl: bool,
+        alt: bool,
+        meta: bool,
+    ) {
+        let ctx = crate::event_handler::EventContext::new(
+            event_type,
+            crate::tree::LayoutNodeId::default(), // Will be overwritten per-node
+        )
+        .with_key_code(key_code)
+        .with_modifiers(shift, ctrl, alt, meta);
+
+        self.handler_registry.broadcast(event_type, &ctx);
+    }
+
     /// Dispatch a scroll event with scroll delta
     ///
     /// Updates the scroll offset for this node and dispatches to handlers.
@@ -667,13 +711,27 @@ impl RenderTree {
 
     /// Apply a scroll delta to a node's scroll offset (without bounds checking)
     pub fn apply_scroll_delta(&mut self, node_id: LayoutNodeId, delta_x: f32, delta_y: f32) {
-        let (current_x, current_y) = self.scroll_offsets.get(&node_id).copied().unwrap_or((0.0, 0.0));
-        self.scroll_offsets.insert(node_id, (current_x + delta_x, current_y + delta_y));
+        let (current_x, current_y) = self
+            .scroll_offsets
+            .get(&node_id)
+            .copied()
+            .unwrap_or((0.0, 0.0));
+        self.scroll_offsets
+            .insert(node_id, (current_x + delta_x, current_y + delta_y));
     }
 
     /// Apply a scroll delta with bounds checking based on viewport and content size
-    pub fn apply_scroll_delta_with_bounds(&mut self, node_id: LayoutNodeId, delta_x: f32, delta_y: f32) {
-        let (current_x, current_y) = self.scroll_offsets.get(&node_id).copied().unwrap_or((0.0, 0.0));
+    pub fn apply_scroll_delta_with_bounds(
+        &mut self,
+        node_id: LayoutNodeId,
+        delta_x: f32,
+        delta_y: f32,
+    ) {
+        let (current_x, current_y) = self
+            .scroll_offsets
+            .get(&node_id)
+            .copied()
+            .unwrap_or((0.0, 0.0));
 
         // Get the viewport bounds for this node (parent offset doesn't matter for size)
         let bounds = self.layout_tree.get_bounds(node_id, (0.0, 0.0));
@@ -681,7 +739,8 @@ impl RenderTree {
         let viewport_height = bounds.map(|b| b.height).unwrap_or(0.0);
 
         // Get content size from Taffy's content_size
-        let (content_width, content_height) = self.layout_tree
+        let (content_width, content_height) = self
+            .layout_tree
             .get_content_size(node_id)
             .unwrap_or((viewport_width, viewport_height));
 
@@ -729,7 +788,10 @@ impl RenderTree {
             }
         }
         // Fallback to legacy scroll_offsets
-        self.scroll_offsets.get(&node_id).copied().unwrap_or((0.0, 0.0))
+        self.scroll_offsets
+            .get(&node_id)
+            .copied()
+            .unwrap_or((0.0, 0.0))
     }
 
     /// Transfer scroll offsets from another tree (preserves scroll position across rebuilds)
@@ -790,9 +852,7 @@ impl RenderTree {
                 // Clone and downcast the Arc
                 let cloned = Arc::clone(existing);
                 // SAFETY: We just verified the type matches
-                return unsafe {
-                    Arc::from_raw(Arc::into_raw(cloned) as *const Mutex<S>)
-                };
+                return unsafe { Arc::from_raw(Arc::into_raw(cloned) as *const Mutex<S>) };
             }
         }
 

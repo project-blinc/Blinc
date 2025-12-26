@@ -206,11 +206,8 @@ impl Checkbox {
 
         // Add checkmark if checked
         if is_checked {
-            checkbox_box = checkbox_box.child(
-                text("✓")
-                    .size(config.size * 0.7)
-                    .color(config.check_color),
-            );
+            checkbox_box =
+                checkbox_box.child(text("✓").size(config.size * 0.7).color(config.check_color));
         }
 
         // Apply disabled opacity
@@ -219,7 +216,11 @@ impl Checkbox {
         }
 
         // Build final element
-        let mut container = div().flex_row().gap(config.gap).items_center().child(checkbox_box);
+        let mut container = div()
+            .flex_row()
+            .gap(config.gap)
+            .items_center()
+            .child(checkbox_box);
 
         // Add label if present
         if let Some(ref label) = config.label {
@@ -234,11 +235,8 @@ impl Checkbox {
                 config.label_color
             };
 
-            container = container.child(
-                text(label)
-                    .size(config.label_font_size)
-                    .color(label_color),
-            );
+            container =
+                container.child(text(label).size(config.label_font_size).color(label_color));
         }
 
         container

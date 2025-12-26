@@ -150,7 +150,8 @@ impl CheckboxState {
 
     /// Set the checkmark visibility target
     pub fn set_check_target(&mut self, visible: bool) {
-        self.check_spring.set_target(if visible { 1.0 } else { 0.0 });
+        self.check_spring
+            .set_target(if visible { 1.0 } else { 0.0 });
     }
 
     /// Check if the value just changed and clear the flag

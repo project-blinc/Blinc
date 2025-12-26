@@ -13,7 +13,9 @@
 use blinc_core::{Color, Shadow, Transform};
 use taffy::prelude::*;
 
-use crate::div::{ElementBuilder, ElementTypeId, FontWeight, TextAlign, TextRenderInfo, TextVerticalAlign};
+use crate::div::{
+    ElementBuilder, ElementTypeId, FontWeight, TextAlign, TextRenderInfo, TextVerticalAlign,
+};
 use crate::element::{RenderLayer, RenderProps};
 use crate::tree::{LayoutNodeId, LayoutTree};
 

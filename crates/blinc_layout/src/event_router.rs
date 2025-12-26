@@ -177,11 +177,19 @@ impl EventRouter {
     }
 
     /// Set focus to an element with its ancestor chain (for proper BLUR bubbling)
-    pub fn set_focus_with_ancestors(&mut self, node: Option<LayoutNodeId>, ancestors: Vec<LayoutNodeId>) {
+    pub fn set_focus_with_ancestors(
+        &mut self,
+        node: Option<LayoutNodeId>,
+        ancestors: Vec<LayoutNodeId>,
+    ) {
         // Send BLUR to old focused element AND bubble to its ancestors
         if let Some(old_focused) = self.focused {
             if Some(old_focused) != node {
-                tracing::info!("EventRouter: sending BLUR to old_focused {:?}, new focus will be {:?}", old_focused, node);
+                tracing::info!(
+                    "EventRouter: sending BLUR to old_focused {:?}, new focus will be {:?}",
+                    old_focused,
+                    node
+                );
                 // Use the stored focused_ancestors for bubbling BLUR
                 let old_ancestors = std::mem::take(&mut self.focused_ancestors);
                 self.emit_event(old_focused, event_types::BLUR);
@@ -195,7 +203,10 @@ impl EventRouter {
                 tracing::info!("EventRouter: focus unchanged at {:?}", node);
             }
         } else {
-            tracing::info!("EventRouter: no previous focus, setting focus to {:?}", node);
+            tracing::info!(
+                "EventRouter: no previous focus, setting focus to {:?}",
+                node
+            );
         }
 
         // Send FOCUS to new focused element
@@ -472,7 +483,12 @@ impl EventRouter {
     ///
     /// Emits RESIZE to all elements in the tree (broadcast).
     /// Returns the list of nodes that received the event.
-    pub fn on_window_resize(&mut self, tree: &RenderTree, _width: f32, _height: f32) -> Vec<(LayoutNodeId, u32)> {
+    pub fn on_window_resize(
+        &mut self,
+        tree: &RenderTree,
+        _width: f32,
+        _height: f32,
+    ) -> Vec<(LayoutNodeId, u32)> {
         let mut events = Vec::new();
 
         // Broadcast RESIZE to all nodes in the tree
@@ -637,14 +653,9 @@ impl EventRouter {
         // Check children in reverse order (last child is on top)
         let children = tree.layout().children(node);
         for child in children.into_iter().rev() {
-            if let Some(result) = self.hit_test_node(
-                tree,
-                child,
-                x,
-                y,
-                (bounds.x, bounds.y),
-                ancestors.clone(),
-            ) {
+            if let Some(result) =
+                self.hit_test_node(tree, child, x, y, (bounds.x, bounds.y), ancestors.clone())
+            {
                 return Some(result);
             }
         }
@@ -754,10 +765,7 @@ mod tests {
 
     #[test]
     fn test_hover_enter_leave() {
-        let ui = div()
-            .w(400.0)
-            .h(300.0)
-            .child(div().w(100.0).h(100.0));
+        let ui = div().w(400.0).h(300.0).child(div().w(100.0).h(100.0));
 
         let mut tree = RenderTree::from_element(&ui);
         tree.compute_layout(400.0, 300.0);
@@ -775,15 +783,14 @@ mod tests {
 
         // Should have POINTER_ENTER events
         let captured = events.borrow();
-        assert!(captured.iter().any(|(_, e)| *e == event_types::POINTER_ENTER));
+        assert!(captured
+            .iter()
+            .any(|(_, e)| *e == event_types::POINTER_ENTER));
     }
 
     #[test]
     fn test_mouse_down_up() {
-        let ui = div()
-            .w(400.0)
-            .h(300.0)
-            .child(div().w(100.0).h(100.0));
+        let ui = div().w(400.0).h(300.0).child(div().w(100.0).h(100.0));
 
         let mut tree = RenderTree::from_element(&ui);
         tree.compute_layout(400.0, 300.0);
@@ -881,7 +888,10 @@ mod tests {
         {
             let captured = events.borrow();
             assert_eq!(
-                captured.iter().filter(|(_, e)| *e == event_types::MOUNT).count(),
+                captured
+                    .iter()
+                    .filter(|(_, e)| *e == event_types::MOUNT)
+                    .count(),
                 3
             );
         }
@@ -890,10 +900,7 @@ mod tests {
         events.borrow_mut().clear();
 
         // Build second tree with only 1 child
-        let ui2 = div()
-            .w(400.0)
-            .h(300.0)
-            .child(div().w(100.0).h(100.0));
+        let ui2 = div().w(400.0).h(300.0).child(div().w(100.0).h(100.0));
 
         let mut tree2 = RenderTree::from_element(&ui2);
         tree2.compute_layout(400.0, 300.0);
@@ -909,10 +916,7 @@ mod tests {
 
     #[test]
     fn test_unmount_clears_state() {
-        let ui = div()
-            .w(400.0)
-            .h(300.0)
-            .child(div().w(100.0).h(100.0));
+        let ui = div().w(400.0).h(300.0).child(div().w(100.0).h(100.0));
 
         let mut tree = RenderTree::from_element(&ui);
         tree.compute_layout(400.0, 300.0);
@@ -936,10 +940,7 @@ mod tests {
 
     #[test]
     fn test_window_focus_blur() {
-        let ui = div()
-            .w(400.0)
-            .h(300.0)
-            .child(div().w(100.0).h(100.0));
+        let ui = div().w(400.0).h(300.0).child(div().w(100.0).h(100.0));
 
         let mut tree = RenderTree::from_element(&ui);
         tree.compute_layout(400.0, 300.0);

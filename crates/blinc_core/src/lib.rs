@@ -59,6 +59,6 @@ pub use layer::{
 pub use reactive::{Derived, DerivedId, Effect, EffectId, ReactiveGraph, Signal, SignalId};
 pub use runtime::BlincReactiveRuntime;
 pub use value::{
-    AnimationAccess, BoxedValue, DynFloat, DynValue, ReactiveAccess, SpringValue, Static,
-    Value, ValueContext,
+    AnimationAccess, BoxedValue, DynFloat, DynValue, ReactiveAccess, SpringValue, Static, Value,
+    ValueContext,
 };

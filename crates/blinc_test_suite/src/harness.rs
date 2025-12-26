@@ -386,7 +386,12 @@ impl TestHarness {
     }
 
     /// Create a test context with custom size
-    pub fn create_context_with_size(&self, name: &str, width: f32, height: f32) -> TestContext<'static> {
+    pub fn create_context_with_size(
+        &self,
+        name: &str,
+        width: f32,
+        height: f32,
+    ) -> TestContext<'static> {
         let mut ctx = TestContext::new(name, width, height);
         ctx.output_dir = self.output_dir.clone();
         ctx

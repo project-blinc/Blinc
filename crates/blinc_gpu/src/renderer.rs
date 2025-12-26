@@ -63,9 +63,9 @@ impl Default for RendererConfig {
         Self {
             // Reduced defaults for lower memory footprint (~1 MB total vs ~5+ MB)
             // These can still handle typical UI scenes while using less memory
-            max_primitives: 2_000,      // ~384 KB (was 1.92 MB)
-            max_glass_primitives: 100,  // ~25 KB (was 256 KB)
-            max_glyphs: 10_000,         // ~640 KB (was 3.2 MB)
+            max_primitives: 2_000,     // ~384 KB (was 1.92 MB)
+            max_glass_primitives: 100, // ~25 KB (was 256 KB)
+            max_glyphs: 10_000,        // ~640 KB (was 3.2 MB)
             sample_count: 1,
             texture_format: None,
         }
@@ -1614,9 +1614,7 @@ impl GpuRenderer {
         // Check if we need to create or recreate the cached glass resources
         let need_new_bind_group = match &self.cached_glass {
             None => true,
-            Some(cached) => {
-                cached.bind_group.is_none() || cached.bind_group_size != current_size
-            }
+            Some(cached) => cached.bind_group.is_none() || cached.bind_group_size != current_size,
         };
 
         if self.cached_glass.is_none() {
@@ -1689,7 +1687,13 @@ impl GpuRenderer {
             }
         }
 
-        let glass_bind_group = self.cached_glass.as_ref().unwrap().bind_group.as_ref().unwrap();
+        let glass_bind_group = self
+            .cached_glass
+            .as_ref()
+            .unwrap()
+            .bind_group
+            .as_ref()
+            .unwrap();
 
         // Create command encoder
         let mut encoder = self
@@ -1844,7 +1848,11 @@ impl GpuRenderer {
 
         // Pass 1: Render background primitives to backdrop texture (at half resolution)
         {
-            self.queue.write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&backdrop_uniforms));
+            self.queue.write_buffer(
+                &self.buffers.uniforms,
+                0,
+                bytemuck::bytes_of(&backdrop_uniforms),
+            );
 
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Backdrop Render Pass"),
@@ -1870,7 +1878,11 @@ impl GpuRenderer {
 
         // Pass 2: Render background primitives to target (at full resolution)
         {
-            self.queue.write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&main_uniforms));
+            self.queue.write_buffer(
+                &self.buffers.uniforms,
+                0,
+                bytemuck::bytes_of(&main_uniforms),
+            );
 
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Target Background Pass"),
@@ -1896,7 +1908,13 @@ impl GpuRenderer {
 
         // Pass 3: Render glass primitives with backdrop blur
         if !batch.glass_primitives.is_empty() {
-            let glass_bind_group = self.cached_glass.as_ref().unwrap().bind_group.as_ref().unwrap();
+            let glass_bind_group = self
+                .cached_glass
+                .as_ref()
+                .unwrap()
+                .bind_group
+                .as_ref()
+                .unwrap();
 
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Glass Render Pass"),
@@ -2080,7 +2098,8 @@ impl GpuRenderer {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: self.texture_format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             });
             let resolve_view = resolve_texture.create_view(&wgpu::TextureViewDescriptor::default());

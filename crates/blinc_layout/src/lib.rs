@@ -63,7 +63,10 @@ pub use element::{
 };
 
 // Builder API
-pub use div::{div, Div, ElementBuilder, ElementTypeId, FontWeight, ImageRenderInfo, TextAlign, TextVerticalAlign};
+pub use div::{
+    div, Div, ElementBuilder, ElementTypeId, FontWeight, ImageRenderInfo, TextAlign,
+    TextVerticalAlign,
+};
 // Reference binding
 pub use div::{DivRef, ElementRef};
 pub use image::{image, img, Image, ImageFilter, ObjectFit, ObjectPosition};
@@ -93,18 +96,21 @@ pub use text_measure::{
 
 // Text selection (clipboard support)
 pub use text_selection::{
-    clear_selection, get_selected_text, global_selection, set_selection,
-    SelectionSource, SharedTextSelection, TextSelection,
+    clear_selection, get_selected_text, global_selection, set_selection, SelectionSource,
+    SharedTextSelection, TextSelection,
 };
 
 /// Prelude module - import everything commonly needed
 pub mod prelude {
     pub use crate::div::{
-        div, Div, ElementBuilder, ElementTypeId, FontWeight, ImageRenderInfo, TextAlign, TextVerticalAlign,
+        div, Div, ElementBuilder, ElementTypeId, FontWeight, ImageRenderInfo, TextAlign,
+        TextVerticalAlign,
     };
     // Reference binding for external element access
     pub use crate::div::{DivRef, ElementRef};
-    pub use crate::element::{DynRenderProps, ElementBounds, RenderLayer, RenderProps, ResolvedRenderProps};
+    pub use crate::element::{
+        DynRenderProps, ElementBounds, RenderLayer, RenderProps, ResolvedRenderProps,
+    };
     // Event handlers
     pub use crate::event_handler::{EventCallback, EventContext, EventHandlers, HandlerRegistry};
     // Event routing
@@ -117,32 +123,72 @@ pub mod prelude {
     pub use crate::element_style::{style, ElementStyle};
     // Stateful elements with user-defined state types (core infrastructure)
     pub use crate::stateful::{
-        // Core generic type
-        BoundStateful, SharedState, Stateful, StatefulInner, StateTransitions,
-        // Built-in state types (Copy-based for Stateful<S>)
-        ButtonState, CheckboxState as StatefulCheckboxState, ScrollState, TextFieldState, ToggleState,
         // Internal scroll events for FSM transitions
         scroll_events,
-        // Type aliases for Stateful<S> - low-level for custom styling
-        Button as StatefulButton, Checkbox as StatefulCheckbox, ScrollContainer, TextField, Toggle,
         // Low-level constructor functions for custom styling
-        stateful, stateful_button, stateful_checkbox, text_field, toggle,
+        stateful,
+        stateful_button,
+        stateful_checkbox,
+        text_field,
+        toggle,
+        // Core generic type
+        BoundStateful,
+        // Type aliases for Stateful<S> - low-level for custom styling
+        Button as StatefulButton,
+        // Built-in state types (Copy-based for Stateful<S>)
+        ButtonState,
+        Checkbox as StatefulCheckbox,
+        CheckboxState as StatefulCheckboxState,
+        ScrollContainer,
+        ScrollState,
+        SharedState,
+        StateTransitions,
+        Stateful,
+        StatefulInner,
+        TextField,
+        TextFieldState,
+        Toggle,
+        ToggleState,
     };
 
     // Ready-to-use widgets (production-ready, work in fluent API without .build())
     pub use crate::widgets::{
         // Button widget - ready-to-use
-        button, Button, ButtonConfig, ButtonVisualState,
+        button,
         // Checkbox widget - ready-to-use
-        checkbox, checkbox_labeled, checkbox_state, Checkbox, CheckboxConfig, CheckboxState, SharedCheckboxState,
-        // Text input widget - ready-to-use
-        text_input, text_input_state, text_input_state_with_placeholder,
-        InputType, NumberConstraints, SharedTextInputState, TextInput, TextInputConfig, TextInputState,
-        // Text area widget - ready-to-use
-        text_area, text_area_state, text_area_state_with_placeholder,
-        SharedTextAreaState, TextArea, TextAreaConfig, TextAreaState, TextPosition,
+        checkbox,
+        checkbox_labeled,
+        checkbox_state,
         // Cursor blink timing (for use by app layer)
-        elapsed_ms, has_focused_text_input, CURSOR_BLINK_INTERVAL_MS,
+        elapsed_ms,
+        has_focused_text_input,
+        // Text area widget - ready-to-use
+        text_area,
+        text_area_state,
+        text_area_state_with_placeholder,
+        // Text input widget - ready-to-use
+        text_input,
+        text_input_state,
+        text_input_state_with_placeholder,
+        Button,
+        ButtonConfig,
+        ButtonVisualState,
+        Checkbox,
+        CheckboxConfig,
+        CheckboxState,
+        InputType,
+        NumberConstraints,
+        SharedCheckboxState,
+        SharedTextAreaState,
+        SharedTextInputState,
+        TextArea,
+        TextAreaConfig,
+        TextAreaState,
+        TextInput,
+        TextInputConfig,
+        TextInputState,
+        TextPosition,
+        CURSOR_BLINK_INTERVAL_MS,
     };
     // Material system
     pub use crate::element::{
@@ -153,13 +199,13 @@ pub mod prelude {
         GlassPanel, ImageData, LayoutRenderer, RenderTree, SvgData, TextData,
     };
     // Scroll container (ready-to-use widget with Div extension)
+    pub use crate::svg::{svg, Svg};
+    pub use crate::text::{text, Text};
+    pub use crate::tree::{LayoutNodeId, LayoutTree};
     pub use crate::widgets::{
         scroll, scroll_no_bounce, Scroll, ScrollConfig, ScrollDirection, ScrollPhysics,
         ScrollRenderInfo, SharedScrollPhysics,
     };
-    pub use crate::svg::{svg, Svg};
-    pub use crate::text::{text, Text};
-    pub use crate::tree::{LayoutNodeId, LayoutTree};
 
     // Canvas element
     pub use crate::canvas::{canvas, Canvas, CanvasBounds};
@@ -177,15 +223,13 @@ pub mod prelude {
 
     // Text selection for clipboard support
     pub use crate::text_selection::{
-        clear_selection, get_selected_text, global_selection, set_selection,
-        SelectionSource, SharedTextSelection, TextSelection,
+        clear_selection, get_selected_text, global_selection, set_selection, SelectionSource,
+        SharedTextSelection, TextSelection,
     };
 
     // Render state (dynamic properties separate from tree structure)
     pub use crate::render_state::{NodeRenderState, Overlay, RenderState};
 
     // Dynamic value system for render-time resolution
-    pub use blinc_core::{
-        AnimationAccess, DynFloat, DynValue, ReactiveAccess, ValueContext,
-    };
+    pub use blinc_core::{AnimationAccess, DynFloat, DynValue, ReactiveAccess, ValueContext};
 }

@@ -125,7 +125,11 @@ impl<T: Clone + Send + 'static> State<T> {
     where
         T: Default,
     {
-        self.reactive.lock().unwrap().get(self.signal).unwrap_or_default()
+        self.reactive
+            .lock()
+            .unwrap()
+            .get(self.signal)
+            .unwrap_or_default()
     }
 
     /// Get the current value, returning None if not found
@@ -225,7 +229,6 @@ impl WindowedContext {
             hooks,
         }
     }
-
 
     /// Update context from window (preserving event router, dirty flag, and reactive graph)
     fn update_from_window<W: Window>(&mut self, window: &W) {
@@ -536,7 +539,12 @@ impl WindowedContext {
     {
         // Use caller location as the key
         let location = std::panic::Location::caller();
-        let key = format!("{}:{}:{}", location.file(), location.line(), location.column());
+        let key = format!(
+            "{}:{}:{}",
+            location.file(),
+            location.line(),
+            location.column()
+        );
         self.use_state_for(&key, initial)
     }
 
@@ -584,7 +592,11 @@ impl WindowedContext {
             // New state - create SharedState and store in signal
             let shared_state: blinc_layout::SharedState<S> =
                 Arc::new(Mutex::new(StatefulInner::new(initial)));
-            let signal = self.reactive.lock().unwrap().create_signal(shared_state.clone());
+            let signal = self
+                .reactive
+                .lock()
+                .unwrap()
+                .create_signal(shared_state.clone());
             let raw_id = signal.id().to_raw();
             hooks.insert(state_key, raw_id);
             shared_state
@@ -801,8 +813,6 @@ impl WindowedApp {
                             ctrl: bool,
                             alt: bool,
                             meta: bool,
-                            /// Ancestors for keyboard event bubbling (root to leaf order)
-                            ancestors: Vec<LayoutNodeId>,
                         }
 
                         impl Default for PendingEvent {
@@ -822,7 +832,6 @@ impl WindowedApp {
                                     ctrl: false,
                                     alt: false,
                                     meta: false,
-                                    ancestors: Vec::new(),
                                 }
                             }
                         }
@@ -971,46 +980,36 @@ impl WindowedApp {
                                             // Dispatch KEY_DOWN for all keys
                                             router.on_key_down(key_code);
 
-                                            // Get focused ancestors for bubbling (includes the focused element)
-                                            let focused_ancestors: Vec<LayoutNodeId> = router.focused_ancestors().to_vec();
-
-                                            // For character-producing keys, also dispatch TEXT_INPUT
+                                            // For character-producing keys, dispatch TEXT_INPUT
+                                            // We use broadcast dispatch so any focused text input can receive it
                                             if let Some(c) = key_char {
                                                 // Don't send text input if ctrl/cmd is held (shortcuts)
                                                 if !mods.ctrl && !mods.meta {
-                                                    if router.focused().is_some() {
-                                                        keyboard_events.push(PendingEvent {
-                                                            node_id: LayoutNodeId::default(), // Will use ancestors for bubbling
-                                                            event_type: blinc_core::events::event_types::TEXT_INPUT,
-                                                            key_char: Some(c),
-                                                            key_code,
-                                                            shift: mods.shift,
-                                                            ctrl: mods.ctrl,
-                                                            alt: mods.alt,
-                                                            meta: mods.meta,
-                                                            ancestors: focused_ancestors.clone(),
-                                                            ..Default::default()
-                                                        });
-                                                    }
-                                                }
-                                            }
-
-                                            // For KEY_DOWN events with special keys (backspace, arrows)
-                                            if key_code != 0 {
-                                                if router.focused().is_some() {
                                                     keyboard_events.push(PendingEvent {
-                                                        node_id: LayoutNodeId::default(), // Will use ancestors for bubbling
-                                                        event_type: blinc_core::events::event_types::KEY_DOWN,
-                                                        key_char: None,
+                                                        event_type: blinc_core::events::event_types::TEXT_INPUT,
+                                                        key_char: Some(c),
                                                         key_code,
                                                         shift: mods.shift,
                                                         ctrl: mods.ctrl,
                                                         alt: mods.alt,
                                                         meta: mods.meta,
-                                                        ancestors: focused_ancestors.clone(),
                                                         ..Default::default()
                                                     });
                                                 }
+                                            }
+
+                                            // For KEY_DOWN events with special keys (backspace, arrows)
+                                            if key_code != 0 {
+                                                keyboard_events.push(PendingEvent {
+                                                    event_type: blinc_core::events::event_types::KEY_DOWN,
+                                                    key_char: None,
+                                                    key_code,
+                                                    shift: mods.shift,
+                                                    ctrl: mods.ctrl,
+                                                    alt: mods.alt,
+                                                    meta: mods.meta,
+                                                    ..Default::default()
+                                                });
                                             }
                                         }
                                         KeyState::Released => {
@@ -1090,13 +1089,16 @@ impl WindowedApp {
                                 }
                             }
 
-                            // Dispatch keyboard events with bubbling through ancestors
+                            // Dispatch keyboard events
+                            // Use broadcast instead of bubbling to handle focus correctly after tree rebuilds.
+                            // Text inputs track their own focus state internally via `s.visual.is_focused()`,
+                            // so broadcasting to all handlers is safe - only the focused one will process.
                             for event in keyboard_events {
                                 if event.event_type == blinc_core::events::event_types::TEXT_INPUT {
                                     if let Some(c) = event.key_char {
-                                        // Use bubbling dispatch - tries each ancestor until handler found
-                                        tree.dispatch_text_input_event_bubbling(
-                                            &event.ancestors,
+                                        // Broadcast to all text input handlers
+                                        // Each handler checks its own focus state internally
+                                        tree.broadcast_text_input_event(
                                             c,
                                             event.shift,
                                             event.ctrl,
@@ -1105,9 +1107,8 @@ impl WindowedApp {
                                         );
                                     }
                                 } else {
-                                    // Use bubbling dispatch for KEY_DOWN
-                                    tree.dispatch_key_event_bubbling(
-                                        &event.ancestors,
+                                    // Broadcast KEY_DOWN to all key handlers
+                                    tree.broadcast_key_event(
                                         event.event_type,
                                         event.key_code,
                                         event.shift,
