@@ -46,10 +46,12 @@ pub mod style;
 pub mod styled_text;
 pub mod svg;
 pub mod syntax;
+pub mod table;
 pub mod text;
 pub mod text_measure;
 pub mod text_selection;
 pub mod tree;
+pub mod typography;
 pub mod widgets;
 
 // Core types
@@ -260,4 +262,16 @@ pub mod prelude {
 
     // Dynamic value system for render-time resolution
     pub use blinc_core::{AnimationAccess, DynFloat, DynValue, ReactiveAccess, ValueContext};
+
+    // Typography helpers (h1-h6, b, span, etc.)
+    pub use crate::typography::{
+        b, caption, h1, h2, h3, h4, h5, h6, heading, inline_code, label, muted, p, small, span,
+        strong,
+    };
+
+    // Table elements
+    pub use crate::table::{
+        cell, striped_tr, table, tbody, td, td_text, tfoot, th, th_text, thead, tr, TableBuilder,
+        TableCell,
+    };
 }
