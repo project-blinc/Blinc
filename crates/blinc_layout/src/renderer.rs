@@ -979,6 +979,28 @@ impl RenderTree {
         }
     }
 
+    /// Notify all scroll physics that scrolling has ended
+    ///
+    /// Call this when a SCROLL_END event is received to start bounce-back animations.
+    pub fn on_scroll_end(&self) {
+        for physics in self.scroll_physics.values() {
+            physics.lock().unwrap().on_scroll_end();
+        }
+    }
+
+    /// Tick all scroll physics and return true if any are animating
+    ///
+    /// Call this each frame to update bounce-back animations.
+    pub fn tick_scroll_physics(&self, dt: f32) -> bool {
+        let mut any_animating = false;
+        for physics in self.scroll_physics.values() {
+            if physics.lock().unwrap().tick(dt) {
+                any_animating = true;
+            }
+        }
+        any_animating
+    }
+
     /// Check if the tree has any dirty nodes (needs rebuild)
     pub fn needs_rebuild(&self) -> bool {
         self.dirty_tracker.has_dirty()

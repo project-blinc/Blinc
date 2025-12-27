@@ -1,7 +1,8 @@
 //! Desktop input conversion (winit -> blinc_platform)
 
 use blinc_platform::{
-    InputEvent, Key, KeyState, KeyboardEvent, Modifiers, MouseButton, MouseEvent, TouchEvent,
+    InputEvent, Key, KeyState, KeyboardEvent, Modifiers, MouseButton, MouseEvent, ScrollPhase,
+    TouchEvent,
 };
 use winit::event::{ElementState, MouseButton as WinitMouseButton, Touch, TouchPhase};
 use winit::keyboard::{Key as WinitKey, ModifiersState, NamedKey};
@@ -201,6 +202,21 @@ pub fn mouse_released(button: WinitMouseButton, x: f32, y: f32) -> InputEvent {
 }
 
 /// Convert scroll event to blinc InputEvent
-pub fn scroll_event(delta_x: f32, delta_y: f32) -> InputEvent {
-    InputEvent::Scroll { delta_x, delta_y }
+pub fn scroll_event(delta_x: f32, delta_y: f32, phase: TouchPhase) -> InputEvent {
+    let scroll_phase = match phase {
+        TouchPhase::Started => ScrollPhase::Started,
+        TouchPhase::Moved => ScrollPhase::Moved,
+        TouchPhase::Ended => ScrollPhase::Ended,
+        TouchPhase::Cancelled => ScrollPhase::MomentumEnded,
+    };
+    InputEvent::Scroll {
+        delta_x,
+        delta_y,
+        phase: scroll_phase,
+    }
+}
+
+/// Create a scroll end event (momentum finished)
+pub fn scroll_end_event() -> InputEvent {
+    InputEvent::ScrollEnd
 }

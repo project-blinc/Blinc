@@ -883,7 +883,7 @@ impl WindowedApp {
                         }
 
                         // First phase: collect events using immutable borrow
-                        let (pending_events, keyboard_events) = if let (Some(ref mut windowed_ctx), Some(ref tree)) =
+                        let (pending_events, keyboard_events, scroll_ended) = if let (Some(ref mut windowed_ctx), Some(ref tree)) =
                             (&mut ctx, &render_tree)
                         {
                             let router = &mut windowed_ctx.event_router;
@@ -892,6 +892,8 @@ impl WindowedApp {
                             let mut pending_events: Vec<PendingEvent> = Vec::new();
                             // Separate collection for keyboard events (TEXT_INPUT)
                             let mut keyboard_events: Vec<PendingEvent> = Vec::new();
+                            // Track if scroll ended
+                            let mut scroll_ended = false;
 
                             // Set up callback to collect events
                             router.set_event_callback({
@@ -1108,7 +1110,7 @@ impl WindowedApp {
                                         router.on_mouse_leave();
                                     }
                                 },
-                                InputEvent::Scroll { delta_x, delta_y } => {
+                                InputEvent::Scroll { delta_x, delta_y, .. } => {
                                     let (mx, my) = router.mouse_position();
                                     // Scroll deltas are also in physical pixels, convert to logical
                                     let ldx = delta_x / scale;
@@ -1121,12 +1123,16 @@ impl WindowedApp {
                                         event.scroll_delta_y = ldy;
                                     }
                                 }
+                                InputEvent::ScrollEnd => {
+                                    // Scroll gesture ended - will trigger bounce-back
+                                    scroll_ended = true;
+                                }
                             }
 
                             router.clear_event_callback();
-                            (pending_events, keyboard_events)
+                            (pending_events, keyboard_events, scroll_ended)
                         } else {
-                            (Vec::new(), Vec::new())
+                            (Vec::new(), Vec::new(), false)
                         };
 
                         // Second phase: dispatch events with mutable borrow
@@ -1182,6 +1188,13 @@ impl WindowedApp {
                                         event.meta,
                                     );
                                 }
+                            }
+
+                            // If scroll ended, notify scroll physics to start bounce-back
+                            if scroll_ended {
+                                tree.on_scroll_end();
+                                // Request redraw to animate bounce-back
+                                window.request_redraw();
                             }
                         }
                     }
@@ -1288,6 +1301,14 @@ impl WindowedApp {
                             let current_time = elapsed_ms();
                             let _animations_active = rs.tick(current_time);
 
+                            // Tick scroll physics for bounce-back animations
+                            let scroll_animating = if let Some(ref tree) = render_tree {
+                                // dt is in seconds - use 1/60 for ~60fps
+                                tree.tick_scroll_physics(1.0 / 60.0)
+                            } else {
+                                false
+                            };
+
                             // =========================================================
                             // PHASE 4: Render
                             // Combines stable tree structure with dynamic render state
@@ -1332,7 +1353,7 @@ impl WindowedApp {
                                 false
                             };
 
-                            if needs_animation_redraw || needs_cursor_redraw || needs_motion_redraw {
+                            if needs_animation_redraw || needs_cursor_redraw || needs_motion_redraw || scroll_animating {
                                 // Request another frame to render updated animation values
                                 // For cursor blink, also re-request continuous redraw for next frame
                                 if needs_cursor_redraw {

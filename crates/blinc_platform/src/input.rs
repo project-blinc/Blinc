@@ -1,5 +1,19 @@
 //! Input event types for keyboard, mouse, and touch
 
+/// Scroll gesture phase (for trackpad/touchpad scrolling)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ScrollPhase {
+    /// Scroll gesture starting (finger touched trackpad)
+    Started,
+    /// Scroll is in progress
+    #[default]
+    Moved,
+    /// Scroll gesture ended (finger lifted, momentum may continue)
+    Ended,
+    /// Momentum/inertia scrolling has ended
+    MomentumEnded,
+}
+
 /// Input events
 #[derive(Clone, Debug)]
 pub enum InputEvent {
@@ -15,7 +29,11 @@ pub enum InputEvent {
         delta_x: f32,
         /// Vertical scroll delta
         delta_y: f32,
+        /// Scroll phase (for trackpad gestures)
+        phase: ScrollPhase,
     },
+    /// Scroll gesture ended (touchpad momentum finished)
+    ScrollEnd,
 }
 
 // ============================================================================

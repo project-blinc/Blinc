@@ -53,7 +53,8 @@ mod window;
 pub use error::{PlatformError, Result};
 pub use event::{ControlFlow, Event, EventLoop, LifecycleEvent, WindowEvent};
 pub use input::{
-    InputEvent, Key, KeyState, KeyboardEvent, Modifiers, MouseButton, MouseEvent, TouchEvent,
+    InputEvent, Key, KeyState, KeyboardEvent, Modifiers, MouseButton, MouseEvent, ScrollPhase,
+    TouchEvent,
 };
 pub use platform::Platform;
 pub use window::{Cursor, Window, WindowConfig};
@@ -69,7 +70,8 @@ pub mod prelude {
     pub use crate::error::{PlatformError, Result};
     pub use crate::event::{ControlFlow, Event, EventLoop, LifecycleEvent, WindowEvent};
     pub use crate::input::{
-        InputEvent, Key, KeyState, KeyboardEvent, Modifiers, MouseButton, MouseEvent, TouchEvent,
+        InputEvent, Key, KeyState, KeyboardEvent, Modifiers, MouseButton, MouseEvent, ScrollPhase,
+        TouchEvent,
     };
     pub use crate::platform::Platform;
     pub use crate::window::{Cursor, Window, WindowConfig};

@@ -219,15 +219,23 @@ where
                 self.handle_event(Event::Input(input_event));
             }
 
-            WinitWindowEvent::MouseWheel { delta, .. } => {
+            WinitWindowEvent::MouseWheel { delta, phase, .. } => {
                 let (dx, dy) = match delta {
                     winit::event::MouseScrollDelta::LineDelta(x, y) => (x, y),
                     winit::event::MouseScrollDelta::PixelDelta(pos) => {
                         (pos.x as f32 / 10.0, pos.y as f32 / 10.0)
                     }
                 };
-                let input_event = input::scroll_event(dx, dy);
+                let input_event = input::scroll_event(dx, dy, phase);
                 self.handle_event(Event::Input(input_event));
+
+                // If scroll gesture ended or momentum ended, send a scroll end event
+                if matches!(
+                    phase,
+                    winit::event::TouchPhase::Ended | winit::event::TouchPhase::Cancelled
+                ) {
+                    self.handle_event(Event::Input(input::scroll_end_event()));
+                }
             }
 
             WinitWindowEvent::Touch(touch) => {
