@@ -558,7 +558,8 @@ impl Scroll {
         Self {
             // Use overflow_scroll to allow children to be laid out at natural size
             // (not constrained to viewport). We handle visual clipping ourselves.
-            inner: Div::new().overflow_scroll(),
+            // Also set items_start to ensure child starts at top-left (not centered/stretched)
+            inner: Div::new().overflow_scroll().items_start(),
             content: None,
             physics,
             handlers,
@@ -571,7 +572,7 @@ impl Scroll {
         let handlers = Self::create_internal_handlers(Arc::clone(&physics));
 
         Self {
-            inner: Div::new().overflow_scroll(),
+            inner: Div::new().overflow_scroll().items_start(),
             content: None,
             physics,
             handlers,
@@ -583,7 +584,7 @@ impl Scroll {
         let handlers = Self::create_internal_handlers(Arc::clone(&physics));
 
         Self {
-            inner: Div::new().overflow_scroll(),
+            inner: Div::new().overflow_scroll().items_start(),
             content: None,
             physics,
             handlers,

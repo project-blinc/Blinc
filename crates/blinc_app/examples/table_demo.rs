@@ -31,7 +31,9 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
         .bg(Color::rgba(0.08, 0.08, 0.1, 1.0))
         .flex_col()
         .gap(8.0)
-        .p(32.0)
+        .pt(18.0)
+        .pb(10.0)
+        .px(10.0)
         .child(
             div()
                 .flex_col()
@@ -46,11 +48,9 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                 .direction(ScrollDirection::Vertical)
                 .child(
                     div()
-                    .h_full()
                         .w_full()
-                        .justify_center()
                         .flex_col()
-                        .gap(32.0)
+                        .gap(18.0)
                         .child(simple_table_section())
                         .child(striped_table_section())
                         .child(manual_table_section()),
@@ -69,7 +69,7 @@ fn simple_table_section() -> Div {
 
     div()
         .flex_col()
-        .gap(12.0)
+        .gap(4.0)
         .child(h3("Simple Table").color(Color::WHITE))
         .child(
             code(
@@ -108,7 +108,7 @@ fn striped_table_section() -> Div {
 
     div()
         .flex_col()
-        .gap(12.0)
+        .gap(4.0)
         .child(h3("Striped Table").color(Color::WHITE))
         .child(
             code(
@@ -137,7 +137,7 @@ fn striped_table_section() -> Div {
 fn manual_table_section() -> Div {
     div()
         .flex_col()
-        .gap(12.0)
+        .gap(4.0)
         .child(h3("Manual Table Construction").color(Color::WHITE))
         .child(muted(
             "For more control, use table(), thead(), tbody(), tr(), th(), td() directly",
@@ -169,7 +169,7 @@ fn manual_table_section() -> Div {
                     thead().child(
                         tr().child(th("Status"))
                             .child(th("Description"))
-                            .child(th("Count")),
+                            .child(th("Count").justify_end()),
                     ),
                 )
                 .child(
