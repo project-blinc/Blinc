@@ -65,18 +65,17 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
         .flex_col()
         .items_center()
         .p(20.0)
-        .gap(20.0)
+        .gap(5.0)
         // Title
         .child(
-            text("Scroll Container Demo")
-                .size(48.0)
+            h2("Scroll Container Demo")
+               
                 .weight(FontWeight::Bold)
                 .color(Color::WHITE),
         )
         // Instructions
         .child(
-            text("Scroll with mouse wheel or trackpad - bounce physics at edges!")
-                .size(20.0)
+            h3("Scroll with mouse wheel or trackpad - bounce physics at edges!")
                 .color(Color::rgba(1.0, 1.0, 1.0, 0.7)),
         )
         // Direction toggle button
@@ -98,18 +97,17 @@ fn build_direction_toggle(ctx: &WindowedContext, current: ScrollDirection) -> im
 
     div()
         .flex_row()
-        .gap(12.0)
+        .gap(4.0)
         .items_center()
         .child(
-            text("Direction:")
-                .size(18.0)
+            span("Direction:")
                 .color(Color::rgba(1.0, 1.0, 1.0, 0.8)),
         )
         .child(
             div()
-                .px(20.0)
-                .py(10.0)
-                .rounded(12.0)
+                .px(4.0)
+                .py(2.0)
+                .rounded(8.0)
                 .bg(Color::rgba(0.3, 0.5, 1.0, 0.8))
                 .on_click(move |_| {
                     let current = direction_state.get();
@@ -122,8 +120,7 @@ fn build_direction_toggle(ctx: &WindowedContext, current: ScrollDirection) -> im
                     tracing::info!("Switched to {:?} scroll", next);
                 })
                 .child(
-                    text(label)
-                        .size(18.0)
+                    span(label)
                         .weight(FontWeight::SemiBold)
                         .color(Color::WHITE),
                 ),

@@ -1118,6 +1118,11 @@ impl WindowedApp {
                                     let ldx = delta_x;
                                     let ldy = delta_y;
 
+                                    tracing::trace!(
+                                        "InputEvent::Scroll received: pos=({:.1}, {:.1}) delta=({:.1}, {:.1})",
+                                        mx, my, ldx, ldy
+                                    );
+
                                     // Use nested scroll support - get hit result for smart dispatch
                                     // Store mouse position and delta for dispatch phase
                                     // We'll re-do hit test in dispatch phase since we need mutable borrow
@@ -1140,11 +1145,19 @@ impl WindowedApp {
                         if let Some(ref mut tree) = render_tree {
                             // Handle scroll with nested scroll support
                             if let Some((mouse_x, mouse_y, delta_x, delta_y)) = scroll_info {
+                                tracing::trace!(
+                                    "Scroll dispatch: pos=({:.1}, {:.1}) delta=({:.1}, {:.1})",
+                                    mouse_x, mouse_y, delta_x, delta_y
+                                );
                                 // Re-do hit test with mutable borrow to get ancestor chain
                                 // Then use dispatch_scroll_chain for proper nested scroll handling
                                 if let Some(ref mut windowed_ctx) = ctx {
                                     let router = &mut windowed_ctx.event_router;
                                     if let Some(hit) = router.hit_test(tree, mouse_x, mouse_y) {
+                                        tracing::trace!(
+                                            "Hit: node={:?}, ancestors={:?}",
+                                            hit.node, hit.ancestors
+                                        );
                                         tree.dispatch_scroll_chain(
                                             hit.node,
                                             &hit.ancestors,

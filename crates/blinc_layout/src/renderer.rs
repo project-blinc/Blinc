@@ -920,6 +920,11 @@ impl RenderTree {
             }
         }
 
+        tracing::trace!(
+            "dispatch_scroll_chain: hit={:?}, chain_len={}, delta=({:.1}, {:.1})",
+            hit_node, chain.len(), delta_x, delta_y
+        );
+
         // Dispatch to each node in the chain
         for node_id in chain {
             // Skip if no remaining delta
@@ -927,14 +932,37 @@ impl RenderTree {
                 break;
             }
 
-            // Check if this node can consume the scroll
-            let (can_x, can_y) = self.can_consume_scroll(node_id, delta_x, delta_y);
+            // Check if this node has a scroll handler
+            let has_handler = self
+                .handler_registry
+                .has_handler(node_id, blinc_core::events::event_types::SCROLL);
 
-            // Determine the delta to dispatch to this node
-            let dispatch_x = if can_x { delta_x } else { 0.0 };
-            let dispatch_y = if can_y { delta_y } else { 0.0 };
+            if !has_handler {
+                continue;
+            }
 
-            // Only dispatch if there's something to dispatch
+            // Get direction and check what this scroll can consume
+            let direction = self.get_scroll_direction(node_id);
+            let (can_consume_x, can_consume_y) = self.can_consume_scroll(node_id, delta_x, delta_y);
+
+            // Determine if this scroll handles each axis (based on direction)
+            let handles_x = direction.map_or(false, |d| {
+                matches!(d, crate::scroll::ScrollDirection::Horizontal | crate::scroll::ScrollDirection::Both)
+            });
+            let handles_y = direction.map_or(false, |d| {
+                matches!(d, crate::scroll::ScrollDirection::Vertical | crate::scroll::ScrollDirection::Both)
+            });
+
+            // Dispatch the remaining delta for axes this scroll handles
+            let dispatch_x = if handles_x { delta_x } else { 0.0 };
+            let dispatch_y = if handles_y { delta_y } else { 0.0 };
+
+            tracing::trace!(
+                "  node={:?}, direction={:?}, handles=({}, {}), can_consume=({}, {}), dispatch=({:.1}, {:.1})",
+                node_id, direction, handles_x, handles_y, can_consume_x, can_consume_y, dispatch_x, dispatch_y
+            );
+
+            // Dispatch if there's delta for this scroll's direction
             if dispatch_x.abs() > 0.001 || dispatch_y.abs() > 0.001 {
                 let ctx = crate::event_handler::EventContext::new(
                     blinc_core::events::event_types::SCROLL,
@@ -943,19 +971,18 @@ impl RenderTree {
                 .with_mouse_pos(mouse_x, mouse_y)
                 .with_scroll_delta(dispatch_x, dispatch_y);
 
-                let has_handler = self
-                    .handler_registry
-                    .has_handler(node_id, blinc_core::events::event_types::SCROLL);
+                tracing::trace!(
+                    "    dispatching to {:?}: delta=({:.1}, {:.1})",
+                    node_id, dispatch_x, dispatch_y
+                );
+                self.handler_registry.dispatch(&ctx);
 
-                if has_handler {
-                    self.handler_registry.dispatch(&ctx);
-                }
-
-                // Mark the consumed delta as consumed
-                if can_x {
+                // Consume the delta for axes this scroll CAN consume (has room to scroll)
+                // This prevents bubbling to outer scrolls for that axis
+                if can_consume_x && handles_x {
                     delta_x = 0.0;
                 }
-                if can_y {
+                if can_consume_y && handles_y {
                     delta_y = 0.0;
                 }
             }
@@ -1093,8 +1120,12 @@ impl RenderTree {
 
     /// Check if a scroll container can scroll in the given delta direction
     ///
-    /// Returns true if the scroll container handles that axis AND has room to scroll.
+    /// Returns true if the scroll container handles that axis.
     /// Used for nested scroll event handling.
+    ///
+    /// A scroll container consumes scroll for its direction(s) unless:
+    /// - It has no scrollable content (content fits within viewport)
+    /// - It's at an edge AND scrolling further into that edge AND bounce is disabled
     pub fn can_consume_scroll(&self, node_id: LayoutNodeId, delta_x: f32, delta_y: f32) -> (bool, bool) {
         let Some(physics) = self.scroll_physics.get(&node_id) else {
             return (false, false);
@@ -1106,21 +1137,26 @@ impl RenderTree {
 
         let can_x = match p.config.direction {
             crate::scroll::ScrollDirection::Horizontal | crate::scroll::ScrollDirection::Both => {
-                // Can consume horizontal if there's room to scroll
+                // Check if there's any scrollable content
                 let scrollable_x = p.content_width - p.viewport_width;
-                if scrollable_x > 0.0 {
-                    // Check if we're not at the edge or scrolling away from edge
-                    if delta_x < 0.0 {
-                        // Scrolling left (content moves right) - can consume if not at left edge
-                        p.offset_x > p.max_offset_x()
-                    } else if delta_x > 0.0 {
-                        // Scrolling right (content moves left) - can consume if not at right edge
-                        p.offset_x < p.min_offset_x()
-                    } else {
-                        false
-                    }
-                } else {
+                if scrollable_x <= 0.0 {
+                    // No scrollable content - don't consume
                     false
+                } else if delta_x.abs() < 0.001 {
+                    // No horizontal delta to consume
+                    false
+                } else if p.config.bounce_enabled {
+                    // With bounce enabled, always consume (for overscroll effect)
+                    true
+                } else {
+                    // Without bounce, only consume if we can actually scroll
+                    if delta_x < 0.0 {
+                        // Scrolling left - can consume if not at left edge
+                        p.offset_x > p.max_offset_x()
+                    } else {
+                        // Scrolling right - can consume if not at right edge
+                        p.offset_x < p.min_offset_x()
+                    }
                 }
             }
             _ => false,
@@ -1128,21 +1164,26 @@ impl RenderTree {
 
         let can_y = match p.config.direction {
             crate::scroll::ScrollDirection::Vertical | crate::scroll::ScrollDirection::Both => {
-                // Can consume vertical if there's room to scroll
+                // Check if there's any scrollable content
                 let scrollable_y = p.content_height - p.viewport_height;
-                if scrollable_y > 0.0 {
-                    // Check if we're not at the edge or scrolling away from edge
-                    if delta_y < 0.0 {
-                        // Scrolling up (content moves down) - can consume if not at top edge
-                        p.offset_y > p.max_offset_y()
-                    } else if delta_y > 0.0 {
-                        // Scrolling down (content moves up) - can consume if not at bottom edge
-                        p.offset_y < p.min_offset_y()
-                    } else {
-                        false
-                    }
-                } else {
+                if scrollable_y <= 0.0 {
+                    // No scrollable content - don't consume
                     false
+                } else if delta_y.abs() < 0.001 {
+                    // No vertical delta to consume
+                    false
+                } else if p.config.bounce_enabled {
+                    // With bounce enabled, always consume (for overscroll effect)
+                    true
+                } else {
+                    // Without bounce, only consume if we can actually scroll
+                    if delta_y < 0.0 {
+                        // Scrolling up - can consume if not at top edge
+                        p.offset_y > p.max_offset_y()
+                    } else {
+                        // Scrolling down - can consume if not at bottom edge
+                        p.offset_y < p.min_offset_y()
+                    }
                 }
             }
             _ => false,
