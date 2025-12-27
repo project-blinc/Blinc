@@ -72,8 +72,8 @@ pub use element::{
 
 // Builder API
 pub use div::{
-    div, Div, ElementBuilder, ElementTypeId, FontFamily, FontWeight, ImageRenderInfo, TextAlign,
-    TextVerticalAlign,
+    div, Div, ElementBuilder, ElementTypeId, FontFamily, FontWeight, GenericFont, ImageRenderInfo,
+    TextAlign, TextVerticalAlign,
 };
 // Reference binding
 pub use div::{DivRef, ElementRef};
@@ -82,7 +82,10 @@ pub use svg::{svg, Svg};
 pub use text::{text, Text};
 
 // Renderer
-pub use renderer::{GlassPanel, ImageData, LayoutRenderer, RenderTree, SvgData, TextData};
+pub use renderer::{
+    GlassPanel, ImageData, LayoutRenderer, RenderTree, StyledTextData, StyledTextSpan, SvgData,
+    TextData,
+};
 
 // Canvas element
 pub use canvas::{canvas, Canvas, CanvasBounds, CanvasData, CanvasRenderFn};
@@ -116,8 +119,8 @@ pub use text_selection::{
 /// Prelude module - import everything commonly needed
 pub mod prelude {
     pub use crate::div::{
-        div, Div, ElementBuilder, ElementTypeId, FontFamily, FontWeight, ImageRenderInfo,
-        TextAlign, TextVerticalAlign,
+        div, Div, ElementBuilder, ElementTypeId, FontFamily, FontWeight, GenericFont,
+        ImageRenderInfo, TextAlign, TextVerticalAlign,
     };
     // Reference binding for external element access
     pub use crate::div::{DivRef, ElementRef};

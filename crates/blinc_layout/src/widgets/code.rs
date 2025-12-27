@@ -647,6 +647,8 @@ impl Code {
                         txt = txt.bold();
                     }
 
+                    txt = txt.monospace();
+
                     line_div = line_div.child(txt);
                 }
             }

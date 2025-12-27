@@ -203,22 +203,52 @@ impl Text {
     /// Set font family
     pub fn font_family(mut self, family: FontFamily) -> Self {
         self.font_family = family;
+        // Re-measure since different fonts have different character widths
+        self.update_size_estimate();
         self
+    }
+
+    /// Set a specific font by name (e.g., "Fira Code", "Inter")
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// text("Hello").font("Inter")
+    /// text("Code").font("Fira Code")
+    /// ```
+    pub fn font(self, name: impl Into<String>) -> Self {
+        self.font_family(FontFamily::named(name))
+    }
+
+    /// Set a specific font with a fallback category
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use blinc_layout::prelude::*;
+    /// text("Code").font_with_fallback("Fira Code", GenericFont::Monospace)
+    /// ```
+    pub fn font_with_fallback(
+        self,
+        name: impl Into<String>,
+        fallback: crate::div::GenericFont,
+    ) -> Self {
+        self.font_family(FontFamily::named_with_fallback(name, fallback))
     }
 
     /// Use monospace font (for code)
     pub fn monospace(self) -> Self {
-        self.font_family(FontFamily::Monospace)
+        self.font_family(FontFamily::monospace())
     }
 
     /// Use serif font
     pub fn serif(self) -> Self {
-        self.font_family(FontFamily::Serif)
+        self.font_family(FontFamily::serif())
     }
 
     /// Use sans-serif font
     pub fn sans_serif(self) -> Self {
-        self.font_family(FontFamily::SansSerif)
+        self.font_family(FontFamily::sans_serif())
     }
 
     // =========================================================================
@@ -262,8 +292,16 @@ impl Text {
 
     /// Update size using actual text measurement if available, otherwise estimate
     fn update_size_estimate(&mut self) {
-        // Use the global text measurer if available, otherwise fall back to estimation
-        let metrics = crate::text_measure::measure_text(&self.content, self.font_size);
+        // Use the global text measurer with font family info
+        let mut options = crate::text_measure::TextLayoutOptions::new();
+        options.font_name = self.font_family.name.clone();
+        options.generic_font = self.font_family.generic;
+
+        let metrics = crate::text_measure::measure_text_with_options(
+            &self.content,
+            self.font_size,
+            &options,
+        );
 
         // Store measured width for render-time comparison
         self.measured_width = metrics.width;
@@ -433,7 +471,7 @@ impl ElementBuilder for Text {
             wrap: self.wrap,
             line_height: self.line_height,
             measured_width: self.measured_width,
-            font_family: self.font_family,
+            font_family: self.font_family.clone(),
             word_spacing: self.word_spacing,
         })
     }

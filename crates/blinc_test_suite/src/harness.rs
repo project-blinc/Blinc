@@ -13,6 +13,7 @@ use blinc_gpu::{
 };
 use blinc_layout::prelude::*;
 use blinc_layout::renderer::ElementType;
+use blinc_layout::div::FontFamily;
 use blinc_svg::SvgDocument;
 use blinc_text::TextAnchor;
 use image::{ImageBuffer, Rgba, RgbaImage};
@@ -57,6 +58,8 @@ pub struct TextCommand {
     pub color: [f32; 4],
     /// Vertical anchor (Top, Center, or Baseline)
     pub anchor: TextAnchor,
+    /// Font family (name + generic fallback)
+    pub font_family: Option<FontFamily>,
 }
 
 /// Context for a single test
@@ -129,6 +132,7 @@ impl<'a> TestContext<'a> {
             font_size,
             color,
             anchor: TextAnchor::Top,
+            font_family: None,
         });
     }
 
@@ -149,6 +153,7 @@ impl<'a> TestContext<'a> {
             font_size,
             color,
             anchor: TextAnchor::Center,
+            font_family: None,
         });
     }
 
@@ -169,6 +174,28 @@ impl<'a> TestContext<'a> {
             font_size,
             color,
             anchor,
+            font_family: None,
+        });
+    }
+
+    /// Add a text rendering command with a specific font family
+    pub fn draw_text_with_font(
+        &mut self,
+        text: &str,
+        x: f32,
+        y: f32,
+        font_size: f32,
+        color: [f32; 4],
+        font_family: FontFamily,
+    ) {
+        self.text_commands.push(TextCommand {
+            text: text.to_string(),
+            x,
+            y,
+            font_size,
+            color,
+            anchor: TextAnchor::Top,
+            font_family: Some(font_family),
         });
     }
 
@@ -227,16 +254,17 @@ impl<'a> TestContext<'a> {
     /// Render text and SVG content from the layout tree
     fn render_layout_content(&mut self, tree: &RenderTree) {
         // Collect text and SVG data first
-        let mut texts: Vec<(String, f32, f32, f32, f32, f32, [f32; 4])> = Vec::new();
+        // (content, x, y, w, h, font_size, color, font_family)
+        let mut texts: Vec<(String, f32, f32, f32, f32, f32, [f32; 4], FontFamily)> = Vec::new();
         let mut svgs: Vec<(String, f32, f32, f32, f32)> = Vec::new();
 
         if let Some(root) = tree.root() {
             Self::collect_layout_elements(tree, root, (0.0, 0.0), &mut texts, &mut svgs);
         }
 
-        // Render text elements
-        for (content, x, y, _w, h, font_size, color) in texts {
-            self.draw_text_centered(&content, x, y + h / 2.0, font_size, color);
+        // Render text elements with font support
+        for (content, x, y, _w, h, font_size, color, font_family) in texts {
+            self.draw_text_with_font(&content, x, y + h / 2.0, font_size, color, font_family);
         }
 
         // Render SVG elements to foreground
@@ -253,7 +281,7 @@ impl<'a> TestContext<'a> {
         tree: &RenderTree,
         node: LayoutNodeId,
         parent_offset: (f32, f32),
-        texts: &mut Vec<(String, f32, f32, f32, f32, f32, [f32; 4])>,
+        texts: &mut Vec<(String, f32, f32, f32, f32, f32, [f32; 4], FontFamily)>,
         svgs: &mut Vec<(String, f32, f32, f32, f32)>,
     ) {
         let Some(bounds) = tree.layout().get_bounds(node, parent_offset) else {
@@ -274,6 +302,7 @@ impl<'a> TestContext<'a> {
                         bounds.height,
                         text_data.font_size,
                         text_data.color,
+                        text_data.font_family.clone(),
                     ));
                 }
                 ElementType::Svg(svg_data) => {
@@ -291,6 +320,9 @@ impl<'a> TestContext<'a> {
                 }
                 ElementType::Canvas(_) => {
                     // Canvas elements render via their own callback
+                }
+                ElementType::StyledText(_) => {
+                    // Styled text is handled similarly to text but with spans
                 }
             }
         }
@@ -362,6 +394,12 @@ impl TestHarness {
             }
         }
 
+        // Preload common fonts that tests might use
+        text_ctx.preload_fonts(&[
+            "SF Mono", "Menlo", "Fira Code", "Inter", "SF Pro",
+            "Consolas", "Monaco", "Source Code Pro", "JetBrains Mono",
+        ]);
+
         // Create output directories
         std::fs::create_dir_all(&config.output_dir).context("Failed to create output directory")?;
         std::fs::create_dir_all(&config.reference_dir)
@@ -426,6 +464,48 @@ impl TestHarness {
         self.text_ctx
             .borrow_mut()
             .prepare_text_with_anchor(text, x, y, font_size, color, anchor)
+            .map_err(|e| anyhow::anyhow!("Text preparation failed: {}", e))
+    }
+
+    /// Prepare text for rendering with a specific font
+    ///
+    /// Returns GPU glyphs that can be rendered with render_text
+    pub fn prepare_text_with_font(
+        &self,
+        text: &str,
+        x: f32,
+        y: f32,
+        font_size: f32,
+        color: [f32; 4],
+        anchor: TextAnchor,
+        font_family: &FontFamily,
+    ) -> Result<Vec<GpuGlyph>> {
+        use blinc_text::{TextAlignment, GenericFont as TextGenericFont};
+        use blinc_layout::div::GenericFont as LayoutGenericFont;
+
+        // Convert from layout GenericFont to text GenericFont
+        let generic = match font_family.generic {
+            LayoutGenericFont::System => TextGenericFont::System,
+            LayoutGenericFont::Monospace => TextGenericFont::Monospace,
+            LayoutGenericFont::Serif => TextGenericFont::Serif,
+            LayoutGenericFont::SansSerif => TextGenericFont::SansSerif,
+        };
+
+        self.text_ctx
+            .borrow_mut()
+            .prepare_text_with_font(
+                text,
+                x,
+                y,
+                font_size,
+                color,
+                anchor,
+                TextAlignment::Left,
+                None,   // width
+                false,  // wrap
+                font_family.name.as_deref(),
+                generic,
+            )
             .map_err(|e| anyhow::anyhow!("Text preparation failed: {}", e))
     }
 
@@ -904,14 +984,29 @@ impl TestHarness {
         // Prepare text glyphs if there are text commands
         let mut all_glyphs = Vec::new();
         for cmd in &text_commands {
-            match self.prepare_text_with_anchor(
-                &cmd.text,
-                cmd.x,
-                cmd.y,
-                cmd.font_size,
-                cmd.color,
-                cmd.anchor,
-            ) {
+            let result = if let Some(ref font_family) = cmd.font_family {
+                // Use font-specific rendering
+                self.prepare_text_with_font(
+                    &cmd.text,
+                    cmd.x,
+                    cmd.y,
+                    cmd.font_size,
+                    cmd.color,
+                    cmd.anchor,
+                    font_family,
+                )
+            } else {
+                // Use default font
+                self.prepare_text_with_anchor(
+                    &cmd.text,
+                    cmd.x,
+                    cmd.y,
+                    cmd.font_size,
+                    cmd.color,
+                    cmd.anchor,
+                )
+            };
+            match result {
                 Ok(glyphs) => all_glyphs.extend(glyphs),
                 Err(e) => tracing::warn!("Failed to prepare text '{}': {}", cmd.text, e),
             }
@@ -1020,14 +1115,27 @@ impl TestHarness {
         // Prepare text glyphs if any
         let mut all_glyphs = Vec::new();
         for cmd in &text_commands {
-            if let Ok(glyphs) = self.prepare_text_with_anchor(
-                &cmd.text,
-                cmd.x,
-                cmd.y,
-                cmd.font_size,
-                cmd.color,
-                cmd.anchor,
-            ) {
+            let result = if let Some(ref font_family) = cmd.font_family {
+                self.prepare_text_with_font(
+                    &cmd.text,
+                    cmd.x,
+                    cmd.y,
+                    cmd.font_size,
+                    cmd.color,
+                    cmd.anchor,
+                    font_family,
+                )
+            } else {
+                self.prepare_text_with_anchor(
+                    &cmd.text,
+                    cmd.x,
+                    cmd.y,
+                    cmd.font_size,
+                    cmd.color,
+                    cmd.anchor,
+                )
+            };
+            if let Ok(glyphs) = result {
                 all_glyphs.extend(glyphs);
             }
         }

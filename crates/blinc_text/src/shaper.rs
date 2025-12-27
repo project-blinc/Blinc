@@ -64,8 +64,8 @@ impl TextShaper {
 
     /// Shape a text string using the given font
     pub fn shape(&self, text: &str, font_face: &FontFace, font_size: f32) -> ShapedText {
-        // Create rustybuzz Face from font data
-        let face = match Face::from_slice(font_face.data(), 0) {
+        // Create rustybuzz Face from font data with correct face index
+        let face = match Face::from_slice(font_face.data(), font_face.face_index()) {
             Some(f) => f,
             None => {
                 // Fallback: return basic glyph sequence without shaping
@@ -154,7 +154,7 @@ impl TextShaper {
         font_size: f32,
         features: &[rustybuzz::Feature],
     ) -> ShapedText {
-        let face = match Face::from_slice(font_face.data(), 0) {
+        let face = match Face::from_slice(font_face.data(), font_face.face_index()) {
             Some(f) => f,
             None => return self.fallback_shape(text, font_face, font_size),
         };

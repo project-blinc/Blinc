@@ -4,6 +4,7 @@
 
 use crate::runner::TestSuite;
 use blinc_core::{Color, DrawContext, Rect};
+use blinc_layout::prelude::*;
 
 /// Helper to convert Color to [f32; 4]
 fn color_to_array(color: Color) -> [f32; 4] {
@@ -126,6 +127,141 @@ pub fn suite() -> TestSuite {
                 color_to_array(Color::BLACK),
             );
         }
+    });
+
+    // Custom font tests - SF Mono with varying sizes
+    suite.add("custom_font_sf_mono", |ctx| {
+        let ui = div()
+            .w(600.0)
+            .h(300.0)
+            .flex_col()
+            .gap_px(15.0)
+            .p_px(20.0)
+            .bg(Color::WHITE)
+            .child(
+                text("SF Mono 12px: The quick brown fox")
+                    .font("SF Mono")
+                    .size(12.0)
+                    .color(Color::BLACK),
+            )
+            .child(
+                text("SF Mono 16px: The quick brown fox")
+                    .font("SF Mono")
+                    .size(16.0)
+                    .color(Color::BLACK),
+            )
+            .child(
+                text("SF Mono 24px: The quick brown fox")
+                    .font("SF Mono")
+                    .size(24.0)
+                    .color(Color::BLACK),
+            )
+            .child(
+                text("SF Mono 32px: ABCDEFG")
+                    .font("SF Mono")
+                    .size(32.0)
+                    .color(Color::BLACK),
+            )
+            .child(
+                text("SF Mono 48px: ABC")
+                    .font("SF Mono")
+                    .size(48.0)
+                    .color(Color::BLACK),
+            );
+
+        let mut tree = RenderTree::from_element(&ui);
+        tree.compute_layout(800.0, 600.0);
+        ctx.render_layout(&tree);
+    });
+
+    // Custom font tests - Menlo with varying sizes
+    suite.add("custom_font_menlo", |ctx| {
+        let ui = div()
+            .w(600.0)
+            .h(300.0)
+            .flex_col()
+            .gap_px(15.0)
+            .p_px(20.0)
+            .bg(Color::WHITE)
+            .child(
+                text("Menlo 12px: The quick brown fox")
+                    .font("Menlo")
+                    .size(12.0)
+                    .color(Color::BLACK),
+            )
+            .child(
+                text("Menlo 16px: The quick brown fox")
+                    .font("Menlo")
+                    .size(16.0)
+                    .color(Color::BLACK),
+            )
+            .child(
+                text("Menlo 24px: The quick brown fox")
+                    .font("Menlo")
+                    .size(24.0)
+                    .color(Color::BLACK),
+            )
+            .child(
+                text("Menlo 32px: ABCDEFG")
+                    .font("Menlo")
+                    .size(32.0)
+                    .color(Color::BLACK),
+            )
+            .child(
+                text("Menlo 48px: ABC")
+                    .font("Menlo")
+                    .size(48.0)
+                    .color(Color::BLACK),
+            );
+
+        let mut tree = RenderTree::from_element(&ui);
+        tree.compute_layout(800.0, 600.0);
+        ctx.render_layout(&tree);
+    });
+
+    // Custom font tests - Fira Code with varying sizes (includes ligatures)
+    suite.add("custom_font_fira_code", |ctx| {
+        let ui = div()
+            .w(600.0)
+            .h(300.0)
+            .flex_col()
+            .gap_px(15.0)
+            .p_px(20.0)
+            .bg(Color::WHITE)
+            .child(
+                text("Fira Code 12px: fn main() {}")
+                    .font("Fira Code")
+                    .size(12.0)
+                    .color(Color::BLACK),
+            )
+            .child(
+                text("Fira Code 16px: => -> != ==")
+                    .font("Fira Code")
+                    .size(16.0)
+                    .color(Color::BLACK),
+            )
+            .child(
+                text("Fira Code 24px: let x = 42;")
+                    .font("Fira Code")
+                    .size(24.0)
+                    .color(Color::BLACK),
+            )
+            .child(
+                text("Fira Code 32px: <> <=")
+                    .font("Fira Code")
+                    .size(32.0)
+                    .color(Color::BLACK),
+            )
+            .child(
+                text("Fira Code 48px: ABC")
+                    .font("Fira Code")
+                    .size(48.0)
+                    .color(Color::BLACK),
+            );
+
+        let mut tree = RenderTree::from_element(&ui);
+        tree.compute_layout(800.0, 600.0);
+        ctx.render_layout(&tree);
     });
 
     suite

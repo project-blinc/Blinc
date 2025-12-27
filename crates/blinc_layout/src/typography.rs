@@ -184,7 +184,7 @@ pub fn heading(level: u8, content: impl Into<String>) -> Text {
 /// div().child(b("Important")).child(text(" regular text"))
 /// ```
 pub fn b(content: impl Into<String>) -> Text {
-    text(content).bold()
+    text(content).bold().no_wrap()
 }
 
 /// Create bold text (alias for `b()`)
@@ -198,9 +198,10 @@ pub fn strong(content: impl Into<String>) -> Text {
     b(content)
 }
 
-/// Create a neutral text span
+/// Create a neutral text span (inline, no wrapping)
 ///
-/// This is equivalent to `text()` but named for HTML familiarity.
+/// This is similar to `text()` but defaults to inline behavior (no wrap).
+/// Use for short inline text fragments.
 ///
 /// # Example
 ///
@@ -208,10 +209,10 @@ pub fn strong(content: impl Into<String>) -> Text {
 /// span("Some text").color(Color::BLUE)
 /// ```
 pub fn span(content: impl Into<String>) -> Text {
-    text(content)
+    text(content).no_wrap()
 }
 
-/// Create small text (12px)
+/// Create small text (12px, inline)
 ///
 /// # Example
 ///
@@ -219,10 +220,10 @@ pub fn span(content: impl Into<String>) -> Text {
 /// small("Fine print").color(Color::GRAY)
 /// ```
 pub fn small(content: impl Into<String>) -> Text {
-    text(content).size(12.0)
+    text(content).size(12.0).no_wrap()
 }
 
-/// Create a label (14px, medium weight)
+/// Create a label (14px, medium weight, inline)
 ///
 /// Useful for form field labels.
 ///
@@ -236,10 +237,10 @@ pub fn small(content: impl Into<String>) -> Text {
 ///     .child(text_input(&state))
 /// ```
 pub fn label(content: impl Into<String>) -> Text {
-    text(content).size(14.0).medium()
+    text(content).size(14.0).medium().no_wrap()
 }
 
-/// Create muted/secondary text
+/// Create muted/secondary text (inline)
 ///
 /// Uses a dimmer gray color by default. Override with `.color()`.
 ///
@@ -249,7 +250,7 @@ pub fn label(content: impl Into<String>) -> Text {
 /// muted("Less important information")
 /// ```
 pub fn muted(content: impl Into<String>) -> Text {
-    text(content).color(Color::rgba(0.6, 0.6, 0.65, 1.0))
+    text(content).color(Color::rgba(0.6, 0.6, 0.65, 1.0)).no_wrap()
 }
 
 /// Create a paragraph text element (16px with line height 1.5)
@@ -265,7 +266,7 @@ pub fn p(content: impl Into<String>) -> Text {
     text(content).size(16.0).line_height(1.5)
 }
 
-/// Create caption text (12px, muted)
+/// Create caption text (12px, muted, inline)
 ///
 /// For image captions, table footnotes, etc.
 ///
@@ -278,6 +279,7 @@ pub fn caption(content: impl Into<String>) -> Text {
     text(content)
         .size(12.0)
         .color(Color::rgba(0.5, 0.5, 0.55, 1.0))
+        .no_wrap()
 }
 
 /// Create code-styled inline text with monospace font
@@ -296,7 +298,7 @@ pub fn caption(content: impl Into<String>) -> Text {
 ///     .child(text(" function"))
 /// ```
 pub fn inline_code(content: impl Into<String>) -> Text {
-    text(content).size(13.0).monospace()
+    text(content).size(13.0).monospace().no_wrap()
 }
 
 #[cfg(test)]

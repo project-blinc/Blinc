@@ -3,7 +3,7 @@
 //! This module provides integration between blinc_text's TextRenderer
 //! and the GPU rendering pipeline.
 
-use blinc_text::{LayoutOptions, TextAlignment, TextAnchor, TextRenderer};
+use blinc_text::{ColorSpan, GenericFont, LayoutOptions, TextAlignment, TextAnchor, TextRenderer};
 use std::sync::Arc;
 
 use crate::primitives::GpuGlyph;
@@ -66,6 +66,12 @@ impl TextRenderingContext {
     /// Load the default font from a file path
     pub fn load_font(&mut self, path: &std::path::Path) -> Result<(), blinc_text::TextError> {
         self.renderer.load_default_font(path)
+    }
+
+    /// Preload fonts by name (call at startup for fonts your app uses)
+    /// This ensures fonts are cached before render time.
+    pub fn preload_fonts(&mut self, names: &[&str]) {
+        self.renderer.preload_fonts(names);
     }
 
     /// Load the default font from data
@@ -166,6 +172,49 @@ impl TextRenderingContext {
         width: Option<f32>,
         wrap: bool,
     ) -> Result<Vec<GpuGlyph>, blinc_text::TextError> {
+        self.prepare_text_with_font(
+            text,
+            x,
+            y,
+            font_size,
+            color,
+            anchor,
+            alignment,
+            width,
+            wrap,
+            None,
+            GenericFont::System,
+        )
+    }
+
+    /// Prepare text with a specific font family
+    ///
+    /// # Arguments
+    /// * `text` - The text string to render
+    /// * `x` - X position
+    /// * `y` - Y position
+    /// * `font_size` - Font size in pixels
+    /// * `color` - RGBA color as [r, g, b, a] in 0.0-1.0 range
+    /// * `anchor` - Vertical anchor (Top, Center, Baseline)
+    /// * `alignment` - Horizontal alignment (Left, Center, Right)
+    /// * `width` - Optional width for alignment/wrapping
+    /// * `wrap` - Whether to wrap text at width boundary
+    /// * `font_name` - Optional font name (e.g., "Fira Code", "Inter")
+    /// * `generic` - Generic font category for fallback
+    pub fn prepare_text_with_font(
+        &mut self,
+        text: &str,
+        x: f32,
+        y: f32,
+        font_size: f32,
+        color: [f32; 4],
+        anchor: TextAnchor,
+        alignment: TextAlignment,
+        width: Option<f32>,
+        wrap: bool,
+        font_name: Option<&str>,
+        generic: GenericFont,
+    ) -> Result<Vec<GpuGlyph>, blinc_text::TextError> {
         let mut options = LayoutOptions::default();
         options.anchor = anchor;
         options.alignment = alignment;
@@ -178,7 +227,7 @@ impl TextRenderingContext {
         }
         let prepared = self
             .renderer
-            .prepare_text(text, font_size, color, &options)?;
+            .prepare_text_with_font(text, font_size, color, &options, font_name, generic)?;
 
         let y_offset = match anchor {
             TextAnchor::Top => y,
@@ -233,6 +282,64 @@ impl TextRenderingContext {
             .collect();
 
         // Update atlas texture if dirty
+        if self.renderer.atlas_is_dirty() {
+            self.update_atlas_texture();
+            self.renderer.mark_atlas_clean();
+        }
+
+        Ok(glyphs)
+    }
+
+    /// Prepare styled text with multiple color spans
+    ///
+    /// This renders text as a single unit but applies different colors to different ranges.
+    /// Each ColorSpan specifies a byte range and color.
+    pub fn prepare_styled_text(
+        &mut self,
+        text: &str,
+        x: f32,
+        y: f32,
+        font_size: f32,
+        default_color: [f32; 4],
+        color_spans: &[ColorSpan],
+        anchor: TextAnchor,
+        font_name: Option<&str>,
+        generic: GenericFont,
+    ) -> Result<Vec<GpuGlyph>, blinc_text::TextError> {
+        let mut options = LayoutOptions::default();
+        options.anchor = anchor;
+        options.line_break = blinc_text::LineBreakMode::None;
+
+        let prepared = self.renderer.prepare_styled_text(
+            text,
+            font_size,
+            default_color,
+            color_spans,
+            &options,
+            font_name,
+            generic,
+        )?;
+
+        let y_offset = match anchor {
+            TextAnchor::Top => y,
+            TextAnchor::Center => {
+                let cap_center = prepared.ascender / 2.0;
+                y - cap_center
+            }
+            TextAnchor::Baseline => y - prepared.ascender,
+        };
+
+        let glyphs = prepared
+            .glyphs
+            .iter()
+            .map(|g| GpuGlyph {
+                bounds: [g.bounds[0] + x, g.bounds[1] + y_offset, g.bounds[2], g.bounds[3]],
+                uv_bounds: g.uv_bounds,
+                color: g.color,
+                clip_bounds: [-10000.0, -10000.0, 100000.0, 100000.0],
+            })
+            .collect();
+
         if self.renderer.atlas_is_dirty() {
             self.update_atlas_texture();
             self.renderer.mark_atlas_clean();

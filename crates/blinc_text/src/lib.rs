@@ -11,6 +11,7 @@ pub mod atlas;
 pub mod font;
 pub mod layout;
 pub mod rasterizer;
+pub mod registry;
 pub mod renderer;
 pub mod shaper;
 
@@ -21,7 +22,8 @@ pub use layout::{
     TextLayoutEngine,
 };
 pub use rasterizer::{GlyphRasterizer, RasterizedGlyph};
-pub use renderer::{GlyphInstance, PreparedText, TextRenderer};
+pub use registry::{FontRegistry, GenericFont};
+pub use renderer::{ColorSpan, GlyphInstance, PreparedText, TextRenderer};
 pub use shaper::{ShapedGlyph, ShapedText, TextShaper};
 
 use thiserror::Error;

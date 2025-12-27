@@ -1469,21 +1469,87 @@ pub enum TextVerticalAlign {
     Center,
 }
 
-/// Font family categories
-///
-/// Specifies which font category to use for text rendering.
-/// The actual font file is determined by the platform/renderer based on this category.
+/// Generic font category for fallback when a named font isn't available
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum FontFamily {
-    /// Default system font (sans-serif on most platforms)
+pub enum GenericFont {
+    /// Default system UI font
     #[default]
     System,
-    /// Monospace font for code (Menlo, Consolas, etc.)
+    /// Monospace font for code (Menlo, Consolas, Monaco, etc.)
     Monospace,
     /// Serif font (Times, Georgia, etc.)
     Serif,
     /// Sans-serif font (Helvetica, Arial, etc.)
     SansSerif,
+}
+
+/// Font family specification
+///
+/// Allows specifying either a named font (e.g., "Fira Code", "Inter") or
+/// a generic category. When a named font is specified, the generic category
+/// serves as a fallback if the font isn't available.
+///
+/// # Example
+///
+/// ```ignore
+/// // Use a specific font with monospace fallback
+/// text("code").font("Fira Code")
+///
+/// // Use system monospace
+/// text("code").monospace()
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FontFamily {
+    /// Specific font name (e.g., "Fira Code", "Inter", "SF Pro")
+    pub name: Option<String>,
+    /// Generic fallback category
+    pub generic: GenericFont,
+}
+
+impl FontFamily {
+    /// Create a font family with just a generic category
+    pub fn generic(generic: GenericFont) -> Self {
+        Self {
+            name: None,
+            generic,
+        }
+    }
+
+    /// Create a font family with a specific font name
+    pub fn named(name: impl Into<String>) -> Self {
+        Self {
+            name: Some(name.into()),
+            generic: GenericFont::System,
+        }
+    }
+
+    /// Create a font family with a specific name and fallback category
+    pub fn named_with_fallback(name: impl Into<String>, generic: GenericFont) -> Self {
+        Self {
+            name: Some(name.into()),
+            generic,
+        }
+    }
+
+    /// System UI font
+    pub fn system() -> Self {
+        Self::generic(GenericFont::System)
+    }
+
+    /// Monospace font
+    pub fn monospace() -> Self {
+        Self::generic(GenericFont::Monospace)
+    }
+
+    /// Serif font
+    pub fn serif() -> Self {
+        Self::generic(GenericFont::Serif)
+    }
+
+    /// Sans-serif font
+    pub fn sans_serif() -> Self {
+        Self::generic(GenericFont::SansSerif)
+    }
 }
 
 /// Text render data extracted from element

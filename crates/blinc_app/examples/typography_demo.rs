@@ -3,6 +3,7 @@
 //! This example demonstrates typography helpers:
 //! - Headings: h1-h6, heading()
 //! - Inline text: b, span, small, label, muted, p, caption, inline_code
+//! - Font families: system, monospace, serif, sans_serif, custom fonts
 //!
 //! For table examples, see `table_demo.rs`
 //!
@@ -48,7 +49,8 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                         .gap(32.0)
                         .p(8.0)
                         .child(typography_section())
-                        .child(inline_text_section()),
+                        .child(inline_text_section())
+                        .child(font_family_section()),
                 ),
         )
 }
@@ -178,8 +180,106 @@ fn inline_text_section() -> Div {
                         .items_center()
                         .child(label("inline_code():").color(Color::GRAY))
                         .child(span("Use ").color(Color::WHITE))
-                        .child(inline_code("div().flex_col()"))
+                        .child(inline_code("div().flex_col()").color(Color::GRAY))
                         .child(span(" for layouts").color(Color::WHITE)),
+                ),
+        )
+}
+
+/// Demonstrates font family options
+fn font_family_section() -> Div {
+    div()
+        .w_full()
+        .flex_col()
+        .gap(12.0)
+        .child(h2("Font Families").color(Color::WHITE))
+        .child(
+            div()
+                .w_full()
+                .bg(Color::rgba(0.12, 0.12, 0.15, 1.0))
+                .rounded(8.0)
+                .p(16.0)
+                .flex_col()
+                .gap(8.0)
+                // System (default)
+                .child(
+                    div()
+                        .flex_row()
+                        .gap(8.0)
+                        .items_center()
+                        .child(label("System (default):").color(Color::GRAY))
+                        .child(text("The quick brown fox jumps over the lazy dog").color(Color::WHITE)),
+                )
+                // Monospace
+                .child(
+                    div()
+                        .flex_row()
+                        .gap(8.0)
+                        .items_center()
+                        .child(label(".monospace():").color(Color::GRAY))
+                        .child(
+                            text("fn main() { println!(\"Hello\"); }")
+                                .monospace()
+                                .color(Color::from_hex(0x98C379)),
+                        ),
+                )
+                // Serif
+                .child(
+                    div()
+                        .flex_row()
+                        .gap(8.0)
+                        .items_center()
+                        .child(label(".serif():").color(Color::GRAY))
+                        .child(
+                            text("The quick brown fox jumps over the lazy dog")
+                                .serif()
+                                .color(Color::WHITE),
+                        ),
+                )
+                // Sans-serif
+                .child(
+                    div()
+                        .flex_row()
+                        .gap(8.0)
+                        .items_center()
+                        .child(label(".sans_serif():").color(Color::GRAY))
+                        .child(
+                            text("The quick brown fox jumps over the lazy dog")
+                                .sans_serif()
+                                .color(Color::WHITE),
+                        ),
+                )
+                // Named font examples
+                .child(
+                    div()
+                        .flex_col()
+                        .gap(4.0)
+                        .child(label("Named fonts with .font():").color(Color::GRAY))
+                        .child(
+                            div()
+                                .flex_col()
+                                .gap(4.0)
+                                .child(
+                                    text("Fira Code - fn main() { }")
+                                        .font("Fira Code")
+                                        .color(Color::from_hex(0xE5C07B)),
+                                )
+                                .child(
+                                    text("Menlo - let x = 42;")
+                                        .font("Menlo")
+                                        .color(Color::from_hex(0x61AFEF)),
+                                )
+                                .child(
+                                    text("SF Mono - const PI: f64 = 3.14;")
+                                        .font("SF Mono")
+                                        .color(Color::from_hex(0xC678DD)),
+                                )
+                                .child(
+                                    text("Inter - Modern UI font")
+                                        .font("Inter")
+                                        .color(Color::WHITE),
+                                ),
+                        ),
                 ),
         )
 }

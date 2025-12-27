@@ -57,6 +57,7 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                 .bg(Color::from_hex(0x222222))
                 .child(
                     div()
+                        .w_full()
                         .h_full()
                         .p(10.0)
                         .flex_col()
@@ -199,6 +200,7 @@ fn line_numbers_section() -> Div {
 }"#;
 
     div()
+        .w_full()
         .flex_col()
         .gap(2.0)
         .child(
@@ -213,37 +215,44 @@ fn line_numbers_section() -> Div {
                 .color(Color::rgba(0.6, 0.6, 0.7, 1.0)),
         )
         .child(
-            div()
-                .mt(6.0)
-                .flex_row()
-                .gap(16.0)
+            scroll()
+                .h_fit()
+                .w(800.0)
+                .direction(ScrollDirection::Horizontal)
                 .child(
                     div()
-                        .flex_col()
-                        .gap(4.0)
-                        .flex_grow()
-                        .child(text("With line numbers").size(12.0).color(Color::WHITE))
+                        .w_full()
+                        .mt(6.0)
+                        .flex_row()
+                        .gap(5.0)
                         .child(
-                            code(sample_code)
-                                .syntax(SyntaxConfig::new(RustHighlighter::new()))
-                                .line_numbers(true)
-                                .font_size(12.0)
-                                .w_full(),
-                        ),
-                )
-                .child(div().h_full().w(1.0).bg(Color::GRAY.with_alpha(0.5)))
-                .child(
-                    div()
-                        .flex_col()
-                        .gap(4.0)
-                        .flex_grow()
-                        .child(text("Without line numbers").size(12.0).color(Color::WHITE))
+                            div()
+                                .flex_col()
+                                .gap(4.0)
+                                .flex_grow()
+                                .child(text("With line numbers").size(12.0).color(Color::WHITE))
+                                .child(
+                                    code(sample_code)
+                                        .syntax(SyntaxConfig::new(RustHighlighter::new()))
+                                        .line_numbers(true)
+                                        .font_size(12.0)
+                                        .w_full(),
+                                ),
+                        )
+                        .child(div().h_full().w(0.5).bg(Color::GRAY.with_alpha(1.0)))
                         .child(
-                            code(sample_code)
-                                .syntax(SyntaxConfig::new(RustHighlighter::new()))
-                                .line_numbers(false)
-                                .font_size(12.0)
-                                .w_full(),
+                            div()
+                                .flex_col()
+                                .gap(4.0)
+                                .flex_grow()
+                                .child(text("Without line numbers").size(12.0).color(Color::WHITE))
+                                .child(
+                                    code(sample_code)
+                                        .syntax(SyntaxConfig::new(RustHighlighter::new()))
+                                        .line_numbers(false)
+                                        .font_size(12.0)
+                                        .w_full(),
+                                ),
                         ),
                 ),
         )

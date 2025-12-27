@@ -89,6 +89,7 @@ ttf-parser = "0.25"
 rustybuzz = "0.20"
 unicode-bidi = "0.3"
 unicode-linebreak = "0.1"
+fontdb = "0.22"
 
 # Image processing (for glyph atlas)
 image = { version = "0.25", default-features = false, features = ["png"] }

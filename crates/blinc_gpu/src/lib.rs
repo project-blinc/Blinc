@@ -38,4 +38,4 @@ pub use shaders::{
 pub use text::TextRenderingContext;
 
 // Re-export text types for convenience
-pub use blinc_text::{TextAlignment, TextAnchor};
+pub use blinc_text::{ColorSpan, GenericFont, TextAlignment, TextAnchor};

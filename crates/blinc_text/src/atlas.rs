@@ -48,6 +48,8 @@ pub struct GlyphInfo {
 /// Key for glyph cache lookup
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct GlyphKey {
+    /// Font ID (hash of font name/family)
+    font_id: u32,
     /// Glyph ID in the font
     glyph_id: u16,
     /// Font size (quantized to avoid too many entries)
@@ -55,10 +57,10 @@ struct GlyphKey {
 }
 
 impl GlyphKey {
-    fn new(glyph_id: u16, font_size: f32) -> Self {
+    fn new(font_id: u32, glyph_id: u16, font_size: f32) -> Self {
         // Quantize font size to reduce cache entries (0.5px granularity)
         let size_key = (font_size * 2.0).round() as u16;
-        Self { glyph_id, size_key }
+        Self { font_id, glyph_id, size_key }
     }
 }
 
@@ -126,8 +128,8 @@ impl GlyphAtlas {
     }
 
     /// Look up a cached glyph
-    pub fn get_glyph(&self, glyph_id: u16, font_size: f32) -> Option<&GlyphInfo> {
-        let key = GlyphKey::new(glyph_id, font_size);
+    pub fn get_glyph(&self, font_id: u32, glyph_id: u16, font_size: f32) -> Option<&GlyphInfo> {
+        let key = GlyphKey::new(font_id, glyph_id, font_size);
         self.glyphs.get(&key)
     }
 
@@ -189,6 +191,7 @@ impl GlyphAtlas {
     /// Insert a rasterized glyph into the atlas
     pub fn insert_glyph(
         &mut self,
+        font_id: u32,
         glyph_id: u16,
         font_size: f32,
         width: u32,
@@ -198,7 +201,7 @@ impl GlyphAtlas {
         advance: u16,
         bitmap: &[u8],
     ) -> Result<GlyphInfo> {
-        let key = GlyphKey::new(glyph_id, font_size);
+        let key = GlyphKey::new(font_id, glyph_id, font_size);
 
         // Check if already cached
         if let Some(info) = self.glyphs.get(&key) {
@@ -256,9 +259,9 @@ impl GlyphAtlas {
 
 impl Default for GlyphAtlas {
     fn default() -> Self {
-        // Default to 512x512 atlas (256 KB instead of 1 MB)
-        // This is sufficient for most UI text; can be resized if needed
-        Self::new(512, 512)
+        // Default to 1024x1024 atlas (1 MB)
+        // This supports multiple fonts at various sizes for typical UI usage
+        Self::new(1024, 1024)
     }
 }
 

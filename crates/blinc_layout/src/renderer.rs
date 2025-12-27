@@ -48,6 +48,8 @@ pub enum ElementType {
     Div,
     /// A text element with content
     Text(TextData),
+    /// Styled text with multiple color spans (for syntax highlighting)
+    StyledText(StyledTextData),
     /// An SVG element
     Svg(SvgData),
     /// An image element
@@ -75,6 +77,38 @@ pub struct TextData {
     pub font_family: crate::div::FontFamily,
     /// Word spacing in pixels (0.0 = normal)
     pub word_spacing: f32,
+}
+
+/// A color span within styled text
+#[derive(Clone, Debug)]
+pub struct StyledTextSpan {
+    /// Start byte index in text
+    pub start: usize,
+    /// End byte index in text (exclusive)
+    pub end: usize,
+    /// RGBA color
+    pub color: [f32; 4],
+}
+
+/// Styled text data for rendering with multiple color spans
+#[derive(Clone)]
+pub struct StyledTextData {
+    /// The full text content
+    pub content: String,
+    /// Color spans (must cover entire text, sorted by start position)
+    pub spans: Vec<StyledTextSpan>,
+    /// Default color for unspanned regions
+    pub default_color: [f32; 4],
+    /// Font size
+    pub font_size: f32,
+    /// Text alignment
+    pub align: crate::div::TextAlign,
+    /// Vertical alignment
+    pub v_align: crate::div::TextVerticalAlign,
+    /// Font family
+    pub font_family: crate::div::FontFamily,
+    /// Line height multiplier
+    pub line_height: f32,
 }
 
 /// SVG data for rendering

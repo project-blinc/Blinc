@@ -4,10 +4,10 @@
 
 use blinc_core::{Brush, Color, CornerRadius, DrawCommand, Rect, Stroke};
 use blinc_gpu::{
-    GpuGlyph, GpuImage, GpuImageInstance, GpuPaintContext, GpuRenderer, ImageRenderingContext,
-    TextAlignment, TextAnchor, TextRenderingContext,
+    GenericFont as GpuGenericFont, GpuGlyph, GpuImage, GpuImageInstance, GpuPaintContext,
+    GpuRenderer, ImageRenderingContext, TextAlignment, TextAnchor, TextRenderingContext,
 };
-use blinc_layout::div::{FontFamily, FontWeight, TextAlign, TextVerticalAlign};
+use blinc_layout::div::{FontFamily, FontWeight, GenericFont, TextAlign, TextVerticalAlign};
 use blinc_layout::prelude::*;
 use blinc_layout::render_state::Overlay;
 use blinc_layout::renderer::ElementType;
@@ -213,7 +213,11 @@ impl RenderContext {
                 text.width
             };
 
-            if let Ok(mut glyphs) = self.text_ctx.prepare_text_with_options(
+            // Convert font family to GPU types
+            let font_name = text.font_family.name.as_deref();
+            let generic = to_gpu_generic_font(text.font_family.generic);
+
+            if let Ok(mut glyphs) = self.text_ctx.prepare_text_with_font(
                 &text.content,
                 text.x,
                 y_pos,
@@ -223,6 +227,8 @@ impl RenderContext {
                 alignment,
                 Some(wrap_width),
                 text.wrap,
+                font_name,
+                generic,
             ) {
                 // Apply clip bounds to all glyphs if the text element has clip bounds
                 if let Some(clip) = text.clip_bounds {
@@ -738,7 +744,7 @@ impl RenderContext {
                         wrap: text_data.wrap,
                         line_height: text_data.line_height,
                         measured_width: scaled_measured_width,
-                        font_family: text_data.font_family,
+                        font_family: text_data.font_family.clone(),
                         word_spacing: text_data.word_spacing,
                     });
                 }
@@ -776,6 +782,8 @@ impl RenderContext {
                 // Canvas elements are rendered inline during tree traversal (in render_layer)
                 ElementType::Canvas(_) => {}
                 ElementType::Div => {}
+                // StyledText is a future optimization - currently handled as multiple Text elements
+                ElementType::StyledText(_) => {}
             }
         }
 
@@ -913,7 +921,11 @@ impl RenderContext {
                 None // No width constraint = no wrapping
             };
 
-            if let Ok(glyphs) = self.text_ctx.prepare_text_with_options(
+            // Convert font family to GPU types
+            let font_name = text.font_family.name.as_deref();
+            let generic = to_gpu_generic_font(text.font_family.generic);
+
+            if let Ok(glyphs) = self.text_ctx.prepare_text_with_font(
                 &text.content,
                 text.x,
                 text.y,
@@ -923,6 +935,8 @@ impl RenderContext {
                 alignment,
                 wrap_width,
                 needs_wrap,
+                font_name,
+                generic,
             ) {
                 // Apply clip bounds if present
                 let mut glyphs = glyphs;
@@ -1066,5 +1080,15 @@ impl RenderContext {
         if !overlay_batch.is_empty() {
             self.renderer.render_overlay(target, &overlay_batch);
         }
+    }
+}
+
+/// Convert layout's GenericFont to GPU's GenericFont
+fn to_gpu_generic_font(generic: GenericFont) -> GpuGenericFont {
+    match generic {
+        GenericFont::System => GpuGenericFont::System,
+        GenericFont::Monospace => GpuGenericFont::Monospace,
+        GenericFont::Serif => GpuGenericFont::Serif,
+        GenericFont::SansSerif => GpuGenericFont::SansSerif,
     }
 }

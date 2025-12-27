@@ -4,16 +4,29 @@
 //! as the renderer.
 
 use blinc_layout::text_measure::{TextLayoutOptions, TextMeasurer, TextMetrics};
-use blinc_text::{FontFace, LayoutOptions, TextLayoutEngine};
+use blinc_layout::GenericFont as LayoutGenericFont;
+use blinc_text::{FontFace, FontRegistry, GenericFont, LayoutOptions, TextLayoutEngine};
 use std::sync::{Arc, Mutex};
+
+/// Convert from layout's GenericFont to text's GenericFont
+fn to_text_generic_font(layout_font: LayoutGenericFont) -> GenericFont {
+    match layout_font {
+        LayoutGenericFont::System => GenericFont::System,
+        LayoutGenericFont::Monospace => GenericFont::Monospace,
+        LayoutGenericFont::Serif => GenericFont::Serif,
+        LayoutGenericFont::SansSerif => GenericFont::SansSerif,
+    }
+}
 
 /// A text measurer that uses actual font metrics
 ///
 /// This measurer uses the same font loading logic as the renderer
 /// to provide accurate text dimensions for layout.
 pub struct FontTextMeasurer {
-    /// The font face to use for measurement
+    /// The font face to use for measurement (default/sans-serif)
     font: Arc<Mutex<Option<FontFace>>>,
+    /// Font registry for loading different font families
+    font_registry: Arc<Mutex<FontRegistry>>,
     /// The layout engine for measuring text
     layout_engine: Mutex<TextLayoutEngine>,
 }
@@ -23,6 +36,7 @@ impl FontTextMeasurer {
     pub fn new() -> Self {
         let mut measurer = Self {
             font: Arc::new(Mutex::new(None)),
+            font_registry: Arc::new(Mutex::new(FontRegistry::new())),
             layout_engine: Mutex::new(TextLayoutEngine::new()),
         };
         measurer.load_system_font();
@@ -140,11 +154,19 @@ impl TextMeasurer for FontTextMeasurer {
         font_size: f32,
         options: &TextLayoutOptions,
     ) -> TextMetrics {
-        let font_guard = self.font.lock().unwrap();
-        let Some(ref font) = *font_guard else {
-            // No font loaded, use estimation
-            return Self::estimate_size(text, font_size, options);
+        // Determine which font to use based on options
+        let generic_font = to_text_generic_font(options.generic_font);
+
+        // Fast path: use cached fonts only (never load during measurement)
+        let registry = self.font_registry.lock().unwrap();
+        let font = match registry.get_for_render(
+            options.font_name.as_deref(),
+            generic_font,
+        ) {
+            Some(f) => f,
+            None => return Self::estimate_size(text, font_size, options),
         };
+        drop(registry); // Release lock before layout
 
         // Convert our options to blinc_text options
         let mut layout_opts = LayoutOptions::default();
@@ -158,7 +180,7 @@ impl TextMeasurer for FontTextMeasurer {
         }
 
         let layout_engine = self.layout_engine.lock().unwrap();
-        let layout = layout_engine.layout(text, font, font_size, &layout_opts);
+        let layout = layout_engine.layout(text, &font, font_size, &layout_opts);
 
         // Get font metrics
         let metrics = font.metrics();

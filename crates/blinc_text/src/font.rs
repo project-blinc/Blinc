@@ -103,6 +103,8 @@ impl FontMetrics {
 pub struct FontFace {
     /// Raw font data (kept alive for ttf-parser)
     data: Arc<Vec<u8>>,
+    /// Face index within the font file (for TTC files)
+    face_index: u32,
     /// Font metrics
     metrics: FontMetrics,
     /// Number of glyphs in the font
@@ -116,12 +118,20 @@ pub struct FontFace {
 }
 
 impl FontFace {
-    /// Load a font from raw TTF/OTF data
+    /// Load a font from raw TTF/OTF data (uses face index 0)
     pub fn from_data(data: Vec<u8>) -> Result<Self> {
+        Self::from_data_with_index(data, 0)
+    }
+
+    /// Load a font from raw TTF/OTF data with a specific face index
+    ///
+    /// For TTC (TrueType Collection) files, different indices represent different
+    /// font faces (e.g., Regular, Bold, Italic variants).
+    pub fn from_data_with_index(data: Vec<u8>, face_index: u32) -> Result<Self> {
         // Wrap data in Arc first so we can use it for parsing
         let data = Arc::new(data);
 
-        let face = ttf_parser::Face::parse(&data, 0)
+        let face = ttf_parser::Face::parse(&data, face_index)
             .map_err(|e| TextError::FontParseError(format!("{:?}", e)))?;
 
         let metrics = FontMetrics {
@@ -163,6 +173,7 @@ impl FontFace {
 
         Ok(Self {
             data,
+            face_index,
             metrics,
             glyph_count,
             family_name,
@@ -208,10 +219,15 @@ impl FontFace {
         &self.data
     }
 
+    /// Get face index within the font file
+    pub fn face_index(&self) -> u32 {
+        self.face_index
+    }
+
     /// Create a ttf-parser Face for glyph operations
     /// Note: This is slightly inefficient as it re-parses; consider caching if needed
     pub(crate) fn as_ttf_face(&self) -> Option<ttf_parser::Face<'_>> {
-        ttf_parser::Face::parse(&self.data, 0).ok()
+        ttf_parser::Face::parse(&self.data, self.face_index).ok()
     }
 
     /// Get glyph ID for a character

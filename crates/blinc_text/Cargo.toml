@@ -16,8 +16,11 @@ ttf-parser = { workspace = true }
 # Text shaping (HarfBuzz)
 rustybuzz = { workspace = true }
 
-# Glyph rasterization
-ab_glyph_rasterizer = "0.1"
+# Font discovery
+fontdb = { workspace = true }
+
+# Glyph rasterization (swash - high quality font rasterizer)
+swash = "0.1"
 
 # Unicode handling
 unicode-bidi = { workspace = true }

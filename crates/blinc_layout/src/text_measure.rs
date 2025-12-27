@@ -4,7 +4,7 @@
 //! This allows accurate text sizing without estimation.
 
 /// Text layout options that affect measurement
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct TextLayoutOptions {
     /// Line height multiplier (1.0 = default, 1.5 = 150%)
     pub line_height: f32,
@@ -14,6 +14,10 @@ pub struct TextLayoutOptions {
     pub word_spacing: f32,
     /// Maximum width for wrapping (None = no wrapping)
     pub max_width: Option<f32>,
+    /// Font family name (e.g., "Fira Code", None for default)
+    pub font_name: Option<String>,
+    /// Generic font category
+    pub generic_font: crate::div::GenericFont,
 }
 
 impl TextLayoutOptions {
@@ -24,6 +28,8 @@ impl TextLayoutOptions {
             letter_spacing: 0.0,
             word_spacing: 0.0,
             max_width: None,
+            font_name: None,
+            generic_font: crate::div::GenericFont::System,
         }
     }
 
@@ -48,6 +54,24 @@ impl TextLayoutOptions {
     /// Set max width for wrapping
     pub fn with_max_width(mut self, width: f32) -> Self {
         self.max_width = Some(width);
+        self
+    }
+
+    /// Set font name
+    pub fn with_font_name(mut self, name: impl Into<String>) -> Self {
+        self.font_name = Some(name.into());
+        self
+    }
+
+    /// Set generic font category
+    pub fn with_generic_font(mut self, generic: crate::div::GenericFont) -> Self {
+        self.generic_font = generic;
+        self
+    }
+
+    /// Set monospace font
+    pub fn monospace(mut self) -> Self {
+        self.generic_font = crate::div::GenericFont::Monospace;
         self
     }
 }

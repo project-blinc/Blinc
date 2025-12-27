@@ -1113,8 +1113,8 @@ impl WindowedApp {
                                 InputEvent::Scroll { delta_x, delta_y, .. } => {
                                     let (mx, my) = router.mouse_position();
                                     // Scroll deltas are also in physical pixels, convert to logical
-                                    let ldx = delta_x / scale;
-                                    let ldy = delta_y / scale;
+                                    let ldx = delta_x;
+                                    let ldy = delta_y;
                                     router.on_scroll(tree, ldx, ldy);
                                     for event in pending_events.iter_mut() {
                                         event.mouse_x = mx;
