@@ -96,9 +96,12 @@ pub fn take_needs_rebuild() -> bool {
     NEEDS_REBUILD.swap(false, Ordering::SeqCst)
 }
 
-/// Request a UI rebuild from a text widget event handler
-/// Called internally when focus/text changes require visual update
-pub(crate) fn request_rebuild() {
+/// Request a UI rebuild from an event handler
+///
+/// Called when widget state changes require a visual update.
+/// The windowed app checks this flag and triggers a tree rebuild,
+/// while preserving scroll positions via `transfer_scroll_offsets_from()`.
+pub fn request_rebuild() {
     NEEDS_REBUILD.store(true, Ordering::SeqCst);
 }
 
@@ -967,6 +970,7 @@ impl TextInput {
                             .size(config.font_size)
                             .color(text_color)
                             .text_left()
+                            .no_wrap()
                             .v_center(),
                     );
                 }
@@ -984,6 +988,7 @@ impl TextInput {
                                 .size(config.font_size)
                                 .color(text_color)
                                 .text_left()
+                                .no_wrap()
                                 .v_center(),
                         ),
                     );
@@ -997,6 +1002,7 @@ impl TextInput {
                             .size(config.font_size)
                             .color(text_color)
                             .text_left()
+                            .no_wrap()
                             .v_center(),
                     );
                 }
@@ -1008,6 +1014,7 @@ impl TextInput {
                     .size(config.font_size)
                     .color(text_color)
                     .text_left()
+                    .no_wrap()
                     .v_center();
                 inner_content = inner_content.child(text_element);
             }
@@ -1215,11 +1222,10 @@ impl TextInput {
                 if let Ok(mut s) = state_for_hover_enter.lock() {
                     if !s.disabled {
                         // Use FSM: POINTER_ENTER transitions hover states
+                        // Note: We don't request_rebuild() here to avoid scroll reset.
+                        // Hover visuals are updated at render time, not tree rebuild time.
                         if let Some(new_state) = s.visual.on_event(event_types::POINTER_ENTER) {
                             s.visual = new_state;
-                            // TODO: Use render-time visual state instead of rebuild
-                            // For now, hover affects border color which requires rebuild
-                            request_rebuild();
                         }
                     }
                 }
@@ -1228,11 +1234,10 @@ impl TextInput {
                 if let Ok(mut s) = state_for_hover_leave.lock() {
                     if !s.disabled {
                         // Use FSM: POINTER_LEAVE transitions hover states
+                        // Note: We don't request_rebuild() here to avoid scroll reset.
+                        // Hover visuals are updated at render time, not tree rebuild time.
                         if let Some(new_state) = s.visual.on_event(event_types::POINTER_LEAVE) {
                             s.visual = new_state;
-                            // TODO: Use render-time visual state instead of rebuild
-                            // For now, hover affects border color which requires rebuild
-                            request_rebuild();
                         }
                     }
                 }

@@ -685,19 +685,22 @@ impl TextArea {
                     text(placeholder)
                         .size(config.font_size)
                         .color(text_color)
-                        .text_left(),
+                        .text_left()
+                        .no_wrap(),
                 ),
             );
         } else {
             for (_line_idx, line) in state_guard.lines.iter().enumerate() {
                 let line_text = if line.is_empty() { " " } else { line.as_str() };
                 // Render all lines normally (cursor is added as overlay)
+                // Use no_wrap() to prevent text from wrapping within the line
                 content = content.child(
                     div().h(line_height).flex_row().items_center().child(
                         text(line_text)
                             .size(config.font_size)
                             .color(text_color)
-                            .text_left(),
+                            .text_left()
+                            .no_wrap(),
                     ),
                 );
             }
@@ -852,11 +855,10 @@ impl TextArea {
                 if let Ok(mut s) = state_for_hover_enter.lock() {
                     if !s.disabled {
                         // Use FSM: POINTER_ENTER transitions hover states
+                        // Note: We don't request_rebuild() here to avoid scroll reset.
+                        // Hover visuals are updated at render time, not tree rebuild time.
                         if let Some(new_state) = s.visual.on_event(event_types::POINTER_ENTER) {
                             s.visual = new_state;
-                            // TODO: Use render-time visual state instead of rebuild
-                            // For now, hover affects border color which requires rebuild
-                            request_rebuild();
                         }
                     }
                 }
@@ -865,11 +867,10 @@ impl TextArea {
                 if let Ok(mut s) = state_for_hover_leave.lock() {
                     if !s.disabled {
                         // Use FSM: POINTER_LEAVE transitions hover states
+                        // Note: We don't request_rebuild() here to avoid scroll reset.
+                        // Hover visuals are updated at render time, not tree rebuild time.
                         if let Some(new_state) = s.visual.on_event(event_types::POINTER_LEAVE) {
                             s.visual = new_state;
-                            // TODO: Use render-time visual state instead of rebuild
-                            // For now, hover affects border color which requires rebuild
-                            request_rebuild();
                         }
                     }
                 }

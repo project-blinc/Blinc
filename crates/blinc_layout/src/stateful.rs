@@ -57,12 +57,125 @@
 //! mutable reference to the inner `Div` for full mutation capability.
 
 use std::hash::Hash;
-use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
 
+use blinc_core::reactive::SignalId;
 use crate::div::{Div, ElementBuilder, ElementRef, ElementTypeId};
 use crate::element::RenderProps;
 use crate::tree::{LayoutNodeId, LayoutTree};
+
+// =========================================================================
+// Global Redraw Flag
+// =========================================================================
+
+/// Global flag for requesting a redraw without tree rebuild
+static NEEDS_REDRAW: AtomicBool = AtomicBool::new(false);
+
+/// Request a redraw without rebuilding the tree
+///
+/// This is used by stateful elements when state changes cause visual updates
+/// but don't require a tree structure change.
+pub fn request_redraw() {
+    NEEDS_REDRAW.store(true, Ordering::SeqCst);
+}
+
+/// Check and clear the redraw flag
+/// Returns true if a redraw was requested since last check
+pub fn take_needs_redraw() -> bool {
+    NEEDS_REDRAW.swap(false, Ordering::SeqCst)
+}
+
+// =========================================================================
+// Pending Prop Updates Queue
+// =========================================================================
+
+/// Queue of pending render prop updates (node_id, new_props)
+///
+/// When a stateful element's state changes, it computes new RenderProps
+/// and queues the update here. The windowed app applies these updates
+/// directly to the RenderTree, avoiding a full tree rebuild.
+static PENDING_PROP_UPDATES: LazyLock<Mutex<Vec<(LayoutNodeId, RenderProps)>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
+
+/// Queue of pending subtree rebuilds
+///
+/// Each entry contains the parent node ID and the children to rebuild.
+/// Children are stored as boxed Div elements (the result of the callback).
+static PENDING_SUBTREE_REBUILDS: LazyLock<Mutex<Vec<PendingSubtreeRebuild>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
+
+/// A pending subtree rebuild operation
+pub struct PendingSubtreeRebuild {
+    /// The parent node whose children should be rebuilt
+    pub parent_id: LayoutNodeId,
+    /// The new child element (a Div that was produced by the callback)
+    pub new_child: crate::div::Div,
+}
+
+// Safety: PendingSubtreeRebuild is only accessed from the main thread
+unsafe impl Send for PendingSubtreeRebuild {}
+
+/// Queue a subtree rebuild for a node
+pub fn queue_subtree_rebuild(parent_id: LayoutNodeId, new_child: crate::div::Div) {
+    PENDING_SUBTREE_REBUILDS.lock().unwrap().push(PendingSubtreeRebuild {
+        parent_id,
+        new_child,
+    });
+}
+
+/// Take all pending subtree rebuilds
+///
+/// Called by the windowed app to apply incremental child updates to the RenderTree.
+pub fn take_pending_subtree_rebuilds() -> Vec<PendingSubtreeRebuild> {
+    std::mem::take(&mut *PENDING_SUBTREE_REBUILDS.lock().unwrap())
+}
+
+/// Registry of stateful elements with signal dependencies
+///
+/// Each entry is (deps, refresh_fn) where refresh_fn triggers a rebuild.
+/// The windowed app checks these when signals change.
+static STATEFUL_DEPS: LazyLock<Mutex<Vec<(Vec<SignalId>, Box<dyn Fn() + Send + Sync>)>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
+
+/// Register a stateful element's dependencies
+///
+/// Called internally when `.deps()` is used on a stateful element.
+pub(crate) fn register_stateful_deps(deps: Vec<SignalId>, refresh_fn: Box<dyn Fn() + Send + Sync>) {
+    STATEFUL_DEPS.lock().unwrap().push((deps, refresh_fn));
+}
+
+/// Check all registered stateful deps against changed signals and trigger rebuilds
+///
+/// Called by windowed app after signal updates.
+/// Returns true if any deps matched and subtree rebuilds were queued.
+pub fn check_stateful_deps(changed_signals: &[SignalId]) -> bool {
+    let registry = STATEFUL_DEPS.lock().unwrap();
+    let mut triggered = false;
+    for (deps, refresh_fn) in registry.iter() {
+        // If any dep is in changed_signals, trigger the refresh
+        if deps.iter().any(|d| changed_signals.contains(d)) {
+            refresh_fn();
+            triggered = true;
+        }
+    }
+    triggered
+}
+
+/// Take all pending prop updates
+///
+/// Called by the windowed app to apply incremental updates to the RenderTree.
+/// Returns the queued updates and clears the queue.
+pub fn take_pending_prop_updates() -> Vec<(LayoutNodeId, RenderProps)> {
+    std::mem::take(&mut *PENDING_PROP_UPDATES.lock().unwrap())
+}
+
+/// Queue a render props update for a node
+///
+/// Called by stateful elements when their state changes.
+fn queue_prop_update(node_id: LayoutNodeId, props: RenderProps) {
+    PENDING_PROP_UPDATES.lock().unwrap().push((node_id, props));
+}
 
 // =========================================================================
 // State Traits
@@ -120,7 +233,8 @@ pub trait StateId: Clone + Copy + PartialEq + Eq + Hash + Send + Sync + 'static 
 // =========================================================================
 
 /// Callback type for state changes with user state type
-pub type StateCallback<S> = Box<dyn Fn(&S, &mut Div) + Send + Sync>;
+/// Wrapped in Arc so it can be cloned for incremental updates
+pub type StateCallback<S> = Arc<dyn Fn(&S, &mut Div) + Send + Sync>;
 
 // =========================================================================
 // Built-in State Types
@@ -415,7 +529,24 @@ pub struct StatefulInner<S: StateTransitions> {
     pub state: S,
 
     /// State change callback (receives state for pattern matching)
+    /// Note: This is boxed and stored here, but the actual Div is updated
+    /// when the Stateful is rebuilt or when render_props() is called.
     pub(crate) state_callback: Option<StateCallback<S>>,
+
+    /// Flag indicating visual state changed and callback should be re-applied
+    pub(crate) needs_visual_update: bool,
+
+    /// Base render props (before state callback is applied)
+    /// This captures the element's properties like rounded corners, shadows, etc.
+    /// When state changes, we start from base and apply callback changes on top.
+    pub(crate) base_render_props: Option<RenderProps>,
+
+    /// The layout node ID for this element (set on first event)
+    /// Used to apply incremental prop updates without tree rebuild
+    pub(crate) node_id: Option<LayoutNodeId>,
+
+    /// Signal dependencies - when any of these change, refresh props
+    pub(crate) deps: Vec<SignalId>,
 }
 
 impl<S: StateTransitions> StatefulInner<S> {
@@ -424,6 +555,10 @@ impl<S: StateTransitions> StatefulInner<S> {
         Self {
             state,
             state_callback: None,
+            needs_visual_update: false,
+            base_render_props: None,
+            node_id: None,
+            deps: Vec::new(),
         }
     }
 }
@@ -434,26 +569,22 @@ impl<S: StateTransitions + Default> Default for Stateful<S> {
     }
 }
 
-// Deref to Div so all Div methods are available
-impl<S: StateTransitions> Deref for Stateful<S> {
-    type Target = Div;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<S: StateTransitions> DerefMut for Stateful<S> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
+// Note: We can't implement Deref/DerefMut because the Div is behind a Mutex.
+// Instead, we provide explicit builder methods that lock and update the div.
 
 /// Shared state handle for `Stateful<S>` elements
 ///
 /// This can be created externally and passed to multiple `Stateful` elements,
 /// or stored for persistence across rebuilds (e.g., via `ctx.use_state()`).
 pub type SharedState<S> = Arc<Mutex<StatefulInner<S>>>;
+
+/// Trigger a refresh of the stateful element's props (internal use)
+///
+/// This re-runs the `on_state` callback and queues a prop update.
+/// Called internally by the reactive system when dependencies change.
+pub(crate) fn refresh_stateful<S: StateTransitions>(shared: &SharedState<S>) {
+    Stateful::<S>::refresh_props_internal(shared);
+}
 
 impl<S: StateTransitions> Stateful<S> {
     /// Create a new stateful element with initial state
@@ -463,6 +594,10 @@ impl<S: StateTransitions> Stateful<S> {
             shared_state: Arc::new(Mutex::new(StatefulInner {
                 state: initial_state,
                 state_callback: None,
+                needs_visual_update: false,
+                base_render_props: None,
+                node_id: None,
+                deps: Vec::new(),
             })),
         }
     }
@@ -548,10 +683,15 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&S, &mut Div) + Send + Sync + 'static,
     {
-        // Store the callback
+        // Capture base render props BEFORE applying state callback
+        // This preserves properties like rounded corners, shadows, etc.
+        let base_props = self.inner.render_props();
+
+        // Store the callback and base props
         {
             let mut inner = self.shared_state.lock().unwrap();
-            inner.state_callback = Some(Box::new(callback));
+            inner.state_callback = Some(Arc::new(callback));
+            inner.base_render_props = Some(base_props);
         }
 
         // Apply initial state to get the initial div styling
@@ -560,6 +700,42 @@ impl<S: StateTransitions> Stateful<S> {
         // Register event handlers that will trigger state transitions
         self = self.register_state_handlers();
 
+        // Register deps if any were set
+        let shared = Arc::clone(&self.shared_state);
+        let deps = shared.lock().unwrap().deps.clone();
+        if !deps.is_empty() {
+            let shared_for_refresh = Arc::clone(&shared);
+            register_stateful_deps(deps, Box::new(move || {
+                refresh_stateful(&shared_for_refresh);
+            }));
+        }
+
+        self
+    }
+
+    /// Set signal dependencies for this stateful element
+    ///
+    /// When any of the specified signals change, the `on_state` callback
+    /// will be re-run to update the element's visual props.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let direction = ctx.use_state_keyed("direction", || Direction::Vertical);
+    ///
+    /// stateful(button_state)
+    ///     .deps(&[direction.signal_id()])
+    ///     .on_state(move |state, div| {
+    ///         // Read direction here - will be current on each refresh
+    ///         let label = match direction.get() { ... };
+    ///         div.set_child(span(label));
+    ///     })
+    /// ```
+    pub fn deps(self, signals: &[SignalId]) -> Self {
+        {
+            let mut inner = self.shared_state.lock().unwrap();
+            inner.deps = signals.to_vec();
+        }
         self
     }
 
@@ -570,59 +746,131 @@ impl<S: StateTransitions> Stateful<S> {
         let shared = Arc::clone(&self.shared_state);
 
         // POINTER_ENTER -> state transition
-        self.inner = std::mem::take(&mut self.inner).on_hover_enter({
-            let shared = Arc::clone(&shared);
-            move |_ctx| {
-                Self::handle_event_internal(&shared, event_types::POINTER_ENTER);
-            }
-        });
+        {
+            let shared_clone = Arc::clone(&shared);
+            self.inner = self.inner.swap().on_hover_enter(move |ctx| {
+                Self::handle_event_internal(&shared_clone, event_types::POINTER_ENTER, ctx.node_id);
+            });
+        }
 
         // POINTER_LEAVE -> state transition
-        self.inner = std::mem::take(&mut self.inner).on_hover_leave({
-            let shared = Arc::clone(&shared);
-            move |_ctx| {
-                Self::handle_event_internal(&shared, event_types::POINTER_LEAVE);
-            }
-        });
+        {
+            let shared_clone = Arc::clone(&shared);
+            self.inner = self.inner.swap().on_hover_leave(move |ctx| {
+                Self::handle_event_internal(&shared_clone, event_types::POINTER_LEAVE, ctx.node_id);
+            });
+        }
 
         // POINTER_DOWN -> state transition
-        self.inner = std::mem::take(&mut self.inner).on_mouse_down({
-            let shared = Arc::clone(&shared);
-            move |_ctx| {
-                Self::handle_event_internal(&shared, event_types::POINTER_DOWN);
-            }
-        });
+        {
+            let shared_clone = Arc::clone(&shared);
+            self.inner = self.inner.swap().on_mouse_down(move |ctx| {
+                Self::handle_event_internal(&shared_clone, event_types::POINTER_DOWN, ctx.node_id);
+            });
+        }
 
         // POINTER_UP -> state transition
-        self.inner = std::mem::take(&mut self.inner).on_mouse_up({
-            let shared = Arc::clone(&shared);
-            move |_ctx| {
-                Self::handle_event_internal(&shared, event_types::POINTER_UP);
-            }
-        });
+        {
+            let shared_clone = Arc::clone(&shared);
+            self.inner = self.inner.swap().on_mouse_up(move |ctx| {
+                Self::handle_event_internal(&shared_clone, event_types::POINTER_UP, ctx.node_id);
+            });
+        }
 
         self
     }
 
     /// Internal handler for state transitions from event handlers
     ///
-    /// This updates the state and requests a redraw so the visual change
-    /// is rendered on the next frame.
-    fn handle_event_internal(shared: &Arc<Mutex<StatefulInner<S>>>, event: u32) {
-        let mut inner = shared.lock().unwrap();
+    /// This updates the state, computes new render props via the callback,
+    /// and queues an incremental prop update. No tree rebuild is needed.
+    fn handle_event_internal(shared: &Arc<Mutex<StatefulInner<S>>>, event: u32, node_id: LayoutNodeId) {
+        let mut guard = shared.lock().unwrap();
+
+        // Store node_id for future use
+        if guard.node_id.is_none() {
+            guard.node_id = Some(node_id);
+        }
 
         // Check if state transition needed
-        let new_state = match inner.state.on_event(event) {
-            Some(s) if s != inner.state => s,
+        let new_state = match guard.state.on_event(event) {
+            Some(s) if s != guard.state => s,
             _ => return,
         };
 
         // Update state
-        inner.state = new_state;
+        guard.state = new_state;
+        guard.needs_visual_update = true;
 
-        // Request a redraw so the state change is visible
-        // We use the text_input module's rebuild flag since it's already wired up
-        crate::widgets::text_input::request_rebuild();
+        // Compute new props via callback and queue the update
+        if let Some(ref callback) = guard.state_callback {
+            let callback = Arc::clone(callback);
+            let state_copy = guard.state;
+            let cached_node_id = guard.node_id;
+            let base_props = guard.base_render_props.clone();
+            drop(guard); // Release lock before calling callback
+
+            // Create temp div, apply callback to get state-specific changes
+            let mut temp_div = Div::new();
+            callback(&state_copy, &mut temp_div);
+            let callback_props = temp_div.render_props();
+
+            // Start from base props and merge callback changes on top
+            let mut final_props = base_props.unwrap_or_default();
+            final_props.merge_from(&callback_props);
+
+            // Queue the prop update for this node
+            if let Some(nid) = cached_node_id {
+                queue_prop_update(nid, final_props);
+            }
+        }
+
+        // Just request redraw, not rebuild
+        request_redraw();
+    }
+
+    /// Force re-run of the state callback and queue prop/subtree updates
+    ///
+    /// Call this when external state (like a label) changes and you need
+    /// to update the element's props and/or children without a ButtonState change.
+    fn refresh_props_internal(shared: &Arc<Mutex<StatefulInner<S>>>) {
+        let guard = shared.lock().unwrap();
+
+        // Need node_id and callback to refresh
+        let (callback, state_copy, cached_node_id, base_props) = match (
+            guard.state_callback.as_ref(),
+            guard.node_id,
+        ) {
+            (Some(cb), Some(nid)) => {
+                let callback = Arc::clone(cb);
+                let state = guard.state;
+                let base = guard.base_render_props.clone();
+                drop(guard);
+                (callback, state, nid, base)
+            }
+            _ => return,
+        };
+
+        // Create temp div, apply callback to get state-specific changes
+        let mut temp_div = Div::new();
+        callback(&state_copy, &mut temp_div);
+        let callback_props = temp_div.render_props();
+
+        // Start from base props and merge callback changes on top
+        let mut final_props = base_props.unwrap_or_default();
+        final_props.merge_from(&callback_props);
+
+        // Queue the prop update for this node
+        queue_prop_update(cached_node_id, final_props);
+
+        // Check if children were set - if so, queue a subtree rebuild
+        if !temp_div.children_builders().is_empty() {
+            // Queue the child for rebuild - the windowed app will process this
+            queue_subtree_rebuild(cached_node_id, temp_div);
+        }
+
+        // Request redraw
+        request_redraw();
     }
 
     /// Dispatch a new state
@@ -630,13 +878,17 @@ impl<S: StateTransitions> Stateful<S> {
     /// Updates the current state and applies the callback if the state changed.
     /// Returns true if the state changed.
     pub fn dispatch_state(&mut self, new_state: S) -> bool {
-        let mut inner = self.shared_state.lock().unwrap();
-        if inner.state != new_state {
-            inner.state = new_state;
-            // Apply callback
-            if let Some(ref callback) = inner.state_callback {
-                callback(&inner.state, &mut self.inner);
+        let mut shared = self.shared_state.lock().unwrap();
+        if shared.state != new_state {
+            shared.state = new_state;
+            // Apply callback - clone via Arc to avoid borrow conflicts
+            if let Some(ref callback) = shared.state_callback {
+                let callback = Arc::clone(callback);
+                let state_copy = shared.state;
+                drop(shared); // Release lock before calling callback
+                callback(&state_copy, &mut self.inner);
             }
+            crate::widgets::request_rebuild();
             true
         } else {
             false
@@ -660,9 +912,14 @@ impl<S: StateTransitions> Stateful<S> {
 
     /// Apply the callback for the current state (if any)
     fn apply_state_callback(&mut self) {
-        let inner = self.shared_state.lock().unwrap();
-        if let Some(ref callback) = inner.state_callback {
-            callback(&inner.state, &mut self.inner);
+        let mut shared = self.shared_state.lock().unwrap();
+        // Clone callback to avoid borrow conflicts (Arc makes this cheap)
+        if let Some(ref callback) = shared.state_callback {
+            let callback = Arc::clone(callback);
+            let state_copy = shared.state;
+            shared.needs_visual_update = false;
+            drop(shared); // Release lock before calling callback
+            callback(&state_copy, &mut self.inner);
         }
     }
 
@@ -672,139 +929,139 @@ impl<S: StateTransitions> Stateful<S> {
 
     /// Set width (builder pattern)
     pub fn w(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).w(px);
+        self.inner = self.inner.swap().w(px);
         self
     }
 
     /// Set height (builder pattern)
     pub fn h(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).h(px);
+        self.inner = self.inner.swap().h(px);
         self
     }
 
     /// Set width to 100% (builder pattern)
     pub fn w_full(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).w_full();
+        self.inner = self.inner.swap().w_full();
         self
     }
 
     /// Set height to 100% (builder pattern)
     pub fn h_full(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).h_full();
+        self.inner = self.inner.swap().h_full();
         self
     }
 
     /// Set both width and height (builder pattern)
     pub fn size(mut self, w: f32, h: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).size(w, h);
+        self.inner = self.inner.swap().size(w, h);
         self
     }
 
     /// Set square size (builder pattern)
     pub fn square(mut self, size: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).square(size);
+        self.inner = self.inner.swap().square(size);
         self
     }
 
     /// Set flex direction to row (builder pattern)
     pub fn flex_row(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).flex_row();
+        self.inner = self.inner.swap().flex_row();
         self
     }
 
     /// Set flex direction to column (builder pattern)
     pub fn flex_col(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).flex_col();
+        self.inner = self.inner.swap().flex_col();
         self
     }
 
     /// Set flex grow (builder pattern)
     pub fn flex_grow(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).flex_grow();
+        self.inner = self.inner.swap().flex_grow();
         self
     }
 
     /// Set width to fit content (builder pattern)
     pub fn w_fit(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).w_fit();
+        self.inner = self.inner.swap().w_fit();
         self
     }
 
     /// Set height to fit content (builder pattern)
     pub fn h_fit(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).h_fit();
+        self.inner = self.inner.swap().h_fit();
         self
     }
 
     /// Set padding all sides (builder pattern)
     pub fn p(mut self, units: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).p(units);
+        self.inner = self.inner.swap().p(units);
         self
     }
 
     /// Set horizontal padding (builder pattern)
     pub fn px(mut self, units: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).px(units);
+        self.inner = self.inner.swap().px(units);
         self
     }
 
     /// Set vertical padding (builder pattern)
     pub fn py(mut self, units: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).py(units);
+        self.inner = self.inner.swap().py(units);
         self
     }
 
     /// Set gap (builder pattern)
     pub fn gap(mut self, units: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).gap(units);
+        self.inner = self.inner.swap().gap(units);
         self
     }
 
     /// Center items (builder pattern)
     pub fn items_center(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).items_center();
+        self.inner = self.inner.swap().items_center();
         self
     }
 
     /// Center justify (builder pattern)
     pub fn justify_center(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).justify_center();
+        self.inner = self.inner.swap().justify_center();
         self
     }
 
     /// Space between (builder pattern)
     pub fn justify_between(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).justify_between();
+        self.inner = self.inner.swap().justify_between();
         self
     }
 
     /// Set background (builder pattern)
     pub fn bg(mut self, color: impl Into<blinc_core::Brush>) -> Self {
-        self.inner = std::mem::take(&mut self.inner).background(color);
+        self.inner = self.inner.swap().background(color);
         self
     }
 
     /// Set corner radius (builder pattern)
     pub fn rounded(mut self, radius: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).rounded(radius);
+        self.inner = self.inner.swap().rounded(radius);
         self
     }
 
     /// Set shadow (builder pattern)
     pub fn shadow(mut self, shadow: blinc_core::Shadow) -> Self {
-        self.inner = std::mem::take(&mut self.inner).shadow(shadow);
+        self.inner = self.inner.swap().shadow(shadow);
         self
     }
 
     /// Set transform (builder pattern)
     pub fn transform(mut self, transform: blinc_core::Transform) -> Self {
-        self.inner = std::mem::take(&mut self.inner).transform(transform);
+        self.inner = self.inner.swap().transform(transform);
         self
     }
 
     /// Add child (builder pattern)
     pub fn child(mut self, child: impl ElementBuilder + 'static) -> Self {
-        self.inner = std::mem::take(&mut self.inner).child(child);
+        self.inner = self.inner.swap().child(child);
         self
     }
 
@@ -814,7 +1071,7 @@ impl<S: StateTransitions> Stateful<S> {
         I: IntoIterator,
         I::Item: ElementBuilder + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).children(children);
+        self.inner = self.inner.swap().children(children);
         self
     }
 
@@ -827,7 +1084,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_click(handler);
+        self.inner = self.inner.swap().on_click(handler);
         self
     }
 
@@ -836,7 +1093,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_mouse_down(handler);
+        self.inner = self.inner.swap().on_mouse_down(handler);
         self
     }
 
@@ -845,7 +1102,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_mouse_up(handler);
+        self.inner = self.inner.swap().on_mouse_up(handler);
         self
     }
 
@@ -854,7 +1111,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_hover_enter(handler);
+        self.inner = self.inner.swap().on_hover_enter(handler);
         self
     }
 
@@ -863,7 +1120,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_hover_leave(handler);
+        self.inner = self.inner.swap().on_hover_leave(handler);
         self
     }
 
@@ -872,7 +1129,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_focus(handler);
+        self.inner = self.inner.swap().on_focus(handler);
         self
     }
 
@@ -881,7 +1138,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_blur(handler);
+        self.inner = self.inner.swap().on_blur(handler);
         self
     }
 
@@ -890,7 +1147,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_mount(handler);
+        self.inner = self.inner.swap().on_mount(handler);
         self
     }
 
@@ -899,7 +1156,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_unmount(handler);
+        self.inner = self.inner.swap().on_unmount(handler);
         self
     }
 
@@ -908,7 +1165,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_key_down(handler);
+        self.inner = self.inner.swap().on_key_down(handler);
         self
     }
 
@@ -917,7 +1174,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_key_up(handler);
+        self.inner = self.inner.swap().on_key_up(handler);
         self
     }
 
@@ -926,7 +1183,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_scroll(handler);
+        self.inner = self.inner.swap().on_scroll(handler);
         self
     }
 
@@ -935,7 +1192,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_resize(handler);
+        self.inner = self.inner.swap().on_resize(handler);
         self
     }
 
@@ -944,7 +1201,7 @@ impl<S: StateTransitions> Stateful<S> {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_event(event_type, handler);
+        self.inner = self.inner.swap().on_event(event_type, handler);
         self
     }
 
@@ -1287,8 +1544,6 @@ impl<S: StateTransitions> ElementBuilder for Stateful<S> {
     }
 
     fn render_props(&self) -> RenderProps {
-        // The inner div already has the correct styling from on_state callback
-        // (applied in on_state() and apply_state_callback())
         self.inner.render_props()
     }
 
@@ -1301,7 +1556,6 @@ impl<S: StateTransitions> ElementBuilder for Stateful<S> {
     }
 
     fn event_handlers(&self) -> Option<&crate::event_handler::EventHandlers> {
-        // Use ElementBuilder trait method explicitly (not the inherent method on Div)
         ElementBuilder::event_handlers(&self.inner)
     }
 }

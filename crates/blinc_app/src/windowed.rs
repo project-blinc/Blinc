@@ -147,7 +147,8 @@ impl<T: Clone + Send + 'static> State<T> {
     /// (adding/removing elements, changing text content, etc.)
     pub fn set(&self, value: T) {
         self.reactive.lock().unwrap().set(self.signal, value);
-        // No rebuild by default - values are read at render time
+        // Check if any stateful elements depend on this signal
+        blinc_layout::check_stateful_deps(&[self.signal.id()]);
     }
 
     /// Set a new value AND trigger a UI tree rebuild
@@ -180,6 +181,11 @@ impl<T: Clone + Send + 'static> State<T> {
     /// Get the underlying signal (for advanced use cases)
     pub fn signal(&self) -> Signal<T> {
         self.signal
+    }
+
+    /// Get the signal ID (for dependency tracking)
+    pub fn signal_id(&self) -> blinc_core::reactive::SignalId {
+        self.signal.id()
     }
 }
 
@@ -1281,6 +1287,28 @@ impl WindowedApp {
                             if blinc_layout::widgets::take_needs_rebuild() {
                                 tracing::debug!("Rebuild triggered by: text widget state change");
                                 needs_rebuild = true;
+                            }
+
+                            // Check if stateful elements requested a redraw (hover/press changes)
+                            // Apply incremental prop updates without full rebuild
+                            if blinc_layout::take_needs_redraw() {
+                                tracing::debug!("Redraw requested by: stateful state change");
+
+                                // Apply any pending prop updates directly to the render tree
+                                if let Some(ref mut tree) = render_tree {
+                                    for (node_id, props) in blinc_layout::take_pending_prop_updates() {
+                                        tree.update_render_props(node_id, |p| *p = props);
+                                    }
+
+                                    // Process pending subtree rebuilds (for child updates)
+                                    tree.process_pending_subtree_rebuilds();
+
+                                    // Recompute layout for the affected nodes
+                                    tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
+                                }
+
+                                // Request window redraw without rebuild
+                                window.request_redraw();
                             }
 
                             // =========================================================

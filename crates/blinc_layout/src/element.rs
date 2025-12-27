@@ -859,6 +859,51 @@ impl RenderProps {
         self.clips_content = clips;
         self
     }
+
+    /// Merge changes from another RenderProps, only taking non-default values
+    ///
+    /// This allows stateful elements to overlay state-specific changes
+    /// on top of base properties. Only properties that were explicitly
+    /// set in `other` will override `self`.
+    pub fn merge_from(&mut self, other: &RenderProps) {
+        // Override background if set
+        if other.background.is_some() {
+            self.background = other.background.clone();
+        }
+        // Override border_radius if non-zero
+        if other.border_radius != CornerRadius::default() {
+            self.border_radius = other.border_radius;
+        }
+        // Override layer if non-default
+        if other.layer != RenderLayer::default() {
+            self.layer = other.layer;
+        }
+        // Override material if set
+        if other.material.is_some() {
+            self.material = other.material.clone();
+        }
+        // node_id is not merged - keep the original
+        // Override shadow if set
+        if other.shadow.is_some() {
+            self.shadow = other.shadow.clone();
+        }
+        // Override transform if set
+        if other.transform.is_some() {
+            self.transform = other.transform.clone();
+        }
+        // Override opacity if non-default
+        if (other.opacity - 1.0).abs() > f32::EPSILON {
+            self.opacity = other.opacity;
+        }
+        // Override clips_content if true
+        if other.clips_content {
+            self.clips_content = true;
+        }
+        // Override motion if set
+        if other.motion.is_some() {
+            self.motion = other.motion.clone();
+        }
+    }
 }
 
 // ============================================================================

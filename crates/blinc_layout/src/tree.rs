@@ -114,6 +114,62 @@ impl LayoutTree {
     pub fn is_empty(&self) -> bool {
         self.node_map.is_empty()
     }
+
+    /// Remove all children from a node (but keep the node itself)
+    pub fn clear_children(&mut self, parent: LayoutNodeId) {
+        let Some(&parent_taffy) = self.node_map.get(parent) else {
+            return;
+        };
+
+        // Get current children
+        let Ok(children) = self.taffy.children(parent_taffy) else {
+            return;
+        };
+
+        // Collect children to remove
+        let children_to_remove: Vec<_> = children.iter().copied().collect();
+
+        // Remove each child from taffy and our maps
+        for child_taffy in children_to_remove {
+            if let Some(&child_id) = self.reverse_map.get(&child_taffy) {
+                // Recursively remove this child's subtree
+                self.remove_subtree(child_id);
+            }
+        }
+    }
+
+    /// Remove a node and all its descendants
+    pub fn remove_subtree(&mut self, id: LayoutNodeId) {
+        // First get and remove all children recursively
+        let children = self.children(id);
+        for child in children {
+            self.remove_subtree(child);
+        }
+
+        // Then remove this node
+        self.remove_node(id);
+    }
+
+    /// Replace children of a node with new children
+    /// Returns the IDs of the old children that were removed
+    pub fn replace_children(&mut self, parent: LayoutNodeId, new_children: Vec<LayoutNodeId>) -> Vec<LayoutNodeId> {
+        let Some(&parent_taffy) = self.node_map.get(parent) else {
+            return Vec::new();
+        };
+
+        // Get current children
+        let old_children = self.children(parent);
+
+        // Set new children in taffy
+        let new_taffy_children: Vec<_> = new_children
+            .iter()
+            .filter_map(|&id| self.node_map.get(id).copied())
+            .collect();
+
+        let _ = self.taffy.set_children(parent_taffy, &new_taffy_children);
+
+        old_children
+    }
 }
 
 impl Default for LayoutTree {

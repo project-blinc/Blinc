@@ -53,6 +53,7 @@ pub use text_input::{
     // Cursor blink timing utilities
     elapsed_ms,
     has_focused_text_input,
+    request_rebuild,
     take_needs_continuous_redraw,
     take_needs_rebuild,
     text_input,

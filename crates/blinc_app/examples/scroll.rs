@@ -15,7 +15,7 @@
 
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
-use blinc_layout::prelude::{Scroll, ScrollPhysics, SharedScrollPhysics};
+use blinc_layout::prelude::{ButtonState, Scroll, ScrollPhysics, SharedScrollPhysics};
 use std::sync::{Arc, Mutex};
 
 fn main() -> Result<()> {
@@ -85,30 +85,48 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
 }
 
 /// Build the direction toggle button
-fn build_direction_toggle(ctx: &WindowedContext, current: ScrollDirection) -> impl ElementBuilder {
+fn build_direction_toggle(ctx: &WindowedContext, _current: ScrollDirection) -> impl ElementBuilder {
     // Get the direction state to update it on click
     let direction_state = ctx.use_state_keyed("scroll_direction", || ScrollDirection::Vertical);
+    let direction_for_label = direction_state.clone();
 
-    let label = match current {
-        ScrollDirection::Vertical => "Vertical",
-        ScrollDirection::Horizontal => "Horizontal",
-        ScrollDirection::Both => "Both",
-    };
+    // Create a button state for proper click handling
+    let button_state = ctx.use_state_for("direction_toggle_btn", ButtonState::Idle);
 
     div()
         .flex_row()
         .gap(4.0)
         .items_center()
+        .child(span("Direction:").color(Color::rgba(1.0, 1.0, 1.0, 0.8)))
         .child(
-            span("Direction:")
-                .color(Color::rgba(1.0, 1.0, 1.0, 0.8)),
-        )
-        .child(
-            div()
+            stateful(button_state)
                 .px(4.0)
                 .py(2.0)
                 .rounded(8.0)
-                .bg(Color::rgba(0.3, 0.5, 1.0, 0.8))
+                // When direction_state changes, refresh this element's on_state
+                .deps(&[direction_state.signal_id()])
+                .on_state(move |state, div| {
+                    let bg = match state {
+                        ButtonState::Idle => Color::rgba(0.3, 0.5, 1.0, 0.8),
+                        ButtonState::Hovered => Color::rgba(0.4, 0.6, 1.0, 0.9),
+                        ButtonState::Pressed => Color::rgba(0.2, 0.4, 0.9, 1.0),
+                        ButtonState::Disabled => Color::rgba(0.3, 0.3, 0.35, 0.5),
+                    };
+
+                    // Read label from reactive state - always current value
+                    let label = match direction_for_label.get() {
+                        ScrollDirection::Vertical => "Vertical",
+                        ScrollDirection::Horizontal => "Horizontal",
+                        ScrollDirection::Both => "Both",
+                    };
+
+                    // Merge changes into the div
+                    div.merge(
+                        blinc_layout::div::div()
+                            .bg(bg)
+                            .child(span(label).weight(FontWeight::SemiBold).color(Color::WHITE)),
+                    );
+                })
                 .on_click(move |_| {
                     let current = direction_state.get();
                     let next = match current {
@@ -118,12 +136,7 @@ fn build_direction_toggle(ctx: &WindowedContext, current: ScrollDirection) -> im
                     };
                     direction_state.set(next);
                     tracing::info!("Switched to {:?} scroll", next);
-                })
-                .child(
-                    span(label)
-                        .weight(FontWeight::SemiBold)
-                        .color(Color::WHITE),
-                ),
+                }),
         )
 }
 

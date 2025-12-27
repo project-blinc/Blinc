@@ -407,6 +407,57 @@ impl Div {
         self.opacity = opacity;
     }
 
+    /// Clear all children and add a single child
+    #[inline]
+    pub fn set_child(&mut self, child: impl ElementBuilder + 'static) {
+        self.children.clear();
+        self.children.push(Box::new(child));
+    }
+
+    /// Clear all children
+    #[inline]
+    pub fn clear_children(&mut self) {
+        self.children.clear();
+    }
+
+    /// Merge properties from another Div into this one
+    ///
+    /// This applies the other Div's non-default properties on top of this one.
+    /// Useful in `on_state` callbacks to apply changes without reassignment:
+    ///
+    /// ```ignore
+    /// .on_state(|state, div| {
+    ///     div.merge(div().bg(color).child(label));
+    /// })
+    /// ```
+    #[inline]
+    pub fn merge(&mut self, other: Div) {
+        // Merge render properties
+        if other.background.is_some() {
+            self.background = other.background;
+        }
+        if other.border_radius != CornerRadius::default() {
+            self.border_radius = other.border_radius;
+        }
+        if other.shadow.is_some() {
+            self.shadow = other.shadow;
+        }
+        if other.transform.is_some() {
+            self.transform = other.transform;
+        }
+        if other.opacity != 1.0 {
+            self.opacity = other.opacity;
+        }
+        if other.material.is_some() {
+            self.material = other.material;
+        }
+
+        // Merge children - if other has children, replace ours
+        if !other.children.is_empty() {
+            self.children = other.children;
+        }
+    }
+
     // =========================================================================
     // Display & Flex Direction
     // =========================================================================

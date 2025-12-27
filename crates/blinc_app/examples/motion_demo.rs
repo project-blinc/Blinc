@@ -39,7 +39,7 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
         .bg(Color::rgba(0.08, 0.08, 0.12, 1.0))
         .flex_col()
         .items_center()
-        .gap(5.0)
+        .gap(10.0)
         .p(10.0)
         .child(
             text("Motion Container Demo")
@@ -84,7 +84,7 @@ fn single_element_demo() -> Div {
                     .rounded(8.0)
                     .items_center()
                     .justify_center()
-                    .child(text("Content").size(12.0).color(Color::WHITE)),
+                    .child(text("Content").text_center().size(12.0).color(Color::WHITE)),
             ),
     )
 }
@@ -133,7 +133,7 @@ fn list_item(label: &str) -> Div {
         .rounded(4.0)
         .items_center()
         .justify_center()
-        .child(text(label).size(11.0).color(Color::WHITE))
+        .child(text(label).text_center().size(11.0).color(Color::WHITE))
 }
 
 /// Showcase the motion() API

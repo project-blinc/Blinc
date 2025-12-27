@@ -7,7 +7,6 @@
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
 use blinc_core::Color;
-use blinc_layout::prelude::*;
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -43,47 +42,52 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
         text_area_state_with_placeholder("Write your message here...")
     });
 
-    div()
+    scroll()
         .w(ctx.width)
         .h(ctx.height)
-        .bg(Color::rgba(0.1, 0.1, 0.15, 1.0))
-        .flex_col()
-        .p(40.0)
-        .gap(10.0)
-        .overflow_clip()
-        .justify_center()
-        .items_center()
-        // Title
-        .child(
-            text("Text Input Elements")
-                .size(48.0)
-                .text_center()
-                .weight(FontWeight::Bold)
-                .color(Color::WHITE),
-        )
-        // Subtitle
-        .child(
-            text("Ready-to-use text_input() and text_area() from blinc_layout")
-                .text_center()
-                .size(20.0)
-                .color(Color::rgba(0.7, 0.7, 0.7, 1.0)),
-        )
-        // Content row
+        .direction(ScrollDirection::Vertical)
         .child(
             div()
-                .flex_row()
                 .w_full()
+                .bg(Color::rgba(0.1, 0.1, 0.15, 1.0))
+                .flex_col()
+                .p(10.0)
+                .gap(10.0)
+                .overflow_clip()
                 .justify_center()
-                .gap(20.0)
-                .flex_grow()
-                // Left column: Text input examples
-                .child(build_input_section(
-                    &username_state.get(),
-                    &email_state.get(),
-                    &password_state.get(),
-                ))
-                // Right column: Form with text area
-                .child(build_form_section(ctx, &message_state.get())),
+                .items_center()
+                // Title
+                .child(
+                    h1("Text Input Elements")
+                        .size(48.0)
+                        .text_center()
+                        .weight(FontWeight::Bold)
+                        .color(Color::WHITE),
+                )
+                // Subtitle
+                .child(
+                    h2("Ready-to-use text_input() and text_area() from blinc_layout")
+                        .text_center()
+                        .size(20.0)
+                        .color(Color::rgba(0.7, 0.7, 0.7, 1.0)),
+                )
+                // Content row
+                .child(
+                    div()
+                        .flex_row()
+                        .w_full()
+                        .justify_center()
+                        .gap(20.0)
+                        .flex_grow()
+                        // Left column: Text input examples
+                        .child(build_input_section(
+                            &username_state.get(),
+                            &email_state.get(),
+                            &password_state.get(),
+                        ))
+                        // Right column: Form with text area
+                        .child(build_form_section(ctx, &message_state.get())),
+                ),
         )
 }
 
@@ -144,9 +148,9 @@ fn build_values_display(
 
     div()
         .flex_col()
-        .w(400.0)
+        .w(200.0)
         .gap(8.0)
-        .p(16.0)
+        .p(4.0)
         .bg(Color::rgba(0.15, 0.15, 0.2, 0.8))
         .rounded(12.0)
         .child(
@@ -191,8 +195,7 @@ fn build_form_section(ctx: &WindowedContext, message: &SharedTextAreaState) -> i
         .w_fit()
         // Section header
         .child(
-            text("TextArea Element")
-                .size(28.0)
+            h3("TextArea Element")
                 .weight(FontWeight::SemiBold)
                 .color(Color::rgba(0.4, 1.0, 0.8, 1.0)),
         )
@@ -208,8 +211,7 @@ fn build_form_section(ctx: &WindowedContext, message: &SharedTextAreaState) -> i
                 .gap(10.0)
                 // Form title
                 .child(
-                    text("Contact Form")
-                        .size(20.0)
+                    h4("Contact Form")
                         .weight(FontWeight::SemiBold)
                         .color(Color::WHITE),
                 )
@@ -219,8 +221,7 @@ fn build_form_section(ctx: &WindowedContext, message: &SharedTextAreaState) -> i
                         .flex_col()
                         .gap(1.0)
                         .child(
-                            text("Message")
-                                .size(18.0)
+                            span("Message")
                                 .weight(FontWeight::Medium)
                                 .color(Color::rgba(0.9, 0.9, 0.9, 1.0)),
                         )
@@ -257,13 +258,7 @@ fn build_form_section(ctx: &WindowedContext, message: &SharedTextAreaState) -> i
                         .on_click(|_| {
                             tracing::info!("Form submitted!");
                         })
-                        .child(
-                            text("Submit")
-                                .size(16.0)
-                                .weight(FontWeight::SemiBold)
-                                .color(Color::WHITE)
-                                .v_center(),
-                        ),
+                        .child(label("Submit").color(Color::WHITE).v_center()),
                 ),
         )
         // Show message preview

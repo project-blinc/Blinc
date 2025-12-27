@@ -94,7 +94,7 @@ pub use canvas::{canvas, Canvas, CanvasBounds, CanvasData, CanvasRenderFn};
 pub use render_state::{ActiveMotion, MotionState, NodeRenderState, Overlay, RenderState};
 
 // Stateful elements
-pub use stateful::{SharedState, StateTransitions, StatefulInner};
+pub use stateful::{check_stateful_deps, request_redraw, take_needs_redraw, take_pending_prop_updates, take_pending_subtree_rebuilds, PendingSubtreeRebuild, SharedState, StateTransitions, StatefulInner};
 
 // Animation integration
 pub use animated::{AnimatedProperties, AnimationBuilder};

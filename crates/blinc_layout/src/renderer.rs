@@ -1323,6 +1323,85 @@ impl RenderTree {
         }
     }
 
+    /// Rebuild only the children of a specific node
+    ///
+    /// This is used for incremental updates when a stateful element's
+    /// dependencies change. Instead of rebuilding the entire tree,
+    /// we only rebuild the affected subtree.
+    ///
+    /// # Arguments
+    /// * `parent_id` - The node whose children should be rebuilt
+    /// * `new_child` - The new child element builder
+    ///
+    /// # Returns
+    /// The ID of the new child node
+    pub fn rebuild_children<E: ElementBuilder>(
+        &mut self,
+        parent_id: LayoutNodeId,
+        new_child: &E,
+    ) -> LayoutNodeId {
+        // 1. Remove old children from layout tree and render nodes
+        let old_children = self.layout_tree.children(parent_id);
+        for child_id in &old_children {
+            self.remove_subtree_nodes(*child_id);
+        }
+        self.layout_tree.clear_children(parent_id);
+
+        // 2. Build the new child element into the layout tree
+        let new_child_id = new_child.build(&mut self.layout_tree);
+
+        // 3. Add the new child to the parent
+        self.layout_tree.add_child(parent_id, new_child_id);
+
+        // 4. Collect render props for the new subtree
+        self.collect_render_props(new_child, new_child_id);
+
+        new_child_id
+    }
+
+    /// Remove render nodes for a subtree (but don't touch layout tree)
+    fn remove_subtree_nodes(&mut self, node_id: LayoutNodeId) {
+        // Remove children first
+        let children = self.layout_tree.children(node_id);
+        for child_id in children {
+            self.remove_subtree_nodes(child_id);
+        }
+
+        // Remove this node's render data
+        self.render_nodes.swap_remove(&node_id);
+        self.handler_registry.remove(node_id);
+        self.node_states.remove(&node_id);
+        self.scroll_offsets.remove(&node_id);
+        self.scroll_physics.remove(&node_id);
+    }
+
+    /// Process all pending subtree rebuilds
+    ///
+    /// This is called by the windowed app after processing events.
+    /// It applies queued child rebuilds without rebuilding the entire tree.
+    pub fn process_pending_subtree_rebuilds(&mut self) {
+        let pending = crate::stateful::take_pending_subtree_rebuilds();
+        for rebuild in pending {
+            // Rebuild children using the Div's children
+            let children = rebuild.new_child.children_builders();
+            if !children.is_empty() {
+                // Remove old children
+                let old_children = self.layout_tree.children(rebuild.parent_id);
+                for child_id in &old_children {
+                    self.remove_subtree_nodes(*child_id);
+                }
+                self.layout_tree.clear_children(rebuild.parent_id);
+
+                // Build new children
+                for child in children {
+                    let child_id = child.build(&mut self.layout_tree);
+                    self.layout_tree.add_child(rebuild.parent_id, child_id);
+                    self.collect_render_props_boxed(child.as_ref(), child_id);
+                }
+            }
+        }
+    }
+
     /// Transfer node states from another tree
     ///
     /// This preserves state across rebuilds by copying the state storage

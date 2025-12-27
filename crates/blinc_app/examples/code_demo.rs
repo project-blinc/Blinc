@@ -38,7 +38,7 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
         .bg(Color::rgba(0.06, 0.06, 0.08, 1.0))
         .flex_col()
         .gap(5.0)
-        .p(16.0)
+        .p(10.0)
         .items_center()
         // Title
         .child(text("Code Element Demo").size(28.0).color(Color::WHITE))
@@ -59,7 +59,7 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                     div()
                         .w_full()
                         .h_full()
-                        .p(10.0)
+                        .p(5.0)
                         .flex_col()
                         .gap(16.0)
                         .flex_grow()
@@ -217,13 +217,14 @@ fn line_numbers_section() -> Div {
         .child(
             scroll()
                 .h_fit()
-                .w(800.0)
+                .w_full()
                 .direction(ScrollDirection::Horizontal)
                 .child(
                     div()
-                        .w(380.0)
+                      
                         .flex_row()
                         .gap(5.0)
+                        .justify_between()
                         .child(
                             div()
                                 .flex_col()
@@ -238,10 +239,10 @@ fn line_numbers_section() -> Div {
                                         .w_full(),
                                 ),
                         )
-                        .child(div().h_full().w(1.0).bg(Color::GRAY))
+                        .child(div().h_full().w(1.0).bg(Color::WHITE.with_alpha(0.5)))
                         .child(
                             div()
-                                .w(380.0)
+                               
                                 .flex_col()
                                 .gap(4.0)
                                 .flex_grow()
