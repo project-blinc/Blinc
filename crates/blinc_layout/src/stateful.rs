@@ -56,6 +56,7 @@
 //! State callbacks receive the current state for pattern matching and a
 //! mutable reference to the inner `Div` for full mutation capability.
 
+use std::cell::RefCell;
 use std::hash::Hash;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -517,10 +518,19 @@ impl StateTransitions for TextFieldState {
 /// ```
 pub struct Stateful<S: StateTransitions> {
     /// Inner div with all layout/visual properties
-    inner: Div,
+    /// Uses RefCell for interior mutability during build()
+    inner: RefCell<Div>,
 
     /// Shared state that event handlers can mutate
     shared_state: Arc<Mutex<StatefulInner<S>>>,
+
+    /// Children cache - populated after on_state callback is applied during build()
+    /// This allows children_builders() to return a reference even with RefCell inner
+    children_cache: RefCell<Vec<Box<dyn ElementBuilder>>>,
+
+    /// Event handlers cache - populated during register_state_handlers() so that
+    /// event_handlers() can return a stable reference for the renderer to capture
+    event_handlers_cache: RefCell<crate::event_handler::EventHandlers>,
 }
 
 /// Internal state for `Stateful<S>`, wrapped in `Arc<Mutex<...>>` for event handler access
@@ -593,7 +603,7 @@ impl<S: StateTransitions> Stateful<S> {
     /// Create a new stateful element with initial state
     pub fn new(initial_state: S) -> Self {
         Self {
-            inner: Div::new(),
+            inner: RefCell::new(Div::new()),
             shared_state: Arc::new(Mutex::new(StatefulInner {
                 state: initial_state,
                 state_callback: None,
@@ -602,6 +612,8 @@ impl<S: StateTransitions> Stateful<S> {
                 node_id: None,
                 deps: Vec::new(),
             })),
+            children_cache: RefCell::new(Vec::new()),
+            event_handlers_cache: RefCell::new(crate::event_handler::EventHandlers::new()),
         }
     }
 
@@ -622,8 +634,10 @@ impl<S: StateTransitions> Stateful<S> {
     /// ```
     pub fn with_shared_state(shared_state: SharedState<S>) -> Self {
         Self {
-            inner: Div::new(),
+            inner: RefCell::new(Div::new()),
             shared_state,
+            children_cache: RefCell::new(Vec::new()),
+            event_handlers_cache: RefCell::new(crate::event_handler::EventHandlers::new()),
         }
     }
 
@@ -633,6 +647,7 @@ impl<S: StateTransitions> Stateful<S> {
     pub fn shared_state(&self) -> SharedState<S> {
         Arc::clone(&self.shared_state)
     }
+
 
     /// Set the initial/default state
     ///
@@ -655,6 +670,22 @@ impl<S: StateTransitions> Stateful<S> {
     pub fn state(&self) -> S {
         self.shared_state.lock().unwrap().state
     }
+
+    /// Get the render props of the inner Div
+    ///
+    /// This allows accessing the accumulated layout properties.
+    pub fn inner_render_props(&self) -> RenderProps {
+        self.inner.borrow().render_props()
+    }
+
+    /// Apply the state callback to update the inner div
+    ///
+    /// This is useful when you need to manually trigger a callback application,
+    /// for example in a custom ElementBuilder::build() implementation.
+    pub fn apply_callback(&self) {
+        self.apply_state_callback();
+    }
+
 
     /// Set the current state directly
     pub fn set_state(&self, state: S) {
@@ -682,13 +713,13 @@ impl<S: StateTransitions> Stateful<S> {
     ///     // ...
     /// })
     /// ```
-    pub fn on_state<F>(mut self, callback: F) -> Self
+    pub fn on_state<F>(self, callback: F) -> Self
     where
         F: Fn(&S, &mut Div) + Send + Sync + 'static,
     {
         // Capture base render props BEFORE applying state callback
         // This preserves properties like rounded corners, shadows, etc.
-        let base_props = self.inner.render_props();
+        let base_props = self.inner.borrow().render_props();
 
         // Store the callback and base props
         {
@@ -697,14 +728,17 @@ impl<S: StateTransitions> Stateful<S> {
             inner.base_render_props = Some(base_props);
         }
 
-        // Apply initial state to get the initial div styling
-        self.apply_state_callback();
+        // Register event handlers BEFORE applying state callback
+        // This is important because register_state_handlers uses swap() which
+        // would clear any children added by the state callback
+        let s = self.register_state_handlers();
 
-        // Register event handlers that will trigger state transitions
-        self = self.register_state_handlers();
+        // Apply initial state to get the initial div styling (including children)
+        // Since apply_state_callback now takes &self (interior mutability), this works
+        s.apply_state_callback();
 
         // Register deps if any were set
-        let shared = Arc::clone(&self.shared_state);
+        let shared = Arc::clone(&s.shared_state);
         let deps = shared.lock().unwrap().deps.clone();
         if !deps.is_empty() {
             let shared_for_refresh = Arc::clone(&shared);
@@ -716,7 +750,7 @@ impl<S: StateTransitions> Stateful<S> {
             );
         }
 
-        self
+        s
     }
 
     /// Set signal dependencies for this stateful element
@@ -746,15 +780,36 @@ impl<S: StateTransitions> Stateful<S> {
     }
 
     /// Register event handlers for automatic state transitions
-    fn register_state_handlers(mut self) -> Self {
+    ///
+    /// These handlers are registered on the event_handlers_cache (not the inner Div)
+    /// so that event_handlers() can return a stable reference for the renderer.
+    fn register_state_handlers(self) -> Self {
+        self.ensure_state_handlers_registered();
+        self
+    }
+
+    /// Ensure state transition handlers are registered (idempotent)
+    ///
+    /// This is public so that wrappers like Button can call it to ensure
+    /// the hover/press state handlers are registered even when not using on_state().
+    pub fn ensure_state_handlers_registered(&self) {
         use blinc_core::events::event_types;
 
         let shared = Arc::clone(&self.shared_state);
 
+        // Get mutable access to the cache
+        let mut cache = self.event_handlers_cache.borrow_mut();
+
+        // Check if already registered by looking for POINTER_ENTER handler
+        // (all 4 handlers are registered together, so checking one is sufficient)
+        if cache.has_handler(event_types::POINTER_ENTER) {
+            return; // Already registered
+        }
+
         // POINTER_ENTER -> state transition
         {
             let shared_clone = Arc::clone(&shared);
-            self.inner = self.inner.swap().on_hover_enter(move |ctx| {
+            cache.on_hover_enter(move |ctx| {
                 Self::handle_event_internal(&shared_clone, event_types::POINTER_ENTER, ctx.node_id);
             });
         }
@@ -762,7 +817,7 @@ impl<S: StateTransitions> Stateful<S> {
         // POINTER_LEAVE -> state transition
         {
             let shared_clone = Arc::clone(&shared);
-            self.inner = self.inner.swap().on_hover_leave(move |ctx| {
+            cache.on_hover_leave(move |ctx| {
                 Self::handle_event_internal(&shared_clone, event_types::POINTER_LEAVE, ctx.node_id);
             });
         }
@@ -770,7 +825,7 @@ impl<S: StateTransitions> Stateful<S> {
         // POINTER_DOWN -> state transition
         {
             let shared_clone = Arc::clone(&shared);
-            self.inner = self.inner.swap().on_mouse_down(move |ctx| {
+            cache.on_mouse_down(move |ctx| {
                 Self::handle_event_internal(&shared_clone, event_types::POINTER_DOWN, ctx.node_id);
             });
         }
@@ -778,12 +833,10 @@ impl<S: StateTransitions> Stateful<S> {
         // POINTER_UP -> state transition
         {
             let shared_clone = Arc::clone(&shared);
-            self.inner = self.inner.swap().on_mouse_up(move |ctx| {
+            cache.on_mouse_up(move |ctx| {
                 Self::handle_event_internal(&shared_clone, event_types::POINTER_UP, ctx.node_id);
             });
         }
-
-        self
     }
 
     /// Internal handler for state transitions from event handlers
@@ -885,7 +938,7 @@ impl<S: StateTransitions> Stateful<S> {
     ///
     /// Updates the current state and applies the callback if the state changed.
     /// Returns true if the state changed.
-    pub fn dispatch_state(&mut self, new_state: S) -> bool {
+    pub fn dispatch_state(&self, new_state: S) -> bool {
         let mut shared = self.shared_state.lock().unwrap();
         if shared.state != new_state {
             shared.state = new_state;
@@ -894,7 +947,7 @@ impl<S: StateTransitions> Stateful<S> {
                 let callback = Arc::clone(callback);
                 let state_copy = shared.state;
                 drop(shared); // Release lock before calling callback
-                callback(&state_copy, &mut self.inner);
+                callback(&state_copy, &mut *self.inner.borrow_mut());
             }
             crate::widgets::request_rebuild();
             true
@@ -906,7 +959,7 @@ impl<S: StateTransitions> Stateful<S> {
     /// Handle an event and potentially transition state
     ///
     /// Returns true if the state changed.
-    pub fn handle_event(&mut self, event: u32) -> bool {
+    pub fn handle_event(&self, event: u32) -> bool {
         let new_state = {
             let inner = self.shared_state.lock().unwrap();
             inner.state.on_event(event)
@@ -919,7 +972,7 @@ impl<S: StateTransitions> Stateful<S> {
     }
 
     /// Apply the callback for the current state (if any)
-    fn apply_state_callback(&mut self) {
+    fn apply_state_callback(&self) {
         let mut shared = self.shared_state.lock().unwrap();
         // Clone callback to avoid borrow conflicts (Arc makes this cheap)
         if let Some(ref callback) = shared.state_callback {
@@ -927,7 +980,7 @@ impl<S: StateTransitions> Stateful<S> {
             let state_copy = shared.state;
             shared.needs_visual_update = false;
             drop(shared); // Release lock before calling callback
-            callback(&state_copy, &mut self.inner);
+            callback(&state_copy, &mut *self.inner.borrow_mut());
         }
     }
 
@@ -935,296 +988,437 @@ impl<S: StateTransitions> Stateful<S> {
     // Builder pattern methods that return Self (not Div)
     // =========================================================================
 
+    /// Helper to update inner Div with RefCell using merge
+    fn merge_into_inner(&self, props: Div) {
+        self.inner.borrow_mut().merge(props);
+    }
+
     /// Set width (builder pattern)
-    pub fn w(mut self, px: f32) -> Self {
-        self.inner = self.inner.swap().w(px);
+    pub fn w(self, px: f32) -> Self {
+        self.merge_into_inner(Div::new().w(px));
         self
     }
 
     /// Set height (builder pattern)
-    pub fn h(mut self, px: f32) -> Self {
-        self.inner = self.inner.swap().h(px);
+    pub fn h(self, px: f32) -> Self {
+        self.merge_into_inner(Div::new().h(px));
         self
     }
 
     /// Set width to 100% (builder pattern)
-    pub fn w_full(mut self) -> Self {
-        self.inner = self.inner.swap().w_full();
+    pub fn w_full(self) -> Self {
+        self.merge_into_inner(Div::new().w_full());
         self
     }
 
     /// Set height to 100% (builder pattern)
-    pub fn h_full(mut self) -> Self {
-        self.inner = self.inner.swap().h_full();
+    pub fn h_full(self) -> Self {
+        self.merge_into_inner(Div::new().h_full());
         self
     }
 
     /// Set both width and height (builder pattern)
-    pub fn size(mut self, w: f32, h: f32) -> Self {
-        self.inner = self.inner.swap().size(w, h);
+    pub fn size(self, w: f32, h: f32) -> Self {
+        self.merge_into_inner(Div::new().size(w, h));
         self
     }
 
     /// Set square size (builder pattern)
-    pub fn square(mut self, size: f32) -> Self {
-        self.inner = self.inner.swap().square(size);
+    pub fn square(self, size: f32) -> Self {
+        self.merge_into_inner(Div::new().square(size));
         self
     }
 
     /// Set flex direction to row (builder pattern)
-    pub fn flex_row(mut self) -> Self {
-        self.inner = self.inner.swap().flex_row();
+    pub fn flex_row(self) -> Self {
+        self.merge_into_inner(Div::new().flex_row());
         self
     }
 
     /// Set flex direction to column (builder pattern)
-    pub fn flex_col(mut self) -> Self {
-        self.inner = self.inner.swap().flex_col();
+    pub fn flex_col(self) -> Self {
+        self.merge_into_inner(Div::new().flex_col());
         self
     }
 
     /// Set flex grow (builder pattern)
-    pub fn flex_grow(mut self) -> Self {
-        self.inner = self.inner.swap().flex_grow();
+    pub fn flex_grow(self) -> Self {
+        self.merge_into_inner(Div::new().flex_grow());
         self
     }
 
     /// Set width to fit content (builder pattern)
-    pub fn w_fit(mut self) -> Self {
-        self.inner = self.inner.swap().w_fit();
+    pub fn w_fit(self) -> Self {
+        self.merge_into_inner(Div::new().w_fit());
         self
     }
 
     /// Set height to fit content (builder pattern)
-    pub fn h_fit(mut self) -> Self {
-        self.inner = self.inner.swap().h_fit();
+    pub fn h_fit(self) -> Self {
+        self.merge_into_inner(Div::new().h_fit());
         self
     }
 
     /// Set padding all sides (builder pattern)
-    pub fn p(mut self, units: f32) -> Self {
-        self.inner = self.inner.swap().p(units);
+    pub fn p(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().p(units));
         self
     }
 
     /// Set horizontal padding (builder pattern)
-    pub fn px(mut self, units: f32) -> Self {
-        self.inner = self.inner.swap().px(units);
+    pub fn px(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().px(units));
         self
     }
 
     /// Set vertical padding (builder pattern)
-    pub fn py(mut self, units: f32) -> Self {
-        self.inner = self.inner.swap().py(units);
+    pub fn py(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().py(units));
+        self
+    }
+
+    /// Set padding top (builder pattern)
+    pub fn pt(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().pt(units));
+        self
+    }
+
+    /// Set padding bottom (builder pattern)
+    pub fn pb(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().pb(units));
+        self
+    }
+
+    /// Set padding left (builder pattern)
+    pub fn pl(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().pl(units));
+        self
+    }
+
+    /// Set padding right (builder pattern)
+    pub fn pr(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().pr(units));
+        self
+    }
+
+    /// Set margin top (builder pattern)
+    pub fn mt(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().mt(units));
+        self
+    }
+
+    /// Set margin bottom (builder pattern)
+    pub fn mb(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().mb(units));
+        self
+    }
+
+    /// Set margin left (builder pattern)
+    pub fn ml(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().ml(units));
+        self
+    }
+
+    /// Set margin right (builder pattern)
+    pub fn mr(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().mr(units));
+        self
+    }
+
+    /// Set horizontal margin (builder pattern)
+    pub fn mx(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().mx(units));
+        self
+    }
+
+    /// Set vertical margin (builder pattern)
+    pub fn my(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().my(units));
+        self
+    }
+
+    /// Set margin all sides (builder pattern)
+    pub fn m(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().m(units));
         self
     }
 
     /// Set gap (builder pattern)
-    pub fn gap(mut self, units: f32) -> Self {
-        self.inner = self.inner.swap().gap(units);
+    pub fn gap(self, units: f32) -> Self {
+        self.merge_into_inner(Div::new().gap(units));
+        self
+    }
+
+    /// Align items to start (builder pattern)
+    pub fn items_start(self) -> Self {
+        self.merge_into_inner(Div::new().items_start());
         self
     }
 
     /// Center items (builder pattern)
-    pub fn items_center(mut self) -> Self {
-        self.inner = self.inner.swap().items_center();
+    pub fn items_center(self) -> Self {
+        self.merge_into_inner(Div::new().items_center());
+        self
+    }
+
+    /// Align items to end (builder pattern)
+    pub fn items_end(self) -> Self {
+        self.merge_into_inner(Div::new().items_end());
+        self
+    }
+
+    /// Justify content start (builder pattern)
+    pub fn justify_start(self) -> Self {
+        self.merge_into_inner(Div::new().justify_start());
         self
     }
 
     /// Center justify (builder pattern)
-    pub fn justify_center(mut self) -> Self {
-        self.inner = self.inner.swap().justify_center();
+    pub fn justify_center(self) -> Self {
+        self.merge_into_inner(Div::new().justify_center());
+        self
+    }
+
+    /// Justify content end (builder pattern)
+    pub fn justify_end(self) -> Self {
+        self.merge_into_inner(Div::new().justify_end());
         self
     }
 
     /// Space between (builder pattern)
-    pub fn justify_between(mut self) -> Self {
-        self.inner = self.inner.swap().justify_between();
+    pub fn justify_between(self) -> Self {
+        self.merge_into_inner(Div::new().justify_between());
         self
     }
 
     /// Set background (builder pattern)
-    pub fn bg(mut self, color: impl Into<blinc_core::Brush>) -> Self {
-        self.inner = self.inner.swap().background(color);
+    pub fn bg(self, color: impl Into<blinc_core::Brush>) -> Self {
+        self.merge_into_inner(Div::new().background(color));
         self
     }
 
     /// Set corner radius (builder pattern)
-    pub fn rounded(mut self, radius: f32) -> Self {
-        self.inner = self.inner.swap().rounded(radius);
+    pub fn rounded(self, radius: f32) -> Self {
+        self.merge_into_inner(Div::new().rounded(radius));
         self
     }
 
     /// Set shadow (builder pattern)
-    pub fn shadow(mut self, shadow: blinc_core::Shadow) -> Self {
-        self.inner = self.inner.swap().shadow(shadow);
+    pub fn shadow(self, shadow: blinc_core::Shadow) -> Self {
+        self.merge_into_inner(Div::new().shadow(shadow));
+        self
+    }
+
+    /// Set small shadow (builder pattern)
+    pub fn shadow_sm(self) -> Self {
+        self.merge_into_inner(Div::new().shadow_sm());
+        self
+    }
+
+    /// Set medium shadow (builder pattern)
+    pub fn shadow_md(self) -> Self {
+        self.merge_into_inner(Div::new().shadow_md());
+        self
+    }
+
+    /// Set large shadow (builder pattern)
+    pub fn shadow_lg(self) -> Self {
+        self.merge_into_inner(Div::new().shadow_lg());
+        self
+    }
+
+    /// Set extra-large shadow (builder pattern)
+    pub fn shadow_xl(self) -> Self {
+        self.merge_into_inner(Div::new().shadow_xl());
+        self
+    }
+
+    /// Set opacity (builder pattern)
+    pub fn opacity(self, opacity: f32) -> Self {
+        self.merge_into_inner(Div::new().opacity(opacity));
+        self
+    }
+
+    /// Set flex shrink (builder pattern)
+    pub fn flex_shrink(self) -> Self {
+        self.merge_into_inner(Div::new().flex_shrink());
+        self
+    }
+
+    /// Set flex shrink to 0 (no shrinking) (builder pattern)
+    pub fn flex_shrink_0(self) -> Self {
+        self.merge_into_inner(Div::new().flex_shrink_0());
         self
     }
 
     /// Set transform (builder pattern)
-    pub fn transform(mut self, transform: blinc_core::Transform) -> Self {
-        self.inner = self.inner.swap().transform(transform);
+    pub fn transform(self, transform: blinc_core::Transform) -> Self {
+        self.merge_into_inner(Div::new().transform(transform));
         self
     }
 
     /// Set overflow to clip (clips children to container bounds)
-    pub fn overflow_clip(mut self) -> Self {
-        self.inner = self.inner.swap().overflow_clip();
+    pub fn overflow_clip(self) -> Self {
+        self.merge_into_inner(Div::new().overflow_clip());
         self
     }
 
     /// Add child (builder pattern)
-    pub fn child(mut self, child: impl ElementBuilder + 'static) -> Self {
-        self.inner = self.inner.swap().child(child);
+    pub fn child(self, child: impl ElementBuilder + 'static) -> Self {
+        self.merge_into_inner(Div::new().child(child));
         self
     }
 
     /// Add children (builder pattern)
-    pub fn children<I>(mut self, children: I) -> Self
+    pub fn children<I>(self, children: I) -> Self
     where
         I: IntoIterator,
         I::Item: ElementBuilder + 'static,
     {
-        self.inner = self.inner.swap().children(children);
+        self.merge_into_inner(Div::new().children(children));
         self
     }
 
     // =========================================================================
     // Event Handlers (builder pattern)
     // =========================================================================
+    //
+    // Note: All event handlers are registered on event_handlers_cache, not on
+    // the inner Div. This allows event_handlers() to return a stable reference
+    // that the renderer can use to register handlers with the tree.
 
     /// Register a click handler (builder pattern)
-    pub fn on_click<F>(mut self, handler: F) -> Self
+    pub fn on_click<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_click(handler);
+        self.event_handlers_cache.borrow_mut().on_click(handler);
         self
     }
 
     /// Register a mouse down handler (builder pattern)
-    pub fn on_mouse_down<F>(mut self, handler: F) -> Self
+    pub fn on_mouse_down<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_mouse_down(handler);
+        self.event_handlers_cache.borrow_mut().on_mouse_down(handler);
         self
     }
 
     /// Register a mouse up handler (builder pattern)
-    pub fn on_mouse_up<F>(mut self, handler: F) -> Self
+    pub fn on_mouse_up<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_mouse_up(handler);
+        self.event_handlers_cache.borrow_mut().on_mouse_up(handler);
         self
     }
 
     /// Register a hover enter handler (builder pattern)
-    pub fn on_hover_enter<F>(mut self, handler: F) -> Self
+    pub fn on_hover_enter<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_hover_enter(handler);
+        self.event_handlers_cache.borrow_mut().on_hover_enter(handler);
         self
     }
 
     /// Register a hover leave handler (builder pattern)
-    pub fn on_hover_leave<F>(mut self, handler: F) -> Self
+    pub fn on_hover_leave<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_hover_leave(handler);
+        self.event_handlers_cache.borrow_mut().on_hover_leave(handler);
         self
     }
 
     /// Register a focus handler (builder pattern)
-    pub fn on_focus<F>(mut self, handler: F) -> Self
+    pub fn on_focus<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_focus(handler);
+        self.event_handlers_cache.borrow_mut().on_focus(handler);
         self
     }
 
     /// Register a blur handler (builder pattern)
-    pub fn on_blur<F>(mut self, handler: F) -> Self
+    pub fn on_blur<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_blur(handler);
+        self.event_handlers_cache.borrow_mut().on_blur(handler);
         self
     }
 
     /// Register a mount handler (builder pattern)
-    pub fn on_mount<F>(mut self, handler: F) -> Self
+    pub fn on_mount<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_mount(handler);
+        self.event_handlers_cache.borrow_mut().on_mount(handler);
         self
     }
 
     /// Register an unmount handler (builder pattern)
-    pub fn on_unmount<F>(mut self, handler: F) -> Self
+    pub fn on_unmount<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_unmount(handler);
+        self.event_handlers_cache.borrow_mut().on_unmount(handler);
         self
     }
 
     /// Register a key down handler (builder pattern)
-    pub fn on_key_down<F>(mut self, handler: F) -> Self
+    pub fn on_key_down<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_key_down(handler);
+        self.event_handlers_cache.borrow_mut().on_key_down(handler);
         self
     }
 
     /// Register a key up handler (builder pattern)
-    pub fn on_key_up<F>(mut self, handler: F) -> Self
+    pub fn on_key_up<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_key_up(handler);
+        self.event_handlers_cache.borrow_mut().on_key_up(handler);
         self
     }
 
     /// Register a scroll handler (builder pattern)
-    pub fn on_scroll<F>(mut self, handler: F) -> Self
+    pub fn on_scroll<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_scroll(handler);
+        self.event_handlers_cache.borrow_mut().on_scroll(handler);
         self
     }
 
     /// Register a mouse move handler (builder pattern)
-    pub fn on_mouse_move<F>(mut self, handler: F) -> Self
+    pub fn on_mouse_move<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_mouse_move(handler);
+        self.event_handlers_cache.borrow_mut().on(blinc_core::events::event_types::POINTER_MOVE, handler);
         self
     }
 
     /// Register a resize handler (builder pattern)
-    pub fn on_resize<F>(mut self, handler: F) -> Self
+    pub fn on_resize<F>(self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_resize(handler);
+        self.event_handlers_cache.borrow_mut().on_resize(handler);
         self
     }
 
     /// Register a handler for a specific event type (builder pattern)
-    pub fn on_event<F>(mut self, event_type: blinc_core::events::EventType, handler: F) -> Self
+    pub fn on_event<F>(self, event_type: blinc_core::events::EventType, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = self.inner.swap().on_event(event_type, handler);
+        self.event_handlers_cache.borrow_mut().on(event_type, handler);
         self
     }
 
@@ -1405,6 +1599,41 @@ impl<S: StateTransitions> BoundStateful<S> {
         self.transform_inner(|s| s.shadow(shadow))
     }
 
+    /// Set small shadow (builder pattern)
+    pub fn shadow_sm(self) -> Self {
+        self.transform_inner(|s| s.shadow_sm())
+    }
+
+    /// Set medium shadow (builder pattern)
+    pub fn shadow_md(self) -> Self {
+        self.transform_inner(|s| s.shadow_md())
+    }
+
+    /// Set large shadow (builder pattern)
+    pub fn shadow_lg(self) -> Self {
+        self.transform_inner(|s| s.shadow_lg())
+    }
+
+    /// Set extra-large shadow (builder pattern)
+    pub fn shadow_xl(self) -> Self {
+        self.transform_inner(|s| s.shadow_xl())
+    }
+
+    /// Set opacity (builder pattern)
+    pub fn opacity(self, opacity: f32) -> Self {
+        self.transform_inner(|s| s.opacity(opacity))
+    }
+
+    /// Set flex shrink (builder pattern)
+    pub fn flex_shrink(self) -> Self {
+        self.transform_inner(|s| s.flex_shrink())
+    }
+
+    /// Set flex shrink to 0 (builder pattern)
+    pub fn flex_shrink_0(self) -> Self {
+        self.transform_inner(|s| s.flex_shrink_0())
+    }
+
     /// Set transform (builder pattern)
     pub fn transform_style(self, xform: blinc_core::Transform) -> Self {
         self.transform_inner(|s| s.transform(xform))
@@ -1576,15 +1805,79 @@ impl<S: StateTransitions + Default> ElementBuilder for BoundStateful<S> {
 
 impl<S: StateTransitions> ElementBuilder for Stateful<S> {
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        self.inner.build(tree)
+        // Check if we need to apply a pending callback (e.g., from Button's build())
+        {
+            let shared = self.shared_state.lock().unwrap();
+            let has_callback = shared.state_callback.is_some();
+            let needs_update = shared.needs_visual_update;
+            tracing::debug!(
+                "Stateful::build - needs_visual_update={}, has_callback={}",
+                needs_update,
+                has_callback
+            );
+            if needs_update && has_callback {
+                let callback = Arc::clone(shared.state_callback.as_ref().unwrap());
+                let state_copy = shared.state;
+                drop(shared); // Release lock before calling callback
+
+                tracing::debug!("Stateful::build - applying callback");
+                // Apply callback to the inner div
+                callback(&state_copy, &mut *self.inner.borrow_mut());
+
+                // Check children count after callback
+                let children_count = self.inner.borrow().children.len();
+                tracing::debug!("Stateful::build - after callback, children count={}", children_count);
+
+                // Mark as updated
+                self.shared_state.lock().unwrap().needs_visual_update = false;
+            }
+        }
+
+        // Extract children from inner Div to the cache for children_builders() to return
+        // This is done by swapping them out, since we can't hold a reference across RefCell
+        {
+            let mut inner = self.inner.borrow_mut();
+            let children = std::mem::take(&mut inner.children);
+            *self.children_cache.borrow_mut() = children;
+        }
+
+        // Put children back for build() to use
+        {
+            let cache = self.children_cache.borrow();
+            let mut inner = self.inner.borrow_mut();
+            // We need to clone the children references - but Box<dyn ElementBuilder> isn't Clone
+            // So we'll leave them in the cache and manually build them
+        }
+
+        // Build the inner div's node (without children since we extracted them)
+        let mut inner = self.inner.borrow_mut();
+        let node = tree.create_node(inner.style.clone());
+
+        // Build children from the cache and add to tree
+        for child in self.children_cache.borrow().iter() {
+            let child_node = child.build(tree);
+            tree.add_child(node, child_node);
+        }
+
+        // Store node_id for incremental updates
+        self.shared_state.lock().unwrap().node_id = Some(node);
+
+        node
     }
 
     fn render_props(&self) -> RenderProps {
-        self.inner.render_props()
+        self.inner.borrow().render_props()
     }
 
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
-        self.inner.children_builders()
+        // SAFETY: We use a raw pointer here because we need to return a reference
+        // to the children in the cache. The cache is stable during rendering.
+        // This is safe as long as children_builders() is only called during the
+        // render phase after build() has populated the cache.
+        unsafe {
+            let cache = self.children_cache.as_ptr();
+            (*cache).as_slice()
+        }
     }
 
     fn element_type_id(&self) -> ElementTypeId {
@@ -1592,7 +1885,19 @@ impl<S: StateTransitions> ElementBuilder for Stateful<S> {
     }
 
     fn event_handlers(&self) -> Option<&crate::event_handler::EventHandlers> {
-        ElementBuilder::event_handlers(&self.inner)
+        // SAFETY: We use a raw pointer here because we need to return a reference
+        // to the event handlers cache. The cache is stable during rendering.
+        // This is safe as long as event_handlers() is only called during the
+        // render phase when the cache is no longer being mutated.
+        unsafe {
+            let cache = self.event_handlers_cache.as_ptr();
+            let handlers = &*cache;
+            if handlers.is_empty() {
+                None
+            } else {
+                Some(handlers)
+            }
+        }
     }
 }
 

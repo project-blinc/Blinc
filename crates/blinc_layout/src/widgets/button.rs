@@ -1,503 +1,549 @@
 //! Ready-to-use Button widget
 //!
-//! A button with built-in hover, press, and disabled states.
-//! Inherits ALL Div methods for full layout control via Deref.
+//! A button with built-in hover, press, and disabled states using FSM-driven
+//! state management via `Stateful<ButtonState>`. This provides efficient
+//! incremental prop updates without tree rebuilds.
 //!
 //! # Example
 //!
 //! ```ignore
-//! div().child(
-//!     button("Click me")
-//!         .on_click(|_| println!("Clicked!"))
-//!         .w(120.0)
-//!         .rounded(8.0)    // ALL Div methods work!
-//!         .p(16.0)
-//!         .flex_row()
-//!         .gap(8.0)
-//! )
+//! // Simple text button - state persists across rebuilds
+//! let btn_state = ctx.use_state_for("my_button", ButtonState::Idle);
+//! button(btn_state, "Click me")
+//!     .on_click(|_| println!("Clicked!"))
+//!     .bg_color(Color::RED)
+//!     .hover_color(Color::GREEN)
+//!
+//! // Button with custom child content
+//! let save_btn_state = ctx.use_state_for("save_btn", ButtonState::Idle);
+//! button_with(save_btn_state, |_state| {
+//!     div().flex_row().gap(8.0)
+//!         .child(svg_icon("save"))
+//!         .child(text("Save"))
+//! })
+//! .on_click(|_| save())
 //! ```
 
-use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, Mutex};
 
+use blinc_core::reactive::SignalId;
 use blinc_core::Color;
 
 use crate::div::{div, Div, ElementBuilder};
 use crate::element::RenderProps;
+use crate::stateful::{ButtonState, SharedState, Stateful};
 use crate::text::text;
 use crate::tree::{LayoutNodeId, LayoutTree};
 
-/// Button visual states
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum ButtonVisualState {
-    #[default]
-    Idle,
-    Hovered,
-    Pressed,
-    Disabled,
-}
+/// Button visual states (re-exported from stateful)
+pub use crate::stateful::ButtonState as ButtonVisualState;
 
-/// Button configuration
+/// Button-specific configuration (colors)
 #[derive(Clone)]
 pub struct ButtonConfig {
-    /// Label text
-    pub label: String,
-    /// Base background color
-    pub bg_color: Color,
-    /// Hover background color
-    pub hover_color: Color,
-    /// Pressed background color
-    pub pressed_color: Color,
-    /// Disabled background color
-    pub disabled_color: Color,
-    /// Text color
+    pub label: Option<String>,
     pub text_color: Color,
-    /// Disabled text color
-    pub disabled_text_color: Color,
-    /// Font size
-    pub font_size: f32,
-    /// Whether disabled
+    pub text_size: f32,
+    pub bg_color: Color,
+    pub hover_color: Color,
+    pub pressed_color: Color,
+    pub disabled_color: Color,
     pub disabled: bool,
 }
 
 impl Default for ButtonConfig {
     fn default() -> Self {
         Self {
-            label: String::new(),
+            label: None,
+            text_color: Color::WHITE,
+            text_size: 16.0,
             bg_color: Color::rgba(0.2, 0.5, 0.9, 1.0),
             hover_color: Color::rgba(0.3, 0.6, 1.0, 1.0),
             pressed_color: Color::rgba(0.15, 0.4, 0.8, 1.0),
             disabled_color: Color::rgba(0.3, 0.3, 0.35, 0.5),
-            text_color: Color::WHITE,
-            disabled_text_color: Color::rgba(0.7, 0.7, 0.7, 1.0),
-            font_size: 16.0,
             disabled: false,
         }
     }
 }
 
-/// Ready-to-use button widget
+type ClickHandler = Arc<dyn Fn(&crate::event_handler::EventContext) + Send + Sync>;
+type StateCallback = Arc<dyn Fn(ButtonState, &mut Div) + Send + Sync>;
+
+/// Button widget - wraps Stateful<ButtonState>
 ///
-/// Inherits all Div methods via Deref, so you have full layout control.
-///
-/// Usage: `button("Label").on_click(|_| ...).w(100.0).rounded(8.0).p(16.0)`
+/// Buttons can have custom content via `button_with()` or use the simple
+/// `button("Label")` constructor for text-only buttons.
 pub struct Button {
-    /// Inner div - ALL Div methods are available via Deref
-    inner: Div,
-    /// Button-specific configuration
-    config: ButtonConfig,
-}
-
-// Deref to Div gives Button ALL Div methods for reading
-impl Deref for Button {
-    type Target = Div;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for Button {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
+    inner: Stateful<ButtonState>,
+    config: Arc<Mutex<ButtonConfig>>,
+    click_handler: Option<ClickHandler>,
+    custom_state_callback: Option<StateCallback>,
+    extra_deps: Vec<SignalId>,
 }
 
 impl Button {
-    /// Create a new button with a label
-    pub fn new(label: impl Into<String>) -> Self {
-        let label = label.into();
-        let config = ButtonConfig {
-            label: label.clone(),
+    /// Create a button with a text label and externally-managed state
+    ///
+    /// The state handle should be created via `ctx.use_state_for()` for persistence
+    /// across rebuilds. The label text color can be customized with `.text_color()`.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let btn_state = ctx.use_state_for("my_button", ButtonState::Idle);
+    /// Button::new(btn_state, "Click me")
+    ///     .on_click(|_| println!("Clicked!"))
+    /// ```
+    pub fn new(state: SharedState<ButtonState>, label: impl Into<String>) -> Self {
+        let config = Arc::new(Mutex::new(ButtonConfig {
+            label: Some(label.into()),
             ..Default::default()
-        };
+        }));
 
-        // Create inner div with default button styling
-        let inner = div()
-            .px(16.0)
-            .py(8.0)
-            .bg(config.bg_color)
-            .rounded(8.0)
-            .items_center()
-            .justify_center()
-            .child(
-                text(&label)
-                    .size(config.font_size)
-                    .color(config.text_color)
-                    .v_center(),
-            );
+        // Create the inner Stateful - we'll apply bg color dynamically in build()
+        // Don't use on_state callback for content since config changes after construction
+        let inner = Stateful::with_shared_state(state);
 
-        Self { inner, config }
-    }
-
-    /// Set the button label
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.config.label = label.into();
-        self.rebuild_content();
-        self
-    }
-
-    /// Set background color (button-specific, updates config)
-    pub fn bg_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.bg_color = color.into();
-        self.inner = std::mem::take(&mut self.inner).background(self.config.bg_color);
-        self
-    }
-
-    /// Set hover color
-    pub fn hover_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.hover_color = color.into();
-        self
-    }
-
-    /// Set pressed color
-    pub fn pressed_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.pressed_color = color.into();
-        self
-    }
-
-    /// Set text color
-    pub fn text_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.text_color = color.into();
-        self.rebuild_content();
-        self
-    }
-
-    /// Set font size
-    pub fn font_size(mut self, size: f32) -> Self {
-        self.config.font_size = size;
-        self.rebuild_content();
-        self
-    }
-
-    /// Set disabled state
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
-        if disabled {
-            self.inner = std::mem::take(&mut self.inner).background(self.config.disabled_color);
-        } else {
-            self.inner = std::mem::take(&mut self.inner).background(self.config.bg_color);
+        Self {
+            inner,
+            config,
+            click_handler: None,
+            custom_state_callback: None,
+            extra_deps: Vec::new(),
         }
-        self.rebuild_content();
+    }
+
+    /// Create a button with custom content and externally-managed state
+    ///
+    /// The state handle should be created via `ctx.use_state_for()` for persistence
+    /// across rebuilds. The content builder receives the current button state, allowing
+    /// state-dependent content rendering (e.g., different icons for pressed state).
+    ///
+    /// Note: When using custom content, `text_color()` has no effect.
+    /// Style your content directly within the content builder.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let btn_state = ctx.use_state_for("icon_btn", ButtonState::Idle);
+    /// Button::with_content(btn_state, |state| {
+    ///     div().child(text("Click me").color(Color::WHITE))
+    /// })
+    /// .on_click(|_| println!("Clicked!"))
+    /// ```
+    pub fn with_content<F>(state: SharedState<ButtonState>, content_builder: F) -> Self
+    where
+        F: Fn(ButtonState) -> Div + Send + Sync + 'static,
+    {
+        let config = Arc::new(Mutex::new(ButtonConfig::default()));
+
+        // Store content builder in config for use in build()
+        // We use a custom_state_callback to hold the content builder
+        let content_builder = Arc::new(content_builder);
+
+        // Create the inner Stateful
+        let inner = Stateful::with_shared_state(state);
+
+        Self {
+            inner,
+            config,
+            click_handler: None,
+            custom_state_callback: Some(Arc::new({
+                let content_builder = Arc::clone(&content_builder);
+                move |state, container: &mut Div| {
+                    let content = content_builder(state);
+                    container.merge(div().child(content));
+                }
+            })),
+            extra_deps: Vec::new(),
+        }
+    }
+
+    // Button-specific methods
+    pub fn bg_color(self, color: impl Into<Color>) -> Self {
+        self.config.lock().unwrap().bg_color = color.into();
         self
     }
 
-    /// Set click handler
+    pub fn hover_color(self, color: impl Into<Color>) -> Self {
+        self.config.lock().unwrap().hover_color = color.into();
+        self
+    }
+
+    pub fn pressed_color(self, color: impl Into<Color>) -> Self {
+        self.config.lock().unwrap().pressed_color = color.into();
+        self
+    }
+
+    /// Set text color for simple text buttons created with `button("Label")`
+    ///
+    /// Note: This has no effect on buttons created with `button_with()`.
+    /// For custom content buttons, style the text directly in your content builder.
+    pub fn text_color(self, color: impl Into<Color>) -> Self {
+        self.config.lock().unwrap().text_color = color.into();
+        self
+    }
+
+    /// Set text size for simple text buttons created with `button("Label")`
+    ///
+    /// Note: This has no effect on buttons created with `button_with()`.
+    pub fn text_size(self, size: f32) -> Self {
+        self.config.lock().unwrap().text_size = size;
+        self
+    }
+
+    pub fn disabled(self, disabled: bool) -> Self {
+        self.config.lock().unwrap().disabled = disabled;
+        // If disabling, also update the state
+        if disabled {
+            self.inner.set_state(ButtonState::Disabled);
+        }
+        self
+    }
+
     pub fn on_click<F>(mut self, handler: F) -> Self
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        if !self.config.disabled {
-            self.inner = std::mem::take(&mut self.inner).on_click(handler);
-        }
+        // Register click handler on the inner Stateful
+        let handler = Arc::new(handler);
+        let handler_clone = Arc::clone(&handler);
+        self.inner = self.inner.on_click(move |ctx| handler_clone(ctx));
+        self.click_handler = Some(handler);
         self
     }
 
-    /// Rebuild text content with current config
-    fn rebuild_content(&mut self) {
-        let text_color = if self.config.disabled {
-            self.config.disabled_text_color
-        } else {
-            self.config.text_color
-        };
-
-        // Clear and rebuild with new text
-        self.inner = std::mem::take(&mut self.inner).child(
-            text(&self.config.label)
-                .size(self.config.font_size)
-                .color(text_color)
-                .v_center(),
-        );
-    }
-
-    // =========================================================================
-    // Builder methods that return Self (shadow Div methods for fluent API)
-    // =========================================================================
-
-    pub fn w(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).w(px);
+    pub fn on_state<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(ButtonState, &mut Div) + Send + Sync + 'static,
+    {
+        self.custom_state_callback = Some(Arc::new(callback));
         self
     }
 
-    pub fn h(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).h(px);
+    pub fn deps(mut self, signal_ids: &[SignalId]) -> Self {
+        self.extra_deps = signal_ids.to_vec();
+        self.inner = self.inner.deps(&self.extra_deps);
         self
     }
 
-    pub fn size(mut self, w: f32, h: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).size(w, h);
+    // Forward ALL Stateful layout methods to inner
+
+    pub fn px(mut self, v: f32) -> Self {
+        self.inner = self.inner.px(v);
         self
     }
 
-    pub fn square(mut self, size: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).square(size);
+    pub fn py(mut self, v: f32) -> Self {
+        self.inner = self.inner.py(v);
+        self
+    }
+
+    pub fn p(mut self, v: f32) -> Self {
+        self.inner = self.inner.p(v);
+        self
+    }
+
+    pub fn pt(mut self, v: f32) -> Self {
+        self.inner = self.inner.pt(v);
+        self
+    }
+
+    pub fn pb(mut self, v: f32) -> Self {
+        self.inner = self.inner.pb(v);
+        self
+    }
+
+    pub fn pl(mut self, v: f32) -> Self {
+        self.inner = self.inner.pl(v);
+        self
+    }
+
+    pub fn pr(mut self, v: f32) -> Self {
+        self.inner = self.inner.pr(v);
+        self
+    }
+
+    pub fn rounded(mut self, v: f32) -> Self {
+        self.inner = self.inner.rounded(v);
+        self
+    }
+
+    pub fn w(mut self, v: f32) -> Self {
+        self.inner = self.inner.w(v);
+        self
+    }
+
+    pub fn h(mut self, v: f32) -> Self {
+        self.inner = self.inner.h(v);
         self
     }
 
     pub fn w_full(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).w_full();
+        self.inner = self.inner.w_full();
         self
     }
 
     pub fn h_full(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).h_full();
+        self.inner = self.inner.h_full();
         self
     }
 
     pub fn w_fit(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).w_fit();
+        self.inner = self.inner.w_fit();
         self
     }
 
     pub fn h_fit(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).h_fit();
+        self.inner = self.inner.h_fit();
         self
     }
 
-    pub fn p(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).p(px);
+    pub fn mt(mut self, v: f32) -> Self {
+        self.inner = self.inner.mt(v);
         self
     }
 
-    pub fn px(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).px(px);
+    pub fn mb(mut self, v: f32) -> Self {
+        self.inner = self.inner.mb(v);
         self
     }
 
-    pub fn py(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).py(px);
+    pub fn ml(mut self, v: f32) -> Self {
+        self.inner = self.inner.ml(v);
         self
     }
 
-    pub fn m(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).m(px);
+    pub fn mr(mut self, v: f32) -> Self {
+        self.inner = self.inner.mr(v);
         self
     }
 
-    pub fn mx(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).mx(px);
+    pub fn mx(mut self, v: f32) -> Self {
+        self.inner = self.inner.mx(v);
         self
     }
 
-    pub fn my(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).my(px);
+    pub fn my(mut self, v: f32) -> Self {
+        self.inner = self.inner.my(v);
         self
     }
 
-    pub fn gap(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).gap(px);
+    pub fn m(mut self, v: f32) -> Self {
+        self.inner = self.inner.m(v);
         self
     }
 
-    pub fn flex_row(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).flex_row();
-        self
-    }
-
-    pub fn flex_col(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).flex_col();
-        self
-    }
-
-    pub fn flex_grow(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).flex_grow();
+    pub fn gap(mut self, v: f32) -> Self {
+        self.inner = self.inner.gap(v);
         self
     }
 
     pub fn items_center(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).items_center();
+        self.inner = self.inner.items_center();
         self
     }
 
     pub fn items_start(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).items_start();
+        self.inner = self.inner.items_start();
         self
     }
 
     pub fn items_end(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).items_end();
+        self.inner = self.inner.items_end();
         self
     }
 
     pub fn justify_center(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).justify_center();
+        self.inner = self.inner.justify_center();
         self
     }
 
     pub fn justify_start(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).justify_start();
+        self.inner = self.inner.justify_start();
         self
     }
 
     pub fn justify_end(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).justify_end();
+        self.inner = self.inner.justify_end();
         self
     }
 
     pub fn justify_between(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).justify_between();
+        self.inner = self.inner.justify_between();
         self
     }
 
-    pub fn bg(mut self, color: impl Into<blinc_core::Brush>) -> Self {
-        self.inner = std::mem::take(&mut self.inner).background(color);
+    pub fn flex_row(mut self) -> Self {
+        self.inner = self.inner.flex_row();
         self
     }
 
-    pub fn rounded(mut self, radius: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).rounded(radius);
+    pub fn flex_col(mut self) -> Self {
+        self.inner = self.inner.flex_col();
         self
     }
 
-    pub fn shadow(mut self, shadow: blinc_core::Shadow) -> Self {
-        self.inner = std::mem::take(&mut self.inner).shadow(shadow);
+    pub fn flex_grow(mut self) -> Self {
+        self.inner = self.inner.flex_grow();
+        self
+    }
+
+    pub fn flex_shrink(mut self) -> Self {
+        self.inner = self.inner.flex_shrink();
+        self
+    }
+
+    pub fn flex_shrink_0(mut self) -> Self {
+        self.inner = self.inner.flex_shrink_0();
         self
     }
 
     pub fn shadow_sm(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).shadow_sm();
+        self.inner = self.inner.shadow_sm();
         self
     }
 
     pub fn shadow_md(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).shadow_md();
+        self.inner = self.inner.shadow_md();
         self
     }
 
     pub fn shadow_lg(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).shadow_lg();
+        self.inner = self.inner.shadow_lg();
         self
     }
 
-    pub fn transform(mut self, transform: blinc_core::Transform) -> Self {
-        self.inner = std::mem::take(&mut self.inner).transform(transform);
+    pub fn shadow_xl(mut self) -> Self {
+        self.inner = self.inner.shadow_xl();
         self
     }
 
-    pub fn opacity(mut self, opacity: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).opacity(opacity);
-        self
-    }
-
-    pub fn overflow_clip(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).overflow_clip();
-        self
-    }
-
-    pub fn overflow_visible(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).overflow_visible();
-        self
-    }
-
-    pub fn child(mut self, child: impl ElementBuilder + 'static) -> Self {
-        self.inner = std::mem::take(&mut self.inner).child(child);
-        self
-    }
-
-    pub fn children<I>(mut self, children: I) -> Self
-    where
-        I: IntoIterator,
-        I::Item: ElementBuilder + 'static,
-    {
-        self.inner = std::mem::take(&mut self.inner).children(children);
-        self
-    }
-
-    // Event handlers
-    pub fn on_hover_enter<F>(mut self, handler: F) -> Self
-    where
-        F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
-    {
-        self.inner = std::mem::take(&mut self.inner).on_hover_enter(handler);
-        self
-    }
-
-    pub fn on_hover_leave<F>(mut self, handler: F) -> Self
-    where
-        F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
-    {
-        self.inner = std::mem::take(&mut self.inner).on_hover_leave(handler);
-        self
-    }
-
-    pub fn on_mouse_down<F>(mut self, handler: F) -> Self
-    where
-        F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
-    {
-        self.inner = std::mem::take(&mut self.inner).on_mouse_down(handler);
-        self
-    }
-
-    pub fn on_mouse_up<F>(mut self, handler: F) -> Self
-    where
-        F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
-    {
-        self.inner = std::mem::take(&mut self.inner).on_mouse_up(handler);
-        self
-    }
-
-    pub fn on_focus<F>(mut self, handler: F) -> Self
-    where
-        F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
-    {
-        self.inner = std::mem::take(&mut self.inner).on_focus(handler);
-        self
-    }
-
-    pub fn on_blur<F>(mut self, handler: F) -> Self
-    where
-        F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
-    {
-        self.inner = std::mem::take(&mut self.inner).on_blur(handler);
-        self
-    }
-
-    pub fn on_key_down<F>(mut self, handler: F) -> Self
-    where
-        F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
-    {
-        self.inner = std::mem::take(&mut self.inner).on_key_down(handler);
-        self
-    }
-
-    pub fn on_key_up<F>(mut self, handler: F) -> Self
-    where
-        F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
-    {
-        self.inner = std::mem::take(&mut self.inner).on_key_up(handler);
-        self
-    }
-
-    pub fn on_scroll<F>(mut self, handler: F) -> Self
-    where
-        F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
-    {
-        self.inner = std::mem::take(&mut self.inner).on_scroll(handler);
+    pub fn opacity(mut self, v: f32) -> Self {
+        self.inner = self.inner.opacity(v);
         self
     }
 }
 
-/// Create a ready-to-use button
+/// Create a button with a text label and context-managed state
 ///
-/// The button inherits ALL Div methods, so you have full layout control.
+/// The state handle should be created via `ctx.use_state_for()` for persistence
+/// across rebuilds. This is the most common button constructor. For buttons with
+/// custom content (icons, multiple elements, etc.), use `button_with()`.
 ///
 /// # Example
-///
 /// ```ignore
-/// button("Submit")
-///     .on_click(|_| println!("Clicked!"))
-///     .w(120.0)
-///     .rounded(16.0)
-///     .p(20.0)
-///     .flex_row()
-///     .gap(8.0)
-///     .child(icon("check"))
+/// let btn_state = ctx.use_state_for("save_btn", ButtonState::Idle);
+/// button(btn_state, "Save")
+///     .on_click(|_| save_data())
+///     .bg_color(Color::GREEN)
 /// ```
-pub fn button(label: impl Into<String>) -> Button {
-    Button::new(label)
+pub fn button(state: SharedState<ButtonState>, label: impl Into<String>) -> Button {
+    Button::new(state, label)
+        .px(12.0)
+        .py(6.0)
+        .rounded(8.0)
+        .items_center()
+        .justify_center()
 }
+
+/// Create a button with custom content and context-managed state
+///
+/// The state handle should be created via `ctx.use_state_for()` for persistence
+/// across rebuilds. The content builder receives the current button state, allowing
+/// state-dependent content (e.g., different icons for pressed state).
+///
+/// # Example
+/// ```ignore
+/// // Icon button
+/// let trash_btn = ctx.use_state_for("trash_btn", ButtonState::Idle);
+/// button_with(trash_btn, |_state| {
+///     div().child(svg_icon("trash"))
+/// })
+/// .on_click(|_| delete_item())
+///
+/// // Button with icon and text
+/// let save_btn = ctx.use_state_for("save_btn", ButtonState::Idle);
+/// button_with(save_btn, |_state| {
+///     div().flex_row().gap(8.0)
+///         .child(svg_icon("save"))
+///         .child(text("Save").color(Color::WHITE))
+/// })
+/// .on_click(|_| save())
+///
+/// // State-aware button (e.g., loading spinner when pressed)
+/// let submit_btn = ctx.use_state_for("submit_btn", ButtonState::Idle);
+/// button_with(submit_btn, |state| {
+///     if matches!(state, ButtonState::Pressed) {
+///         div().child(spinner())
+///     } else {
+///         div().child(text("Submit").color(Color::WHITE))
+///     }
+/// })
+/// ```
+pub fn button_with<F>(state: SharedState<ButtonState>, content_builder: F) -> Button
+where
+    F: Fn(ButtonState) -> Div + Send + Sync + 'static,
+{
+    Button::with_content(state, content_builder)
+        .px(12.0)
+        .py(6.0)
+        .rounded(8.0)
+        .items_center()
+        .justify_center()
+}
+
 
 impl ElementBuilder for Button {
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
+        tracing::info!("Button::build called");
+        // Capture current config values for the on_state callback
+        let config_for_state = Arc::clone(&self.config);
+        let custom_callback = self.custom_state_callback.clone();
+
+        // Ensure state transition handlers (hover, press) are registered
+        // This is needed because Button bypasses Stateful::on_state() and sets
+        // the callback directly, so register_state_handlers() is never called.
+        self.inner.ensure_state_handlers_registered();
+
+        // Register on_state callback with current config
+        // This will be applied by Stateful::build() when it sees needs_visual_update
+        {
+            let shared_state = self.inner.shared_state();
+            let mut shared = shared_state.lock().unwrap();
+            shared.state_callback = Some(Arc::new(move |state: &ButtonState, container: &mut Div| {
+                tracing::info!("Button on_state callback fired, state={:?}", state);
+                let cfg = config_for_state.lock().unwrap();
+                let bg = match state {
+                    ButtonState::Idle => cfg.bg_color,
+                    ButtonState::Hovered => cfg.hover_color,
+                    ButtonState::Pressed => cfg.pressed_color,
+                    ButtonState::Disabled => cfg.disabled_color,
+                };
+
+                // Apply background color and content
+                let mut update = div().bg(bg);
+
+                // Add content based on whether we have custom content or label
+                if let Some(ref callback) = custom_callback {
+                    callback(*state, &mut update);
+                } else if let Some(ref label) = cfg.label {
+                    tracing::info!("Button adding label child: {}", label);
+                    update = update.child(text(label).size(cfg.text_size).color(cfg.text_color));
+                }
+
+                let update_children = update.children.len();
+                tracing::info!("Button update div has {} children before merge", update_children);
+                drop(cfg);
+                container.merge(update);
+                let container_children = container.children.len();
+                tracing::info!("Button container has {} children after merge", container_children);
+            }));
+            shared.base_render_props = Some(self.inner.inner_render_props());
+            shared.needs_visual_update = true;
+        }
+
+        // Build the inner Stateful - it will apply the callback we just set
         self.inner.build(tree)
     }
 
@@ -506,6 +552,7 @@ impl ElementBuilder for Button {
     }
 
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
+        // Delegate to the inner Stateful which has the cached children
         self.inner.children_builders()
     }
 
@@ -514,6 +561,7 @@ impl ElementBuilder for Button {
     }
 
     fn event_handlers(&self) -> Option<&crate::event_handler::EventHandlers> {
-        ElementBuilder::event_handlers(&self.inner)
+        // Delegate to the inner Stateful which has the cached event handlers
+        self.inner.event_handlers()
     }
 }

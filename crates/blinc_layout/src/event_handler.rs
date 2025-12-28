@@ -168,6 +168,11 @@ impl EventHandlers {
         self.handlers.is_empty()
     }
 
+    /// Check if a handler is registered for a specific event type
+    pub fn has_handler(&self, event_type: EventType) -> bool {
+        self.handlers.contains_key(&event_type)
+    }
+
     /// Register a handler for an event type
     pub fn on<F>(&mut self, event_type: EventType, handler: F)
     where

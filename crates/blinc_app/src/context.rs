@@ -1082,6 +1082,161 @@ impl RenderContext {
         Ok(())
     }
 
+    /// Render a tree on top of existing content (no clear)
+    ///
+    /// This is used for overlay trees (modals, toasts, dialogs) that render
+    /// on top of the main UI without clearing it.
+    pub fn render_overlay_tree_with_motion(
+        &mut self,
+        tree: &RenderTree,
+        render_state: &blinc_layout::RenderState,
+        width: u32,
+        height: u32,
+        target: &wgpu::TextureView,
+    ) -> Result<()> {
+        // Create a single paint context for all layers with text rendering support
+        let mut ctx =
+            GpuPaintContext::with_text_context(width as f32, height as f32, &mut self.text_ctx);
+
+        // Render with motion animations applied (all layers to same context)
+        tree.render_with_motion(&mut ctx, render_state);
+
+        // Take the batch
+        let batch = ctx.take_batch();
+
+        // Collect text, SVG, and image elements WITH motion state
+        let (texts, svgs, images) =
+            self.collect_render_elements_with_state(tree, Some(render_state));
+
+        // Pre-load all images into cache before rendering
+        self.preload_images(&images);
+
+        // Prepare text glyphs with z_layer information
+        let mut glyphs_by_layer: std::collections::BTreeMap<u32, Vec<GpuGlyph>> =
+            std::collections::BTreeMap::new();
+        for text in &texts {
+            let alignment = match text.align {
+                TextAlign::Left => TextAlignment::Left,
+                TextAlign::Center => TextAlignment::Center,
+                TextAlign::Right => TextAlignment::Right,
+            };
+
+            // Apply motion opacity to text color
+            let color = if text.motion_opacity < 1.0 {
+                [
+                    text.color[0],
+                    text.color[1],
+                    text.color[2],
+                    text.color[3] * text.motion_opacity,
+                ]
+            } else {
+                text.color
+            };
+
+            // Determine wrap width
+            let effective_width = if let Some(clip) = text.clip_bounds {
+                clip[2].min(text.width)
+            } else {
+                text.width
+            };
+
+            let needs_wrap = text.wrap && effective_width < text.measured_width - 2.0;
+            let wrap_width = Some(text.width);
+            let font_name = text.font_family.name.as_deref();
+            let generic = to_gpu_generic_font(text.font_family.generic);
+
+            let (anchor, y_pos) = match text.v_align {
+                TextVerticalAlign::Center => (TextAnchor::Center, text.y + text.height / 2.0),
+                TextVerticalAlign::Top => (TextAnchor::Top, text.y),
+            };
+
+            if let Ok(glyphs) = self.text_ctx.prepare_text_with_font(
+                &text.content,
+                text.x,
+                y_pos,
+                text.font_size,
+                color,
+                anchor,
+                alignment,
+                wrap_width,
+                needs_wrap,
+                font_name,
+                generic,
+            ) {
+                let mut glyphs = glyphs;
+                if let Some(clip) = text.clip_bounds {
+                    for glyph in &mut glyphs {
+                        glyph.clip_bounds = clip;
+                    }
+                }
+                glyphs_by_layer
+                    .entry(text.z_index)
+                    .or_default()
+                    .extend(glyphs);
+            }
+        }
+
+        // Render SVGs
+        let mut svg_ctx = GpuPaintContext::new(width as f32, height as f32);
+        for (source, x, y, w, h) in &svgs {
+            if let Ok(doc) = SvgDocument::from_str(source) {
+                doc.render_fit(&mut svg_ctx, Rect::new(*x, *y, *w, *h));
+            }
+        }
+
+        // Merge SVG batch into main batch
+        let mut batch = batch;
+        batch.merge(svg_ctx.take_batch());
+
+        self.renderer.resize(width, height);
+
+        // For overlay rendering, we DON'T have glass effects (overlays are simple)
+        // Render primitives without clearing (LoadOp::Load)
+        let max_z = batch.max_z_layer();
+        let max_text_z = glyphs_by_layer.keys().cloned().max().unwrap_or(0);
+        let max_layer = max_z.max(max_text_z);
+
+        tracing::debug!(
+            "render_overlay_tree: {} primitives, {} text layers, max_layer={}",
+            batch.primitives.len(),
+            glyphs_by_layer.len(),
+            max_layer
+        );
+
+        // Render all layers using overlay mode (no clear)
+        for z in 0..=max_layer {
+            let layer_primitives = batch.primitives_for_layer(z);
+            if !layer_primitives.is_empty() {
+                tracing::debug!(
+                    "render_overlay_tree: rendering {} primitives at z={}",
+                    layer_primitives.len(),
+                    z
+                );
+                self.renderer
+                    .render_primitives_overlay(target, &layer_primitives);
+            }
+
+            if let Some(glyphs) = glyphs_by_layer.get(&z) {
+                if !glyphs.is_empty() {
+                    tracing::debug!(
+                        "render_overlay_tree: rendering {} glyphs at z={}",
+                        glyphs.len(),
+                        z
+                    );
+                    self.render_text(target, glyphs);
+                }
+            }
+        }
+
+        // Images render on top
+        self.render_images(target, &images);
+
+        // Poll the device to free completed command buffers
+        self.renderer.poll();
+
+        Ok(())
+    }
+
     /// Render overlays from RenderState (cursors, selections, focus rings)
     fn render_overlays(
         &mut self,

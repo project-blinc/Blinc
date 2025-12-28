@@ -35,12 +35,13 @@ pub mod button;
 pub mod checkbox;
 pub mod code;
 pub mod cursor;
+pub mod overlay;
 pub mod scroll;
 pub mod text_area;
 pub mod text_input;
 
 // Re-export button widget
-pub use button::{button, Button, ButtonConfig, ButtonVisualState};
+pub use button::{button, button_with, Button, ButtonConfig, ButtonVisualState};
 
 // Re-export checkbox widget
 pub use checkbox::{
@@ -88,3 +89,10 @@ pub use cursor::{
 
 // Re-export code widget
 pub use code::{code, pre, Code, CodeConfig};
+
+// Re-export overlay widget
+pub use overlay::{
+    overlay_events, overlay_manager, BackdropConfig, Corner, ContextMenuBuilder, DialogBuilder,
+    DropdownBuilder, ModalBuilder, OverlayAnimation, OverlayConfig, OverlayHandle, OverlayKind,
+    OverlayManager, OverlayManagerExt, OverlayPosition, OverlayState, ToastBuilder,
+};

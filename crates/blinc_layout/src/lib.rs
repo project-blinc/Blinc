@@ -30,6 +30,7 @@
 
 pub mod animated;
 pub mod canvas;
+pub mod diff;
 pub mod div;
 pub mod element;
 pub mod element_style;
@@ -59,6 +60,12 @@ pub mod widgets;
 pub use element::{
     DynRenderProps, ElementBounds, MotionAnimation, MotionKeyframe, RenderLayer, RenderProps,
     ResolvedRenderProps,
+};
+
+// Diff and reconciliation
+pub use diff::{
+    diff, diff_children, diff_elements, reconcile,
+    ChangeCategory, ChildDiff, DiffResult, DivHash, ReconcileActions,
 };
 pub use event_handler::{EventCallback, EventContext, EventHandlers, HandlerRegistry};
 pub use event_router::{EventRouter, HitTestResult, MouseButton};
@@ -147,6 +154,11 @@ pub mod prelude {
     pub use crate::interactive::{DirtyTracker, InteractiveContext, NodeState};
     // Unified element styling
     pub use crate::element_style::{style, ElementStyle};
+    // Diff and reconciliation
+    pub use crate::diff::{
+        diff, diff_children, diff_elements, reconcile,
+        ChangeCategory, ChildDiff, DiffResult, DivHash, ReconcileActions,
+    };
     // Stateful elements with user-defined state types (core infrastructure)
     pub use crate::stateful::{
         // Internal scroll events for FSM transitions
@@ -287,5 +299,12 @@ pub mod prelude {
     pub use crate::table::{
         cell, striped_tr, table, tbody, td, td_text, tfoot, th, th_text, thead, tr, TableBuilder,
         TableCell,
+    };
+
+    // Overlay system (modals, dialogs, context menus, toasts)
+    pub use crate::widgets::{
+        overlay_events, overlay_manager, BackdropConfig, ContextMenuBuilder, Corner, DialogBuilder,
+        DropdownBuilder, ModalBuilder, OverlayAnimation, OverlayConfig, OverlayHandle, OverlayKind,
+        OverlayManager, OverlayManagerExt, OverlayPosition, OverlayState, ToastBuilder,
     };
 }

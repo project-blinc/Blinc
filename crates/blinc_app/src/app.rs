@@ -232,6 +232,23 @@ impl BlincApp {
             .render_tree_with_motion(tree, render_state, width, height, target)
     }
 
+    /// Render an overlay tree on top of existing content (no clear)
+    ///
+    /// This is used for rendering modal/dialog/toast overlays on top of the main UI.
+    /// Unlike `render_tree_with_motion`, this method does NOT clear the render target,
+    /// preserving whatever was rendered before.
+    pub fn render_overlay_tree_with_motion(
+        &mut self,
+        tree: &RenderTree,
+        render_state: &blinc_layout::RenderState,
+        target: &wgpu::TextureView,
+        width: u32,
+        height: u32,
+    ) -> Result<()> {
+        self.ctx
+            .render_overlay_tree_with_motion(tree, render_state, width, height, target)
+    }
+
     /// Get the render context for advanced usage
     pub fn context(&mut self) -> &mut RenderContext {
         &mut self.ctx

@@ -32,6 +32,7 @@ use std::sync::{
 use blinc_animation::{AnimationScheduler, SchedulerHandle};
 use blinc_core::reactive::{Derived, ReactiveGraph, Signal};
 use blinc_layout::prelude::*;
+use blinc_layout::widgets::overlay::{overlay_manager, OverlayManager, OverlayManagerExt};
 use blinc_platform::{
     ControlFlow, Event, EventLoop, InputEvent, Key, KeyState, LifecycleEvent, MouseEvent, Platform,
     TouchEvent, Window, WindowConfig, WindowEvent,
@@ -217,6 +218,8 @@ pub struct WindowedContext {
     reactive: SharedReactiveGraph,
     /// Hook state for call-order based signal persistence
     hooks: SharedHookState,
+    /// Overlay manager for modals, dialogs, toasts, etc.
+    overlay_manager: OverlayManager,
 }
 
 impl WindowedContext {
@@ -227,6 +230,7 @@ impl WindowedContext {
         ref_dirty_flag: RefDirtyFlag,
         reactive: SharedReactiveGraph,
         hooks: SharedHookState,
+        overlay_mgr: OverlayManager,
     ) -> Self {
         // Get physical size (actual surface pixels) and scale factor
         let (physical_width, physical_height) = window.size();
@@ -250,6 +254,7 @@ impl WindowedContext {
             ref_dirty_flag,
             reactive,
             hooks,
+            overlay_manager: overlay_mgr,
         }
     }
 
@@ -553,6 +558,40 @@ impl WindowedContext {
         self.animations.lock().unwrap().handle()
     }
 
+    /// Get the overlay manager for showing modals, dialogs, toasts, etc.
+    ///
+    /// The overlay manager provides a fluent API for creating overlays that
+    /// render in a separate pass after the main UI tree, ensuring they always
+    /// appear on top.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use blinc_layout::prelude::*;
+    ///
+    /// fn my_ui(ctx: &WindowedContext) -> impl ElementBuilder {
+    ///     let overlay_mgr = ctx.overlay_manager();
+    ///
+    ///     div()
+    ///         .child(
+    ///             button("Show Modal").on_click({
+    ///                 let mgr = overlay_mgr.clone();
+    ///                 move |_| {
+    ///                     mgr.modal()
+    ///                         .content(|| {
+    ///                             div().p(20.0).bg(Color::WHITE)
+    ///                                 .child(text("Hello from modal!"))
+    ///                         })
+    ///                         .show();
+    ///                 }
+    ///             })
+    ///         )
+    /// }
+    /// ```
+    pub fn overlay_manager(&self) -> OverlayManager {
+        Arc::clone(&self.overlay_manager)
+    }
+
     /// Create a persistent state for stateful UI elements
     ///
     /// This creates a `SharedState<S>` that survives across UI rebuilds.
@@ -753,6 +792,9 @@ impl WindowedApp {
         // This includes cursor blink, animated colors, hover states, etc.
         let mut render_state: Option<blinc_layout::RenderState> = None;
 
+        // Overlay manager for modals, dialogs, toasts, etc.
+        let overlays: OverlayManager = overlay_manager();
+
         event_loop
             .run(move |event, window| {
                 match event {
@@ -782,7 +824,7 @@ impl WindowedApp {
                                     surface_config = Some(config);
                                     app = Some(blinc_app);
 
-                                    // Initialize context with event router, animations, dirty flag, reactive graph, and hooks
+                                    // Initialize context with event router, animations, dirty flag, reactive graph, hooks, and overlay manager
                                     ctx = Some(WindowedContext::from_window(
                                         window,
                                         EventRouter::new(),
@@ -790,6 +832,7 @@ impl WindowedApp {
                                         Arc::clone(&ref_dirty_flag),
                                         Arc::clone(&reactive),
                                         Arc::clone(&hooks),
+                                        Arc::clone(&overlays),
                                     ));
 
                                     // Initialize render state with the shared animation scheduler
@@ -939,13 +982,23 @@ impl WindowedApp {
                                         let lx = x / scale;
                                         let ly = y / scale;
                                         let btn = convert_mouse_button(button);
-                                        router.on_mouse_down(tree, lx, ly, btn);
-                                        let (local_x, local_y) = router.last_hit_local();
-                                        for event in pending_events.iter_mut() {
-                                            event.mouse_x = lx;
-                                            event.mouse_y = ly;
-                                            event.local_x = local_x;
-                                            event.local_y = local_y;
+
+                                        // Check for blocking overlay (Modal/Dialog with backdrop)
+                                        // These block all clicks to the main UI - only modal content receives events
+                                        if windowed_ctx.overlay_manager.has_blocking_overlay() {
+                                            // Check if click is on backdrop (outside content) - dismisses if so
+                                            windowed_ctx.overlay_manager.handle_click_at(lx, ly);
+                                            // Block the click from reaching main UI
+                                            // TODO: Route click events to overlay tree for modal content interaction
+                                        } else {
+                                            router.on_mouse_down(tree, lx, ly, btn);
+                                            let (local_x, local_y) = router.last_hit_local();
+                                            for event in pending_events.iter_mut() {
+                                                event.mouse_x = lx;
+                                                event.mouse_y = ly;
+                                                event.local_x = local_x;
+                                                event.local_y = local_y;
+                                            }
                                         }
                                     }
                                     MouseEvent::ButtonReleased { button, x, y } => {
@@ -1045,6 +1098,15 @@ impl WindowedApp {
 
                                     match kb_event.state {
                                         KeyState::Pressed => {
+                                            // Handle Escape key for overlays first
+                                            // If an overlay handles it, don't propagate further
+                                            if kb_event.key == Key::Escape {
+                                                if windowed_ctx.overlay_manager.handle_escape() {
+                                                    // Escape was consumed by overlay, skip further processing
+                                                    // (but continue collecting events for non-overlay targets)
+                                                }
+                                            }
+
                                             // Dispatch KEY_DOWN for all keys
                                             router.on_key_down(key_code);
 
@@ -1411,6 +1473,36 @@ impl WindowedApp {
                                 }
                             }
 
+                            // =========================================================
+                            // PHASE 4b: Render overlay tree (modals, toasts, etc.)
+                            // Overlays render after main tree to ensure always-on-top
+                            // =========================================================
+
+                            // Update overlay manager viewport for positioning (with scale factor for HiDPI)
+                            windowed_ctx.overlay_manager.set_viewport_with_scale(
+                                windowed_ctx.width,
+                                windowed_ctx.height,
+                                windowed_ctx.scale_factor as f32,
+                            );
+
+                            // Update overlay states (Opening->Open transitions, auto-dismiss toasts)
+                            windowed_ctx.overlay_manager.update(current_time);
+
+                            // Build and render overlay tree if there are visible overlays
+                            // Use render_overlay_tree_with_motion which does NOT clear the screen
+                            if let Some(overlay_tree) = windowed_ctx.overlay_manager.build_overlay_tree() {
+                                let result = blinc_app.render_overlay_tree_with_motion(
+                                    &overlay_tree,
+                                    rs,
+                                    &view,
+                                    windowed_ctx.physical_width as u32,
+                                    windowed_ctx.physical_height as u32,
+                                );
+                                if let Err(e) = result {
+                                    tracing::error!("Overlay render error: {}", e);
+                                }
+                            }
+
                             frame.present();
 
                             // =========================================================
@@ -1435,7 +1527,13 @@ impl WindowedApp {
                                 false
                             };
 
-                            if needs_animation_redraw || needs_cursor_redraw || needs_motion_redraw || scroll_animating {
+                            // Check if overlays changed (modal opened/closed, toast appeared, etc.)
+                            let needs_overlay_redraw = {
+                                let mgr = windowed_ctx.overlay_manager.lock().unwrap();
+                                mgr.take_dirty() || mgr.has_visible_overlays()
+                            };
+
+                            if needs_animation_redraw || needs_cursor_redraw || needs_motion_redraw || scroll_animating || needs_overlay_redraw {
                                 // Request another frame to render updated animation values
                                 // For cursor blink, also re-request continuous redraw for next frame
                                 if needs_cursor_redraw {

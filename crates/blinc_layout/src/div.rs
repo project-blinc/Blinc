@@ -312,13 +312,13 @@ pub type DivRef = ElementRef<Div>;
 pub struct Div {
     pub(crate) style: Style,
     pub(crate) children: Vec<Box<dyn ElementBuilder>>,
-    background: Option<Brush>,
-    border_radius: CornerRadius,
-    render_layer: RenderLayer,
-    material: Option<Material>,
-    shadow: Option<Shadow>,
-    transform: Option<Transform>,
-    opacity: f32,
+    pub(crate) background: Option<Brush>,
+    pub(crate) border_radius: CornerRadius,
+    pub(crate) render_layer: RenderLayer,
+    pub(crate) material: Option<Material>,
+    pub(crate) shadow: Option<Shadow>,
+    pub(crate) transform: Option<Transform>,
+    pub(crate) opacity: f32,
     pub(crate) event_handlers: crate::event_handler::EventHandlers,
 }
 
@@ -499,8 +499,12 @@ impl Div {
         if other.align_content != default.align_content {
             self.style.align_content = other.align_content;
         }
-        if other.gap != default.gap {
-            self.style.gap = other.gap;
+        // Gap - merge per axis
+        if other.gap.width != default.gap.width {
+            self.style.gap.width = other.gap.width;
+        }
+        if other.gap.height != default.gap.height {
+            self.style.gap.height = other.gap.height;
         }
 
         // Flex item properties
@@ -517,34 +521,82 @@ impl Div {
             self.style.align_self = other.align_self;
         }
 
-        // Size constraints
-        if other.size != default.size {
-            self.style.size = other.size;
+        // Size constraints - merge per dimension to allow w() then h() separately
+        if other.size.width != default.size.width {
+            self.style.size.width = other.size.width;
         }
-        if other.min_size != default.min_size {
-            self.style.min_size = other.min_size;
+        if other.size.height != default.size.height {
+            self.style.size.height = other.size.height;
         }
-        if other.max_size != default.max_size {
-            self.style.max_size = other.max_size;
+        if other.min_size.width != default.min_size.width {
+            self.style.min_size.width = other.min_size.width;
+        }
+        if other.min_size.height != default.min_size.height {
+            self.style.min_size.height = other.min_size.height;
+        }
+        if other.max_size.width != default.max_size.width {
+            self.style.max_size.width = other.max_size.width;
+        }
+        if other.max_size.height != default.max_size.height {
+            self.style.max_size.height = other.max_size.height;
         }
         if other.aspect_ratio != default.aspect_ratio {
             self.style.aspect_ratio = other.aspect_ratio;
         }
 
-        // Spacing
-        if other.margin != default.margin {
-            self.style.margin = other.margin;
+        // Spacing - merge per side to allow partial updates (e.g., px then py)
+        // Margin
+        if other.margin.left != default.margin.left {
+            self.style.margin.left = other.margin.left;
         }
-        if other.padding != default.padding {
-            self.style.padding = other.padding;
+        if other.margin.right != default.margin.right {
+            self.style.margin.right = other.margin.right;
         }
-        if other.border != default.border {
-            self.style.border = other.border;
+        if other.margin.top != default.margin.top {
+            self.style.margin.top = other.margin.top;
+        }
+        if other.margin.bottom != default.margin.bottom {
+            self.style.margin.bottom = other.margin.bottom;
+        }
+        // Padding
+        if other.padding.left != default.padding.left {
+            self.style.padding.left = other.padding.left;
+        }
+        if other.padding.right != default.padding.right {
+            self.style.padding.right = other.padding.right;
+        }
+        if other.padding.top != default.padding.top {
+            self.style.padding.top = other.padding.top;
+        }
+        if other.padding.bottom != default.padding.bottom {
+            self.style.padding.bottom = other.padding.bottom;
+        }
+        // Border
+        if other.border.left != default.border.left {
+            self.style.border.left = other.border.left;
+        }
+        if other.border.right != default.border.right {
+            self.style.border.right = other.border.right;
+        }
+        if other.border.top != default.border.top {
+            self.style.border.top = other.border.top;
+        }
+        if other.border.bottom != default.border.bottom {
+            self.style.border.bottom = other.border.bottom;
         }
 
-        // Inset (for absolute positioning)
-        if other.inset != default.inset {
-            self.style.inset = other.inset;
+        // Inset (for absolute positioning) - merge per side
+        if other.inset.left != default.inset.left {
+            self.style.inset.left = other.inset.left;
+        }
+        if other.inset.right != default.inset.right {
+            self.style.inset.right = other.inset.right;
+        }
+        if other.inset.top != default.inset.top {
+            self.style.inset.top = other.inset.top;
+        }
+        if other.inset.bottom != default.inset.bottom {
+            self.style.inset.bottom = other.inset.bottom;
         }
     }
 
