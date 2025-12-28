@@ -1,0 +1,14 @@
+[book]
+authors = ["Blinc Contributors"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Blinc UI Framework"
+description = "A GPU-accelerated, reactive UI framework for Rust"
+
+[build]
+build-dir = "../../target/book"
+
+[output.html]
+git-repository-url = "https://github.com/user/blinc"
+edit-url-template = "https://github.com/user/blinc/edit/main/docs/book/{path}"
