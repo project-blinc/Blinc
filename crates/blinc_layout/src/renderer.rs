@@ -5,8 +5,9 @@
 
 use std::any::Any;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 
+use blinc_animation::AnimationScheduler;
 use indexmap::IndexMap;
 
 use blinc_core::{Brush, ClipShape, Color, CornerRadius, DrawContext, GlassStyle, Rect, Transform};
@@ -243,6 +244,8 @@ pub struct RenderTree {
     /// before rendering. This allows users to specify sizes in logical pixels
     /// while rendering happens at physical pixel resolution.
     scale_factor: f32,
+    /// Animation scheduler for scroll bounce springs
+    animations: Weak<Mutex<AnimationScheduler>>,
 }
 
 impl Default for RenderTree {
@@ -265,6 +268,18 @@ impl RenderTree {
             scroll_physics: HashMap::new(),
             last_scroll_tick_ms: None,
             scale_factor: 1.0,
+            animations: Weak::new(),
+        }
+    }
+
+    /// Set the animation scheduler for scroll bounce animations
+    pub fn set_animations(&mut self, scheduler: &Arc<Mutex<AnimationScheduler>>) {
+        self.animations = Arc::downgrade(scheduler);
+        // Update any existing scroll physics with the scheduler
+        for physics in self.scroll_physics.values() {
+            if let Some(scheduler_arc) = self.animations.upgrade() {
+                physics.lock().unwrap().set_scheduler(&scheduler_arc);
+            }
         }
     }
 
@@ -328,6 +343,10 @@ impl RenderTree {
 
         // Store scroll physics if this is a scroll element
         if let Some(physics) = element.scroll_physics() {
+            // Set the animation scheduler for bounce springs
+            if let Some(scheduler) = self.animations.upgrade() {
+                physics.lock().unwrap().set_scheduler(&scheduler);
+            }
             self.scroll_physics.insert(node_id, physics);
         }
 
@@ -414,6 +433,10 @@ impl RenderTree {
 
         // Store scroll physics if this is a scroll element
         if let Some(physics) = element.scroll_physics() {
+            // Set the animation scheduler for bounce springs
+            if let Some(scheduler) = self.animations.upgrade() {
+                physics.lock().unwrap().set_scheduler(&scheduler);
+            }
             self.scroll_physics.insert(node_id, physics);
         }
 
@@ -522,6 +545,10 @@ impl RenderTree {
 
         // Store scroll physics if this is a scroll element
         if let Some(physics) = element.scroll_physics() {
+            // Set the animation scheduler for bounce springs
+            if let Some(scheduler) = self.animations.upgrade() {
+                physics.lock().unwrap().set_scheduler(&scheduler);
+            }
             self.scroll_physics.insert(node_id, physics);
         }
 
@@ -1212,6 +1239,16 @@ impl RenderTree {
     pub fn on_scroll_end(&self) {
         for physics in self.scroll_physics.values() {
             physics.lock().unwrap().on_scroll_end();
+        }
+    }
+
+    /// Notify all scroll physics that the scroll gesture has ended (finger lifted)
+    ///
+    /// Call this when `ScrollPhase::Ended` is detected to start bounce-back
+    /// animations immediately, without waiting for momentum scroll to finish.
+    pub fn on_gesture_end(&self) {
+        for physics in self.scroll_physics.values() {
+            physics.lock().unwrap().on_gesture_end();
         }
     }
 

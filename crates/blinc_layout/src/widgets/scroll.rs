@@ -31,9 +31,9 @@
 //! - **Inherits Div**: Full access to all Div methods for layout control
 
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 
-use blinc_animation::{Spring, SpringConfig};
+use blinc_animation::{AnimationScheduler, Spring, SpringConfig, SpringId};
 use blinc_core::{Brush, Shadow};
 
 use crate::div::{Div, ElementBuilder, ElementTypeId};
@@ -83,11 +83,13 @@ impl Default for ScrollConfig {
     fn default() -> Self {
         Self {
             bounce_enabled: true,
-            // High stiffness for quick snap-back, low damping for elastic feel
-            bounce_spring: SpringConfig::new(3000.0, 100.0, 1.0),
+            // iOS-like elastic snap-back: very stiff critically-damped spring
+            // Critical damping = 2 * sqrt(stiffness * mass) = 2 * sqrt(3000) ≈ 109.5
+            // Using damping = 110 (slightly overdamped) for fast snap with no rebound
+            bounce_spring: SpringConfig::new(3000.0, 110.0, 1.0),
             deceleration: 1500.0,    // Decelerate at 1500 px/s²
             velocity_threshold: 10.0, // Stop when below 10 px/s
-            max_overscroll: 0.05,
+            max_overscroll: 0.3,     // 30% of viewport for visible elastic effect
             direction: ScrollDirection::Vertical,
         }
     }
@@ -124,7 +126,6 @@ impl ScrollConfig {
 // ============================================================================
 
 /// Internal physics state for scroll animation
-#[derive(Clone)]
 pub struct ScrollPhysics {
     /// Current vertical scroll offset (negative = scrolled down)
     pub offset_y: f32,
@@ -134,10 +135,10 @@ pub struct ScrollPhysics {
     pub offset_x: f32,
     /// Current horizontal velocity (pixels per second)
     pub velocity_x: f32,
-    /// Spring animator for vertical bounce (None when not bouncing)
-    pub spring_y: Option<Spring>,
-    /// Spring animator for horizontal bounce (None when not bouncing)
-    pub spring_x: Option<Spring>,
+    /// Spring ID for vertical bounce (None when not bouncing)
+    spring_y: Option<SpringId>,
+    /// Spring ID for horizontal bounce (None when not bouncing)
+    spring_x: Option<SpringId>,
     /// Current FSM state
     pub state: ScrollState,
     /// Content height (calculated from children)
@@ -150,6 +151,8 @@ pub struct ScrollPhysics {
     pub viewport_width: f32,
     /// Configuration
     pub config: ScrollConfig,
+    /// Weak reference to animation scheduler for spring management
+    scheduler: Weak<Mutex<AnimationScheduler>>,
 }
 
 impl Default for ScrollPhysics {
@@ -167,6 +170,7 @@ impl Default for ScrollPhysics {
             content_width: 0.0,
             viewport_width: 0.0,
             config: ScrollConfig::default(),
+            scheduler: Weak::new(),
         }
     }
 }
@@ -178,6 +182,20 @@ impl ScrollPhysics {
             config,
             ..Default::default()
         }
+    }
+
+    /// Create new physics with scheduler for animation-driven bounce
+    pub fn with_scheduler(config: ScrollConfig, scheduler: &Arc<Mutex<AnimationScheduler>>) -> Self {
+        Self {
+            config,
+            scheduler: Arc::downgrade(scheduler),
+            ..Default::default()
+        }
+    }
+
+    /// Set the animation scheduler (for spring-based bounce animation)
+    pub fn set_scheduler(&mut self, scheduler: &Arc<Mutex<AnimationScheduler>>) {
+        self.scheduler = Arc::downgrade(scheduler);
     }
 
     /// Maximum vertical scroll offset (0 = top edge)
@@ -256,8 +274,17 @@ impl ScrollPhysics {
     /// Note: On macOS, the system already applies momentum physics to scroll events,
     /// so we don't need to track velocity or apply our own momentum. We just apply
     /// the delta directly with bounds clamping.
+    ///
+    /// When bouncing, we ignore momentum scroll events - the spring animation
+    /// takes over and drives the position back to bounds.
     pub fn apply_scroll_delta(&mut self, delta_x: f32, delta_y: f32) {
-        // Transition to scrolling state
+        // If bouncing, ignore momentum scroll events - let spring drive the animation
+        // The spring will snap back to bounds; momentum events would fight against it
+        if self.state == ScrollState::Bouncing {
+            return;
+        }
+
+        // Transition state machine
         if let Some(new_state) = self.state.on_event(blinc_core::events::event_types::SCROLL) {
             self.state = new_state;
         }
@@ -269,9 +296,24 @@ impl ScrollPhysics {
             self.config.direction,
             ScrollDirection::Vertical | ScrollDirection::Both
         ) {
-            // If overscrolling, apply rubber-band resistance
-            if self.is_overscrolling_y() && self.config.bounce_enabled {
-                let resistance = 0.3; // 30% resistance when overscrolling
+            let overscroll = self.overscroll_amount_y();
+            let pushing_further = (overscroll > 0.0 && delta_y > 0.0)
+                || (overscroll < 0.0 && delta_y < 0.0);
+            let pulling_back = (overscroll > 0.0 && delta_y < 0.0)
+                || (overscroll < 0.0 && delta_y > 0.0);
+
+            // If overscrolling and delta is trying to pull us back (momentum),
+            // ignore it - let the spring handle the return animation instead.
+            // This prevents momentum from fighting with the bounce animation.
+            if self.is_overscrolling_y() && self.config.bounce_enabled && pulling_back {
+                // Ignore momentum deltas that would pull back - spring will handle it
+            } else if self.is_overscrolling_y() && self.config.bounce_enabled && pushing_further {
+                // Resistance increases as we stretch further - creates natural rubber-band feel
+                let overscroll_amount = overscroll.abs();
+                let max_over = self.viewport_height * self.config.max_overscroll;
+                let stretch_ratio = (overscroll_amount / max_over).min(1.0);
+                // Start at 55% effect, decrease to 10% at max stretch
+                let resistance = 0.55 - (stretch_ratio * 0.45);
                 self.offset_y += delta_y * resistance;
             } else {
                 self.offset_y += delta_y;
@@ -302,9 +344,22 @@ impl ScrollPhysics {
             self.config.direction,
             ScrollDirection::Horizontal | ScrollDirection::Both
         ) {
-            // If overscrolling, apply rubber-band resistance
-            if self.is_overscrolling_x() && self.config.bounce_enabled {
-                let resistance = 0.3;
+            let overscroll = self.overscroll_amount_x();
+            let pushing_further = (overscroll > 0.0 && delta_x > 0.0)
+                || (overscroll < 0.0 && delta_x < 0.0);
+            let pulling_back = (overscroll > 0.0 && delta_x < 0.0)
+                || (overscroll < 0.0 && delta_x > 0.0);
+
+            // If overscrolling and delta is trying to pull us back (momentum),
+            // ignore it - let the spring handle the return animation instead.
+            if self.is_overscrolling_x() && self.config.bounce_enabled && pulling_back {
+                // Ignore momentum deltas that would pull back - spring will handle it
+            } else if self.is_overscrolling_x() && self.config.bounce_enabled && pushing_further {
+                // Resistance increases as we stretch further
+                let overscroll_amount = overscroll.abs();
+                let max_over = self.viewport_width * self.config.max_overscroll;
+                let stretch_ratio = (overscroll_amount / max_over).min(1.0);
+                let resistance = 0.55 - (stretch_ratio * 0.45);
                 self.offset_x += delta_x * resistance;
             } else {
                 self.offset_x += delta_x;
@@ -339,8 +394,65 @@ impl ScrollPhysics {
         }
     }
 
+    /// Called when scroll gesture ends (finger lifted from trackpad)
+    ///
+    /// If overscrolling, start bounce immediately for snappy feedback.
+    /// The user expects the elastic snap-back to begin the moment they release.
+    pub fn on_gesture_end(&mut self) {
+        // If overscrolling, start bounce immediately on finger lift
+        // This gives snappy iOS-like feedback where release = snap back
+        if self.is_overscrolling() && self.config.bounce_enabled {
+            self.start_bounce();
+        }
+    }
+
+    /// Cancel any active bounce springs
+    fn cancel_springs(&mut self) {
+        if let Some(scheduler) = self.scheduler.upgrade() {
+            let scheduler = scheduler.lock().unwrap();
+            if let Some(id) = self.spring_y.take() {
+                scheduler.remove_spring(id);
+            }
+            if let Some(id) = self.spring_x.take() {
+                scheduler.remove_spring(id);
+            }
+        } else {
+            // No scheduler, just clear the IDs
+            self.spring_y = None;
+            self.spring_x = None;
+        }
+    }
+
     /// Start bounce animation to return to bounds
     fn start_bounce(&mut self) {
+        // Don't restart if already bouncing - this prevents resetting the spring
+        // which would cause vibration/jitter
+        if self.state == ScrollState::Bouncing {
+            return;
+        }
+
+        // Get scheduler - if not available, can't animate
+        let Some(scheduler_arc) = self.scheduler.upgrade() else {
+            // No scheduler - just snap to bounds immediately
+            if self.is_overscrolling_y() {
+                self.offset_y = if self.offset_y > self.min_offset_y() {
+                    self.min_offset_y()
+                } else {
+                    self.max_offset_y()
+                };
+            }
+            if self.is_overscrolling_x() {
+                self.offset_x = if self.offset_x > self.min_offset_x() {
+                    self.min_offset_x()
+                } else {
+                    self.max_offset_x()
+                };
+            }
+            return;
+        };
+
+        let scheduler = scheduler_arc.lock().unwrap();
+
         // Start vertical bounce if needed
         if self.is_overscrolling_y()
             && matches!(
@@ -356,7 +468,8 @@ impl ScrollPhysics {
 
             let mut spring = Spring::new(self.config.bounce_spring, self.offset_y);
             spring.set_target(target);
-            self.spring_y = Some(spring);
+            let spring_id = scheduler.add_spring(spring);
+            self.spring_y = Some(spring_id);
         }
 
         // Start horizontal bounce if needed
@@ -374,79 +487,81 @@ impl ScrollPhysics {
 
             let mut spring = Spring::new(self.config.bounce_spring, self.offset_x);
             spring.set_target(target);
-            self.spring_x = Some(spring);
+            let spring_id = scheduler.add_spring(spring);
+            self.spring_x = Some(spring_id);
         }
+
+        drop(scheduler); // Release lock before state transition
 
         if let Some(new_state) = self.state.on_event(scroll_events::HIT_EDGE) {
             self.state = new_state;
         }
     }
 
-    /// Tick animation (called every frame)
+    /// Update scroll offsets from animation scheduler springs
     ///
-    /// Returns true if still animating, false if settled
-    ///
-    /// Note: On macOS, the system provides momentum scrolling via continuous scroll events,
-    /// so our tick function mainly handles bounce-back animation when overscrolled.
-    pub fn tick(&mut self, dt: f32) -> bool {
+    /// Returns true if still animating, false if settled.
+    /// This reads spring values from the AnimationScheduler which ticks them
+    /// on a background thread at 120fps.
+    pub fn tick(&mut self, _dt: f32) -> bool {
         match self.state {
             ScrollState::Idle => false,
 
             ScrollState::Scrolling => {
-                // Active scrolling is driven by events, not ticks
-                // Check if we should start bounce (in case scroll ended while overscrolling)
-                if self.is_overscrolling() && self.config.bounce_enabled {
-                    self.start_bounce();
-                    return true;
-                }
+                // Active scrolling is driven by scroll events, not ticks.
+                // The rubber-band effect happens in apply_scroll_delta().
+                // Bounce only starts when on_scroll_end() is called.
                 true
             }
 
             ScrollState::Decelerating => {
-                // On macOS, the system provides momentum via scroll events
-                // We don't need our own deceleration - just check for bounce
-                if self.is_overscrolling() && self.config.bounce_enabled {
-                    self.start_bounce();
-                    return true;
-                }
-
-                // Settle to idle if not overscrolling
-                if let Some(new_state) = self.state.on_event(scroll_events::SETTLED) {
-                    self.state = new_state;
-                }
+                // On macOS, the system provides momentum via scroll events.
+                // When momentum finishes, on_scroll_end() is called which starts bounce.
                 false
             }
 
             ScrollState::Bouncing => {
+                // Read spring values from scheduler (scheduler ticks them on background thread)
+                let Some(scheduler_arc) = self.scheduler.upgrade() else {
+                    // No scheduler - snap to bounds and settle
+                    self.offset_y = self.offset_y.clamp(self.max_offset_y(), self.min_offset_y());
+                    self.offset_x = self.offset_x.clamp(self.max_offset_x(), self.min_offset_x());
+                    self.state = ScrollState::Idle;
+                    return false;
+                };
+
+                let scheduler = scheduler_arc.lock().unwrap();
                 let mut still_bouncing = false;
 
-                // Tick vertical spring
-                if let Some(ref mut spring) = self.spring_y {
-                    spring.step(dt);
-                    self.offset_y = spring.value();
-
-                    if spring.is_settled() {
-                        self.offset_y = spring.target();
-                        self.spring_y = None;
-                    } else {
-                        still_bouncing = true;
+                // Read vertical spring value
+                if let Some(spring_id) = self.spring_y {
+                    if let Some(spring) = scheduler.get_spring(spring_id) {
+                        self.offset_y = spring.value();
+                        if spring.is_settled() {
+                            self.offset_y = spring.target();
+                        } else {
+                            still_bouncing = true;
+                        }
                     }
                 }
 
-                // Tick horizontal spring
-                if let Some(ref mut spring) = self.spring_x {
-                    spring.step(dt);
-                    self.offset_x = spring.value();
-
-                    if spring.is_settled() {
-                        self.offset_x = spring.target();
-                        self.spring_x = None;
-                    } else {
-                        still_bouncing = true;
+                // Read horizontal spring value
+                if let Some(spring_id) = self.spring_x {
+                    if let Some(spring) = scheduler.get_spring(spring_id) {
+                        self.offset_x = spring.value();
+                        if spring.is_settled() {
+                            self.offset_x = spring.target();
+                        } else {
+                            still_bouncing = true;
+                        }
                     }
                 }
+
+                drop(scheduler);
 
                 if !still_bouncing {
+                    // Clean up springs
+                    self.cancel_springs();
                     if let Some(new_state) = self.state.on_event(scroll_events::SETTLED) {
                         self.state = new_state;
                     }
@@ -471,8 +586,7 @@ impl ScrollPhysics {
         self.offset_y = 0.0;
         self.velocity_x = 0.0;
         self.velocity_y = 0.0;
-        self.spring_x = None;
-        self.spring_y = None;
+        self.cancel_springs();
         self.state = ScrollState::Idle;
     }
 }

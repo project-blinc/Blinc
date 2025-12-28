@@ -889,7 +889,7 @@ impl WindowedApp {
                         }
 
                         // First phase: collect events using immutable borrow
-                        let (pending_events, keyboard_events, scroll_ended, scroll_info) = if let (Some(ref mut windowed_ctx), Some(ref tree)) =
+                        let (pending_events, keyboard_events, scroll_ended, gesture_ended, scroll_info) = if let (Some(ref mut windowed_ctx), Some(ref tree)) =
                             (&mut ctx, &render_tree)
                         {
                             let router = &mut windowed_ctx.event_router;
@@ -1120,16 +1120,22 @@ impl WindowedApp {
                                         router.on_mouse_leave();
                                     }
                                 },
-                                InputEvent::Scroll { delta_x, delta_y, .. } => {
+                                InputEvent::Scroll { delta_x, delta_y, phase } => {
                                     let (mx, my) = router.mouse_position();
                                     // Scroll deltas are also in physical pixels, convert to logical
                                     let ldx = delta_x;
                                     let ldy = delta_y;
 
                                     tracing::trace!(
-                                        "InputEvent::Scroll received: pos=({:.1}, {:.1}) delta=({:.1}, {:.1})",
-                                        mx, my, ldx, ldy
+                                        "InputEvent::Scroll received: pos=({:.1}, {:.1}) delta=({:.1}, {:.1}) phase={:?}",
+                                        mx, my, ldx, ldy, phase
                                     );
+
+                                    // Check if gesture ended (finger lifted from trackpad)
+                                    // This happens before momentum ends
+                                    if phase == blinc_platform::ScrollPhase::Ended {
+                                        gesture_ended = true;
+                                    }
 
                                     // Use nested scroll support - get hit result for smart dispatch
                                     // Store mouse position and delta for dispatch phase
@@ -1137,43 +1143,61 @@ impl WindowedApp {
                                     scroll_info = Some((mx, my, ldx, ldy));
                                 }
                                 InputEvent::ScrollEnd => {
-                                    // Scroll gesture ended - will trigger bounce-back
+                                    // Scroll momentum ended - full stop
                                     scroll_ended = true;
                                 }
                             }
 
                             router.clear_event_callback();
-                            (pending_events, keyboard_events, scroll_ended, scroll_info)
+                            (pending_events, keyboard_events, scroll_ended, gesture_ended, scroll_info)
                         } else {
-                            (Vec::new(), Vec::new(), false, None)
+                            (Vec::new(), Vec::new(), false, false, None)
                         };
 
                         // Second phase: dispatch events with mutable borrow
                         // This automatically marks the tree dirty when handlers fire
                         if let Some(ref mut tree) = render_tree {
+                            // IMPORTANT: Process gesture_ended BEFORE scroll delta dispatch
+                            // When gesture ends while overscrolling, we start bounce which
+                            // sets state to Bouncing. Then apply_scroll_delta will early-return
+                            // and ignore the momentum delta that came with this same event.
+                            if gesture_ended {
+                                tree.on_gesture_end();
+                                // Request redraw to animate bounce-back
+                                window.request_redraw();
+                            }
+
                             // Handle scroll with nested scroll support
+                            // Skip scroll delta entirely if gesture just ended - the delta
+                            // from the same event as gesture_ended is the last finger movement,
+                            // not momentum, but we still want to ignore it for instant snap-back
                             if let Some((mouse_x, mouse_y, delta_x, delta_y)) = scroll_info {
-                                tracing::trace!(
-                                    "Scroll dispatch: pos=({:.1}, {:.1}) delta=({:.1}, {:.1})",
-                                    mouse_x, mouse_y, delta_x, delta_y
-                                );
-                                // Re-do hit test with mutable borrow to get ancestor chain
-                                // Then use dispatch_scroll_chain for proper nested scroll handling
-                                if let Some(ref mut windowed_ctx) = ctx {
-                                    let router = &mut windowed_ctx.event_router;
-                                    if let Some(hit) = router.hit_test(tree, mouse_x, mouse_y) {
-                                        tracing::trace!(
-                                            "Hit: node={:?}, ancestors={:?}",
-                                            hit.node, hit.ancestors
-                                        );
-                                        tree.dispatch_scroll_chain(
-                                            hit.node,
-                                            &hit.ancestors,
-                                            mouse_x,
-                                            mouse_y,
-                                            delta_x,
-                                            delta_y,
-                                        );
+                                // Skip if gesture ended in this same event - go straight to bounce
+                                if gesture_ended {
+                                    tracing::trace!("Skipping scroll delta - gesture ended, bouncing");
+                                } else {
+                                    tracing::trace!(
+                                        "Scroll dispatch: pos=({:.1}, {:.1}) delta=({:.1}, {:.1})",
+                                        mouse_x, mouse_y, delta_x, delta_y
+                                    );
+                                    // Re-do hit test with mutable borrow to get ancestor chain
+                                    // Then use dispatch_scroll_chain for proper nested scroll handling
+                                    if let Some(ref mut windowed_ctx) = ctx {
+                                        let router = &mut windowed_ctx.event_router;
+                                        if let Some(hit) = router.hit_test(tree, mouse_x, mouse_y) {
+                                            tracing::trace!(
+                                                "Hit: node={:?}, ancestors={:?}",
+                                                hit.node, hit.ancestors
+                                            );
+                                            tree.dispatch_scroll_chain(
+                                                hit.node,
+                                                &hit.ancestors,
+                                                mouse_x,
+                                                mouse_y,
+                                                delta_x,
+                                                delta_y,
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -1224,7 +1248,7 @@ impl WindowedApp {
                                 }
                             }
 
-                            // If scroll ended, notify scroll physics to start bounce-back
+                            // If scroll momentum ended, notify scroll physics
                             if scroll_ended {
                                 tree.on_scroll_end();
                                 // Request redraw to animate bounce-back
@@ -1322,6 +1346,9 @@ impl WindowedApp {
                                 // Build UI and create render tree
                                 let ui = ui_builder(windowed_ctx);
                                 let mut tree = RenderTree::from_element(&ui);
+
+                                // Set animation scheduler for scroll bounce springs
+                                tree.set_animations(&windowed_ctx.animations);
 
                                 // Set DPI scale factor for HiDPI rendering
                                 // Layout uses logical pixels (ctx.width/height), then scaling
