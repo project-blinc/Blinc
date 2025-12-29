@@ -192,7 +192,7 @@ Signal → Subscribers → Effects/Derived
 - [x] Implement RenderTree for layout-to-rendering bridge
 - [x] Implement layer separation (Background/Glass/Foreground)
 - [x] 100+ Tailwind-style builder methods (`.flex_col()`, `.p()`, `.gap()`, etc.)
-- [ ] Implement dirty tracking for incremental layout
+- [x] Implement dirty tracking for incremental layout
 - [ ] Export ZRTL C-ABI functions
 
 ---

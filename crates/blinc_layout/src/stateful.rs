@@ -1067,6 +1067,12 @@ impl<S: StateTransitions> Stateful<S> {
         self
     }
 
+    /// Set minimum width (builder pattern)
+    pub fn min_w(self, px: f32) -> Self {
+        self.merge_into_inner(Div::new().min_w(px));
+        self
+    }
+
     /// Set height to 100% (builder pattern)
     pub fn h_full(self) -> Self {
         self.merge_into_inner(Div::new().h_full());

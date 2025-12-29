@@ -1404,6 +1404,19 @@ impl RenderTree {
         }
     }
 
+    /// Clear all layout bounds storages to force fresh calculations
+    ///
+    /// This should be called on window resize to ensure that cached bounds
+    /// don't influence the new layout computation. Each element will get
+    /// fresh bounds on the next `compute_layout` call.
+    pub fn clear_layout_bounds_storages(&self) {
+        for (_, entry) in &self.layout_bounds_storages {
+            if let Ok(mut guard) = entry.storage.lock() {
+                *guard = None;
+            }
+        }
+    }
+
     /// Update scroll physics with content dimensions from layout
     fn update_scroll_content_dimensions(&mut self) {
         // Collect node_ids to avoid borrowing issues

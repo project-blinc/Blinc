@@ -1184,6 +1184,15 @@ impl TextArea {
                 new_state
             });
 
+        // Clear stale node_id from previous tree builds
+        // During full rebuild (e.g., window resize), the old node_id points to
+        // nodes in the old tree. Clearing it ensures the new node_id gets assigned
+        // when this element is added to the new tree.
+        {
+            let mut shared = shared_state.lock().unwrap();
+            shared.node_id = None;
+        }
+
         // Create inner Stateful with text area event handlers
         let inner = Self::create_inner_with_handlers(
             Arc::clone(&shared_state),
@@ -1777,28 +1786,35 @@ impl TextArea {
             .flex_grow() // Take remaining space
             .child(text_content);
 
-        // Main content wrapper - uses flex_grow to fill parent without overriding fixed dimensions
+        // Main content wrapper - uses explicit sizing to ensure proper intrinsic dimensions
+        // Using flex_grow/w_full causes issues with w_fit() ancestors because
+        // Percent(1.0) doesn't resolve correctly when ancestors don't have fixed sizes.
         // Structure matches TextInput: outer styled container -> padding spacers -> clip container
+        let content_width = config.effective_width();
+        let content_height = config.effective_height();
+        let inner_height = content_height - padding_y * 2.0;
+
         div()
             .flex_col()
-            .flex_grow()
+            .w(content_width)
+            .h(content_height)
             // Top padding spacer
-            .child(div().h(padding_y).w_full())
+            .child(div().h(padding_y).w(content_width))
             // Middle row with left/right padding and scroll content
             .child(
                 div()
                     .flex_row()
-                    .flex_grow()
-                    .w_full()
+                    .h(inner_height)
+                    .w(content_width)
                     // Left padding spacer
-                    .child(div().w(padding_x).h_full())
+                    .child(div().w(padding_x).h(inner_height))
                     // Scroll content in the middle (no rounded corners on scroll itself)
                     .child(scrollable_content)
                     // Right padding spacer
-                    .child(div().w(padding_x).h_full()),
+                    .child(div().w(padding_x).h(inner_height)),
             )
             // Bottom padding spacer
-            .child(div().h(padding_y).w_full())
+            .child(div().h(padding_y).w(content_width))
     }
 
     /// Set placeholder text

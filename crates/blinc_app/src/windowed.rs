@@ -1045,9 +1045,21 @@ impl WindowedApp {
                                 {
                                     let logical_width = width as f32 / windowed_ctx.scale_factor as f32;
                                     let logical_height = height as f32 / windowed_ctx.scale_factor as f32;
+
+                                    // Update windowed context dimensions - CRITICAL for layout computation
+                                    // Without this, compute_layout uses stale dimensions
+                                    windowed_ctx.width = logical_width;
+                                    windowed_ctx.height = logical_height;
+                                    windowed_ctx.physical_width = width as f32;
+                                    windowed_ctx.physical_height = height as f32;
+
                                     windowed_ctx
                                         .event_router
                                         .on_window_resize(tree, logical_width, logical_height);
+
+                                    // Clear layout bounds storages to force fresh calculations
+                                    // This prevents stale cached bounds from influencing the new layout
+                                    tree.clear_layout_bounds_storages();
                                 }
 
                                 // Request redraw to trigger relayout with new dimensions
@@ -1630,50 +1642,68 @@ impl WindowedApp {
                                 let ui = ui_builder(windowed_ctx);
 
                                 // Use incremental update if we have an existing tree
+                                // BUT: Skip incremental update during resize - do full rebuild instead
+                                // This ensures parent constraints properly propagate to all children
                                 if let Some(ref mut existing_tree) = render_tree {
-                                    use blinc_layout::UpdateResult;
+                                    if needs_relayout {
+                                        // Window resize: bypass incremental update, do full rebuild
+                                        // This ensures proper constraint propagation from parents to children
+                                        tracing::debug!("Window resize: full tree rebuild (bypassing incremental update)");
 
-                                    let update_result = existing_tree.incremental_update(&ui);
+                                        // Clear layout bounds storages before rebuild
+                                        existing_tree.clear_layout_bounds_storages();
 
-                                    match update_result {
-                                        UpdateResult::NoChanges => {
-                                            // Tree unchanged - but check if relayout needed (e.g., resize)
-                                            if needs_relayout {
-                                                tracing::debug!("Incremental update: NoChanges but relayout needed (resize)");
-                                                existing_tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
-                                            } else {
+                                        // Full rebuild: create new tree from element
+                                        let mut tree = RenderTree::from_element(&ui);
+
+                                        // Set animation scheduler for scroll bounce springs
+                                        tree.set_animations(&windowed_ctx.animations);
+
+                                        // Set DPI scale factor for HiDPI rendering
+                                        tree.set_scale_factor(windowed_ctx.scale_factor as f32);
+
+                                        // Compute layout with new viewport dimensions
+                                        tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
+
+                                        // Initialize motion animations for any nodes wrapped in motion() containers
+                                        tree.initialize_motion_animations(rs);
+
+                                        // Replace existing tree with fresh one
+                                        *existing_tree = tree;
+
+                                        // Clear relayout flag after full rebuild
+                                        needs_relayout = false;
+                                    } else {
+                                        // Normal incremental update (no resize)
+                                        use blinc_layout::UpdateResult;
+
+                                        let update_result = existing_tree.incremental_update(&ui);
+
+                                        match update_result {
+                                            UpdateResult::NoChanges => {
                                                 tracing::debug!("Incremental update: NoChanges - skipping rebuild");
                                             }
-                                        }
-                                        UpdateResult::VisualOnly => {
-                                            // Only visual props changed - check if relayout needed
-                                            if needs_relayout {
-                                                tracing::debug!("Incremental update: VisualOnly but relayout needed (resize)");
-                                                existing_tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
-                                            } else {
+                                            UpdateResult::VisualOnly => {
                                                 tracing::debug!("Incremental update: VisualOnly - skipping layout");
+                                                // Props already updated in-place by incremental_update
                                             }
-                                            // Props already updated in-place by incremental_update
-                                        }
-                                        UpdateResult::LayoutChanged => {
-                                            // Layout changed - recompute layout
-                                            tracing::debug!("Incremental update: LayoutChanged - recomputing layout");
-                                            existing_tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
-                                        }
-                                        UpdateResult::ChildrenChanged => {
-                                            // Children changed - subtrees were rebuilt in place
-                                            tracing::debug!("Incremental update: ChildrenChanged - subtrees rebuilt");
+                                            UpdateResult::LayoutChanged => {
+                                                // Layout changed - recompute layout
+                                                tracing::debug!("Incremental update: LayoutChanged - recomputing layout");
+                                                existing_tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
+                                            }
+                                            UpdateResult::ChildrenChanged => {
+                                                // Children changed - subtrees were rebuilt in place
+                                                tracing::debug!("Incremental update: ChildrenChanged - subtrees rebuilt");
 
-                                            // Recompute layout since structure changed
-                                            existing_tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
+                                                // Recompute layout since structure changed
+                                                existing_tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
 
-                                            // Initialize motion animations for any new nodes wrapped in motion() containers
-                                            existing_tree.initialize_motion_animations(rs);
+                                                // Initialize motion animations for any new nodes wrapped in motion() containers
+                                                existing_tree.initialize_motion_animations(rs);
+                                            }
                                         }
                                     }
-
-                                    // Clear relayout flag after processing
-                                    needs_relayout = false;
                                 } else {
                                     // No existing tree - create new
                                     let mut tree = RenderTree::from_element(&ui);

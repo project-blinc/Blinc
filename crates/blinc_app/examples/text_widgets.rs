@@ -10,7 +10,10 @@ use blinc_core::Color;
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive(tracing::Level::INFO.into()),
+        )
         .init();
 
     let config = WindowConfig {
@@ -77,7 +80,7 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                         .flex_row()
                         .w_full()
                         .justify_center()
-                        .gap(20.0)
+                        .gap(10.0)
                         .flex_grow()
                         // Left column: Text input examples
                         .child(build_input_section(
@@ -100,7 +103,7 @@ fn build_input_section(
     div()
         .flex_col()
         .gap(4.0)
-        .w_fit()
+
         // Section header
         .child(
             text("TextInput Element")
@@ -127,7 +130,6 @@ fn build_input_section(
 /// Build a labeled text input
 fn build_labeled_input(label: &str, state: &SharedTextInputState) -> impl ElementBuilder {
     div()
-        .w_full()
         .flex_col()
         .gap(1.0)
         .child(
@@ -148,8 +150,8 @@ fn build_values_display(
     let email_val = email.lock().unwrap().value.clone();
 
     div()
+    .max_w(400.0)
         .flex_col()
-        .w_full()
         .mt(10.0)
         .gap(8.0)
         .p(4.0)
@@ -162,6 +164,7 @@ fn build_values_display(
                 .color(Color::rgba(0.7, 0.7, 0.7, 1.0)),
         )
         .child(
+            // Todo: Use stateful element for proper dynamic value tracking
             text(&format!(
                 "Username: {}",
                 if username_val.is_empty() {
@@ -174,6 +177,7 @@ fn build_values_display(
             .color(Color::rgba(0.5, 0.8, 0.5, 1.0)),
         )
         .child(
+            // Todo: Use stateful element for proper dynamic value tracking
             text(&format!(
                 "Email: {}",
                 if email_val.is_empty() {
@@ -286,6 +290,7 @@ fn build_message_preview(message: &SharedTextAreaState) -> impl ElementBuilder {
                 .color(Color::rgba(0.7, 0.7, 0.7, 1.0)),
         )
         .child(
+            // Todo: Use stateful element for proper dynamic value tracking
             text(&if msg_val.is_empty() {
                 "(empty)".to_string()
             } else {
