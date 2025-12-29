@@ -1215,12 +1215,7 @@ impl TextInput {
         // - auto (default): stretches in flex containers via align-items: stretch
         // - w_full(): explicitly fills parent width
         // - w(px): user-specified fixed width
-        let mut main_content = div()
-            .h_full()
-            .w_full()
-            .relative()
-            .flex_row()
-            .items_center();
+        let mut main_content = div().h_full().w_full().relative().flex_row().items_center();
 
         // Left padding spacer
         main_content =

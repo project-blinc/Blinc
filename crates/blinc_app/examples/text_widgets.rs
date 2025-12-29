@@ -103,7 +103,6 @@ fn build_input_section(
     div()
         .flex_col()
         .gap(4.0)
-
         // Section header
         .child(
             text("TextInput Element")
@@ -150,7 +149,7 @@ fn build_values_display(
     let email_val = email.lock().unwrap().value.clone();
 
     div()
-    .max_w(400.0)
+        .max_w(400.0)
         .flex_col()
         .mt(10.0)
         .gap(8.0)
