@@ -961,7 +961,7 @@ impl TextInput {
                     let old_scroll = data_guard.scroll_offset_x;
                     data_guard.ensure_cursor_visible(&cfg);
                     if data_guard.scroll_offset_x != old_scroll {
-                        tracing::info!(
+                        tracing::debug!(
                             "TextInput scroll changed: {} -> {} (cursor={}, text_len={})",
                             old_scroll,
                             data_guard.scroll_offset_x,

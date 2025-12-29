@@ -983,7 +983,7 @@ impl WindowedApp {
         // 2. Layout recompute - recalculate flexbox layout
         // 3. Visual redraw - render the frame
         set_redraw_callback(|| {
-            tracing::info!("Theme changed - requesting full rebuild");
+            tracing::debug!("Theme changed - requesting full rebuild");
             blinc_layout::widgets::request_full_rebuild();
         });
     }
@@ -1138,7 +1138,7 @@ impl WindowedApp {
                                     // independently from tree structure changes
                                     render_state = Some(blinc_layout::RenderState::new(Arc::clone(&animations)));
 
-                                    tracing::info!("Blinc windowed app initialized");
+                                    tracing::debug!("Blinc windowed app initialized");
                                 }
                                 Err(e) => {
                                     tracing::error!("Failed to initialize Blinc: {}", e);

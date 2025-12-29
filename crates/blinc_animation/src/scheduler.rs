@@ -203,7 +203,7 @@ impl AnimationScheduler {
                         let count = COUNTER.fetch_add(1, Ordering::Relaxed);
                         if count % 120 == 0 {
                             // Log once per second at 120fps
-                            tracing::info!(
+                            tracing::debug!(
                                 "Animation thread: waking event loop (continuous={}, active={})",
                                 wants_continuous,
                                 has_active
@@ -264,7 +264,7 @@ impl AnimationScheduler {
     ///
     /// Call `set_continuous_redraw(false)` when no longer needed.
     pub fn set_continuous_redraw(&self, enabled: bool) {
-        tracing::info!("AnimationScheduler: set_continuous_redraw({})", enabled);
+        tracing::debug!("AnimationScheduler: set_continuous_redraw({})", enabled);
         self.continuous_redraw.store(enabled, Ordering::Release);
     }
 

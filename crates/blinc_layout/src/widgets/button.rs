@@ -510,7 +510,7 @@ where
 
 impl ElementBuilder for Button {
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        tracing::info!("Button::build called");
+        tracing::debug!("Button::build called");
         // Capture current config values for the on_state callback
         let config_for_state = Arc::clone(&self.config);
         let custom_callback = self.custom_state_callback.clone();
@@ -527,7 +527,7 @@ impl ElementBuilder for Button {
             let mut shared = shared_state.lock().unwrap();
             shared.state_callback =
                 Some(Arc::new(move |state: &ButtonState, container: &mut Div| {
-                    tracing::info!("Button on_state callback fired, state={:?}", state);
+                    tracing::debug!("Button on_state callback fired, state={:?}", state);
                     let cfg = config_for_state.lock().unwrap();
                     let bg = match state {
                         ButtonState::Idle => cfg.bg_color,
@@ -543,20 +543,20 @@ impl ElementBuilder for Button {
                     if let Some(ref callback) = custom_callback {
                         callback(*state, &mut update);
                     } else if let Some(ref label) = cfg.label {
-                        tracing::info!("Button adding label child: {}", label);
+                        tracing::debug!("Button adding label child: {}", label);
                         update =
                             update.child(text(label).size(cfg.text_size).color(cfg.text_color));
                     }
 
                     let update_children = update.children.len();
-                    tracing::info!(
+                    tracing::debug!(
                         "Button update div has {} children before merge",
                         update_children
                     );
                     drop(cfg);
                     container.merge(update);
                     let container_children = container.children.len();
-                    tracing::info!(
+                    tracing::debug!(
                         "Button container has {} children after merge",
                         container_children
                     );

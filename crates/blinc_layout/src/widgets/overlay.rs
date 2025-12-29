@@ -574,7 +574,7 @@ impl OverlayManagerInner {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let handle = OverlayHandle::new(id);
 
-        tracing::info!(
+        tracing::debug!(
             "OverlayManager::add - adding {:?} overlay with handle {:?}",
             config.kind,
             handle
@@ -592,7 +592,7 @@ impl OverlayManagerInner {
         self.overlays.insert(handle, overlay);
         self.mark_dirty();
 
-        tracing::info!(
+        tracing::debug!(
             "OverlayManager::add - now have {} overlays",
             self.overlays.len()
         );
