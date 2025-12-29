@@ -558,12 +558,12 @@ File Change → Grammar Recompile → JIT Update → State Preserved
 
 #### Tasks
 
-- [ ] API reference documentation
-- [ ] Tutorial: Getting Started
-- [ ] Tutorial: Building Your First App
-- [ ] Guide: Custom Widgets
-- [ ] Guide: Animations
-- [ ] Guide: Paint/Canvas
+- [X] API reference documentation
+- [X] Tutorial: Getting Started
+- [X] Tutorial: Building Your First App
+- [X] Guide: Custom Widgets
+- [X] Guide: Animations
+- [X] Guide: Paint/Canvas
 - [ ] Guide: Platform Integration
 
 ---
