@@ -57,6 +57,10 @@ pub struct EventContext {
     /// Position relative to element bounds
     pub local_x: f32,
     pub local_y: f32,
+    /// Computed bounds width (set after layout)
+    pub bounds_width: f32,
+    /// Computed bounds height (set after layout)
+    pub bounds_height: f32,
     /// Scroll delta for SCROLL events (pixels scrolled)
     pub scroll_delta_x: f32,
     pub scroll_delta_y: f32,
@@ -87,6 +91,8 @@ impl EventContext {
             mouse_y: 0.0,
             local_x: 0.0,
             local_y: 0.0,
+            bounds_width: 0.0,
+            bounds_height: 0.0,
             scroll_delta_x: 0.0,
             scroll_delta_y: 0.0,
             drag_delta_x: 0.0,
@@ -111,6 +117,13 @@ impl EventContext {
     pub fn with_local_pos(mut self, x: f32, y: f32) -> Self {
         self.local_x = x;
         self.local_y = y;
+        self
+    }
+
+    /// Set computed bounds (width and height from layout)
+    pub fn with_bounds(mut self, width: f32, height: f32) -> Self {
+        self.bounds_width = width;
+        self.bounds_height = height;
         self
     }
 

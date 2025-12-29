@@ -198,10 +198,16 @@ impl AnimationScheduler {
                     // Wake up the event loop if a callback is set
                     if let Some(ref callback) = wake_callback {
                         // Only log occasionally to avoid spam
-                        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                        static COUNTER: std::sync::atomic::AtomicU64 =
+                            std::sync::atomic::AtomicU64::new(0);
                         let count = COUNTER.fetch_add(1, Ordering::Relaxed);
-                        if count % 120 == 0 { // Log once per second at 120fps
-                            tracing::info!("Animation thread: waking event loop (continuous={}, active={})", wants_continuous, has_active);
+                        if count % 120 == 0 {
+                            // Log once per second at 120fps
+                            tracing::info!(
+                                "Animation thread: waking event loop (continuous={}, active={})",
+                                wants_continuous,
+                                has_active
+                            );
                         }
                         callback();
                     }

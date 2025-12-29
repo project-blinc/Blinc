@@ -10,7 +10,9 @@ use std::sync::{Arc, Mutex, Weak};
 use blinc_animation::AnimationScheduler;
 use indexmap::IndexMap;
 
-use blinc_core::{Brush, ClipShape, Color, CornerRadius, DrawContext, GlassStyle, Rect, Stroke, Transform};
+use blinc_core::{
+    Brush, ClipShape, Color, CornerRadius, DrawContext, GlassStyle, Rect, Stroke, Transform,
+};
 use taffy::prelude::*;
 
 use crate::canvas::CanvasData;
@@ -219,6 +221,9 @@ pub trait LayoutRenderer {
 /// Type-erased node state storage
 pub type NodeStateStorage = Arc<Mutex<dyn Any + Send>>;
 
+/// Storage for computed layout bounds (shared with ElementRef)
+pub type LayoutBoundsStorage = Arc<Mutex<Option<ElementBounds>>>;
+
 /// RenderTree - bridges layout computation and rendering
 pub struct RenderTree {
     /// The underlying layout tree
@@ -255,6 +260,9 @@ pub struct RenderTree {
     /// Per-node hashes for incremental change detection
     /// Maps node_id to (own_hash, tree_hash) - own excludes children, tree includes children
     node_hashes: HashMap<LayoutNodeId, (DivHash, DivHash)>,
+    /// Layout bounds storages to update after layout computation
+    /// Maps node_id to shared storage that gets updated with computed bounds
+    layout_bounds_storages: HashMap<LayoutNodeId, LayoutBoundsStorage>,
 }
 
 /// Result of an incremental update attempt
@@ -294,6 +302,7 @@ impl RenderTree {
             animations: Weak::new(),
             tree_hash: None,
             node_hashes: HashMap::new(),
+            layout_bounds_storages: HashMap::new(),
         }
     }
 
@@ -731,6 +740,11 @@ impl RenderTree {
             self.motion_bindings.insert(node_id, bindings);
         }
 
+        // Register layout bounds storage if element wants bounds updates
+        if let Some(storage) = element.layout_bounds_storage() {
+            self.layout_bounds_storages.insert(node_id, storage);
+        }
+
         // Recursively update children
         let child_node_ids = self.layout_tree.children(node_id);
         let child_builders = element.children_builders();
@@ -804,6 +818,11 @@ impl RenderTree {
         // Update motion bindings if this element has continuous animations
         if let Some(bindings) = element.motion_bindings() {
             self.motion_bindings.insert(node_id, bindings);
+        }
+
+        // Register layout bounds storage if element wants bounds updates
+        if let Some(storage) = element.layout_bounds_storage() {
+            self.layout_bounds_storages.insert(node_id, storage);
         }
 
         let child_node_ids = self.layout_tree.children(node_id);
@@ -889,6 +908,11 @@ impl RenderTree {
         // Store motion bindings if this element has continuous animations
         if let Some(bindings) = element.motion_bindings() {
             self.motion_bindings.insert(node_id, bindings);
+        }
+
+        // Register layout bounds storage if element wants bounds updates
+        if let Some(storage) = element.layout_bounds_storage() {
+            self.layout_bounds_storages.insert(node_id, storage);
         }
 
         // Get child node IDs from the layout tree
@@ -997,6 +1021,11 @@ impl RenderTree {
         // Store motion bindings if this element has continuous animations
         if let Some(bindings) = element.motion_bindings() {
             self.motion_bindings.insert(node_id, bindings);
+        }
+
+        // Register layout bounds storage if element wants bounds updates
+        if let Some(storage) = element.layout_bounds_storage() {
+            self.layout_bounds_storages.insert(node_id, storage);
         }
 
         // Get child node IDs from the layout tree
@@ -1129,6 +1158,11 @@ impl RenderTree {
         // Store motion bindings if this element has continuous animations
         if let Some(bindings) = element.motion_bindings() {
             self.motion_bindings.insert(node_id, bindings);
+        }
+
+        // Register layout bounds storage if element wants bounds updates
+        if let Some(storage) = element.layout_bounds_storage() {
+            self.layout_bounds_storages.insert(node_id, storage);
         }
 
         // Recursively process children (without motion - motion only applies to direct children)
@@ -1268,6 +1302,37 @@ impl RenderTree {
 
             // Update scroll physics with computed content dimensions
             self.update_scroll_content_dimensions();
+
+            // Update registered layout bounds storages
+            self.update_layout_bounds_storages();
+        }
+    }
+
+    /// Register a layout bounds storage for a node
+    ///
+    /// After layout is computed, the storage will be updated with the node's
+    /// computed bounds. This allows elements to react to layout changes.
+    pub fn register_layout_bounds_storage(
+        &mut self,
+        node_id: LayoutNodeId,
+        storage: LayoutBoundsStorage,
+    ) {
+        self.layout_bounds_storages.insert(node_id, storage);
+    }
+
+    /// Unregister a layout bounds storage
+    pub fn unregister_layout_bounds_storage(&mut self, node_id: LayoutNodeId) {
+        self.layout_bounds_storages.remove(&node_id);
+    }
+
+    /// Update all registered layout bounds storages after layout computation
+    fn update_layout_bounds_storages(&self) {
+        for (&node_id, storage) in &self.layout_bounds_storages {
+            if let Some(bounds) = self.layout_tree.get_bounds(node_id, (0.0, 0.0)) {
+                if let Ok(mut guard) = storage.lock() {
+                    *guard = Some(bounds);
+                }
+            }
         }
     }
 
@@ -1356,6 +1421,8 @@ impl RenderTree {
         mouse_y: f32,
         local_x: f32,
         local_y: f32,
+        bounds_width: f32,
+        bounds_height: f32,
     ) {
         let has_handler = self.handler_registry.has_handler(node_id, event_type);
         tracing::debug!(
@@ -1367,7 +1434,8 @@ impl RenderTree {
 
         let ctx = crate::event_handler::EventContext::new(event_type, node_id)
             .with_mouse_pos(mouse_x, mouse_y)
-            .with_local_pos(local_x, local_y);
+            .with_local_pos(local_x, local_y)
+            .with_bounds(bounds_width, bounds_height);
 
         if has_handler {
             self.handler_registry.dispatch(&ctx);

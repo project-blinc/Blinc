@@ -950,7 +950,8 @@ impl<S: StateTransitions> Stateful<S> {
                 (has_cb, has_nid) => {
                     tracing::warn!(
                         "refresh_props_internal: early return - has_callback={}, has_node_id={}",
-                        has_cb.is_some(), has_nid.is_some()
+                        has_cb.is_some(),
+                        has_nid.is_some()
                     );
                     return;
                 }

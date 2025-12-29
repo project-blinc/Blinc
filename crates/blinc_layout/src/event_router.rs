@@ -62,6 +62,10 @@ pub struct HitTestResult {
     pub local_y: f32,
     /// The hit chain from root to the hit node (for event bubbling)
     pub ancestors: Vec<LayoutNodeId>,
+    /// The bounds width of the hit element
+    pub bounds_width: f32,
+    /// The bounds height of the hit element
+    pub bounds_height: f32,
 }
 
 /// Callback for element events
@@ -84,6 +88,10 @@ pub struct EventRouter {
     /// Local coordinates from the last hit test (relative to the hit element)
     last_hit_local_x: f32,
     last_hit_local_y: f32,
+
+    /// Bounds from the last hit test (element dimensions)
+    last_hit_bounds_width: f32,
+    last_hit_bounds_height: f32,
 
     /// Elements currently under the pointer (for enter/leave tracking)
     hovered: HashSet<LayoutNodeId>,
@@ -131,6 +139,8 @@ impl EventRouter {
             mouse_y: 0.0,
             last_hit_local_x: 0.0,
             last_hit_local_y: 0.0,
+            last_hit_bounds_width: 0.0,
+            last_hit_bounds_height: 0.0,
             hovered: HashSet::new(),
             pressed_target: None,
             pressed_ancestors: Vec::new(),
@@ -152,6 +162,13 @@ impl EventRouter {
     /// These are updated whenever a hit test is performed (mouse move, click, etc.)
     pub fn last_hit_local(&self) -> (f32, f32) {
         (self.last_hit_local_x, self.last_hit_local_y)
+    }
+
+    /// Get the last hit test bounds dimensions
+    ///
+    /// These are updated whenever a hit test is performed (mouse move, click, etc.)
+    pub fn last_hit_bounds(&self) -> (f32, f32) {
+        (self.last_hit_bounds_width, self.last_hit_bounds_height)
     }
 
     /// Set the event callback for routing events to elements
@@ -355,9 +372,11 @@ impl EventRouter {
             self.pressed_target = Some(hit.node);
             // Store ancestors for bubbling on release
             self.pressed_ancestors = hit.ancestors.clone();
-            // Store local coordinates for event handlers
+            // Store local coordinates and bounds for event handlers
             self.last_hit_local_x = hit.local_x;
             self.last_hit_local_y = hit.local_y;
+            self.last_hit_bounds_width = hit.bounds_width;
+            self.last_hit_bounds_height = hit.bounds_height;
 
             // Set focus to the clicked element WITH its ancestors (for BLUR bubbling later)
             self.set_focus_with_ancestors(Some(hit.node), hit.ancestors.clone());
@@ -819,6 +838,8 @@ impl EventRouter {
             local_x: x - bounds.x,
             local_y: y - bounds.y,
             ancestors,
+            bounds_width: bounds.width,
+            bounds_height: bounds.height,
         })
     }
 
@@ -850,6 +871,8 @@ impl EventRouter {
             local_x: x - bounds.x,
             local_y: y - bounds.y,
             ancestors: ancestors.clone(),
+            bounds_width: bounds.width,
+            bounds_height: bounds.height,
         });
 
         // Get scroll offset for this node (if it's a scroll container)

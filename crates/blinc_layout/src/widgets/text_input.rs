@@ -23,7 +23,9 @@ use blinc_core::Color;
 use crate::canvas::canvas;
 use crate::div::{div, Div, ElementBuilder};
 use crate::element::RenderProps;
-use crate::stateful::{refresh_stateful, SharedState, StatefulInner, StateTransitions, Stateful, TextFieldState};
+use crate::stateful::{
+    refresh_stateful, SharedState, StateTransitions, Stateful, StatefulInner, TextFieldState,
+};
 use crate::text::text;
 use crate::text_selection::{clear_selection, set_selection, SelectionSource};
 use crate::tree::{LayoutNodeId, LayoutTree};
@@ -221,8 +223,8 @@ fn blur_focused_text_area() {
 /// Blur all focused text inputs and text areas.
 /// Called when clicking outside any text element.
 pub fn blur_all_text_inputs() {
-    use blinc_core::events::event_types;
     use crate::stateful::refresh_stateful;
+    use blinc_core::events::event_types;
 
     // Blur focused TextInput
     {
@@ -367,6 +369,13 @@ pub struct TextInputData {
     pub cursor_state: SharedCursorState,
     /// Horizontal scroll offset for text that exceeds the input width
     pub scroll_offset_x: f32,
+    /// Computed width of the text input (set after layout, used for scroll calculations)
+    /// This is updated when the layout is computed and allows proper scroll behavior
+    /// even when `use_full_width` is true.
+    pub computed_width: Option<f32>,
+    /// Layout bounds storage - updated after each layout computation
+    /// Used to get the actual computed width for proper scroll behavior
+    pub layout_bounds_storage: crate::renderer::LayoutBoundsStorage,
     /// Reference to the Stateful's shared state for triggering incremental updates
     pub(crate) stateful_state: Option<SharedState<TextFieldState>>,
 }
@@ -412,6 +421,8 @@ impl TextInputData {
             focus_time_ms: 0,
             cursor_state: cursor_state(),
             scroll_offset_x: 0.0,
+            computed_width: None,
+            layout_bounds_storage: Arc::new(Mutex::new(None)),
             stateful_state: None,
         }
     }
@@ -460,9 +471,18 @@ impl TextInputData {
 
         // Filter based on input type
         let filtered: String = match self.input_type {
-            InputType::Number => text.chars().filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-').collect(),
-            InputType::Integer => text.chars().filter(|c| c.is_ascii_digit() || *c == '-').collect(),
-            InputType::Tel => text.chars().filter(|c| c.is_ascii_digit() || *c == '+' || *c == '-' || *c == ' ').collect(),
+            InputType::Number => text
+                .chars()
+                .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
+                .collect(),
+            InputType::Integer => text
+                .chars()
+                .filter(|c| c.is_ascii_digit() || *c == '-')
+                .collect(),
+            InputType::Tel => text
+                .chars()
+                .filter(|c| c.is_ascii_digit() || *c == '+' || *c == '-' || *c == ' ')
+                .collect(),
             _ => text.to_string(),
         };
 
@@ -490,7 +510,11 @@ impl TextInputData {
 
     pub fn delete_backward(&mut self) {
         if let Some(start) = self.selection_start {
-            let (from, to) = if start < self.cursor { (start, self.cursor) } else { (self.cursor, start) };
+            let (from, to) = if start < self.cursor {
+                (start, self.cursor)
+            } else {
+                (self.cursor, start)
+            };
             let before: String = self.value.chars().take(from).collect();
             let after: String = self.value.chars().skip(to).collect();
             self.value = before + &after;
@@ -509,7 +533,11 @@ impl TextInputData {
 
     pub fn delete_forward(&mut self) {
         if let Some(start) = self.selection_start {
-            let (from, to) = if start < self.cursor { (start, self.cursor) } else { (self.cursor, start) };
+            let (from, to) = if start < self.cursor {
+                (start, self.cursor)
+            } else {
+                (self.cursor, start)
+            };
             let before: String = self.value.chars().take(from).collect();
             let after: String = self.value.chars().skip(to).collect();
             self.value = before + &after;
@@ -580,17 +608,27 @@ impl TextInputData {
 
     pub fn selected_text(&self) -> Option<String> {
         self.selection_start.map(|start| {
-            let (from, to) = if start < self.cursor { (start, self.cursor) } else { (self.cursor, start) };
+            let (from, to) = if start < self.cursor {
+                (start, self.cursor)
+            } else {
+                (self.cursor, start)
+            };
             self.value.chars().skip(from).take(to - from).collect()
         })
     }
 
     pub fn validate(&mut self) {
         self.is_valid = match self.input_type {
-            InputType::Email => self.value.is_empty() || (self.value.contains('@') && self.value.contains('.')),
+            InputType::Email => {
+                self.value.is_empty() || (self.value.contains('@') && self.value.contains('.'))
+            }
             InputType::Number => self.value.is_empty() || self.value.parse::<f64>().is_ok(),
             InputType::Integer => self.value.is_empty() || self.value.parse::<i64>().is_ok(),
-            InputType::Url => self.value.is_empty() || self.value.starts_with("http://") || self.value.starts_with("https://"),
+            InputType::Url => {
+                self.value.is_empty()
+                    || self.value.starts_with("http://")
+                    || self.value.starts_with("https://")
+            }
             _ => true,
         };
 
@@ -614,7 +652,11 @@ impl TextInputData {
     pub fn sync_global_selection(&self) {
         if let Some(start) = self.selection_start {
             if start != self.cursor {
-                let (from, to) = if start < self.cursor { (start, self.cursor) } else { (self.cursor, start) };
+                let (from, to) = if start < self.cursor {
+                    (start, self.cursor)
+                } else {
+                    (self.cursor, start)
+                };
                 let selected: String = self.value.chars().skip(from).take(to - from).collect();
                 set_selection(selected, SelectionSource::TextInput, true);
             } else {
@@ -664,6 +706,24 @@ impl TextInputData {
     /// This implements HTML-like behavior where text scrolls left when typing
     /// extends beyond the visible width.
     pub fn ensure_cursor_visible(&mut self, config: &TextInputConfig) {
+        // Try to get computed width from layout bounds storage first
+        // This is updated after each layout computation
+        let layout_width = self
+            .layout_bounds_storage
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|b| b.width));
+
+        // Use layout width if available, otherwise fall back to stored computed_width
+        let effective_computed_width = layout_width.or(self.computed_width);
+
+        // For full-width inputs without computed bounds yet, don't scroll
+        // This prevents incorrect scrolling before we have the real container width
+        if config.use_full_width && effective_computed_width.is_none() {
+            self.scroll_offset_x = 0.0;
+            return;
+        }
+
         // Calculate total text width
         let display = self.display_text();
         let total_text_width = if !display.is_empty() {
@@ -681,8 +741,10 @@ impl TextInputData {
         };
 
         // Calculate available width for text (the visible viewport)
+        // Use computed_width if available (set after layout), otherwise fall back to config.width
         // Account for padding on both sides and border
-        let available_width = config.width - config.padding_x * 2.0 - config.border_width * 2.0;
+        let base_width = effective_computed_width.unwrap_or(config.width);
+        let available_width = base_width - config.padding_x * 2.0 - config.border_width * 2.0;
 
         // Simple approach: measure if text exceeds viewport
         // If cursor is past the visible right edge, scroll to show cursor
@@ -704,7 +766,6 @@ impl TextInputData {
         let max_scroll = (total_text_width - available_width + cursor_margin).max(0.0);
         self.scroll_offset_x = self.scroll_offset_x.min(max_scroll);
     }
-
 }
 
 /// Create a shared text input data
@@ -737,6 +798,7 @@ pub fn text_input_state_with_placeholder(placeholder: impl Into<String>) -> Shar
 pub struct TextInputConfig {
     pub width: f32,
     pub height: f32,
+    pub use_full_width: bool,
     pub font_size: f32,
     pub text_color: Color,
     pub placeholder_color: Color,
@@ -760,6 +822,7 @@ impl Default for TextInputConfig {
         Self {
             width: 200.0,
             height: 44.0,
+            use_full_width: false,
             font_size: 16.0,
             text_color: Color::WHITE,
             placeholder_color: Color::rgba(0.5, 0.5, 0.55, 1.0),
@@ -806,8 +869,8 @@ impl TextInput {
 
         // Reuse existing stateful_state if available, otherwise create new one
         // This ensures state persists across rebuilds (e.g., window resize)
-        let stateful_state: SharedState<TextFieldState> = existing_stateful_state
-            .unwrap_or_else(|| {
+        let stateful_state: SharedState<TextFieldState> =
+            existing_stateful_state.unwrap_or_else(|| {
                 let new_state = Arc::new(Mutex::new(StatefulInner::new(initial_visual)));
                 // Store reference in TextInputData for triggering refreshes
                 if let Ok(mut d) = data.lock() {
@@ -831,23 +894,28 @@ impl TextInput {
             let data_for_callback = Arc::clone(&data);
             let mut shared = stateful_state.lock().unwrap();
 
-            shared.state_callback = Some(Arc::new(move |visual: &TextFieldState, container: &mut Div| {
-                let cfg = config_for_callback.lock().unwrap().clone();
-                let mut data_guard = data_for_callback.lock().unwrap();
+            shared.state_callback = Some(Arc::new(
+                move |visual: &TextFieldState, container: &mut Div| {
+                    let cfg = config_for_callback.lock().unwrap().clone();
+                    let mut data_guard = data_for_callback.lock().unwrap();
 
-                // Update scroll offset to keep cursor visible
-                let old_scroll = data_guard.scroll_offset_x;
-                data_guard.ensure_cursor_visible(&cfg);
-                if data_guard.scroll_offset_x != old_scroll {
-                    tracing::info!(
-                        "TextInput scroll changed: {} -> {} (cursor={}, text_len={})",
-                        old_scroll, data_guard.scroll_offset_x, data_guard.cursor, data_guard.value.len()
-                    );
-                }
+                    // Update scroll offset to keep cursor visible
+                    let old_scroll = data_guard.scroll_offset_x;
+                    data_guard.ensure_cursor_visible(&cfg);
+                    if data_guard.scroll_offset_x != old_scroll {
+                        tracing::info!(
+                            "TextInput scroll changed: {} -> {} (cursor={}, text_len={})",
+                            old_scroll,
+                            data_guard.scroll_offset_x,
+                            data_guard.cursor,
+                            data_guard.value.len()
+                        );
+                    }
 
-                let content = TextInput::build_content(*visual, &data_guard, &cfg);
-                container.merge(content);
-            }));
+                    let content = TextInput::build_content(*visual, &data_guard, &cfg);
+                    container.merge(content);
+                },
+            ));
 
             shared.needs_visual_update = true;
         }
@@ -894,17 +962,19 @@ impl TextInput {
                     }
 
                     // Get config for cursor positioning
-                    // Note: We don't subtract padding/border because local_x from the event
-                    // is relative to the innermost hit element (the text content area)
                     let cfg = config_for_click.lock().unwrap();
                     let font_size = cfg.font_size;
+                    let padding_x = cfg.padding_x;
+                    let border_width = cfg.border_width;
                     drop(cfg);
 
                     // Update FSM state
                     {
                         let mut shared = stateful_for_click.lock().unwrap();
                         if !shared.state.is_focused() {
-                            if let Some(new_state) = shared.state.on_event(event_types::POINTER_DOWN)
+                            if let Some(new_state) = shared
+                                .state
+                                .on_event(event_types::POINTER_DOWN)
                                 .or_else(|| shared.state.on_event(event_types::FOCUS))
                             {
                                 shared.state = new_state;
@@ -923,9 +993,18 @@ impl TextInput {
                         request_continuous_redraw();
                     }
 
+                    // Store computed width from layout bounds for scroll calculations
+                    // This allows ensure_cursor_visible to work correctly with w_full() inputs
+                    if ctx.bounds_width > 0.0 {
+                        d.computed_width = Some(ctx.bounds_width);
+                    }
+
                     // Calculate cursor position from click x position
-                    // local_x is relative to the innermost hit element (text content area)
-                    let text_x = ctx.local_x.max(0.0);
+                    // local_x is relative to the hit element bounds (the main container)
+                    // Subtract padding and border to get position relative to text content area
+                    // Also add scroll offset since text may be scrolled
+                    let text_x =
+                        (ctx.local_x - padding_x - border_width + d.scroll_offset_x).max(0.0);
                     let cursor_pos = d.cursor_position_from_x(text_x, font_size);
                     d.cursor = cursor_pos;
                     d.selection_start = None;
@@ -981,12 +1060,12 @@ impl TextInput {
                     let mut changed = true;
                     let mut should_blur = false;
                     match ctx.key_code {
-                        8 => d.delete_backward(),   // Backspace
-                        127 => d.delete_forward(),  // Delete
-                        37 => d.move_left(ctx.shift),   // Left arrow
-                        39 => d.move_right(ctx.shift),  // Right arrow
-                        36 => d.move_to_start(ctx.shift), // Home
-                        35 => d.move_to_end(ctx.shift),   // End
+                        8 => d.delete_backward(),                     // Backspace
+                        127 => d.delete_forward(),                    // Delete
+                        37 => d.move_left(ctx.shift),                 // Left arrow
+                        39 => d.move_right(ctx.shift),                // Right arrow
+                        36 => d.move_to_start(ctx.shift),             // Home
+                        35 => d.move_to_end(ctx.shift),               // End
                         65 if ctx.meta || ctx.ctrl => d.select_all(), // Ctrl/Cmd+A
                         27 => {
                             // Escape - blur the input
@@ -1015,7 +1094,11 @@ impl TextInput {
     }
 
     /// Build the content div based on current visual state and data
-    fn build_content(visual: TextFieldState, data: &TextInputData, config: &TextInputConfig) -> Div {
+    fn build_content(
+        visual: TextFieldState,
+        data: &TextInputData,
+        config: &TextInputConfig,
+    ) -> Div {
         let display = if data.value.is_empty() {
             if !data.placeholder.is_empty() {
                 data.placeholder.clone()
@@ -1061,7 +1144,11 @@ impl TextInput {
         let scroll_offset = data.scroll_offset_x;
 
         let selection_range: Option<(usize, usize)> = data.selection_start.map(|start| {
-            if start < cursor_pos { (start, cursor_pos) } else { (cursor_pos, start) }
+            if start < cursor_pos {
+                (start, cursor_pos)
+            } else {
+                (cursor_pos, start)
+            }
         });
 
         let cursor_state_for_canvas = Arc::clone(&data.cursor_state);
@@ -1075,30 +1162,39 @@ impl TextInput {
 
         // Calculate dimensions - use full width/height, border is drawn on top
         let inner_height = config.height;
-        let clip_width = config.width - config.padding_x * 2.0;
 
         // Build main container with background and proper border
-        // Note: Don't use .w_full().h_full() here - that would override the parent's
-        // fixed dimensions (set via .h()) through the merge() operation.
-        // Use .flex_grow() to fill parent without overriding fixed dimensions.
         let mut main_content = div()
             .bg(bg)
             .border(config.border_width, border)
             .rounded(config.corner_radius)
             .relative()
             .flex_row()
-            .flex_grow() // Fill parent without overriding fixed dimensions
             .items_center();
 
-        // Left padding spacer
-        main_content = main_content.child(div().w(config.padding_x).h(inner_height));
+        // When use_full_width is true, use w_full() to match parent width
+        // Otherwise use flex_grow() to fill available space without overriding fixed dimensions
+        if config.use_full_width {
+            main_content = main_content.w_full();
+        } else {
+            main_content = main_content.flex_grow();
+        }
 
-        // Clip container - fixed dimensions, clips overflow
-        let mut clip_container = div()
-            .w(clip_width)
-            .h(inner_height)
-            .relative()
-            .overflow_clip();
+        // Left padding spacer
+        main_content =
+            main_content.child(div().w(config.padding_x).h(inner_height).flex_shrink_0());
+
+        // Clip container - use flex_grow when full width, fixed width otherwise
+        let mut clip_container = div().h(inner_height).relative().overflow_clip();
+
+        if config.use_full_width {
+            // Use flex: 1 (grow: 1, shrink: 1, basis: 0) to fill remaining space between padding spacers
+            clip_container = clip_container.flex_1();
+        } else {
+            // Use fixed width calculated from config
+            let clip_width = config.width - config.padding_x * 2.0;
+            clip_container = clip_container.w(clip_width);
+        }
 
         // Text wrapper with absolute positioning
         // Using left() with negative scroll offset to scroll content
@@ -1117,15 +1213,29 @@ impl TextInput {
                 let before_sel: String = display.chars().take(sel_start).collect();
                 if !before_sel.is_empty() {
                     text_container = text_container.child(
-                        text(&before_sel).size(config.font_size).color(text_color).text_left().no_wrap().v_center(),
+                        text(&before_sel)
+                            .size(config.font_size)
+                            .color(text_color)
+                            .text_left()
+                            .no_wrap()
+                            .v_center(),
                     );
                 }
 
-                let selected: String = display.chars().skip(sel_start).take(sel_end - sel_start).collect();
+                let selected: String = display
+                    .chars()
+                    .skip(sel_start)
+                    .take(sel_end - sel_start)
+                    .collect();
                 if !selected.is_empty() {
                     text_container = text_container.child(
                         div().bg(selection_color).rounded(2.0).child(
-                            text(&selected).size(config.font_size).color(text_color).text_left().no_wrap().v_center(),
+                            text(&selected)
+                                .size(config.font_size)
+                                .color(text_color)
+                                .text_left()
+                                .no_wrap()
+                                .v_center(),
                         ),
                     );
                 }
@@ -1133,14 +1243,24 @@ impl TextInput {
                 let after_sel: String = display.chars().skip(sel_end).collect();
                 if !after_sel.is_empty() {
                     text_container = text_container.child(
-                        text(&after_sel).size(config.font_size).color(text_color).text_left().no_wrap().v_center(),
+                        text(&after_sel)
+                            .size(config.font_size)
+                            .color(text_color)
+                            .text_left()
+                            .no_wrap()
+                            .v_center(),
                     );
                 }
 
                 text_wrapper = text_wrapper.child(text_container);
             } else {
                 text_wrapper = text_wrapper.child(
-                    text(&display).size(config.font_size).color(text_color).text_left().no_wrap().v_center()
+                    text(&display)
+                        .size(config.font_size)
+                        .color(text_color)
+                        .text_left()
+                        .no_wrap()
+                        .v_center(),
                 );
             }
         }
@@ -1166,14 +1286,24 @@ impl TextInput {
 
             let cursor_state_clone = Arc::clone(&cursor_state_for_canvas);
             let cursor_canvas = canvas(
-                move |ctx: &mut dyn blinc_core::DrawContext, bounds: crate::canvas::CanvasBounds| {
+                move |ctx: &mut dyn blinc_core::DrawContext,
+                      bounds: crate::canvas::CanvasBounds| {
                     let cs = cursor_state_clone.lock().unwrap();
-                    if !cs.visible { return; }
+                    if !cs.visible {
+                        return;
+                    }
 
                     let opacity = cs.current_opacity();
-                    if opacity < 0.01 { return; }
+                    if opacity < 0.01 {
+                        return;
+                    }
 
-                    let color = blinc_core::Color::rgba(cs.color.r, cs.color.g, cs.color.b, cs.color.a * opacity);
+                    let color = blinc_core::Color::rgba(
+                        cs.color.r,
+                        cs.color.g,
+                        cs.color.b,
+                        cs.color.a * opacity,
+                    );
                     // Draw cursor centered within the bounds
                     ctx.fill_rect(
                         blinc_core::Rect::new(0.0, 0.0, cs.width, bounds.height),
@@ -1200,7 +1330,8 @@ impl TextInput {
         main_content = main_content.child(clip_container);
 
         // Right padding spacer
-        main_content = main_content.child(div().w(config.padding_x).h(inner_height));
+        main_content =
+            main_content.child(div().w(config.padding_x).h(inner_height).flex_shrink_0());
 
         // Return the main container with proper border
         main_content
@@ -1217,6 +1348,7 @@ impl TextInput {
     }
 
     pub fn w_full(mut self) -> Self {
+        self.config.lock().unwrap().use_full_width = true;
         self.inner = std::mem::take(&mut self.inner).w_full();
         self
     }
@@ -1350,6 +1482,15 @@ impl ElementBuilder for TextInput {
 
     fn layout_style(&self) -> Option<&taffy::Style> {
         self.inner.layout_style()
+    }
+
+    fn layout_bounds_storage(&self) -> Option<crate::renderer::LayoutBoundsStorage> {
+        // Return the layout bounds storage from the data so it gets updated after layout
+        if let Ok(data) = self.data.lock() {
+            Some(Arc::clone(&data.layout_bounds_storage))
+        } else {
+            None
+        }
     }
 }
 

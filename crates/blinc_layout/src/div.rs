@@ -23,7 +23,8 @@ use taffy::prelude::*;
 use taffy::Overflow;
 
 use crate::element::{
-    GlassMaterial, Material, MetallicMaterial, RenderLayer, RenderProps, WoodMaterial,
+    ElementBounds, GlassMaterial, Material, MetallicMaterial, RenderLayer, RenderProps,
+    WoodMaterial,
 };
 use crate::tree::{LayoutNodeId, LayoutTree};
 
@@ -64,10 +65,15 @@ type DirtyFlag = Arc<AtomicBool>;
 ///     btn.dispatch_state(ButtonState::Pressed);
 /// });
 /// ```
+/// Storage for computed layout bounds
+type LayoutBoundsStorage = Arc<Mutex<Option<ElementBounds>>>;
+
 pub struct ElementRef<T> {
     inner: RefStorage<T>,
     /// Shared dirty flag - when set, signals that the UI needs to be rebuilt
     dirty_flag: DirtyFlag,
+    /// Computed layout bounds (set after layout is computed)
+    layout_bounds: LayoutBoundsStorage,
 }
 
 impl<T> Clone for ElementRef<T> {
@@ -75,6 +81,7 @@ impl<T> Clone for ElementRef<T> {
         Self {
             inner: Arc::clone(&self.inner),
             dirty_flag: Arc::clone(&self.dirty_flag),
+            layout_bounds: Arc::clone(&self.layout_bounds),
         }
     }
 }
@@ -91,6 +98,7 @@ impl<T> ElementRef<T> {
         Self {
             inner: Arc::new(Mutex::new(None)),
             dirty_flag: Arc::new(AtomicBool::new(false)),
+            layout_bounds: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -102,6 +110,7 @@ impl<T> ElementRef<T> {
         Self {
             inner: Arc::new(Mutex::new(None)),
             dirty_flag,
+            layout_bounds: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -259,6 +268,50 @@ impl<T> ElementRef<T> {
             guard: self.inner.lock().unwrap(),
             dirty_flag: Arc::clone(&self.dirty_flag),
         }
+    }
+
+    // =========================================================================
+    // Layout Bounds
+    // =========================================================================
+
+    /// Get the computed layout bounds for this element
+    ///
+    /// Returns `None` if layout hasn't been computed yet or if the element
+    /// is not part of the layout tree.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// if let Some(bounds) = input_ref.get_layout_bounds() {
+    ///     println!("Width: {}, Height: {}", bounds.width, bounds.height);
+    /// }
+    /// ```
+    pub fn get_layout_bounds(&self) -> Option<ElementBounds> {
+        self.layout_bounds.lock().unwrap().clone()
+    }
+
+    /// Set the computed layout bounds for this element
+    ///
+    /// This is called internally after layout is computed to store
+    /// the element's position and dimensions.
+    pub fn set_layout_bounds(&self, bounds: ElementBounds) {
+        *self.layout_bounds.lock().unwrap() = Some(bounds);
+    }
+
+    /// Clear the stored layout bounds
+    ///
+    /// Called when the element is removed from the layout tree or
+    /// when layout needs to be recomputed.
+    pub fn clear_layout_bounds(&self) {
+        *self.layout_bounds.lock().unwrap() = None;
+    }
+
+    /// Get the layout bounds storage handle for sharing
+    ///
+    /// This allows other parts of the system to update the layout bounds
+    /// when layout is computed.
+    pub fn layout_bounds_storage(&self) -> LayoutBoundsStorage {
+        Arc::clone(&self.layout_bounds)
     }
 }
 
@@ -1973,6 +2026,14 @@ pub trait ElementBuilder {
     /// This is used for hashing layout-affecting properties like size,
     /// padding, margin, flex properties, etc.
     fn layout_style(&self) -> Option<&taffy::Style> {
+        None
+    }
+
+    /// Get layout bounds storage for this element
+    ///
+    /// If this element wants to be notified of its computed layout bounds
+    /// after layout is calculated, it returns a storage that will be updated.
+    fn layout_bounds_storage(&self) -> Option<crate::renderer::LayoutBoundsStorage> {
         None
     }
 }

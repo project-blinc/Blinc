@@ -1087,6 +1087,9 @@ impl WindowedApp {
                             /// Local coordinates relative to element bounds
                             local_x: f32,
                             local_y: f32,
+                            /// Computed bounds dimensions of the element
+                            bounds_width: f32,
+                            bounds_height: f32,
                             scroll_delta_x: f32,
                             scroll_delta_y: f32,
                             key_char: Option<char>,
@@ -1106,6 +1109,8 @@ impl WindowedApp {
                                     mouse_y: 0.0,
                                     local_x: 0.0,
                                     local_y: 0.0,
+                                    bounds_width: 0.0,
+                                    bounds_height: 0.0,
                                     scroll_delta_x: 0.0,
                                     scroll_delta_y: 0.0,
                                     key_char: None,
@@ -1186,11 +1191,14 @@ impl WindowedApp {
                                             let _events = router.on_mouse_down(tree, lx, ly, btn);
 
                                             let (local_x, local_y) = router.last_hit_local();
+                                            let (bounds_width, bounds_height) = router.last_hit_bounds();
                                             for event in pending_events.iter_mut() {
                                                 event.mouse_x = lx;
                                                 event.mouse_y = ly;
                                                 event.local_x = local_x;
                                                 event.local_y = local_y;
+                                                event.bounds_width = bounds_width;
+                                                event.bounds_height = bounds_height;
                                             }
                                         }
                                     }
@@ -1349,11 +1357,14 @@ impl WindowedApp {
                                         let ly = y / scale;
                                         router.on_mouse_down(tree, lx, ly, MouseButton::Left);
                                         let (local_x, local_y) = router.last_hit_local();
+                                        let (bounds_width, bounds_height) = router.last_hit_bounds();
                                         for event in pending_events.iter_mut() {
                                             event.mouse_x = lx;
                                             event.mouse_y = ly;
                                             event.local_x = local_x;
                                             event.local_y = local_y;
+                                            event.bounds_width = bounds_width;
+                                            event.bounds_height = bounds_height;
                                         }
                                     }
                                     TouchEvent::Moved { x, y, .. } => {
@@ -1475,6 +1486,8 @@ impl WindowedApp {
                                     event.mouse_y,
                                     event.local_x,
                                     event.local_y,
+                                    event.bounds_width,
+                                    event.bounds_height,
                                 );
                             }
 

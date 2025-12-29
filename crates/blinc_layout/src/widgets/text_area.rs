@@ -15,14 +15,15 @@ use blinc_core::Color;
 use crate::canvas::canvas;
 use crate::div::{div, Div, ElementBuilder};
 use crate::element::RenderProps;
-use crate::stateful::{refresh_stateful, SharedState, StatefulInner, StateTransitions, Stateful, TextFieldState};
+use crate::stateful::{
+    refresh_stateful, SharedState, StateTransitions, Stateful, StatefulInner, TextFieldState,
+};
 use crate::text::text;
 use crate::tree::{LayoutNodeId, LayoutTree};
 use crate::widgets::cursor::{cursor_state, CursorAnimation, SharedCursorState};
 use crate::widgets::scroll::{Scroll, ScrollDirection, ScrollPhysics, SharedScrollPhysics};
 use crate::widgets::text_input::{
-    elapsed_ms, increment_focus_count,
-    request_continuous_redraw_pub, set_focused_text_area,
+    elapsed_ms, increment_focus_count, request_continuous_redraw_pub, set_focused_text_area,
 };
 
 /// Position in a multi-line text (line and column)
@@ -243,11 +244,11 @@ impl Default for TextAreaState {
             cursor_blink_interval_ms: 530, // Standard cursor blink rate (~530ms)
             cursor_state: cursor_state(),
             scroll_physics: Arc::new(Mutex::new(ScrollPhysics::default())),
-            viewport_height: 120.0, // Default height from TextAreaConfig
-            line_height: 14.0 * 1.4, // Default font_size * line_height
-            font_size: 14.0,         // Default font size
-            available_width: 276.0,  // Default width minus padding/borders
-            wrap_enabled: true,      // Default to wrapping (visual lines handle cursor tracking)
+            viewport_height: 120.0,   // Default height from TextAreaConfig
+            line_height: 14.0 * 1.4,  // Default font_size * line_height
+            font_size: 14.0,          // Default font size
+            available_width: 276.0,   // Default width minus padding/borders
+            wrap_enabled: true,       // Default to wrapping (visual lines handle cursor tracking)
             visual_lines: Vec::new(), // Computed on first layout
             stateful_state: None,
             clicked_visual_line: None, // Set by line click handlers
@@ -855,7 +856,8 @@ impl TextAreaState {
                     // Check if there's another visual line for same logical line
                     if idx + 1 < self.visual_lines.len()
                         && self.visual_lines[idx + 1].logical_line == cursor_line
-                        && self.visual_lines[idx + 1].start_char == cursor_col {
+                        && self.visual_lines[idx + 1].start_char == cursor_col
+                    {
                         return idx + 1;
                     }
                     return idx;
@@ -878,7 +880,8 @@ impl TextAreaState {
         for vl in &self.visual_lines {
             if vl.logical_line == cursor_line
                 && cursor_col >= vl.start_char
-                && cursor_col <= vl.end_char {
+                && cursor_col <= vl.end_char
+            {
                 // Measure text from start of visual line to cursor
                 let local_col = cursor_col - vl.start_char;
                 if local_col == 0 {
@@ -950,7 +953,8 @@ impl TextAreaState {
                 // within that line based on cursor column position
                 if line_visual_count > 1 && !line.is_empty() {
                     let text_before: String = line.chars().take(self.cursor.column).collect();
-                    let prefix_width = crate::text_measure::measure_text(&text_before, font_size).width;
+                    let prefix_width =
+                        crate::text_measure::measure_text(&text_before, font_size).width;
                     let lines_into = (prefix_width / available_width).floor() as usize;
                     cursor_visual_y += lines_into as f32 * line_height;
                 }
@@ -1051,7 +1055,12 @@ impl TextAreaState {
     }
 
     /// Find character position from x coordinate within a visual line
-    fn char_position_in_visual_line(&self, visual_line_idx: usize, x: f32, font_size: f32) -> usize {
+    fn char_position_in_visual_line(
+        &self,
+        visual_line_idx: usize,
+        x: f32,
+        font_size: f32,
+    ) -> usize {
         if visual_line_idx >= self.visual_lines.len() {
             return 0;
         }
@@ -1165,8 +1174,8 @@ impl TextArea {
 
         // Reuse existing stateful_state if available, otherwise create new one
         // This ensures state persists across rebuilds (e.g., window resize)
-        let shared_state: SharedState<TextFieldState> = existing_stateful_state
-            .unwrap_or_else(|| {
+        let shared_state: SharedState<TextFieldState> =
+            existing_stateful_state.unwrap_or_else(|| {
                 let new_state = Arc::new(Mutex::new(StatefulInner::new(initial_visual)));
                 // Store reference in TextAreaState for triggering refreshes
                 if let Ok(mut d) = state.lock() {
@@ -1180,7 +1189,9 @@ impl TextArea {
             Arc::clone(&shared_state),
             Arc::clone(state),
             Arc::clone(&config),
-        ).w(default_width).h(default_height);
+        )
+        .w(default_width)
+        .h(default_height);
 
         // Register callback immediately so it's available for incremental diff
         // The diff system calls children_builders() before build(), so the callback
@@ -1191,57 +1202,61 @@ impl TextArea {
             let shared_state_for_callback = Arc::clone(state);
             let mut shared = shared_state.lock().unwrap();
 
-            shared.state_callback = Some(Arc::new(move |visual: &TextFieldState, container: &mut Div| {
-                let cfg = config_for_callback.lock().unwrap().clone();
-                let mut data_guard = data_for_callback.lock().unwrap();
+            shared.state_callback = Some(Arc::new(
+                move |visual: &TextFieldState, container: &mut Div| {
+                    let cfg = config_for_callback.lock().unwrap().clone();
+                    let mut data_guard = data_for_callback.lock().unwrap();
 
-                // Sync visual state to data so it matches the FSM
-                data_guard.visual = *visual;
+                    // Sync visual state to data so it matches the FSM
+                    data_guard.visual = *visual;
 
-                // Update cached scroll dimensions from config
-                let line_height = cfg.font_size * cfg.line_height;
-                let viewport_height = cfg.effective_height() - cfg.padding_y * 2.0 - cfg.border_width * 2.0;
-                let available_width = cfg.effective_width() - cfg.padding_x * 2.0 - cfg.border_width * 2.0;
-                data_guard.line_height = line_height;
-                data_guard.viewport_height = viewport_height;
-                data_guard.font_size = cfg.font_size;
-                data_guard.available_width = available_width;
-                data_guard.wrap_enabled = cfg.wrap;
+                    // Update cached scroll dimensions from config
+                    let line_height = cfg.font_size * cfg.line_height;
+                    let viewport_height =
+                        cfg.effective_height() - cfg.padding_y * 2.0 - cfg.border_width * 2.0;
+                    let available_width =
+                        cfg.effective_width() - cfg.padding_x * 2.0 - cfg.border_width * 2.0;
+                    data_guard.line_height = line_height;
+                    data_guard.viewport_height = viewport_height;
+                    data_guard.font_size = cfg.font_size;
+                    data_guard.available_width = available_width;
+                    data_guard.wrap_enabled = cfg.wrap;
 
-                // Recompute visual lines for proper cursor tracking with wrapped text
-                data_guard.compute_visual_lines();
+                    // Recompute visual lines for proper cursor tracking with wrapped text
+                    data_guard.compute_visual_lines();
 
-                // Determine colors based on visual state
-                let (bg, border) = match visual {
-                    TextFieldState::Focused | TextFieldState::FocusedHovered => {
-                        (cfg.focused_bg_color, cfg.focused_border_color)
-                    }
-                    TextFieldState::Hovered => (cfg.hover_bg_color, cfg.hover_border_color),
-                    TextFieldState::Disabled => (
-                        Color::rgba(0.12, 0.12, 0.15, 0.5),
-                        Color::rgba(0.25, 0.25, 0.3, 0.5),
-                    ),
-                    _ => (cfg.bg_color, cfg.border_color),
-                };
+                    // Determine colors based on visual state
+                    let (bg, border) = match visual {
+                        TextFieldState::Focused | TextFieldState::FocusedHovered => {
+                            (cfg.focused_bg_color, cfg.focused_border_color)
+                        }
+                        TextFieldState::Hovered => (cfg.hover_bg_color, cfg.hover_border_color),
+                        TextFieldState::Disabled => (
+                            Color::rgba(0.12, 0.12, 0.15, 0.5),
+                            Color::rgba(0.25, 0.25, 0.3, 0.5),
+                        ),
+                        _ => (cfg.bg_color, cfg.border_color),
+                    };
 
-                // Apply visual styling directly to the container (preserves fixed dimensions)
-                // Note: Don't use set_padding_x/set_padding_y - use explicit spacers like TextInput
-                // This ensures proper visual separation from rounded corners
-                // Note: Don't use set_overflow_clip() here - let the Scroll handle clipping
-                // The outer container just provides visual styling (bg, border, rounded)
-                container.set_bg(bg);
-                container.set_border(cfg.border_width, border);
-                container.set_rounded(cfg.corner_radius);
+                    // Apply visual styling directly to the container (preserves fixed dimensions)
+                    // Note: Don't use set_padding_x/set_padding_y - use explicit spacers like TextInput
+                    // This ensures proper visual separation from rounded corners
+                    // Note: Don't use set_overflow_clip() here - let the Scroll handle clipping
+                    // The outer container just provides visual styling (bg, border, rounded)
+                    container.set_bg(bg);
+                    container.set_border(cfg.border_width, border);
+                    container.set_rounded(cfg.corner_radius);
 
-                // Build content wrapper with explicit padding spacers (like TextInput)
-                let content = TextArea::build_content(
-                    *visual,
-                    &data_guard,
-                    &cfg,
-                    Arc::clone(&shared_state_for_callback),
-                );
-                container.set_child(content);
-            }));
+                    // Build content wrapper with explicit padding spacers (like TextInput)
+                    let content = TextArea::build_content(
+                        *visual,
+                        &data_guard,
+                        &cfg,
+                        Arc::clone(&shared_state_for_callback),
+                    );
+                    container.set_child(content);
+                },
+            ));
 
             shared.needs_visual_update = true;
         }
@@ -1294,7 +1309,8 @@ impl TextArea {
                 let cfg = config_for_click.lock().unwrap();
                 let font_size = cfg.font_size;
                 let line_height = cfg.font_size * cfg.line_height;
-                let available_width = cfg.effective_width() - cfg.padding_x * 2.0 - cfg.border_width * 2.0;
+                let available_width =
+                    cfg.effective_width() - cfg.padding_x * 2.0 - cfg.border_width * 2.0;
                 let wrap_enabled = cfg.wrap;
                 drop(cfg);
 
@@ -1313,7 +1329,9 @@ impl TextArea {
                         let mut shared = shared_for_click.lock().unwrap();
                         if !shared.state.is_focused() {
                             // Transition to focused state
-                            if let Some(new_state) = shared.state.on_event(event_types::POINTER_DOWN)
+                            if let Some(new_state) = shared
+                                .state
+                                .on_event(event_types::POINTER_DOWN)
                                 .or_else(|| shared.state.on_event(event_types::FOCUS))
                             {
                                 shared.state = new_state;
@@ -1390,11 +1408,7 @@ impl TextArea {
                         let line_height = d.line_height;
                         let viewport_height = d.viewport_height;
                         d.ensure_cursor_visible(line_height, viewport_height);
-                        tracing::debug!(
-                            "TextArea received char: {:?}, value: {}",
-                            c,
-                            d.value()
-                        );
+                        tracing::debug!("TextArea received char: {:?}, value: {}", c, d.value());
                         true
                     } else {
                         false
@@ -1497,7 +1511,7 @@ impl TextArea {
                     refresh_stateful(&shared_for_key);
                 }
             })
-            // Note: Scroll events are handled by the scroll() widget inside build_content
+        // Note: Scroll events are handled by the scroll() widget inside build_content
     }
 
     /// Build the content div based on current visual state and data
@@ -1529,9 +1543,8 @@ impl TextArea {
         let line_height = config.font_size * config.line_height;
 
         // Calculate available width for text (for wrap calculations)
-        let text_area_width = config.effective_width()
-            - config.padding_x * 2.0
-            - config.border_width * 2.0;
+        let text_area_width =
+            config.effective_width() - config.padding_x * 2.0 - config.border_width * 2.0;
 
         // Use visual lines for cursor positioning (computed in callback before build_content)
         // This provides accurate cursor tracking for wrapped text
@@ -1559,7 +1572,10 @@ impl TextArea {
         // The cursor is positioned inside the scroll content so it scrolls with text
         let cursor_canvas_opt = if is_focused {
             // Cursor top is based on visual line position plus vertical centering within line
-            let cursor_top = cursor_visual_y + (line_height - cursor_height) / 2.0;
+            // Shift cursor UP - fonts have descender space at bottom which pushes visible text upward
+            let descender_offset = config.font_size * 0.1;
+            let cursor_top =
+                cursor_visual_y + (line_height - cursor_height) / 2.0 - descender_offset;
             let cursor_left = cursor_x;
 
             {
@@ -1618,7 +1634,13 @@ impl TextArea {
         // Use relative positioning to allow cursor absolute positioning within
         // Note: Don't use w_full() here - each line has explicit width, and w_full would
         // cause content to extend into the rounded corner areas of the outer container
-        let mut text_content = div().flex_col().justify_start().items_start().relative();
+        // Use overflow_visible to prevent clipping cursor when it shifts up
+        let mut text_content = div()
+            .flex_col()
+            .justify_start()
+            .items_start()
+            .relative()
+            .overflow_visible();
 
         if data.is_empty() {
             // Use state's placeholder if available, otherwise fall back to config
@@ -1630,20 +1652,29 @@ impl TextArea {
 
             // Placeholder always uses no_wrap for consistent appearance
             text_content = text_content.child(
-                div().h(line_height).flex_row().items_center().w(text_area_width).child(
-                    text(placeholder)
-                        .size(config.font_size)
-                        .color(text_color)
-                        .text_left()
-                        .no_wrap(),
-                ),
+                div()
+                    .h(line_height)
+                    .flex_row()
+                    .items_center()
+                    .w(text_area_width)
+                    .child(
+                        text(placeholder)
+                            .size(config.font_size)
+                            .color(text_color)
+                            .text_left()
+                            .no_wrap(),
+                    ),
             );
         } else if config.wrap && !data.visual_lines.is_empty() {
             // Wrapping mode with computed visual lines
             // Render each visual line segment for precise cursor alignment
             // Each line has a click handler that stores its visual line index
             for (visual_line_idx, vl) in data.visual_lines.iter().enumerate() {
-                let line_text = if vl.text.is_empty() { " " } else { vl.text.as_str() };
+                let line_text = if vl.text.is_empty() {
+                    " "
+                } else {
+                    vl.text.as_str()
+                };
                 let state_for_line = Arc::clone(&shared_state);
 
                 // Each visual line has fixed height and a click handler
@@ -1693,7 +1724,7 @@ impl TextArea {
                                 .size(config.font_size)
                                 .color(text_color)
                                 .text_left(),
-                                // No .no_wrap() - text wraps at container width
+                            // No .no_wrap() - text wraps at container width
                         ),
                 );
             }
@@ -1764,7 +1795,7 @@ impl TextArea {
                     // Scroll content in the middle (no rounded corners on scroll itself)
                     .child(scrollable_content)
                     // Right padding spacer
-                    .child(div().w(padding_x).h_full())
+                    .child(div().w(padding_x).h_full()),
             )
             // Bottom padding spacer
             .child(div().h(padding_y).w_full())

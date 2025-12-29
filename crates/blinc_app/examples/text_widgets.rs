@@ -127,9 +127,9 @@ fn build_input_section(
 /// Build a labeled text input
 fn build_labeled_input(label: &str, state: &SharedTextInputState) -> impl ElementBuilder {
     div()
-    .w_full()
+        .w_full()
         .flex_col()
-        .gap(4.0)
+        .gap(1.0)
         .child(
             text(label)
                 .size(16.0)
@@ -273,7 +273,7 @@ fn build_message_preview(message: &SharedTextAreaState) -> impl ElementBuilder {
     let msg_val = message.lock().unwrap().value();
 
     div()
-    .w_full()
+        .w_full()
         .flex_col()
         .gap(8.0)
         .p(16.0)
