@@ -461,7 +461,7 @@ ctx.push_transform(matrix);
 - [ ] Implement Checkbox with animation
 - [ ] Implement Toggle with spring animation
 - [ ] Implement Dropdown with expand animation
-- [ ] Implement Modal with backdrop
+- [X] Implement Modal with backdrop
 - [ ] Implement Tabs with indicator animation
 - [ ] Implement Slider with drag handling
 
