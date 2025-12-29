@@ -1002,9 +1002,8 @@ impl TextInput {
                     // Calculate cursor position from click x position
                     // local_x is relative to the hit element bounds (the main container)
                     // Subtract padding and border to get position relative to text content area
-                    // Also add scroll offset since text may be scrolled
-                    let text_x =
-                        (ctx.local_x - padding_x - border_width + d.scroll_offset_x).max(0.0);
+                    // Note: Don't add scroll_offset_x here - cursor_position_from_x handles it internally
+                    let text_x = (ctx.local_x - padding_x - border_width).max(0.0);
                     let cursor_pos = d.cursor_position_from_x(text_x, font_size);
                     d.cursor = cursor_pos;
                     d.selection_start = None;
