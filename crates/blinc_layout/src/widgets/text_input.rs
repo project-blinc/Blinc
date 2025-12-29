@@ -879,12 +879,49 @@ impl TextInput {
                 new_state
             });
 
+        // Clear stale node_id from previous tree builds
+        // During full rebuild (e.g., window resize), the old node_id points to
+        // nodes in the old tree. Clearing it ensures the new node_id gets assigned
+        // when this element is added to the new tree.
+        {
+            let mut shared = stateful_state.lock().unwrap();
+            shared.node_id = None;
+        }
+
         // Create inner Stateful with text input event handlers
-        let inner = Self::create_inner_with_handlers(
+        let mut inner = Self::create_inner_with_handlers(
             Arc::clone(&stateful_state),
             Arc::clone(&data),
             Arc::clone(&config),
         );
+
+        // Set default width and height from config on the outer Stateful
+        // This ensures proper layout constraints even without explicit .w() call
+        // Also set overflow_clip to ensure children never visually exceed parent bounds
+        //
+        // HTML input behavior in flex layouts:
+        // 1. Inputs stretch to fill parent width in flex-col (align-items: stretch)
+        // 2. min-width: 0 - allows shrinking below content size in flex containers
+        // 3. flex-shrink: 1 - allows shrinking when container is constrained
+        {
+            let cfg = config.lock().unwrap();
+            // By default, use w_full() to stretch like HTML inputs do in flex containers.
+            // The config.width serves as a fallback/minimum, not a fixed constraint.
+            // Users can override with .w(px) for fixed width behavior.
+            if cfg.use_full_width {
+                inner = inner.w_full();
+            }
+            // Note: When neither w() nor w_full() is called, the element uses auto width
+            // which allows it to stretch in flex containers (align-items: stretch default)
+
+            // Apply HTML input-like flex behavior:
+            // - min_w(0.0) allows the input to shrink below its content size
+            // - flex_shrink (default 1) allows shrinking in flex containers
+            // Note: Don't use overflow_clip() here - the inner clip_container handles clipping.
+            // Using overflow_clip on the outer container with rounded corners causes
+            // the clip to interfere with border rendering at the corners.
+            inner = inner.h(cfg.height).min_w(0.0);
+        }
 
         // Register callback immediately so it's available for incremental diff
         // The diff system calls children_builders() before build(), so the callback
@@ -912,8 +949,36 @@ impl TextInput {
                         );
                     }
 
+                    // Determine colors based on visual state
+                    let (bg, border_color) = match visual {
+                        TextFieldState::Idle => (cfg.bg_color, cfg.border_color),
+                        TextFieldState::Hovered => (cfg.hover_bg_color, cfg.hover_border_color),
+                        TextFieldState::Focused | TextFieldState::FocusedHovered => {
+                            (cfg.focused_bg_color, cfg.focused_border_color)
+                        }
+                        TextFieldState::Disabled => (
+                            Color::rgba(0.12, 0.12, 0.15, 0.5),
+                            Color::rgba(0.25, 0.25, 0.3, 0.5),
+                        ),
+                    };
+
+                    // Apply error state border if invalid
+                    let border_color = if !data_guard.is_valid && !data_guard.value.is_empty() {
+                        cfg.error_border_color
+                    } else {
+                        border_color
+                    };
+
+                    // Apply visual styling directly to the container (preserves fixed dimensions)
+                    // This is the key fix: use set_* methods instead of merge() to avoid
+                    // overwriting layout properties like width set on the outer Stateful
+                    container.set_bg(bg);
+                    container.set_border(cfg.border_width, border_color);
+                    container.set_rounded(cfg.corner_radius);
+
+                    // Build and set content as a child (not merge)
                     let content = TextInput::build_content(*visual, &data_guard, &cfg);
-                    container.merge(content);
+                    container.set_child(content);
                 },
             ));
 
@@ -1090,6 +1155,10 @@ impl TextInput {
     }
 
     /// Build the content div based on current visual state and data
+    ///
+    /// Note: Visual styling (bg, border, rounded) is now applied directly to the
+    /// container in the callback via set_* methods. This function only builds
+    /// the inner content structure (padding spacers, clip container, text, cursor).
     fn build_content(
         visual: TextFieldState,
         data: &TextInputData,
@@ -1111,25 +1180,6 @@ impl TextInput {
             Color::rgba(0.4, 0.4, 0.4, 1.0)
         } else {
             config.text_color
-        };
-
-        // Visual state-based styling
-        let (bg, border) = match visual {
-            TextFieldState::Idle => (config.bg_color, config.border_color),
-            TextFieldState::Hovered => (config.hover_bg_color, config.hover_border_color),
-            TextFieldState::Focused | TextFieldState::FocusedHovered => {
-                (config.focused_bg_color, config.focused_border_color)
-            }
-            TextFieldState::Disabled => (
-                Color::rgba(0.12, 0.12, 0.15, 0.5),
-                Color::rgba(0.25, 0.25, 0.3, 0.5),
-            ),
-        };
-
-        let border = if !data.is_valid && !data.value.is_empty() {
-            config.error_border_color
-        } else {
-            border
         };
 
         let is_focused = visual.is_focused();
@@ -1156,41 +1206,37 @@ impl TextInput {
             0.0
         };
 
-        // Calculate dimensions - use full width/height, border is drawn on top
-        let inner_height = config.height;
+        // Calculate dimensions - inner height accounts for border
+        let inner_height = config.height - config.border_width * 2.0;
 
-        // Build main container with background and proper border
+        // Build main content container - NO visual styling here (handled by callback)
+        // Always use w_full() so content fills the parent Stateful element.
+        // The parent's width is controlled by:
+        // - auto (default): stretches in flex containers via align-items: stretch
+        // - w_full(): explicitly fills parent width
+        // - w(px): user-specified fixed width
         let mut main_content = div()
-            .bg(bg)
-            .border(config.border_width, border)
-            .rounded(config.corner_radius)
+            .h_full()
+            .w_full()
             .relative()
             .flex_row()
             .items_center();
-
-        // When use_full_width is true, use w_full() to match parent width
-        // Otherwise use flex_grow() to fill available space without overriding fixed dimensions
-        if config.use_full_width {
-            main_content = main_content.w_full();
-        } else {
-            main_content = main_content.flex_grow();
-        }
 
         // Left padding spacer
         main_content =
             main_content.child(div().w(config.padding_x).h(inner_height).flex_shrink_0());
 
-        // Clip container - use flex_grow when full width, fixed width otherwise
-        let mut clip_container = div().h(inner_height).relative().overflow_clip();
-
-        if config.use_full_width {
-            // Use flex: 1 (grow: 1, shrink: 1, basis: 0) to fill remaining space between padding spacers
-            clip_container = clip_container.flex_1();
-        } else {
-            // Use fixed width calculated from config
-            let clip_width = config.width - config.padding_x * 2.0;
-            clip_container = clip_container.w(clip_width);
-        }
+        // Clip container - use flex_1 to fill available space
+        // This works for both full-width and fixed-width cases because:
+        // - The parent (main_content) already has the width constraint
+        // - flex_1 allows the clip container to fill remaining space after padding spacers
+        // - min_w(0) allows shrinking below content size (HTML input behavior)
+        let mut clip_container = div()
+            .h(inner_height)
+            .relative()
+            .overflow_clip()
+            .flex_1()
+            .min_w(0.0);
 
         // Text wrapper with absolute positioning
         // Using left() with negative scroll offset to scroll content
@@ -1349,6 +1395,11 @@ impl TextInput {
         self
     }
 
+    pub fn min_w(mut self, px: f32) -> Self {
+        self.inner = std::mem::take(&mut self.inner).min_w(px);
+        self
+    }
+
     pub fn h(mut self, px: f32) -> Self {
         {
             let mut cfg = self.config.lock().unwrap();
@@ -1442,10 +1493,11 @@ impl TextInput {
 }
 
 /// Create a text input widget
-/// By default, width inherits from parent (w_full). Use .w() to set explicit width.
+/// By default, uses the config's default width (200px).
+/// Use .w_full() to fill parent width, or .w() to set explicit width.
 pub fn text_input(data: &SharedTextInputData) -> TextInput {
-    let config = TextInputConfig::default();
-    TextInput::new(Arc::clone(data)).w_full().h(config.height)
+    // TextInput::new() sets default width from config (200px)
+    TextInput::new(Arc::clone(data))
 }
 
 impl ElementBuilder for TextInput {
