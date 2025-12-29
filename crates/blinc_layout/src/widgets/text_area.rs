@@ -1194,13 +1194,21 @@ impl TextArea {
         }
 
         // Create inner Stateful with text area event handlers
-        let inner = Self::create_inner_with_handlers(
+        let mut inner = Self::create_inner_with_handlers(
             Arc::clone(&shared_state),
             Arc::clone(state),
             Arc::clone(&config),
-        )
-        .w(default_width)
-        .h(default_height);
+        );
+
+        // Set default dimensions from config
+        // HTML-like flex behavior:
+        // 1. min-width: 0 - allows shrinking below content size in flex containers
+        // 2. flex-shrink: 1 (default) - allows shrinking when container is constrained
+        // 3. The height is always set explicitly (based on rows or config.height)
+        // Note: Don't use overflow_clip() here - the inner Scroll handles clipping.
+        // Using overflow_clip on the outer container with rounded corners causes
+        // the clip to interfere with border rendering at the corners.
+        inner = inner.w(default_width).h(default_height).min_w(0.0);
 
         // Register callback immediately so it's available for incremental diff
         // The diff system calls children_builders() before build(), so the callback
@@ -1982,6 +1990,11 @@ impl TextArea {
 
     pub fn h_fit(mut self) -> Self {
         self.inner = std::mem::take(&mut self.inner).h_fit();
+        self
+    }
+
+    pub fn min_w(mut self, px: f32) -> Self {
+        self.inner = std::mem::take(&mut self.inner).min_w(px);
         self
     }
 
