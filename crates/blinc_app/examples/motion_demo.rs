@@ -19,6 +19,7 @@ use blinc_app::windowed::{WindowedApp, WindowedContext};
 use blinc_core::Color;
 use blinc_layout::motion::{motion, StaggerConfig};
 use blinc_layout::widgets::scroll::Scroll;
+use blinc_theme::theme;
 use std::sync::{Arc, Mutex};
 
 /// Component for the pull-to-refresh demo.
@@ -56,10 +57,11 @@ fn main() -> Result<()> {
 }
 
 fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
+    let theme = ThemeState::get();
     div()
         .w(ctx.width)
         .h(ctx.height)
-        .bg(Color::rgba(0.08, 0.08, 0.12, 1.0))
+        .bg(theme.color(ColorToken::Background).with_alpha(0.8))
         .flex_col()
         .items_center()
         .gap(10.0)
