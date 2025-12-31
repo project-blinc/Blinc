@@ -11,11 +11,11 @@ use std::path::Path;
 /// Test output directory
 const OUTPUT_DIR: &str = "test_output/blinc_app";
 
-/// Create test app with MSAA enabled for smooth SVG edges
+/// Create test app for rendering tests
 /// Returns None if no GPU adapter is available (e.g., in CI without GPU)
 fn create_test_app() -> Option<BlincApp> {
     match BlincApp::with_config(BlincConfig {
-        sample_count: 4, // 4x MSAA for smooth edges
+        sample_count: 1, // SDF handles AA for most elements
         ..Default::default()
     }) {
         Ok(app) => Some(app),

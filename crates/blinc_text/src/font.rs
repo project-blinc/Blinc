@@ -5,6 +5,51 @@
 use crate::{Result, TextError};
 use std::sync::Arc;
 
+/// Font data that can be either owned or memory-mapped.
+///
+/// This avoids copying 180MB+ font files when using memory-mapped sources.
+/// Uses the same trait object type as fontdb for zero-copy compatibility.
+#[derive(Clone)]
+pub enum FontData {
+    /// Owned data (Vec wrapped in Arc for cheap cloning)
+    Owned(Arc<Vec<u8>>),
+    /// Shared data from fontdb (memory-mapped or binary) - avoids copy
+    Shared(Arc<dyn AsRef<[u8]> + Send + Sync>),
+}
+
+impl FontData {
+    /// Create from owned data
+    pub fn from_vec(data: Vec<u8>) -> Self {
+        FontData::Owned(Arc::new(data))
+    }
+
+    /// Create from shared data (memory-mapped or fontdb binary)
+    ///
+    /// This is the key optimization - accepts fontdb's Arc directly without copying.
+    pub fn from_mapped(data: Arc<dyn AsRef<[u8]> + Send + Sync>) -> Self {
+        FontData::Shared(data)
+    }
+
+    /// Get the raw bytes
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            FontData::Owned(data) => data.as_ref(),
+            FontData::Shared(data) => data.as_ref().as_ref(),
+        }
+    }
+}
+
+impl std::fmt::Debug for FontData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FontData::Owned(data) => write!(f, "FontData::Owned({} bytes)", data.len()),
+            FontData::Shared(data) => {
+                write!(f, "FontData::Shared({} bytes)", data.as_ref().as_ref().len())
+            }
+        }
+    }
+}
+
 /// Font weight variants
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum FontWeight {
@@ -101,8 +146,8 @@ impl FontMetrics {
 
 /// A parsed font face
 pub struct FontFace {
-    /// Raw font data (kept alive for ttf-parser)
-    data: Arc<Vec<u8>>,
+    /// Raw font data (kept alive for ttf-parser) - can be owned or memory-mapped
+    data: FontData,
     /// Face index within the font file (for TTC files)
     face_index: u32,
     /// Font metrics
@@ -128,10 +173,15 @@ impl FontFace {
     /// For TTC (TrueType Collection) files, different indices represent different
     /// font faces (e.g., Regular, Bold, Italic variants).
     pub fn from_data_with_index(data: Vec<u8>, face_index: u32) -> Result<Self> {
-        // Wrap data in Arc first so we can use it for parsing
-        let data = Arc::new(data);
+        let font_data = FontData::from_vec(data);
+        Self::from_font_data(font_data, face_index)
+    }
 
-        let face = ttf_parser::Face::parse(&data, face_index)
+    /// Load a font from FontData (can be owned or memory-mapped)
+    ///
+    /// This is the core loading function that avoids copying memory-mapped data.
+    pub fn from_font_data(data: FontData, face_index: u32) -> Result<Self> {
+        let face = ttf_parser::Face::parse(data.as_bytes(), face_index)
             .map_err(|e| TextError::FontParseError(format!("{:?}", e)))?;
 
         let metrics = FontMetrics {
@@ -216,7 +266,7 @@ impl FontFace {
 
     /// Get raw font data for shaping
     pub fn data(&self) -> &[u8] {
-        &self.data
+        self.data.as_bytes()
     }
 
     /// Get face index within the font file
@@ -227,7 +277,7 @@ impl FontFace {
     /// Create a ttf-parser Face for glyph operations
     /// Note: This is slightly inefficient as it re-parses; consider caching if needed
     pub(crate) fn as_ttf_face(&self) -> Option<ttf_parser::Face<'_>> {
-        ttf_parser::Face::parse(&self.data, self.face_index).ok()
+        ttf_parser::Face::parse(self.data.as_bytes(), self.face_index).ok()
     }
 
     /// Get glyph ID for a character

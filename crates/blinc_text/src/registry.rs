@@ -1,11 +1,20 @@
 //! Font registry for system font discovery and caching
 //!
 //! Uses fontdb to discover and load system fonts by name or generic category.
+//! Uses memory mapping to avoid loading large fonts (like 180MB Apple Color Emoji) fully into RAM.
+//!
+//! # Memory Optimization
+//!
+//! The registry uses lazy loading to minimize memory usage:
+//! - Only known essential system fonts are loaded at startup (by path)
+//! - Full system font scan is deferred until a font lookup fails
+//! - Emoji/symbol fonts are loaded lazily on first use
 
-use crate::font::FontFace;
+use crate::font::{FontData, FontFace};
 use crate::{Result, TextError};
 use fontdb::{Database, Family, Query, Source, Stretch, Style, Weight};
 use rustc_hash::FxHashMap;
+use std::path::Path;
 use std::sync::Arc;
 
 /// Generic font category for fallback
@@ -26,50 +35,114 @@ pub enum GenericFont {
     Symbol,
 }
 
+/// Known system font paths for each platform
+/// These are loaded directly without scanning all system fonts
+#[cfg(target_os = "macos")]
+const KNOWN_FONT_PATHS: &[&str] = &[
+    // System UI fonts
+    "/System/Library/Fonts/SFNS.ttf",                    // SF Pro (System)
+    "/System/Library/Fonts/SFNSMono.ttf",                // SF Mono
+    "/System/Library/Fonts/Helvetica.ttc",               // Helvetica
+    "/System/Library/Fonts/Times.ttc",                   // Times (Serif)
+    "/System/Library/Fonts/Menlo.ttc",                   // Menlo (Monospace with symbols)
+    "/System/Library/Fonts/Monaco.ttf",                  // Monaco (Monospace)
+    // Common user fonts
+    "/Library/Fonts/Arial.ttf",
+    "/Library/Fonts/Georgia.ttf",
+];
+
+#[cfg(target_os = "windows")]
+const KNOWN_FONT_PATHS: &[&str] = &[
+    "C:\\Windows\\Fonts\\segoeui.ttf",    // Segoe UI (System)
+    "C:\\Windows\\Fonts\\consola.ttf",    // Consolas (Monospace)
+    "C:\\Windows\\Fonts\\arial.ttf",      // Arial (Sans-serif)
+    "C:\\Windows\\Fonts\\times.ttf",      // Times New Roman (Serif)
+    "C:\\Windows\\Fonts\\cour.ttf",       // Courier New (Monospace)
+];
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+const KNOWN_FONT_PATHS: &[&str] = &[
+    // Linux common paths
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+    // Noto fonts
+    "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+    "/usr/share/fonts/truetype/noto/NotoMono-Regular.ttf",
+];
+
 /// Font registry that discovers and caches system fonts
 pub struct FontRegistry {
-    /// fontdb database containing all system fonts
+    /// fontdb database containing system fonts
     db: Database,
     /// Cached FontFace instances (Some = found, None = not found)
     faces: FxHashMap<String, Option<Arc<FontFace>>>,
+    /// Whether full system font scan has been performed
+    system_fonts_loaded: bool,
 }
 
 impl FontRegistry {
-    /// Create a new font registry and load system fonts
+    /// Create a new font registry with lazy loading
+    ///
+    /// Only loads known essential system fonts by path.
+    /// Full system font scan is deferred until needed.
     pub fn new() -> Self {
         let mut db = Database::new();
 
-        // Load all system fonts
-        db.load_system_fonts();
+        // Load only known essential fonts by path (fast, minimal memory)
+        let mut loaded_count = 0;
+        for path in KNOWN_FONT_PATHS {
+            if Path::new(path).exists() {
+                db.load_font_file(path).ok();
+                loaded_count += 1;
+            }
+        }
+        tracing::debug!("Loaded {} known system fonts", loaded_count);
 
-        let mut registry = Self {
+        Self {
             db,
             faces: FxHashMap::default(),
-        };
-
-        // Preload all generic font categories at startup
-        registry.preload_generic_fonts();
-
-        registry
+            system_fonts_loaded: false,
+        }
+        // Note: We don't preload generic fonts here anymore.
+        // They'll be loaded on first use. This avoids triggering a full
+        // system font scan at startup.
     }
 
-    /// Preload all generic font categories
+    /// Ensure all system fonts are loaded (lazy initialization)
+    ///
+    /// Called automatically when a font lookup fails.
+    /// This scans all system font directories which can be slow.
+    fn ensure_system_fonts_loaded(&mut self) {
+        if self.system_fonts_loaded {
+            return;
+        }
+
+        tracing::debug!("Loading all system fonts (lazy scan)...");
+        self.db.load_system_fonts();
+        self.system_fonts_loaded = true;
+        tracing::debug!("System fonts loaded: {} faces", self.db.faces().count());
+    }
+
+    /// Preload essential generic font categories at startup.
+    ///
+    /// Emoji and Symbol fonts are NOT preloaded - they're loaded lazily on first use.
+    /// This saves ~180MB of memory if emoji aren't used (Apple Color Emoji is huge).
     fn preload_generic_fonts(&mut self) {
+        // Only preload essential text fonts - NOT emoji/symbol
+        // Emoji font is 180MB+ on macOS, so lazy loading saves significant memory
         for generic in [
             GenericFont::System,
             GenericFont::SansSerif,
             GenericFont::Serif,
             GenericFont::Monospace,
-            GenericFont::Emoji,
-            GenericFont::Symbol,
+            // GenericFont::Emoji,  // Lazy loaded on first emoji use
+            // GenericFont::Symbol, // Lazy loaded on first symbol use
         ] {
             if let Err(e) = self.load_generic(generic) {
-                // Emoji/Symbol fonts may not be available on all systems, don't warn
-                if generic != GenericFont::Emoji && generic != GenericFont::Symbol {
-                    tracing::warn!("Failed to preload generic font {:?}: {:?}", generic, e);
-                } else {
-                    tracing::debug!("{:?} font not available: {:?}", generic, e);
-                }
+                tracing::warn!("Failed to preload generic font {:?}: {:?}", generic, e);
             }
         }
     }
@@ -78,6 +151,8 @@ impl FontRegistry {
     /// (call at startup for fonts your app uses)
     ///
     /// This discovers and loads all variants (bold, italic, etc.) of each font.
+    /// Note: This may trigger a full system font scan if the font isn't found
+    /// in the known fonts.
     pub fn preload_fonts(&mut self, names: &[&str]) {
         for name in names {
             if self.has_font(name) {
@@ -119,42 +194,32 @@ impl FontRegistry {
             });
         }
 
-        // Query fontdb for the font by family name with requested weight/style
-        let query = Query {
-            families: &[Family::Name(name)],
-            weight: Weight(weight),
-            style: if italic { Style::Italic } else { Style::Normal },
-            stretch: Stretch::Normal,
-        };
+        // Try to find the font (may need to load system fonts lazily)
+        let id = self.find_font_id(name, weight, italic);
 
-        let id = match self.db.query(&query) {
+        // If not found in known fonts, try loading all system fonts
+        let id = match id {
             Some(id) => id,
-            None => {
-                // Try with Oblique if Italic wasn't found
-                if italic {
-                    let oblique_query = Query {
-                        families: &[Family::Name(name)],
-                        weight: Weight(weight),
-                        style: Style::Oblique,
-                        stretch: Stretch::Normal,
-                    };
-                    match self.db.query(&oblique_query) {
-                        Some(id) => id,
-                        None => {
-                            self.faces.insert(cache_key.clone(), None);
-                            return Err(TextError::FontLoadError(format!(
-                                "Font '{}' (weight={}, italic={}) not found",
-                                name, weight, italic
-                            )));
-                        }
+            None if !self.system_fonts_loaded => {
+                // Lazy load all system fonts and retry
+                self.ensure_system_fonts_loaded();
+                match self.find_font_id(name, weight, italic) {
+                    Some(id) => id,
+                    None => {
+                        self.faces.insert(cache_key.clone(), None);
+                        return Err(TextError::FontLoadError(format!(
+                            "Font '{}' (weight={}, italic={}) not found",
+                            name, weight, italic
+                        )));
                     }
-                } else {
-                    self.faces.insert(cache_key.clone(), None);
-                    return Err(TextError::FontLoadError(format!(
-                        "Font '{}' (weight={}, italic={}) not found",
-                        name, weight, italic
-                    )));
                 }
+            }
+            None => {
+                self.faces.insert(cache_key.clone(), None);
+                return Err(TextError::FontLoadError(format!(
+                    "Font '{}' (weight={}, italic={}) not found",
+                    name, weight, italic
+                )));
             }
         };
 
@@ -166,6 +231,65 @@ impl FontRegistry {
         self.faces.insert(cache_key, Some(Arc::clone(&face)));
 
         Ok(face)
+    }
+
+    /// Find a font ID by name, weight, and italic style
+    fn find_font_id(&self, name: &str, weight: u16, italic: bool) -> Option<fontdb::ID> {
+        // Query fontdb for the font by family name with requested weight/style
+        let query = Query {
+            families: &[Family::Name(name)],
+            weight: Weight(weight),
+            style: if italic { Style::Italic } else { Style::Normal },
+            stretch: Stretch::Normal,
+        };
+
+        if let Some(id) = self.db.query(&query) {
+            return Some(id);
+        }
+
+        // Try with Oblique if Italic wasn't found
+        if italic {
+            let oblique_query = Query {
+                families: &[Family::Name(name)],
+                weight: Weight(weight),
+                style: Style::Oblique,
+                stretch: Stretch::Normal,
+            };
+            if let Some(id) = self.db.query(&oblique_query) {
+                return Some(id);
+            }
+        }
+
+        None
+    }
+
+    /// Find a generic font ID by family, weight, and italic style
+    fn find_generic_font_id(&self, family: Family, weight: u16, italic: bool) -> Option<fontdb::ID> {
+        let query = Query {
+            families: &[family],
+            weight: Weight(weight),
+            style: if italic { Style::Italic } else { Style::Normal },
+            stretch: Stretch::Normal,
+        };
+
+        if let Some(id) = self.db.query(&query) {
+            return Some(id);
+        }
+
+        // Try with Oblique if Italic wasn't found
+        if italic {
+            let oblique_query = Query {
+                families: &[family],
+                weight: Weight(weight),
+                style: Style::Oblique,
+                stretch: Stretch::Normal,
+            };
+            if let Some(id) = self.db.query(&oblique_query) {
+                return Some(id);
+            }
+        }
+
+        None
     }
 
     /// Load the system emoji font
@@ -284,24 +408,54 @@ impl FontRegistry {
     }
 
     /// Load a font face by fontdb ID
-    fn load_face_by_id(&self, id: fontdb::ID) -> Result<FontFace> {
-        // Get the face source info
+    ///
+    /// Uses memory mapping when available to avoid loading large fonts into RAM.
+    fn load_face_by_id(&mut self, id: fontdb::ID) -> Result<FontFace> {
+        // Try to get shared face data first (memory-mapped if from file)
+        // This keeps the mmap alive via Arc, avoiding a copy of the 180MB emoji font
+        //
+        // SAFETY: We accept the risk of file changes on disk since fonts rarely change
+        // and the benefit of not copying 180MB outweighs the risk
+        //
+        // Note: make_shared_face_data is only available when fontdb has "fs" and "memmap" features,
+        // which are enabled by default. If they're disabled, this will fail to compile.
+        if let Some((shared_data, face_index)) =
+            unsafe { self.db.make_shared_face_data(id) }
+        {
+            let font_data = FontData::from_mapped(shared_data);
+            return FontFace::from_font_data(font_data, face_index);
+        }
+
+        // Fallback: Get the face source info and load manually
+        // This path is taken for Binary sources that don't come from files
         let (src, face_index) = self
             .db
             .face_source(id)
             .ok_or_else(|| TextError::FontLoadError("Font source not found".to_string()))?;
 
-        // Load the font data
-        let data = match src {
-            Source::File(path) => std::fs::read(&path).map_err(|e| {
-                TextError::FontLoadError(format!("Failed to read font file {:?}: {}", path, e))
-            })?,
-            Source::Binary(arc) => arc.as_ref().as_ref().to_vec(),
-            Source::SharedFile(_path, data) => data.as_ref().as_ref().to_vec(),
+        // Load the font data - use FontData to avoid copying memory-mapped data
+        let font_data = match src {
+            Source::File(path) => {
+                // File source - shouldn't reach here if make_shared_face_data worked
+                tracing::warn!("Loading font via fs::read (mmap failed): {:?}", path);
+                let data = std::fs::read(&path).map_err(|e| {
+                    TextError::FontLoadError(format!("Failed to read font file {:?}: {}", path, e))
+                })?;
+                FontData::from_vec(data)
+            }
+            Source::Binary(arc) => {
+                // Binary data - wrap the Arc directly without copying
+                FontData::from_mapped(arc)
+            }
+            Source::SharedFile(_path, data) => {
+                // Memory-mapped file - use directly without copying!
+                // This is the key optimization for large fonts like Apple Color Emoji
+                FontData::from_mapped(data)
+            }
         };
 
-        // Create FontFace with the correct index
-        FontFace::from_data_with_index(data, face_index)
+        // Create FontFace with the memory-mapped or owned data
+        FontFace::from_font_data(font_data, face_index)
     }
 
     /// Load a generic font category
@@ -356,42 +510,32 @@ impl FontRegistry {
             GenericFont::Symbol => unreachable!(), // Handled above
         };
 
-        // Query fontdb with requested weight and style
-        let query = Query {
-            families: &[family],
-            weight: Weight(weight),
-            style: if italic { Style::Italic } else { Style::Normal },
-            stretch: Stretch::Normal,
-        };
+        // Try to find the font (may need to load system fonts lazily)
+        let id = self.find_generic_font_id(family, weight, italic);
 
-        let id = match self.db.query(&query) {
+        // If not found in known fonts, try loading all system fonts
+        let id = match id {
             Some(id) => id,
-            None => {
-                // Try with Oblique if Italic wasn't found
-                if italic {
-                    let oblique_query = Query {
-                        families: &[family],
-                        weight: Weight(weight),
-                        style: Style::Oblique,
-                        stretch: Stretch::Normal,
-                    };
-                    match self.db.query(&oblique_query) {
-                        Some(id) => id,
-                        None => {
-                            self.faces.insert(cache_key.clone(), None);
-                            return Err(TextError::FontLoadError(format!(
-                                "Generic font {:?} (weight={}, italic={}) not found",
-                                generic, weight, italic
-                            )));
-                        }
+            None if !self.system_fonts_loaded => {
+                // Lazy load all system fonts and retry
+                self.ensure_system_fonts_loaded();
+                match self.find_generic_font_id(family, weight, italic) {
+                    Some(id) => id,
+                    None => {
+                        self.faces.insert(cache_key.clone(), None);
+                        return Err(TextError::FontLoadError(format!(
+                            "Generic font {:?} (weight={}, italic={}) not found",
+                            generic, weight, italic
+                        )));
                     }
-                } else {
-                    self.faces.insert(cache_key.clone(), None);
-                    return Err(TextError::FontLoadError(format!(
-                        "Generic font {:?} (weight={}, italic={}) not found",
-                        generic, weight, italic
-                    )));
                 }
+            }
+            None => {
+                self.faces.insert(cache_key.clone(), None);
+                return Err(TextError::FontLoadError(format!(
+                    "Generic font {:?} (weight={}, italic={}) not found",
+                    generic, weight, italic
+                )));
             }
         };
 
@@ -543,7 +687,12 @@ impl FontRegistry {
     }
 
     /// List available font families on the system
-    pub fn list_families(&self) -> Vec<String> {
+    ///
+    /// Note: This triggers a full system font scan if not already done.
+    pub fn list_families(&mut self) -> Vec<String> {
+        // Ensure all system fonts are loaded for a complete list
+        self.ensure_system_fonts_loaded();
+
         let mut families: Vec<String> = self
             .db
             .faces()
@@ -556,14 +705,29 @@ impl FontRegistry {
     }
 
     /// Check if a font is available
-    pub fn has_font(&self, name: &str) -> bool {
+    ///
+    /// Note: This may trigger a full system font scan if the font
+    /// isn't found in the initially loaded fonts.
+    pub fn has_font(&mut self, name: &str) -> bool {
         let query = Query {
             families: &[Family::Name(name)],
             weight: Weight::NORMAL,
             style: Style::Normal,
             stretch: Stretch::Normal,
         };
-        self.db.query(&query).is_some()
+
+        // Check in already loaded fonts first
+        if self.db.query(&query).is_some() {
+            return true;
+        }
+
+        // If not found and we haven't loaded all system fonts, try that
+        if !self.system_fonts_loaded {
+            self.ensure_system_fonts_loaded();
+            return self.db.query(&query).is_some();
+        }
+
+        false
     }
 
     /// Preload all variants (weights and styles) of a font family
@@ -642,7 +806,7 @@ mod tests {
 
     #[test]
     fn test_list_families() {
-        let registry = FontRegistry::new();
+        let mut registry = FontRegistry::new();
         let families = registry.list_families();
         // May be empty in minimal CI environments without fonts
         println!("Found {} font families", families.len());

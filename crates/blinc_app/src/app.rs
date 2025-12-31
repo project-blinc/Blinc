@@ -29,7 +29,7 @@ impl Default for BlincConfig {
             max_primitives: 10_000,
             max_glass_primitives: 1_000,
             max_glyphs: 50_000,
-            sample_count: 4,
+            sample_count: 1, // Disabled MSAA - SDF rendering handles AA for most elements
         }
     }
 }

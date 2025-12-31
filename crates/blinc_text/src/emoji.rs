@@ -216,10 +216,13 @@ impl EmojiRenderer {
         }
     }
 
-    /// Create a new emoji renderer
+    /// Create a new emoji renderer.
+    ///
+    /// Uses the global shared font registry to minimize memory usage.
+    /// Apple Color Emoji alone is 180MB - sharing prevents loading it multiple times.
     pub fn new() -> Self {
         Self {
-            font_registry: Arc::new(Mutex::new(FontRegistry::new())),
+            font_registry: crate::global_font_registry(),
             rasterizer: GlyphRasterizer::new(),
             shaper: TextShaper::new(),
         }

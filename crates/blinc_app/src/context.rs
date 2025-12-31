@@ -13,10 +13,14 @@ use blinc_layout::prelude::*;
 use blinc_layout::render_state::Overlay;
 use blinc_layout::renderer::ElementType;
 use blinc_svg::SvgDocument;
-use std::collections::HashMap;
+use lru::LruCache;
+use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 
 use crate::error::Result;
+
+/// Maximum number of images to keep in cache (prevents unbounded memory growth)
+const IMAGE_CACHE_CAPACITY: usize = 128;
 
 /// Internal render context that manages GPU resources and rendering
 pub struct RenderContext {
@@ -30,8 +34,10 @@ pub struct RenderContext {
     backdrop_texture: Option<CachedTexture>,
     // Cached MSAA texture for anti-aliased rendering
     msaa_texture: Option<CachedTexture>,
-    // Cached images by source
-    image_cache: HashMap<String, GpuImage>,
+    // LRU cache for images (prevents unbounded memory growth)
+    image_cache: LruCache<String, GpuImage>,
+    // Scratch buffers for per-frame allocations (reused to avoid allocations)
+    scratch_glyphs: Vec<GpuGlyph>,
 }
 
 struct CachedTexture {
@@ -119,7 +125,8 @@ impl RenderContext {
             sample_count,
             backdrop_texture: None,
             msaa_texture: None,
-            image_cache: HashMap::new(),
+            image_cache: LruCache::new(NonZeroUsize::new(IMAGE_CACHE_CAPACITY).unwrap()),
+            scratch_glyphs: Vec::with_capacity(1024), // Pre-allocate for typical text
         }
     }
 
@@ -456,7 +463,8 @@ impl RenderContext {
     /// Pre-load images into cache (call before rendering)
     fn preload_images(&mut self, images: &[ImageElement]) {
         for image in images {
-            if self.image_cache.contains_key(&image.source) {
+            // LruCache::contains also promotes to most-recently-used
+            if self.image_cache.contains(&image.source) {
                 continue;
             }
 
@@ -478,7 +486,8 @@ impl RenderContext {
                 &image.source,
             );
 
-            self.image_cache.insert(image.source.clone(), gpu_image);
+            // LruCache::put evicts oldest entry if at capacity
+            self.image_cache.put(image.source.clone(), gpu_image);
         }
     }
 
@@ -1099,11 +1108,18 @@ impl RenderContext {
             self.render_images_ref(target, &bg_images);
             self.render_images_ref(target, &fg_images);
 
-            // Collect all glyphs for glass path (TODO: implement interleaved glass rendering)
-            let all_glyphs: Vec<_> = glyphs_by_layer.values().flatten().cloned().collect();
-            if !all_glyphs.is_empty() {
-                self.render_text(target, &all_glyphs);
+            // Collect all glyphs for glass path using scratch buffer to avoid allocation
+            // (TODO: implement interleaved glass rendering)
+            // Take ownership temporarily to avoid borrow conflict with self.render_text
+            let mut scratch = std::mem::take(&mut self.scratch_glyphs);
+            scratch.clear();
+            for glyphs in glyphs_by_layer.values() {
+                scratch.extend_from_slice(glyphs);
             }
+            if !scratch.is_empty() {
+                self.render_text(target, &scratch);
+            }
+            self.scratch_glyphs = scratch; // Restore for next frame
 
             // Render text decorations for glass path (all layers)
             let decorations_by_layer = generate_text_decoration_primitives_by_layer(&texts);

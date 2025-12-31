@@ -293,7 +293,10 @@ impl GpuRenderer {
                     label: Some("Blinc GPU Device"),
                     required_features: wgpu::Features::empty(),
                     required_limits: wgpu::Limits::default(),
-                    memory_hints: wgpu::MemoryHints::Performance,
+                    // MemoryUsage hint tells the driver to prefer lower memory over performance.
+                    // This helps reduce RSS on integrated GPUs (Apple Silicon) where GPU memory
+                    // is shared with CPU and counts against process memory.
+                    memory_hints: wgpu::MemoryHints::MemoryUsage,
                 },
                 None,
             )
@@ -355,7 +358,10 @@ impl GpuRenderer {
                     label: Some("Blinc GPU Device"),
                     required_features: wgpu::Features::empty(),
                     required_limits: wgpu::Limits::default(),
-                    memory_hints: wgpu::MemoryHints::Performance,
+                    // MemoryUsage hint tells the driver to prefer lower memory over performance.
+                    // This helps reduce RSS on integrated GPUs (Apple Silicon) where GPU memory
+                    // is shared with CPU and counts against process memory.
+                    memory_hints: wgpu::MemoryHints::MemoryUsage,
                 },
                 None,
             )

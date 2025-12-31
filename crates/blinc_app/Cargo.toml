@@ -36,6 +36,9 @@ anyhow.workspace = true
 # Logging
 tracing.workspace = true
 
+# Data structures
+lru = { workspace = true }
+
 [target.'cfg(not(target_os = "android"))'.dependencies]
 blinc_platform_desktop = { path = "../../extensions/blinc_platform_desktop", optional = true }
 

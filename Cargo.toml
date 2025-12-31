@@ -79,6 +79,7 @@ slotmap = "1.0"
 smallvec = "1.11"
 rustc-hash = "2.0"
 indexmap = "2.7"
+lru = "0.12"
 
 # Regex for syntax highlighting
 regex = "1.10"

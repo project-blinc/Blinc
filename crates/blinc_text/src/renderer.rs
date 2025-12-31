@@ -14,8 +14,15 @@ use crate::rasterizer::GlyphRasterizer;
 use crate::registry::{FontRegistry, GenericFont};
 use crate::shaper::TextShaper;
 use crate::{Result, TextError};
-use rustc_hash::FxHashMap;
+use lru::LruCache;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
+
+/// Maximum number of glyphs to keep in the grayscale glyph cache
+const GLYPH_CACHE_CAPACITY: usize = 2048;
+
+/// Maximum number of color glyphs (emoji) to keep in cache
+const COLOR_GLYPH_CACHE_CAPACITY: usize = 512;
 
 /// A GPU glyph instance for rendering
 #[derive(Debug, Clone, Copy)]
@@ -71,25 +78,28 @@ pub struct TextRenderer {
     rasterizer: GlyphRasterizer,
     /// Text layout engine
     layout_engine: TextLayoutEngine,
-    /// Cache key: (font_id, glyph_id, quantized_size) -> atlas info
+    /// LRU cache for grayscale glyphs: (font_id, glyph_id, quantized_size) -> atlas info
     /// font_id is hash of font name or 0 for default
-    glyph_cache: FxHashMap<(u32, u16, u16), GlyphInfo>,
-    /// Cache for color glyphs (emoji) - same key format
-    color_glyph_cache: FxHashMap<(u32, u16, u16), GlyphInfo>,
+    glyph_cache: LruCache<(u32, u16, u16), GlyphInfo>,
+    /// LRU cache for color glyphs (emoji) - same key format
+    color_glyph_cache: LruCache<(u32, u16, u16), GlyphInfo>,
 }
 
 impl TextRenderer {
-    /// Create a new text renderer with default atlas size
+    /// Create a new text renderer with default atlas size.
+    ///
+    /// Uses the global shared font registry to minimize memory usage.
+    /// Apple Color Emoji alone is 180MB - sharing prevents loading it multiple times.
     pub fn new() -> Self {
         Self {
             default_font: None,
-            font_registry: Arc::new(std::sync::Mutex::new(FontRegistry::new())),
+            font_registry: crate::global_font_registry(),
             atlas: GlyphAtlas::default(),
             color_atlas: ColorGlyphAtlas::default(),
             rasterizer: GlyphRasterizer::new(),
             layout_engine: TextLayoutEngine::new(),
-            glyph_cache: FxHashMap::default(),
-            color_glyph_cache: FxHashMap::default(),
+            glyph_cache: LruCache::new(NonZeroUsize::new(GLYPH_CACHE_CAPACITY).unwrap()),
+            color_glyph_cache: LruCache::new(NonZeroUsize::new(COLOR_GLYPH_CACHE_CAPACITY).unwrap()),
         }
     }
 
@@ -105,22 +115,24 @@ impl TextRenderer {
             color_atlas: ColorGlyphAtlas::default(),
             rasterizer: GlyphRasterizer::new(),
             layout_engine: TextLayoutEngine::new(),
-            glyph_cache: FxHashMap::default(),
-            color_glyph_cache: FxHashMap::default(),
+            glyph_cache: LruCache::new(NonZeroUsize::new(GLYPH_CACHE_CAPACITY).unwrap()),
+            color_glyph_cache: LruCache::new(NonZeroUsize::new(COLOR_GLYPH_CACHE_CAPACITY).unwrap()),
         }
     }
 
-    /// Create with custom atlas size
+    /// Create with custom atlas size.
+    ///
+    /// Uses the global shared font registry to minimize memory usage.
     pub fn with_atlas_size(width: u32, height: u32) -> Self {
         Self {
             default_font: None,
-            font_registry: Arc::new(std::sync::Mutex::new(FontRegistry::new())),
+            font_registry: crate::global_font_registry(),
             atlas: GlyphAtlas::new(width, height),
             color_atlas: ColorGlyphAtlas::default(),
             rasterizer: GlyphRasterizer::new(),
             layout_engine: TextLayoutEngine::new(),
-            glyph_cache: FxHashMap::default(),
-            color_glyph_cache: FxHashMap::default(),
+            glyph_cache: LruCache::new(NonZeroUsize::new(GLYPH_CACHE_CAPACITY).unwrap()),
+            color_glyph_cache: LruCache::new(NonZeroUsize::new(COLOR_GLYPH_CACHE_CAPACITY).unwrap()),
         }
     }
 
@@ -399,8 +411,10 @@ impl TextRenderer {
                         if fallback_glyph_id != 0 {
                             // Shape just this character with the fallback font to get correct metrics
                             let shaper = TextShaper::new();
-                            let char_str: String = positioned.codepoint.to_string();
-                            let shaped = shaper.shape(&char_str, fallback_font, font_size);
+                            // Use stack-allocated buffer instead of heap String
+                            let mut char_buf = [0u8; 4];
+                            let char_str = positioned.codepoint.encode_utf8(&mut char_buf);
+                            let shaped = shaper.shape(char_str, fallback_font, font_size);
 
                             if let Some(shaped_glyph) = shaped.glyphs.first() {
                                 // Create a new positioned glyph with fallback font metrics
@@ -751,7 +765,7 @@ impl TextRenderer {
         let size_key = (font_size * 2.0).round() as u16;
         let cache_key = (font_id, glyph_id, size_key);
 
-        // Check cache first
+        // Check cache first (LruCache::get promotes to most-recently-used)
         if let Some(info) = self.glyph_cache.get(&cache_key) {
             return Ok(*info);
         }
@@ -773,7 +787,8 @@ impl TextRenderer {
                 advance: rasterized.advance,
                 font_size,
             };
-            self.glyph_cache.insert(cache_key, info);
+            // LruCache::put evicts oldest entry if at capacity
+            self.glyph_cache.put(cache_key, info);
             return Ok(info);
         }
 
@@ -790,7 +805,7 @@ impl TextRenderer {
             &rasterized.bitmap,
         )?;
 
-        self.glyph_cache.insert(cache_key, info);
+        self.glyph_cache.put(cache_key, info);
         Ok(info)
     }
 
@@ -806,7 +821,7 @@ impl TextRenderer {
         let size_key = (font_size * 2.0).round() as u16;
         let cache_key = (font_id, glyph_id, size_key);
 
-        // Check color cache first
+        // Check color cache first (LruCache::get promotes to most-recently-used)
         if let Some(info) = self.color_glyph_cache.get(&cache_key) {
             return Ok(*info);
         }
@@ -828,7 +843,8 @@ impl TextRenderer {
                 advance: rasterized.advance,
                 font_size,
             };
-            self.color_glyph_cache.insert(cache_key, info);
+            // LruCache::put evicts oldest entry if at capacity
+            self.color_glyph_cache.put(cache_key, info);
             return Ok(info);
         }
 
@@ -845,7 +861,7 @@ impl TextRenderer {
             &rasterized.bitmap,
         )?;
 
-        self.color_glyph_cache.insert(cache_key, info);
+        self.color_glyph_cache.put(cache_key, info);
         Ok(info)
     }
 

@@ -32,11 +32,14 @@ pub struct FontTextMeasurer {
 }
 
 impl FontTextMeasurer {
-    /// Create a new font text measurer with its own font registry
+    /// Create a new font text measurer.
+    ///
+    /// Uses the global shared font registry to minimize memory usage.
+    /// Apple Color Emoji alone is 180MB - sharing prevents loading it multiple times.
     pub fn new() -> Self {
         let mut measurer = Self {
             font: Arc::new(Mutex::new(None)),
-            font_registry: Arc::new(Mutex::new(FontRegistry::new())),
+            font_registry: blinc_text::global_font_registry(),
             layout_engine: Mutex::new(TextLayoutEngine::new()),
         };
         measurer.load_system_font();

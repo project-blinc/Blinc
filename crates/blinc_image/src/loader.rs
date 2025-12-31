@@ -113,10 +113,12 @@ impl ImageData {
     /// Load an emoji character as an image
     ///
     /// Uses the system emoji font to render the emoji as an RGBA image.
+    /// Uses the global shared font registry to avoid loading the 180MB emoji font multiple times.
     #[cfg(feature = "emoji")]
     fn load_emoji(emoji: &str, size: f32) -> Result<Self> {
         use blinc_text::EmojiRenderer;
 
+        // EmojiRenderer::new() uses the global shared font registry
         let mut renderer = EmojiRenderer::new();
         let sprite = renderer
             .render_string(emoji, size)
