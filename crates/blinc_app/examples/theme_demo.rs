@@ -92,7 +92,7 @@ fn header(ctx: &WindowedContext) -> impl ElementBuilder {
         .child(
             div()
                 .flex_col()
-                .gap(4.0)
+                .gap(2.0)
                 .child(
                     text("Blinc Theme System")
                         .size(theme.typography().text_2xl)
@@ -121,6 +121,8 @@ fn theme_toggle_button(ctx: &WindowedContext, label: &str) -> impl ElementBuilde
         .py(theme.spacing().space_1)
         .rounded(radius)
         .bg(theme.color(ColorToken::Primary))
+        .items_center()
+        .border(1.0, theme.color(ColorToken::Border))
         .on_state(|state, container| {
             // Fetch colors inside the callback so they update with theme changes
             let theme = ThemeState::get();

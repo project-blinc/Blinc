@@ -124,11 +124,8 @@ fn build_direction_toggle(ctx: &WindowedContext, _current: ScrollDirection) -> i
                     // Merge changes into the div
                     container.merge(
                         div()
-                            .w_fit()
-                            .items_center()
-                            .justify_center()
                             .bg(bg)
-                            .child(span(label).weight(FontWeight::SemiBold).color(Color::WHITE)),
+                            .child(text(label).weight(FontWeight::SemiBold).color(Color::WHITE).no_wrap()),
                     );
                 })
                 .on_click(move |_| {

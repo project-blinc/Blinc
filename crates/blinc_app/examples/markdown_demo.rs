@@ -7,7 +7,7 @@
 //! Run with: cargo run -p blinc_app --example markdown_demo --features windowed
 
 use blinc_app::prelude::*;
-use blinc_app::windowed::{WindowedApp, WindowedContext, State};
+use blinc_app::windowed::{State, WindowedApp, WindowedContext};
 use blinc_core::{Color, SignalId};
 use blinc_layout::markdown::markdown_light;
 use std::sync::{Arc, Mutex};
@@ -140,14 +140,15 @@ fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder {
 
 fn build_header() -> impl ElementBuilder {
     div()
-        .flex_row()
+        .flex_col()
         .w_full()
-        .justify_between()
+        .justify_center()
         .items_center()
+        .gap(4.0)
         .child(
             div()
-                .flex_row()
-                .gap(12.0)
+                .flex_col()
+                .gap(2.0)
                 .items_center()
                 .child(
                     h1("Markdown Editor")
@@ -155,7 +156,7 @@ fn build_header() -> impl ElementBuilder {
                         .weight(FontWeight::Bold),
                 )
                 .child(
-                    span("Live Preview")
+                    span("(Live Preview)")
                         .size(14.0)
                         .color(Color::rgba(0.5, 0.8, 1.0, 0.8)),
                 ),
@@ -182,13 +183,13 @@ fn build_editor_panel(
         .w(width)
         .h(height)
         .flex_col()
-        .gap(8.0)
+        .gap(2.0)
         // Panel header
         .child(
             div()
                 .flex_row()
                 .items_center()
-                .gap(8.0)
+                .gap(2.0)
                 .child(
                     span("Source")
                         .size(14.0)
@@ -205,7 +206,7 @@ fn build_editor_panel(
         .child(
             div()
                 .w_full()
-                .h(height-200.0)
+                .h(height - 200.0)
                 .bg(theme.color(ColorToken::SurfaceElevated))
                 .rounded(8.0)
                 .border(1.0, Color::rgba(0.3, 0.3, 0.35, 1.0))
@@ -232,13 +233,13 @@ fn build_preview_panel(
         .w(width)
         .h(height)
         .flex_col()
-        .gap(8.0)
+        .gap(2.0)
         // Panel header
         .child(
             div()
                 .flex_row()
                 .items_center()
-                .gap(8.0)
+                .gap(2.0)
                 .child(
                     span("Preview")
                         .size(14.0)
@@ -262,20 +263,28 @@ fn build_preview_panel(
                 .border(1.0, Color::rgba(0.3, 0.3, 0.35, 1.0))
                 .overflow_clip()
                 .child(
-                    scroll().w_full().h_full().direction(ScrollDirection::Vertical).child(
-                        div().h_fit().w_full().justify_center().p(20.0).child(
-                            stateful(preview_state)
-                                .deps(&[change_signal_id])
-                                .on_state(move |_state, container| {
-                                    // Get the state value inside the reactive callback
-                                    let text_state = text_state_handle.get();
-                                    let markdown_content =
-                                        text_state.lock().map(|s| s.value()).unwrap_or_default();
-                                    *container = std::mem::take(container)
-                                        .child(markdown_light(&markdown_content));
-                                }),
+                    scroll()
+                        .w_full()
+                        .h_full()
+                        .direction(ScrollDirection::Vertical)
+                        .child(
+                            div().h_fit().w_full().justify_center().p(4.0).child(
+                                stateful(preview_state)
+                                    .w_full()
+                                    .flex_grow()
+                                    .deps(&[change_signal_id])
+                                    .on_state(move |_state, container| {
+                                        // Get the state value inside the reactive callback
+                                        let text_state = text_state_handle.get();
+                                        let markdown_content = text_state
+                                            .lock()
+                                            .map(|s| s.value())
+                                            .unwrap_or_default();
+                                        *container = std::mem::take(container)
+                                            .child(markdown_light(&markdown_content));
+                                    }),
+                            ),
                         ),
-                    ),
                 )
         })
 }

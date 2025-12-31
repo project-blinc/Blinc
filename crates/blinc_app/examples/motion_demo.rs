@@ -362,12 +362,13 @@ fn pull_to_refresh_demo(ctx: &WindowedContext) -> Div {
 fn list_item(label: &str) -> Div {
     div()
         .w(160.0)
-        .h(24.0)
+        .h_fit()
+        .p(4.0)
         .bg(Color::rgba(0.5, 0.8, 0.6, 1.0))
         .rounded(4.0)
         .items_center()
         .justify_center()
-        .child(text(label).text_center().size(11.0).color(Color::WHITE))
+        .child(text(label).size(11.0).color(Color::WHITE).no_wrap())
 }
 
 /// Showcase the motion() API

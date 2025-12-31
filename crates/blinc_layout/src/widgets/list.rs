@@ -415,6 +415,12 @@ impl ListItem {
         self
     }
 
+    /// Add a boxed child element (for dynamic element types)
+    pub fn child_box(mut self, child: Box<dyn crate::div::ElementBuilder>) -> Self {
+        self.content = self.content.child_box(child);
+        self
+    }
+
     /// Set marker and index (called by parent list) - uses default config
     fn with_marker(self, marker: ListMarker, index: Option<usize>) -> Self {
         self.with_marker_and_config(marker, index, &ListConfig::default())
@@ -536,6 +542,12 @@ impl TaskListItem {
     /// Content is added after the checkbox in a flex row layout.
     pub fn child(mut self, child: impl ElementBuilder + 'static) -> Self {
         self.inner = self.inner.child(child);
+        self
+    }
+
+    /// Add a boxed child element (for dynamic element types)
+    pub fn child_box(mut self, child: Box<dyn crate::div::ElementBuilder>) -> Self {
+        self.inner = self.inner.child_box(child);
         self
     }
 

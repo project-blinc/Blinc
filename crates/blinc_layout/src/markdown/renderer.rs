@@ -5,7 +5,7 @@ use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, T
 use crate::div::{div, Div, ElementBuilder};
 use crate::image::img;
 use crate::text::text;
-use crate::typography::{h1, h2, h3, h4, h5, h6, inline_code, p};
+use crate::typography::{h1, h2, h3, h4, h5, h6};
 use crate::widgets::{
     code, li, ol_start_with_config, ol_with_config, striped_tr, table, task_item,
     task_item_with_config, tbody, td, th, thead, tr, ul_with_config, ListConfig, ListItem,
@@ -13,6 +13,7 @@ use crate::widgets::{
 };
 
 use super::config::MarkdownConfig;
+
 
 /// Markdown renderer that converts markdown text to blinc layout elements
 pub struct MarkdownRenderer {
@@ -124,6 +125,8 @@ struct RenderState<'a> {
     inline_style: InlineStyle,
     /// Completed styled segments for the current paragraph
     styled_segments: Vec<StyledSegment>,
+    /// Buffer of inline elements (for mixed text + inline_code)
+    inline_elements: Vec<Box<dyn ElementBuilder>>,
     /// Current code block language
     code_language: Option<String>,
     /// Inside a code block
@@ -164,6 +167,7 @@ impl<'a> RenderState<'a> {
             inline_text: String::new(),
             inline_style: InlineStyle::default(),
             styled_segments: Vec::new(),
+            inline_elements: Vec::new(),
             code_language: None,
             in_code_block: false,
             code_content: String::new(),
@@ -356,8 +360,8 @@ impl<'a> RenderState<'a> {
                 _ => {}
             },
             TagEnd::Item => {
-                // Flush any remaining text
-                let text_content = std::mem::take(&mut self.inline_text);
+                // Build inline content from accumulated elements
+                let content = self.build_inline_content();
 
                 // Create list config for placeholder lists
                 let list_config = ListConfig {
@@ -369,8 +373,9 @@ impl<'a> RenderState<'a> {
                 };
 
                 if let Some(StackItem::ListItem(item)) = self.stack.pop() {
-                    let item = if !text_content.is_empty() {
-                        item.child(p(&text_content).size(self.config.body_size).color(self.config.text_color))
+                    // Add content to item
+                    let item = if let Some(content) = content {
+                        item.child_box(Box::new(content))
                     } else {
                         item
                     };
@@ -392,8 +397,9 @@ impl<'a> RenderState<'a> {
                         _ => {}
                     }
                 } else if let Some(StackItem::TaskItem(item)) = self.stack.pop() {
-                    let item = if !text_content.is_empty() {
-                        item.child(p(&text_content).size(self.config.body_size).color(self.config.text_color))
+                    // Add content to task item
+                    let item = if let Some(content) = content {
+                        item.child_box(Box::new(content))
                     } else {
                         item
                     };
@@ -499,23 +505,34 @@ impl<'a> RenderState<'a> {
     }
 
     fn handle_inline_code(&mut self, code_text: &str) {
-        // Flush any accumulated text first
-        self.flush_inline_text();
+        // Flush any accumulated styled segments to elements first
+        self.flush_segments_to_elements();
 
-        // Add inline code as a separate element
-        let code_elem = inline_code(code_text);
+        // Build inline code manually with matching size to body text for proper alignment
+        // We need to set size BEFORE no_wrap() to ensure correct measurement
+        let code_elem = text(code_text)
+            .size(self.config.body_size) // Match body text size for baseline alignment
+            .monospace()
+            .color(self.config.code_text)
+            .line_height(1.5)
+            .no_wrap(); // Measurement happens here with correct size
 
-        // For now, add to container directly if we're in paragraph context
-        // In a more complete implementation, we'd track inline elements
-        self.add_to_current_context(code_elem);
+        self.inline_elements.push(Box::new(code_elem));
     }
 
     fn handle_soft_break(&mut self) {
+        // Soft break is rendered as a single space
         self.inline_text.push(' ');
     }
 
     fn handle_hard_break(&mut self) {
-        self.inline_text.push('\n');
+        // Hard break creates an actual line break
+        // Flush current content, add a line break element
+        self.flush_segments_to_elements();
+
+        // Add a line break (full-width zero-height div forces next content to new line)
+        let line_break = div().w_full().h(0.0);
+        self.inline_elements.push(Box::new(line_break));
     }
 
     fn handle_rule(&mut self) {
@@ -569,54 +586,73 @@ impl<'a> RenderState<'a> {
         self.styled_segments.push(segment);
     }
 
-    fn flush_paragraph(&mut self) {
-        // First flush any remaining inline text
+    /// Flush styled segments into the element buffer
+    fn flush_segments_to_elements(&mut self) {
+        // First flush any remaining inline text to segments
         self.flush_inline_text();
 
+        // Convert segments to text elements and add to buffer
+        // Use span() for inline text which preserves natural spacing
         let segments = std::mem::take(&mut self.styled_segments);
-
-        if segments.is_empty() {
-            return;
-        }
-
-        // Check if all segments have default styling (no bold, italic, links, etc.)
-        let all_plain = segments.iter().all(|s| {
-            !s.bold && !s.italic && !s.strikethrough && !s.underline && s.link_url.is_none()
-        });
-
-        if all_plain && segments.len() == 1 {
-            // Simple case: just use a paragraph
-            let para = p(&segments[0].text)
-                .size(self.config.body_size)
-                .color(self.config.text_color);
-            self.add_to_current_context(para);
-        } else {
-            // Build a flex row with individual styled text elements
-            let mut row = div().flex_row().flex_wrap().items_baseline();
-
-            for segment in segments {
-                let mut txt = text(&segment.text)
-                    .size(self.config.body_size)
-                    .color(segment.color)
-                    .line_height(1.5);
-
-                if segment.bold {
-                    txt = txt.bold();
-                }
-
-                // Note: italic and underline/strikethrough would need Text to support these
-                // For now, we at least get the correct colors for links
-
-                row = row.child(txt);
+        for segment in segments {
+            if segment.text.is_empty() {
+                continue;
             }
 
-            self.add_to_current_context(row);
+            // Build text with styles set BEFORE no_wrap() so measurement includes correct weight/style
+            let mut txt = text(&segment.text)
+                .size(self.config.body_size)
+                .color(segment.color)
+                .line_height(1.5);
+
+            if segment.bold {
+                txt = txt.bold();
+            }
+            if segment.italic {
+                txt = txt.italic();
+            }
+
+            // Call no_wrap() last to trigger final measurement with correct styles
+            txt = txt.no_wrap();
+
+            self.inline_elements.push(Box::new(txt));
+        }
+    }
+
+    /// Build a row div from the element buffer, consuming it
+    fn build_inline_content(&mut self) -> Option<Div> {
+        // Flush any remaining segments to elements
+        self.flush_segments_to_elements();
+
+        let elements = std::mem::take(&mut self.inline_elements);
+
+        if elements.is_empty() {
+            return None;
+        }
+
+        // Build a flex row with baseline alignment
+        // No gap needed - text elements include their natural spacing
+        let mut row = div().flex_row().flex_wrap().items_baseline();
+        for elem in elements {
+            row = row.child_box(elem);
+        }
+
+        Some(row)
+    }
+
+    fn flush_paragraph(&mut self) {
+        // Build inline content from segments and elements
+        if let Some(content) = self.build_inline_content() {
+            self.add_to_current_context(content);
         }
     }
 
     fn flush_heading(&mut self, level: u8) {
         // Flush any remaining inline text first
         self.flush_inline_text();
+
+        // Clear any inline elements (headings don't support inline code etc.)
+        self.inline_elements.clear();
 
         let segments = std::mem::take(&mut self.styled_segments);
 
@@ -705,6 +741,101 @@ mod tests {
         let content = markdown("Hello world");
         content.build(&mut tree);
         assert!(tree.len() > 0);
+    }
+
+    #[test]
+    fn test_bold_spacing_events() {
+        // Test that pulldown-cmark preserves spaces around styled text
+        let md = "This is **bold** and text";
+        let parser = Parser::new_ext(md, Options::empty());
+        let events: Vec<_> = parser.collect();
+
+        // Print events for debugging
+        for (i, event) in events.iter().enumerate() {
+            println!("{}: {:?}", i, event);
+        }
+
+        // Verify we get the space before "and"
+        let has_space_after_bold = events.iter().any(|e| {
+            if let Event::Text(t) = e {
+                t.starts_with(" and") || t.as_ref() == " and text"
+            } else {
+                false
+            }
+        });
+        assert!(has_space_after_bold, "Expected space after bold text");
+    }
+
+    #[test]
+    fn test_bold_spacing_segments() {
+        init_theme();
+        // Test that our renderer preserves spaces in segments
+        let md = "This is **bold** and text";
+
+        let mut options = Options::empty();
+        options.insert(Options::ENABLE_TABLES);
+        options.insert(Options::ENABLE_STRIKETHROUGH);
+        options.insert(Options::ENABLE_TASKLISTS);
+
+        let parser = Parser::new_ext(md, options);
+        let events: Vec<Event<'_>> = parser.collect();
+
+        // Print all events
+        println!("Events:");
+        for (i, event) in events.iter().enumerate() {
+            println!("  {}: {:?}", i, event);
+        }
+
+        let config = super::super::config::MarkdownConfig::default();
+        let mut renderer = RenderState::new(&config);
+
+        // Process events one by one and trace what happens
+        for (i, event) in events.iter().enumerate() {
+            println!("\nProcessing event {}: {:?}", i, event);
+            renderer.handle_event(event);
+            println!("  inline_text: '{}'", renderer.inline_text);
+            println!("  styled_segments: {}", renderer.styled_segments.len());
+            for (j, seg) in renderer.styled_segments.iter().enumerate() {
+                println!("    {}: '{}' (bold={}, italic={})", j, seg.text, seg.bold, seg.italic);
+            }
+            println!("  inline_elements: {}", renderer.inline_elements.len());
+        }
+    }
+
+    #[test]
+    fn test_italic_spacing_segments() {
+        init_theme();
+        // Test italic spacing vs bold
+        let md = "This is *italic* and text";
+
+        let mut options = Options::empty();
+        options.insert(Options::ENABLE_TABLES);
+        options.insert(Options::ENABLE_STRIKETHROUGH);
+        options.insert(Options::ENABLE_TASKLISTS);
+
+        let parser = Parser::new_ext(md, options);
+        let events: Vec<Event<'_>> = parser.collect();
+
+        // Print all events
+        println!("Events:");
+        for (i, event) in events.iter().enumerate() {
+            println!("  {}: {:?}", i, event);
+        }
+
+        let config = super::super::config::MarkdownConfig::default();
+        let mut renderer = RenderState::new(&config);
+
+        // Process events one by one and trace what happens
+        for (i, event) in events.iter().enumerate() {
+            println!("\nProcessing event {}: {:?}", i, event);
+            renderer.handle_event(event);
+            println!("  inline_text: '{}'", renderer.inline_text);
+            println!("  styled_segments: {}", renderer.styled_segments.len());
+            for (j, seg) in renderer.styled_segments.iter().enumerate() {
+                println!("    {}: '{}' (bold={}, italic={})", j, seg.text, seg.bold, seg.italic);
+            }
+            println!("  inline_elements: {}", renderer.inline_elements.len());
+        }
     }
 
     #[test]

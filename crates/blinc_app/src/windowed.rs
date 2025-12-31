@@ -1118,6 +1118,11 @@ impl WindowedApp {
                                     };
                                     surf.configure(&blinc_app.device(), &config);
 
+                                    // Update text measurer with shared font registry for accurate measurement
+                                    crate::text_measurer::init_text_measurer_with_registry(
+                                        blinc_app.font_registry(),
+                                    );
+
                                     surface = Some(surf);
                                     surface_config = Some(config);
                                     app = Some(blinc_app);

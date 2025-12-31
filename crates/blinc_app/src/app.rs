@@ -2,10 +2,10 @@
 //!
 //! The main entry point for Blinc applications.
 
-use blinc_gpu::{GpuRenderer, RendererConfig, TextRenderingContext};
+use blinc_gpu::{FontRegistry, GpuRenderer, RendererConfig, TextRenderingContext};
 use blinc_layout::prelude::*;
 use blinc_layout::RenderTree;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::context::RenderContext;
 use crate::error::{BlincError, Result};
@@ -131,6 +131,11 @@ impl BlincApp {
             "Source Code Pro",
             "JetBrains Mono",
         ]);
+
+        // Preload generic font weights (for system fallback fonts)
+        text_ctx.preload_generic_styles(blinc_gpu::GenericFont::SansSerif, &[400, 700], false);
+        text_ctx.preload_generic_styles(blinc_gpu::GenericFont::SansSerif, &[400, 700], true);
+        text_ctx.preload_generic_styles(blinc_gpu::GenericFont::Monospace, &[400, 700], false);
 
         let ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
 
@@ -277,6 +282,14 @@ impl BlincApp {
         self.ctx.texture_format()
     }
 
+    /// Get the shared font registry
+    ///
+    /// This can be used to share fonts between text measurement and rendering,
+    /// ensuring consistent font loading and metrics.
+    pub fn font_registry(&self) -> Arc<Mutex<FontRegistry>> {
+        self.ctx.font_registry()
+    }
+
     /// Create a new Blinc application with a window surface
     ///
     /// This creates a GPU renderer optimized for the given window and returns
@@ -370,6 +383,11 @@ impl BlincApp {
             "Source Code Pro",
             "JetBrains Mono",
         ]);
+
+        // Preload generic font weights (for system fallback fonts)
+        text_ctx.preload_generic_styles(blinc_gpu::GenericFont::SansSerif, &[400, 700], false);
+        text_ctx.preload_generic_styles(blinc_gpu::GenericFont::SansSerif, &[400, 700], true);
+        text_ctx.preload_generic_styles(blinc_gpu::GenericFont::Monospace, &[400, 700], false);
 
         let ctx = RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
         let app = Self { ctx, config };
