@@ -377,6 +377,8 @@ pub struct Div {
     pub(crate) opacity: f32,
     pub(crate) cursor: Option<crate::element::CursorStyle>,
     pub(crate) event_handlers: crate::event_handler::EventHandlers,
+    /// Element ID for selector API queries
+    pub(crate) element_id: Option<String>,
 }
 
 impl Default for Div {
@@ -403,7 +405,29 @@ impl Div {
             opacity: 1.0,
             cursor: None,
             event_handlers: crate::event_handler::EventHandlers::new(),
+            element_id: None,
         }
+    }
+
+    /// Set an element ID for selector API queries
+    ///
+    /// Elements with IDs can be looked up programmatically:
+    /// ```rust,ignore
+    /// div().id("my-container").child(...)
+    ///
+    /// // Later:
+    /// if let Some(handle) = ctx.query("my-container") {
+    ///     handle.scroll_into_view();
+    /// }
+    /// ```
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.element_id = Some(id.into());
+        self
+    }
+
+    /// Get the element ID if set
+    pub fn element_id(&self) -> Option<&str> {
+        self.element_id.as_deref()
     }
 
     /// Swap this Div with a default, returning the original
@@ -512,6 +536,21 @@ impl Div {
     #[inline]
     pub fn clear_children(&mut self) {
         self.children.clear();
+    }
+
+    /// Set width in pixels without consuming self
+    ///
+    /// This is useful in state callbacks where you want to update
+    /// layout properties without using the swap pattern.
+    #[inline]
+    pub fn set_w(&mut self, px: f32) {
+        self.style.size.width = taffy::Dimension::Length(px);
+    }
+
+    /// Set height in pixels without consuming self
+    #[inline]
+    pub fn set_h(&mut self, px: f32) {
+        self.style.size.height = taffy::Dimension::Length(px);
     }
 
     /// Merge properties from another Div into this one
@@ -2179,6 +2218,21 @@ pub trait ElementBuilder {
     fn layout_bounds_callback(&self) -> Option<crate::renderer::LayoutBoundsCallback> {
         None
     }
+
+    /// Get the element ID for selector API queries
+    ///
+    /// Elements with IDs can be looked up programmatically via `ctx.query("id")`.
+    fn element_id(&self) -> Option<&str> {
+        None
+    }
+
+    /// Get the bound ScrollRef for programmatic scroll control
+    ///
+    /// Only scroll containers return a ScrollRef. This is used by the renderer
+    /// to bind the ScrollRef to the node and process pending scroll commands.
+    fn bound_scroll_ref(&self) -> Option<&crate::selector::ScrollRef> {
+        None
+    }
 }
 
 impl ElementBuilder for Div {
@@ -2233,6 +2287,10 @@ impl ElementBuilder for Div {
 
     fn layout_style(&self) -> Option<&taffy::Style> {
         Some(&self.style)
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        self.element_id.as_deref()
     }
 }
 

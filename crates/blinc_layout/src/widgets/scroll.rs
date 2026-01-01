@@ -39,6 +39,7 @@ use blinc_core::{Brush, Shadow};
 use crate::div::{Div, ElementBuilder, ElementTypeId};
 use crate::element::RenderProps;
 use crate::event_handler::{EventContext, EventHandlers};
+use crate::selector::ScrollRef;
 use crate::stateful::{scroll_events, ScrollState, StateTransitions};
 use crate::tree::{LayoutNodeId, LayoutTree};
 
@@ -596,6 +597,68 @@ impl ScrollPhysics {
         self.cancel_springs();
         self.state = ScrollState::Idle;
     }
+
+    /// Animate scroll to a target offset using spring physics
+    ///
+    /// This provides smooth animated scrolling instead of instant jumps.
+    /// The spring configuration uses a snappy feel for quick but smooth transitions.
+    pub fn scroll_to_animated(&mut self, target_x: f32, target_y: f32) {
+        // Cancel any existing springs
+        self.cancel_springs();
+
+        // Get scheduler - if not available, just snap to target
+        let Some(scheduler_arc) = self.scheduler.upgrade() else {
+            self.offset_x = target_x;
+            self.offset_y = target_y;
+            return;
+        };
+
+        let mut scheduler = scheduler_arc.lock().unwrap();
+
+        // Use a snappy spring for scroll animations - fast but smooth
+        let scroll_spring_config = SpringConfig::new(400.0, 30.0, 1.0);
+
+        // Animate vertical scroll if direction supports it
+        if matches!(
+            self.config.direction,
+            ScrollDirection::Vertical | ScrollDirection::Both
+        ) && (self.offset_y - target_y).abs() > 0.5
+        {
+            let mut spring = Spring::new(scroll_spring_config, self.offset_y);
+            spring.set_target(target_y);
+            let spring_id = scheduler.add_spring(spring);
+            self.spring_y = Some(spring_id);
+        } else if matches!(
+            self.config.direction,
+            ScrollDirection::Vertical | ScrollDirection::Both
+        ) {
+            self.offset_y = target_y;
+        }
+
+        // Animate horizontal scroll if direction supports it
+        if matches!(
+            self.config.direction,
+            ScrollDirection::Horizontal | ScrollDirection::Both
+        ) && (self.offset_x - target_x).abs() > 0.5
+        {
+            let mut spring = Spring::new(scroll_spring_config, self.offset_x);
+            spring.set_target(target_x);
+            let spring_id = scheduler.add_spring(spring);
+            self.spring_x = Some(spring_id);
+        } else if matches!(
+            self.config.direction,
+            ScrollDirection::Horizontal | ScrollDirection::Both
+        ) {
+            self.offset_x = target_x;
+        }
+
+        drop(scheduler);
+
+        // Transition to bouncing state to read spring values in tick()
+        if self.spring_x.is_some() || self.spring_y.is_some() {
+            self.state = ScrollState::Bouncing;
+        }
+    }
 }
 
 // ============================================================================
@@ -648,6 +711,8 @@ pub struct Scroll {
     physics: SharedScrollPhysics,
     /// Event handlers
     handlers: EventHandlers,
+    /// Optional scroll reference for programmatic control
+    scroll_ref: Option<ScrollRef>,
 }
 
 // Deref to Div gives Scroll ALL Div methods for reading
@@ -685,6 +750,7 @@ impl Scroll {
             content: None,
             physics,
             handlers,
+            scroll_ref: None,
         }
     }
 
@@ -698,6 +764,7 @@ impl Scroll {
             content: None,
             physics,
             handlers,
+            scroll_ref: None,
         }
     }
 
@@ -710,6 +777,7 @@ impl Scroll {
             content: None,
             physics,
             handlers,
+            scroll_ref: None,
         }
     }
 
@@ -818,6 +886,49 @@ impl Scroll {
     /// Set to free scrolling (both directions)
     pub fn both_directions(self) -> Self {
         self.direction(ScrollDirection::Both)
+    }
+
+    // =========================================================================
+    // Element ID and ScrollRef binding
+    // =========================================================================
+
+    /// Set element ID for this scroll container
+    ///
+    /// This allows the element to be queried by ID via `ctx.query("id")`.
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.inner = std::mem::take(&mut self.inner).id(id);
+        self
+    }
+
+    /// Bind a ScrollRef for programmatic scroll control
+    ///
+    /// The ScrollRef can be used to:
+    /// - Scroll to elements by ID: `scroll_ref.scroll_to("item-42")`
+    /// - Scroll to top/bottom: `scroll_ref.scroll_to_top()`, `scroll_ref.scroll_to_bottom()`
+    /// - Scroll by offset: `scroll_ref.scroll_by(0.0, 100.0)`
+    /// - Query scroll state: `scroll_ref.offset()`, `scroll_ref.is_at_bottom()`
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let scroll_ref = ScrollRef::new();
+    ///
+    /// scroll()
+    ///     .bind(&scroll_ref)
+    ///     .child(items.iter().map(|i| div().id(format!("item-{}", i.id))))
+    ///
+    /// // Later:
+    /// scroll_ref.scroll_to("item-42");
+    /// scroll_ref.scroll_to_bottom();
+    /// ```
+    pub fn bind(mut self, scroll_ref: &ScrollRef) -> Self {
+        self.scroll_ref = Some(scroll_ref.clone());
+        self
+    }
+
+    /// Get the bound ScrollRef, if any
+    pub fn scroll_ref(&self) -> Option<&ScrollRef> {
+        self.scroll_ref.as_ref()
     }
 
     // =========================================================================
@@ -1204,6 +1315,14 @@ impl ElementBuilder for Scroll {
 
     fn layout_style(&self) -> Option<&taffy::Style> {
         self.inner.layout_style()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        self.inner.element_id()
+    }
+
+    fn bound_scroll_ref(&self) -> Option<&ScrollRef> {
+        self.scroll_ref.as_ref()
     }
 }
 

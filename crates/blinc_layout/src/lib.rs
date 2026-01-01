@@ -58,6 +58,9 @@ pub mod widgets;
 // Markdown rendering
 pub mod markdown;
 
+// Selector API for programmatic element access
+pub mod selector;
+
 // Core types
 pub use element::{
     BorderSide, BorderSides, CursorStyle, DynRenderProps, ElementBounds, MotionAnimation,
@@ -326,5 +329,11 @@ pub mod prelude {
         blockquote, blockquote_with_config, hr, hr_color, hr_thick, hr_with_config, li, link, ol,
         ol_start, task_item, ul, Blockquote, BlockquoteConfig, HrConfig, Link, LinkConfig,
         ListConfig, ListItem, ListMarker, OrderedList, TaskListItem, UnorderedList,
+    };
+
+    // Selector API for programmatic element access
+    pub use crate::selector::{
+        ElementEvent, ElementHandle, ElementRegistry, ScrollBehavior, ScrollBlock, ScrollInline,
+        ScrollOptions, ScrollRef,
     };
 }

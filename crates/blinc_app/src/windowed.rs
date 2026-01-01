@@ -61,6 +61,9 @@ pub type RefDirtyFlag = Arc<AtomicBool>;
 /// Shared reactive graph for the application (thread-safe)
 pub type SharedReactiveGraph = Arc<Mutex<ReactiveGraph>>;
 
+/// Shared element registry for query API (thread-safe)
+pub type SharedElementRegistry = Arc<blinc_layout::selector::ElementRegistry>;
+
 use std::collections::HashMap;
 
 /// Key for identifying a signal in the keyed state system
@@ -228,6 +231,8 @@ pub struct WindowedContext {
     hooks: SharedHookState,
     /// Overlay manager for modals, dialogs, toasts, etc.
     overlay_manager: OverlayManager,
+    /// Element registry for query API (shared with RenderTree)
+    element_registry: SharedElementRegistry,
 }
 
 impl WindowedContext {
@@ -239,6 +244,7 @@ impl WindowedContext {
         reactive: SharedReactiveGraph,
         hooks: SharedHookState,
         overlay_mgr: OverlayManager,
+        element_registry: SharedElementRegistry,
     ) -> Self {
         // Get physical size (actual surface pixels) and scale factor
         let (physical_width, physical_height) = window.size();
@@ -263,6 +269,7 @@ impl WindowedContext {
             reactive,
             hooks,
             overlay_manager: overlay_mgr,
+            element_registry,
         }
     }
 
@@ -356,6 +363,117 @@ impl WindowedContext {
             reactive: Arc::clone(&self.reactive),
             dirty_flag: Arc::clone(&self.ref_dirty_flag),
         }
+    }
+
+    /// Create a persistent signal that survives across UI rebuilds (keyed)
+    ///
+    /// Unlike `use_signal()` which creates a new signal each call, this method
+    /// persists the signal using a unique string key. Use this for simple
+    /// reactive values that need to survive rebuilds.
+    ///
+    /// For FSM-based state with `StateTransitions`, use `use_state_keyed()` instead.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let current_index = ctx.use_signal_keyed("current_index", || 0usize);
+    ///
+    /// // Read the value
+    /// let index = ctx.get(current_index).unwrap_or(0);
+    ///
+    /// // Set the value (in an event handler)
+    /// ctx.set(current_index, 1);
+    /// ```
+    pub fn use_signal_keyed<T, F>(&self, key: &str, init: F) -> Signal<T>
+    where
+        T: Clone + Send + 'static,
+        F: FnOnce() -> T,
+    {
+        use blinc_core::reactive::SignalId;
+
+        let state_key = StateKey::from_string::<T>(key);
+        let mut hooks = self.hooks.lock().unwrap();
+
+        // Check if we have an existing signal with this key
+        if let Some(raw_id) = hooks.get(&state_key) {
+            // Reconstruct the signal from stored ID
+            let signal_id = SignalId::from_raw(raw_id);
+            Signal::from_id(signal_id)
+        } else {
+            // First time - create a new signal and store it
+            let signal = self.reactive.lock().unwrap().create_signal(init());
+            let raw_id = signal.id().to_raw();
+            hooks.insert(state_key, raw_id);
+            signal
+        }
+    }
+
+    /// Create a persistent ScrollRef for programmatic scroll control
+    ///
+    /// This creates a ScrollRef that survives across UI rebuilds. Use `.bind()`
+    /// on a scroll widget to connect it, then call methods like `.scroll_to()`
+    /// to programmatically control scrolling.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
+    ///     let scroll_ref = ctx.use_scroll_ref("my_scroll");
+    ///
+    ///     div()
+    ///         .child(
+    ///             scroll()
+    ///                 .bind(&scroll_ref)
+    ///                 .child(items.iter().map(|i| div().id(format!("item-{}", i.id))))
+    ///         )
+    ///         .child(
+    ///             button("Scroll to item 5").on_click({
+    ///                 let scroll_ref = scroll_ref.clone();
+    ///                 move |_| scroll_ref.scroll_to("item-5")
+    ///             })
+    ///         )
+    /// }
+    /// ```
+    pub fn use_scroll_ref(&self, key: &str) -> blinc_layout::selector::ScrollRef {
+        use blinc_core::reactive::SignalId;
+        use blinc_layout::selector::{ScrollRef, SharedScrollRefInner, TriggerCallback};
+
+        // Create a unique key for the scroll ref's inner state
+        let state_key =
+            StateKey::from_string::<SharedScrollRefInner>(&format!("scroll_ref:{}", key));
+        let mut hooks = self.hooks.lock().unwrap();
+
+        // Check if we have an existing signal with this key
+        let (signal_id, inner) = if let Some(raw_id) = hooks.get(&state_key) {
+            // Reconstruct the signal ID and get the inner state from the reactive graph
+            let signal_id = SignalId::from_raw(raw_id);
+            let inner = self
+                .reactive
+                .lock()
+                .unwrap()
+                .get_untracked(Signal::<SharedScrollRefInner>::from_id(signal_id))
+                .unwrap_or_else(ScrollRef::new_inner);
+            (signal_id, inner)
+        } else {
+            // First time - create a new inner state and store it in the reactive graph
+            let new_inner = ScrollRef::new_inner();
+            let signal = self
+                .reactive
+                .lock()
+                .unwrap()
+                .create_signal(Arc::clone(&new_inner));
+            let raw_id = signal.id().to_raw();
+            hooks.insert(state_key, raw_id);
+            (signal.id(), new_inner)
+        };
+
+        drop(hooks);
+
+        // ScrollRef doesn't need to trigger rebuilds - scroll operations are processed
+        // every frame by process_pending_scroll_refs()
+        let noop_trigger: TriggerCallback = Arc::new(|| {});
+
+        ScrollRef::with_inner(inner, signal_id, noop_trigger)
     }
 
     /// Create a new reactive signal with an initial value (low-level API)
@@ -598,6 +716,37 @@ impl WindowedContext {
     /// ```
     pub fn overlay_manager(&self) -> OverlayManager {
         Arc::clone(&self.overlay_manager)
+    }
+
+    // =========================================================================
+    // Query API
+    // =========================================================================
+
+    /// Query an element by ID
+    ///
+    /// Returns the node ID if an element with the given ID exists. Elements are
+    /// assigned IDs using the `.id("my-id")` builder method.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // In UI builder:
+    /// div().id("my-element").child(...)
+    ///
+    /// // Later:
+    /// if let Some(node_id) = ctx.query("my-element") {
+    ///     // Element exists
+    /// }
+    /// ```
+    pub fn query(&self, id: &str) -> Option<blinc_layout::LayoutNodeId> {
+        self.element_registry.get(id)
+    }
+
+    /// Get the shared element registry
+    ///
+    /// This provides access to the element registry for advanced query operations.
+    pub fn element_registry(&self) -> &SharedElementRegistry {
+        &self.element_registry
     }
 
     /// Create a persistent state for stateful UI elements
@@ -1070,6 +1219,9 @@ impl WindowedApp {
         scheduler.set_wake_callback(move || wake_proxy.wake());
         scheduler.start_background();
         let animations: SharedAnimationScheduler = Arc::new(Mutex::new(scheduler));
+        // Shared element registry for query API
+        let element_registry: SharedElementRegistry =
+            Arc::new(blinc_layout::selector::ElementRegistry::new());
 
         // Set up continuous redraw callback for text widget cursor animation
         // This bridges text widgets (which track focus) with the animation scheduler (which drives redraws)
@@ -1127,7 +1279,7 @@ impl WindowedApp {
                                     surface_config = Some(config);
                                     app = Some(blinc_app);
 
-                                    // Initialize context with event router, animations, dirty flag, reactive graph, hooks, and overlay manager
+                                    // Initialize context with event router, animations, dirty flag, reactive graph, hooks, overlay manager, and registry
                                     ctx = Some(WindowedContext::from_window(
                                         window,
                                         EventRouter::new(),
@@ -1136,6 +1288,7 @@ impl WindowedApp {
                                         Arc::clone(&reactive),
                                         Arc::clone(&hooks),
                                         Arc::clone(&overlays),
+                                        Arc::clone(&element_registry),
                                     ));
 
                                     // Initialize render state with the shared animation scheduler
@@ -1802,8 +1955,12 @@ impl WindowedApp {
                                         // Clear layout bounds storages before rebuild
                                         existing_tree.clear_layout_bounds_storages();
 
-                                        // Full rebuild: create new tree from element
-                                        let mut tree = RenderTree::from_element(&ui);
+                                        // Full rebuild: create new tree from element with shared registry
+                                        // Pass registry to from_element_with_registry so IDs are registered during build
+                                        let mut tree = RenderTree::from_element_with_registry(
+                                            &ui,
+                                            Arc::clone(&element_registry),
+                                        );
 
                                         // Set animation scheduler for scroll bounce springs
                                         tree.set_animations(&windowed_ctx.animations);
@@ -1854,8 +2011,11 @@ impl WindowedApp {
                                         }
                                     }
                                 } else {
-                                    // No existing tree - create new
-                                    let mut tree = RenderTree::from_element(&ui);
+                                    // No existing tree - create new with shared registry
+                                    let mut tree = RenderTree::from_element_with_registry(
+                                        &ui,
+                                        Arc::clone(&element_registry),
+                                    );
 
                                     // Set animation scheduler for scroll bounce springs
                                     tree.set_animations(&windowed_ctx.animations);
@@ -1887,6 +2047,11 @@ impl WindowedApp {
 
                             // Tick theme animation (handles color interpolation during theme transitions)
                             let theme_animating = blinc_theme::ThemeState::get().tick();
+
+                            // Process pending scroll operations from ScrollRefs
+                            if let Some(ref mut tree) = render_tree {
+                                tree.process_pending_scroll_refs();
+                            }
 
                             // Tick scroll physics for bounce-back animations
                             let scroll_animating = if let Some(ref mut tree) = render_tree {

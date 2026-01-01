@@ -19,6 +19,7 @@ use crate::canvas::CanvasData;
 use crate::diff::{render_props_eq, ChangeCategory, DivHash};
 use crate::div::{ElementBuilder, ElementTypeId};
 use crate::element::{ElementBounds, GlassMaterial, Material, RenderLayer, RenderProps};
+use crate::selector::{ElementRegistry, ScrollRef};
 use crate::tree::{LayoutNodeId, LayoutTree};
 
 /// A computed glass panel ready for GPU rendering
@@ -328,6 +329,14 @@ pub struct RenderTree {
     /// Layout bounds storages to update after layout computation
     /// Maps node_id to entry with shared storage and optional change callback
     layout_bounds_storages: HashMap<LayoutNodeId, LayoutBoundsEntry>,
+    /// Element registry for O(1) lookups by string ID
+    element_registry: Arc<ElementRegistry>,
+    /// Bound ScrollRefs for programmatic scroll control
+    /// Note: NOT cleared on rebuild - ScrollRef inner state persists and node_id is updated
+    scroll_refs: HashMap<LayoutNodeId, ScrollRef>,
+    /// Active scroll refs (persists across rebuilds, keyed by inner pointer address)
+    /// Maps inner pointer -> ScrollRef for persistence across rebuilds
+    active_scroll_refs: Vec<ScrollRef>,
 }
 
 /// Result of an incremental update attempt
@@ -368,6 +377,9 @@ impl RenderTree {
             tree_hash: None,
             node_hashes: HashMap::new(),
             layout_bounds_storages: HashMap::new(),
+            element_registry: Arc::new(ElementRegistry::new()),
+            scroll_refs: HashMap::new(),
+            active_scroll_refs: Vec::new(),
         }
     }
 
@@ -382,9 +394,34 @@ impl RenderTree {
         }
     }
 
+    /// Set a shared external element registry
+    ///
+    /// This allows the WindowedContext to share the same registry for query operations.
+    /// The registry is automatically populated during tree building.
+    pub fn set_element_registry(&mut self, registry: Arc<ElementRegistry>) {
+        self.element_registry = registry;
+    }
+
     /// Build a render tree from an element builder
     pub fn from_element<E: ElementBuilder>(element: &E) -> Self {
         let mut tree = Self::new();
+        // Compute tree hash for change detection
+        tree.tree_hash = Some(DivHash::compute_element_tree(element));
+        tree.root = Some(tree.build_element(element));
+        tree
+    }
+
+    /// Build a render tree from an element builder with a shared element registry
+    ///
+    /// This ensures element IDs are registered to the shared registry during build,
+    /// rather than to an internal registry that gets replaced later.
+    pub fn from_element_with_registry<E: ElementBuilder>(
+        element: &E,
+        registry: Arc<ElementRegistry>,
+    ) -> Self {
+        let mut tree = Self::new();
+        // Set shared registry BEFORE building so IDs are registered correctly
+        tree.element_registry = registry;
         // Compute tree hash for change detection
         tree.tree_hash = Some(DivHash::compute_element_tree(element));
         tree.root = Some(tree.build_element(element));
@@ -422,11 +459,15 @@ impl RenderTree {
         // For now, do a full rebuild. Future optimization: use diff for incremental updates
         self.tree_hash = Some(new_hash);
 
-        // Clear existing data
+        // Clear existing data that will be repopulated during rebuild
         self.render_nodes.clear();
         self.handler_registry = crate::event_handler::HandlerRegistry::new();
+        self.element_registry.clear();
+        // Clear scroll_refs HashMap (node_id keyed) - it will be repopulated during rebuild
+        // but active_scroll_refs persists for process_pending_scroll_refs
+        self.scroll_refs.clear();
 
-        // Preserve node_states, scroll_offsets, scroll_physics, motion_bindings
+        // Preserve node_states, scroll_offsets, scroll_physics, motion_bindings, active_scroll_refs
         // as these should survive rebuilds
 
         // Rebuild the layout tree
@@ -974,11 +1015,21 @@ impl RenderTree {
         // Register layout bounds storage if element wants bounds updates
         self.register_element_bounds_storage(node_id, element);
 
+        // Register element ID if present (for selector API)
+        if let Some(id) = element.element_id() {
+            self.element_registry.register(id, node_id);
+        }
+
+        // Bind ScrollRef if present (for scroll containers)
+        if let Some(scroll_ref) = element.bound_scroll_ref() {
+            self.register_scroll_ref(node_id, scroll_ref);
+        }
+
         // Get child node IDs from the layout tree
         let child_node_ids = self.layout_tree.children(node_id);
         let child_builders = element.children_builders();
 
-        // Log mismatch to help debug stateful/motion issues
+        // Log mismatch to help debug stateful/motion issues (in collect_render_props)
         if child_node_ids.len() != child_builders.len() && !child_node_ids.is_empty() {
             tracing::warn!(
                 "collect_render_props: node {:?} has {} layout children but {} builder children (mismatch!)",
@@ -1091,6 +1142,16 @@ impl RenderTree {
 
         // Register layout bounds storage if element wants bounds updates
         self.register_element_bounds_storage(node_id, element);
+
+        // Register element ID if present (for selector API)
+        if let Some(id) = element.element_id() {
+            self.element_registry.register(id, node_id);
+        }
+
+        // Bind ScrollRef if present (for scroll containers)
+        if let Some(scroll_ref) = element.bound_scroll_ref() {
+            self.register_scroll_ref(node_id, scroll_ref);
+        }
 
         // Get child node IDs from the layout tree
         let child_node_ids = self.layout_tree.children(node_id);
@@ -1233,6 +1294,16 @@ impl RenderTree {
 
         // Register layout bounds storage if element wants bounds updates
         self.register_element_bounds_storage(node_id, element);
+
+        // Register element ID if present (for selector API)
+        if let Some(id) = element.element_id() {
+            self.element_registry.register(id, node_id);
+        }
+
+        // Bind ScrollRef if present (for scroll containers)
+        if let Some(scroll_ref) = element.bound_scroll_ref() {
+            self.register_scroll_ref(node_id, scroll_ref);
+        }
 
         // Recursively process children (without motion - motion only applies to direct children)
         let child_node_ids = self.layout_tree.children(node_id);
@@ -1526,8 +1597,8 @@ impl RenderTree {
                     p.content_height = content_height;
 
                     tracing::trace!(
-                        "Scroll physics updated: viewport=({:.0}, {:.0}) content=({:.0}, {:.0}) max_offset_y={:.0}",
-                        viewport_width, viewport_height, content_width, content_height, p.max_offset_y()
+                        "Scroll physics updated: viewport=({:.0}, {:.0}) content=({:.0}, {:.0}) max_offset=({:.0}, {:.0}) direction={:?}",
+                        viewport_width, viewport_height, content_width, content_height, p.max_offset_x(), p.max_offset_y(), p.config.direction
                     );
                 }
             }
@@ -1547,6 +1618,154 @@ impl RenderTree {
     /// Get the event handler registry mutably
     pub fn handler_registry_mut(&mut self) -> &mut crate::event_handler::HandlerRegistry {
         &mut self.handler_registry
+    }
+
+    /// Get the element registry for ID-based lookups
+    pub fn element_registry(&self) -> &Arc<ElementRegistry> {
+        &self.element_registry
+    }
+
+    /// Query an element by ID
+    ///
+    /// Returns the node ID if an element with the given ID exists.
+    pub fn query_by_id(&self, id: &str) -> Option<LayoutNodeId> {
+        self.element_registry.get(id)
+    }
+
+    /// Get a bound ScrollRef by node ID
+    pub fn scroll_ref(&self, node_id: LayoutNodeId) -> Option<&ScrollRef> {
+        self.scroll_refs.get(&node_id)
+    }
+
+    /// Register a ScrollRef for a scroll container node
+    ///
+    /// This binds the ScrollRef to the node and adds it to both the node-keyed
+    /// HashMap (for quick lookup) and the active_scroll_refs Vec (for persistence
+    /// across rebuilds).
+    fn register_scroll_ref(&mut self, node_id: LayoutNodeId, scroll_ref: &ScrollRef) {
+        scroll_ref.bind_to_node(node_id, Arc::downgrade(&self.element_registry));
+        self.scroll_refs.insert(node_id, scroll_ref.clone());
+        // Also track in active_scroll_refs for persistence across rebuilds
+        // Check if already present by comparing inner pointer
+        let inner_ptr = Arc::as_ptr(&scroll_ref.inner());
+        if !self
+            .active_scroll_refs
+            .iter()
+            .any(|sr| Arc::as_ptr(&sr.inner()) == inner_ptr)
+        {
+            self.active_scroll_refs.push(scroll_ref.clone());
+        }
+    }
+
+    /// Process all pending scroll operations from bound ScrollRefs
+    ///
+    /// This should be called each frame before rendering to apply any
+    /// programmatic scroll commands (scroll_to, scroll_to_bottom, etc.).
+    ///
+    /// Returns true if any scroll state was modified.
+    pub fn process_pending_scroll_refs(&mut self) -> bool {
+        use crate::selector::PendingScroll;
+
+        let mut any_modified = false;
+
+        // Collect scroll refs that have pending operations from active_scroll_refs
+        // (active_scroll_refs persists across rebuilds, unlike scroll_refs HashMap)
+        let pending: Vec<_> = self
+            .active_scroll_refs
+            .iter()
+            .filter_map(|scroll_ref| {
+                let node_id = scroll_ref.node_id()?;
+                scroll_ref
+                    .take_pending_scroll()
+                    .map(|pending| (node_id, pending))
+            })
+            .collect();
+        for (node_id, pending_scroll) in pending {
+            let Some(physics) = self.scroll_physics.get(&node_id) else {
+                continue;
+            };
+
+            let mut physics = physics.lock().unwrap();
+            any_modified = true;
+
+            match pending_scroll {
+                PendingScroll::ToOffset { x, y, smooth: _ } => {
+                    // For now, instant scroll (smooth animation TBD)
+                    physics.offset_x = -x;
+                    physics.offset_y = -y;
+                }
+                PendingScroll::ByAmount { dx, dy, smooth: _ } => {
+                    physics.apply_scroll_delta(dx, dy);
+                }
+                PendingScroll::ToTop { smooth: _ } => {
+                    physics.offset_y = 0.0;
+                }
+                PendingScroll::ToBottom { smooth: _ } => {
+                    physics.offset_y = physics.max_offset_y();
+                }
+                PendingScroll::ToElement {
+                    element_id,
+                    options,
+                } => {
+                    // Look up element bounds and scroll to make it visible
+                    if let Some(target_node) = self.element_registry.get(&element_id) {
+                        // Get target element's bounds
+                        if let Some(target_bounds) = self.get_bounds(target_node) {
+                            // Get scroll container's bounds
+                            if let Some(container_bounds) = self.get_bounds(node_id) {
+                                // Calculate scroll offset to bring element into view
+                                // Element's position relative to scroll container
+                                let relative_y = target_bounds.y - container_bounds.y;
+                                let relative_x = target_bounds.x - container_bounds.x;
+
+                                // Scroll to center the element (or just make it visible)
+                                let viewport_height = physics.viewport_height;
+                                let viewport_width = physics.viewport_width;
+
+                                // Calculate target offsets
+                                // Center vertically
+                                let target_center_y =
+                                    relative_y + target_bounds.height / 2.0 - viewport_height / 2.0;
+                                let target_offset_y = (-target_center_y)
+                                    .clamp(physics.max_offset_y(), physics.min_offset_y());
+
+                                // Center horizontally
+                                let target_center_x =
+                                    relative_x + target_bounds.width / 2.0 - viewport_width / 2.0;
+                                let target_offset_x = (-target_center_x)
+                                    .clamp(physics.max_offset_x(), physics.min_offset_x());
+
+                                // Use smooth animation if requested
+                                if options.behavior == crate::selector::ScrollBehavior::Smooth {
+                                    physics.scroll_to_animated(target_offset_x, target_offset_y);
+                                } else {
+                                    // Instant scroll
+                                    physics.offset_y = target_offset_y;
+                                    if matches!(
+                                        physics.config.direction,
+                                        crate::scroll::ScrollDirection::Horizontal
+                                            | crate::scroll::ScrollDirection::Both
+                                    ) {
+                                        physics.offset_x = target_offset_x;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Update ScrollRef with current state
+            if let Some(scroll_ref) = self.scroll_refs.get(&node_id) {
+                scroll_ref.update_state(
+                    (physics.offset_x.abs(), physics.offset_y.abs()),
+                    (physics.content_width, physics.content_height),
+                    (physics.viewport_width, physics.viewport_height),
+                );
+            }
+        }
+
+        any_modified
     }
 
     /// Dispatch an event to a node's handlers
@@ -2352,6 +2571,9 @@ impl RenderTree {
         self.node_states.remove(&node_id);
         self.scroll_offsets.remove(&node_id);
         self.scroll_physics.remove(&node_id);
+        self.scroll_refs.remove(&node_id);
+        // Unregister from element registry (removes by node_id)
+        self.element_registry.unregister(node_id);
     }
 
     /// Process all pending subtree rebuilds
