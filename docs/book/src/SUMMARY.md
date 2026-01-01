@@ -30,6 +30,7 @@
 # Widgets
 
 - [Buttons & Inputs](./widgets/inputs.md)
+- [Text & Rich Text](./widgets/text.md)
 - [Scroll Containers](./widgets/scroll.md)
 - [Canvas Drawing](./widgets/canvas.md)
 - [Images & SVG](./widgets/media.md)

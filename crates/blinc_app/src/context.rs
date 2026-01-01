@@ -965,8 +965,150 @@ impl RenderContext {
                 // Canvas elements are rendered inline during tree traversal (in render_layer)
                 ElementType::Canvas(_) => {}
                 ElementType::Div => {}
-                // StyledText is a future optimization - currently handled as multiple Text elements
-                ElementType::StyledText(_) => {}
+                // StyledText: render text with inline styling using multiple TextElements
+                ElementType::StyledText(styled_data) => {
+                    let scaled_x = abs_x * scale;
+                    let scaled_y = abs_y * scale;
+                    let scaled_width = bounds.width * scale;
+                    let scaled_height = bounds.height * scale;
+                    let scaled_font_size = styled_data.font_size * scale;
+                    let scaled_clip = current_clip
+                        .map(|[cx, cy, cw, ch]| [cx * scale, cy * scale, cw * scale, ch * scale]);
+
+                    // Build non-overlapping segments from potentially overlapping spans
+                    // This handles nested tags like <span color="red"><b>text</b></span>
+                    let content = &styled_data.content;
+                    let content_len = content.len();
+
+                    // Get default styles from element config
+                    let default_bold = styled_data.weight == FontWeight::Bold;
+                    let default_italic = styled_data.italic;
+
+                    // Collect all boundary positions where style might change
+                    let mut boundaries: Vec<usize> = vec![0, content_len];
+                    for span in &styled_data.spans {
+                        if span.start < content_len {
+                            boundaries.push(span.start);
+                        }
+                        if span.end <= content_len {
+                            boundaries.push(span.end);
+                        }
+                    }
+                    boundaries.sort();
+                    boundaries.dedup();
+
+                    // Build segments between boundaries
+                    let mut segments: Vec<(usize, usize, [f32; 4], bool, bool, bool, bool)> =
+                        Vec::new();
+
+                    for window in boundaries.windows(2) {
+                        let seg_start = window[0];
+                        let seg_end = window[1];
+                        if seg_start >= seg_end {
+                            continue;
+                        }
+
+                        // Determine style for this segment by merging all overlapping spans
+                        let mut color: Option<[f32; 4]> = None;
+                        let mut bold = default_bold;
+                        let mut italic = default_italic;
+                        let mut underline = false;
+                        let mut strikethrough = false;
+
+                        for span in &styled_data.spans {
+                            // Check if span overlaps this segment
+                            if span.start <= seg_start && span.end >= seg_end {
+                                // This span covers this segment - merge styles
+                                if span.bold {
+                                    bold = true;
+                                }
+                                if span.italic {
+                                    italic = true;
+                                }
+                                if span.underline {
+                                    underline = true;
+                                }
+                                if span.strikethrough {
+                                    strikethrough = true;
+                                }
+                                // Use color if span has explicit color (not transparent)
+                                if span.color[3] > 0.0 {
+                                    color = Some(span.color);
+                                }
+                            }
+                        }
+
+                        let final_color = color.unwrap_or(styled_data.default_color);
+                        segments.push((
+                            seg_start,
+                            seg_end,
+                            final_color,
+                            bold,
+                            italic,
+                            underline,
+                            strikethrough,
+                        ));
+                    }
+
+                    // Use consistent ascender from element for baseline alignment
+                    let scaled_ascender = styled_data.ascender * scale;
+
+                    // Calculate x offsets for each segment and push as TextElements
+                    let mut x_offset = 0.0f32;
+                    for (start, end, color, bold, italic, underline, strikethrough) in segments {
+                        if start >= end || start >= content.len() {
+                            continue;
+                        }
+                        let segment_text = &content[start..end.min(content.len())];
+                        if segment_text.is_empty() {
+                            continue;
+                        }
+
+                        // Measure segment width for positioning
+                        let mut options = blinc_layout::text_measure::TextLayoutOptions::new();
+                        options.font_name = styled_data.font_family.name.clone();
+                        options.generic_font = styled_data.font_family.generic;
+                        options.font_weight = if bold { 700 } else { 400 };
+                        options.italic = italic;
+                        let metrics = blinc_layout::text_measure::measure_text_with_options(
+                            segment_text,
+                            styled_data.font_size,
+                            &options,
+                        );
+                        let segment_width = metrics.width * scale;
+
+                        texts.push(TextElement {
+                            content: segment_text.to_string(),
+                            x: scaled_x + x_offset,
+                            y: scaled_y,
+                            width: segment_width,
+                            height: scaled_height,
+                            font_size: scaled_font_size,
+                            color,
+                            align: TextAlign::Left, // Always left-align segments
+                            weight: if bold {
+                                FontWeight::Bold
+                            } else {
+                                FontWeight::Normal
+                            },
+                            italic,
+                            v_align: styled_data.v_align,
+                            clip_bounds: scaled_clip,
+                            motion_opacity: effective_motion_opacity,
+                            wrap: false, // Don't wrap individual segments
+                            line_height: styled_data.line_height,
+                            measured_width: segment_width,
+                            font_family: styled_data.font_family.clone(),
+                            word_spacing: 0.0,
+                            z_index: *z_layer,
+                            ascender: scaled_ascender, // Use consistent ascender for baseline alignment
+                            strikethrough,
+                            underline,
+                        });
+
+                        x_offset += segment_width;
+                    }
+                }
             }
         }
 

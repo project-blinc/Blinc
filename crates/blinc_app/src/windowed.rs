@@ -1503,9 +1503,17 @@ impl WindowedApp {
                                         let ly = y / scale;
                                         let btn = convert_mouse_button(button);
                                         router.on_mouse_up(tree, lx, ly, btn);
+                                        // Use the local coordinates from when the press started
+                                        // (stored by on_mouse_down via last_hit_local)
+                                        let (local_x, local_y) = router.last_hit_local();
+                                        let (bounds_width, bounds_height) = router.last_hit_bounds();
                                         for event in pending_events.iter_mut() {
                                             event.mouse_x = lx;
                                             event.mouse_y = ly;
+                                            event.local_x = local_x;
+                                            event.local_y = local_y;
+                                            event.bounds_width = bounds_width;
+                                            event.bounds_height = bounds_height;
                                         }
                                     }
                                     MouseEvent::Left => {

@@ -162,6 +162,12 @@ pub struct StyledTextData {
     pub font_family: crate::div::FontFamily,
     /// Line height multiplier
     pub line_height: f32,
+    /// Default font weight (for unspanned regions)
+    pub weight: crate::div::FontWeight,
+    /// Default italic style (for unspanned regions)
+    pub italic: bool,
+    /// Measured ascender for consistent baseline alignment
+    pub ascender: f32,
 }
 
 /// SVG data for rendering
@@ -1106,6 +1112,38 @@ impl RenderTree {
             ElementTypeId::Canvas => ElementType::Canvas(CanvasData {
                 render_fn: element.canvas_render_info(),
             }),
+            ElementTypeId::StyledText => {
+                if let Some(info) = element.styled_text_render_info() {
+                    ElementType::StyledText(StyledTextData {
+                        content: info.content,
+                        spans: info
+                            .spans
+                            .into_iter()
+                            .map(|s| StyledTextSpan {
+                                start: s.start,
+                                end: s.end,
+                                color: s.color,
+                                bold: s.bold,
+                                italic: s.italic,
+                                underline: s.underline,
+                                strikethrough: s.strikethrough,
+                                link_url: s.link_url,
+                            })
+                            .collect(),
+                        default_color: info.default_color,
+                        font_size: info.font_size,
+                        align: info.align,
+                        v_align: info.v_align,
+                        font_family: info.font_family,
+                        line_height: info.line_height,
+                        weight: info.weight,
+                        italic: info.italic,
+                        ascender: info.ascender,
+                    })
+                } else {
+                    ElementType::Div
+                }
+            }
             ElementTypeId::Div => ElementType::Div,
             ElementTypeId::Motion => ElementType::Div, // Motion is a transparent container
         };
@@ -1258,6 +1296,38 @@ impl RenderTree {
             ElementTypeId::Canvas => ElementType::Canvas(CanvasData {
                 render_fn: element.canvas_render_info(),
             }),
+            ElementTypeId::StyledText => {
+                if let Some(info) = element.styled_text_render_info() {
+                    ElementType::StyledText(StyledTextData {
+                        content: info.content,
+                        spans: info
+                            .spans
+                            .into_iter()
+                            .map(|s| StyledTextSpan {
+                                start: s.start,
+                                end: s.end,
+                                color: s.color,
+                                bold: s.bold,
+                                italic: s.italic,
+                                underline: s.underline,
+                                strikethrough: s.strikethrough,
+                                link_url: s.link_url,
+                            })
+                            .collect(),
+                        default_color: info.default_color,
+                        font_size: info.font_size,
+                        align: info.align,
+                        v_align: info.v_align,
+                        font_family: info.font_family,
+                        line_height: info.line_height,
+                        weight: info.weight,
+                        italic: info.italic,
+                        ascender: info.ascender,
+                    })
+                } else {
+                    ElementType::Div
+                }
+            }
             ElementTypeId::Div => ElementType::Div,
             ElementTypeId::Motion => ElementType::Div,
         };
@@ -1373,6 +1443,38 @@ impl RenderTree {
             ElementTypeId::Canvas => ElementType::Canvas(CanvasData {
                 render_fn: element.canvas_render_info(),
             }),
+            ElementTypeId::StyledText => {
+                if let Some(info) = element.styled_text_render_info() {
+                    ElementType::StyledText(StyledTextData {
+                        content: info.content,
+                        spans: info
+                            .spans
+                            .into_iter()
+                            .map(|s| StyledTextSpan {
+                                start: s.start,
+                                end: s.end,
+                                color: s.color,
+                                bold: s.bold,
+                                italic: s.italic,
+                                underline: s.underline,
+                                strikethrough: s.strikethrough,
+                                link_url: s.link_url,
+                            })
+                            .collect(),
+                        default_color: info.default_color,
+                        font_size: info.font_size,
+                        align: info.align,
+                        v_align: info.v_align,
+                        font_family: info.font_family,
+                        line_height: info.line_height,
+                        weight: info.weight,
+                        italic: info.italic,
+                        ascender: info.ascender,
+                    })
+                } else {
+                    ElementType::Div
+                }
+            }
             ElementTypeId::Div => ElementType::Div,
             ElementTypeId::Motion => ElementType::Div, // Motion is a transparent container
         }
@@ -1399,6 +1501,38 @@ impl RenderTree {
                         ascender: info.ascender,
                         strikethrough: info.strikethrough,
                         underline: info.underline,
+                    })
+                } else {
+                    ElementType::Div
+                }
+            }
+            ElementTypeId::StyledText => {
+                if let Some(info) = element.styled_text_render_info() {
+                    ElementType::StyledText(StyledTextData {
+                        content: info.content,
+                        spans: info
+                            .spans
+                            .into_iter()
+                            .map(|s| StyledTextSpan {
+                                start: s.start,
+                                end: s.end,
+                                color: s.color,
+                                bold: s.bold,
+                                italic: s.italic,
+                                underline: s.underline,
+                                strikethrough: s.strikethrough,
+                                link_url: s.link_url,
+                            })
+                            .collect(),
+                        default_color: info.default_color,
+                        font_size: info.font_size,
+                        align: info.align,
+                        v_align: info.v_align,
+                        font_family: info.font_family,
+                        line_height: info.line_height,
+                        weight: info.weight,
+                        italic: info.italic,
+                        ascender: info.ascender,
                     })
                 } else {
                     ElementType::Div

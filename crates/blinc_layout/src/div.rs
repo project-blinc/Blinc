@@ -1932,6 +1932,8 @@ impl Div {
 pub enum ElementTypeId {
     Div,
     Text,
+    /// Styled text with inline formatting spans
+    StyledText,
     Svg,
     Image,
     Canvas,
@@ -2122,6 +2124,54 @@ pub struct TextRenderInfo {
     pub underline: bool,
 }
 
+/// A span within styled text (for rich_text element)
+#[derive(Clone)]
+pub struct StyledTextSpanInfo {
+    /// Start byte index
+    pub start: usize,
+    /// End byte index (exclusive)
+    pub end: usize,
+    /// RGBA color
+    pub color: [f32; 4],
+    /// Whether span is bold
+    pub bold: bool,
+    /// Whether span is italic
+    pub italic: bool,
+    /// Whether span has underline
+    pub underline: bool,
+    /// Whether span has strikethrough
+    pub strikethrough: bool,
+    /// Optional link URL
+    pub link_url: Option<String>,
+}
+
+/// Styled text render data (for rich_text element with inline formatting)
+#[derive(Clone)]
+pub struct StyledTextRenderInfo {
+    /// Plain text content (tags stripped)
+    pub content: String,
+    /// Style spans
+    pub spans: Vec<StyledTextSpanInfo>,
+    /// Font size
+    pub font_size: f32,
+    /// Default color for unspanned regions
+    pub default_color: [f32; 4],
+    /// Text alignment
+    pub align: TextAlign,
+    /// Vertical alignment
+    pub v_align: TextVerticalAlign,
+    /// Font family
+    pub font_family: FontFamily,
+    /// Line height multiplier
+    pub line_height: f32,
+    /// Default font weight (for unspanned regions or spans without explicit weight)
+    pub weight: FontWeight,
+    /// Default italic style (for unspanned regions or spans without explicit italic)
+    pub italic: bool,
+    /// Measured ascender from font metrics (for consistent baseline alignment)
+    pub ascender: f32,
+}
+
 /// SVG render data extracted from element
 #[derive(Clone)]
 pub struct SvgRenderInfo {
@@ -2197,6 +2247,11 @@ pub trait ElementBuilder {
 
     /// Get text render info if this is a text element
     fn text_render_info(&self) -> Option<TextRenderInfo> {
+        None
+    }
+
+    /// Get styled text render info if this is a styled text element (rich_text)
+    fn styled_text_render_info(&self) -> Option<StyledTextRenderInfo> {
         None
     }
 

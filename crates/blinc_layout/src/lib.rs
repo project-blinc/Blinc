@@ -41,6 +41,7 @@ pub mod interactive;
 pub mod motion;
 pub mod render_state;
 pub mod renderer;
+pub mod rich_text;
 pub mod scroll;
 pub mod stack;
 pub mod stateful;
@@ -87,7 +88,7 @@ pub use element::{
 // Builder API
 pub use div::{
     div, Div, ElementBuilder, ElementTypeId, FontFamily, FontWeight, GenericFont, ImageRenderInfo,
-    TextAlign, TextVerticalAlign,
+    StyledTextRenderInfo, StyledTextSpanInfo, TextAlign, TextVerticalAlign,
 };
 // Stack container (overlayed children)
 pub use stack::{stack, Stack};
@@ -97,6 +98,7 @@ pub use image::{
     emoji, emoji_sized, image, img, Image, ImageFilter, LoadingStrategy, ObjectFit, ObjectPosition,
     Placeholder,
 };
+pub use rich_text::{rich_text, rich_text_styled, RichText};
 pub use svg::{svg, Svg};
 pub use text::{text, Text};
 
@@ -252,6 +254,7 @@ pub mod prelude {
         GlassPanel, ImageData, LayoutRenderer, RenderTree, SvgData, TextData, UpdateResult,
     };
     // Scroll container (ready-to-use widget with Div extension)
+    pub use crate::rich_text::{rich_text, rich_text_styled, RichText};
     pub use crate::svg::{svg, Svg};
     pub use crate::text::{text, Text};
     pub use crate::tree::{LayoutNodeId, LayoutTree};
