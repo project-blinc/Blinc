@@ -1,0 +1,25 @@
+[package]
+name = "blinc_cn"
+description = "Blinc Component Library - shadcn-style themed components built on blinc_layout primitives"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[features]
+default = []
+
+[dependencies]
+# Primitives layer
+blinc_layout = { path = "../blinc_layout" }
+blinc_core = { path = "../blinc_core" }
+blinc_animation = { path = "../blinc_animation" }
+blinc_theme = { path = "../blinc_theme" }
+
+# Layout
+taffy.workspace = true
+
+# Logging
+tracing.workspace = true

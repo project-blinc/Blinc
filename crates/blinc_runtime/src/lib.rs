@@ -17,8 +17,8 @@ pub use blinc_gpu;
 #[cfg(feature = "blinc_paint")]
 pub use blinc_paint;
 
-#[cfg(feature = "blinc_widgets")]
-pub use blinc_widgets;
+// #[cfg(feature = "blinc_cn")]
+// pub use blinc_cn;
 
 /// Initialize the Blinc runtime
 pub fn init() -> anyhow::Result<()> {

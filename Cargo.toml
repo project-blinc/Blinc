@@ -14,7 +14,7 @@ members = [
     "crates/blinc_text",
     "crates/blinc_svg",
     "crates/blinc_theme",
-    # "crates/blinc_widgets",
+    "crates/blinc_cn",
     "crates/blinc_runtime",
     "crates/blinc_test_suite",
     "extensions/blinc_platform_desktop",

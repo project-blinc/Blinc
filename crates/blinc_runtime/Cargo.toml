@@ -7,7 +7,7 @@ license.workspace = true
 
 [features]
 default = ["full"]
-full = ["blinc_core", "blinc_animation", "blinc_layout", "blinc_gpu", "blinc_paint", "blinc_widgets"]
+full = ["blinc_core", "blinc_animation", "blinc_layout", "blinc_gpu", "blinc_paint"]
 
 [dependencies]
 blinc_core = { path = "../blinc_core", optional = true }
@@ -15,7 +15,7 @@ blinc_animation = { path = "../blinc_animation", optional = true }
 blinc_layout = { path = "../blinc_layout", optional = true }
 blinc_gpu = { path = "../blinc_gpu", optional = true }
 blinc_paint = { path = "../blinc_paint", optional = true }
-blinc_widgets = { path = "../blinc_widgets", optional = true }
+# blinc_cn = { path = "../blinc_cn", optional = true }
 
 # Errors
 anyhow.workspace = true
