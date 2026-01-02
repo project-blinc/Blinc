@@ -68,6 +68,7 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                         .child(toggles_section(ctx))
                         .child(slider_section(ctx))
                         .child(radio_section(ctx))
+                        .child(select_section(ctx))
                         .child(loading_section(ctx))
                         .child(misc_section()),
                 ),
@@ -431,6 +432,63 @@ fn radio_section(ctx: &WindowedContext) -> impl ElementBuilder {
                         .option("red", "Red")
                         .option("green", "Green")
                         .option("blue", "Blue"),
+                ),
+        )
+}
+
+// ============================================================================
+// SELECT SECTION
+// ============================================================================
+
+fn select_section(ctx: &WindowedContext) -> impl ElementBuilder {
+    let fruit = ctx.use_state_keyed("fruit_select", || "".to_string());
+    let fruit_open = ctx.use_state_keyed("fruit_open", || false);
+    let size = ctx.use_state_keyed("size_select", || "medium".to_string());
+    let size_open = ctx.use_state_keyed("size_open", || false);
+    let disabled_select = ctx.use_state_keyed("disabled_select", || "option1".to_string());
+    let disabled_open = ctx.use_state_keyed("disabled_open", || false);
+
+    section_container()
+        .child(section_title("Select"))
+        .child(
+            div()
+                .flex_row()
+                .flex_wrap()
+                .gap(24.0)
+                // Basic select with placeholder
+                .child(
+                    div().w(200.0).child(
+                        cn::select(&fruit, &fruit_open)
+                            .label("Favorite Fruit")
+                            .placeholder("Choose a fruit...")
+                            .option("apple", "Apple")
+                            .option("banana", "Banana")
+                            .option("cherry", "Cherry")
+                            .option("date", "Date")
+                            .option("elderberry", "Elderberry")
+                            .on_change(|v| tracing::info!("Selected fruit: {}", v)),
+                    ),
+                )
+                // Select with pre-selected value
+                .child(
+                    div().w(200.0).child(
+                        cn::select(&size, &size_open)
+                            .label("Size")
+                            .option("small", "Small")
+                            .option("medium", "Medium")
+                            .option("large", "Large")
+                            .option("xl", "Extra Large"),
+                    ),
+                )
+                // Disabled select
+                .child(
+                    div().w(200.0).child(
+                        cn::select(&disabled_select, &disabled_open)
+                            .label("Disabled")
+                            .option("option1", "Option 1")
+                            .option("option2", "Option 2")
+                            .disabled(true),
+                    ),
                 ),
         )
 }

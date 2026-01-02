@@ -54,6 +54,7 @@ pub mod cn {
     pub use crate::components::label::label;
     pub use crate::components::progress::{progress, progress_animated};
     pub use crate::components::radio::radio_group;
+    pub use crate::components::select::select;
     pub use crate::components::separator::separator;
     pub use crate::components::slider::slider;
     pub use crate::components::skeleton::{skeleton, skeleton_circle};
@@ -75,6 +76,7 @@ pub mod prelude {
     pub use crate::components::label::{label, Label, LabelBuilder, LabelSize};
     pub use crate::components::progress::{progress, progress_animated, AnimatedProgress, Progress, ProgressSize};
     pub use crate::components::radio::{radio_group, RadioGroup, RadioGroupBuilder, RadioLayout, RadioSize};
+    pub use crate::components::select::{select, Select, SelectBuilder, SelectOption, SelectSize};
     pub use crate::components::separator::{separator, Separator, SeparatorOrientation};
     pub use crate::components::slider::{slider, Slider, SliderBuilder, SliderSize};
     pub use crate::components::skeleton::{skeleton, skeleton_circle, Skeleton};
