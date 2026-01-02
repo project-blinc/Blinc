@@ -1,6 +1,6 @@
 //! Switch component for boolean toggle
 //!
-//! A themed toggle switch with optional animated thumb movement.
+//! A themed toggle switch with smooth animated thumb movement.
 //! Uses State<bool> from context for reactive state management.
 //!
 //! # Example
@@ -12,31 +12,32 @@
 //!     // Create switch state from context
 //!     let enabled = ctx.use_state_for("notifications", false);
 //!
-//!     cn::switch(&enabled)
+//!     // Smooth animation enabled by default when scheduler is provided
+//!     cn::switch(&enabled, ctx.animation_handle())
 //!         .label("Enable notifications")
 //!         .on_change(|is_on| println!("Switch: {}", is_on))
 //! }
 //!
 //! // Different sizes
 //! let dark_mode = ctx.use_state_for("dark_mode", true);
-//! cn::switch(&dark_mode)
+//! cn::switch(&dark_mode, ctx.animation_handle())
 //!     .size(SwitchSize::Small)
 //!
 //! // Custom colors
-//! cn::switch(&enabled)
+//! cn::switch(&enabled, ctx.animation_handle())
 //!     .on_color(Color::GREEN)
 //!     .off_color(Color::GRAY)
 //!
 //! // Disabled state
-//! cn::switch(&enabled)
+//! cn::switch(&enabled, ctx.animation_handle())
 //!     .disabled(true)
 //!
-//! // With smooth spring animation (optional, requires SharedAnimatedValue from context)
-//! let thumb_x = SwitchComponent::use_thumb_x(ctx, 0.0, SpringConfig::snappy());
-//! cn::switch(&enabled)
-//!     .animated(thumb_x)
+//! // Custom spring config for different feel
+//! cn::switch(&enabled, ctx.animation_handle())
+//!     .spring(SpringConfig::wobbly())
 //! ```
 
+use blinc_animation::{AnimatedValue, SchedulerHandle, SpringConfig};
 use blinc_core::{Color, State, Transform};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
@@ -45,7 +46,7 @@ use blinc_layout::prelude::*;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, ThemeState};
 use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// Switch size variants
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -90,7 +91,7 @@ impl SwitchSize {
 
 /// Switch component
 ///
-/// A toggle switch with optional spring animation.
+/// A toggle switch with smooth spring animation.
 /// Uses State<bool> from context for reactive state management.
 pub struct Switch {
     inner: Stateful<ButtonState>,
@@ -102,33 +103,51 @@ pub struct Switch {
     on_color: Option<Color>,
     off_color: Option<Color>,
     thumb_color: Option<Color>,
-    // Animation (optional - for smooth spring animation)
-    thumb_anim: Option<SharedAnimatedValue>,
+    // Animation - created internally with scheduler handle
+    thumb_anim: SharedAnimatedValue,
+    spring_config: SpringConfig,
     // Callback
     on_change: Option<Arc<dyn Fn(bool) + Send + Sync>>,
 }
 
 impl Switch {
-    /// Create a new switch with state from context
+    /// Create a new switch with state and animation scheduler from context
+    ///
+    /// The switch uses spring animation for smooth thumb movement.
     ///
     /// # Example
     /// ```ignore
     /// let enabled = ctx.use_state_for("my_switch", false);
-    /// cn::switch(&enabled)
+    /// cn::switch(&enabled, ctx.animation_handle())
     /// ```
-    pub fn new(on_state: &State<bool>) -> Self {
+    pub fn new(on_state: &State<bool>, scheduler: SchedulerHandle) -> Self {
         let inner = Stateful::new(ButtonState::Idle);
+
+        // Calculate initial thumb position based on current state
+        let size = SwitchSize::default();
+        let padding = 2.0;
+        let thumb_travel = size.track_width() - size.thumb_size() - (padding * 2.0);
+        let initial_x = if on_state.get() { thumb_travel } else { 0.0 };
+
+        // Create internal animated value with snappy spring config
+        let spring_config = SpringConfig::snappy();
+        let thumb_anim: SharedAnimatedValue = Arc::new(Mutex::new(AnimatedValue::new(
+            scheduler,
+            initial_x,
+            spring_config,
+        )));
 
         Self {
             inner,
             on_state: on_state.clone(),
-            size: SwitchSize::default(),
+            size,
             label: None,
             disabled: false,
             on_color: None,
             off_color: None,
             thumb_color: None,
-            thumb_anim: None,
+            thumb_anim,
+            spring_config,
             on_change: None,
         }
     }
@@ -169,19 +188,18 @@ impl Switch {
         self
     }
 
-    /// Enable smooth spring animation for thumb movement
+    /// Set custom spring configuration for thumb animation
     ///
-    /// Pass a SharedAnimatedValue created from context for spring physics.
-    /// Without this, the thumb position changes instantly on toggle.
+    /// By default, the switch uses `SpringConfig::snappy()`.
+    /// Use this to customize the animation feel.
     ///
     /// # Example
     /// ```ignore
-    /// // Create animated value from context
-    /// let thumb_x = SwitchComponent::use_thumb_x(ctx, 0.0, SpringConfig::snappy());
-    /// cn::switch(&enabled).animated(thumb_x)
+    /// cn::switch(&enabled, ctx.animation_handle())
+    ///     .spring(SpringConfig::wobbly())
     /// ```
-    pub fn animated(mut self, thumb_anim: SharedAnimatedValue) -> Self {
-        self.thumb_anim = Some(thumb_anim);
+    pub fn spring(mut self, config: SpringConfig) -> Self {
+        self.spring_config = config;
         self
     }
 
@@ -271,8 +289,7 @@ impl Switch {
             // Scale effect on press
             let thumb_scale = if is_pressed && !disabled { 0.9 } else { 1.0 };
 
-            // Build visual update
-            // Use motion() with translate_x binding for smooth spring animation if available
+            // Build visual update with animated thumb using motion container
             let thumb_element = div()
                 .w(thumb_size)
                 .h(thumb_size)
@@ -280,16 +297,10 @@ impl Switch {
                 .bg(thumb_color)
                 .transform(Transform::scale(thumb_scale, thumb_scale));
 
-            let visual = if let Some(ref anim) = thumb_anim {
-                // Animated thumb using motion container with spring physics
-                div().bg(track_bg).child(motion().translate_x(anim.clone()).child(thumb_element))
-            } else {
-                // Instant position change without animation
-                let thumb_translate_x = if is_on { thumb_travel } else { 0.0 };
-                div().bg(track_bg).child(
-                    thumb_element.transform(Transform::translate(thumb_translate_x, 0.0)),
-                )
-            };
+            // Always use motion() with translate_x for smooth spring animation
+            let visual = div()
+                .bg(track_bg)
+                .child(motion().translate_x(thumb_anim.clone()).child(thumb_element));
 
             container.merge(visual);
         });
@@ -304,11 +315,9 @@ impl Switch {
             let new_value = !current;
             on_state_for_click.set(new_value);
 
-            // Update animated value target if provided
-            if let Some(ref anim) = thumb_anim_for_click {
-                let target = if new_value { thumb_travel } else { 0.0 };
-                anim.lock().unwrap().set_target(target);
-            }
+            // Update animated value target for smooth thumb movement
+            let target = if new_value { thumb_travel } else { 0.0 };
+            thumb_anim_for_click.lock().unwrap().set_target(target);
 
             if let Some(ref callback) = on_change {
                 callback(new_value);
@@ -388,6 +397,7 @@ impl ElementBuilder for Switch {
 ///
 /// The switch uses reactive `State<bool>` for its on/off status.
 /// State changes automatically trigger visual updates via signals.
+/// Smooth spring animation is enabled by default.
 ///
 /// # Example
 ///
@@ -397,13 +407,13 @@ impl ElementBuilder for Switch {
 /// fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
 ///     let dark_mode = ctx.use_state_for("dark_mode", false);
 ///
-///     cn::switch(&dark_mode)
+///     cn::switch(&dark_mode, ctx.animation_handle())
 ///         .label("Dark mode")
 ///         .on_change(|enabled| println!("Dark mode: {}", enabled))
 /// }
 /// ```
-pub fn switch(state: &State<bool>) -> Switch {
-    Switch::new(state)
+pub fn switch(state: &State<bool>, scheduler: SchedulerHandle) -> Switch {
+    Switch::new(state, scheduler)
 }
 
 #[cfg(test)]
