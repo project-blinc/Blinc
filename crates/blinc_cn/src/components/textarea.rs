@@ -283,7 +283,7 @@ impl ElementBuilder for Textarea {
 
         // Build a container with label, textarea, and description/error
         let spacing = theme.spacing_value(SpacingToken::Space2);
-        let mut container = div().flex_col().gap(spacing);
+        let mut container = div().flex_col().gap_px(spacing);
 
         // Apply width to container
         if self.full_width {

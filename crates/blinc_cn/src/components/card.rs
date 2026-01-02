@@ -46,15 +46,18 @@ impl Card {
         let border_color = theme.color(ColorToken::Border);
         let radius = theme.radius(RadiusToken::Lg);
         let padding = theme.spacing_value(SpacingToken::Space6); // 24px
+        let gap = theme.spacing_value(SpacingToken::Space4); // 16px
 
         let inner = div()
             .bg(bg)
             .border(1.0, border_color)
             .rounded(radius)
             .shadow_sm()
-            .p(padding)
+            .p_px(padding)
             .flex_col()
-            .gap(theme.spacing_value(SpacingToken::Space4)); // 16px gap between sections
+            .items_start() // Align content to start, not center
+            .h_fit() // Don't stretch to fill parent height
+            .gap_px(gap); // 16px gap between sections
 
         Self { inner }
     }
@@ -62,6 +65,68 @@ impl Card {
     /// Add content to the card body
     pub fn child(mut self, content: impl ElementBuilder + 'static) -> Self {
         self.inner = self.inner.child(content);
+        self
+    }
+
+    // Forwarding methods for common Div operations
+
+    /// Set width
+    pub fn w(mut self, width: f32) -> Self {
+        self.inner = self.inner.w(width);
+        self
+    }
+
+    /// Set height
+    pub fn h(mut self, height: f32) -> Self {
+        self.inner = self.inner.h(height);
+        self
+    }
+
+    /// Set full width
+    pub fn w_full(mut self) -> Self {
+        self.inner = self.inner.w_full();
+        self
+    }
+
+    /// Set padding on all sides
+    pub fn p(mut self, padding: f32) -> Self {
+        self.inner = self.inner.p(padding);
+        self
+    }
+
+    /// Set horizontal padding
+    pub fn px(mut self, padding: f32) -> Self {
+        self.inner = self.inner.px(padding);
+        self
+    }
+
+    /// Set vertical padding
+    pub fn py(mut self, padding: f32) -> Self {
+        self.inner = self.inner.py(padding);
+        self
+    }
+
+    /// Set margin on all sides
+    pub fn m(mut self, margin: f32) -> Self {
+        self.inner = self.inner.m(margin);
+        self
+    }
+
+    /// Apply large shadow
+    pub fn shadow_lg(mut self) -> Self {
+        self.inner = self.inner.shadow_lg();
+        self
+    }
+
+    /// Apply medium shadow
+    pub fn shadow_md(mut self) -> Self {
+        self.inner = self.inner.shadow_md();
+        self
+    }
+
+    /// Set background color
+    pub fn bg(mut self, color: blinc_core::Color) -> Self {
+        self.inner = self.inner.bg(color);
         self
     }
 }
@@ -139,9 +204,12 @@ impl CardHeader {
     /// Create a new card header
     pub fn new() -> Self {
         let theme = ThemeState::get();
+        let gap = theme.spacing_value(SpacingToken::Space1_5); // 6px
         let inner = div()
             .flex_col()
-            .gap(theme.spacing_value(SpacingToken::Space1_5)); // 6px
+            .items_start()
+            .w_full()
+            .gap_px(gap);
 
         Self { inner }
     }
@@ -221,6 +289,80 @@ pub fn card_header() -> CardHeader {
     CardHeader::new()
 }
 
+/// Card content section - grows to fill available space
+pub struct CardContent {
+    inner: Div,
+}
+
+impl CardContent {
+    /// Create a new card content section
+    pub fn new() -> Self {
+        let inner = div()
+            .flex_col()
+            .flex_1() // Grow to fill available space
+            .w_full();
+
+        Self { inner }
+    }
+
+    /// Add a child element
+    pub fn child(mut self, content: impl ElementBuilder + 'static) -> Self {
+        self.inner = self.inner.child(content);
+        self
+    }
+}
+
+impl Default for CardContent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Deref for CardContent {
+    type Target = Div;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for CardContent {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl ElementBuilder for CardContent {
+    fn build(&self, tree: &mut blinc_layout::tree::LayoutTree) -> blinc_layout::tree::LayoutNodeId {
+        self.inner.build(tree)
+    }
+
+    fn render_props(&self) -> blinc_layout::element::RenderProps {
+        self.inner.render_props()
+    }
+
+    fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
+        self.inner.children_builders()
+    }
+
+    fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
+        ElementBuilder::event_handlers(&self.inner)
+    }
+
+    fn layout_style(&self) -> Option<&taffy::Style> {
+        ElementBuilder::layout_style(&self.inner)
+    }
+
+    fn element_type_id(&self) -> ElementTypeId {
+        ElementBuilder::element_type_id(&self.inner)
+    }
+}
+
+/// Create a card content section
+pub fn card_content() -> CardContent {
+    CardContent::new()
+}
+
 /// Card footer section
 pub struct CardFooter {
     inner: Div,
@@ -230,9 +372,11 @@ impl CardFooter {
     /// Create a new card footer
     pub fn new() -> Self {
         let theme = ThemeState::get();
+        let gap = theme.spacing_value(SpacingToken::Space2); // 8px
         let inner = div()
             .flex_row()
-            .gap(theme.spacing_value(SpacingToken::Space2)) // 8px
+            .w_full()
+            .gap_px(gap)
             .justify_end();
 
         Self { inner }

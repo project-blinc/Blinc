@@ -1163,6 +1163,14 @@ impl RenderTree {
 
         // Register event handlers if present
         if let Some(handlers) = element.event_handlers() {
+            // Log if DRAG handler is being registered
+            if handlers.has_handler(blinc_core::events::event_types::DRAG) {
+                tracing::info!(
+                    "collect_render_props_boxed: Registering DRAG handler for node {:?} (element_type={:?})",
+                    node_id,
+                    element.element_type_id()
+                );
+            }
             self.handler_registry.register(node_id, handlers.clone());
         }
 
@@ -1942,18 +1950,51 @@ impl RenderTree {
         bounds_width: f32,
         bounds_height: f32,
     ) {
-        let has_handler = self.handler_registry.has_handler(node_id, event_type);
-        tracing::debug!(
-            "dispatch_event_with_local: node={:?}, event_type={}, has_handler={}",
+        self.dispatch_event_full(
             node_id,
             event_type,
-            has_handler
+            mouse_x,
+            mouse_y,
+            local_x,
+            local_y,
+            bounds_width,
+            bounds_height,
+            0.0,
+            0.0,
+        );
+    }
+
+    /// Dispatch an event with all context data including drag delta
+    ///
+    /// This is the full dispatch method that includes drag_delta for DRAG events.
+    pub fn dispatch_event_full(
+        &mut self,
+        node_id: LayoutNodeId,
+        event_type: blinc_core::events::EventType,
+        mouse_x: f32,
+        mouse_y: f32,
+        local_x: f32,
+        local_y: f32,
+        bounds_width: f32,
+        bounds_height: f32,
+        drag_delta_x: f32,
+        drag_delta_y: f32,
+    ) {
+        let has_handler = self.handler_registry.has_handler(node_id, event_type);
+        tracing::debug!(
+            "dispatch_event_full: node={:?}, event_type={}, has_handler={}, drag_delta=({:.1}, {:.1})",
+            node_id,
+            event_type,
+            has_handler,
+            drag_delta_x,
+            drag_delta_y
         );
 
         let ctx = crate::event_handler::EventContext::new(event_type, node_id)
             .with_mouse_pos(mouse_x, mouse_y)
             .with_local_pos(local_x, local_y)
-            .with_bounds(bounds_width, bounds_height);
+            .with_bounds(bounds_width, bounds_height)
+            .with_drag_delta(drag_delta_x, drag_delta_y);
 
         if has_handler {
             self.handler_registry.dispatch(&ctx);
@@ -2719,22 +2760,20 @@ impl RenderTree {
     pub fn process_pending_subtree_rebuilds(&mut self) {
         let pending = crate::stateful::take_pending_subtree_rebuilds();
         for rebuild in pending {
-            // Rebuild children using the Div's children
-            let children = rebuild.new_child.children_builders();
-            if !children.is_empty() {
-                // Remove old children
-                let old_children = self.layout_tree.children(rebuild.parent_id);
-                for child_id in &old_children {
-                    self.remove_subtree_nodes(*child_id);
-                }
-                self.layout_tree.clear_children(rebuild.parent_id);
+            // Always remove old children first (even if new children is empty)
+            // This fixes the bug where SVG checkmarks would persist after unchecking
+            let old_children = self.layout_tree.children(rebuild.parent_id);
+            for child_id in &old_children {
+                self.remove_subtree_nodes(*child_id);
+            }
+            self.layout_tree.clear_children(rebuild.parent_id);
 
-                // Build new children
-                for child in children {
-                    let child_id = child.build(&mut self.layout_tree);
-                    self.layout_tree.add_child(rebuild.parent_id, child_id);
-                    self.collect_render_props_boxed(child.as_ref(), child_id);
-                }
+            // Build new children (if any)
+            let children = rebuild.new_child.children_builders();
+            for child in children {
+                let child_id = child.build(&mut self.layout_tree);
+                self.layout_tree.add_child(rebuild.parent_id, child_id);
+                self.collect_render_props_boxed(child.as_ref(), child_id);
             }
         }
     }

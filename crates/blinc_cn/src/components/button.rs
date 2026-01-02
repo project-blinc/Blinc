@@ -216,6 +216,10 @@ impl ButtonSize {
 /// ```
 pub struct Button {
     inner: Stateful<ButtonState>,
+    label: String,
+    variant: ButtonVariant,
+    btn_size: ButtonSize,
+    disabled: bool,
 }
 
 impl Button {
@@ -254,8 +258,8 @@ impl Button {
 
         let mut btn = Stateful::new(initial_state)
             .h(height)
-            .px(px)
-            .py(py)
+            .padding_x(blinc_layout::units::px(px))
+            .padding_y(blinc_layout::units::px(py))
             .rounded(radius)
             .items_center()
             .justify_center()
@@ -269,8 +273,11 @@ impl Button {
         // Default to fit content width
         btn = btn.w_fit();
 
+        // Clone label for the closure
+        let label_clone = label.clone();
+
         // State callback for hover/press visual changes
-        btn = btn.on_state(move |state, div| {
+        btn = btn.on_state(move |state, container| {
             let theme = ThemeState::get();
             let bg = variant.background(&theme, *state);
             let scale = if matches!(state, ButtonState::Pressed) {
@@ -279,56 +286,43 @@ impl Button {
                 1.0
             };
 
-            *div = div
-                .swap()
-                .bg(bg)
-                .transform(Transform::scale(scale, scale))
-                .child(text(&label).size(font_size).color(fg));
+            container.merge(
+                div()
+                    .bg(bg)
+                    .transform(Transform::scale(scale, scale))
+                    .cursor_pointer()
+                    .child(text(&label_clone).size(font_size).color(fg)),
+            );
         });
 
-        Self { inner: btn }
+        Self {
+            inner: btn,
+            label,
+            variant,
+            btn_size,
+            disabled,
+        }
     }
 
     /// Set the button variant (rebuilds with new styling)
     pub fn variant(self, variant: ButtonVariant) -> Self {
-        let state = self.inner.state();
-        let disabled = matches!(state, ButtonState::Disabled);
-        Self::with_options(self.extract_label(), variant, ButtonSize::default(), disabled)
+        Self::with_options(self.label, variant, self.btn_size, self.disabled)
     }
 
     /// Set the button size (rebuilds with new sizing)
     pub fn size(self, size: ButtonSize) -> Self {
-        let state = self.inner.state();
-        let disabled = matches!(state, ButtonState::Disabled);
-        Self::with_options(
-            self.extract_label(),
-            ButtonVariant::default(),
-            size,
-            disabled,
-        )
+        Self::with_options(self.label, self.variant, size, self.disabled)
     }
 
     /// Make the button disabled
     pub fn disabled(self, disabled: bool) -> Self {
-        Self::with_options(
-            self.extract_label(),
-            ButtonVariant::default(),
-            ButtonSize::default(),
-            disabled,
-        )
+        Self::with_options(self.label, self.variant, self.btn_size, disabled)
     }
 
     /// Make the button full width
     pub fn full_width(mut self) -> Self {
         self.inner = self.inner.w_full();
         self
-    }
-
-    /// Extract label from inner (for rebuilding)
-    fn extract_label(&self) -> String {
-        // For now, return empty string - in a full implementation
-        // we'd store the label separately
-        String::new()
     }
 }
 

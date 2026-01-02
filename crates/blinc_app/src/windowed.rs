@@ -1405,6 +1405,9 @@ impl WindowedApp {
                             bounds_height: f32,
                             scroll_delta_x: f32,
                             scroll_delta_y: f32,
+                            /// Drag delta for DRAG/DRAG_END events
+                            drag_delta_x: f32,
+                            drag_delta_y: f32,
                             key_char: Option<char>,
                             key_code: u32,
                             shift: bool,
@@ -1426,6 +1429,8 @@ impl WindowedApp {
                                     bounds_height: 0.0,
                                     scroll_delta_x: 0.0,
                                     scroll_delta_y: 0.0,
+                                    drag_delta_x: 0.0,
+                                    drag_delta_y: 0.0,
                                     key_char: None,
                                     key_code: 0,
                                     shift: false,
@@ -1478,9 +1483,20 @@ impl WindowedApp {
                                         let lx = x / scale;
                                         let ly = y / scale;
                                         router.on_mouse_move(tree, lx, ly);
+
+                                        // Get drag delta from router (for DRAG events)
+                                        let (drag_dx, drag_dy) = router.drag_delta();
+
                                         for event in pending_events.iter_mut() {
                                             event.mouse_x = lx;
                                             event.mouse_y = ly;
+                                            // Populate drag delta for DRAG events
+                                            if event.event_type == blinc_core::events::event_types::DRAG
+                                                || event.event_type == blinc_core::events::event_types::DRAG_END
+                                            {
+                                                event.drag_delta_x = drag_dx;
+                                                event.drag_delta_y = drag_dy;
+                                            }
                                         }
 
                                         // Update cursor based on hovered element
@@ -1814,7 +1830,7 @@ impl WindowedApp {
                                 if event.event_type == blinc_core::events::event_types::SCROLL {
                                     continue;
                                 }
-                                tree.dispatch_event_with_local(
+                                tree.dispatch_event_full(
                                     event.node_id,
                                     event.event_type,
                                     event.mouse_x,
@@ -1823,6 +1839,8 @@ impl WindowedApp {
                                     event.local_y,
                                     event.bounds_width,
                                     event.bounds_height,
+                                    event.drag_delta_x,
+                                    event.drag_delta_y,
                                 );
                             }
 

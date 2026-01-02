@@ -48,6 +48,7 @@ blinc_platform_android = { path = "../../extensions/blinc_platform_android", opt
 [dev-dependencies]
 image.workspace = true
 tracing-subscriber.workspace = true
+blinc_cn = { path = "../blinc_cn" }
 
 [features]
 default = ["windowed"]

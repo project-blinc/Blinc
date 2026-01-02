@@ -862,7 +862,7 @@ impl<S: StateTransitions> Stateful<S> {
         let mut cache = self.event_handlers_cache.borrow_mut();
 
         // Check if already registered by looking for POINTER_ENTER handler
-        // (all 4 handlers are registered together, so checking one is sufficient)
+        // (all handlers are registered together, so checking one is sufficient)
         if cache.has_handler(event_types::POINTER_ENTER) {
             return; // Already registered
         }
@@ -896,6 +896,22 @@ impl<S: StateTransitions> Stateful<S> {
             let shared_clone = Arc::clone(&shared);
             cache.on_mouse_up(move |ctx| {
                 Self::handle_event_internal(&shared_clone, event_types::POINTER_UP, ctx.node_id);
+            });
+        }
+
+        // DRAG -> state transition (for drag-aware states like SliderThumbState)
+        {
+            let shared_clone = Arc::clone(&shared);
+            cache.on_drag(move |ctx| {
+                Self::handle_event_internal(&shared_clone, event_types::DRAG, ctx.node_id);
+            });
+        }
+
+        // DRAG_END -> state transition
+        {
+            let shared_clone = Arc::clone(&shared);
+            cache.on_drag_end(move |ctx| {
+                Self::handle_event_internal(&shared_clone, event_types::DRAG_END, ctx.node_id);
             });
         }
     }
@@ -1162,6 +1178,24 @@ impl<S: StateTransitions> Stateful<S> {
         self
     }
 
+    /// Set padding using a semantic Length value (builder pattern)
+    pub fn padding(self, len: crate::units::Length) -> Self {
+        self.merge_into_inner(Div::new().padding(len));
+        self
+    }
+
+    /// Set horizontal padding using a semantic Length value (builder pattern)
+    pub fn padding_x(self, len: crate::units::Length) -> Self {
+        self.merge_into_inner(Div::new().padding_x(len));
+        self
+    }
+
+    /// Set vertical padding using a semantic Length value (builder pattern)
+    pub fn padding_y(self, len: crate::units::Length) -> Self {
+        self.merge_into_inner(Div::new().padding_y(len));
+        self
+    }
+
     /// Set padding top (builder pattern)
     pub fn pt(self, units: f32) -> Self {
         self.merge_into_inner(Div::new().pt(units));
@@ -1382,6 +1416,46 @@ impl<S: StateTransitions> Stateful<S> {
         self.cursor(crate::element::CursorStyle::Text)
     }
 
+    // =========================================================================
+    // Position (builder pattern)
+    // =========================================================================
+
+    /// Set position to absolute (builder pattern)
+    pub fn absolute(self) -> Self {
+        self.merge_into_inner(Div::new().absolute());
+        self
+    }
+
+    /// Set position to relative (builder pattern)
+    pub fn relative(self) -> Self {
+        self.merge_into_inner(Div::new().relative());
+        self
+    }
+
+    /// Set top position (builder pattern)
+    pub fn top(self, px: f32) -> Self {
+        self.merge_into_inner(Div::new().top(px));
+        self
+    }
+
+    /// Set bottom position (builder pattern)
+    pub fn bottom(self, px: f32) -> Self {
+        self.merge_into_inner(Div::new().bottom(px));
+        self
+    }
+
+    /// Set left position (builder pattern)
+    pub fn left(self, px: f32) -> Self {
+        self.merge_into_inner(Div::new().left(px));
+        self
+    }
+
+    /// Set right position (builder pattern)
+    pub fn right(self, px: f32) -> Self {
+        self.merge_into_inner(Div::new().right(px));
+        self
+    }
+
     /// Add child (builder pattern)
     pub fn child(self, child: impl ElementBuilder + 'static) -> Self {
         self.merge_into_inner(Div::new().child(child));
@@ -1528,6 +1602,33 @@ impl<S: StateTransitions> Stateful<S> {
         self.event_handlers_cache
             .borrow_mut()
             .on(blinc_core::events::event_types::POINTER_MOVE, handler);
+        self
+    }
+
+    /// Register a drag handler (builder pattern)
+    ///
+    /// Drag events are emitted when the mouse moves while a button is pressed.
+    /// Use `EventContext::local_x/y` to get the current position during drag.
+    pub fn on_drag<F>(self, handler: F) -> Self
+    where
+        F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
+    {
+        self.event_handlers_cache
+            .borrow_mut()
+            .on(blinc_core::events::event_types::DRAG, handler);
+        self
+    }
+
+    /// Register a drag end handler (builder pattern)
+    ///
+    /// Called when the mouse button is released after a drag operation.
+    pub fn on_drag_end<F>(self, handler: F) -> Self
+    where
+        F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
+    {
+        self.event_handlers_cache
+            .borrow_mut()
+            .on(blinc_core::events::event_types::DRAG_END, handler);
         self
     }
 

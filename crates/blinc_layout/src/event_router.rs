@@ -171,6 +171,19 @@ impl EventRouter {
         (self.last_hit_bounds_width, self.last_hit_bounds_height)
     }
 
+    /// Get the current drag delta (offset from drag start position)
+    ///
+    /// Returns (delta_x, delta_y) - the distance dragged from the initial mouse_down position.
+    /// Only meaningful when `is_dragging()` returns true.
+    pub fn drag_delta(&self) -> (f32, f32) {
+        (self.drag_delta_x, self.drag_delta_y)
+    }
+
+    /// Check if a drag operation is currently in progress
+    pub fn is_dragging(&self) -> bool {
+        self.is_dragging
+    }
+
     /// Set the event callback for routing events to elements
     ///
     /// The callback receives (node_id, event_type) and should dispatch
@@ -306,15 +319,28 @@ impl EventRouter {
 
             // Start dragging if we've moved more than a small threshold
             const DRAG_THRESHOLD: f32 = 3.0;
-            if !self.is_dragging
-                && (self.drag_delta_x.abs() > DRAG_THRESHOLD
-                    || self.drag_delta_y.abs() > DRAG_THRESHOLD)
-            {
+            let delta_exceeds = self.drag_delta_x.abs() > DRAG_THRESHOLD
+                || self.drag_delta_y.abs() > DRAG_THRESHOLD;
+
+            tracing::trace!(
+                "Drag check: target={:?}, delta=({:.1}, {:.1}), threshold_exceeded={}, is_dragging={}",
+                target, self.drag_delta_x, self.drag_delta_y, delta_exceeds, self.is_dragging
+            );
+
+            if !self.is_dragging && delta_exceeds {
                 self.is_dragging = true;
+                tracing::info!(
+                    "DRAG started: target={:?}, delta=({:.1}, {:.1})",
+                    target, self.drag_delta_x, self.drag_delta_y
+                );
             }
 
             // Emit DRAG event to the pressed target
             if self.is_dragging {
+                tracing::info!(
+                    "Emitting DRAG to {:?}, delta=({:.1}, {:.1})",
+                    target, self.drag_delta_x, self.drag_delta_y
+                );
                 self.emit_event(target, event_types::DRAG);
                 events.push((target, event_types::DRAG));
 
@@ -824,6 +850,10 @@ impl EventRouter {
 
         // Check children in reverse order (last child is on top)
         let children = tree.layout().children(node);
+        tracing::trace!(
+            "hit_test_node: node={:?}, bounds=({:.1}, {:.1}, {:.1}x{:.1}), children={:?}",
+            node, bounds.x, bounds.y, bounds.width, bounds.height, children
+        );
         for child in children.into_iter().rev() {
             if let Some(result) =
                 self.hit_test_node(tree, child, x, y, child_offset, ancestors.clone())
@@ -833,6 +863,7 @@ impl EventRouter {
         }
 
         // No child hit, this node is the target
+        tracing::trace!("hit_test_node: returning node={:?} as target (no children hit)", node);
         Some(HitTestResult {
             node,
             local_x: x - bounds.x,

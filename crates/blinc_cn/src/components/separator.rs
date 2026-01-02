@@ -20,6 +20,7 @@
 
 use std::ops::{Deref, DerefMut};
 
+use blinc_core::Color;
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
 use blinc_layout::prelude::*;
 use blinc_theme::{ColorToken, ThemeState};
@@ -63,6 +64,75 @@ impl Separator {
     /// Make separator horizontal (default)
     pub fn horizontal(self) -> Self {
         Self::with_orientation(SeparatorOrientation::Horizontal)
+    }
+
+    // Forwarding methods for common Div operations
+    // These consume self and return Self for chaining
+
+    /// Set width
+    pub fn w(mut self, width: f32) -> Self {
+        self.inner = self.inner.w(width);
+        self
+    }
+
+    /// Set height
+    pub fn h(mut self, height: f32) -> Self {
+        self.inner = self.inner.h(height);
+        self
+    }
+
+    /// Set margin on all sides
+    pub fn m(mut self, margin: f32) -> Self {
+        self.inner = self.inner.m(margin);
+        self
+    }
+
+    /// Set horizontal margin
+    pub fn mx(mut self, margin: f32) -> Self {
+        self.inner = self.inner.mx(margin);
+        self
+    }
+
+    /// Set vertical margin
+    pub fn my(mut self, margin: f32) -> Self {
+        self.inner = self.inner.my(margin);
+        self
+    }
+
+    /// Set margin top
+    pub fn mt(mut self, margin: f32) -> Self {
+        self.inner = self.inner.mt(margin);
+        self
+    }
+
+    /// Set margin bottom
+    pub fn mb(mut self, margin: f32) -> Self {
+        self.inner = self.inner.mb(margin);
+        self
+    }
+
+    /// Set margin left
+    pub fn ml(mut self, margin: f32) -> Self {
+        self.inner = self.inner.ml(margin);
+        self
+    }
+
+    /// Set margin right
+    pub fn mr(mut self, margin: f32) -> Self {
+        self.inner = self.inner.mr(margin);
+        self
+    }
+
+    /// Set background color
+    pub fn bg(mut self, color: impl Into<Color>) -> Self {
+        self.inner = self.inner.bg(color.into());
+        self
+    }
+
+    /// Set opacity
+    pub fn opacity(mut self, opacity: f32) -> Self {
+        self.inner = self.inner.opacity(opacity);
+        self
     }
 }
 

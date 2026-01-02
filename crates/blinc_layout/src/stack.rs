@@ -891,6 +891,46 @@ impl Stack {
         self.inner = self.inner.on_blur(handler);
         self
     }
+
+    // =========================================================================
+    // Cursor
+    // =========================================================================
+
+    /// Set cursor style
+    pub fn cursor(mut self, cursor: crate::element::CursorStyle) -> Self {
+        self.inner = self.inner.cursor(cursor);
+        self
+    }
+
+    /// Set cursor to pointer (hand)
+    pub fn cursor_pointer(self) -> Self {
+        self.cursor(crate::element::CursorStyle::Pointer)
+    }
+
+    /// Set cursor to text selection
+    pub fn cursor_text(self) -> Self {
+        self.cursor(crate::element::CursorStyle::Text)
+    }
+
+    /// Set cursor to move
+    pub fn cursor_move(self) -> Self {
+        self.cursor(crate::element::CursorStyle::Move)
+    }
+
+    /// Set cursor to grab
+    pub fn cursor_grab(self) -> Self {
+        self.cursor(crate::element::CursorStyle::Grab)
+    }
+
+    /// Set cursor to grabbing
+    pub fn cursor_grabbing(self) -> Self {
+        self.cursor(crate::element::CursorStyle::Grabbing)
+    }
+
+    /// Set cursor to not allowed
+    pub fn cursor_not_allowed(self) -> Self {
+        self.cursor(crate::element::CursorStyle::NotAllowed)
+    }
 }
 
 impl ElementBuilder for Stack {

@@ -17,6 +17,7 @@ blinc_layout = { path = "../blinc_layout" }
 blinc_core = { path = "../blinc_core" }
 blinc_animation = { path = "../blinc_animation" }
 blinc_theme = { path = "../blinc_theme" }
+blinc_macros = { path = "../blinc_macros" }
 
 # Layout
 taffy.workspace = true

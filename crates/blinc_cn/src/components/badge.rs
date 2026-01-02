@@ -80,6 +80,8 @@ impl BadgeVariant {
 /// Implements `Deref` to `Div` for full customization.
 pub struct Badge {
     inner: Div,
+    label: String,
+    variant: BadgeVariant,
 }
 
 impl Badge {
@@ -96,15 +98,15 @@ impl Badge {
         let fg = variant.foreground(&theme);
         let border = variant.border(&theme);
 
-        let px = theme.spacing_value(SpacingToken::Space2_5); // 10px
-        let py = theme.spacing_value(SpacingToken::Space0_5); // 2px
+        let padding_x = theme.spacing_value(SpacingToken::Space2_5); // 10px
+        let padding_y = theme.spacing_value(SpacingToken::Space0_5); // 2px
         let radius = theme.radius(RadiusToken::Full); // Pill shape
         let font_size = theme.typography().get(TypographyToken::TextXs);
 
         let mut badge = div()
             .bg(bg)
-            .px(px)
-            .py(py)
+            .padding_x_px(padding_x)
+            .padding_y_px(padding_y)
             .rounded(radius)
             .items_center()
             .justify_center()
@@ -114,30 +116,16 @@ impl Badge {
             badge = badge.border(1.0, border_color);
         }
 
-        Self { inner: badge }
+        Self {
+            inner: badge,
+            label,
+            variant,
+        }
     }
 
     /// Set the badge variant
     pub fn variant(self, variant: BadgeVariant) -> Self {
-        // Rebuild with new variant - we'd need to extract label
-        // For now, this creates a new badge with variant
-        let theme = ThemeState::get();
-        let bg = variant.background(&theme);
-        let _fg = variant.foreground(&theme); // TODO: Apply to text children
-        let border = variant.border(&theme);
-
-        let mut badge = self.inner.bg(bg);
-
-        // Update text color in children would require more complex logic
-        // For a proper implementation, we'd store the label
-
-        if let Some(border_color) = border {
-            badge = badge.border(1.0, border_color);
-        } else {
-            badge = badge.border(0.0, Color::TRANSPARENT);
-        }
-
-        Self { inner: badge }
+        Self::with_variant(self.label, variant)
     }
 }
 

@@ -48,7 +48,7 @@ pub mod cn {
     pub use crate::components::alert::{alert, alert_box};
     pub use crate::components::badge::badge;
     pub use crate::components::button::button;
-    pub use crate::components::card::{card, card_footer, card_header};
+    pub use crate::components::card::{card, card_content, card_footer, card_header};
     pub use crate::components::checkbox::checkbox;
     pub use crate::components::input::input;
     pub use crate::components::label::label;
@@ -68,19 +68,21 @@ pub mod prelude {
     pub use crate::components::alert::{alert, alert_box, Alert, AlertBox, AlertVariant};
     pub use crate::components::badge::{badge, Badge, BadgeVariant};
     pub use crate::components::button::{button, Button, ButtonSize, ButtonVariant};
-    pub use crate::components::card::{card, card_footer, card_header, Card, CardFooter, CardHeader};
+    pub use crate::components::card::{card, card_content, card_footer, card_header, Card, CardContent, CardFooter, CardHeader};
     pub use crate::components::checkbox::{checkbox, Checkbox, CheckboxSize};
     pub use crate::components::input::{input, Input, InputBgColors, InputBorderColors, InputSize};
-    pub use crate::components::label::{label, Label, LabelSize};
-    pub use crate::components::radio::{radio_group, RadioGroup, RadioLayout, RadioSize};
+    pub use crate::components::label::{label, Label, LabelBuilder, LabelSize};
+    pub use crate::components::radio::{radio_group, RadioGroup, RadioGroupBuilder, RadioLayout, RadioSize};
     pub use crate::components::separator::{separator, Separator, SeparatorOrientation};
-    pub use crate::components::slider::{slider, Slider, SliderSize};
+    pub use crate::components::slider::{slider, Slider, SliderBuilder, SliderSize};
     pub use crate::components::skeleton::{skeleton, skeleton_circle, Skeleton};
     pub use crate::components::spinner::{spinner, Spinner, SpinnerSize};
     pub use crate::components::switch::{switch, Switch, SwitchSize};
     pub use crate::components::textarea::{textarea, Textarea, TextareaSize};
     // Re-export State for checkbox/switch/radio usage
     pub use blinc_core::State;
+    // Re-export SchedulerHandle for slider/switch usage
+    pub use blinc_animation::SchedulerHandle;
     // Re-export text_area_state for textarea usage
     pub use blinc_layout::widgets::text_area::{text_area_state, SharedTextAreaState};
     // Re-export commonly needed theme types

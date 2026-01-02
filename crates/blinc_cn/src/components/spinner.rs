@@ -238,10 +238,13 @@ impl Spinner {
 impl ElementBuilder for Spinner {
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
         let diameter = self.size.diameter();
+        let border_width = self.size.border_width();
+        // Add padding on both sides to account for the border width so drawing doesn't clip
+        let total_size = diameter + border_width * 2.0;
         let style = Style {
             size: taffy::Size {
-                width: taffy::Dimension::Length(diameter),
-                height: taffy::Dimension::Length(diameter),
+                width: taffy::Dimension::Length(total_size),
+                height: taffy::Dimension::Length(total_size),
             },
             ..Default::default()
         };

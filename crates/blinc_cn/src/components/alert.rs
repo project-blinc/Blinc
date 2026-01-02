@@ -104,7 +104,7 @@ impl Alert {
             .bg(bg)
             .border(1.0, border_color)
             .rounded(radius)
-            .p(padding)
+            .p_px(padding)
             .child(text(&message).size(14.0).color(text_color));
 
         Self { inner }
@@ -193,14 +193,15 @@ impl AlertBox {
         let border_color = variant.border(&theme);
         let radius = theme.radius(RadiusToken::Md);
         let padding = theme.spacing_value(SpacingToken::Space4);
+        let gap = theme.spacing_value(SpacingToken::Space1); // 4px
 
         div()
             .bg(bg)
             .border(1.0, border_color)
             .rounded(radius)
-            .p(padding)
+            .p_px(padding)
             .flex_col()
-            .gap(theme.spacing_value(SpacingToken::Space1)) // 4px
+            .gap_px(gap)
     }
 
     /// Set the alert variant

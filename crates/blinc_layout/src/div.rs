@@ -805,6 +805,15 @@ impl Div {
         self
     }
 
+    /// Set flex-grow to a specific value
+    ///
+    /// Use this for proportional sizing. For example, an element with flex_grow_value(2.0)
+    /// will grow to twice the size of an element with flex_grow_value(1.0).
+    pub fn flex_grow_value(mut self, value: f32) -> Self {
+        self.style.flex_grow = value;
+        self
+    }
+
     /// Set flex-shrink to 1 (element will shrink if needed)
     pub fn flex_shrink(mut self) -> Self {
         self.style.flex_shrink = 1.0;
@@ -1884,6 +1893,16 @@ impl Div {
     {
         self.event_handlers
             .on(blinc_core::events::event_types::DRAG, handler);
+        self
+    }
+
+    /// Register a drag end handler (pointer movement while button is pressed)
+    pub fn on_drag_end<F>(mut self, handler: F) -> Self
+    where
+        F: Fn(&crate::event_handler::EventContext) + 'static,
+    {
+        self.event_handlers
+            .on(blinc_core::events::event_types::DRAG_END, handler);
         self
     }
 

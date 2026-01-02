@@ -37,7 +37,6 @@ use blinc_layout::element::RenderProps;
 use blinc_layout::prelude::*;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
-use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 /// SVG checkmark path - simple checkmark that fits in a 16x16 viewBox
@@ -96,19 +95,8 @@ impl CheckboxSize {
 /// A toggle checkbox with hover and press feedback.
 /// Uses State<bool> from context for reactive state management.
 pub struct Checkbox {
-    inner: Stateful<ButtonState>,
-    checked_state: State<bool>,
-    size: CheckboxSize,
-    label: Option<String>,
-    disabled: bool,
-    // Colors
-    checked_color: Option<Color>,
-    unchecked_bg: Option<Color>,
-    border_color: Option<Color>,
-    hover_border_color: Option<Color>,
-    check_color: Option<Color>,
-    // Callback
-    on_change: Option<Arc<dyn Fn(bool) + Send + Sync>>,
+    /// The fully-built inner element (Div containing checkbox and optional label)
+    inner: Div,
 }
 
 impl Checkbox {
@@ -120,111 +108,38 @@ impl Checkbox {
     /// cn::checkbox(&checked)
     /// ```
     pub fn new(checked_state: &State<bool>) -> Self {
-        let inner = Stateful::new(ButtonState::Idle);
-
-        Self {
-            inner,
-            checked_state: checked_state.clone(),
-            size: CheckboxSize::default(),
-            label: None,
-            disabled: false,
-            checked_color: None,
-            unchecked_bg: None,
-            border_color: None,
-            hover_border_color: None,
-            check_color: None,
-            on_change: None,
-        }
+        Self::with_config(CheckboxConfig::new(checked_state.clone()))
     }
 
-    /// Set the checkbox size
-    pub fn size(mut self, size: CheckboxSize) -> Self {
-        self.size = size;
-        self
-    }
-
-    /// Add a label to the checkbox
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.label = Some(label.into());
-        self
-    }
-
-    /// Set disabled state
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.disabled = disabled;
-        self
-    }
-
-    /// Set the background color when checked
-    pub fn checked_color(mut self, color: impl Into<Color>) -> Self {
-        self.checked_color = Some(color.into());
-        self
-    }
-
-    /// Set the background color when unchecked
-    pub fn unchecked_bg(mut self, color: impl Into<Color>) -> Self {
-        self.unchecked_bg = Some(color.into());
-        self
-    }
-
-    /// Set the border color
-    pub fn border_color(mut self, color: impl Into<Color>) -> Self {
-        self.border_color = Some(color.into());
-        self
-    }
-
-    /// Set the hover border color
-    pub fn hover_border_color(mut self, color: impl Into<Color>) -> Self {
-        self.hover_border_color = Some(color.into());
-        self
-    }
-
-    /// Set the checkmark color
-    pub fn check_color(mut self, color: impl Into<Color>) -> Self {
-        self.check_color = Some(color.into());
-        self
-    }
-
-    /// Set the change callback
-    ///
-    /// Called when the checkbox is toggled, with the new checked state.
-    pub fn on_change<F>(mut self, callback: F) -> Self
-    where
-        F: Fn(bool) + Send + Sync + 'static,
-    {
-        self.on_change = Some(Arc::new(callback));
-        self
-    }
-
-    /// Build the checkbox element
-    fn build_checkbox(&self) -> Stateful<ButtonState> {
+    /// Create from a full configuration
+    fn with_config(config: CheckboxConfig) -> Self {
         let theme = ThemeState::get();
-        let box_size = self.size.size();
-        let border_width = self.size.border_width();
-        let checkmark_size = self.size.checkmark_size();
-        let radius = self.size.corner_radius(&theme);
+        let box_size = config.size.size();
+        let border_width = config.size.border_width();
+        let checkmark_size = config.size.checkmark_size();
+        let radius = config.size.corner_radius(&theme);
 
         // Get colors
-        let checked_bg = self
+        let checked_bg = config
             .checked_color
             .unwrap_or_else(|| theme.color(ColorToken::Primary));
-        let unchecked_bg = self
+        let unchecked_bg = config
             .unchecked_bg
             .unwrap_or_else(|| theme.color(ColorToken::InputBg));
-        let border = self
+        let border = config
             .border_color
             .unwrap_or_else(|| theme.color(ColorToken::Border));
-        let hover_border = self
+        let hover_border = config
             .hover_border_color
             .unwrap_or_else(|| theme.color(ColorToken::BorderHover));
-        let check_mark_color = self
+        let check_mark_color = config
             .check_color
             .unwrap_or_else(|| theme.color(ColorToken::TextInverse));
 
-        let disabled = self.disabled;
-        let on_change = self.on_change.clone();
-        let checked_state = self.checked_state.clone();
-        let checked_state_for_click = self.checked_state.clone();
+        let disabled = config.disabled;
+        let on_change = config.on_change.clone();
+        let checked_state = config.checked_state.clone();
+        let checked_state_for_click = config.checked_state.clone();
 
         let mut checkbox = Stateful::new(ButtonState::Idle)
             .w(box_size)
@@ -256,6 +171,9 @@ impl Checkbox {
             // Apply scale effect on hover for subtle motion feedback
             let scale = if is_hovered && !disabled { 1.05 } else { 1.0 };
 
+            // Clear existing children first to ensure checkmark is removed when unchecked
+            container.clear_children();
+
             // Build visual update - use merge to preserve existing properties
             let mut visual = div()
                 .bg(bg)
@@ -274,8 +192,12 @@ impl Checkbox {
             container.merge(visual);
         });
 
-        // Add click handler to toggle the state
+        // Add click handler to toggle the state (only if not disabled)
         checkbox = checkbox.on_click(move |_| {
+            if disabled {
+                return;
+            }
+
             let current = checked_state_for_click.get();
             let new_value = !current;
             checked_state_for_click.set(new_value);
@@ -285,72 +207,204 @@ impl Checkbox {
             }
         });
 
-        checkbox
-    }
-}
-
-impl Default for Checkbox {
-    fn default() -> Self {
-        // Note: This default requires State<bool> which needs context
-        // Prefer using checkbox(&state) constructor
-        panic!("Checkbox requires State<bool> from context. Use checkbox(&state) instead.")
-    }
-}
-
-impl Deref for Checkbox {
-    type Target = Stateful<ButtonState>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for Checkbox {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl ElementBuilder for Checkbox {
-    fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        let checkbox = self.build_checkbox();
-
-        // If there's a label, wrap in a row
-        if let Some(ref label_text) = self.label {
-            let theme = ThemeState::get();
-            let label_color = if self.disabled {
+        // If there's a label, wrap in a row with clickable container
+        let inner = if let Some(ref label_text) = config.label {
+            let label_color = if disabled {
                 theme.color(ColorToken::TextTertiary)
             } else {
                 theme.color(ColorToken::TextPrimary)
             };
 
+            // Clone state for the container click handler
+            let checked_state_for_label = config.checked_state.clone();
+            let on_change_for_label = config.on_change.clone();
+
             div()
                 .flex_row()
-                .gap(8.0)
+                .gap(theme.spacing().space_1)
                 .items_center()
                 .cursor_pointer()
                 .child(checkbox)
                 .child(text(label_text).size(14.0).color(label_color))
-                .build(tree)
+                .on_click(move |_| {
+                    if disabled {
+                        return;
+                    }
+                    let current = checked_state_for_label.get();
+                    let new_value = !current;
+                    checked_state_for_label.set(new_value);
+                    if let Some(ref callback) = on_change_for_label {
+                        callback(new_value);
+                    }
+                })
         } else {
-            checkbox.build(tree)
-        }
+            // Wrap single checkbox in a div for consistent behavior
+            div().child(checkbox)
+        };
+
+        Self { inner }
+    }
+}
+
+impl ElementBuilder for Checkbox {
+    fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
+        self.inner.build(tree)
     }
 
     fn render_props(&self) -> RenderProps {
-        RenderProps::default()
+        self.inner.render_props()
     }
 
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
-        &[]
+        self.inner.children_builders()
     }
 
     fn element_type_id(&self) -> ElementTypeId {
-        ElementTypeId::Div
+        self.inner.element_type_id()
     }
 
     fn layout_style(&self) -> Option<&taffy::Style> {
-        None
+        self.inner.layout_style()
+    }
+}
+
+/// Internal configuration for building a Checkbox
+#[derive(Clone)]
+struct CheckboxConfig {
+    checked_state: State<bool>,
+    size: CheckboxSize,
+    label: Option<String>,
+    disabled: bool,
+    checked_color: Option<Color>,
+    unchecked_bg: Option<Color>,
+    border_color: Option<Color>,
+    hover_border_color: Option<Color>,
+    check_color: Option<Color>,
+    on_change: Option<Arc<dyn Fn(bool) + Send + Sync>>,
+}
+
+impl CheckboxConfig {
+    fn new(checked_state: State<bool>) -> Self {
+        Self {
+            checked_state,
+            size: CheckboxSize::default(),
+            label: None,
+            disabled: false,
+            checked_color: None,
+            unchecked_bg: None,
+            border_color: None,
+            hover_border_color: None,
+            check_color: None,
+            on_change: None,
+        }
+    }
+}
+
+/// Builder for creating Checkbox components with fluent API
+pub struct CheckboxBuilder {
+    config: CheckboxConfig,
+    /// Cached built Checkbox - built lazily on first access
+    built: std::cell::OnceCell<Checkbox>,
+}
+
+impl CheckboxBuilder {
+    /// Create a new checkbox builder with state from context
+    pub fn new(checked_state: &State<bool>) -> Self {
+        Self {
+            config: CheckboxConfig::new(checked_state.clone()),
+            built: std::cell::OnceCell::new(),
+        }
+    }
+
+    /// Get or build the inner Checkbox
+    fn get_or_build(&self) -> &Checkbox {
+        self.built.get_or_init(|| Checkbox::with_config(self.config.clone()))
+    }
+
+    /// Set the checkbox size
+    pub fn size(mut self, size: CheckboxSize) -> Self {
+        self.config.size = size;
+        self
+    }
+
+    /// Add a label to the checkbox
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.config.label = Some(label.into());
+        self
+    }
+
+    /// Set disabled state
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.config.disabled = disabled;
+        self
+    }
+
+    /// Set the background color when checked
+    pub fn checked_color(mut self, color: impl Into<Color>) -> Self {
+        self.config.checked_color = Some(color.into());
+        self
+    }
+
+    /// Set the background color when unchecked
+    pub fn unchecked_bg(mut self, color: impl Into<Color>) -> Self {
+        self.config.unchecked_bg = Some(color.into());
+        self
+    }
+
+    /// Set the border color
+    pub fn border_color(mut self, color: impl Into<Color>) -> Self {
+        self.config.border_color = Some(color.into());
+        self
+    }
+
+    /// Set the hover border color
+    pub fn hover_border_color(mut self, color: impl Into<Color>) -> Self {
+        self.config.hover_border_color = Some(color.into());
+        self
+    }
+
+    /// Set the checkmark color
+    pub fn check_color(mut self, color: impl Into<Color>) -> Self {
+        self.config.check_color = Some(color.into());
+        self
+    }
+
+    /// Set the change callback
+    ///
+    /// Called when the checkbox is toggled, with the new checked state.
+    pub fn on_change<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(bool) + Send + Sync + 'static,
+    {
+        self.config.on_change = Some(Arc::new(callback));
+        self
+    }
+
+    /// Build the final Checkbox component
+    pub fn build_component(self) -> Checkbox {
+        Checkbox::with_config(self.config)
+    }
+}
+
+impl ElementBuilder for CheckboxBuilder {
+    fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
+        self.get_or_build().build(tree)
+    }
+
+    fn render_props(&self) -> RenderProps {
+        self.get_or_build().render_props()
+    }
+
+    fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
+        self.get_or_build().children_builders()
+    }
+
+    fn element_type_id(&self) -> ElementTypeId {
+        self.get_or_build().element_type_id()
+    }
+
+    fn layout_style(&self) -> Option<&taffy::Style> {
+        self.get_or_build().layout_style()
     }
 }
 
@@ -372,8 +426,8 @@ impl ElementBuilder for Checkbox {
 ///         .on_change(|checked| println!("Checked: {}", checked))
 /// }
 /// ```
-pub fn checkbox(state: &State<bool>) -> Checkbox {
-    Checkbox::new(state)
+pub fn checkbox(state: &State<bool>) -> CheckboxBuilder {
+    CheckboxBuilder::new(state)
 }
 
 #[cfg(test)]
