@@ -55,6 +55,7 @@ pub mod cn {
     pub use crate::components::separator::separator;
     pub use crate::components::skeleton::{skeleton, skeleton_circle};
     pub use crate::components::spinner::spinner;
+    pub use crate::components::switch::switch;
 }
 
 /// Prelude for convenient imports
@@ -71,7 +72,8 @@ pub mod prelude {
     pub use crate::components::separator::{separator, Separator, SeparatorOrientation};
     pub use crate::components::skeleton::{skeleton, skeleton_circle, Skeleton};
     pub use crate::components::spinner::{spinner, Spinner, SpinnerSize};
-    // Re-export State for checkbox usage
+    pub use crate::components::switch::{switch, Switch, SwitchSize};
+    // Re-export State for checkbox/switch usage
     pub use blinc_core::State;
     // Re-export commonly needed theme types
     pub use blinc_theme::{ColorToken, RadiusToken, ShadowToken, SpacingToken, ThemeState};

@@ -41,7 +41,7 @@ Form inputs and controls.
 | **Textarea** | text_area | Planned |
 | **Checkbox** | Stateful, div, svg | ✅ Done |
 | **Radio Group** | Stateful, div | Planned |
-| **Switch** | Stateful, motion | Planned |
+| **Switch** | Stateful, motion | ✅ Done |
 | **Slider** | Stateful, div | Planned |
 | **Select** | scroll, text, overlay | Planned |
 | **Combobox** | text_input, scroll, overlay | Planned |
@@ -489,18 +489,19 @@ crates/blinc_cn/
 ### Completed
 
 - **Phase 1 (Core)**: All 7 components done (Button, Badge, Card, Separator, Skeleton, Spinner, Alert)
-- **Phase 2 (Form)**: Input, Label, and Checkbox done with full theme integration and customization
+- **Phase 2 (Form)**: Input, Label, Checkbox, and Switch done with full theme integration and customization
 
 ### Current: Phase 2 - Form Components
 
 Next components to implement:
 
-1. **Switch** - Toggle switch with motion animation
-2. **Textarea** - Multi-line text input (wraps text_area primitive)
+1. **Textarea** - Multi-line text input (wraps text_area primitive)
+2. **Radio Group** - Radio button group
 
 ### Notes
 
 - Spinner uses canvas-based animation with AnimatedTimeline for smooth 60fps rotation
 - Input supports full color customization (border, bg, text, placeholder, cursor, selection)
 - Checkbox uses State<bool> from context with signal-based reactivity and SVG checkmark
+- Switch uses State<bool> with optional motion() animation for smooth spring physics
 - All components use theme tokens from blinc_theme
