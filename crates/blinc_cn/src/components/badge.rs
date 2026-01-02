@@ -24,7 +24,7 @@ use std::ops::{Deref, DerefMut};
 use blinc_core::Color;
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
 use blinc_layout::prelude::*;
-use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState};
+use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState, TypographyToken};
 
 /// Badge visual variants
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -99,6 +99,7 @@ impl Badge {
         let px = theme.spacing_value(SpacingToken::Space2_5); // 10px
         let py = theme.spacing_value(SpacingToken::Space0_5); // 2px
         let radius = theme.radius(RadiusToken::Full); // Pill shape
+        let font_size = theme.typography().get(TypographyToken::TextXs);
 
         let mut badge = div()
             .bg(bg)
@@ -107,7 +108,7 @@ impl Badge {
             .rounded(radius)
             .items_center()
             .justify_center()
-            .child(text(&label).size(12.0).color(fg).medium());
+            .child(text(&label).size(font_size).color(fg).medium());
 
         if let Some(border_color) = border {
             badge = badge.border(1.0, border_color);

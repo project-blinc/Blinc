@@ -1510,6 +1510,105 @@ impl TextInput {
         self.inner = std::mem::take(&mut self.inner).flex_grow();
         self
     }
+
+    // ========== Border Color Configuration ==========
+
+    /// Set the idle border color (when not hovered or focused)
+    pub fn idle_border_color(self, color: Color) -> Self {
+        self.config.lock().unwrap().border_color = color;
+        self
+    }
+
+    /// Set the hover border color
+    pub fn hover_border_color(self, color: Color) -> Self {
+        self.config.lock().unwrap().hover_border_color = color;
+        self
+    }
+
+    /// Set the focused border color
+    pub fn focused_border_color(self, color: Color) -> Self {
+        self.config.lock().unwrap().focused_border_color = color;
+        self
+    }
+
+    /// Set the error border color (shown when is_valid is false)
+    pub fn error_border_color(self, color: Color) -> Self {
+        self.config.lock().unwrap().error_border_color = color;
+        self
+    }
+
+    /// Set all border colors at once for consistent theming
+    pub fn border_colors(
+        self,
+        idle: Color,
+        hover: Color,
+        focused: Color,
+        error: Color,
+    ) -> Self {
+        let mut cfg = self.config.lock().unwrap();
+        cfg.border_color = idle;
+        cfg.hover_border_color = hover;
+        cfg.focused_border_color = focused;
+        cfg.error_border_color = error;
+        drop(cfg);
+        self
+    }
+
+    // ========== Background Color Configuration ==========
+
+    /// Set the idle background color
+    pub fn idle_bg_color(self, color: Color) -> Self {
+        self.config.lock().unwrap().bg_color = color;
+        self
+    }
+
+    /// Set the hover background color
+    pub fn hover_bg_color(self, color: Color) -> Self {
+        self.config.lock().unwrap().hover_bg_color = color;
+        self
+    }
+
+    /// Set the focused background color
+    pub fn focused_bg_color(self, color: Color) -> Self {
+        self.config.lock().unwrap().focused_bg_color = color;
+        self
+    }
+
+    /// Set all background colors at once
+    pub fn bg_colors(self, idle: Color, hover: Color, focused: Color) -> Self {
+        let mut cfg = self.config.lock().unwrap();
+        cfg.bg_color = idle;
+        cfg.hover_bg_color = hover;
+        cfg.focused_bg_color = focused;
+        drop(cfg);
+        self
+    }
+
+    // ========== Text Color Configuration ==========
+
+    /// Set the text color
+    pub fn text_color(self, color: Color) -> Self {
+        self.config.lock().unwrap().text_color = color;
+        self
+    }
+
+    /// Set the placeholder text color
+    pub fn placeholder_color(self, color: Color) -> Self {
+        self.config.lock().unwrap().placeholder_color = color;
+        self
+    }
+
+    /// Set the cursor color
+    pub fn cursor_color(self, color: Color) -> Self {
+        self.config.lock().unwrap().cursor_color = color;
+        self
+    }
+
+    /// Set the selection highlight color
+    pub fn selection_color(self, color: Color) -> Self {
+        self.config.lock().unwrap().selection_color = color;
+        self
+    }
 }
 
 /// Create a text input widget

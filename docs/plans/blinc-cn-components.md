@@ -23,11 +23,12 @@ These are fundamental components used throughout any application.
 | Component | Primitives Used | Status |
 |-----------|-----------------|--------|
 | **Button** | Stateful<ButtonState>, text | ✅ Done |
-| **Badge** | div, text | Planned |
-| **Card** | div, text | Planned |
-| **Separator** | div | Planned |
-| **Skeleton** | div with animation | Planned |
-| **Spinner** | div with animation | Planned |
+| **Badge** | div, text | ✅ Done |
+| **Card** | div, text | ✅ Done |
+| **Separator** | div | ✅ Done |
+| **Skeleton** | div with animation | ✅ Done |
+| **Spinner** | div with animation | ✅ Done |
+| **Alert** | div, text, icon | ✅ Done |
 
 ### 2. Form Components (Priority: High)
 
@@ -117,6 +118,212 @@ Text components.
 |-----------|-----------------|--------|
 | **Typography** | text, rich_text | Planned |
 | **Kbd** | div, text | Planned |
+
+### 9. Icons (Priority: High)
+
+Icon system with pluggable icon libraries.
+
+| Component | Primitives Used | Status  |
+|-----------|-----------------|---------|
+| **Icon**  | svg             | Planned |
+
+## Icon System
+
+### Icon Overview
+
+The icon system provides a unified API for rendering icons from multiple icon libraries.
+Icons are rendered using the `svg()` element primitive and support theming, sizing, and animations.
+
+### Default Icon Library: Lucide
+
+[Lucide](https://lucide.dev/) is the default icon library, forked and maintained as SVG assets.
+Lucide provides 1500+ icons with consistent stroke width and sizing.
+
+### Icon Crate Structure
+
+```
+blinc_icons/              # Icon library crate
+├── Cargo.toml
+├── src/
+│   ├── lib.rs            # Main exports, Icon trait
+│   ├── registry.rs       # Icon registry for lookups
+│   └── libraries/
+│       ├── mod.rs
+│       ├── lucide.rs     # Lucide icons (default)
+│       ├── heroicons.rs  # Heroicons (optional)
+│       └── custom.rs     # User-defined icons
+└── assets/
+    └── lucide/           # Forked Lucide SVG files
+        ├── arrow-right.svg
+        ├── check.svg
+        └── ...
+```
+
+### Icon Trait
+
+```rust
+/// Trait for icon providers
+pub trait IconProvider {
+    /// Get SVG path data for an icon by name
+    fn get_icon(&self, name: &str) -> Option<IconData>;
+
+    /// List all available icon names
+    fn list_icons(&self) -> &[&str];
+}
+
+/// Icon data returned by providers
+pub struct IconData {
+    /// SVG path data (d attribute)
+    pub path: &'static str,
+    /// Default viewBox dimensions
+    pub view_box: (f32, f32, f32, f32),
+    /// Stroke width (for stroke-based icons like Lucide)
+    pub stroke_width: Option<f32>,
+    /// Fill rule
+    pub fill_rule: FillRule,
+}
+
+pub enum FillRule {
+    Stroke,     // Icons drawn with strokes (Lucide)
+    Fill,       // Icons drawn with fills (some Heroicons)
+    EvenOdd,    // Complex paths
+}
+```
+
+### Icon Component API
+
+```rust
+// Basic usage with Lucide (default)
+cn::icon("arrow-right")
+    .size(IconSize::Medium)
+
+// With explicit size in pixels
+cn::icon("check")
+    .size_px(24.0)
+
+// With color from theme
+cn::icon("alert-circle")
+    .color(ColorToken::Destructive)
+
+// With custom color
+cn::icon("heart")
+    .color_value(Color::RED)
+
+// Animated icon
+cn::icon("loader")
+    .spin()  // Continuous rotation
+
+cn::icon("chevron-down")
+    .rotate(90.0)  // Static rotation
+
+// From different library
+cn::icon("arrow-right")
+    .library(IconLibrary::Heroicons)
+
+// Custom SVG path
+cn::icon_custom("M12 2L2 7l10 5 10-5-10-5z")
+    .view_box(0.0, 0.0, 24.0, 24.0)
+```
+
+### Icon Sizes
+
+```rust
+pub enum IconSize {
+    ExtraSmall,  // 12px
+    Small,       // 16px
+    Medium,      // 20px (default)
+    Large,       // 24px
+    ExtraLarge,  // 32px
+}
+```
+
+### Integration with Components
+
+Icons integrate seamlessly with other components:
+
+```rust
+// Button with icon
+cn::button("Submit")
+    .icon_left(cn::icon("arrow-right"))
+
+// Button with only icon
+cn::button_icon(cn::icon("settings"))
+
+// Alert with icon
+cn::alert()
+    .icon(cn::icon("alert-triangle"))
+    .title("Warning")
+    .description("Something went wrong")
+
+// Input with icon
+cn::input()
+    .icon_left(cn::icon("search"))
+    .placeholder("Search...")
+
+// Badge with icon
+cn::badge("New")
+    .icon(cn::icon("sparkles"))
+```
+
+### Configuration
+
+```rust
+// Global icon configuration
+IconConfig::set_default_library(IconLibrary::Lucide);
+IconConfig::set_default_size(IconSize::Medium);
+IconConfig::set_default_stroke_width(2.0);
+
+// Register custom icon library
+IconConfig::register_library("my-icons", MyIconProvider::new());
+```
+
+### Build-time Icon Inclusion
+
+To minimize bundle size, icons can be included at build time:
+
+```rust
+// In build.rs or via feature flags
+// Only include icons that are actually used
+
+// Feature flags in Cargo.toml
+[features]
+lucide-full = []           # All 1500+ icons
+lucide-common = []         # ~100 common icons (default)
+lucide-arrows = []         # Arrow icons only
+heroicons = []             # Include Heroicons
+```
+
+### Icon Generation (Build Script)
+
+```rust
+// build.rs generates Rust code from SVG files
+fn main() {
+    let icons_dir = "assets/lucide";
+    let output = "src/libraries/lucide_generated.rs";
+
+    // Parse SVGs and generate static icon data
+    blinc_icons_codegen::generate(icons_dir, output);
+}
+```
+
+### Example: Complete Icon Usage
+
+```rust
+use blinc_cn::prelude::*;
+use blinc_icons::{icon, IconSize};
+
+fn toolbar(ctx: &impl BlincContext) -> impl ElementBuilder {
+    div().flex_row().gap(2.0).children([
+        cn::button_icon(icon("bold")).on_click(|_| {}),
+        cn::button_icon(icon("italic")).on_click(|_| {}),
+        cn::button_icon(icon("underline")).on_click(|_| {}),
+        cn::separator().vertical(),
+        cn::button_icon(icon("align-left")).on_click(|_| {}),
+        cn::button_icon(icon("align-center")).on_click(|_| {}),
+        cn::button_icon(icon("align-right")).on_click(|_| {}),
+    ])
+}
+```
 
 ## Component API Patterns
 
