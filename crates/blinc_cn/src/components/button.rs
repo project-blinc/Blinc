@@ -329,6 +329,18 @@ impl Button {
         self.inner = self.inner.w_full();
         self
     }
+
+    /// Set click handler
+    ///
+    /// This method is provided on Button directly to allow chaining with
+    /// `.variant()` and `.size()` methods.
+    pub fn on_click<F>(mut self, handler: F) -> Self
+    where
+        F: Fn(&blinc_layout::event_handler::EventContext) + Send + Sync + 'static,
+    {
+        self.inner = self.inner.on_click(handler);
+        self
+    }
 }
 
 // Implement Deref to expose all Stateful<ButtonState> methods

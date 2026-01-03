@@ -497,7 +497,7 @@ fn build_menu_content(
             }
 
             // Left side: icon + label
-            let mut left_side = div().flex_row().items_center().gap(padding / 4.0);
+            let mut left_side = div().w_fit().h_fit().flex_row().items_center().gap(padding / 4.0);
 
             if let Some(ref icon_svg) = item_icon {
                 left_side = left_side.child(

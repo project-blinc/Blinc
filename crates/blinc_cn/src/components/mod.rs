@@ -13,6 +13,7 @@ pub mod button;
 pub mod card;
 pub mod checkbox;
 pub mod context_menu;
+pub mod dialog;
 pub mod input;
 pub mod label;
 pub mod progress;
@@ -34,6 +35,7 @@ pub use card::{
 };
 pub use checkbox::{checkbox, Checkbox, CheckboxSize};
 pub use context_menu::{context_menu, ContextMenuBuilder, ContextMenuItem, SubmenuBuilder};
+pub use dialog::{alert_dialog, dialog, AlertDialogBuilder, Dialog, DialogBuilder, DialogSize};
 pub use input::{input, Input, InputBgColors, InputBorderColors, InputSize};
 pub use label::{label, Label, LabelBuilder, LabelSize};
 pub use progress::{progress, progress_animated, AnimatedProgress, Progress, ProgressSize};
