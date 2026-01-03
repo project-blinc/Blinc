@@ -40,6 +40,7 @@ use blinc_core::Color;
 use indexmap::IndexMap;
 
 use crate::div::{div, Div};
+use crate::motion::motion;
 use crate::renderer::RenderTree;
 use crate::stack::stack;
 use crate::stateful::StateTransitions;
@@ -987,11 +988,13 @@ impl OverlayManagerInner {
             content
         };
 
-        // TODO: Re-enable motion animations for enter/exit
-        // let animated_content = motion()
-        //     .enter_animation(overlay.config.animation.enter.clone())
-        //     .exit_animation(overlay.config.animation.exit.clone())
-        //     .child(content);
+        // Wrap content in motion container for enter/exit animations
+        let animated_content = div().child(
+            motion()
+                .enter_animation(overlay.config.animation.enter.clone())
+                .exit_animation(overlay.config.animation.exit.clone())
+                .child(content),
+        );
 
         // Build the layer with optional backdrop
         if let Some(ref backdrop_config) = overlay.config.backdrop {
@@ -1008,11 +1011,11 @@ impl OverlayManagerInner {
                     // Backdrop layer (behind) - fills entire viewport
                     .child(div().w_full().h_full().bg(backdrop_config.color))
                     // Content layer (on top) - positioned according to config
-                    .child(self.position_content(overlay, content, vp_width, vp_height)),
+                    .child(self.position_content(overlay, animated_content, vp_width, vp_height)),
             )
         } else {
             // No backdrop - position content according to config
-            self.position_content(overlay, content, vp_width, vp_height)
+            self.position_content(overlay, animated_content, vp_width, vp_height)
         }
     }
 
