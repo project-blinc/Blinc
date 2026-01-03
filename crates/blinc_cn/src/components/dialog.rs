@@ -8,48 +8,32 @@
 //! ```ignore
 //! use blinc_cn::prelude::*;
 //!
-//! fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-//!     let is_open = ctx.use_state_keyed("dialog_open", || false);
-//!
-//!     div()
-//!         .child(
-//!             cn::button("Open Dialog")
-//!                 .on_click({
-//!                     let is_open = is_open.clone();
-//!                     move |_| is_open.set(true)
-//!                 })
-//!         )
-//!         .child(
-//!             cn::dialog(&is_open)
-//!                 .title("Confirm Action")
-//!                 .description("Are you sure you want to proceed?")
-//!                 .footer(
-//!                     div().flex_row().gap(2.0)
-//!                         .child(cn::button("Cancel").variant(ButtonVariant::Outline))
-//!                         .child(cn::button("Confirm"))
-//!                 )
-//!         )
-//! }
+//! // Imperative API - show dialog from on_click handler
+//! cn::button("Open Dialog")
+//!     .on_click(|_| {
+//!         cn::dialog()
+//!             .title("Confirm Action")
+//!             .description("Are you sure you want to proceed?")
+//!             .on_confirm(|| {
+//!                 tracing::info!("Confirmed!");
+//!             })
+//!             .show();
+//!     })
 //!
 //! // Alert dialog (simpler API)
-//! cn::alert_dialog(&is_open)
+//! cn::alert_dialog()
 //!     .title("Error")
 //!     .description("Something went wrong.")
 //!     .confirm_text("OK")
 //!     .on_confirm(|| { /* handle confirm */ })
+//!     .show()
 //! ```
 
-use std::cell::OnceCell;
 use std::sync::Arc;
 
-use blinc_core::context_state::BlincContextState;
-use blinc_core::{Color, State};
-use blinc_layout::div::ElementTypeId;
-use blinc_layout::element::RenderProps;
+use blinc_core::Color;
 use blinc_layout::overlay_state::get_overlay_manager;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::Stateful;
-use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::overlay::{OverlayHandle, OverlayManagerExt};
 use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState};
 
@@ -71,7 +55,7 @@ pub enum DialogSize {
 
 impl DialogSize {
     /// Get the max width for this size
-    fn max_width(&self) -> f32 {
+    pub fn max_width(&self) -> f32 {
         match self {
             DialogSize::Small => 400.0,
             DialogSize::Medium => 500.0,
@@ -81,379 +65,38 @@ impl DialogSize {
     }
 }
 
-/// Dialog component
+/// Builder for creating and showing dialogs imperatively
 ///
-/// A modal dialog that appears centered on screen with a backdrop.
-/// Uses state-driven reactivity for open/close behavior.
-pub struct Dialog {
-    /// The fully-built inner element (empty placeholder - actual dialog is in overlay)
-    inner: Div,
-}
-
-impl Dialog {
-    /// Create from a full configuration
-    fn from_config(config: DialogConfig) -> Self {
-        let theme = ThemeState::get();
-        let open_state = config.open_state.clone();
-
-        // Create internal state for overlay handle
-        let handle_key = format!(
-            "_dialog_handle_{}",
-            config.open_state.signal_id().to_raw()
-        );
-        let overlay_handle_state: State<Option<u64>> =
-            BlincContextState::get().use_state_keyed(&handle_key, || None);
-
-        let is_open = open_state.get();
-
-        // Check if we need to show/hide the dialog
-        if is_open {
-            // Check if overlay is already shown
-            if overlay_handle_state.get().is_none() {
-                // Show the dialog overlay
-                let handle = show_dialog_overlay(&config, &open_state, &overlay_handle_state);
-                overlay_handle_state.set(Some(handle.id()));
-            }
-        } else {
-            // Close overlay if it exists
-            if let Some(handle_id) = overlay_handle_state.get() {
-                let mgr = get_overlay_manager();
-                mgr.close(OverlayHandle::from_raw(handle_id));
-                overlay_handle_state.set(None);
-            }
-        }
-
-        // The actual dialog renders nothing in the main tree - it's all in the overlay
-        // But we use Stateful to ensure re-render when open state changes
-        let placeholder = Stateful::<()>::new(())
-            .deps(&[open_state.signal_id()])
-            .w(0.0)
-            .h(0.0)
-            .on_state(|_, container| {
-                // Empty placeholder
-                container.merge(div().w(0.0).h(0.0));
-            });
-
-        Self {
-            inner: div().child(placeholder),
-        }
-    }
-}
-
-impl ElementBuilder for Dialog {
-    fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        self.inner.build(tree)
-    }
-
-    fn render_props(&self) -> RenderProps {
-        self.inner.render_props()
-    }
-
-    fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
-        self.inner.children_builders()
-    }
-
-    fn element_type_id(&self) -> ElementTypeId {
-        self.inner.element_type_id()
-    }
-}
-
-/// Show the dialog overlay
-fn show_dialog_overlay(
-    config: &DialogConfig,
-    open_state: &State<bool>,
-    overlay_handle_state: &State<Option<u64>>,
-) -> OverlayHandle {
-    let theme = ThemeState::get();
-    let bg = theme.color(ColorToken::Surface);
-    let border = theme.color(ColorToken::Border);
-    let text_primary = theme.color(ColorToken::TextPrimary);
-    let text_secondary = theme.color(ColorToken::TextSecondary);
-    let radius = theme.radius(RadiusToken::Lg);
-    let spacing = theme.spacing_value(SpacingToken::Space4);
-
-    let title = config.title.clone();
-    let description = config.description.clone();
-    let content = config.content.clone();
-    let footer = config.footer.clone();
-    let max_width = config.size.max_width();
-    let on_close = config.on_close.clone();
-
-    let open_state_for_close = open_state.clone();
-    let handle_state_for_close = overlay_handle_state.clone();
-
-    let mgr = get_overlay_manager();
-    mgr.modal()
-        .dismiss_on_escape(true)
-        .content(move || {
-            build_dialog_content(
-                &title,
-                &description,
-                &content,
-                &footer,
-                max_width,
-                bg,
-                border,
-                text_primary,
-                text_secondary,
-                radius,
-                spacing,
-                &open_state_for_close,
-                &handle_state_for_close,
-                &on_close,
-            )
-        })
-        .show()
-}
-
-/// Build the dialog content div
-#[allow(clippy::too_many_arguments)]
-fn build_dialog_content(
-    title: &Option<String>,
-    description: &Option<String>,
-    content: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
-    footer: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
-    max_width: f32,
-    bg: Color,
-    border: Color,
-    text_primary: Color,
-    text_secondary: Color,
-    radius: f32,
-    spacing: f32,
-    open_state: &State<bool>,
-    overlay_handle_state: &State<Option<u64>>,
-    on_close: &Option<Arc<dyn Fn() + Send + Sync>>,
-) -> Div {
-    let handle_state_for_ready = overlay_handle_state.clone();
-
-    let mut dialog = div()
-        .flex_col()
-        .w(max_width)
-        .bg(bg)
-        .border(1.0, border)
-        .rounded(radius)
-        .shadow_xl()
-        .overflow_clip()
-        .p(spacing)
-        .gap(spacing)
-        .on_ready(move |bounds| {
-            // Report actual content size to overlay manager
-            if let Some(handle_id) = handle_state_for_ready.get() {
-                let mgr = get_overlay_manager();
-                mgr.set_content_size(
-                    OverlayHandle::from_raw(handle_id),
-                    bounds.width,
-                    bounds.height,
-                );
-            }
-        });
-
-    // Header section (title + description)
-    if title.is_some() || description.is_some() {
-        let mut header = div().flex_col().gap(spacing / 2.0);
-
-        if let Some(ref title_text) = title {
-            header = header.child(
-                text(title_text)
-                    .size(18.0)
-                    .weight(FontWeight::SemiBold)
-                    .color(text_primary),
-            );
-        }
-
-        if let Some(ref desc_text) = description {
-            header = header.child(
-                text(desc_text)
-                    .size(14.0)
-                    .color(text_secondary),
-            );
-        }
-
-        dialog = dialog.child(header);
-    }
-
-    // Custom content section
-    if let Some(ref content_fn) = content {
-        dialog = dialog.child(content_fn());
-    }
-
-    // Footer section
-    if let Some(ref footer_fn) = footer {
-        dialog = dialog.child(
-            div()
-                .flex_row()
-                .justify_end()
-                .gap(spacing / 2.0)
-                .pt(spacing / 2.0)
-                .child(footer_fn()),
-        );
-    }
-
-    dialog
-}
-
-/// Internal configuration for building a Dialog
-#[derive(Clone)]
-struct DialogConfig {
-    open_state: State<bool>,
+/// Use `cn::dialog()` to create a builder, configure it, then call `.show()`.
+pub struct DialogBuilder {
     title: Option<String>,
     description: Option<String>,
     content: Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     footer: Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     size: DialogSize,
-    on_close: Option<Arc<dyn Fn() + Send + Sync>>,
+    confirm_text: String,
+    cancel_text: String,
+    on_confirm: Option<Arc<dyn Fn() + Send + Sync>>,
+    on_cancel: Option<Arc<dyn Fn() + Send + Sync>>,
+    confirm_destructive: bool,
+    show_cancel: bool,
 }
 
-impl DialogConfig {
-    fn new(open_state: State<bool>) -> Self {
+impl DialogBuilder {
+    /// Create a new dialog builder
+    pub fn new() -> Self {
         Self {
-            open_state,
             title: None,
             description: None,
             content: None,
             footer: None,
-            size: DialogSize::default(),
-            on_close: None,
-        }
-    }
-}
-
-/// Builder for creating Dialog components with fluent API
-pub struct DialogBuilder {
-    config: DialogConfig,
-    /// Cached built Dialog - built lazily on first access
-    built: OnceCell<Dialog>,
-}
-
-impl DialogBuilder {
-    /// Create a new dialog builder with open state
-    pub fn new(open_state: &State<bool>) -> Self {
-        Self {
-            config: DialogConfig::new(open_state.clone()),
-            built: OnceCell::new(),
-        }
-    }
-
-    /// Get or build the inner Dialog
-    fn get_or_build(&self) -> &Dialog {
-        self.built
-            .get_or_init(|| Dialog::from_config(self.config.clone()))
-    }
-
-    /// Set the dialog title
-    pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.config.title = Some(title.into());
-        self
-    }
-
-    /// Set the dialog description
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        self.config.description = Some(description.into());
-        self
-    }
-
-    /// Set custom content
-    pub fn content<F>(mut self, f: F) -> Self
-    where
-        F: Fn() -> Div + Send + Sync + 'static,
-    {
-        self.config.content = Some(Arc::new(f));
-        self
-    }
-
-    /// Set the footer content (typically buttons)
-    pub fn footer<F>(mut self, f: F) -> Self
-    where
-        F: Fn() -> Div + Send + Sync + 'static,
-    {
-        self.config.footer = Some(Arc::new(f));
-        self
-    }
-
-    /// Set the dialog size
-    pub fn size(mut self, size: DialogSize) -> Self {
-        self.config.size = size;
-        self
-    }
-
-    /// Set callback when dialog is closed
-    pub fn on_close<F>(mut self, f: F) -> Self
-    where
-        F: Fn() + Send + Sync + 'static,
-    {
-        self.config.on_close = Some(Arc::new(f));
-        self
-    }
-}
-
-impl ElementBuilder for DialogBuilder {
-    fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        self.get_or_build().build(tree)
-    }
-
-    fn render_props(&self) -> RenderProps {
-        self.get_or_build().render_props()
-    }
-
-    fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
-        self.get_or_build().children_builders()
-    }
-
-    fn element_type_id(&self) -> ElementTypeId {
-        self.get_or_build().element_type_id()
-    }
-}
-
-/// Create a dialog with open state
-///
-/// # Example
-///
-/// ```ignore
-/// let is_open = ctx.use_state_keyed("dialog", || false);
-///
-/// cn::dialog(&is_open)
-///     .title("Confirm")
-///     .description("Are you sure?")
-///     .footer(|| {
-///         div().flex_row().gap(2.0)
-///             .child(cn::button("Cancel"))
-///             .child(cn::button("OK"))
-///     })
-/// ```
-pub fn dialog(open_state: &State<bool>) -> DialogBuilder {
-    DialogBuilder::new(open_state)
-}
-
-// =============================================================================
-// Alert Dialog - Simpler API for confirmation dialogs
-// =============================================================================
-
-/// Builder for alert dialogs (simpler API for confirmations)
-pub struct AlertDialogBuilder {
-    open_state: State<bool>,
-    title: Option<String>,
-    description: Option<String>,
-    confirm_text: String,
-    cancel_text: Option<String>,
-    on_confirm: Option<Arc<dyn Fn() + Send + Sync>>,
-    on_cancel: Option<Arc<dyn Fn() + Send + Sync>>,
-    size: DialogSize,
-    destructive: bool,
-}
-
-impl AlertDialogBuilder {
-    /// Create a new alert dialog builder
-    pub fn new(open_state: &State<bool>) -> Self {
-        Self {
-            open_state: open_state.clone(),
-            title: None,
-            description: None,
-            confirm_text: "OK".to_string(),
-            cancel_text: None,
+            size: DialogSize::Medium,
+            confirm_text: "Confirm".to_string(),
+            cancel_text: "Cancel".to_string(),
             on_confirm: None,
             on_cancel: None,
-            size: DialogSize::Small,
-            destructive: false,
+            confirm_destructive: false,
+            show_cancel: true,
         }
     }
 
@@ -469,39 +112,21 @@ impl AlertDialogBuilder {
         self
     }
 
-    /// Set the confirm button text
-    pub fn confirm_text(mut self, text: impl Into<String>) -> Self {
-        self.confirm_text = text.into();
-        self
-    }
-
-    /// Set the cancel button text (if None, no cancel button is shown)
-    pub fn cancel_text(mut self, text: impl Into<String>) -> Self {
-        self.cancel_text = Some(text.into());
-        self
-    }
-
-    /// Set callback when confirm is clicked
-    pub fn on_confirm<F>(mut self, f: F) -> Self
+    /// Set custom content for the dialog body
+    pub fn content<F>(mut self, content: F) -> Self
     where
-        F: Fn() + Send + Sync + 'static,
+        F: Fn() -> Div + Send + Sync + 'static,
     {
-        self.on_confirm = Some(Arc::new(f));
+        self.content = Some(Arc::new(content));
         self
     }
 
-    /// Set callback when cancel is clicked
-    pub fn on_cancel<F>(mut self, f: F) -> Self
+    /// Set custom footer content (replaces default buttons)
+    pub fn footer<F>(mut self, footer: F) -> Self
     where
-        F: Fn() + Send + Sync + 'static,
+        F: Fn() -> Div + Send + Sync + 'static,
     {
-        self.on_cancel = Some(Arc::new(f));
-        self
-    }
-
-    /// Make this a destructive action (red confirm button)
-    pub fn destructive(mut self) -> Self {
-        self.destructive = true;
+        self.footer = Some(Arc::new(footer));
         self
     }
 
@@ -511,126 +136,335 @@ impl AlertDialogBuilder {
         self
     }
 
-    /// Build the alert dialog
-    pub fn build_dialog(self) -> DialogBuilder {
-        let open_state = self.open_state.clone();
-        let on_confirm = self.on_confirm.clone();
-        let on_cancel = self.on_cancel.clone();
-        let confirm_text = self.confirm_text.clone();
-        let cancel_text = self.cancel_text.clone();
-        let destructive = self.destructive;
+    /// Set the confirm button text
+    pub fn confirm_text(mut self, text: impl Into<String>) -> Self {
+        self.confirm_text = text.into();
+        self
+    }
 
-        let open_for_confirm = open_state.clone();
-        let open_for_cancel = open_state.clone();
+    /// Set the cancel button text
+    pub fn cancel_text(mut self, text: impl Into<String>) -> Self {
+        self.cancel_text = text.into();
+        self
+    }
 
-        let mut builder = dialog(&open_state).size(self.size);
+    /// Set whether the confirm button should be destructive (red)
+    pub fn confirm_destructive(mut self, destructive: bool) -> Self {
+        self.confirm_destructive = destructive;
+        self
+    }
 
-        if let Some(title) = self.title {
-            builder = builder.title(title);
-        }
+    /// Hide the cancel button (for alert-style dialogs)
+    pub fn hide_cancel(mut self) -> Self {
+        self.show_cancel = false;
+        self
+    }
 
-        if let Some(description) = self.description {
-            builder = builder.description(description);
-        }
+    /// Set the callback for when confirm is clicked
+    pub fn on_confirm<F>(mut self, callback: F) -> Self
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.on_confirm = Some(Arc::new(callback));
+        self
+    }
 
-        builder = builder.footer(move || {
-            let mut footer = div().flex_row().justify_end().gap(2.0);
+    /// Set the callback for when cancel is clicked
+    pub fn on_cancel<F>(mut self, callback: F) -> Self
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.on_cancel = Some(Arc::new(callback));
+        self
+    }
 
-            // Cancel button (if text provided)
-            if let Some(ref cancel) = cancel_text {
-                let open_for_cancel = open_for_cancel.clone();
-                let on_cancel = on_cancel.clone();
-                footer = footer.child(
-                    button(cancel)
-                        .variant(ButtonVariant::Outline)
-                        .on_click(move |_| {
-                            open_for_cancel.set(false);
-                            if let Some(ref cb) = on_cancel {
-                                cb();
-                            }
-                        }),
-                );
-            }
+    /// Show the dialog
+    ///
+    /// This creates a modal overlay with the dialog content.
+    /// The dialog can be dismissed by clicking the backdrop, pressing Escape,
+    /// or clicking the Cancel/Confirm buttons.
+    pub fn show(self) -> OverlayHandle {
+        let theme = ThemeState::get();
+        let bg = theme.color(ColorToken::Surface);
+        let border = theme.color(ColorToken::Border);
+        let text_primary = theme.color(ColorToken::TextPrimary);
+        let text_secondary = theme.color(ColorToken::TextSecondary);
+        let radius = theme.radius(RadiusToken::Lg);
+        let spacing = theme.spacing_value(SpacingToken::Space4);
 
-            // Confirm button
-            let open_for_confirm = open_for_confirm.clone();
-            let on_confirm = on_confirm.clone();
-            let variant = if destructive {
-                ButtonVariant::Destructive
-            } else {
-                ButtonVariant::Primary
-            };
+        let title = self.title;
+        let description = self.description;
+        let content = self.content;
+        let footer = self.footer;
+        let max_width = self.size.max_width();
+        let confirm_text = self.confirm_text;
+        let cancel_text = self.cancel_text;
+        let on_confirm = self.on_confirm;
+        let on_cancel = self.on_cancel;
+        let confirm_destructive = self.confirm_destructive;
+        let show_cancel = self.show_cancel;
 
-            footer = footer.child(
-                button(&confirm_text)
-                    .variant(variant)
-                    .on_click(move |_| {
-                        open_for_confirm.set(false);
-                        if let Some(ref cb) = on_confirm {
-                            cb();
-                        }
-                    }),
-            );
+        let mgr = get_overlay_manager();
 
-            footer
-        });
-
-        builder
+        mgr.modal()
+            .dismiss_on_escape(true)
+            .content(move || {
+                build_dialog_content(
+                    &title,
+                    &description,
+                    &content,
+                    &footer,
+                    max_width,
+                    bg,
+                    border,
+                    text_primary,
+                    text_secondary,
+                    radius,
+                    spacing,
+                    &confirm_text,
+                    &cancel_text,
+                    &on_confirm,
+                    &on_cancel,
+                    confirm_destructive,
+                    show_cancel,
+                )
+            })
+            .show()
     }
 }
 
-impl ElementBuilder for AlertDialogBuilder {
-    fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        // Clone self to build the dialog
-        let builder = AlertDialogBuilder {
-            open_state: self.open_state.clone(),
-            title: self.title.clone(),
-            description: self.description.clone(),
-            confirm_text: self.confirm_text.clone(),
-            cancel_text: self.cancel_text.clone(),
-            on_confirm: self.on_confirm.clone(),
-            on_cancel: self.on_cancel.clone(),
-            size: self.size,
-            destructive: self.destructive,
-        };
-        builder.build_dialog().build(tree)
-    }
-
-    fn render_props(&self) -> RenderProps {
-        RenderProps::default()
-    }
-
-    fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
-        &[]
-    }
-
-    fn element_type_id(&self) -> ElementTypeId {
-        ElementTypeId::Div
+impl Default for DialogBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
-/// Create an alert dialog (simpler API for confirmations)
+/// Create a new dialog builder
 ///
 /// # Example
 ///
 /// ```ignore
-/// let is_open = ctx.use_state_keyed("confirm", || false);
-///
-/// cn::alert_dialog(&is_open)
-///     .title("Delete Item?")
-///     .description("This action cannot be undone.")
-///     .confirm_text("Delete")
-///     .cancel_text("Cancel")
-///     .destructive()
-///     .on_confirm(|| { /* delete item */ })
+/// cn::dialog()
+///     .title("Edit Profile")
+///     .description("Make changes to your profile.")
+///     .on_confirm(|| { /* save */ })
+///     .show();
 /// ```
-pub fn alert_dialog(open_state: &State<bool>) -> AlertDialogBuilder {
-    AlertDialogBuilder::new(open_state)
+pub fn dialog() -> DialogBuilder {
+    DialogBuilder::new()
 }
+
+/// Builder for alert dialogs (single button confirmation)
+pub struct AlertDialogBuilder {
+    inner: DialogBuilder,
+}
+
+impl AlertDialogBuilder {
+    /// Create a new alert dialog builder
+    pub fn new() -> Self {
+        Self {
+            inner: DialogBuilder::new().hide_cancel(),
+        }
+    }
+
+    /// Set the dialog title
+    pub fn title(mut self, title: impl Into<String>) -> Self {
+        self.inner = self.inner.title(title);
+        self
+    }
+
+    /// Set the dialog description
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.inner = self.inner.description(description);
+        self
+    }
+
+    /// Set the confirm button text (default: "OK")
+    pub fn confirm_text(mut self, text: impl Into<String>) -> Self {
+        self.inner = self.inner.confirm_text(text);
+        self
+    }
+
+    /// Set the callback for when confirm is clicked
+    pub fn on_confirm<F>(mut self, callback: F) -> Self
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.inner = self.inner.on_confirm(callback);
+        self
+    }
+
+    /// Set the dialog size
+    pub fn size(mut self, size: DialogSize) -> Self {
+        self.inner = self.inner.size(size);
+        self
+    }
+
+    /// Show the alert dialog
+    pub fn show(self) -> OverlayHandle {
+        self.inner.show()
+    }
+}
+
+impl Default for AlertDialogBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Create a new alert dialog builder (single button confirmation)
+///
+/// # Example
+///
+/// ```ignore
+/// cn::alert_dialog()
+///     .title("Information")
+///     .description("Operation completed.")
+///     .confirm_text("OK")
+///     .show();
+/// ```
+pub fn alert_dialog() -> AlertDialogBuilder {
+    AlertDialogBuilder::new()
+}
+
+/// Build the dialog content
+#[allow(clippy::too_many_arguments)]
+fn build_dialog_content(
+    title: &Option<String>,
+    description: &Option<String>,
+    content: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
+    footer: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
+    max_width: f32,
+    bg: Color,
+    border: Color,
+    text_primary: Color,
+    text_secondary: Color,
+    radius: f32,
+    _spacing: f32,
+    confirm_text: &str,
+    _cancel_text: &str,
+    on_confirm: &Option<Arc<dyn Fn() + Send + Sync>>,
+    on_cancel: &Option<Arc<dyn Fn() + Send + Sync>>,
+    confirm_destructive: bool,
+    show_cancel: bool,
+) -> Div {
+    // Use theme spacing tokens via helper methods (.p_6(), .gap_2(), .m_4(), etc.)
+    let theme = ThemeState::get();
+    let mut dialog = div()
+        .min_w(300.0)
+        .max_w(max_width)
+        .bg(bg)
+        .border(1.0, border)
+        .rounded(radius)
+        .shadow_xl()
+        .flex_col()
+        .p_6(); // 24px padding from theme
+
+    // Header section
+    if title.is_some() || description.is_some() {
+        let mut header = div().w_full().flex_col().gap_2(); // 8px gap from theme
+
+        if let Some(ref title_text) = title {
+            header = header.child(h3(title_text).color(text_primary));
+        }
+
+        if let Some(ref desc_text) = description {
+            header = header.child(text(desc_text).size(theme.typography().text_sm).color(text_secondary));
+        }
+
+        dialog = dialog.child(header);
+    }
+
+    // Custom content
+    if let Some(ref content_fn) = content {
+        dialog = dialog.child(
+            div()
+                .w_full()
+                .mt(theme.spacing().space_2)
+                .child(content_fn()),
+        ); // 16px margin from theme
+    }
+
+    // Footer - either custom or default buttons
+    let footer_content = if let Some(ref footer_fn) = footer {
+        footer_fn()
+    } else {
+        // Default footer with buttons
+        let mut footer_div = div().w_full().flex_row().gap_2().justify_end(); // 8px gap from theme
+
+        if show_cancel {
+            let on_cancel = on_cancel.clone();
+            footer_div =
+                footer_div.child(button("Cancel").variant(ButtonVariant::Outline).on_click(
+                    move |_| {
+                        if let Some(ref cb) = on_cancel {
+                            cb();
+                        }
+                        // Get fresh overlay manager to close
+                        get_overlay_manager().close_top();
+                    },
+                ));
+        }
+
+        let on_confirm = on_confirm.clone();
+        let confirm_text = confirm_text.to_string();
+        footer_div = footer_div.child(
+            button(&confirm_text)
+                .variant(if confirm_destructive {
+                    ButtonVariant::Destructive
+                } else {
+                    ButtonVariant::Primary
+                })
+                .on_click(move |_| {
+                    if let Some(ref cb) = on_confirm {
+                        cb();
+                    }
+                    // Get fresh overlay manager to close
+                    get_overlay_manager().close_top();
+                }),
+        );
+
+        footer_div
+    };
+
+    dialog = dialog.child(
+        div()
+            .w_full()
+            .mt(theme.spacing().space_2)
+            .child(footer_content),
+    ); // 16px margin from theme
+
+    dialog
+}
+
+// Keep the old types for backwards compatibility but mark as deprecated
+#[doc(hidden)]
+pub type Dialog = DialogBuilder;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_dialog_builder() {
+        let builder = dialog()
+            .title("Test")
+            .description("Description")
+            .confirm_text("OK");
+
+        assert_eq!(builder.title, Some("Test".to_string()));
+        assert_eq!(builder.description, Some("Description".to_string()));
+        assert_eq!(builder.confirm_text, "OK");
+    }
+
+    #[test]
+    fn test_alert_dialog_builder() {
+        let builder = alert_dialog().title("Alert").confirm_text("Got it");
+
+        assert_eq!(builder.inner.title, Some("Alert".to_string()));
+        assert_eq!(builder.inner.confirm_text, "Got it");
+        assert!(!builder.inner.show_cancel);
+    }
 
     #[test]
     fn test_dialog_sizes() {

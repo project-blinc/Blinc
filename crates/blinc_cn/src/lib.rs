@@ -71,7 +71,7 @@ pub mod prelude {
     // Components
     pub use crate::components::alert::{alert, alert_box, Alert, AlertBox, AlertVariant};
     pub use crate::components::badge::{badge, Badge, BadgeVariant};
-    pub use crate::components::button::{button, Button, ButtonSize, ButtonVariant};
+    pub use crate::components::button::{button, Button, ButtonSize, ButtonVariant, IconPosition};
     pub use crate::components::card::{
         card, card_content, card_footer, card_header, Card, CardContent, CardFooter, CardHeader,
     };
@@ -80,7 +80,7 @@ pub mod prelude {
         context_menu, ContextMenuBuilder, ContextMenuItem, SubmenuBuilder,
     };
     pub use crate::components::dialog::{
-        alert_dialog, dialog, AlertDialogBuilder, Dialog, DialogBuilder, DialogSize,
+        alert_dialog, dialog, AlertDialogBuilder, DialogBuilder, DialogSize,
     };
     pub use crate::components::input::{input, Input, InputBgColors, InputBorderColors, InputSize};
     pub use crate::components::label::{label, Label, LabelBuilder, LabelSize};

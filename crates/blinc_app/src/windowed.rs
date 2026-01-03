@@ -2128,6 +2128,10 @@ impl WindowedApp {
                             // Uses logical pixels (width/height) as that's what layout uses
                             rs.set_viewport_size(windowed_ctx.width, windowed_ctx.height);
 
+                            // Clear overlays from previous frame (cursor, selection, focus ring)
+                            // These are re-added during rendering if still active
+                            rs.clear_overlays();
+
                             // =========================================================
                             // PHASE 1: Check if tree structure needs rebuild
                             // Only structural changes require tree rebuild
@@ -2168,30 +2172,40 @@ impl WindowedApp {
                                 let prop_updates = blinc_layout::take_pending_prop_updates();
                                 let had_prop_updates = !prop_updates.is_empty();
 
-                                // Apply prop updates to the main render tree
-                                if let Some(ref mut tree) = render_tree {
-                                    for (node_id, props) in &prop_updates {
-                                        tree.update_render_props(*node_id, |p| *p = props.clone());
+                                // Apply prop updates to the appropriate tree
+                                // IMPORTANT: Node IDs are local to each tree's SlotMap, so we must
+                                // be careful not to apply updates to the wrong tree. When an overlay
+                                // is visible, interactions are with the overlay, so apply to overlay tree.
+                                // When no overlay, apply to main tree.
+                                let has_overlay = windowed_ctx.overlay_tree.is_some();
+
+                                if has_overlay {
+                                    // Overlay is visible - apply updates to overlay tree only
+                                    // This prevents node ID collisions from affecting the main tree
+                                    if let Some(ref mut overlay_tree) = windowed_ctx.overlay_tree {
+                                        for (node_id, props) in &prop_updates {
+                                            overlay_tree.update_render_props(*node_id, |p| *p = props.clone());
+                                        }
                                     }
+                                } else {
+                                    // No overlay - apply updates to main tree
+                                    if let Some(ref mut tree) = render_tree {
+                                        for (node_id, props) in &prop_updates {
+                                            tree.update_render_props(*node_id, |p| *p = props.clone());
+                                        }
 
-                                    // Process pending subtree rebuilds (structural changes)
-                                    // Only recompute layout if subtree rebuilds occurred
-                                    let had_subtree_rebuilds = blinc_layout::has_pending_subtree_rebuilds();
-                                    tree.process_pending_subtree_rebuilds();
+                                        // Process pending subtree rebuilds (structural changes)
+                                        // Only recompute layout if subtree rebuilds occurred
+                                        let had_subtree_rebuilds = blinc_layout::has_pending_subtree_rebuilds();
+                                        tree.process_pending_subtree_rebuilds();
 
-                                    // Recompute layout only if structural changes happened
-                                    if had_subtree_rebuilds {
-                                        tracing::debug!("Subtree rebuilds processed, recomputing layout");
-                                        tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
-                                    } else if had_prop_updates {
-                                        tracing::trace!("Visual-only prop updates, skipping layout");
-                                    }
-                                }
-
-                                // Also apply prop updates to the overlay tree if it exists
-                                if let Some(ref mut overlay_tree) = windowed_ctx.overlay_tree {
-                                    for (node_id, props) in &prop_updates {
-                                        overlay_tree.update_render_props(*node_id, |p| *p = props.clone());
+                                        // Recompute layout only if structural changes happened
+                                        if had_subtree_rebuilds {
+                                            tracing::debug!("Subtree rebuilds processed, recomputing layout");
+                                            tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
+                                        } else if had_prop_updates {
+                                            tracing::trace!("Visual-only prop updates, skipping layout");
+                                        }
                                     }
                                 }
 

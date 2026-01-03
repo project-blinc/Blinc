@@ -196,6 +196,16 @@ impl ButtonSize {
     }
 }
 
+/// Icon position relative to the label
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum IconPosition {
+    /// Icon appears before the label (left in LTR)
+    #[default]
+    Start,
+    /// Icon appears after the label (right in LTR)
+    End,
+}
+
 /// Button component with variants and sizes
 ///
 /// Built on `blinc_layout::Stateful<ButtonState>` for hover/press interactions.
@@ -213,6 +223,11 @@ impl ButtonSize {
 ///     .m(8.0)        // margin
 ///     .shadow_lg()   // shadow
 ///     .gap(4.0)      // flex gap
+///
+/// // Button with icon
+/// cn::button("Save")
+///     .icon("💾")
+///     .variant(ButtonVariant::Primary)
 /// ```
 pub struct Button {
     inner: Stateful<ButtonState>,
@@ -220,6 +235,8 @@ pub struct Button {
     variant: ButtonVariant,
     btn_size: ButtonSize,
     disabled: bool,
+    icon: Option<String>,
+    icon_position: IconPosition,
 }
 
 impl Button {
@@ -230,6 +247,8 @@ impl Button {
             ButtonVariant::default(),
             ButtonSize::default(),
             false,
+            None,
+            IconPosition::Start,
         )
     }
 
@@ -239,6 +258,8 @@ impl Button {
         variant: ButtonVariant,
         btn_size: ButtonSize,
         disabled: bool,
+        icon: Option<String>,
+        icon_position: IconPosition,
     ) -> Self {
         let theme = ThemeState::get();
         let label = label.into();
@@ -278,8 +299,9 @@ impl Button {
         // Default to fit content width
         btn = btn.w_fit();
 
-        // Clone label for the closure
+        // Clone values for the closure
         let label_clone = label.clone();
+        let icon_clone = icon.clone();
 
         // State callback for hover/press visual changes
         btn = btn.on_state(move |state, container| {
@@ -291,12 +313,34 @@ impl Button {
                 1.0
             };
 
+            // Build content with icon + label or just label
+            let mut content = div()
+                .flex_row()
+                .items_center()
+                .gap(6.0);
+
+            let label_text = text(&label_clone).size(font_size).color(fg).no_cursor();
+
+            if let Some(ref icon_str) = icon_clone {
+                let icon_text = text(icon_str).size(font_size).color(fg).no_cursor();
+                match icon_position {
+                    IconPosition::Start => {
+                        content = content.child(icon_text).child(label_text);
+                    }
+                    IconPosition::End => {
+                        content = content.child(label_text).child(icon_text);
+                    }
+                }
+            } else {
+                content = content.child(label_text);
+            }
+
             container.merge(
                 div()
                     .bg(bg)
                     .transform(Transform::scale(scale, scale))
                     .cursor_pointer()
-                    .child(text(&label_clone).size(font_size).color(fg)),
+                    .child(content),
             );
         });
 
@@ -306,22 +350,34 @@ impl Button {
             variant,
             btn_size,
             disabled,
+            icon,
+            icon_position,
         }
     }
 
     /// Set the button variant (rebuilds with new styling)
     pub fn variant(self, variant: ButtonVariant) -> Self {
-        Self::with_options(self.label, variant, self.btn_size, self.disabled)
+        Self::with_options(self.label, variant, self.btn_size, self.disabled, self.icon, self.icon_position)
     }
 
     /// Set the button size (rebuilds with new sizing)
     pub fn size(self, size: ButtonSize) -> Self {
-        Self::with_options(self.label, self.variant, size, self.disabled)
+        Self::with_options(self.label, self.variant, size, self.disabled, self.icon, self.icon_position)
     }
 
     /// Make the button disabled
     pub fn disabled(self, disabled: bool) -> Self {
-        Self::with_options(self.label, self.variant, self.btn_size, disabled)
+        Self::with_options(self.label, self.variant, self.btn_size, disabled, self.icon, self.icon_position)
+    }
+
+    /// Set an icon for the button
+    pub fn icon(self, icon: impl Into<String>) -> Self {
+        Self::with_options(self.label, self.variant, self.btn_size, self.disabled, Some(icon.into()), self.icon_position)
+    }
+
+    /// Set the icon position (Start or End)
+    pub fn icon_position(self, position: IconPosition) -> Self {
+        Self::with_options(self.label, self.variant, self.btn_size, self.disabled, self.icon, position)
     }
 
     /// Make the button full width

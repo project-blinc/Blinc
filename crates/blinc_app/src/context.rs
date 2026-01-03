@@ -1695,14 +1695,9 @@ impl RenderContext {
                         });
                     }
                 }
-                Overlay::Selection { rects, color } => {
-                    for (x, y, w, h) in rects {
-                        overlay_ctx.execute_command(&DrawCommand::FillRect {
-                            rect: Rect::new(*x, *y, *w, *h),
-                            corner_radius: CornerRadius::default(),
-                            brush: Brush::Solid(*color),
-                        });
-                    }
+                Overlay::Selection { rects: _, color: _ } => {
+                    // TODO: Re-enable for real-time text selection
+                    // Disabled for now to avoid blue mask issue after modal close
                 }
                 Overlay::FocusRing {
                     position,

@@ -660,14 +660,9 @@ fn context_menu_section() -> impl ElementBuilder {
 // DIALOG SECTION
 // ============================================================================
 
-fn dialog_section(ctx: &WindowedContext) -> impl ElementBuilder {
+fn dialog_section(_ctx: &WindowedContext) -> impl ElementBuilder {
     let theme = ThemeState::get();
-    let text_secondary = theme.color(ColorToken::TextSecondary);
-
-    // Dialog open states
-    let basic_dialog_open = ctx.use_state_keyed("basic_dialog", || false);
-    let alert_dialog_open = ctx.use_state_keyed("alert_dialog", || false);
-    let destructive_dialog_open = ctx.use_state_keyed("destructive_dialog", || false);
+    let _text_secondary = theme.color(ColorToken::TextSecondary);
 
     section_container()
         .child(section_title("Dialogs"))
@@ -676,99 +671,70 @@ fn dialog_section(ctx: &WindowedContext) -> impl ElementBuilder {
                 .flex_row()
                 .flex_wrap()
                 .gap(16.0)
-                // Basic dialog trigger
-                .child({
-                    let open = basic_dialog_open.clone();
+                // Basic dialog trigger - imperative API like context menu
+                .child(
                     cn::button("Open Basic Dialog")
                         .variant(ButtonVariant::Outline)
-                        .on_click(move |_| open.set(true))
-                })
+                        .on_click(move |_| {
+                            tracing::info!("Opening basic dialog...");
+                            cn::dialog()
+                                .title("Edit Profile")
+                                .description("Make changes to your profile here. Click save when you're done.")
+                                .content(|| {
+                                    let theme = ThemeState::get();
+                                    div()
+                                        .flex_col()
+                                        .gap(2.0)
+                                        .child(
+                                            text("This is a basic dialog with custom content.")
+                                                .size(14.0)
+                                                .color(theme.color(ColorToken::TextSecondary)),
+                                        )
+                                        .child(
+                                            text("You can put any content here - forms, lists, images, etc.")
+                                                .size(14.0)
+                                                .color(theme.color(ColorToken::TextSecondary)),
+                                        )
+                                })
+                                .on_confirm(|| {
+                                    tracing::info!("Saving changes...");
+                                })
+                                .show();
+                        }),
+                )
                 // Alert dialog trigger
-                .child({
-                    let open = alert_dialog_open.clone();
+                .child(
                     cn::button("Open Alert")
                         .variant(ButtonVariant::Secondary)
-                        .on_click(move |_| open.set(true))
-                })
+                        .on_click(move |_| {
+                            tracing::info!("Opening alert dialog...");
+                            cn::alert_dialog()
+                                .title("Information")
+                                .description("This is an alert dialog. Click OK to dismiss.")
+                                .confirm_text("OK")
+                                .on_confirm(|| {
+                                    tracing::info!("Alert acknowledged");
+                                })
+                                .show();
+                        }),
+                )
                 // Destructive dialog trigger
-                .child({
-                    let open = destructive_dialog_open.clone();
+                .child(
                     cn::button("Delete Item")
                         .variant(ButtonVariant::Destructive)
-                        .on_click(move |_| open.set(true))
-                }),
-        )
-        // Basic Dialog
-        .child(
-            cn::dialog(&basic_dialog_open)
-                .title("Edit Profile")
-                .description("Make changes to your profile here. Click save when you're done.")
-                .content(|| {
-                    let theme = ThemeState::get();
-                    div()
-                        .flex_col()
-                        .gap(12.0)
-                        .child(
-                            text("This is a basic dialog with custom content.")
-                                .size(14.0)
-                                .color(theme.color(ColorToken::TextSecondary)),
-                        )
-                        .child(
-                            text("You can put any content here - forms, lists, images, etc.")
-                                .size(14.0)
-                                .color(theme.color(ColorToken::TextSecondary)),
-                        )
-                })
-                .footer({
-                    let open = basic_dialog_open.clone();
-                    move || {
-                        let open = open.clone();
-                        div()
-                            .flex_row()
-                            .gap(8.0)
-                            .child(
-                                cn::button("Cancel")
-                                    .variant(ButtonVariant::Outline)
-                                    .on_click({
-                                        let open = open.clone();
-                                        move |_| open.set(false)
-                                    }),
-                            )
-                            .child(
-                                cn::button("Save Changes").on_click({
-                                    let open = open.clone();
-                                    move |_| {
-                                        tracing::info!("Saving changes...");
-                                        open.set(false);
-                                    }
-                                }),
-                            )
-                    }
-                }),
-        )
-        // Alert Dialog (simple confirmation)
-        .child(
-            cn::alert_dialog(&alert_dialog_open)
-                .title("Are you sure?")
-                .description("This action will update your settings.")
-                .confirm_text("Continue")
-                .cancel_text("Cancel")
-                .on_confirm(|| tracing::info!("Alert confirmed!")),
-        )
-        // Destructive Dialog
-        .child(
-            cn::alert_dialog(&destructive_dialog_open)
-                .title("Delete Item")
-                .description("This action cannot be undone. This will permanently delete the item from your account.")
-                .confirm_text("Delete")
-                .cancel_text("Cancel")
-                .destructive()
-                .on_confirm(|| tracing::info!("Item deleted!")),
-        )
-        .child(
-            text("Click a button above to open a dialog")
-                .size(12.0)
-                .color(text_secondary),
+                        .on_click(move |_| {
+                            tracing::info!("Opening destructive dialog...");
+                            cn::dialog()
+                                .title("Delete Item")
+                                .description("Are you sure you want to delete this item? This action cannot be undone.")
+                                .confirm_text("Delete")
+                                .confirm_destructive(true)
+                                .on_confirm(|| {
+                                    tracing::info!("Item deleted!");
+                                })
+                                .show();
+                        }),
+                ),
         )
 }
 

@@ -29,13 +29,13 @@ pub mod textarea;
 // Re-export all components
 pub use alert::{alert, alert_box, Alert, AlertBox, AlertVariant};
 pub use badge::{badge, Badge, BadgeVariant};
-pub use button::{button, Button, ButtonSize, ButtonVariant};
+pub use button::{button, Button, ButtonSize, ButtonVariant, IconPosition};
 pub use card::{
     card, card_content, card_footer, card_header, Card, CardContent, CardFooter, CardHeader,
 };
 pub use checkbox::{checkbox, Checkbox, CheckboxSize};
 pub use context_menu::{context_menu, ContextMenuBuilder, ContextMenuItem, SubmenuBuilder};
-pub use dialog::{alert_dialog, dialog, AlertDialogBuilder, Dialog, DialogBuilder, DialogSize};
+pub use dialog::{alert_dialog, dialog, AlertDialogBuilder, DialogBuilder, DialogSize};
 pub use input::{input, Input, InputBgColors, InputBorderColors, InputSize};
 pub use label::{label, Label, LabelBuilder, LabelSize};
 pub use progress::{progress, progress_animated, AnimatedProgress, Progress, ProgressSize};
