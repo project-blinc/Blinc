@@ -304,26 +304,35 @@ impl RenderContext {
             // Step 5: Render glass/foreground-layer images (on top of glass, NOT blurred)
             self.render_images_ref(target, &fg_images);
 
-            // Step 6: Render foreground primitives with MSAA for smooth SVG edges
-            if !fg_batch.is_empty() {
-                if use_msaa_overlay {
-                    self.renderer
-                        .render_overlay_msaa(target, &fg_batch, self.sample_count);
-                } else {
-                    self.renderer.render_overlay(target, &fg_batch);
+            // Step 6: Render foreground and text
+            if self.renderer.unified_text_rendering() {
+                // Unified rendering: combine text glyphs with foreground primitives
+                let unified_primitives = fg_batch.get_unified_foreground_primitives();
+                if !unified_primitives.is_empty() {
+                    self.render_unified(target, &unified_primitives);
                 }
-            }
+            } else {
+                // Legacy rendering: separate foreground and text passes
+                if !fg_batch.is_empty() {
+                    if use_msaa_overlay {
+                        self.renderer
+                            .render_overlay_msaa(target, &fg_batch, self.sample_count);
+                    } else {
+                        self.renderer.render_overlay(target, &fg_batch);
+                    }
+                }
 
-            // Step 7: Render text
-            if !all_glyphs.is_empty() {
-                self.render_text(target, &all_glyphs);
+                // Step 7: Render text
+                if !all_glyphs.is_empty() {
+                    self.render_text(target, &all_glyphs);
+                }
             }
 
             // Step 8: Render text decorations (strikethrough, underline)
             let decorations_by_layer = generate_text_decoration_primitives_by_layer(&texts);
             for primitives in decorations_by_layer.values() {
                 if !primitives.is_empty() {
-                    self.renderer.render_primitives_overlay(target, primitives);
+                    self.render_unified(target, primitives);
                 }
             }
         } else {
@@ -339,26 +348,36 @@ impl RenderContext {
             // Render images after background primitives
             self.render_images(target, &images, width as f32, height as f32);
 
-            // Render foreground with MSAA for smooth SVG edges
-            if !fg_batch.is_empty() {
-                if use_msaa_overlay {
-                    self.renderer
-                        .render_overlay_msaa(target, &fg_batch, self.sample_count);
-                } else {
-                    self.renderer.render_overlay(target, &fg_batch);
+            // Render foreground and text
+            if self.renderer.unified_text_rendering() {
+                // Unified rendering: combine text glyphs with foreground primitives
+                // This ensures text and shapes transform together during animations
+                let unified_primitives = fg_batch.get_unified_foreground_primitives();
+                if !unified_primitives.is_empty() {
+                    self.render_unified(target, &unified_primitives);
                 }
-            }
+            } else {
+                // Legacy rendering: separate foreground and text passes
+                if !fg_batch.is_empty() {
+                    if use_msaa_overlay {
+                        self.renderer
+                            .render_overlay_msaa(target, &fg_batch, self.sample_count);
+                    } else {
+                        self.renderer.render_overlay(target, &fg_batch);
+                    }
+                }
 
-            // Render text
-            if !all_glyphs.is_empty() {
-                self.render_text(target, &all_glyphs);
+                // Render text
+                if !all_glyphs.is_empty() {
+                    self.render_text(target, &all_glyphs);
+                }
             }
 
             // Render text decorations (strikethrough, underline)
             let decorations_by_layer = generate_text_decoration_primitives_by_layer(&texts);
             for primitives in decorations_by_layer.values() {
                 if !primitives.is_empty() {
-                    self.renderer.render_primitives_overlay(target, primitives);
+                    self.render_unified(target, primitives);
                 }
             }
         }
@@ -428,6 +447,34 @@ impl RenderContext {
                 color_atlas_view,
                 self.text_ctx.sampler(),
             );
+        }
+    }
+
+    /// Render SDF primitives and text glyphs in a unified pass
+    ///
+    /// This ensures text and shapes transform together during animations,
+    /// preventing visual lag when parent containers have motion transforms.
+    fn render_unified(
+        &mut self,
+        target: &wgpu::TextureView,
+        primitives: &[GpuPrimitive],
+    ) {
+        if primitives.is_empty() {
+            return;
+        }
+
+        if let (Some(atlas_view), Some(color_atlas_view)) =
+            (self.text_ctx.atlas_view(), self.text_ctx.color_atlas_view())
+        {
+            self.renderer.render_primitives_overlay_with_glyphs(
+                target,
+                primitives,
+                atlas_view,
+                color_atlas_view,
+            );
+        } else {
+            // Fallback to regular rendering if no text atlases available
+            self.renderer.render_primitives_overlay(target, primitives);
         }
     }
 
@@ -770,6 +817,7 @@ impl RenderContext {
                 1.0,        // Initial motion opacity
                 (0.0, 0.0), // Initial motion translate offset
                 (1.0, 1.0), // Initial motion scale
+                None,       // No initial motion scale center
                 render_state,
                 scale,
                 &mut z_layer,
@@ -796,6 +844,9 @@ impl RenderContext {
         inherited_motion_opacity: f32,
         inherited_motion_translate: (f32, f32),
         inherited_motion_scale: (f32, f32),
+        // Center point for motion scale (in layout coordinates, before DPI scaling)
+        // When a parent has motion scale, children should scale around the parent's center
+        inherited_motion_scale_center: Option<(f32, f32)>,
         render_state: Option<&blinc_layout::RenderState>,
         scale: f32,
         z_layer: &mut u32,
@@ -812,7 +863,7 @@ impl RenderContext {
         let abs_x = bounds.x;
         let abs_y = bounds.y;
 
-        // Get motion values for this node
+        // Get motion values for this node from RenderState (entry/exit animations)
         let motion_values = render_state.and_then(|rs| {
             // Try stable motion first, then node-based
             if let Some(render_node) = tree.get_render_node(node) {
@@ -823,30 +874,63 @@ impl RenderContext {
             rs.get_motion_values(node)
         });
 
-        // Calculate motion opacity for this node
-        let node_motion_opacity = motion_values.and_then(|m| m.opacity).unwrap_or(1.0);
+        // Get motion bindings from RenderTree (continuous AnimatedValue animations)
+        // NOTE: binding_transform (translate) is NOT added to effective_motion_translate
+        // because it's already included in new_offset for child positioning (see line ~1250).
+        // Only RenderState motion values need to be inherited through effective_motion_translate.
+        let binding_scale = tree.get_motion_scale(node);
+        let binding_opacity = tree.get_motion_opacity(node);
 
-        // Get motion translate for this node
+        // Calculate motion opacity for this node (combine both sources)
+        let node_motion_opacity = motion_values
+            .and_then(|m| m.opacity)
+            .unwrap_or_else(|| binding_opacity.unwrap_or(1.0));
+
+        // Get motion translate for this node from RenderState only
+        // (binding translate is handled via new_offset in recursive calls)
         let node_motion_translate = motion_values
             .map(|m| m.resolved_translate())
             .unwrap_or((0.0, 0.0));
 
-        // Get motion scale for this node (affects child positioning)
+        // Get motion scale for this node from RenderState
         let node_motion_scale = motion_values
             .map(|m| m.resolved_scale())
             .unwrap_or((1.0, 1.0));
 
+        // Combine with binding scale
+        let binding_scale_values = binding_scale.unwrap_or((1.0, 1.0));
+
         // Combine with inherited values
+        // NOTE: effective_motion_translate only includes RenderState motion values,
+        // NOT binding transforms (which are already in the position via new_offset)
         let effective_motion_opacity = inherited_motion_opacity * node_motion_opacity;
         let effective_motion_translate = (
             inherited_motion_translate.0 + node_motion_translate.0,
             inherited_motion_translate.1 + node_motion_translate.1,
         );
-        // Scale compounds multiplicatively
+        // Scale compounds multiplicatively (including binding scale)
         let effective_motion_scale = (
-            inherited_motion_scale.0 * node_motion_scale.0,
-            inherited_motion_scale.1 * node_motion_scale.1,
+            inherited_motion_scale.0 * node_motion_scale.0 * binding_scale_values.0,
+            inherited_motion_scale.1 * node_motion_scale.1 * binding_scale_values.1,
         );
+
+        // Determine the motion scale center for children
+        // If this node has motion scale (from RenderState or binding), use its center as the scale center
+        // Otherwise, inherit the parent's scale center
+        let this_node_has_scale = (node_motion_scale.0 - 1.0).abs() > 0.001
+            || (node_motion_scale.1 - 1.0).abs() > 0.001
+            || (binding_scale_values.0 - 1.0).abs() > 0.001
+            || (binding_scale_values.1 - 1.0).abs() > 0.001;
+
+        let effective_motion_scale_center = if this_node_has_scale {
+            // This node has motion scale - compute its center in absolute layout coordinates
+            let center_x = abs_x + bounds.width / 2.0;
+            let center_y = abs_y + bounds.height / 2.0;
+            Some((center_x, center_y))
+        } else {
+            // No scale on this node - inherit the parent's scale center
+            inherited_motion_scale_center
+        };
 
         // Skip if completely transparent
         if effective_motion_opacity <= 0.001 {
@@ -910,28 +994,56 @@ impl RenderContext {
 
             match &render_node.element_type {
                 ElementType::Text(text_data) => {
-                    // Apply motion transform to position
-                    // Scale is applied centered around the element's own center (not world origin)
-                    // Translation simply offsets the element
-                    let center_x = abs_x + bounds.width / 2.0;
-                    let center_y = abs_y + bounds.height / 2.0;
+                    // Apply DPI scale factor FIRST to match shape rendering order
+                    // In render_with_motion, DPI scale is pushed at root level before any other transforms
+                    // So we must: scale base positions first, then apply motion transforms
+                    let base_x = abs_x * scale;
+                    let base_y = abs_y * scale;
+                    let base_width = bounds.width * scale;
+                    let base_height = bounds.height * scale;
 
-                    // Apply translation only (scale affects size, not position when scaling around center)
-                    let translated_center_x = center_x + effective_motion_translate.0;
-                    let translated_center_y = center_y + effective_motion_translate.1;
+                    // Scale motion translate by DPI factor (motion values are in layout coordinates)
+                    let scaled_motion_tx = effective_motion_translate.0 * scale;
+                    let scaled_motion_ty = effective_motion_translate.1 * scale;
 
-                    // Convert back to top-left position with scaled dimensions
-                    // The element stays centered at its position but its size scales
-                    let motion_x =
-                        translated_center_x - (bounds.width * effective_motion_scale.0) / 2.0;
-                    let motion_y =
-                        translated_center_y - (bounds.height * effective_motion_scale.1) / 2.0;
+                    // Apply motion scale and translation
+                    // When there's a motion scale center (from parent Motion container),
+                    // we must scale around THAT center, not the text element's own center.
+                    // This matches how shapes are rendered - the scale transform is pushed
+                    // at the Motion container level and affects all children relative to
+                    // the container's center.
+                    let (scaled_x, scaled_y, scaled_width, scaled_height) =
+                        if let Some((motion_center_x, motion_center_y)) =
+                            effective_motion_scale_center
+                        {
+                            // Scale position around the motion container's center (in DPI-scaled coordinates)
+                            let motion_center_x_scaled = motion_center_x * scale;
+                            let motion_center_y_scaled = motion_center_y * scale;
 
-                    // Apply DPI scale factor to positions and sizes
-                    let scaled_x = motion_x * scale;
-                    let scaled_y = motion_y * scale;
-                    let scaled_width = bounds.width * effective_motion_scale.0 * scale;
-                    let scaled_height = bounds.height * effective_motion_scale.1 * scale;
+                            // Calculate position relative to motion center
+                            let rel_x = base_x - motion_center_x_scaled;
+                            let rel_y = base_y - motion_center_y_scaled;
+
+                            // Apply scale to relative position and size
+                            let scaled_rel_x = rel_x * effective_motion_scale.0;
+                            let scaled_rel_y = rel_y * effective_motion_scale.1;
+                            let scaled_w = base_width * effective_motion_scale.0;
+                            let scaled_h = base_height * effective_motion_scale.1;
+
+                            // Apply motion translation and convert back to absolute position
+                            let final_x =
+                                motion_center_x_scaled + scaled_rel_x + scaled_motion_tx;
+                            let final_y =
+                                motion_center_y_scaled + scaled_rel_y + scaled_motion_ty;
+
+                            (final_x, final_y, scaled_w, scaled_h)
+                        } else {
+                            // No motion scale center - just apply translation (no scale effect)
+                            let final_x = base_x + scaled_motion_tx;
+                            let final_y = base_y + scaled_motion_ty;
+                            (final_x, final_y, base_width, base_height)
+                        };
+
                     let scaled_font_size =
                         text_data.font_size * effective_motion_scale.1 * scale;
                     let scaled_measured_width =
@@ -941,6 +1053,22 @@ impl RenderContext {
                     let scaled_clip = current_clip
                         .map(|[cx, cy, cw, ch]| [cx * scale, cy * scale, cw * scale, ch * scale]);
 
+                    // Log motion values if non-trivial (for debugging text/shape sync issues)
+                    if effective_motion_translate.0.abs() > 0.1 || effective_motion_translate.1.abs() > 0.1
+                        || (effective_motion_scale.0 - 1.0).abs() > 0.01 || (effective_motion_scale.1 - 1.0).abs() > 0.01 {
+                        tracing::info!(
+                            "Text '{}': motion_translate=({:.1}, {:.1}), motion_scale=({:.2}, {:.2}), base=({:.1}, {:.1}), final=({:.1}, {:.1})",
+                            text_data.content,
+                            effective_motion_translate.0,
+                            effective_motion_translate.1,
+                            effective_motion_scale.0,
+                            effective_motion_scale.1,
+                            base_x,
+                            base_y,
+                            scaled_x,
+                            scaled_y,
+                        );
+                    }
                     tracing::debug!(
                         "Text '{}': abs=({:.1}, {:.1}), size=({:.1}x{:.1}), font={:.1}, align={:?}, v_align={:?}, z_layer={}",
                         text_data.content,
@@ -1018,11 +1146,46 @@ impl RenderContext {
                 ElementType::Div => {}
                 // StyledText: render text with inline styling using multiple TextElements
                 ElementType::StyledText(styled_data) => {
-                    let scaled_x = abs_x * scale;
-                    let scaled_y = abs_y * scale;
-                    let scaled_width = bounds.width * scale;
-                    let scaled_height = bounds.height * scale;
-                    let scaled_font_size = styled_data.font_size * scale;
+                    // Apply DPI scale factor first
+                    let base_x = abs_x * scale;
+                    let base_y = abs_y * scale;
+                    let base_width = bounds.width * scale;
+                    let base_height = bounds.height * scale;
+
+                    // Scale motion translate by DPI factor
+                    let scaled_motion_tx = effective_motion_translate.0 * scale;
+                    let scaled_motion_ty = effective_motion_translate.1 * scale;
+
+                    // Apply motion scale and translation (same logic as Text)
+                    let (scaled_x, scaled_y, scaled_width, scaled_height) =
+                        if let Some((motion_center_x, motion_center_y)) =
+                            effective_motion_scale_center
+                        {
+                            let motion_center_x_scaled = motion_center_x * scale;
+                            let motion_center_y_scaled = motion_center_y * scale;
+
+                            let rel_x = base_x - motion_center_x_scaled;
+                            let rel_y = base_y - motion_center_y_scaled;
+
+                            let scaled_rel_x = rel_x * effective_motion_scale.0;
+                            let scaled_rel_y = rel_y * effective_motion_scale.1;
+                            let scaled_w = base_width * effective_motion_scale.0;
+                            let scaled_h = base_height * effective_motion_scale.1;
+
+                            let final_x =
+                                motion_center_x_scaled + scaled_rel_x + scaled_motion_tx;
+                            let final_y =
+                                motion_center_y_scaled + scaled_rel_y + scaled_motion_ty;
+
+                            (final_x, final_y, scaled_w, scaled_h)
+                        } else {
+                            let final_x = base_x + scaled_motion_tx;
+                            let final_y = base_y + scaled_motion_ty;
+                            (final_x, final_y, base_width, base_height)
+                        };
+
+                    let scaled_font_size =
+                        styled_data.font_size * effective_motion_scale.1 * scale;
                     let scaled_clip = current_clip
                         .map(|[cx, cy, cw, ch]| [cx * scale, cy * scale, cw * scale, ch * scale]);
 
@@ -1126,7 +1289,8 @@ impl RenderContext {
                             styled_data.font_size,
                             &options,
                         );
-                        let segment_width = metrics.width * scale;
+                        // Apply both DPI scale and motion scale to segment width
+                        let segment_width = metrics.width * scale * effective_motion_scale.0;
 
                         texts.push(TextElement {
                             content: segment_text.to_string(),
@@ -1152,7 +1316,7 @@ impl RenderContext {
                             font_family: styled_data.font_family.clone(),
                             word_spacing: 0.0,
                             z_index: *z_layer,
-                            ascender: scaled_ascender, // Use consistent ascender for baseline alignment
+                            ascender: scaled_ascender * effective_motion_scale.1, // Scale ascender with motion
                             strikethrough,
                             underline,
                         });
@@ -1187,6 +1351,7 @@ impl RenderContext {
                 effective_motion_opacity,
                 effective_motion_translate,
                 effective_motion_scale,
+                effective_motion_scale_center,
                 render_state,
                 scale,
                 z_layer,
