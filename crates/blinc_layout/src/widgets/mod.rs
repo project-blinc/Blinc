@@ -119,7 +119,7 @@ pub use table::{
 pub use blockquote::{blockquote, blockquote_with_config, Blockquote, BlockquoteConfig};
 
 // Re-export horizontal rule widget
-pub use hr::{hr, hr_color, hr_thick, hr_with_config, HrConfig};
+pub use hr::{hr, hr_color, hr_thick, hr_with_bg, hr_with_config, HrConfig};
 
 // Re-export link widget
 pub use link::{link, open_url, Link, LinkConfig};

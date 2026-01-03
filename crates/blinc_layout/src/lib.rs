@@ -343,9 +343,9 @@ pub mod prelude {
 
     // Additional markdown widgets
     pub use crate::widgets::{
-        blockquote, blockquote_with_config, hr, hr_color, hr_thick, hr_with_config, li, link, ol,
-        ol_start, task_item, ul, Blockquote, BlockquoteConfig, HrConfig, Link, LinkConfig,
-        ListConfig, ListItem, ListMarker, OrderedList, TaskListItem, UnorderedList,
+        blockquote, blockquote_with_config, hr, hr_color, hr_thick, hr_with_bg, hr_with_config, li,
+        link, ol, ol_start, task_item, ul, Blockquote, BlockquoteConfig, HrConfig, Link,
+        LinkConfig, ListConfig, ListItem, ListMarker, OrderedList, TaskListItem, UnorderedList,
     };
 
     // Selector API for programmatic element access

@@ -421,14 +421,9 @@ fn build_menu_content(
 
     for (idx, item) in items.iter().enumerate() {
         if item.is_separator {
-            // Separator line - use pixel margin for consistency
-            menu = menu.child(
-                div()
-                    .h(1.0)
-                    .w_full()
-                    .bg(border)
-                    .my(padding / 8.0),
-            );
+            // Separator line with explicit background to prevent alpha artifacts
+            // during opacity animations
+            menu = menu.child(hr_with_bg(bg));
         } else {
             // Regular menu item
             let item_label = item.label.clone();
@@ -499,14 +494,15 @@ fn build_menu_content(
             }
 
             // Left side: icon + label
-            let mut left_side = div().w_fit().h_fit().flex_row().items_center().gap(padding / 4.0);
+            let mut left_side = div()
+                .w_fit()
+                .h_fit()
+                .flex_row()
+                .items_center()
+                .gap(padding / 4.0);
 
             if let Some(ref icon_svg) = item_icon {
-                left_side = left_side.child(
-                    svg(icon_svg)
-                        .size(16.0, 16.0)
-                        .color(item_text_color),
-                );
+                left_side = left_side.child(svg(icon_svg).size(16.0, 16.0).color(item_text_color));
             }
 
             left_side = left_side.child(
@@ -531,11 +527,7 @@ fn build_menu_content(
             } else if has_submenu {
                 // Chevron right for submenu
                 let chevron_right = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>"#;
-                row = row.child(
-                    svg(chevron_right)
-                        .size(12.0, 12.0)
-                        .color(text_tertiary),
-                );
+                row = row.child(svg(chevron_right).size(12.0, 12.0).color(text_tertiary));
             }
 
             menu = menu.child(row);
