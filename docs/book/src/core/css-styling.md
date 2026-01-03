@@ -12,6 +12,8 @@ The CSS system supports:
 - **Keyframe animations** (`@keyframes`)
 - **Automatic animation application** via the `animation:` property
 - **Theme integration** (`theme()` function)
+- **Length units** (`px`, `sp`, `%`)
+- **Gradients** (`linear-gradient`, `radial-gradient`, `conic-gradient`)
 
 ---
 
@@ -71,6 +73,90 @@ div()
 }
 ```
 
+### Gradients
+
+CSS gradients are fully supported for the `background` property:
+
+#### Linear Gradients
+
+```css
+#element {
+    /* Angle-based (0deg = up, 90deg = right, 180deg = down) */
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
+    /* Direction keywords */
+    background: linear-gradient(to right, red, blue);
+    background: linear-gradient(to bottom right, #fff, #000);
+
+    /* Multiple color stops */
+    background: linear-gradient(90deg, red 0%, yellow 50%, green 100%);
+
+    /* Implied positions (evenly distributed) */
+    background: linear-gradient(to bottom, red, yellow, green);
+
+    /* Different angle units */
+    background: linear-gradient(0.25turn, red, blue);  /* 90deg */
+    background: linear-gradient(1.5708rad, red, blue); /* ~90deg */
+}
+```
+
+#### Radial Gradients
+
+```css
+#element {
+    /* Simple circle from center */
+    background: radial-gradient(circle, red, blue);
+
+    /* With position */
+    background: radial-gradient(circle at center, red, blue);
+    background: radial-gradient(circle at 25% 75%, red, blue);
+
+    /* Ellipse shape */
+    background: radial-gradient(ellipse at center, red, blue);
+
+    /* Multiple color stops */
+    background: radial-gradient(circle, red 0%, yellow 50%, green 100%);
+}
+```
+
+#### Conic Gradients
+
+```css
+#element {
+    /* Simple color wheel */
+    background: conic-gradient(red, yellow, green, blue, red);
+
+    /* With starting angle */
+    background: conic-gradient(from 45deg, red, blue);
+
+    /* With position */
+    background: conic-gradient(at 25% 75%, red, blue);
+
+    /* Combined angle and position */
+    background: conic-gradient(from 90deg at center, red, blue);
+}
+```
+
+#### Gradient Color Stops
+
+Color stops can use any supported color format:
+
+```css
+#element {
+    /* Hex colors with positions */
+    background: linear-gradient(to right, #667eea 0%, #764ba2 100%);
+
+    /* RGBA colors */
+    background: linear-gradient(45deg, rgba(255, 0, 0, 0.5), rgba(0, 0, 255, 0.8));
+
+    /* Named colors */
+    background: linear-gradient(to right, red, orange, yellow, green, blue);
+
+    /* Mixed formats */
+    background: linear-gradient(135deg, #ff0000, rgba(0, 255, 0, 0.5) 50%, blue);
+}
+```
+
 ### Border Radius
 
 ```css
@@ -118,6 +204,58 @@ div()
     render-layer: foreground;               /* On top */
     render-layer: background;               /* Behind */
     render-layer: glass;                    /* Glass layer */
+}
+```
+
+---
+
+## Length Units
+
+Blinc CSS supports three types of length units:
+
+### Pixels (`px`)
+
+Raw pixel values. These are the default when no unit is specified.
+
+```css
+#element {
+    border-radius: 8px;
+    box-shadow: 2px 4px 12px rgba(0, 0, 0, 0.3);
+    transform: translate(10px, 20px);
+}
+```
+
+### Spacing Units (`sp`)
+
+Spacing units follow a 4px grid system, where `1sp = 4px`. This helps maintain consistent spacing throughout your application.
+
+```css
+#card {
+    border-radius: 2sp;                    /* 2 * 4 = 8px */
+    box-shadow: 1sp 2sp 4sp rgba(0,0,0,0.2); /* 4px 8px 16px */
+    transform: translate(4sp, 2sp);         /* 16px, 8px */
+}
+```
+
+Common `sp` values:
+
+- `1sp` = 4px
+- `2sp` = 8px
+- `4sp` = 16px
+- `6sp` = 24px
+- `8sp` = 32px
+
+### Percentages (`%`)
+
+Percentages are supported in gradient color stops and position values.
+
+```css
+#element {
+    /* Gradient color stops use percentages */
+    background: linear-gradient(to right, red 0%, blue 100%);
+
+    /* Radial/conic gradient positions */
+    background: radial-gradient(circle at 25% 75%, red, blue);
 }
 ```
 
@@ -486,6 +624,7 @@ fn styled_app() -> impl ElementBuilder {
         :root {
             --card-bg: theme(surface);
             --card-radius: theme(radius-lg);
+            --brand-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
 
         @keyframes fade-in {
@@ -506,6 +645,17 @@ fn styled_app() -> impl ElementBuilder {
 
         #card:hover {
             box-shadow: theme(shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        #gradient-card {
+            background: var(--brand-gradient);
+            border-radius: theme(radius-lg);
+            box-shadow: theme(shadow-md);
+        }
+
+        #gradient-card:hover {
+            background: linear-gradient(135deg, #7c8ff0 0%, #8b5cb8 100%);
             transform: translateY(-2px);
         }
 
@@ -542,6 +692,12 @@ fn styled_app() -> impl ElementBuilder {
                 .id("card")
                 .p(16.0)
                 .child(text("Styled with CSS!"))
+        )
+        .child(
+            div()
+                .id("gradient-card")
+                .p(16.0)
+                .child(text("Gradient background!"))
         )
         .child(
             button("Click me")

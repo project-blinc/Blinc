@@ -50,7 +50,7 @@
 
 use std::collections::HashMap;
 
-use blinc_core::{Brush, Color, CornerRadius, Shadow, Transform};
+use blinc_core::{Brush, Color, CornerRadius, Gradient, GradientSpace, GradientStop, Point, Shadow, Transform};
 use blinc_theme::{ColorToken, ThemeState};
 use nom::{
     branch::alt,
@@ -67,6 +67,7 @@ use tracing::debug;
 
 use crate::element::RenderLayer;
 use crate::element_style::ElementStyle;
+use crate::units::Length;
 
 /// Custom parser result type using VerboseError for better diagnostics
 type ParseResult<'a, O> = IResult<&'a str, O, VerboseError<&'a str>>;
@@ -1935,13 +1936,30 @@ fn apply_property_with_errors(
 // ============================================================================
 
 fn parse_brush(value: &str) -> Option<Brush> {
-    // Try theme() function first
-    if let Ok((_, color)) = parse_theme_color::<nom::error::Error<&str>>(value) {
+    let trimmed = value.trim();
+
+    // Try linear-gradient()
+    if trimmed.starts_with("linear-gradient(") {
+        return parse_linear_gradient(trimmed).map(Brush::Gradient);
+    }
+
+    // Try radial-gradient()
+    if trimmed.starts_with("radial-gradient(") {
+        return parse_radial_gradient(trimmed).map(Brush::Gradient);
+    }
+
+    // Try conic-gradient()
+    if trimmed.starts_with("conic-gradient(") {
+        return parse_conic_gradient(trimmed).map(Brush::Gradient);
+    }
+
+    // Try theme() function
+    if let Ok((_, color)) = parse_theme_color::<nom::error::Error<&str>>(trimmed) {
         return Some(Brush::Solid(color));
     }
 
     // Try parsing as color
-    parse_color(value).map(Brush::Solid)
+    parse_color(trimmed).map(Brush::Solid)
 }
 
 /// Parse theme(token-name) for colors
@@ -2164,7 +2182,7 @@ fn parse_translate_transform<'a, E: NomParseError<&'a str>>(input: &'a str) -> I
         let (rest, x) = parse_length(rest)?;
         let (rest, _) = ws(rest)?;
         let (rest, _) = char(')')(rest)?;
-        return Ok((rest, Transform::translate(x, 0.0)));
+        return Ok((rest, Transform::translate(x.to_px(), 0.0)));
     }
 
     // Try translateY(y)
@@ -2175,7 +2193,7 @@ fn parse_translate_transform<'a, E: NomParseError<&'a str>>(input: &'a str) -> I
         let (rest, y) = parse_length(rest)?;
         let (rest, _) = ws(rest)?;
         let (rest, _) = char(')')(rest)?;
-        return Ok((rest, Transform::translate(0.0, y)));
+        return Ok((rest, Transform::translate(0.0, y.to_px())));
     }
 
     // Try translate(x, y)
@@ -2191,21 +2209,59 @@ fn parse_translate_transform<'a, E: NomParseError<&'a str>>(input: &'a str) -> I
     let (input, _) = ws(input)?;
     let (input, _) = char(')')(input)?;
 
-    Ok((input, Transform::translate(x, y)))
+    Ok((input, Transform::translate(x.to_px(), y.to_px())))
 }
 
-/// Parse a length value with optional px suffix
-fn parse_length<'a, E: NomParseError<&'a str>>(input: &'a str) -> IResult<&'a str, f32, E> {
-    let (input, value) = float(input)?;
-    let (input, _) = opt(tag_no_case("px"))(input)?;
-    Ok((input, value))
-}
-
-/// Parse a length value from a string slice
-fn parse_length_value(input: &str) -> Option<f32> {
+/// Parse a CSS length value with unit suffix and return as Length enum
+///
+/// Supports:
+/// - `px` - pixels (e.g., "16px")
+/// - `sp` - spacing units, 4px grid (e.g., "4sp" = 16px)
+/// - `%` - percentage (e.g., "50%")
+/// - unitless - treated as pixels for backwards compatibility
+fn parse_css_length(input: &str) -> Option<Length> {
     let input = input.trim();
-    let input = input.strip_suffix("px").unwrap_or(input).trim();
-    input.parse::<f32>().ok()
+
+    // Try percentage first
+    if let Some(pct_str) = input.strip_suffix('%') {
+        return pct_str.trim().parse::<f32>().ok().map(Length::Pct);
+    }
+
+    // Try spacing units (4px grid)
+    if let Some(sp_str) = input.strip_suffix("sp") {
+        return sp_str.trim().parse::<f32>().ok().map(Length::Sp);
+    }
+
+    // Try pixels (explicit or implicit)
+    let num_str = input.strip_suffix("px").unwrap_or(input).trim();
+    num_str.parse::<f32>().ok().map(Length::Px)
+}
+
+/// Parse a length value with optional px/sp suffix using nom
+fn parse_length<'a, E: NomParseError<&'a str>>(input: &'a str) -> IResult<&'a str, Length, E> {
+    let (input, value) = float(input)?;
+    // Try to match a unit suffix
+    let (input, unit) = opt(alt((
+        tag_no_case("px"),
+        tag_no_case("sp"),
+        tag("%"),
+    )))(input)?;
+
+    let length = match unit {
+        Some("sp") | Some("SP") => Length::Sp(value),
+        Some("%") => Length::Pct(value),
+        _ => Length::Px(value), // px or unitless
+    };
+
+    Ok((input, length))
+}
+
+/// Parse a length value from a string slice, returning pixels (f32)
+///
+/// This is a convenience wrapper that converts Length to pixels for
+/// properties that need raw pixel values (like shadow offsets).
+fn parse_length_value(input: &str) -> Option<f32> {
+    parse_css_length(input).map(|len| len.to_px())
 }
 
 /// Parse opacity value
@@ -2502,6 +2558,433 @@ fn parse_named_color(name: &str) -> Option<Color> {
         "orange" => Some(Color::ORANGE),
         "purple" => Some(Color::PURPLE),
         "transparent" => Some(Color::TRANSPARENT),
+        _ => None,
+    }
+}
+
+// ============================================================================
+// Gradient Parsing
+// ============================================================================
+
+/// Parse CSS linear-gradient()
+///
+/// Syntax:
+/// - `linear-gradient(135deg, #667eea 0%, #764ba2 100%)`
+/// - `linear-gradient(to right, red, blue)`
+/// - `linear-gradient(to bottom right, #fff, #000)`
+/// - `linear-gradient(90deg, red 0%, yellow 50%, green 100%)`
+fn parse_linear_gradient(input: &str) -> Option<Gradient> {
+    // Strip the function wrapper
+    let inner = input
+        .strip_prefix("linear-gradient(")
+        .and_then(|s| s.strip_suffix(')'))?
+        .trim();
+
+    // Split by commas, but be careful with colors that contain commas (rgb, rgba)
+    let parts = split_gradient_parts(inner);
+    if parts.is_empty() {
+        return None;
+    }
+
+    // Parse angle/direction (first part might be angle or first color stop)
+    let (angle_deg, color_start_idx) = parse_gradient_direction(&parts[0]);
+
+    // Parse color stops
+    let stops = parse_color_stops(&parts[color_start_idx..])?;
+    if stops.len() < 2 {
+        return None;
+    }
+
+    // Convert angle to start/end points (using ObjectBoundingBox space 0-1)
+    let (start, end) = angle_to_gradient_points(angle_deg);
+
+    Some(Gradient::Linear {
+        start,
+        end,
+        stops,
+        space: GradientSpace::ObjectBoundingBox,
+        spread: blinc_core::GradientSpread::Pad,
+    })
+}
+
+/// Parse CSS radial-gradient()
+///
+/// Syntax:
+/// - `radial-gradient(circle, red, blue)`
+/// - `radial-gradient(circle at center, red, blue)`
+/// - `radial-gradient(ellipse at 25% 25%, red, blue)`
+fn parse_radial_gradient(input: &str) -> Option<Gradient> {
+    let inner = input
+        .strip_prefix("radial-gradient(")
+        .and_then(|s| s.strip_suffix(')'))?
+        .trim();
+
+    let parts = split_gradient_parts(inner);
+    if parts.is_empty() {
+        return None;
+    }
+
+    // Check for shape/position specification
+    let mut center = Point::new(0.5, 0.5); // Default center
+    let mut color_start_idx = 0;
+
+    // First part might be shape/position info
+    let first = parts[0].trim().to_lowercase();
+    if first.starts_with("circle") || first.starts_with("ellipse") {
+        // Parse "circle at X Y" or just "circle"
+        if let Some(at_pos) = first.find(" at ") {
+            let pos_str = &first[at_pos + 4..];
+            if let Some(pos) = parse_position(pos_str) {
+                center = pos;
+            }
+        }
+        color_start_idx = 1;
+    } else if first.contains(" at ") || first.starts_with("at ") {
+        // Just position: "at center" or "at 50% 50%"
+        let pos_str = first.strip_prefix("at ").unwrap_or(&first);
+        if let Some(pos) = parse_position(pos_str) {
+            center = pos;
+        }
+        color_start_idx = 1;
+    }
+
+    let stops = parse_color_stops(&parts[color_start_idx..])?;
+    if stops.len() < 2 {
+        return None;
+    }
+
+    Some(Gradient::Radial {
+        center,
+        radius: 0.5, // Default radius for ObjectBoundingBox space
+        focal: None,
+        stops,
+        space: GradientSpace::ObjectBoundingBox,
+        spread: blinc_core::GradientSpread::Pad,
+    })
+}
+
+/// Parse CSS conic-gradient()
+///
+/// Syntax:
+/// - `conic-gradient(red, yellow, green, blue, red)`
+/// - `conic-gradient(from 45deg, red, blue)`
+/// - `conic-gradient(from 0deg at center, red 0deg, blue 360deg)`
+fn parse_conic_gradient(input: &str) -> Option<Gradient> {
+    let inner = input
+        .strip_prefix("conic-gradient(")
+        .and_then(|s| s.strip_suffix(')'))?
+        .trim();
+
+    let parts = split_gradient_parts(inner);
+    if parts.is_empty() {
+        return None;
+    }
+
+    let mut start_angle: f32 = 0.0;
+    let mut center = Point::new(0.5, 0.5);
+    let mut color_start_idx = 0;
+
+    // Check for "from Xdeg" and/or "at position"
+    let first = parts[0].trim().to_lowercase();
+    if first.starts_with("from ") {
+        // Parse "from 45deg" or "from 45deg at center"
+        let rest = &first[5..];
+        if let Some(at_pos) = rest.find(" at ") {
+            // Has both angle and position
+            let angle_str = rest[..at_pos].trim();
+            if let Some(angle) = parse_angle_value(angle_str) {
+                start_angle = angle;
+            }
+            let pos_str = &rest[at_pos + 4..];
+            if let Some(pos) = parse_position(pos_str) {
+                center = pos;
+            }
+        } else {
+            // Just angle
+            if let Some(angle) = parse_angle_value(rest.trim()) {
+                start_angle = angle;
+            }
+        }
+        color_start_idx = 1;
+    } else if first.starts_with("at ") {
+        // Just position
+        if let Some(pos) = parse_position(&first[3..]) {
+            center = pos;
+        }
+        color_start_idx = 1;
+    }
+
+    let stops = parse_color_stops(&parts[color_start_idx..])?;
+    if stops.len() < 2 {
+        return None;
+    }
+
+    Some(Gradient::Conic {
+        center,
+        start_angle: start_angle * std::f32::consts::PI / 180.0, // Convert to radians
+        stops,
+        space: GradientSpace::ObjectBoundingBox,
+    })
+}
+
+/// Split gradient arguments by commas, respecting parentheses for rgb()/rgba()
+fn split_gradient_parts(input: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut paren_depth: i32 = 0;
+
+    for c in input.chars() {
+        match c {
+            '(' => {
+                paren_depth += 1;
+                current.push(c);
+            }
+            ')' => {
+                paren_depth = (paren_depth - 1).max(0);
+                current.push(c);
+            }
+            ',' if paren_depth == 0 => {
+                let trimmed = current.trim().to_string();
+                if !trimmed.is_empty() {
+                    parts.push(trimmed);
+                }
+                current.clear();
+            }
+            _ => current.push(c),
+        }
+    }
+
+    let trimmed = current.trim().to_string();
+    if !trimmed.is_empty() {
+        parts.push(trimmed);
+    }
+
+    parts
+}
+
+/// Parse gradient direction (angle or "to <direction>")
+/// Returns (angle_in_degrees, color_start_index)
+fn parse_gradient_direction(first_part: &str) -> (f32, usize) {
+    let part = first_part.trim().to_lowercase();
+
+    // Try parsing as angle (e.g., "135deg", "45deg")
+    if let Some(angle) = parse_angle_value(&part) {
+        return (angle, 1);
+    }
+
+    // Try parsing as direction keyword
+    if part.starts_with("to ") {
+        let direction = &part[3..];
+        let angle = match direction.trim() {
+            "top" => 0.0,
+            "right" => 90.0,
+            "bottom" => 180.0,
+            "left" => 270.0,
+            "top right" | "right top" => 45.0,
+            "bottom right" | "right bottom" => 135.0,
+            "bottom left" | "left bottom" => 225.0,
+            "top left" | "left top" => 315.0,
+            _ => return (180.0, 0), // Default to "to bottom" if unrecognized, treat as color
+        };
+        return (angle, 1);
+    }
+
+    // Not a direction - default to "to bottom" (180deg) and treat first part as color
+    (180.0, 0)
+}
+
+/// Parse angle value (e.g., "45deg", "0.5turn", "100grad")
+fn parse_angle_value(input: &str) -> Option<f32> {
+    let input = input.trim();
+
+    if let Some(deg_str) = input.strip_suffix("deg") {
+        return deg_str.trim().parse::<f32>().ok();
+    }
+
+    if let Some(turn_str) = input.strip_suffix("turn") {
+        return turn_str.trim().parse::<f32>().ok().map(|t| t * 360.0);
+    }
+
+    if let Some(rad_str) = input.strip_suffix("rad") {
+        return rad_str
+            .trim()
+            .parse::<f32>()
+            .ok()
+            .map(|r| r * 180.0 / std::f32::consts::PI);
+    }
+
+    if let Some(grad_str) = input.strip_suffix("grad") {
+        return grad_str.trim().parse::<f32>().ok().map(|g| g * 0.9);
+    }
+
+    // Try parsing as plain number (assumed degrees)
+    input.parse::<f32>().ok()
+}
+
+/// Convert CSS gradient angle to start/end points
+/// CSS angles: 0deg = to top, 90deg = to right, 180deg = to bottom, 270deg = to left
+/// In ObjectBoundingBox space (0-1 coordinates)
+fn angle_to_gradient_points(angle_deg: f32) -> (Point, Point) {
+    // CSS gradient angles are measured clockwise from top (0deg = up)
+    // Convert to mathematical angle (counterclockwise from right)
+    let angle_rad = (90.0 - angle_deg) * std::f32::consts::PI / 180.0;
+
+    // Calculate direction vector
+    let dx = angle_rad.cos();
+    let dy = -angle_rad.sin(); // Negative because Y grows downward in screen coords
+
+    // Find intersection with unit square
+    // We want the gradient line to span the full diagonal based on angle
+    let center = Point::new(0.5, 0.5);
+
+    // Calculate the length needed to reach corners
+    let len = if dx.abs() > dy.abs() {
+        0.5 / dx.abs()
+    } else if dy.abs() > 0.0 {
+        0.5 / dy.abs()
+    } else {
+        0.5
+    };
+
+    let start = Point::new(center.x - dx * len, center.y - dy * len);
+    let end = Point::new(center.x + dx * len, center.y + dy * len);
+
+    (start, end)
+}
+
+/// Parse color stops from gradient parts
+fn parse_color_stops(parts: &[String]) -> Option<Vec<GradientStop>> {
+    if parts.is_empty() {
+        return None;
+    }
+
+    let mut stops = Vec::new();
+    let total = parts.len();
+
+    for (i, part) in parts.iter().enumerate() {
+        if let Some(stop) = parse_single_color_stop(part, i, total) {
+            stops.push(stop);
+        }
+    }
+
+    // Ensure we have at least 2 stops
+    if stops.len() < 2 {
+        return None;
+    }
+
+    // Fill in missing positions (evenly distributed)
+    distribute_stop_positions(&mut stops);
+
+    Some(stops)
+}
+
+/// Parse a single color stop (e.g., "red", "#667eea 50%", "rgba(255,0,0,0.5) 25%")
+fn parse_single_color_stop(part: &str, index: usize, total: usize) -> Option<GradientStop> {
+    let part = part.trim();
+
+    // Try to find a percentage or length at the end
+    let (color_str, position) = extract_color_and_position(part, index, total);
+
+    let color = parse_color(color_str)?;
+    Some(GradientStop::new(position, color))
+}
+
+/// Extract color and position from a color stop string
+fn extract_color_and_position(part: &str, index: usize, total: usize) -> (&str, f32) {
+    // Check for percentage at the end
+    if let Some(pct_pos) = part.rfind('%') {
+        // Find where the number starts (work backwards from %)
+        let before_pct = &part[..pct_pos];
+        if let Some(space_pos) = before_pct.rfind(|c: char| !c.is_ascii_digit() && c != '.' && c != '-') {
+            let num_str = &part[space_pos + 1..pct_pos];
+            if let Ok(pct) = num_str.trim().parse::<f32>() {
+                let color_str = part[..=space_pos].trim();
+                return (color_str, pct / 100.0);
+            }
+        } else {
+            // The whole thing before % is a number
+            if let Ok(pct) = before_pct.trim().parse::<f32>() {
+                // This shouldn't happen for valid color stops, but handle it
+                return (part, pct / 100.0);
+            }
+        }
+    }
+
+    // Check for pixel value at the end (less common in CSS but valid)
+    if let Some(px_pos) = part.rfind("px") {
+        let before_px = &part[..px_pos];
+        if let Some(space_pos) = before_px.rfind(|c: char| !c.is_ascii_digit() && c != '.' && c != '-') {
+            let num_str = &part[space_pos + 1..px_pos];
+            if let Ok(_px) = num_str.trim().parse::<f32>() {
+                // For now, ignore pixel values and use default positioning
+                let color_str = part[..=space_pos].trim();
+                return (color_str, default_position(index, total));
+            }
+        }
+    }
+
+    // No explicit position - use default
+    (part, default_position(index, total))
+}
+
+/// Calculate default position for a color stop
+fn default_position(index: usize, total: usize) -> f32 {
+    if total <= 1 {
+        0.0
+    } else {
+        index as f32 / (total - 1) as f32
+    }
+}
+
+/// Fill in missing/default positions with even distribution
+fn distribute_stop_positions(stops: &mut [GradientStop]) {
+    // The positions are already set during parsing
+    // This function could be enhanced to handle "auto" positions
+    // For now, we rely on default_position during parsing
+}
+
+/// Parse position keywords (for radial/conic gradients)
+fn parse_position(input: &str) -> Option<Point> {
+    let input = input.trim().to_lowercase();
+
+    // Single keyword
+    match input.as_str() {
+        "center" => return Some(Point::new(0.5, 0.5)),
+        "top" => return Some(Point::new(0.5, 0.0)),
+        "bottom" => return Some(Point::new(0.5, 1.0)),
+        "left" => return Some(Point::new(0.0, 0.5)),
+        "right" => return Some(Point::new(1.0, 0.5)),
+        "top left" | "left top" => return Some(Point::new(0.0, 0.0)),
+        "top right" | "right top" => return Some(Point::new(1.0, 0.0)),
+        "bottom left" | "left bottom" => return Some(Point::new(0.0, 1.0)),
+        "bottom right" | "right bottom" => return Some(Point::new(1.0, 1.0)),
+        _ => {}
+    }
+
+    // Try parsing as "X% Y%" or "Xpx Ypx"
+    let parts: Vec<&str> = input.split_whitespace().collect();
+    if parts.len() >= 2 {
+        let x = parse_position_value(parts[0])?;
+        let y = parse_position_value(parts[1])?;
+        return Some(Point::new(x, y));
+    }
+
+    None
+}
+
+/// Parse a single position value (percentage or keyword)
+fn parse_position_value(input: &str) -> Option<f32> {
+    let input = input.trim();
+
+    if let Some(pct_str) = input.strip_suffix('%') {
+        return pct_str.trim().parse::<f32>().ok().map(|p| p / 100.0);
+    }
+
+    // Keywords
+    match input {
+        "left" | "top" => Some(0.0),
+        "center" => Some(0.5),
+        "right" | "bottom" => Some(1.0),
         _ => None,
     }
 }
@@ -3837,5 +4320,498 @@ mod tests {
 
         // Should return None when element has no animation property
         assert!(result.stylesheet.resolve_animation("card").is_none());
+    }
+
+    // =========================================================================
+    // Gradient Tests
+    // =========================================================================
+
+    #[test]
+    fn test_linear_gradient_angle() {
+        let css = r#"#card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+        assert!(style.background.is_some());
+
+        if let Some(Brush::Gradient(Gradient::Linear { stops, .. })) = &style.background {
+            assert_eq!(stops.len(), 2);
+            assert_eq!(stops[0].offset, 0.0);
+            assert_eq!(stops[1].offset, 1.0);
+        } else {
+            panic!("Expected linear gradient");
+        }
+    }
+
+    #[test]
+    fn test_linear_gradient_to_right() {
+        let css = r#"#card { background: linear-gradient(to right, red, blue); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Linear { start, end, .. })) = &style.background {
+            // "to right" means 90deg, which should be start=(0, 0.5), end=(1, 0.5)
+            assert!((start.x - 0.0).abs() < 0.01);
+            assert!((start.y - 0.5).abs() < 0.01);
+            assert!((end.x - 1.0).abs() < 0.01);
+            assert!((end.y - 0.5).abs() < 0.01);
+        } else {
+            panic!("Expected linear gradient");
+        }
+    }
+
+    #[test]
+    fn test_linear_gradient_to_bottom() {
+        let css = r#"#card { background: linear-gradient(to bottom, #fff, #000); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Linear { start, end, .. })) = &style.background {
+            // "to bottom" means 180deg, which should be start=(0.5, 0), end=(0.5, 1)
+            assert!((start.x - 0.5).abs() < 0.01);
+            assert!((start.y - 0.0).abs() < 0.01);
+            assert!((end.x - 0.5).abs() < 0.01);
+            assert!((end.y - 1.0).abs() < 0.01);
+        } else {
+            panic!("Expected linear gradient");
+        }
+    }
+
+    #[test]
+    fn test_linear_gradient_to_bottom_right() {
+        let css = r#"#card { background: linear-gradient(to bottom right, red, blue); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Linear { start, end, .. })) = &style.background {
+            // "to bottom right" means 135deg, which should be start=(0, 0), end=(1, 1)
+            assert!((start.x - 0.0).abs() < 0.01);
+            assert!((start.y - 0.0).abs() < 0.01);
+            assert!((end.x - 1.0).abs() < 0.01);
+            assert!((end.y - 1.0).abs() < 0.01);
+        } else {
+            panic!("Expected linear gradient");
+        }
+    }
+
+    #[test]
+    fn test_linear_gradient_multiple_stops() {
+        let css = r#"#card { background: linear-gradient(90deg, red 0%, yellow 50%, green 100%); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Linear { stops, .. })) = &style.background {
+            assert_eq!(stops.len(), 3);
+            assert_eq!(stops[0].offset, 0.0);
+            assert_eq!(stops[1].offset, 0.5);
+            assert_eq!(stops[2].offset, 1.0);
+        } else {
+            panic!("Expected linear gradient with 3 stops");
+        }
+    }
+
+    #[test]
+    fn test_linear_gradient_implied_positions() {
+        let css = r#"#card { background: linear-gradient(to bottom, red, yellow, green); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Linear { stops, .. })) = &style.background {
+            // With 3 stops and no explicit positions, should be 0%, 50%, 100%
+            assert_eq!(stops.len(), 3);
+            assert_eq!(stops[0].offset, 0.0);
+            assert_eq!(stops[1].offset, 0.5);
+            assert_eq!(stops[2].offset, 1.0);
+        } else {
+            panic!("Expected linear gradient with implied positions");
+        }
+    }
+
+    #[test]
+    fn test_linear_gradient_rgba_colors() {
+        let css =
+            r#"#card { background: linear-gradient(45deg, rgba(255, 0, 0, 0.5) 0%, rgba(0, 0, 255, 0.8) 100%); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Linear { stops, .. })) = &style.background {
+            assert_eq!(stops.len(), 2);
+            // Check that RGBA colors were parsed (alpha should be < 1.0)
+            assert!(stops[0].color.a < 1.0);
+            assert!(stops[1].color.a < 1.0);
+        } else {
+            panic!("Expected linear gradient with RGBA colors");
+        }
+    }
+
+    #[test]
+    fn test_linear_gradient_angle_units() {
+        // Test various angle units
+        let css_deg = r#"#a { background: linear-gradient(90deg, red, blue); }"#;
+        let css_turn = r#"#b { background: linear-gradient(0.25turn, red, blue); }"#;
+        let css_rad = r#"#c { background: linear-gradient(1.5708rad, red, blue); }"#;
+
+        let result_deg = Stylesheet::parse_with_errors(css_deg);
+        let result_turn = Stylesheet::parse_with_errors(css_turn);
+        let result_rad = Stylesheet::parse_with_errors(css_rad);
+
+        // All should parse to approximately the same gradient (90 degrees)
+        if let (
+            Some(Brush::Gradient(Gradient::Linear {
+                start: s1, end: e1, ..
+            })),
+            Some(Brush::Gradient(Gradient::Linear {
+                start: s2, end: e2, ..
+            })),
+            Some(Brush::Gradient(Gradient::Linear {
+                start: s3, end: e3, ..
+            })),
+        ) = (
+            &result_deg.stylesheet.get("a").unwrap().background,
+            &result_turn.stylesheet.get("b").unwrap().background,
+            &result_rad.stylesheet.get("c").unwrap().background,
+        ) {
+            // All should have similar start/end points (allowing for floating point)
+            assert!((s1.x - s2.x).abs() < 0.1);
+            assert!((e1.x - e2.x).abs() < 0.1);
+            assert!((s1.x - s3.x).abs() < 0.1);
+            assert!((e1.x - e3.x).abs() < 0.1);
+        } else {
+            panic!("Expected linear gradients");
+        }
+    }
+
+    #[test]
+    fn test_radial_gradient_simple() {
+        let css = r#"#card { background: radial-gradient(circle, red, blue); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Radial { stops, .. })) = &style.background {
+            assert_eq!(stops.len(), 2);
+        } else {
+            panic!("Expected radial gradient");
+        }
+    }
+
+    #[test]
+    fn test_radial_gradient_at_center() {
+        let css = r#"#card { background: radial-gradient(circle at center, red, blue); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Radial { center, .. })) = &style.background {
+            assert!((center.x - 0.5).abs() < 0.01);
+            assert!((center.y - 0.5).abs() < 0.01);
+        } else {
+            panic!("Expected radial gradient");
+        }
+    }
+
+    #[test]
+    fn test_radial_gradient_at_position() {
+        let css = r#"#card { background: radial-gradient(circle at 25% 75%, red, blue); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Radial { center, .. })) = &style.background {
+            assert!((center.x - 0.25).abs() < 0.01);
+            assert!((center.y - 0.75).abs() < 0.01);
+        } else {
+            panic!("Expected radial gradient at custom position");
+        }
+    }
+
+    #[test]
+    fn test_radial_gradient_multiple_stops() {
+        let css =
+            r#"#card { background: radial-gradient(circle, red 0%, yellow 50%, green 100%); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Radial { stops, .. })) = &style.background {
+            assert_eq!(stops.len(), 3);
+            assert_eq!(stops[0].offset, 0.0);
+            assert_eq!(stops[1].offset, 0.5);
+            assert_eq!(stops[2].offset, 1.0);
+        } else {
+            panic!("Expected radial gradient with 3 stops");
+        }
+    }
+
+    #[test]
+    fn test_radial_gradient_ellipse() {
+        let css = r#"#card { background: radial-gradient(ellipse at center, red, blue); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+        assert!(matches!(
+            &style.background,
+            Some(Brush::Gradient(Gradient::Radial { .. }))
+        ));
+    }
+
+    #[test]
+    fn test_conic_gradient_simple() {
+        let css = r#"#card { background: conic-gradient(red, yellow, green, blue, red); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Conic { stops, .. })) = &style.background {
+            assert_eq!(stops.len(), 5);
+        } else {
+            panic!("Expected conic gradient");
+        }
+    }
+
+    #[test]
+    fn test_conic_gradient_from_angle() {
+        let css = r#"#card { background: conic-gradient(from 45deg, red, blue); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Conic { start_angle, .. })) = &style.background {
+            // 45 degrees in radians is approximately 0.785
+            assert!((*start_angle - 0.785).abs() < 0.01);
+        } else {
+            panic!("Expected conic gradient with start angle");
+        }
+    }
+
+    #[test]
+    fn test_conic_gradient_at_position() {
+        let css = r#"#card { background: conic-gradient(at 25% 75%, red, blue); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Conic { center, .. })) = &style.background {
+            assert!((center.x - 0.25).abs() < 0.01);
+            assert!((center.y - 0.75).abs() < 0.01);
+        } else {
+            panic!("Expected conic gradient at custom position");
+        }
+    }
+
+    #[test]
+    fn test_conic_gradient_from_at() {
+        let css = r#"#card { background: conic-gradient(from 90deg at center, red, blue); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Conic {
+            start_angle,
+            center,
+            ..
+        })) = &style.background
+        {
+            // 90 degrees in radians is approximately 1.571
+            assert!((*start_angle - 1.571).abs() < 0.01);
+            assert!((center.x - 0.5).abs() < 0.01);
+            assert!((center.y - 0.5).abs() < 0.01);
+        } else {
+            panic!("Expected conic gradient with angle and position");
+        }
+    }
+
+    #[test]
+    fn test_gradient_with_css_variables() {
+        let css = r#"
+            :root {
+                --start-color: #667eea;
+                --end-color: #764ba2;
+            }
+            #card {
+                background: linear-gradient(135deg, var(--start-color), var(--end-color));
+            }
+        "#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        // This test verifies that gradients work in the CSS context
+        // Variable resolution happens at parse time
+        let style = result.stylesheet.get("card").unwrap();
+        assert!(style.background.is_some());
+    }
+
+    #[test]
+    fn test_gradient_fallback_to_solid() {
+        // If gradient parsing fails, should fall through to color parsing
+        let css = r#"#card { background: #FF0000; }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        let style = result.stylesheet.get("card").unwrap();
+        if let Some(Brush::Solid(color)) = &style.background {
+            assert_eq!(color.r, 1.0);
+            assert_eq!(color.g, 0.0);
+            assert_eq!(color.b, 0.0);
+        } else {
+            panic!("Expected solid color");
+        }
+    }
+
+    #[test]
+    fn test_gradient_with_named_colors() {
+        let css = r#"#card { background: linear-gradient(to right, red, orange, yellow, green, blue, purple); }"#;
+        let result = Stylesheet::parse_with_errors(css);
+
+        assert!(!result.has_errors());
+        let style = result.stylesheet.get("card").unwrap();
+
+        if let Some(Brush::Gradient(Gradient::Linear { stops, .. })) = &style.background {
+            assert_eq!(stops.len(), 6);
+            // Check that positions are evenly distributed
+            assert_eq!(stops[0].offset, 0.0);
+            assert!((stops[1].offset - 0.2).abs() < 0.01);
+            assert!((stops[2].offset - 0.4).abs() < 0.01);
+            assert!((stops[3].offset - 0.6).abs() < 0.01);
+            assert!((stops[4].offset - 0.8).abs() < 0.01);
+            assert_eq!(stops[5].offset, 1.0);
+        } else {
+            panic!("Expected linear gradient with 6 named colors");
+        }
+    }
+
+    // =========================================================================
+    // Length Unit Tests
+    // =========================================================================
+
+    #[test]
+    fn test_parse_css_length_px() {
+        let len = parse_css_length("16px").unwrap();
+        assert!(matches!(len, Length::Px(v) if (v - 16.0).abs() < 0.01));
+        assert_eq!(len.to_px(), 16.0);
+    }
+
+    #[test]
+    fn test_parse_css_length_sp() {
+        // sp = spacing units (4px grid)
+        let len = parse_css_length("4sp").unwrap();
+        assert!(matches!(len, Length::Sp(v) if (v - 4.0).abs() < 0.01));
+        assert_eq!(len.to_px(), 16.0); // 4 * 4 = 16px
+    }
+
+    #[test]
+    fn test_parse_css_length_pct() {
+        let len = parse_css_length("50%").unwrap();
+        assert!(matches!(len, Length::Pct(v) if (v - 50.0).abs() < 0.01));
+        // Percentage doesn't convert to pixels without context
+        assert_eq!(len.to_px(), 0.0);
+    }
+
+    #[test]
+    fn test_parse_css_length_unitless() {
+        // Unitless treated as pixels for backwards compatibility
+        let len = parse_css_length("24").unwrap();
+        assert!(matches!(len, Length::Px(v) if (v - 24.0).abs() < 0.01));
+        assert_eq!(len.to_px(), 24.0);
+    }
+
+    #[test]
+    fn test_border_radius_with_sp() {
+        let css = "#card { border-radius: 2sp; }"; // 2 * 4 = 8px
+        let result = Stylesheet::parse_with_errors(css);
+
+        let style = result.stylesheet.get("card").unwrap();
+        if let Some(radius) = &style.corner_radius {
+            // 2sp = 8px
+            assert_eq!(radius.top_left, 8.0);
+        } else {
+            panic!("Expected corner radius to be parsed");
+        }
+    }
+
+    #[test]
+    fn test_shadow_with_sp() {
+        let css = "#card { box-shadow: 1sp 2sp 4sp rgba(0,0,0,0.3); }";
+        let result = Stylesheet::parse_with_errors(css);
+
+        let style = result.stylesheet.get("card").unwrap();
+        if let Some(shadow) = &style.shadow {
+            // 1sp = 4px, 2sp = 8px, 4sp = 16px
+            assert_eq!(shadow.offset_x, 4.0);
+            assert_eq!(shadow.offset_y, 8.0);
+            assert_eq!(shadow.blur, 16.0);
+        } else {
+            panic!("Expected shadow to be parsed");
+        }
+    }
+
+    #[test]
+    fn test_transform_with_sp() {
+        use blinc_core::Transform;
+
+        let css = "#card { transform: translate(4sp, 2sp); }";
+        let result = Stylesheet::parse_with_errors(css);
+
+        let style = result.stylesheet.get("card").unwrap();
+        if let Some(Transform::Affine2D(affine)) = &style.transform {
+            // 4sp = 16px, 2sp = 8px
+            // elements[4] = tx, elements[5] = ty
+            assert!((affine.elements[4] - 16.0).abs() < 0.01);
+            assert!((affine.elements[5] - 8.0).abs() < 0.01);
+        } else {
+            panic!("Expected Affine2D transform to be parsed");
+        }
+    }
+
+    #[test]
+    fn test_translatex_with_sp() {
+        use blinc_core::Transform;
+
+        let css = "#card { transform: translateX(4sp); }";
+        let result = Stylesheet::parse_with_errors(css);
+
+        let style = result.stylesheet.get("card").unwrap();
+        if let Some(Transform::Affine2D(affine)) = &style.transform {
+            assert!((affine.elements[4] - 16.0).abs() < 0.01); // 4sp = 16px
+            assert!((affine.elements[5] - 0.0).abs() < 0.01);
+        } else {
+            panic!("Expected Affine2D transform to be parsed");
+        }
+    }
+
+    #[test]
+    fn test_translatey_with_sp() {
+        use blinc_core::Transform;
+
+        let css = "#card { transform: translateY(2sp); }";
+        let result = Stylesheet::parse_with_errors(css);
+
+        let style = result.stylesheet.get("card").unwrap();
+        if let Some(Transform::Affine2D(affine)) = &style.transform {
+            assert!((affine.elements[4] - 0.0).abs() < 0.01);
+            assert!((affine.elements[5] - 8.0).abs() < 0.01); // 2sp = 8px
+        } else {
+            panic!("Expected Affine2D transform to be parsed");
+        }
     }
 }
