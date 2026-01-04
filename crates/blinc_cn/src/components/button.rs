@@ -25,15 +25,15 @@
 //!     .on_click(|_| println!("Submitted!"))
 //! ```
 
-use blinc_core::context_state::BlincContextState;
 use blinc_core::Color;
 use blinc_layout::div::ElementBuilder;
 use blinc_layout::element::CursorStyle;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, SharedState, Stateful, StatefulInner};
+use blinc_layout::stateful::{use_shared_state, ButtonState, SharedState, Stateful};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
+use blinc_layout::InstanceKey;
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 /// Button visual variants (like shadcn)
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -209,32 +209,16 @@ pub enum IconPosition {
 
 /// Get or create a persistent SharedState<ButtonState> for the given key
 ///
-/// This bridges BlincContextState (which stores arbitrary values via signals)
-/// with SharedState<S> (which Stateful needs for FSM state management).
-pub (crate) fn use_button_state(key: &str) -> SharedState<ButtonState> {
-    let ctx = BlincContextState::get();
-
-    // We store the SharedState wrapped in an Arc inside the signal
-    // This way it persists across rebuilds
-    let state: blinc_core::State<Option<SharedState<ButtonState>>> =
-        ctx.use_state_keyed(key, || None);
-
-    let existing = state.get();
-    if let Some(shared) = existing {
-        shared
-    } else {
-        // First time - create the SharedState and store it
-        let shared: SharedState<ButtonState> =
-            Arc::new(Mutex::new(StatefulInner::new(ButtonState::Idle)));
-        state.set(Some(shared.clone()));
-        shared
-    }
+/// This is a convenience wrapper around `use_shared_state::<ButtonState>`.
+pub(crate) fn use_button_state(key: &str) -> SharedState<ButtonState> {
+    use_shared_state::<ButtonState>(key)
 }
 
 /// Create a button with a label
 ///
-/// Uses `#[track_caller]` to generate a unique instance key based on the call site.
+/// Uses `#[track_caller]` with UUID to generate a unique instance key.
 /// State is managed internally and persists across rebuilds.
+/// Safe to use in loops and closures - each instance gets a unique key.
 ///
 /// # Example
 ///
@@ -244,18 +228,32 @@ pub (crate) fn use_button_state(key: &str) -> SharedState<ButtonState> {
 /// cn::button("OK")
 ///     .variant(ButtonVariant::Primary)
 ///     .on_click(|_| println!("Confirmed!"))
+///
+/// // Safe in loops - each button gets unique state
+/// for item in items {
+///     cn::button(&item.name)
+/// }
 /// ```
 #[track_caller]
 pub fn button(label: impl Into<String>) -> ButtonBuilder {
-    let loc = std::panic::Location::caller();
-    let instance_key = format!("{}:{}:{}", loc.file(), loc.line(), loc.column());
-    ButtonBuilder::new(&instance_key, label)
+    ButtonBuilder {
+        key: InstanceKey::new("button"),
+        config: ButtonConfig {
+            label: label.into(),
+            variant: ButtonVariant::default(),
+            btn_size: ButtonSize::default(),
+            disabled: false,
+            icon: None,
+            icon_position: IconPosition::default(),
+            on_click: None,
+        },
+        built: std::cell::OnceCell::new(),
+    }
 }
 
 /// Internal configuration for ButtonBuilder
 #[derive(Clone)]
 struct ButtonConfig {
-    instance_key: String,
     label: String,
     variant: ButtonVariant,
     btn_size: ButtonSize,
@@ -272,12 +270,12 @@ pub struct Button {
 }
 
 impl Button {
-    /// Build from a config
-    fn from_config(config: ButtonConfig) -> Self {
+    /// Build from a config with the instance key
+    fn from_config(instance_key: &str, config: ButtonConfig) -> Self {
         let theme = ThemeState::get();
 
-        // Get persistent state for this button
-        let state_key = format!("_cn_btn_{}", config.instance_key);
+        // Get persistent state for this button using the unique instance key
+        let state_key = format!("_cn_btn_{}", instance_key);
         let button_state = use_button_state(&state_key);
 
         // Get sizes from config
@@ -422,17 +420,22 @@ impl ElementBuilder for Button {
 
 /// Button configuration for building buttons
 pub struct ButtonBuilder {
+    /// Unique instance key (UUID-based for loop/closure safety)
+    key: InstanceKey,
     config: ButtonConfig,
     /// Cached built Button - built lazily on first access
     built: std::cell::OnceCell<Button>,
 }
 
 impl ButtonBuilder {
-    /// Create a new button builder
-    pub fn new(instance_key: &str, label: impl Into<String>) -> Self {
+    /// Create a new button builder with explicit key
+    ///
+    /// For most use cases, prefer `button()` which auto-generates a unique key.
+    /// Use this when you need a deterministic key for programmatic access.
+    pub fn with_key(key: impl Into<String>, label: impl Into<String>) -> Self {
         Self {
+            key: InstanceKey::explicit(key),
             config: ButtonConfig {
-                instance_key: instance_key.to_string(),
                 label: label.into(),
                 variant: ButtonVariant::default(),
                 btn_size: ButtonSize::default(),
@@ -448,7 +451,7 @@ impl ButtonBuilder {
     /// Get or build the inner Button
     fn get_or_build(&self) -> &Button {
         self.built
-            .get_or_init(|| Button::from_config(self.config.clone()))
+            .get_or_init(|| Button::from_config(self.key.get(), self.config.clone()))
     }
 
     /// Set the button variant
@@ -492,7 +495,7 @@ impl ButtonBuilder {
 
     /// Build the final Button component
     pub fn build_component(self) -> Button {
-        Button::from_config(self.config)
+        Button::from_config(self.key.get(), self.config)
     }
 }
 

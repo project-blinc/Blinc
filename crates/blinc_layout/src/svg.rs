@@ -260,6 +260,7 @@ impl ElementBuilder for Svg {
             clips_content: false,
             motion: None,
             motion_stable_id: None,
+            motion_should_replay: false,
             is_stack_layer: false,
             cursor: None,
         }

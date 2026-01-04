@@ -962,6 +962,7 @@ fn tabs_section(ctx: &WindowedContext) -> impl ElementBuilder {
                     .child(cn::label("Simple Tabs"))
                     .child(
                         cn::tabs(&simple_tab)
+                        .transition(TabsTransition::SlideRight)
                             .tab("tab1", "Account", || {
                                 div().px(10.0).bg_surface_elevated().w_full().h_full().items_center().child(
                                     text("Manage your account settings and preferences.")

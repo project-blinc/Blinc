@@ -40,13 +40,43 @@
 //! | Focus state | | ✓ (FSM) |
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use blinc_animation::{AnimationScheduler, SchedulerHandle, Spring, SpringConfig, SpringId};
 use blinc_core::{Color, Rect, Transform};
 
 use crate::element::{MotionAnimation, MotionKeyframe};
 use crate::tree::LayoutNodeId;
+
+// =============================================================================
+// Global pending motion replay queue
+// =============================================================================
+
+/// Global queue for motion keys that should replay their animation
+///
+/// This allows motion elements to request replay during tree building,
+/// without needing direct access to RenderState.
+static PENDING_MOTION_REPLAYS: LazyLock<Mutex<Vec<String>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
+
+/// Queue a stable motion key for replay (global version)
+///
+/// Call this from within motion element construction when `.replay()` is used.
+/// The replay will be processed when `RenderState::process_global_motion_replays()`
+/// is called after `initialize_motion_animations()`.
+pub fn queue_global_motion_replay(key: String) {
+    let mut queue = PENDING_MOTION_REPLAYS.lock().unwrap();
+    if !queue.contains(&key) {
+        queue.push(key);
+    }
+}
+
+/// Take all pending global motion replays
+///
+/// Returns the queued keys and clears the queue.
+pub fn take_global_motion_replays() -> Vec<String> {
+    std::mem::take(&mut *PENDING_MOTION_REPLAYS.lock().unwrap())
+}
 
 /// Buffer zone around viewport for prefetching content
 /// This prevents pop-in when scrolling slowly
@@ -238,6 +268,10 @@ pub struct RenderState {
     /// Used for mark-and-sweep cleanup of unused motions
     stable_motions_used: std::collections::HashSet<String>,
 
+    /// Queue of stable motion keys that should replay their animation
+    /// These are processed after initialize_motion_animations completes
+    pending_motion_replays: Vec<String>,
+
     /// Global overlays (cursors, selections, focus rings)
     overlays: Vec<Overlay>,
 
@@ -271,6 +305,7 @@ impl RenderState {
             node_states: HashMap::new(),
             stable_motions: HashMap::new(),
             stable_motions_used: std::collections::HashSet::new(),
+            pending_motion_replays: Vec::new(),
             overlays: Vec::new(),
             animations,
             cursor_visible: true,
@@ -809,9 +844,12 @@ impl RenderState {
     /// alone. Only when in Removed state do we restart (overlay was closed and
     /// reopened).
     ///
+    /// If `replay` is true, the animation restarts from the beginning even if
+    /// it already exists (useful for tab transitions where content changes).
+    ///
     /// If the overlay is closing (checked via `is_overlay_closing()`), this will
     /// start the exit animation instead of leaving the motion alone.
-    pub fn start_stable_motion(&mut self, key: &str, config: MotionAnimation) {
+    pub fn start_stable_motion(&mut self, key: &str, config: MotionAnimation, replay: bool) {
         use crate::overlay_state::is_overlay_closing;
 
         // Mark this key as used this frame (for garbage collection)
@@ -852,6 +890,12 @@ impl RenderState {
                 }
                 return;
             }
+
+            // NOTE: replay flag is intentionally ignored here for existing motions.
+            // The replay mechanism via this flag doesn't work correctly because
+            // initialize_motion_animations is called for ALL motions in the tree,
+            // not just the ones that changed. Use `replay_stable_motion(key)` instead,
+            // called from an on_ready callback when the motion is first mounted.
 
             // If already animating or visible, leave it alone
             match existing.state {
@@ -930,6 +974,73 @@ impl RenderState {
                 motion.current = MotionKeyframe::default(); // Start from visible
             } else {
                 motion.state = MotionState::Removed;
+            }
+        }
+    }
+
+    /// Queue a stable motion key for replay
+    ///
+    /// The replay will be processed after `initialize_motion_animations` completes.
+    /// This allows motion elements to request replay during tree building without
+    /// affecting other motions.
+    ///
+    /// Call `process_pending_motion_replays()` after `initialize_motion_animations()`
+    /// to actually perform the replays.
+    pub fn queue_motion_replay(&mut self, key: String) {
+        if !self.pending_motion_replays.contains(&key) {
+            self.pending_motion_replays.push(key);
+        }
+    }
+
+    /// Process all pending motion replays (from local queue)
+    ///
+    /// Call this after `initialize_motion_animations()` to replay any motions
+    /// that requested it via `queue_motion_replay()`.
+    pub fn process_pending_motion_replays(&mut self) {
+        let keys = std::mem::take(&mut self.pending_motion_replays);
+        for key in keys {
+            self.replay_stable_motion(&key);
+        }
+    }
+
+    /// Process all pending motion replays from the global queue
+    ///
+    /// Call this after `initialize_motion_animations()` to replay any motions
+    /// that were queued via `queue_global_motion_replay()` during tree building.
+    pub fn process_global_motion_replays(&mut self) {
+        let keys = take_global_motion_replays();
+        for key in keys {
+            self.replay_stable_motion(&key);
+        }
+    }
+
+    /// Replay a stable-keyed motion animation from the beginning
+    ///
+    /// This restarts the animation if it's in Visible state.
+    /// Prefer using `queue_motion_replay()` during tree building, and
+    /// `process_pending_motion_replays()` after initialization.
+    pub fn replay_stable_motion(&mut self, key: &str) {
+        if let Some(motion) = self.stable_motions.get_mut(key) {
+            // Only replay if animation is complete (Visible state)
+            if matches!(motion.state, MotionState::Visible) {
+                let config = motion.config.clone();
+                motion.state = if config.enter_delay_ms > 0 {
+                    MotionState::Waiting {
+                        remaining_delay_ms: config.enter_delay_ms as f32,
+                    }
+                } else if config.enter_from.is_some() && config.enter_duration_ms > 0 {
+                    MotionState::Entering {
+                        progress: 0.0,
+                        duration_ms: config.enter_duration_ms as f32,
+                    }
+                } else {
+                    MotionState::Visible
+                };
+                motion.current = if matches!(motion.state, MotionState::Visible) {
+                    MotionKeyframe::default()
+                } else {
+                    config.enter_from.clone().unwrap_or_default()
+                };
             }
         }
     }
@@ -1024,17 +1135,15 @@ impl RenderState {
 
     /// End the frame for stable motion tracking
     ///
-    /// Marks any stable motions that weren't accessed this frame as `Removed`.
-    /// This allows them to restart their animations if accessed again later
-    /// (e.g., when an overlay is reopened).
+    /// Removes any stable motions that weren't accessed this frame.
+    /// Since each motion container gets a unique UUID key, unused motions
+    /// from closed overlays should be cleaned up to prevent memory leaks.
     pub fn end_stable_motion_frame(&mut self) {
-        for (key, motion) in self.stable_motions.iter_mut() {
-            if !self.stable_motions_used.contains(key) {
-                // This motion wasn't used this frame - mark it as removed
-                // so it can restart when the overlay reopens
-                motion.state = MotionState::Removed;
-            }
-        }
+        // Remove motions that weren't used this frame
+        // With UUID-based keys, each new motion container gets a unique key,
+        // so we need to actually remove old entries rather than just marking them
+        self.stable_motions
+            .retain(|key, _| self.stable_motions_used.contains(key));
     }
 
     // =========================================================================

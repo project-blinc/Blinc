@@ -567,8 +567,12 @@ pub struct OverlayManagerInner {
     overlays: IndexMap<OverlayHandle, ActiveOverlay>,
     /// Next overlay ID
     next_id: AtomicU64,
-    /// Dirty flag - set when overlays change
+    /// Dirty flag - set when overlays change structurally (added/removed)
+    /// This triggers a full content rebuild
     dirty: AtomicBool,
+    /// Animation dirty flag - set when animation state changes but content is same
+    /// This triggers a re-render but NOT a content rebuild
+    animation_dirty: AtomicBool,
     /// Viewport dimensions for positioning (logical pixels)
     viewport: (f32, f32),
     /// DPI scale factor
@@ -590,6 +594,7 @@ impl OverlayManagerInner {
             overlays: IndexMap::new(),
             next_id: AtomicU64::new(1),
             dirty: AtomicBool::new(false),
+            animation_dirty: AtomicBool::new(false),
             viewport: (0.0, 0.0),
             scale_factor: 1.0,
             toast_corner: Corner::TopRight,
@@ -620,14 +625,34 @@ impl OverlayManagerInner {
         self.toast_corner = corner;
     }
 
-    /// Check and clear dirty flag
+    /// Check and clear dirty flag (content changed, needs full rebuild)
     pub fn take_dirty(&self) -> bool {
         self.dirty.swap(false, Ordering::SeqCst)
     }
 
-    /// Mark as dirty
+    /// Check dirty flag without clearing (for peeking before render)
+    pub fn is_dirty(&self) -> bool {
+        self.dirty.load(Ordering::SeqCst)
+    }
+
+    /// Check and clear animation dirty flag (just needs re-render, no content rebuild)
+    pub fn take_animation_dirty(&self) -> bool {
+        self.animation_dirty.swap(false, Ordering::SeqCst)
+    }
+
+    /// Check if needs any kind of redraw (content or animation)
+    pub fn needs_redraw(&self) -> bool {
+        self.dirty.load(Ordering::SeqCst) || self.animation_dirty.load(Ordering::SeqCst)
+    }
+
+    /// Mark as dirty (content changed)
     fn mark_dirty(&self) {
         self.dirty.store(true, Ordering::SeqCst);
+    }
+
+    /// Mark animation dirty (animation state changed but content is same)
+    fn mark_animation_dirty(&self) {
+        self.animation_dirty.store(true, Ordering::SeqCst);
     }
 
     /// Add a new overlay
@@ -692,13 +717,14 @@ impl OverlayManagerInner {
         self.current_time_ms = current_time_ms;
 
         let mut to_close = Vec::new();
-        let mut dirty = false;
+        let mut content_dirty = false;
+        let mut animation_dirty = false;
 
         for (handle, overlay) in self.overlays.iter_mut() {
             // Initialize created_at_ms on first update
             if overlay.created_at_ms.is_none() {
                 overlay.created_at_ms = Some(current_time_ms);
-                dirty = true;
+                content_dirty = true;
             }
 
             match overlay.state {
@@ -711,11 +737,12 @@ impl OverlayManagerInner {
                             // Animation complete, transition to Open
                             if overlay.transition(overlay_events::ANIMATION_COMPLETE) {
                                 overlay.opened_at_ms = Some(current_time_ms);
-                                dirty = true;
+                                // State transition doesn't change content, just animation
+                                animation_dirty = true;
                             }
                         } else {
-                            // Animation still in progress, keep redrawing
-                            dirty = true;
+                            // Animation still in progress, keep redrawing (no content change)
+                            animation_dirty = true;
                         }
                     }
                 }
@@ -739,7 +766,8 @@ impl OverlayManagerInner {
                             current_time_ms,
                             overlay.config.animation.exit.duration_ms()
                         );
-                        dirty = true;
+                        // Starting close animation - animation change, not content
+                        animation_dirty = true;
                     }
 
                     // Check if exit animation has completed
@@ -754,11 +782,12 @@ impl OverlayManagerInner {
                                 elapsed
                             );
                             if overlay.transition(overlay_events::ANIMATION_COMPLETE) {
-                                dirty = true;
+                                // Overlay will be removed - this is a content change
+                                content_dirty = true;
                             }
                         } else {
-                            // Animation still in progress, keep redrawing
-                            dirty = true;
+                            // Animation still in progress, keep redrawing (no content change)
+                            animation_dirty = true;
                         }
                     }
                 }
@@ -772,15 +801,23 @@ impl OverlayManagerInner {
         for handle in to_close {
             if let Some(overlay) = self.overlays.get_mut(&handle) {
                 overlay.transition(overlay_events::CLOSE);
-                dirty = true;
+                // Starting close - animation change (content rebuild when actually removed)
+                animation_dirty = true;
             }
         }
 
         // Remove closed overlays
+        let count_before = self.overlays.len();
         self.overlays.retain(|_, o| o.state != OverlayState::Closed);
+        if self.overlays.len() != count_before {
+            // Overlays were removed - content change
+            content_dirty = true;
+        }
 
-        if dirty {
+        if content_dirty {
             self.mark_dirty();
+        } else if animation_dirty {
+            self.mark_animation_dirty();
         }
     }
 
@@ -788,7 +825,8 @@ impl OverlayManagerInner {
     pub fn close(&mut self, handle: OverlayHandle) {
         if let Some(overlay) = self.overlays.get_mut(&handle) {
             if overlay.transition(overlay_events::CLOSE) {
-                self.mark_dirty();
+                // Starting close animation - animation dirty, not content
+                self.mark_animation_dirty();
             }
         }
     }
@@ -1315,8 +1353,14 @@ pub trait OverlayManagerExt {
     fn is_visible(&self, handle: OverlayHandle) -> bool;
     /// Update overlay states - call every frame for animations and auto-dismiss
     fn update(&self, current_time_ms: u64);
-    /// Take the dirty flag (returns true if dirty, clears flag)
+    /// Take the dirty flag (returns true if content changed and needs full rebuild)
     fn take_dirty(&self) -> bool;
+    /// Check dirty flag without clearing (for peeking before render)
+    fn is_dirty(&self) -> bool;
+    /// Take the animation dirty flag (returns true if animation changed but content is same)
+    fn take_animation_dirty(&self) -> bool;
+    /// Check if needs any kind of redraw (content or animation)
+    fn needs_redraw(&self) -> bool;
     /// Set the cached content size for an overlay (for hit testing)
     fn set_content_size(&self, handle: OverlayHandle, width: f32, height: f32);
 }
@@ -1411,6 +1455,18 @@ impl OverlayManagerExt for OverlayManager {
 
     fn take_dirty(&self) -> bool {
         self.lock().unwrap().take_dirty()
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.lock().unwrap().is_dirty()
+    }
+
+    fn take_animation_dirty(&self) -> bool {
+        self.lock().unwrap().take_animation_dirty()
+    }
+
+    fn needs_redraw(&self) -> bool {
+        self.lock().unwrap().needs_redraw()
     }
 
     fn set_content_size(&self, handle: OverlayHandle, width: f32, height: f32) {

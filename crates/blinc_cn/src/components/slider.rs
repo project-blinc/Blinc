@@ -53,6 +53,7 @@ use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 use std::sync::Arc;
 
 use super::label::{label, LabelSize};
+use blinc_layout::InstanceKey;
 
 /// Slider thumb interaction states
 ///
@@ -167,13 +168,11 @@ impl Slider {
     /// ```
     #[track_caller]
     pub fn new<C: BlincContext + AnimationContext>(ctx: &C, value_state: &State<f32>) -> Self {
-        let loc = std::panic::Location::caller();
-        let instance_key = format!("{}:{}:{}", loc.file(), loc.line(), loc.column());
-        Self::with_config(ctx, SliderConfig::new(value_state.clone(), instance_key))
+        Self::with_config(ctx, InstanceKey::new("slider"), SliderConfig::new(value_state.clone()))
     }
 
     /// Create from a full configuration
-    fn with_config<C: BlincContext + AnimationContext>(ctx: &C, config: SliderConfig) -> Self {
+    fn with_config<C: BlincContext + AnimationContext>(ctx: &C, key: InstanceKey, config: SliderConfig) -> Self {
         let theme = ThemeState::get();
         let track_height = config.size.track_height();
         let thumb_size = config.size.thumb_size();
@@ -209,8 +208,8 @@ impl Slider {
 
         // Get PERSISTED state from context using BlincComponent macro
         // These survive across UI rebuilds!
-        // Use the instance_key from config so each slider has its own state
-        let instance_key = &config.instance_key;
+        // Use the instance_key from InstanceKey so each slider has its own state
+        let instance_key = key.get();
         let thumb_offset = SliderState::use_thumb_offset_for(
             ctx,
             instance_key,
@@ -549,8 +548,6 @@ impl ElementBuilder for Slider {
 #[derive(Clone)]
 struct SliderConfig {
     value_state: State<f32>,
-    /// Unique instance key for this slider (generated at creation time)
-    instance_key: String,
     min: f32,
     max: f32,
     step: Option<f32>,
@@ -566,10 +563,9 @@ struct SliderConfig {
 }
 
 impl SliderConfig {
-    fn new(value_state: State<f32>, instance_key: String) -> Self {
+    fn new(value_state: State<f32>) -> Self {
         Self {
             value_state,
-            instance_key,
             min: 0.0,
             max: 1.0,
             step: None,
@@ -591,6 +587,7 @@ impl SliderConfig {
 /// Unlike other builders, this one builds the slider immediately when `build_final()` is called,
 /// because the context reference cannot be stored due to lifetime constraints.
 pub struct SliderBuilder {
+    key: InstanceKey,
     config: SliderConfig,
 }
 
@@ -600,16 +597,17 @@ impl SliderBuilder {
     /// Uses `#[track_caller]` to generate a unique instance key based on the call site.
     #[track_caller]
     pub fn new(value_state: &State<f32>) -> Self {
-        let loc = std::panic::Location::caller();
-        let instance_key = format!(
-            "{}:{}:{}:{}",
-            loc.file(),
-            loc.line(),
-            loc.column(),
-            value_state.signal_id().to_raw()
-        );
         Self {
-            config: SliderConfig::new(value_state.clone(), instance_key),
+            key: InstanceKey::new("slider"),
+            config: SliderConfig::new(value_state.clone()),
+        }
+    }
+
+    /// Create a slider builder with an explicit key
+    pub fn with_key(key: impl Into<String>, value_state: &State<f32>) -> Self {
+        Self {
+            key: InstanceKey::explicit(key),
+            config: SliderConfig::new(value_state.clone()),
         }
     }
 
@@ -694,7 +692,7 @@ impl SliderBuilder {
     ///
     /// This must be called last to create the actual Slider element.
     pub fn build_final<C: BlincContext + AnimationContext>(self, ctx: &C) -> Slider {
-        Slider::with_config(ctx, self.config)
+        Slider::with_config(ctx, self.key, self.config)
     }
 }
 

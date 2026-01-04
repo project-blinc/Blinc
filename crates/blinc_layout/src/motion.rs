@@ -37,6 +37,7 @@
 
 use crate::div::{ElementBuilder, ElementTypeId};
 use crate::element::{MotionAnimation, MotionKeyframe, RenderProps};
+use crate::key::InstanceKey;
 use crate::tree::{LayoutNodeId, LayoutTree};
 use blinc_animation::{AnimatedValue, AnimationPreset, MultiKeyframeAnimation};
 use blinc_core::Transform;
@@ -309,14 +310,18 @@ pub struct Motion {
     style: Style,
 
     /// Stable key for motion tracking across tree rebuilds
-    /// Auto-generated from call site, with optional user-provided suffix
-    /// Format: "motion:{file}:{line}:{col}" or "motion:{file}:{line}:{col}:{suffix}"
-    stable_key: String,
+    /// Auto-generated with UUID for uniqueness even in loops/closures
+    key: InstanceKey,
 
     /// Whether to use stable keying for this motion
     /// When true (default), animation state persists across tree rebuilds using stable_key
     /// When false, each new node gets a fresh animation (useful for tabs, lists)
     use_stable_key: bool,
+
+    /// Whether to replay the animation even if the motion already exists
+    /// When true, the animation restarts from the beginning
+    /// Useful for tab transitions where content changes but key stays stable
+    replay: bool,
 
     // =========================================================================
     // Continuous animation bindings (AnimatedValue driven)
@@ -367,8 +372,8 @@ fn motion_keyframe_to_properties(kf: &MotionKeyframe) -> blinc_animation::Keyfra
 
 /// Create a motion container
 ///
-/// The motion container automatically generates a stable key based on the call site
-/// (file, line, column). This allows animations to persist across tree rebuilds.
+/// The motion container automatically generates a stable unique key using UUID,
+/// ensuring uniqueness even when created in loops or closures.
 ///
 /// For additional uniqueness in loops, use `.id()`:
 ///
@@ -382,9 +387,6 @@ fn motion_keyframe_to_properties(kf: &MotionKeyframe) -> blinc_animation::Keyfra
 /// ```
 #[track_caller]
 pub fn motion() -> Motion {
-    let loc = std::panic::Location::caller();
-    let stable_key = format!("motion:{}:{}:{}", loc.file(), loc.line(), loc.column());
-
     Motion {
         children: Vec::new(),
         enter: None,
@@ -401,8 +403,60 @@ pub fn motion() -> Motion {
             flex_grow: 1.0,
             ..Style::default()
         },
-        stable_key,
+        key: InstanceKey::new("motion"),
         use_stable_key: true, // Default to stable keying for overlays
+        replay: false,
+        translate_x: None,
+        translate_y: None,
+        scale: None,
+        scale_x: None,
+        scale_y: None,
+        rotation: None,
+        rotation_timeline: None,
+        opacity: None,
+    }
+}
+
+/// Create a motion container with a key derived from a parent key.
+///
+/// Use this inside `on_state` callbacks or other contexts where the motion
+/// is recreated on each rebuild. By deriving from a stable parent key,
+/// the motion's animation state persists across rebuilds.
+///
+/// # Example
+///
+/// ```ignore
+/// // In a component with a stable key
+/// let key = InstanceKey::new("tabs");
+///
+/// Stateful::with_shared_state(state)
+///     .on_state(move |_, container| {
+///         // Derive motion key from parent - stable across rebuilds
+///         let m = motion_derived(&key.derive("content"))
+///             .fade_in(200)
+///             .child(content);
+///         container.merge(div().child(m));
+///     })
+/// ```
+pub fn motion_derived(parent_key: &str) -> Motion {
+    Motion {
+        children: Vec::new(),
+        enter: None,
+        exit: None,
+        stagger_config: None,
+        style: Style {
+            display: Display::Flex,
+            flex_direction: FlexDirection::Column,
+            size: taffy::Size {
+                width: taffy::Dimension::Percent(1.0),
+                height: taffy::Dimension::Auto,
+            },
+            flex_grow: 1.0,
+            ..Style::default()
+        },
+        key: InstanceKey::explicit(format!("motion:{}", parent_key)),
+        use_stable_key: true,
+        replay: false,
         translate_x: None,
         translate_y: None,
         scale: None,
@@ -850,10 +904,10 @@ impl Motion {
 
     /// Append an ID suffix for additional uniqueness
     ///
-    /// Motion containers automatically generate a stable key based on their call site.
+    /// Motion containers automatically generate a unique key using UUID.
     /// Use `.id()` when you need additional uniqueness, such as in loops or lists.
     ///
-    /// The provided ID is concatenated to the internal stable key.
+    /// The provided ID is appended to the generated key.
     ///
     /// # Example
     ///
@@ -866,16 +920,17 @@ impl Motion {
     /// }
     /// ```
     pub fn id(mut self, id: impl std::fmt::Display) -> Self {
-        // Append the ID to the existing stable key
-        self.stable_key = format!("{}:{}", self.stable_key, id);
+        // Create a new key that includes the user-provided suffix
+        let new_key = format!("{}:{}", self.key.get(), id);
+        self.key = InstanceKey::explicit(new_key);
         self
     }
 
     /// Get the stable key for this motion container
     ///
-    /// Returns the auto-generated call-site key with any user-provided ID suffixes appended.
+    /// Returns the unique key (UUID-based) with any user-provided ID suffixes appended.
     pub fn get_stable_key(&self) -> &str {
-        &self.stable_key
+        self.key.get()
     }
 
     /// Make this motion transient (animation replays on each rebuild)
@@ -900,6 +955,32 @@ impl Motion {
     pub fn transient(mut self) -> Self {
         self.use_stable_key = false;
         self
+    }
+
+    /// Request the animation to replay from the beginning
+    ///
+    /// Use this with `motion_derived` when you want the animation to play
+    /// each time the content changes, while still maintaining a stable key
+    /// to prevent animation restarts on unrelated rebuilds.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Tab content that animates on every tab switch
+    /// let motion_key = format!("{}:{}", base_key, active_tab);
+    /// motion_derived(&motion_key)
+    ///     .replay()  // Animation plays each time active_tab changes
+    ///     .fade_in(150)
+    ///     .child(tab_content)
+    /// ```
+    pub fn replay(mut self) -> Self {
+        self.replay = true;
+        self
+    }
+
+    /// Check if replay is requested
+    pub fn should_replay(&self) -> bool {
+        self.replay
     }
 
     /// Get the motion animation configuration for a child at given index
@@ -1014,10 +1095,14 @@ impl ElementBuilder for Motion {
         // Return stable key only if stable keying is enabled
         // When disabled, each node gets fresh animations (node-based tracking)
         if self.use_stable_key {
-            Some(&self.stable_key)
+            Some(self.key.get())
         } else {
             None
         }
+    }
+
+    fn motion_should_replay(&self) -> bool {
+        self.replay
     }
 
     fn layout_style(&self) -> Option<&taffy::Style> {

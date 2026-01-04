@@ -49,6 +49,7 @@ use blinc_layout::widgets::overlay::{OverlayHandle, OverlayManagerExt};
 use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState};
 
 use super::label::{label, LabelSize};
+use blinc_layout::InstanceKey;
 
 /// Select size variants
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -159,7 +160,7 @@ pub struct Select {
 
 impl Select {
     /// Create from a full configuration
-    fn from_config(config: SelectConfig) -> Self {
+    fn from_config(instance_key: &str, config: SelectConfig) -> Self {
         let theme = ThemeState::get();
         let height = config.size.height();
         let font_size = config.size.font_size();
@@ -177,11 +178,11 @@ impl Select {
         let disabled = config.disabled;
 
         // Create internal open_state using the singleton (tracks whether dropdown should be shown)
-        let open_key = format!("_select_open_{}", config.instance_key);
+        let open_key = format!("{}_open", instance_key);
         let open_state = BlincContextState::get().use_state_keyed(&open_key, || false);
 
         // Store overlay handle to track the dropdown overlay
-        let handle_key = format!("_select_handle_{}", config.instance_key);
+        let handle_key = format!("{}_handle", instance_key);
         let overlay_handle_state: State<Option<u64>> =
             BlincContextState::get().use_state_keyed(&handle_key, || None);
 
@@ -407,8 +408,6 @@ impl ElementBuilder for Select {
 #[derive(Clone)]
 struct SelectConfig {
     value_state: State<String>,
-    /// Unique instance key for this select (generated at creation time)
-    instance_key: String,
     options: Vec<SelectOption>,
     placeholder: Option<String>,
     label: Option<String>,
@@ -419,10 +418,9 @@ struct SelectConfig {
 }
 
 impl SelectConfig {
-    fn new(value_state: State<String>, instance_key: String) -> Self {
+    fn new(value_state: State<String>) -> Self {
         Self {
             value_state,
-            instance_key,
             options: Vec::new(),
             placeholder: None,
             label: None,
@@ -436,6 +434,7 @@ impl SelectConfig {
 
 /// Builder for creating Select components with fluent API
 pub struct SelectBuilder {
+    key: InstanceKey,
     config: SelectConfig,
     /// Cached built Select - built lazily on first access
     built: OnceCell<Select>,
@@ -448,16 +447,18 @@ impl SelectBuilder {
     /// Uses `#[track_caller]` to generate a unique instance key based on the call site.
     #[track_caller]
     pub fn new(value_state: &State<String>) -> Self {
-        let loc = std::panic::Location::caller();
-        let instance_key = format!(
-            "{}:{}:{}:{}",
-            loc.file(),
-            loc.line(),
-            loc.column(),
-            value_state.signal_id().to_raw()
-        );
         Self {
-            config: SelectConfig::new(value_state.clone(), instance_key),
+            key: InstanceKey::new("select"),
+            config: SelectConfig::new(value_state.clone()),
+            built: OnceCell::new(),
+        }
+    }
+
+    /// Create a select builder with an explicit key
+    pub fn with_key(key: impl Into<String>, value_state: &State<String>) -> Self {
+        Self {
+            key: InstanceKey::explicit(key),
+            config: SelectConfig::new(value_state.clone()),
             built: OnceCell::new(),
         }
     }
@@ -465,7 +466,7 @@ impl SelectBuilder {
     /// Get or build the inner Select
     fn get_or_build(&self) -> &Select {
         self.built
-            .get_or_init(|| Select::from_config(self.config.clone()))
+            .get_or_init(|| Select::from_config(self.key.get(), self.config.clone()))
     }
 
     /// Add an option with value and label

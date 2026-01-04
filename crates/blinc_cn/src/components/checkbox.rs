@@ -39,6 +39,8 @@ use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 use std::sync::Arc;
 
+use blinc_layout::InstanceKey;
+
 /// SVG checkmark path - simple checkmark that fits in a 16x16 viewBox
 const CHECKMARK_SVG: &str = r#"<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M3 8L6.5 11.5L13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -302,6 +304,8 @@ impl CheckboxConfig {
 
 /// Builder for creating Checkbox components with fluent API
 pub struct CheckboxBuilder {
+    #[allow(dead_code)]
+    key: InstanceKey,
     config: CheckboxConfig,
     /// Cached built Checkbox - built lazily on first access
     built: std::cell::OnceCell<Checkbox>,
@@ -309,8 +313,19 @@ pub struct CheckboxBuilder {
 
 impl CheckboxBuilder {
     /// Create a new checkbox builder with state from context
+    #[track_caller]
     pub fn new(checked_state: &State<bool>) -> Self {
         Self {
+            key: InstanceKey::new("checkbox"),
+            config: CheckboxConfig::new(checked_state.clone()),
+            built: std::cell::OnceCell::new(),
+        }
+    }
+
+    /// Create a checkbox builder with an explicit key
+    pub fn with_key(key: impl Into<String>, checked_state: &State<bool>) -> Self {
+        Self {
+            key: InstanceKey::explicit(key),
             config: CheckboxConfig::new(checked_state.clone()),
             built: std::cell::OnceCell::new(),
         }

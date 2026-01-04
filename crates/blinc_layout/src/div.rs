@@ -2653,6 +2653,14 @@ pub trait ElementBuilder {
         None
     }
 
+    /// Check if this motion should replay its animation
+    ///
+    /// When true, the animation restarts from the beginning even if
+    /// the motion already exists with the same stable key.
+    fn motion_should_replay(&self) -> bool {
+        false
+    }
+
     /// Get the layout style for this element
     ///
     /// This is used for hashing layout-affecting properties like size,
@@ -2728,6 +2736,7 @@ impl ElementBuilder for Div {
             clips_content,
             motion: None,
             motion_stable_id: None,
+            motion_should_replay: false,
             is_stack_layer: false,
             cursor: self.cursor,
         }

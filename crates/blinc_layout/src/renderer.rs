@@ -1283,6 +1283,12 @@ impl RenderTree {
         } else {
             None
         };
+        // Get replay flag from Motion container
+        let motion_should_replay = if is_motion {
+            element.motion_should_replay()
+        } else {
+            false
+        };
 
         // Match children by index (they were built in order)
         for (index, (child_builder, &child_node_id)) in
@@ -1300,6 +1306,7 @@ impl RenderTree {
                         child_node_id,
                         Some(motion_config),
                         child_stable_id,
+                        motion_should_replay,
                     );
                     continue;
                 }
@@ -1315,6 +1322,7 @@ impl RenderTree {
         node_id: LayoutNodeId,
         motion_config: Option<crate::element::MotionAnimation>,
         motion_stable_id: Option<String>,
+        motion_should_replay: bool,
     ) {
         let mut props = element.render_props();
         props.node_id = Some(node_id);
@@ -1322,7 +1330,16 @@ impl RenderTree {
         // Motion config from parent takes precedence
         if motion_config.is_some() {
             props.motion = motion_config;
-            props.motion_stable_id = motion_stable_id;
+            props.motion_stable_id = motion_stable_id.clone();
+            props.motion_should_replay = motion_should_replay;
+
+            // Queue replay with the CHILD's stable key (includes :child:N suffix)
+            // This ensures replay uses the same key as initialize_motion_animations
+            if motion_should_replay {
+                if let Some(ref key) = motion_stable_id {
+                    crate::render_state::queue_global_motion_replay(key.clone());
+                }
+            }
         } else if props.motion.is_none() {
             // Fall back to CSS animation from stylesheet if element has an ID
             if let Some(ref stylesheet) = self.stylesheet {
@@ -2534,8 +2551,12 @@ impl RenderTree {
             if let Some(ref motion_config) = render_node.props.motion {
                 // Use stable key if available (for overlays), otherwise use node_id
                 if let Some(ref stable_key) = render_node.props.motion_stable_id {
-                    // Only start if not already tracking this stable key
-                    render_state.start_stable_motion(stable_key, motion_config.clone());
+                    // Start or replay stable motion based on replay flag
+                    render_state.start_stable_motion(
+                        stable_key,
+                        motion_config.clone(),
+                        render_node.props.motion_should_replay,
+                    );
                 } else {
                     render_state.start_enter_motion(node_id, motion_config.clone());
                 }

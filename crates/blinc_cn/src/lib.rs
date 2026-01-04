@@ -43,6 +43,9 @@ pub mod components;
 
 pub use components::*;
 
+// Re-export InstanceKey from blinc_layout (the canonical location)
+pub use blinc_layout::InstanceKey;
+
 /// Convenience module for accessing components with `cn::` prefix
 pub mod cn {
     pub use crate::components::alert::{alert, alert_box};

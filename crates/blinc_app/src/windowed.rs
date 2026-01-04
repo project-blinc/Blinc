@@ -1623,7 +1623,8 @@ impl WindowedApp {
                                         // Route to overlay tree first if visible
                                         if windowed_ctx.overlay_manager.has_visible_overlays() {
                                             // Build/update overlay tree for event routing
-                                            if windowed_ctx.overlay_tree.is_none() || windowed_ctx.overlay_manager.take_dirty() {
+                                            // Use is_dirty() to peek without consuming (render phase will take it)
+                                            if windowed_ctx.overlay_tree.is_none() || windowed_ctx.overlay_manager.is_dirty() {
                                                 windowed_ctx.overlay_tree = windowed_ctx.overlay_manager.build_overlay_tree();
                                             }
                                             if let Some(ref overlay_tree) = windowed_ctx.overlay_tree {
@@ -2246,6 +2247,8 @@ impl WindowedApp {
                                             // Initialize motion animations for any new motion() containers
                                             // added during the subtree rebuild (e.g., tab content changes)
                                             tree.initialize_motion_animations(rs);
+                                            // Process any motion replay requests queued during tree building
+                                            rs.process_global_motion_replays();
                                         } else if had_prop_updates {
                                             tracing::trace!("Visual-only prop updates, skipping layout");
                                         }
@@ -2295,6 +2298,8 @@ impl WindowedApp {
 
                                         // Initialize motion animations for any nodes wrapped in motion() containers
                                         tree.initialize_motion_animations(rs);
+                                        // Process any motion replay requests queued during tree building
+                                        rs.process_global_motion_replays();
 
                                         // Replace existing tree with fresh one
                                         *existing_tree = tree;
@@ -2329,6 +2334,9 @@ impl WindowedApp {
 
                                                 // Initialize motion animations for any new nodes wrapped in motion() containers
                                                 existing_tree.initialize_motion_animations(rs);
+
+                                                // Process any global motion replays that were queued during tree building
+                                                rs.process_global_motion_replays();
                                             }
                                         }
                                     }
@@ -2350,6 +2358,9 @@ impl WindowedApp {
 
                                     // Initialize motion animations for any nodes wrapped in motion() containers
                                     tree.initialize_motion_animations(rs);
+
+                                    // Process any global motion replays that were queued during tree building
+                                    rs.process_global_motion_replays();
 
                                     render_tree = Some(tree);
                                 }
@@ -2441,11 +2452,23 @@ impl WindowedApp {
                                 // Begin tracking stable motion usage for this frame
                                 rs.begin_stable_motion_frame();
 
-                                // Rebuild overlay tree (always rebuild for rendering to get latest content)
-                                windowed_ctx.overlay_tree = windowed_ctx.overlay_manager.build_overlay_tree();
+                                // Only rebuild overlay tree if content changed (not just animation)
+                                // This is critical for InstanceKey stability - rebuilding creates new UUIDs
+                                let content_dirty = windowed_ctx.overlay_manager.take_dirty();
+                                let _animation_dirty = windowed_ctx.overlay_manager.take_animation_dirty();
+
+                                if content_dirty || windowed_ctx.overlay_tree.is_none() {
+                                    // Content changed or no tree - full rebuild
+                                    windowed_ctx.overlay_tree = windowed_ctx.overlay_manager.build_overlay_tree();
+                                }
+                                // Animation dirty just means we re-render the existing tree
+
                                 if let Some(ref overlay_tree) = windowed_ctx.overlay_tree {
                                     // Initialize motion animations for overlay content
                                     overlay_tree.initialize_motion_animations(rs);
+
+                                    // Process any global motion replays that were queued during overlay tree building
+                                    rs.process_global_motion_replays();
 
                                     let result = blinc_app.render_overlay_tree_with_motion(
                                         overlay_tree,

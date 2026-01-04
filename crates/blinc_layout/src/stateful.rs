@@ -144,16 +144,29 @@ pub fn has_pending_subtree_rebuilds() -> bool {
 
 /// Registry of stateful elements with signal dependencies
 ///
-/// Each entry is (deps, refresh_fn) where refresh_fn triggers a rebuild.
+/// Maps stateful_key -> (deps, refresh_fn) where refresh_fn triggers a rebuild.
 /// The windowed app checks these when signals change.
-static STATEFUL_DEPS: LazyLock<Mutex<Vec<(Vec<SignalId>, Box<dyn Fn() + Send + Sync>)>>> =
-    LazyLock::new(|| Mutex::new(Vec::new()));
+/// Using a HashMap with unique keys ensures that re-registration replaces the old
+/// entry instead of accumulating duplicates on each rebuild.
+static STATEFUL_DEPS: LazyLock<
+    Mutex<std::collections::HashMap<u64, (Vec<SignalId>, Box<dyn Fn() + Send + Sync>)>>,
+> = LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
 
 /// Register a stateful element's dependencies
 ///
 /// Called internally when `.deps()` is used on a stateful element.
-pub(crate) fn register_stateful_deps(deps: Vec<SignalId>, refresh_fn: Box<dyn Fn() + Send + Sync>) {
-    STATEFUL_DEPS.lock().unwrap().push((deps, refresh_fn));
+/// The `stateful_key` should be a unique identifier for the stateful instance
+/// (e.g., pointer address of the SharedState). Re-registering with the same key
+/// replaces the previous entry, preventing accumulation of stale callbacks.
+pub(crate) fn register_stateful_deps(
+    stateful_key: u64,
+    deps: Vec<SignalId>,
+    refresh_fn: Box<dyn Fn() + Send + Sync>,
+) {
+    STATEFUL_DEPS
+        .lock()
+        .unwrap()
+        .insert(stateful_key, (deps, refresh_fn));
 }
 
 /// Check all registered stateful deps against changed signals and trigger rebuilds
@@ -163,7 +176,7 @@ pub(crate) fn register_stateful_deps(deps: Vec<SignalId>, refresh_fn: Box<dyn Fn
 pub fn check_stateful_deps(changed_signals: &[SignalId]) -> bool {
     let registry = STATEFUL_DEPS.lock().unwrap();
     let mut triggered = false;
-    for (deps, refresh_fn) in registry.iter() {
+    for (_key, (deps, refresh_fn)) in registry.iter() {
         // If any dep is in changed_signals, trigger the refresh
         if deps.iter().any(|d| changed_signals.contains(d)) {
             refresh_fn();
@@ -632,6 +645,86 @@ impl<S: StateTransitions + Default> Default for Stateful<S> {
 /// or stored for persistence across rebuilds (e.g., via `ctx.use_state()`).
 pub type SharedState<S> = Arc<Mutex<StatefulInner<S>>>;
 
+/// Get or create a persistent `SharedState<S>` for the given key.
+///
+/// This bridges `BlincContextState` (which stores arbitrary values via signals)
+/// with `SharedState<S>` (which `Stateful` needs for FSM state management).
+///
+/// The state persists across UI rebuilds, making it safe to use in loops and closures
+/// when combined with unique keys (e.g., from `InstanceKey`).
+///
+/// # Type Parameters
+///
+/// - `S`: The state type, must implement `StateTransitions + Default + Clone + Send + Sync`
+///
+/// # Example
+///
+/// ```ignore
+/// use blinc_layout::prelude::*;
+///
+/// // Get or create a button state for a unique key
+/// let button_state = use_shared_state::<ButtonState>("my-button");
+///
+/// // Use with Stateful
+/// Stateful::with_shared_state(button_state)
+///     .on_state(|state, div| { /* ... */ })
+///
+/// // Works with any state type
+/// let checkbox_state = use_shared_state::<CheckboxState>("my-checkbox");
+/// ```
+pub fn use_shared_state<S>(key: &str) -> SharedState<S>
+where
+    S: StateTransitions + Default + Clone + Send + Sync + 'static,
+{
+    use blinc_core::context_state::BlincContextState;
+
+    let ctx = BlincContextState::get();
+
+    // We store the SharedState wrapped in an Option inside the signal
+    // This way it persists across rebuilds
+    let state: blinc_core::State<Option<SharedState<S>>> = ctx.use_state_keyed(key, || None);
+
+    let existing = state.get();
+    if let Some(shared) = existing {
+        shared
+    } else {
+        // First time - create the SharedState and store it
+        let shared: SharedState<S> = Arc::new(Mutex::new(StatefulInner::new(S::default())));
+        state.set(Some(shared.clone()));
+        shared
+    }
+}
+
+/// Get or create a persistent `SharedState<S>` with a custom initial state.
+///
+/// Like `use_shared_state`, but allows specifying a non-default initial state.
+///
+/// # Example
+///
+/// ```ignore
+/// // Start in a specific state
+/// let state = use_shared_state_with::<ButtonState>("my-button", ButtonState::Disabled);
+/// ```
+pub fn use_shared_state_with<S>(key: &str, initial: S) -> SharedState<S>
+where
+    S: StateTransitions + Clone + Send + Sync + 'static,
+{
+    use blinc_core::context_state::BlincContextState;
+
+    let ctx = BlincContextState::get();
+
+    let state: blinc_core::State<Option<SharedState<S>>> = ctx.use_state_keyed(key, || None);
+
+    let existing = state.get();
+    if let Some(shared) = existing {
+        shared
+    } else {
+        let shared: SharedState<S> = Arc::new(Mutex::new(StatefulInner::new(initial)));
+        state.set(Some(shared.clone()));
+        shared
+    }
+}
+
 /// Trigger a refresh of the stateful element's props (internal use)
 ///
 /// This re-runs the `on_state` callback and queues a prop update.
@@ -817,8 +910,12 @@ impl<S: StateTransitions> Stateful<S> {
         let shared = Arc::clone(&s.shared_state);
         let deps = shared.lock().unwrap().deps.clone();
         if !deps.is_empty() {
+            // Use Arc pointer address as unique key - prevents duplicate registrations
+            // when the same Stateful is rebuilt multiple times
+            let stateful_key = Arc::as_ptr(&shared) as u64;
             let shared_for_refresh = Arc::clone(&shared);
             register_stateful_deps(
+                stateful_key,
                 deps,
                 Box::new(move || {
                     refresh_stateful(&shared_for_refresh);

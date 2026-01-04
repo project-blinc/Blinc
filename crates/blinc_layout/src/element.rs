@@ -860,6 +860,9 @@ pub struct RenderProps {
     /// Stable ID for motion animation tracking across tree rebuilds
     /// Used by overlays where the tree is rebuilt every frame
     pub motion_stable_id: Option<String>,
+    /// Whether the motion animation should replay from the beginning
+    /// Used with motion_stable_id to force animation restart on content change
+    pub motion_should_replay: bool,
     /// Whether this is a Stack layer that increments z_layer for proper z-ordering
     /// When true, entering this node increments the DrawContext's z_layer
     pub is_stack_layer: bool,
@@ -884,6 +887,7 @@ impl Default for RenderProps {
             clips_content: false,
             motion: None,
             motion_stable_id: None,
+            motion_should_replay: false,
             is_stack_layer: false,
             cursor: None,
         }

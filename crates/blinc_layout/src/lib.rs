@@ -69,6 +69,12 @@ pub mod overlay_state;
 // CSS subset parser for ElementStyle
 pub mod css_parser;
 
+// Stable unique key generation for components
+pub mod key;
+
+// Re-export InstanceKey at crate root
+pub use key::InstanceKey;
+
 // Core types
 pub use element::{
     BorderSide, BorderSides, CursorStyle, DynRenderProps, ElementBounds, MotionAnimation,
@@ -124,7 +130,8 @@ pub use render_state::{ActiveMotion, MotionState, NodeRenderState, Overlay, Rend
 pub use stateful::{
     check_stateful_deps, has_pending_subtree_rebuilds, queue_prop_update, queue_subtree_rebuild,
     request_redraw, take_needs_redraw, take_pending_prop_updates, take_pending_subtree_rebuilds,
-    PendingSubtreeRebuild, SharedState, StateTransitions, StatefulInner,
+    use_shared_state, use_shared_state_with, PendingSubtreeRebuild, SharedState, StateTransitions,
+    StatefulInner,
 };
 
 // Animation integration
@@ -135,8 +142,8 @@ pub use units::{pct, px, sp, Length, Unit};
 
 // Motion container for entry/exit animations
 pub use motion::{
-    motion, ElementAnimation, Motion, MotionBindings, SharedAnimatedValue, SlideDirection,
-    StaggerConfig, StaggerDirection,
+    motion, motion_derived, ElementAnimation, Motion, MotionBindings, SharedAnimatedValue,
+    SlideDirection, StaggerConfig, StaggerDirection,
 };
 
 // Text measurement
@@ -210,6 +217,9 @@ pub mod prelude {
         TextFieldState,
         Toggle,
         ToggleState,
+        // Utility functions for persistent shared state
+        use_shared_state,
+        use_shared_state_with,
     };
 
     // Ready-to-use widgets (production-ready, work in fluent API without .build())
@@ -299,8 +309,8 @@ pub mod prelude {
 
     // Motion container for entry/exit animations
     pub use crate::motion::{
-        motion, ElementAnimation, Motion, MotionBindings, SharedAnimatedValue, SlideDirection,
-        StaggerConfig, StaggerDirection,
+        motion, motion_derived, ElementAnimation, Motion, MotionBindings, SharedAnimatedValue,
+        SlideDirection, StaggerConfig, StaggerDirection,
     };
 
     // Text selection for clipboard support
@@ -363,4 +373,7 @@ pub mod prelude {
         CssKeyframes, CssParseResult, CssSelector, ElementState as CssElementState,
         ParseError as CssParseError, Severity as CssSeverity, Stylesheet,
     };
+
+    // Stable unique key generation for components
+    pub use crate::key::InstanceKey;
 }

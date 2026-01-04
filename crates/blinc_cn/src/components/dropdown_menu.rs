@@ -68,6 +68,7 @@ const CHEVRON_DOWN_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width=
 const CHEVRON_UP_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>"#;
 use crate::ButtonVariant;
 use crate::button::use_button_state;
+use blinc_layout::InstanceKey;
 
 use super::context_menu::{ContextMenuItem, SubmenuBuilder};
 
@@ -116,8 +117,8 @@ pub struct DropdownMenuBuilder {
     align: DropdownAlign,
     /// Offset from trigger (pixels)
     offset: f32,
-    /// Instance key for state
-    instance_key: String,
+    /// Unique instance key (UUID-based for loop/closure safety)
+    key: InstanceKey,
     /// Built component cache
     built: OnceCell<DropdownMenu>,
 }
@@ -138,8 +139,6 @@ impl DropdownMenuBuilder {
     /// Create with a simple string label trigger
     #[track_caller]
     pub fn new(label: impl Into<String>) -> Self {
-        let loc = std::panic::Location::caller();
-        let instance_key = format!("dropdown:{}:{}:{}", loc.file(), loc.line(), loc.column());
         Self {
             trigger_label: Some(label.into()),
             trigger_builder: None,
@@ -148,7 +147,7 @@ impl DropdownMenuBuilder {
             position: DropdownPosition::Bottom,
             align: DropdownAlign::Start,
             offset: 4.0,
-            instance_key,
+            key: InstanceKey::new("dropdown"),
             built: OnceCell::new(),
         }
     }
@@ -161,8 +160,6 @@ impl DropdownMenuBuilder {
     where
         F: Fn(bool) -> Div + Send + Sync + 'static,
     {
-        let loc = std::panic::Location::caller();
-        let instance_key = format!("dropdown:{}:{}:{}", loc.file(), loc.line(), loc.column());
         Self {
             trigger_label: None,
             trigger_builder: Some(Arc::new(trigger)),
@@ -171,7 +168,7 @@ impl DropdownMenuBuilder {
             position: DropdownPosition::Bottom,
             align: DropdownAlign::Start,
             offset: 4.0,
-            instance_key,
+            key: InstanceKey::new("dropdown"),
             built: OnceCell::new(),
         }
     }
@@ -278,17 +275,15 @@ impl DropdownMenuBuilder {
     fn build_component(&self) -> DropdownMenu {
         let theme = ThemeState::get();
 
-        // Create open state
+        // Create open state using InstanceKey for unique identification
         let open_state: State<bool> =
-            BlincContextState::get().use_state_keyed(&self.instance_key, || false);
+            BlincContextState::get().use_state_keyed(self.key.get(), || false);
 
         // Store overlay handle ID
-        let handle_key = format!("{}_handle", self.instance_key);
         let overlay_handle_state: State<Option<u64>> =
-            BlincContextState::get().use_state_keyed(&handle_key, || None);
+            BlincContextState::get().use_state_keyed(&self.key.derive("handle"), || None);
 
-        // Trigger element ID for positioning
-        let trigger_id = format!("{}_trigger", self.instance_key);
+      
 
         // Clone values for closures
         let items = self.items.clone();
@@ -300,8 +295,8 @@ impl DropdownMenuBuilder {
         let trigger_builder = self.trigger_builder.clone();
 
         let btn_variant = ButtonVariant::Outline;
-        let button_state = use_button_state(&format!("{}_button_state", self.instance_key));
-
+        let button_state = use_button_state(&self.key.derive("button"));
+       
         // Build trigger element
         let open_state_for_trigger = open_state.clone();
         let open_state_for_trigger_1 = open_state.clone();
@@ -310,13 +305,14 @@ impl DropdownMenuBuilder {
 
         let trigger = Stateful::with_shared_state(button_state)
             //.id(&trigger_id)
+            .bg(btn_variant.background(theme, ButtonState::Idle))
             .cursor_pointer()
             .deps(&[open_state.signal_id()])
             .on_state(move |state, container: &mut Div| {
                 let is_open = open_state_for_trigger.get();
                 let bg = btn_variant.background(theme, *state);
-                println!("Dropdown trigger state: {:?}, open: {}", state, is_open);
-                println!("Dropdown trigger bg: {:?}", bg);
+                // println!("Dropdown trigger state: {:?}, open: {}", state, is_open);
+                // println!("Dropdown trigger bg: {:?}", bg);
                 // Build trigger content
                 let trigger_content: Div = if let Some(ref builder) = trigger_builder {
                     builder(is_open)
@@ -693,7 +689,7 @@ impl ElementBuilder for DropdownMenuBuilder {
     }
 
     fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
-        self.get_or_build().inner.event_handlers()
+        ElementBuilder::event_handlers(&self.get_or_build().inner)
     }
 }
 

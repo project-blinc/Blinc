@@ -63,17 +63,21 @@
 //! ```
 
 use std::cell::OnceCell;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use blinc_animation::{AnimationPreset, MultiKeyframeAnimation};
-use blinc_core::State;
+use blinc_core::{State, use_state_keyed};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
-use blinc_layout::motion::motion;
+use blinc_layout::motion::motion_derived;
 use blinc_layout::prelude::*;
 use blinc_layout::stateful::Stateful;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
+
+use blinc_layout::InstanceKey;
+
+use crate::button::use_button_state;
 
 /// Tabs size variants
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -307,7 +311,6 @@ impl TabsTransition {
 /// Configuration for the tabs component
 #[derive(Clone)]
 struct TabsConfig {
-    instance_key: String,
     state: State<String>,
     tabs: Vec<TabItem>,
     size: TabsSize,
@@ -319,7 +322,6 @@ struct TabsConfig {
 impl std::fmt::Debug for TabsConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TabsConfig")
-            .field("instance_key", &self.instance_key)
             .field("tabs", &self.tabs)
             .field("size", &self.size)
             .field("default_value", &self.default_value)
@@ -340,6 +342,7 @@ impl std::fmt::Debug for Tabs {
 
 /// Builder for tabs component
 pub struct TabsBuilder {
+    key: InstanceKey,
     config: TabsConfig,
     built: OnceCell<Tabs>,
 }
@@ -356,11 +359,25 @@ impl TabsBuilder {
     /// Create a new tabs builder with state
     #[track_caller]
     pub fn new(state: &State<String>) -> Self {
-        let loc = std::panic::Location::caller();
-        let instance_key = format!("{}:{}:{}", loc.file(), loc.line(), loc.column());
         Self {
+            key: InstanceKey::new("tabs"),
             config: TabsConfig {
-                instance_key,
+                state: state.clone(),
+                tabs: Vec::new(),
+                size: TabsSize::default(),
+                default_value: None,
+                on_change: None,
+                transition: TabsTransition::default(),
+            },
+            built: OnceCell::new(),
+        }
+    }
+
+    /// Create a tabs builder with an explicit key
+    pub fn with_key(key: impl Into<String>, state: &State<String>) -> Self {
+        Self {
+            key: InstanceKey::explicit(key),
+            config: TabsConfig {
                 state: state.clone(),
                 tabs: Vec::new(),
                 size: TabsSize::default(),
@@ -506,7 +523,9 @@ impl TabsBuilder {
         let state_for_buttons = config.state.clone();
         let on_change = config.on_change.clone();
 
-        let tab_button_area = Stateful::<()>::new(())
+        let unique_state_component_key = use_button_state(self.key.get());
+
+        let tab_button_area = Stateful::with_shared_state(unique_state_component_key)
             .deps(&[config.state.signal_id()])
             .h(size.height())
             .w_full()
@@ -516,7 +535,7 @@ impl TabsBuilder {
             .flex_row()
             .items_center()
             .gap(4.0)
-            .on_state(move |_state: &(), container: &mut Div| {
+            .on_state(move |_state, container: &mut Div| {
                 let active_value = state_for_buttons.get();
 
                 let mut buttons = div().w_fit().flex_row().items_center().gap(4.0);
@@ -544,8 +563,11 @@ impl TabsBuilder {
         let tabs_for_content = config.tabs.clone();
         let state_for_content = config.state.clone();
         let transition = config.transition;
+        // Clone the base key for deriving motion keys inside on_state
+        let motion_base_key = self.key.derive("motion");
 
-        let tab_content_area = Stateful::<()>::new(())
+        let content_area_state = use_shared_state(&self.key.derive("content_area"));
+        let tab_content_area = Stateful::with_shared_state(content_area_state)
             .deps(&[config.state.signal_id()])
             .w_full()
             .flex_grow()
@@ -558,11 +580,9 @@ impl TabsBuilder {
                     if tab.menu_item.value() == active_value {
                         let content = (tab.content)();
                         if transition != TabsTransition::None {
-                            // Use transient() so each tab switch gets a fresh animation
-                            // Motion defaults to w_full + flex_grow so it fills parent
-                            // Note: Only enter animation is supported - exit animations would
-                            // require keeping both old and new content during transition
-                            let mut m = motion().transient();
+                           
+                            let tab_motion_key = format!("{}:{}", motion_base_key, active_value);
+                            let mut m = motion_derived(&tab_motion_key).replay();
                             if let Some(enter) = transition.enter_animation() {
                                 m = m.enter_animation(enter);
                             }
