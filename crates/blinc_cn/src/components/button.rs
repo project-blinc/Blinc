@@ -1,6 +1,6 @@
 //! Button component with shadcn-style variants
 //!
-//! A themed button component using Stateful<ButtonState> for hover/press interactions.
+//! A themed button component using `Stateful<ButtonState>` for hover/press interactions.
 //! The button manages its own state internally using `#[track_caller]` for unique key generation.
 //!
 //! # Example
