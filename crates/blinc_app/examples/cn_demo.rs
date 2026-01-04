@@ -31,6 +31,7 @@ fn main() -> Result<()> {
 }
 
 fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
+    eprintln!("build_ui called");
     let theme = ThemeState::get();
     let bg = theme.color(ColorToken::Background);
 

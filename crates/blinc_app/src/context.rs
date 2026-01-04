@@ -1052,7 +1052,7 @@ impl RenderContext {
                         || (effective_motion_scale.0 - 1.0).abs() > 0.01
                         || (effective_motion_scale.1 - 1.0).abs() > 0.01
                     {
-                        tracing::info!(
+                        tracing::debug!(
                             "Text '{}': motion_translate=({:.1}, {:.1}), motion_scale=({:.2}, {:.2}), base=({:.1}, {:.1}), final=({:.1}, {:.1})",
                             text_data.content,
                             effective_motion_translate.0,

@@ -1363,6 +1363,20 @@ pub trait OverlayManagerExt {
     fn needs_redraw(&self) -> bool;
     /// Set the cached content size for an overlay (for hit testing)
     fn set_content_size(&self, handle: OverlayHandle, width: f32, height: f32);
+    /// Mark overlay content as dirty (triggers full rebuild)
+    ///
+    /// Call this when state used in overlay content changes and needs to be reflected.
+    /// This is needed because overlay content is built once and cached.
+    ///
+    /// WARNING: This triggers a full content rebuild which re-initializes motion animations.
+    /// For simple visual updates like hover state changes, use `request_redraw()` instead.
+    fn mark_content_dirty(&self);
+
+    /// Request a redraw without rebuilding content
+    ///
+    /// Use this for visual state updates that don't require the overlay tree to be rebuilt,
+    /// such as hover state changes. This avoids re-triggering motion animations.
+    fn request_redraw(&self);
 }
 
 impl OverlayManagerExt for OverlayManager {
@@ -1471,6 +1485,14 @@ impl OverlayManagerExt for OverlayManager {
 
     fn set_content_size(&self, handle: OverlayHandle, width: f32, height: f32) {
         self.lock().unwrap().set_content_size(handle, width, height);
+    }
+
+    fn mark_content_dirty(&self) {
+        self.lock().unwrap().mark_dirty();
+    }
+
+    fn request_redraw(&self) {
+        self.lock().unwrap().mark_animation_dirty();
     }
 }
 

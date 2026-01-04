@@ -587,9 +587,13 @@ fn build_dropdown_content(
                 })
                 .on_hover_enter(move |_| {
                     hover_state_enter.set(true);
+                    // Request redraw (not full content rebuild) so hover state change is reflected
+                    get_overlay_manager().request_redraw();
                 })
                 .on_hover_leave(move |_| {
                     hover_state_leave.set(false);
+                    // Request redraw (not full content rebuild) so hover state change is reflected
+                    get_overlay_manager().request_redraw();
                 });
 
             if !item_disabled {

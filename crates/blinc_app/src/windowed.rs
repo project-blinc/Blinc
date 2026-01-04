@@ -2220,38 +2220,41 @@ impl WindowedApp {
                                 // When no overlay, apply to main tree.
                                 let has_overlay = windowed_ctx.overlay_tree.is_some();
 
-                                if has_overlay {
-                                    // Overlay is visible - apply updates to overlay tree only
-                                    // This prevents node ID collisions from affecting the main tree
-                                    if let Some(ref mut overlay_tree) = windowed_ctx.overlay_tree {
-                                        for (node_id, props) in &prop_updates {
-                                            overlay_tree.update_render_props(*node_id, |p| *p = props.clone());
-                                        }
+                                // Apply prop updates to BOTH trees - nodes may exist in either
+                                // The update_render_props silently ignores invalid node IDs
+                                let had_prop_updates = !prop_updates.is_empty();
+                                if let Some(ref mut tree) = render_tree {
+                                    for (node_id, props) in &prop_updates {
+                                        tree.update_render_props(*node_id, |p| *p = props.clone());
                                     }
-                                } else {
-                                    // No overlay - apply updates to main tree
-                                    if let Some(ref mut tree) = render_tree {
-                                        for (node_id, props) in &prop_updates {
-                                            tree.update_render_props(*node_id, |p| *p = props.clone());
-                                        }
+                                }
+                                if let Some(ref mut overlay_tree) = windowed_ctx.overlay_tree {
+                                    for (node_id, props) in &prop_updates {
+                                        overlay_tree.update_render_props(*node_id, |p| *p = props.clone());
+                                    }
+                                }
 
-                                        // Process pending subtree rebuilds (structural changes)
-                                        // Only recompute layout if subtree rebuilds occurred
-                                        let had_subtree_rebuilds = blinc_layout::has_pending_subtree_rebuilds();
-                                        tree.process_pending_subtree_rebuilds();
+                                // Process subtree rebuilds for main tree
+                                // This must happen even when overlay is visible, because
+                                // Select/DropdownMenu buttons are in the main tree and need
+                                // their children rebuilt when the value changes
+                                if let Some(ref mut tree) = render_tree {
+                                    // Process pending subtree rebuilds (structural changes)
+                                    // Only recompute layout if subtree rebuilds occurred
+                                    let had_subtree_rebuilds = blinc_layout::has_pending_subtree_rebuilds();
+                                    tree.process_pending_subtree_rebuilds();
 
-                                        // Recompute layout only if structural changes happened
-                                        if had_subtree_rebuilds {
-                                            tracing::debug!("Subtree rebuilds processed, recomputing layout");
-                                            tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
-                                            // Initialize motion animations for any new motion() containers
-                                            // added during the subtree rebuild (e.g., tab content changes)
-                                            tree.initialize_motion_animations(rs);
-                                            // Process any motion replay requests queued during tree building
-                                            rs.process_global_motion_replays();
-                                        } else if had_prop_updates {
-                                            tracing::trace!("Visual-only prop updates, skipping layout");
-                                        }
+                                    // Recompute layout only if structural changes happened
+                                    if had_subtree_rebuilds {
+                                        tracing::debug!("Subtree rebuilds processed, recomputing layout");
+                                        tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
+                                        // Initialize motion animations for any new motion() containers
+                                        // added during the subtree rebuild (e.g., tab content changes)
+                                        tree.initialize_motion_animations(rs);
+                                        // Process any motion replay requests queued during tree building
+                                        rs.process_global_motion_replays();
+                                    } else if had_prop_updates {
+                                        tracing::trace!("Visual-only prop updates, skipping layout");
                                     }
                                 }
 
@@ -2265,6 +2268,9 @@ impl WindowedApp {
                             // =========================================================
 
                             if needs_rebuild || render_tree.is_none() {
+                                // Reset call counters for stable key generation
+                                reset_call_counters();
+
                                 // Build UI element tree
                                 let ui = ui_builder(windowed_ctx);
 

@@ -48,6 +48,9 @@ use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::overlay::{OverlayHandle, OverlayManagerExt};
 use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState};
 
+use crate::ButtonVariant;
+use crate::button::use_button_state;
+
 use super::label::{label, LabelSize};
 use blinc_layout::InstanceKey;
 
@@ -204,18 +207,18 @@ impl Select {
         let value_state_for_options = config.value_state.clone();
         let open_state_for_click = open_state.clone();
         let overlay_handle_for_click = overlay_handle_state.clone();
-
-        // Use Stateful with () as we only need signal deps, not FSM state transitions
+        let btn_variant = ButtonVariant::Outline;
+        let select_btn_state = use_button_state(&format!("{}_btn", instance_key));
         // The click handler is on the Stateful itself (not the inner div) so it gets registered
         // Use w_full() to ensure the Stateful takes the same width as its parent container
-        let select_element = Stateful::<()>::new(())
+        let select_element = Stateful::with_shared_state(select_btn_state)
             .deps(&[config.value_state.signal_id(), open_state.signal_id()])
             .w_full()
             .h(height)
             .cursor_pointer()
-            .on_state(move |_state: &(), container: &mut Div| {
+            .on_state(move |state, container: &mut Div| {
                 let is_open = open_state_for_display.get();
-
+                let bg = btn_variant.background(theme, *state);
                 // Get current display value and selected option
                 let current_val = value_state_for_display.get();
                 let selected_option = options_for_display
@@ -531,19 +534,19 @@ impl SelectBuilder {
 
 impl ElementBuilder for SelectBuilder {
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        self.get_or_build().build(tree)
+        self.get_or_build().inner.build(tree)
     }
 
     fn render_props(&self) -> RenderProps {
-        self.get_or_build().render_props()
+        self.get_or_build().inner.render_props()
     }
 
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
-        self.get_or_build().children_builders()
+        self.get_or_build().inner.children_builders()
     }
 
     fn element_type_id(&self) -> ElementTypeId {
-        self.get_or_build().element_type_id()
+        self.get_or_build().inner.element_type_id()
     }
 }
 
@@ -667,9 +670,13 @@ fn build_dropdown_content(
             })
             .on_hover_enter(move |_ctx| {
                 hover_state_for_enter.set(true);
+                // Request redraw (not full content rebuild) so hover state change is reflected
+                get_overlay_manager().request_redraw();
             })
             .on_hover_leave(move |_ctx| {
                 hover_state_for_leave.set(false);
+                // Request redraw (not full content rebuild) so hover state change is reflected
+                get_overlay_manager().request_redraw();
             })
             .on_click(move |_ctx| {
                 if !is_opt_disabled {

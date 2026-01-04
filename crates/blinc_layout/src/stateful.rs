@@ -178,7 +178,8 @@ pub fn check_stateful_deps(changed_signals: &[SignalId]) -> bool {
     let mut triggered = false;
     for (_key, (deps, refresh_fn)) in registry.iter() {
         // If any dep is in changed_signals, trigger the refresh
-        if deps.iter().any(|d| changed_signals.contains(d)) {
+        let matched = deps.iter().any(|d| changed_signals.contains(d));
+        if matched {
             refresh_fn();
             triggered = true;
         }
@@ -1098,14 +1099,7 @@ impl<S: StateTransitions> Stateful<S> {
                     drop(guard);
                     (callback, state, nid, base)
                 }
-                (has_cb, has_nid) => {
-                    tracing::warn!(
-                        "refresh_props_internal: early return - has_callback={}, has_node_id={}",
-                        has_cb.is_some(),
-                        has_nid.is_some()
-                    );
-                    return;
-                }
+                _ => return,
             };
 
         // Create temp div, apply callback to get state-specific changes
@@ -1121,20 +1115,8 @@ impl<S: StateTransitions> Stateful<S> {
         queue_prop_update(cached_node_id, final_props);
 
         // Check if children were set - if so, queue a subtree rebuild
-        let child_count = temp_div.children_builders().len();
-        if child_count > 0 {
-            tracing::debug!(
-                "refresh_props_internal: queuing subtree rebuild for node {:?} with {} children",
-                cached_node_id,
-                child_count
-            );
-            // Queue the child for rebuild - the windowed app will process this
+        if !temp_div.children_builders().is_empty() {
             queue_subtree_rebuild(cached_node_id, temp_div);
-        } else {
-            tracing::debug!(
-                "refresh_props_internal: no children to rebuild for node {:?}",
-                cached_node_id
-            );
         }
 
         // Request redraw

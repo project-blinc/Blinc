@@ -72,8 +72,8 @@ pub mod css_parser;
 // Stable unique key generation for components
 pub mod key;
 
-// Re-export InstanceKey at crate root
-pub use key::InstanceKey;
+// Re-export InstanceKey and reset function at crate root
+pub use key::{reset_call_counters, InstanceKey};
 
 // Core types
 pub use element::{
@@ -375,5 +375,5 @@ pub mod prelude {
     };
 
     // Stable unique key generation for components
-    pub use crate::key::InstanceKey;
+    pub use crate::key::{reset_call_counters, InstanceKey};
 }
