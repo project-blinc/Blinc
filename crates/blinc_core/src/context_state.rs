@@ -137,7 +137,12 @@ pub struct Bounds {
 impl Bounds {
     /// Create new bounds
     pub fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     /// Check if a point is inside the bounds
@@ -497,11 +502,7 @@ impl BlincContextState {
 
     /// Check if an element is currently focused
     pub fn is_focused(&self, id: &str) -> bool {
-        self.focused_element
-            .read()
-            .unwrap()
-            .as_deref()
-            == Some(id)
+        self.focused_element.read().unwrap().as_deref() == Some(id)
     }
 
     // =========================================================================

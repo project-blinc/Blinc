@@ -1334,9 +1334,8 @@ impl WindowedApp {
         // Set up bounds callback for ElementHandle.bounds()
         {
             let registry_for_bounds = Arc::clone(&element_registry);
-            let bounds_callback: blinc_core::BoundsCallback = Arc::new(move |id: &str| {
-                registry_for_bounds.get_bounds(id)
-            });
+            let bounds_callback: blinc_core::BoundsCallback =
+                Arc::new(move |id: &str| registry_for_bounds.get_bounds(id));
             BlincContextState::get().set_bounds_callback(bounds_callback);
         }
 

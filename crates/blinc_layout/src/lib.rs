@@ -122,10 +122,9 @@ pub use render_state::{ActiveMotion, MotionState, NodeRenderState, Overlay, Rend
 
 // Stateful elements
 pub use stateful::{
-    check_stateful_deps, has_pending_subtree_rebuilds, queue_prop_update,
-    queue_subtree_rebuild, request_redraw, take_needs_redraw, take_pending_prop_updates,
-    take_pending_subtree_rebuilds, PendingSubtreeRebuild, SharedState, StateTransitions,
-    StatefulInner,
+    check_stateful_deps, has_pending_subtree_rebuilds, queue_prop_update, queue_subtree_rebuild,
+    request_redraw, take_needs_redraw, take_pending_prop_updates, take_pending_subtree_rebuilds,
+    PendingSubtreeRebuild, SharedState, StateTransitions, StatefulInner,
 };
 
 // Animation integration

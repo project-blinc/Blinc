@@ -70,7 +70,12 @@ impl<T> ElementHandle<T> {
     pub fn bounds(&self) -> Option<ElementBounds> {
         // Get bounds from the registry cache (populated by RenderTree after layout)
         let bounds = self.registry.get_bounds(&self.string_id)?;
-        Some(ElementBounds::new(bounds.x, bounds.y, bounds.width, bounds.height))
+        Some(ElementBounds::new(
+            bounds.x,
+            bounds.y,
+            bounds.width,
+            bounds.height,
+        ))
     }
 
     /// Check if this element is visible in the viewport
