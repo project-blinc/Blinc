@@ -105,8 +105,6 @@ pub struct RichText {
     /// Link data for click handling: (start_byte, end_byte, url, x_start, x_end)
     /// Pre-calculated during update_size_estimate for hit testing
     link_regions: Arc<Vec<LinkRegion>>,
-    /// Callback invoked when element is first laid out
-    on_ready: Option<crate::renderer::OnReadyCallback>,
 }
 
 impl RichText {
@@ -155,7 +153,6 @@ impl RichText {
             word_spacing: 0.0,
             event_handlers: EventHandlers::new(),
             link_regions: Arc::new(Vec::new()),
-            on_ready: None,
         };
         rich.update_size_estimate();
         rich.setup_link_handlers();
@@ -220,7 +217,6 @@ impl RichText {
             word_spacing: 0.0,
             event_handlers: EventHandlers::new(),
             link_regions: Arc::new(Vec::new()),
-            on_ready: None,
         };
         rich.update_size_estimate();
         rich.setup_link_handlers();
@@ -597,15 +593,6 @@ impl RichText {
     pub fn spans(&self) -> &[TextSpan] {
         &self.spans
     }
-
-    /// Set a callback to be invoked when the element is first laid out
-    pub fn on_ready<F>(mut self, callback: F) -> Self
-    where
-        F: Fn(crate::element::ElementBounds) + Send + Sync + 'static,
-    {
-        self.on_ready = Some(std::sync::Arc::new(callback));
-        self
-    }
 }
 
 impl ElementBuilder for RichText {
@@ -682,10 +669,6 @@ impl ElementBuilder for RichText {
             italic: self.italic,
             ascender: self.ascender,
         })
-    }
-
-    fn on_ready_callback(&self) -> Option<crate::renderer::OnReadyCallback> {
-        self.on_ready.clone()
     }
 }
 

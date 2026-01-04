@@ -208,7 +208,14 @@ fn progress_bar_demo(ctx: &WindowedContext) -> Div {
     let click_timeline = Arc::clone(&timeline);
     let ready_timeline = Arc::clone(&timeline);
 
+    // Register on_ready callback (fires once with stable ID tracking)
+    ctx.query("progress-bar-demo").on_ready(move |_| {
+        // Start animation when first laid out
+        ready_timeline.lock().unwrap().start();
+    });
+
     demo_card("Progress Bar")
+        .id("progress-bar-demo")
         .child(
             canvas(move |ctx: &mut dyn DrawContext, bounds| {
                 let timeline = render_timeline.lock().unwrap();
@@ -261,10 +268,6 @@ fn progress_bar_demo(ctx: &WindowedContext) -> Div {
         .on_click(move |_| {
             // Restart animation on click
             click_timeline.lock().unwrap().restart();
-        })
-        .on_ready(move |_| {
-            // Start animation when first laid out
-            ready_timeline.lock().unwrap().start();
         })
 }
 

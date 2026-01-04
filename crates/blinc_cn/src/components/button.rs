@@ -356,6 +356,10 @@ impl Button {
                     merge_div = merge_div.shadow_md();
                 }
 
+                if variant == ButtonVariant::Outline {
+                    merge_div = merge_div.shadow_sm();
+                }
+
                 container.merge(merge_div);
             })
             .child(content);
@@ -377,6 +381,10 @@ impl Button {
 
         if variant != ButtonVariant::Link && variant != ButtonVariant::Ghost {
             stateful = stateful.shadow_md();
+        }
+
+        if variant == ButtonVariant::Outline {
+            stateful = stateful.shadow_sm();
         }
 
         // Wrap in a div for consistent ElementBuilder behavior

@@ -35,8 +35,6 @@ pub struct Svg {
     shadow: Option<Shadow>,
     /// Transform
     transform: Option<Transform>,
-    /// Callback invoked when element is first laid out
-    on_ready: Option<crate::renderer::OnReadyCallback>,
 }
 
 impl Svg {
@@ -57,7 +55,6 @@ impl Svg {
             render_layer: RenderLayer::default(),
             shadow: None,
             transform: None,
-            on_ready: None,
         }
     }
 
@@ -240,15 +237,6 @@ impl Svg {
     pub fn rotate(self, angle: f32) -> Self {
         self.transform(Transform::rotate(angle))
     }
-
-    /// Set a callback to be invoked when the element is first laid out
-    pub fn on_ready<F>(mut self, callback: F) -> Self
-    where
-        F: Fn(crate::element::ElementBounds) + Send + Sync + 'static,
-    {
-        self.on_ready = Some(std::sync::Arc::new(callback));
-        self
-    }
 }
 
 impl ElementBuilder for Svg {
@@ -294,10 +282,6 @@ impl ElementBuilder for Svg {
 
     fn layout_style(&self) -> Option<&taffy::Style> {
         Some(&self.style)
-    }
-
-    fn on_ready_callback(&self) -> Option<crate::renderer::OnReadyCallback> {
-        self.on_ready.clone()
     }
 }
 

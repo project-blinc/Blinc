@@ -562,9 +562,6 @@ pub struct Stateful<S: StateTransitions> {
     /// event_handlers() can return a stable reference for the renderer to capture
     event_handlers_cache: RefCell<crate::event_handler::EventHandlers>,
 
-    /// On-ready callback invoked after first layout computation
-    on_ready: Option<crate::renderer::OnReadyCallback>,
-
     /// Layout bounds storage - updated synchronously after each layout
     layout_bounds: crate::renderer::LayoutBoundsStorage,
 
@@ -686,7 +683,6 @@ impl<S: StateTransitions> Stateful<S> {
             })),
             children_cache: RefCell::new(Vec::new()),
             event_handlers_cache: RefCell::new(crate::event_handler::EventHandlers::new()),
-            on_ready: None,
             layout_bounds: Arc::new(std::sync::Mutex::new(None)),
             layout_bounds_cb: None,
         }
@@ -713,7 +709,6 @@ impl<S: StateTransitions> Stateful<S> {
             shared_state,
             children_cache: RefCell::new(Vec::new()),
             event_handlers_cache: RefCell::new(crate::event_handler::EventHandlers::new()),
-            on_ready: None,
             layout_bounds: Arc::new(std::sync::Mutex::new(None)),
             layout_bounds_cb: None,
         }
@@ -1672,31 +1667,6 @@ impl<S: StateTransitions> Stateful<S> {
         self
     }
 
-    /// Set an on_ready callback that fires once after the element is laid out
-    ///
-    /// The callback receives the element's computed bounds after layout.
-    /// This is triggered once per element after its first successful layout
-    /// computation.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// Stateful::new(ButtonState::Idle)
-    ///     .w(200.0)
-    ///     .h(100.0)
-    ///     .on_ready(|bounds| {
-    ///         println!("Element ready at ({}, {}) size {}x{}",
-    ///             bounds.x, bounds.y, bounds.width, bounds.height);
-    ///     })
-    /// ```
-    pub fn on_ready<F>(mut self, callback: F) -> Self
-    where
-        F: Fn(crate::element::ElementBounds) + Send + Sync + 'static,
-    {
-        self.on_ready = Some(std::sync::Arc::new(callback));
-        self
-    }
-
     /// Set a layout callback that fires synchronously after each layout computation
     ///
     /// Unlike `on_ready` which fires once with a delay, `on_layout` fires immediately
@@ -2111,14 +2081,6 @@ impl<S: StateTransitions> BoundStateful<S> {
         self.transform_inner(|s| s.on_event(event_type, handler))
     }
 
-    /// Set an on_ready callback that fires once after the element is laid out (builder pattern)
-    pub fn on_ready<F>(self, callback: F) -> Self
-    where
-        F: Fn(crate::element::ElementBounds) + Send + Sync + 'static,
-    {
-        self.transform_inner(|s| s.on_ready(callback))
-    }
-
     /// Set a layout callback that fires synchronously after each layout computation (builder pattern)
     pub fn on_layout<F>(self, callback: F) -> Self
     where
@@ -2249,10 +2211,6 @@ impl<S: StateTransitions> ElementBuilder for Stateful<S> {
             let inner = self.inner.as_ptr();
             Some(&(*inner).style)
         }
-    }
-
-    fn on_ready_callback(&self) -> Option<crate::renderer::OnReadyCallback> {
-        self.on_ready.clone()
     }
 
     fn layout_bounds_storage(&self) -> Option<crate::renderer::LayoutBoundsStorage> {

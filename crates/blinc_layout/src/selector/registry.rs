@@ -21,8 +21,11 @@ pub struct ElementRegistry {
     /// Parent relationships for tree traversal
     parents: RwLock<HashMap<LayoutNodeId, LayoutNodeId>>,
     /// Pending on_ready callbacks registered via ElementHandle.on_ready()
-    /// These are picked up by the RenderTree and moved to its callback storage
-    pending_on_ready: Mutex<Vec<(LayoutNodeId, OnReadyCallback)>>,
+    /// Keyed by string ID for stable tracking across rebuilds
+    pending_on_ready: Mutex<Vec<(String, OnReadyCallback)>>,
+    /// Set of string IDs that have already had their on_ready callback triggered
+    /// This survives across rebuilds since string IDs are stable
+    triggered_on_ready_ids: Mutex<std::collections::HashSet<String>>,
 }
 
 impl std::fmt::Debug for ElementRegistry {
@@ -56,6 +59,7 @@ impl ElementRegistry {
             reverse: RwLock::new(HashMap::new()),
             parents: RwLock::new(HashMap::new()),
             pending_on_ready: Mutex::new(Vec::new()),
+            triggered_on_ready_ids: Mutex::new(std::collections::HashSet::new()),
         }
     }
 
@@ -191,9 +195,31 @@ impl ElementRegistry {
     ///
     /// This is called by ElementHandle.on_ready() to queue callbacks that will
     /// be processed by the RenderTree after layout computation.
+    ///
+    /// The node_id is used to look up the string ID, which is used for stable
+    /// tracking across tree rebuilds.
     pub fn register_on_ready(&self, node_id: LayoutNodeId, callback: OnReadyCallback) {
-        if let Ok(mut pending) = self.pending_on_ready.lock() {
-            pending.push((node_id, callback));
+        // Look up the string ID for this node
+        if let Some(string_id) = self.get_id(node_id) {
+            // Check if already triggered (skip if so)
+            if let Ok(triggered) = self.triggered_on_ready_ids.lock() {
+                if triggered.contains(&string_id) {
+                    tracing::trace!(
+                        "on_ready callback for '{}' already triggered, skipping",
+                        string_id
+                    );
+                    return;
+                }
+            }
+
+            if let Ok(mut pending) = self.pending_on_ready.lock() {
+                pending.push((string_id, callback));
+            }
+        } else {
+            tracing::warn!(
+                "on_ready callback registered for node {:?} without a string ID - callbacks require .id() for stable tracking",
+                node_id
+            );
         }
     }
 
@@ -201,7 +227,9 @@ impl ElementRegistry {
     ///
     /// This is called by the RenderTree to move pending callbacks into its own
     /// callback storage for processing after layout.
-    pub fn take_pending_on_ready(&self) -> Vec<(LayoutNodeId, OnReadyCallback)> {
+    ///
+    /// Returns tuples of (string_id, callback) for stable tracking.
+    pub fn take_pending_on_ready(&self) -> Vec<(String, OnReadyCallback)> {
         if let Ok(mut pending) = self.pending_on_ready.lock() {
             std::mem::take(&mut *pending)
         } else {
@@ -215,6 +243,45 @@ impl ElementRegistry {
             .lock()
             .map(|v| !v.is_empty())
             .unwrap_or(false)
+    }
+
+    /// Mark an on_ready callback as triggered by string ID
+    ///
+    /// This prevents the same callback from firing again on tree rebuilds.
+    pub fn mark_on_ready_triggered(&self, string_id: &str) {
+        if let Ok(mut triggered) = self.triggered_on_ready_ids.lock() {
+            triggered.insert(string_id.to_string());
+        }
+    }
+
+    /// Check if an on_ready callback has already been triggered
+    pub fn is_on_ready_triggered(&self, string_id: &str) -> bool {
+        self.triggered_on_ready_ids
+            .lock()
+            .map(|t| t.contains(string_id))
+            .unwrap_or(false)
+    }
+
+    /// Register an on_ready callback by string ID directly
+    ///
+    /// This is the preferred method for registering on_ready callbacks, as it
+    /// uses the stable string ID directly rather than looking it up from a node_id.
+    /// This allows callbacks to be registered before the element exists in the tree.
+    pub fn register_on_ready_for_id(&self, string_id: &str, callback: OnReadyCallback) {
+        // Check if already triggered (skip if so)
+        if let Ok(triggered) = self.triggered_on_ready_ids.lock() {
+            if triggered.contains(string_id) {
+                tracing::trace!(
+                    "on_ready callback for '{}' already triggered, skipping",
+                    string_id
+                );
+                return;
+            }
+        }
+
+        if let Ok(mut pending) = self.pending_on_ready.lock() {
+            pending.push((string_id.to_string(), callback));
+        }
     }
 }
 
@@ -266,5 +333,134 @@ mod tests {
         // In a real scenario with different node IDs, the second registration
         // would overwrite the first
         assert_eq!(registry.get("same-id"), Some(node1));
+    }
+
+    // =========================================================================
+    // On-Ready Callback Tests
+    // =========================================================================
+
+    #[test]
+    fn test_register_on_ready_for_id() {
+        let registry = ElementRegistry::new();
+        let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        // Register callback before element exists
+        let called_clone = called.clone();
+        registry.register_on_ready_for_id(
+            "my-element",
+            Arc::new(move |_| {
+                called_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+            }),
+        );
+
+        // Should have pending callback
+        assert!(registry.has_pending_on_ready());
+
+        // Take pending callbacks
+        let pending = registry.take_pending_on_ready();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].0, "my-element");
+
+        // Pending should now be empty
+        assert!(!registry.has_pending_on_ready());
+    }
+
+    #[test]
+    fn test_on_ready_triggered_tracking() {
+        let registry = ElementRegistry::new();
+
+        // Not triggered initially
+        assert!(!registry.is_on_ready_triggered("my-element"));
+
+        // Mark as triggered
+        registry.mark_on_ready_triggered("my-element");
+
+        // Now it's triggered
+        assert!(registry.is_on_ready_triggered("my-element"));
+
+        // Other IDs are not affected
+        assert!(!registry.is_on_ready_triggered("other-element"));
+    }
+
+    #[test]
+    fn test_on_ready_skips_already_triggered() {
+        let registry = ElementRegistry::new();
+
+        // First registration should work
+        registry.register_on_ready_for_id("my-element", Arc::new(|_| {}));
+        assert!(registry.has_pending_on_ready());
+
+        // Take and mark as triggered
+        let _ = registry.take_pending_on_ready();
+        registry.mark_on_ready_triggered("my-element");
+
+        // Second registration should be skipped
+        registry.register_on_ready_for_id("my-element", Arc::new(|_| {}));
+        assert!(!registry.has_pending_on_ready());
+    }
+
+    #[test]
+    fn test_on_ready_multiple_elements() {
+        let registry = ElementRegistry::new();
+
+        registry.register_on_ready_for_id("element-a", Arc::new(|_| {}));
+        registry.register_on_ready_for_id("element-b", Arc::new(|_| {}));
+        registry.register_on_ready_for_id("element-c", Arc::new(|_| {}));
+
+        let pending = registry.take_pending_on_ready();
+        assert_eq!(pending.len(), 3);
+
+        let ids: Vec<_> = pending.iter().map(|(id, _)| id.as_str()).collect();
+        assert!(ids.contains(&"element-a"));
+        assert!(ids.contains(&"element-b"));
+        assert!(ids.contains(&"element-c"));
+    }
+
+    #[test]
+    fn test_on_ready_via_node_id() {
+        let registry = ElementRegistry::new();
+        let node_id = LayoutNodeId::default();
+
+        // Register element first
+        registry.register("my-element", node_id);
+
+        // Register callback via node_id
+        registry.register_on_ready(node_id, Arc::new(|_| {}));
+
+        // Should have pending callback with string ID
+        let pending = registry.take_pending_on_ready();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].0, "my-element");
+    }
+
+    #[test]
+    fn test_on_ready_via_node_id_without_string_id_warns() {
+        let registry = ElementRegistry::new();
+        let node_id = LayoutNodeId::default();
+
+        // Don't register string ID - callback via node_id should warn and not add
+        registry.register_on_ready(node_id, Arc::new(|_| {}));
+
+        // Should NOT have pending callback (no string ID mapping)
+        assert!(!registry.has_pending_on_ready());
+    }
+
+    #[test]
+    fn test_triggered_survives_clear() {
+        let registry = ElementRegistry::new();
+        let node_id = LayoutNodeId::default();
+
+        registry.register("my-element", node_id);
+        registry.mark_on_ready_triggered("my-element");
+
+        // Clear the registry (simulates tree rebuild)
+        registry.clear();
+
+        // Triggered state should survive
+        assert!(registry.is_on_ready_triggered("my-element"));
+
+        // New callback registration should be skipped
+        registry.register_on_ready_for_id("my-element", Arc::new(|_| {}));
+        assert!(!registry.has_pending_on_ready());
     }
 }

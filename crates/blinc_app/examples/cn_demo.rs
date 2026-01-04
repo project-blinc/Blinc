@@ -795,7 +795,7 @@ fn progress_section(ctx: &WindowedContext, _scroll_ref: &ScrollRef) -> impl Elem
     // Clone for reset button
     let progress_for_reset = animated_progress.clone();
 
-    section_container().child(section_title("Progress")).child(
+    let section = section_container().child(section_title("Progress")).child(
         div()
             .flex_col()
             .gap(20.0)
@@ -865,14 +865,18 @@ fn progress_section(ctx: &WindowedContext, _scroll_ref: &ScrollRef) -> impl Elem
                             }),
                     ),
             )
-            // on_ready fires once after element is laid out (with built-in 500ms delay)
-            .on_ready(move |_| {
-                if let Ok(mut value) = progress_for_ready.lock() {
-                    value.set_target(PROGRESS_WIDTH * 0.75);
-                    tracing::info!("on_ready: animation triggered to 75%");
-                }
-            }),
-    )
+            .id("progress-section"),
+    );
+
+    // Register on_ready callback (fires once with stable ID tracking)
+    ctx.query("progress-section").on_ready(move |_| {
+        if let Ok(mut value) = progress_for_ready.lock() {
+            value.set_target(PROGRESS_WIDTH * 0.75);
+            tracing::info!("on_ready: animation triggered to 75%");
+        }
+    });
+
+    section
 }
 
 // ============================================================================

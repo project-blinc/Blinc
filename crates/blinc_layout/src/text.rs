@@ -72,8 +72,6 @@ pub struct Text {
     underline: bool,
     /// Cursor style when hovering over this text (default: Text cursor)
     cursor: Option<crate::element::CursorStyle>,
-    /// Callback invoked when element is first laid out
-    on_ready: Option<crate::renderer::OnReadyCallback>,
 }
 
 impl Text {
@@ -109,7 +107,6 @@ impl Text {
             strikethrough: false,
             underline: false,
             cursor: Some(crate::element::CursorStyle::Text), // Text cursor by default
-            on_ready: None,
         };
         text.update_size_estimate();
         text
@@ -543,19 +540,6 @@ impl Text {
         self.line_height = multiplier;
         self
     }
-
-    /// Register a callback to be invoked when this element is first laid out
-    ///
-    /// The callback receives the element's computed bounds after layout.
-    /// This is useful for triggering animations or setup that depends on
-    /// the element being fully rendered.
-    pub fn on_ready<F>(mut self, callback: F) -> Self
-    where
-        F: Fn(crate::element::ElementBounds) + Send + Sync + 'static,
-    {
-        self.on_ready = Some(std::sync::Arc::new(callback));
-        self
-    }
 }
 
 impl ElementBuilder for Text {
@@ -614,10 +598,6 @@ impl ElementBuilder for Text {
 
     fn layout_style(&self) -> Option<&taffy::Style> {
         Some(&self.style)
-    }
-
-    fn on_ready_callback(&self) -> Option<crate::renderer::OnReadyCallback> {
-        self.on_ready.clone()
     }
 }
 

@@ -51,6 +51,18 @@ fn my_component() -> impl ElementBuilder {
 
 ### Toggling Color Scheme
 
+> ⚠️ **Known Limitation: Dynamic Theme Toggle**
+>
+> Dynamic theme switching at runtime (e.g., toggling between light/dark mode while the app is running) currently has significant limitations:
+>
+> - **Full UI rebuild required**: Theme changes trigger a complete UI tree rebuild, which is expensive and can cause visual glitches
+> - **`on_ready` callbacks fire multiple times**: During theme animation, `on_ready` may fire repeatedly instead of once
+> - **Animation ticks cause rebuilds**: Each frame of the theme transition animation triggers another rebuild
+>
+> **Recommendation**: For production apps, set the theme once at startup based on user preference or system settings. Theme changes should require an app restart.
+>
+> This limitation will be addressed in a future release with token-based color resolution that allows visual-only repaints without tree rebuilds.
+
 ```rust
 // Toggle between light and dark mode
 ThemeState::get().toggle_scheme();
@@ -196,6 +208,10 @@ div().rounded(theme.radii().radius_full) // Pill shape
 
 ## Animated Theme Transitions
 
+> ⚠️ **Experimental Feature**
+>
+> Animated theme transitions are currently experimental and have known issues. See the [Known Limitation](#toggling-color-scheme) above. For production use, disable animations and require app restart for theme changes.
+
 When switching between light and dark mode, colors smoothly animate using spring physics. This happens automatically when you call `toggle_scheme()` or `set_scheme()`.
 
 ### How It Works
@@ -203,7 +219,7 @@ When switching between light and dark mode, colors smoothly animate using spring
 1. Theme colors are stored as `AnimatedValue` in the global `ThemeState`
 2. When the scheme changes, target colors animate from current to new values
 3. The animation scheduler drives smooth interpolation
-4. UI rebuilds on each frame with interpolated colors
+4. UI rebuilds on each frame with interpolated colors (⚠️ this is the source of current performance issues)
 
 ### Configuration
 
@@ -322,6 +338,10 @@ The `WindowedApp` automatically initializes the theme with system color scheme d
 ---
 
 ## System Scheme Watcher (Optional)
+
+> ⚠️ **Not Recommended for Production**
+>
+> Due to the [dynamic theme toggle limitations](#toggling-color-scheme), the system scheme watcher is not recommended for production apps. When the system theme changes, it triggers the same problematic full UI rebuild. Consider detecting the system scheme once at startup instead.
 
 For apps that need to automatically follow system theme changes (e.g., when the user toggles dark mode in system settings), Blinc provides an optional background watcher.
 

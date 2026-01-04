@@ -225,8 +225,6 @@ pub struct Image {
     placeholder: Placeholder,
     /// Fade-in duration when image loads (for lazy loading)
     fade_duration: Duration,
-    /// Callback invoked when element is first laid out
-    on_ready: Option<crate::renderer::OnReadyCallback>,
 }
 
 impl Image {
@@ -260,7 +258,6 @@ impl Image {
             loading: LoadingStrategy::default(),
             placeholder: Placeholder::default(),
             fade_duration: Duration::from_millis(200),
-            on_ready: None,
         }
     }
 
@@ -754,19 +751,6 @@ impl Image {
     pub fn height(&self) -> f32 {
         self.height
     }
-
-    /// Register a callback to be invoked when this element is first laid out
-    ///
-    /// The callback receives the element's computed bounds after layout.
-    /// This is useful for triggering animations or setup that depends on
-    /// the element being fully rendered.
-    pub fn on_ready<F>(mut self, callback: F) -> Self
-    where
-        F: Fn(crate::element::ElementBounds) + Send + Sync + 'static,
-    {
-        self.on_ready = Some(std::sync::Arc::new(callback));
-        self
-    }
 }
 
 impl ElementBuilder for Image {
@@ -851,10 +835,6 @@ impl ElementBuilder for Image {
 
     fn layout_style(&self) -> Option<&taffy::Style> {
         Some(&self.style)
-    }
-
-    fn on_ready_callback(&self) -> Option<crate::renderer::OnReadyCallback> {
-        self.on_ready.clone()
     }
 }
 

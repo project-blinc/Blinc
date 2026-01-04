@@ -359,8 +359,8 @@ pub struct RenderTree {
     /// Maps inner pointer -> ScrollRef for persistence across rebuilds
     active_scroll_refs: Vec<ScrollRef>,
     /// On-ready callbacks for elements (fires once after first layout)
-    /// Maps node_id to callback entry. Callbacks are triggered after layout computation.
-    on_ready_callbacks: HashMap<LayoutNodeId, OnReadyEntry>,
+    /// Maps string_id to callback entry for stable tracking across rebuilds.
+    on_ready_callbacks: HashMap<String, OnReadyEntry>,
     /// Optional stylesheet for automatic state modifier application
     /// When set, elements with IDs will automatically get :hover, :active, :focus, :disabled styles
     stylesheet: Option<Arc<Stylesheet>>,
@@ -884,9 +884,6 @@ impl RenderTree {
         // Register layout bounds storage if element wants bounds updates
         self.register_element_bounds_storage(node_id, element);
 
-        // Register on_ready callback if element has one
-        self.register_element_on_ready(node_id, element);
-
         // Recursively update children
         let child_node_ids = self.layout_tree.children(node_id);
         let child_builders = element.children_builders();
@@ -964,9 +961,6 @@ impl RenderTree {
 
         // Register layout bounds storage if element wants bounds updates
         self.register_element_bounds_storage(node_id, element);
-
-        // Register on_ready callback if element has one
-        self.register_element_on_ready(node_id, element);
 
         let child_node_ids = self.layout_tree.children(node_id);
         let child_builders = element.children_builders();
@@ -1072,9 +1066,6 @@ impl RenderTree {
 
         // Register layout bounds storage if element wants bounds updates
         self.register_element_bounds_storage(node_id, element);
-
-        // Register on_ready callback if element has one
-        self.register_element_on_ready(node_id, element);
 
         // Register element ID if present (for selector API)
         if let Some(id) = element.element_id() {
@@ -1259,9 +1250,6 @@ impl RenderTree {
 
         // Register layout bounds storage if element wants bounds updates
         self.register_element_bounds_storage(node_id, element);
-
-        // Register on_ready callback if element has one
-        self.register_element_on_ready(node_id, element);
 
         // Register element ID if present (for selector API)
         if let Some(id) = element.element_id() {
@@ -1477,9 +1465,6 @@ impl RenderTree {
 
         // Register layout bounds storage if element wants bounds updates
         self.register_element_bounds_storage(node_id, element);
-
-        // Register on_ready callback if element has one
-        self.register_element_on_ready(node_id, element);
 
         // Register element ID if present (for selector API)
         if let Some(id) = element.element_id() {
@@ -1827,59 +1812,27 @@ impl RenderTree {
     // On-Ready Callbacks
     // =========================================================================
 
-    /// Register an on_ready callback for a node
-    ///
-    /// The callback will be invoked once after the element's first successful
-    /// layout computation. It receives the element's computed bounds.
-    ///
-    /// This is useful for triggering animations or other setup that depends
-    /// on the element being fully rendered and laid out.
-    pub fn register_on_ready_callback(&mut self, node_id: LayoutNodeId, callback: OnReadyCallback) {
-        self.on_ready_callbacks.insert(
-            node_id,
-            OnReadyEntry {
-                callback,
-                triggered: false,
-            },
-        );
-    }
-
-    /// Register on_ready callback from an element builder
-    ///
-    /// This helper checks on_ready_callback() from the ElementBuilder trait
-    /// and registers it if present.
-    fn register_element_on_ready(&mut self, node_id: LayoutNodeId, element: &dyn ElementBuilder) {
-        if let Some(callback) = element.on_ready_callback() {
-            self.on_ready_callbacks.insert(
-                node_id,
-                OnReadyEntry {
-                    callback,
-                    triggered: false,
-                },
-            );
-        }
-    }
-
     /// Process all pending on_ready callbacks
     ///
     /// This is called after layout computation. Each callback is invoked with
     /// the element's computed bounds, then marked as triggered so it won't
     /// fire again on subsequent layouts.
     ///
-    /// This method also picks up any pending callbacks registered via the query
-    /// API (ElementHandle.on_ready()) from the ElementRegistry.
+    /// Callbacks registered via the query API (ElementHandle.on_ready()) are
+    /// tracked by string ID for stability across tree rebuilds.
     ///
-    /// Callbacks are invoked after a short delay (500ms) to allow the window
+    /// Callbacks are invoked after a short delay (200ms) to allow the window
     /// to finish resizing/animating on platforms like macOS where fullscreen
     /// transitions cause rapid resize events.
     fn process_on_ready_callbacks(&mut self) {
-        // First, pick up any pending callbacks from the registry (via query API)
+        // Pick up any pending callbacks from the registry (via query API)
+        // These are already keyed by string ID for stable tracking
         let pending_from_registry = self.element_registry.take_pending_on_ready();
-        for (node_id, callback) in pending_from_registry {
+        for (string_id, callback) in pending_from_registry {
             // Only add if not already registered (avoid duplicates)
-            if !self.on_ready_callbacks.contains_key(&node_id) {
+            if !self.on_ready_callbacks.contains_key(&string_id) {
                 self.on_ready_callbacks.insert(
-                    node_id,
+                    string_id,
                     OnReadyEntry {
                         callback,
                         triggered: false,
@@ -1888,23 +1841,30 @@ impl RenderTree {
             }
         }
 
-        // Collect node_ids that need callback invocation
-        let to_trigger: Vec<(LayoutNodeId, OnReadyCallback, ElementBounds)> = self
+        // Collect callbacks that need invocation
+        // Look up node_id from string_id via registry for bounds lookup
+        let registry = self.element_registry.clone();
+        let to_trigger: Vec<(String, OnReadyCallback, ElementBounds)> = self
             .on_ready_callbacks
             .iter()
             .filter(|(_, entry)| !entry.triggered)
-            .filter_map(|(&node_id, entry)| {
+            .filter_map(|(string_id, entry)| {
+                // Look up node_id from string_id
+                let node_id = registry.get(string_id)?;
+
                 self.layout_tree
                     .get_bounds(node_id, (0.0, 0.0))
-                    .map(|bounds| (node_id, entry.callback.clone(), bounds))
+                    .map(|bounds| (string_id.clone(), entry.callback.clone(), bounds))
             })
             .collect();
 
         // Mark as triggered before invoking (in case callback triggers rebuild)
-        for (node_id, _, _) in &to_trigger {
-            if let Some(entry) = self.on_ready_callbacks.get_mut(node_id) {
+        // Also mark in the registry for cross-rebuild deduplication
+        for (string_id, _, _) in &to_trigger {
+            if let Some(entry) = self.on_ready_callbacks.get_mut(string_id) {
                 entry.triggered = true;
             }
+            self.element_registry.mark_on_ready_triggered(string_id);
         }
 
         // Invoke callbacks with bounds after a delay
@@ -1915,8 +1875,8 @@ impl RenderTree {
                 // Magic delay to let the window settle
                 std::thread::sleep(std::time::Duration::from_millis(200));
 
-                for (node_id, callback, bounds) in to_trigger {
-                    tracing::trace!("on_ready callback invoked for node {:?}", node_id);
+                for (string_id, callback, bounds) in to_trigger {
+                    tracing::trace!("on_ready callback invoked for '{}'", string_id);
                     callback(bounds);
                 }
             });

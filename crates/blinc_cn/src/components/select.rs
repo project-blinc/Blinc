@@ -593,10 +593,14 @@ fn build_dropdown_content(
     text_tertiary: blinc_core::Color,
     surface_elevated: blinc_core::Color,
 ) -> Div {
-    // Clone handle state for on_ready callback
-    let handle_state_for_ready = overlay_handle_state.clone();
+    // Generate a unique ID for the dropdown based on overlay handle
+    let dropdown_id = overlay_handle_state
+        .get()
+        .map(|h| format!("select-dropdown-{}", h))
+        .unwrap_or_else(|| "select-dropdown-temp".to_string());
 
     let mut dropdown_div = div()
+        .id(dropdown_id)
         .flex_col()
         .w(width)
         .bg(bg)
@@ -604,18 +608,10 @@ fn build_dropdown_content(
         .rounded(radius)
         .shadow_lg()
         .overflow_clip()
-        .h_fit()
-        .on_ready(move |bounds| {
-            // Report actual content size to overlay manager for accurate hit testing
-            if let Some(handle_id) = handle_state_for_ready.get() {
-                let mgr = get_overlay_manager();
-                mgr.set_content_size(
-                    OverlayHandle::from_raw(handle_id),
-                    bounds.width,
-                    bounds.height,
-                );
-            }
-        });
+        .h_fit();
+
+    // Note: on_ready callback removed - overlay manager now uses initial size estimation
+    // If accurate sizing is needed, register via ctx.query("select-dropdown-{handle}").on_ready(...)
 
     for opt in options {
         let opt_value = opt.value.clone();

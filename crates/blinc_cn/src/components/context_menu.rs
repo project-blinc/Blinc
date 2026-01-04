@@ -396,9 +396,14 @@ fn build_menu_content(
     font_size: f32,
     padding: f32,
 ) -> Div {
-    let handle_state_for_ready = overlay_handle_state.clone();
+    // Generate a unique ID for the menu based on overlay handle
+    let menu_id = overlay_handle_state
+        .get()
+        .map(|h| format!("context-menu-{}", h))
+        .unwrap_or_else(|| "context-menu-temp".to_string());
 
     let mut menu = div()
+        .id(menu_id)
         .flex_col()
         .w(width)
         .bg(bg)
@@ -406,18 +411,10 @@ fn build_menu_content(
         .rounded(radius)
         .shadow_lg()
         .overflow_clip()
-        .h_fit()
-        .on_ready(move |bounds| {
-            // Report actual content size to overlay manager
-            if let Some(handle_id) = handle_state_for_ready.get() {
-                let mgr = get_overlay_manager();
-                mgr.set_content_size(
-                    OverlayHandle::from_raw(handle_id),
-                    bounds.width,
-                    bounds.height,
-                );
-            }
-        });
+        .h_fit();
+
+    // Note: on_ready callback removed - overlay manager now uses initial size estimation
+    // If accurate sizing is needed, register via ctx.query("context-menu-{handle}").on_ready(...)
 
     for (idx, item) in items.iter().enumerate() {
         if item.is_separator {

@@ -243,9 +243,13 @@ impl WindowedContext {
     /// ```
     /// Register a callback to run once when the UI is ready (context-level).
     ///
-    /// **Note:** For element-specific callbacks, prefer using `.on_ready()` on
-    /// individual elements (like `div().on_ready(|| ...)`), which ties the
-    /// callback to that element's layout node.
+    /// **Note:** For element-specific callbacks, prefer using the query API:
+    /// ```ignore
+    /// ctx.query_element("my-element").on_ready(|bounds| {
+    ///     // Triggered once after element is laid out
+    /// });
+    /// ```
+    /// The query-based approach uses stable string IDs that survive tree rebuilds.
     ///
     /// This context-level callback runs after the first rebuild completes.
     /// If called after the UI is already ready, executes immediately.
@@ -688,24 +692,36 @@ impl WindowedContext {
     // Query API
     // =========================================================================
 
-    /// Query an element by ID
+    /// Query an element by ID and get an ElementHandle for programmatic manipulation
     ///
-    /// Returns the node ID if an element with the given ID exists. Elements are
-    /// assigned IDs using the `.id("my-id")` builder method.
+    /// Returns an `ElementHandle` for interacting with the element. The handle
+    /// provides methods like `scroll_into_view()`, `focus()`, `click()`, `on_ready()`,
+    /// and tree traversal.
+    ///
+    /// The handle works even if the element doesn't exist yet - operations like
+    /// `on_ready()` will queue until the element is laid out. Use `handle.exists()`
+    /// to check if the element currently exists.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// // In UI builder:
-    /// div().id("my-element").child(...)
+    /// // Register on_ready callback (works before element exists):
+    /// ctx.query("progress-bar").on_ready(|bounds| {
+    ///     progress_anim.lock().unwrap().set_target(bounds.width * 0.75);
+    /// });
     ///
-    /// // Later:
-    /// if let Some(node_id) = ctx.query("my-element") {
-    ///     // Element exists
+    /// // In UI builder:
+    /// div().id("progress-bar").child(...)
+    ///
+    /// // Later, interact with existing element:
+    /// let handle = ctx.query("my-element");
+    /// if handle.exists() {
+    ///     handle.scroll_into_view();
+    ///     handle.focus();
     /// }
     /// ```
-    pub fn query(&self, id: &str) -> Option<blinc_layout::LayoutNodeId> {
-        self.element_registry.get(id)
+    pub fn query(&self, id: &str) -> blinc_layout::selector::ElementHandle<()> {
+        blinc_layout::selector::ElementHandle::new(id, self.element_registry.clone())
     }
 
     /// Get the shared element registry
