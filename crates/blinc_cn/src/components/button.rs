@@ -352,6 +352,10 @@ impl Button {
                     merge_div = merge_div.border(1.0, border_color);
                 }
 
+                if variant != ButtonVariant::Link && variant != ButtonVariant::Ghost {
+                    merge_div = merge_div.shadow_md();
+                }
+
                 container.merge(merge_div);
             })
             .child(content);
@@ -369,6 +373,10 @@ impl Button {
         // If disabled, set initial state to Disabled
         if disabled {
             stateful.set_state(ButtonState::Disabled);
+        }
+
+        if variant != ButtonVariant::Link && variant != ButtonVariant::Ghost {
+            stateful = stateful.shadow_md();
         }
 
         // Wrap in a div for consistent ElementBuilder behavior
