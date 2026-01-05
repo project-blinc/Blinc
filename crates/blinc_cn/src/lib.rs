@@ -53,6 +53,7 @@ pub mod cn {
     pub use crate::components::button::button;
     pub use crate::components::card::{card, card_content, card_footer, card_header};
     pub use crate::components::checkbox::checkbox;
+    pub use crate::components::combobox::combobox;
     pub use crate::components::context_menu::context_menu;
     pub use crate::components::dialog::{alert_dialog, dialog};
     pub use crate::components::dropdown_menu::{dropdown_menu, dropdown_menu_custom};

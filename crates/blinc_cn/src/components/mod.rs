@@ -12,6 +12,7 @@ pub mod badge;
 pub mod button;
 pub mod card;
 pub mod checkbox;
+pub mod combobox;
 pub mod context_menu;
 pub mod dialog;
 pub mod dropdown_menu;
@@ -39,6 +40,7 @@ pub use card::{
     card, card_content, card_footer, card_header, Card, CardContent, CardFooter, CardHeader,
 };
 pub use checkbox::{checkbox, Checkbox, CheckboxSize};
+pub use combobox::{combobox, Combobox, ComboboxBuilder, ComboboxOption, ComboboxSize};
 pub use context_menu::{context_menu, ContextMenuBuilder, ContextMenuItem, SubmenuBuilder};
 pub use dialog::{alert_dialog, dialog, AlertDialogBuilder, DialogBuilder, DialogSize};
 pub use dropdown_menu::{

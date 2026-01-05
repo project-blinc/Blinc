@@ -400,6 +400,8 @@ pub struct TextInputData {
     pub layout_bounds_storage: crate::renderer::LayoutBoundsStorage,
     /// Reference to the Stateful's shared state for triggering incremental updates
     pub(crate) stateful_state: Option<SharedState<TextFieldState>>,
+    /// Callback invoked when text value changes
+    pub(crate) on_change_callback: Option<OnChangeCallback>,
 }
 
 impl std::fmt::Debug for TextInputData {
@@ -446,6 +448,7 @@ impl TextInputData {
             computed_width: None,
             layout_bounds_storage: Arc::new(Mutex::new(None)),
             stateful_state: None,
+            on_change_callback: None,
         }
     }
 
@@ -870,6 +873,9 @@ impl Default for TextInputConfig {
 // TextInput Widget
 // =============================================================================
 
+/// Callback type for on_change events
+pub type OnChangeCallback = Arc<dyn Fn(&str) + Send + Sync>;
+
 /// TextInput widget using FSM-driven Stateful for incremental updates
 pub struct TextInput {
     inner: Stateful<TextFieldState>,
@@ -877,6 +883,8 @@ pub struct TextInput {
     config: Arc<Mutex<TextInputConfig>>,
     /// Reference to the Stateful's shared state for wiring up to TextInputData
     stateful_state: SharedState<TextFieldState>,
+    /// Callback invoked when text value changes
+    on_change_callback: Option<OnChangeCallback>,
 }
 
 impl TextInput {
@@ -995,13 +1003,15 @@ impl TextInput {
                     // Apply visual styling directly to the container (preserves fixed dimensions)
                     // This is the key fix: use set_* methods instead of merge() to avoid
                     // overwriting layout properties like width set on the outer Stateful
-                    container.set_bg(bg);
-                    container.set_border(cfg.border_width, border_color);
-                    container.set_rounded(cfg.corner_radius);
+                    let inner = div()
+                        .w_full()
+                        .bg(bg)
+                        .border(cfg.border_width, border_color)
+                        .rounded(cfg.corner_radius);
 
                     // Build and set content as a child (not merge)
                     let content = TextInput::build_content(*visual, &data_guard, &cfg);
-                    container.set_child(content);
+                    container.merge(inner.child(content));
                 },
             ));
 
@@ -1017,6 +1027,7 @@ impl TextInput {
             data,
             config,
             stateful_state,
+            on_change_callback: None,
         }
     }
 
@@ -1037,6 +1048,7 @@ impl TextInput {
         let stateful_for_key = Arc::clone(&stateful_state);
 
         Stateful::with_shared_state(stateful_state)
+            .w_full()
             // Handle mouse down to focus and position cursor
             .on_mouse_down(move |ctx| {
                 let needs_refresh = {
@@ -1104,7 +1116,7 @@ impl TextInput {
             })
             // Handle text input
             .on_event(event_types::TEXT_INPUT, move |ctx| {
-                let needs_refresh = {
+                let (needs_refresh, callback_info) = {
                     let mut d = match data_for_text.lock() {
                         Ok(d) => d,
                         Err(_) => return,
@@ -1118,9 +1130,14 @@ impl TextInput {
                         d.insert(&c.to_string());
                         d.reset_cursor_blink();
                         tracing::debug!("TextInput received char: {:?}, value: {}", c, d.value);
-                        true
+                        // Extract callback and value for calling after lock release
+                        let cb_info = d
+                            .on_change_callback
+                            .as_ref()
+                            .map(|cb| (Arc::clone(cb), d.value.clone()));
+                        (true, cb_info)
                     } else {
-                        false
+                        (false, None)
                     }
                 }; // Lock released here
 
@@ -1128,10 +1145,15 @@ impl TextInput {
                 if needs_refresh {
                     refresh_stateful(&stateful_for_text);
                 }
+
+                // Call on_change callback after lock is released
+                if let Some((callback, new_value)) = callback_info {
+                    callback(&new_value);
+                }
             })
             // Handle key down for navigation and deletion
             .on_key_down(move |ctx| {
-                let needs_refresh = {
+                let (needs_refresh, callback_info) = {
                     let mut d = match data_for_key.lock() {
                         Ok(d) => d,
                         Err(_) => return,
@@ -1143,13 +1165,20 @@ impl TextInput {
 
                     let mut changed = true;
                     let mut should_blur = false;
+                    let mut value_changed = false; // Track if text content actually changed
                     match ctx.key_code {
-                        8 => d.delete_backward(),                     // Backspace
-                        127 => d.delete_forward(),                    // Delete
-                        37 => d.move_left(ctx.shift),                 // Left arrow
-                        39 => d.move_right(ctx.shift),                // Right arrow
-                        36 => d.move_to_start(ctx.shift),             // Home
-                        35 => d.move_to_end(ctx.shift),               // End
+                        8 => {
+                            d.delete_backward(); // Backspace
+                            value_changed = true;
+                        }
+                        127 => {
+                            d.delete_forward(); // Delete
+                            value_changed = true;
+                        }
+                        37 => d.move_left(ctx.shift),     // Left arrow
+                        39 => d.move_right(ctx.shift),    // Right arrow
+                        36 => d.move_to_start(ctx.shift), // Home
+                        35 => d.move_to_end(ctx.shift),   // End
                         65 if ctx.meta || ctx.ctrl => d.select_all(), // Ctrl/Cmd+A
                         27 => {
                             // Escape - blur the input
@@ -1164,7 +1193,16 @@ impl TextInput {
                         d.sync_global_selection();
                     }
 
-                    (changed, should_blur)
+                    // Extract callback info if value changed
+                    let cb_info = if value_changed {
+                        d.on_change_callback
+                            .as_ref()
+                            .map(|cb| (Arc::clone(cb), d.value.clone()))
+                    } else {
+                        None
+                    };
+
+                    ((changed, should_blur), cb_info)
                 }; // Lock released here
 
                 // Handle blur (Escape key)
@@ -1173,6 +1211,11 @@ impl TextInput {
                 } else if needs_refresh.0 {
                     // Trigger incremental refresh AFTER releasing the data lock
                     refresh_stateful(&stateful_for_key);
+                }
+
+                // Call on_change callback after lock is released
+                if let Some((callback, new_value)) = callback_info {
+                    callback(&new_value);
                 }
             })
             // Set text cursor (I-beam) for text input
@@ -1601,6 +1644,32 @@ impl TextInput {
     /// Set the selection highlight color
     pub fn selection_color(self, color: Color) -> Self {
         self.config.lock().unwrap().selection_color = color;
+        self
+    }
+
+    /// Set the callback to be invoked when the text value changes
+    ///
+    /// The callback receives the new text value as a string slice.
+    /// This is called after insert or delete operations modify the text.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// text_input(&data)
+    ///     .on_change(|new_value| {
+    ///         println!("Text changed to: {}", new_value);
+    ///     })
+    /// ```
+    pub fn on_change<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(&str) + Send + Sync + 'static,
+    {
+        let cb: OnChangeCallback = Arc::new(callback);
+        self.on_change_callback = Some(Arc::clone(&cb));
+        // Store in TextInputData so it can be accessed in event handlers
+        if let Ok(mut d) = self.data.lock() {
+            d.on_change_callback = Some(cb);
+        }
         self
     }
 }

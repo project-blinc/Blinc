@@ -66,6 +66,7 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                         .child(slider_section(ctx))
                         .child(radio_section(ctx))
                         .child(select_section(ctx))
+                        .child(combobox_section(ctx))
                         .child(context_menu_section())
                         .child(dropdown_menu_section())
                         .child(dialog_section(ctx))
@@ -499,6 +500,69 @@ fn select_section(ctx: &WindowedContext) -> impl ElementBuilder {
                         .option("option1", "Option 1")
                         .option("option2", "Option 2")
                         .disabled(true),
+                ),
+            ),
+    )
+}
+
+// ============================================================================
+// COMBOBOX SECTION
+// ============================================================================
+
+fn combobox_section(ctx: &WindowedContext) -> impl ElementBuilder {
+    let country = ctx.use_state_keyed("country_combobox", || "".to_string());
+    let framework = ctx.use_state_keyed("framework_combobox", || "".to_string());
+    let custom_value = ctx.use_state_keyed("custom_combobox", || "".to_string());
+
+    section_container().child(section_title("Combobox")).child(
+        div()
+            .flex_row()
+            .flex_wrap()
+            .gap(24.0)
+            // Basic searchable combobox
+            .child(
+                div().w(220.0).child(
+                    cn::combobox(&country)
+                        .label("Country")
+                        .placeholder("Search countries...")
+                        .option("us", "United States")
+                        .option("uk", "United Kingdom")
+                        .option("de", "Germany")
+                        .option("fr", "France")
+                        .option("jp", "Japan")
+                        .option("au", "Australia")
+                        .option("ca", "Canada")
+                        .option("br", "Brazil")
+                        .on_change(|v| tracing::info!("Selected country: {}", v)),
+                ),
+            )
+            // Combobox with more options
+            .child(
+                div().w(220.0).child(
+                    cn::combobox(&framework)
+                        .label("Framework")
+                        .placeholder("Search frameworks...")
+                        .option("react", "React")
+                        .option("vue", "Vue.js")
+                        .option("angular", "Angular")
+                        .option("svelte", "Svelte")
+                        .option("solid", "SolidJS")
+                        .option("qwik", "Qwik")
+                        .option("astro", "Astro")
+                        .on_change(|v| tracing::info!("Selected framework: {}", v)),
+                ),
+            )
+            // Combobox with custom values allowed
+            .child(
+                div().w(220.0).child(
+                    cn::combobox(&custom_value)
+                        .label("Custom Allowed")
+                        .placeholder("Type anything...")
+                        .option("preset1", "Preset Option 1")
+                        .option("preset2", "Preset Option 2")
+                        .option("preset3", "Preset Option 3")
+                        .allow_custom(true)
+                        .on_change(|v| tracing::info!("Custom value: {}", v)),
                 ),
             ),
     )

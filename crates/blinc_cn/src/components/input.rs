@@ -41,10 +41,14 @@
 //!     .placeholder_color(Color::rgba(0.5, 0.5, 0.5, 1.0))
 //! ```
 
+use std::sync::Arc;
+
 use blinc_core::Color;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::prelude::*;
-use blinc_layout::widgets::text_input::{InputType, SharedTextInputData, TextInput};
+use blinc_layout::widgets::text_input::{
+    InputType, OnChangeCallback, SharedTextInputData, TextInput,
+};
 use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState, TypographyTokens};
 use std::ops::{Deref, DerefMut};
 
@@ -265,6 +269,14 @@ impl Input {
             input = input.w(w);
         }
 
+        // Apply on_change callback
+        if let Some(ref callback) = config.on_change {
+            input = input.on_change({
+                let cb = Arc::clone(callback);
+                move |value: &str| cb(value)
+            });
+        }
+
         input
     }
 }
@@ -324,6 +336,7 @@ struct InputConfig {
     selection_color: Option<Color>,
     border_width: Option<f32>,
     corner_radius: Option<f32>,
+    on_change: Option<OnChangeCallback>,
 }
 
 impl Default for InputConfig {
@@ -349,6 +362,7 @@ impl Default for InputConfig {
             selection_color: None,
             border_width: None,
             corner_radius: None,
+            on_change: None,
         }
     }
 }
@@ -564,6 +578,27 @@ impl InputBuilder {
     /// Set the corner radius (overrides size-based radius)
     pub fn rounded(mut self, radius: f32) -> Self {
         self.config.corner_radius = Some(radius);
+        self
+    }
+
+    /// Set the callback to be invoked when the text value changes
+    ///
+    /// The callback receives the new text value as a string slice.
+    /// This is called after insert or delete operations modify the text.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// cn::input(&data)
+    ///     .on_change(|new_value| {
+    ///         println!("Text changed to: {}", new_value);
+    ///     })
+    /// ```
+    pub fn on_change<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(&str) + Send + Sync + 'static,
+    {
+        self.config.on_change = Some(Arc::new(callback));
         self
     }
 
