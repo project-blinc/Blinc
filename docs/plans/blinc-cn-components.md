@@ -81,7 +81,7 @@ Modal and overlay components.
 | **Dialog** | overlay, motion | ✅ Done |
 | **Sheet** | overlay, motion | Planned |
 | **Drawer** | overlay, motion | Planned |
-| **Dropdown Menu** | overlay, scroll | Planned |
+| **Dropdown Menu** | overlay, scroll | ✅ Done |
 | **Context Menu** | overlay, scroll | ✅ Done |
 | **Menubar** | div, overlay | Planned |
 | **Hover Card** | overlay, motion | Planned |
@@ -92,7 +92,7 @@ Navigation components.
 
 | Component | Primitives Used | Status |
 |-----------|-----------------|--------|
-| **Tabs** | Stateful, div, text | Planned |
+| **Tabs** | Stateful, div, text | ✅ Done |
 | **Breadcrumb** | div, link | Planned |
 | **Pagination** | div, button | Planned |
 | **Navigation Menu** | div, overlay | Planned |
