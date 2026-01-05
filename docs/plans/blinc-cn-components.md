@@ -44,7 +44,7 @@ Form inputs and controls.
 | **Switch** | Stateful, motion | ✅ Done |
 | **Slider** | Stateful, div | ✅ Done |
 | **Select** | Stateful, div, scroll | ✅ Done |
-| **Combobox** | text_input, scroll, overlay | Planned |
+| **Combobox** | text_input, scroll, overlay | ✅ Done |
 | **Form** | div, validation | Planned |
 | **Field** | div, label, input, error | Planned |
 
@@ -68,7 +68,7 @@ User feedback components.
 | Component | Primitives Used | Status |
 |-----------|-----------------|--------|
 | **Alert** | div, text, icon | Planned |
-| **Toast** | overlay, motion | Planned |
+| **Toast** | overlay, motion | ✅ Done |
 | **Tooltip** | overlay, motion | Planned |
 | **Popover** | overlay | Planned |
 
