@@ -281,7 +281,6 @@ impl DialogBuilder {
                     show_cancel,
                     &enter_animation,
                     &exit_animation,
-                  
                 )
             })
             .show()
@@ -403,7 +402,7 @@ fn build_dialog_content(
     confirm_destructive: bool,
     show_cancel: bool,
     enter_animation: &MultiKeyframeAnimation,
-    exit_animation: &MultiKeyframeAnimation
+    exit_animation: &MultiKeyframeAnimation,
 ) -> Div {
     // Use theme spacing tokens via helper methods (.p_6(), .gap_2(), .m_4(), etc.)
     let theme = ThemeState::get();
@@ -515,7 +514,8 @@ fn build_dialog_content(
         motion()
             .enter_animation(enter_animation.clone())
             .exit_animation(exit_animation.clone())
-            .child(dialog).replay(),
+            .child(dialog)
+            .replay(),
     )
 }
 

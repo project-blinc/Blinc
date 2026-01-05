@@ -70,6 +70,8 @@ pub struct Text {
     strikethrough: bool,
     /// Whether text has underline decoration
     underline: bool,
+    /// Whether this element is transparent to hit-testing
+    pointer_events_none: bool,
     /// Cursor style when hovering over this text (default: Text cursor)
     cursor: Option<crate::element::CursorStyle>,
 }
@@ -106,6 +108,7 @@ impl Text {
             ascender: 14.0 * 0.8, // will be set by update_size_estimate
             strikethrough: false,
             underline: false,
+            pointer_events_none: false,
             cursor: Some(crate::element::CursorStyle::Text), // Text cursor by default
         };
         text.update_size_estimate();
@@ -292,6 +295,12 @@ impl Text {
     /// Remove cursor style (use default cursor from parent or window)
     pub fn no_cursor(mut self) -> Self {
         self.cursor = None;
+        self
+    }
+
+    /// Make this element transparent to hit-testing (pointer-events: none)
+    pub fn pointer_events_none(mut self) -> Self {
+        self.pointer_events_none = true;
         self
     }
 
@@ -565,6 +574,7 @@ impl ElementBuilder for Text {
             motion_stable_id: None,
             motion_should_replay: false,
             is_stack_layer: false,
+            pointer_events_none: self.pointer_events_none,
             cursor: self.cursor,
         }
     }

@@ -351,13 +351,13 @@ impl RenderState {
             for (key, motion) in &self.stable_motions {
                 let state = match &motion.state {
                     MotionState::Waiting { .. } => MotionAnimationState::Waiting,
-                    MotionState::Entering { progress, .. } => {
-                        MotionAnimationState::Entering { progress: *progress }
-                    }
+                    MotionState::Entering { progress, .. } => MotionAnimationState::Entering {
+                        progress: *progress,
+                    },
                     MotionState::Visible => MotionAnimationState::Visible,
-                    MotionState::Exiting { progress, .. } => {
-                        MotionAnimationState::Exiting { progress: *progress }
-                    }
+                    MotionState::Exiting { progress, .. } => MotionAnimationState::Exiting {
+                        progress: *progress,
+                    },
                     MotionState::Removed => MotionAnimationState::Removed,
                 };
                 states.insert(key.clone(), state);
@@ -1111,13 +1111,13 @@ impl RenderState {
         match self.stable_motions.get(key) {
             Some(motion) => match &motion.state {
                 MotionState::Waiting { .. } => MotionAnimationState::Waiting,
-                MotionState::Entering { progress, .. } => {
-                    MotionAnimationState::Entering { progress: *progress }
-                }
+                MotionState::Entering { progress, .. } => MotionAnimationState::Entering {
+                    progress: *progress,
+                },
                 MotionState::Visible => MotionAnimationState::Visible,
-                MotionState::Exiting { progress, .. } => {
-                    MotionAnimationState::Exiting { progress: *progress }
-                }
+                MotionState::Exiting { progress, .. } => MotionAnimationState::Exiting {
+                    progress: *progress,
+                },
                 MotionState::Removed => MotionAnimationState::Removed,
             },
             None => MotionAnimationState::NotFound,

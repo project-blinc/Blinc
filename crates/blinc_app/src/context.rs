@@ -2,7 +2,9 @@
 //!
 //! Wraps the GPU rendering pipeline with a clean API.
 
-use blinc_core::{Brush, Color, CornerRadius, DrawCommand, DrawContext, DrawContextExt, Rect, Stroke};
+use blinc_core::{
+    Brush, Color, CornerRadius, DrawCommand, DrawContext, DrawContextExt, Rect, Stroke,
+};
 use blinc_gpu::{
     FontRegistry, GenericFont as GpuGenericFont, GpuGlyph, GpuImage, GpuImageInstance,
     GpuPaintContext, GpuPrimitive, GpuRenderer, ImageRenderingContext, PrimitiveBatch,
@@ -125,6 +127,19 @@ struct SvgElement {
     clip_bounds: Option<[f32; 4]>,
     /// Motion opacity inherited from parent motion container
     motion_opacity: f32,
+}
+
+/// Debug bounds element for layout visualization
+#[derive(Clone)]
+struct DebugBoundsElement {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    /// Element type name for labeling
+    element_type: String,
+    /// Depth in the tree (for color coding)
+    depth: u32,
 }
 
 impl RenderContext {
@@ -517,6 +532,20 @@ impl RenderContext {
         }
     }
 
+    /// Render debug visualization overlays for all layout elements
+    ///
+    /// When `BLINC_DEBUG=layout` (or `all`) is set, this renders:
+    /// - Semi-transparent colored rectangles for each element's bounding box
+    /// - Colors cycle based on tree depth to distinguish nested elements
+    fn render_layout_debug(&mut self, target: &wgpu::TextureView, tree: &RenderTree, scale: f32) {
+        let debug_bounds = collect_debug_bounds(tree, scale);
+        let debug_primitives = generate_layout_debug_primitives(&debug_bounds);
+        if !debug_primitives.is_empty() {
+            self.renderer
+                .render_primitives_overlay(target, &debug_primitives);
+        }
+    }
+
     /// Render images to the backdrop texture (for images that should be blurred by glass)
     fn render_images_to_backdrop(&mut self, images: &[&ImageElement]) {
         let Some(ref backdrop) = self.backdrop_texture else {
@@ -898,11 +927,7 @@ impl RenderContext {
     fn collect_render_elements(
         &self,
         tree: &RenderTree,
-    ) -> (
-        Vec<TextElement>,
-        Vec<SvgElement>,
-        Vec<ImageElement>,
-    ) {
+    ) -> (Vec<TextElement>, Vec<SvgElement>, Vec<ImageElement>) {
         self.collect_render_elements_with_state(tree, None)
     }
 
@@ -911,11 +936,7 @@ impl RenderContext {
         &self,
         tree: &RenderTree,
         render_state: Option<&blinc_layout::RenderState>,
-    ) -> (
-        Vec<TextElement>,
-        Vec<SvgElement>,
-        Vec<ImageElement>,
-    ) {
+    ) -> (Vec<TextElement>, Vec<SvgElement>, Vec<ImageElement>) {
         let mut texts = Vec::new();
         let mut svgs = Vec::new();
         let mut images = Vec::new();
@@ -1856,10 +1877,14 @@ impl RenderContext {
         // Render overlays from RenderState
         self.render_overlays(render_state, width, height, target);
 
-        // Render debug visualization if enabled (BLINC_DEBUG=text)
+        // Render debug visualization if enabled (BLINC_DEBUG=text|layout|all)
         let debug = DebugMode::from_env();
         if debug.text {
             self.render_text_debug(target, &texts);
+        }
+        if debug.layout {
+            let scale = tree.scale_factor();
+            self.render_layout_debug(target, tree, scale);
         }
 
         Ok(())
@@ -2030,6 +2055,13 @@ impl RenderContext {
         // Poll the device to free completed command buffers
         self.renderer.poll();
 
+        // Render layout debug for overlay tree if enabled
+        let debug = DebugMode::from_env();
+        if debug.layout {
+            let scale = tree.scale_factor();
+            self.render_layout_debug(target, tree, scale);
+        }
+
         Ok(())
     }
 
@@ -2110,30 +2142,34 @@ fn to_gpu_generic_font(generic: GenericFont) -> GpuGenericFont {
 /// Debug mode flags for visual debugging
 ///
 /// Set environment variable `BLINC_DEBUG` to enable debug visualization:
-/// - `text` or `1`: Show text bounding boxes and baselines
-/// - `all`: Show all debug visualizations
+/// - `text`: Show text bounding boxes and baselines
+/// - `layout`: Show all element bounding boxes (useful for debugging hit-testing)
+/// - `all` or `1` or `true`: Show all debug visualizations
 #[derive(Clone, Copy)]
 pub struct DebugMode {
     /// Show text bounding boxes and baseline indicators
     pub text: bool,
+    /// Show all element bounding boxes
+    pub layout: bool,
 }
 
 impl DebugMode {
     /// Check environment variable and return debug mode configuration
     pub fn from_env() -> Self {
-        let debug_text = std::env::var("BLINC_DEBUG")
-            .map(|v| {
-                let v = v.to_lowercase();
-                v == "1" || v == "text" || v == "all" || v == "true"
-            })
-            .unwrap_or(false);
+        let debug_value = std::env::var("BLINC_DEBUG")
+            .map(|v| v.to_lowercase())
+            .unwrap_or_default();
 
-        Self { text: debug_text }
+        let all = debug_value == "all" || debug_value == "1" || debug_value == "true";
+        let text = all || debug_value == "text";
+        let layout = all || debug_value == "layout";
+
+        Self { text, layout }
     }
 
     /// Check if any debug mode is enabled
     pub fn any_enabled(&self) -> bool {
-        self.text
+        self.text || self.layout
     }
 }
 
@@ -2296,8 +2332,115 @@ fn generate_text_debug_primitives(texts: &[TextElement]) -> Vec<GpuPrimitive> {
     primitives
 }
 
+/// Collect all element bounds from the render tree for debug visualization
+fn collect_debug_bounds(tree: &RenderTree, scale: f32) -> Vec<DebugBoundsElement> {
+    let mut bounds = Vec::new();
+
+    if let Some(root) = tree.root() {
+        collect_debug_bounds_recursive(tree, root, (0.0, 0.0), 0, scale, &mut bounds);
+    }
+
+    bounds
+}
+
+/// Recursively collect bounds from all nodes
+fn collect_debug_bounds_recursive(
+    tree: &RenderTree,
+    node: LayoutNodeId,
+    parent_offset: (f32, f32),
+    depth: u32,
+    scale: f32,
+    bounds: &mut Vec<DebugBoundsElement>,
+) {
+    use blinc_layout::renderer::ElementType;
+
+    let Some(node_bounds) = tree.layout().get_bounds(node, parent_offset) else {
+        return;
+    };
+
+    // Determine element type name
+    let element_type = tree
+        .get_render_node(node)
+        .map(|n| match &n.element_type {
+            ElementType::Div => "Div".to_string(),
+            ElementType::Text(_) => "Text".to_string(),
+            ElementType::StyledText(_) => "StyledText".to_string(),
+            ElementType::Image(_) => "Image".to_string(),
+            ElementType::Svg(_) => "Svg".to_string(),
+            ElementType::Canvas(_) => "Canvas".to_string(),
+        })
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    // Add this element's bounds (with DPI scaling)
+    bounds.push(DebugBoundsElement {
+        x: node_bounds.x * scale,
+        y: node_bounds.y * scale,
+        width: node_bounds.width * scale,
+        height: node_bounds.height * scale,
+        element_type,
+        depth,
+    });
+
+    // Get scroll offset for this node (scroll containers offset their children)
+    let scroll_offset = tree.get_scroll_offset(node);
+
+    // Calculate new offset for children (including scroll offset)
+    let new_offset = (
+        node_bounds.x + scroll_offset.0,
+        node_bounds.y + scroll_offset.1,
+    );
+
+    // Recurse into children
+    for child in tree.layout().children(node) {
+        collect_debug_bounds_recursive(tree, child, new_offset, depth + 1, scale, bounds);
+    }
+}
+
+/// Generate debug primitives for layout element bounds
+///
+/// Creates visual overlays showing:
+/// - Colored outlines for each element's bounding box
+/// - Colors cycle based on tree depth (red, green, blue, yellow, cyan, magenta)
+fn generate_layout_debug_primitives(bounds: &[DebugBoundsElement]) -> Vec<GpuPrimitive> {
+    let mut primitives = Vec::new();
+
+    // Color palette for different depths (cycling)
+    let colors: [(f32, f32, f32); 6] = [
+        (1.0, 0.3, 0.3), // Red
+        (0.3, 1.0, 0.3), // Green
+        (0.3, 0.3, 1.0), // Blue
+        (1.0, 1.0, 0.3), // Yellow
+        (0.3, 1.0, 1.0), // Cyan
+        (1.0, 0.3, 1.0), // Magenta
+    ];
+
+    for elem in bounds {
+        // Skip very small elements (likely invisible)
+        if elem.width < 1.0 || elem.height < 1.0 {
+            continue;
+        }
+
+        let (r, g, b) = colors[(elem.depth as usize) % colors.len()];
+        let alpha = 0.5; // Semi-transparent outline
+
+        // Draw outline only (transparent fill with colored border)
+        let rect = GpuPrimitive::rect(elem.x, elem.y, elem.width, elem.height)
+            .with_color(0.0, 0.0, 0.0, 0.0) // Transparent fill
+            .with_border(1.0, r, g, b, alpha); // Colored border
+
+        primitives.push(rect);
+    }
+
+    primitives
+}
+
 /// Scale and translate a path for SVG rendering with tint
-fn scale_and_translate_path(path: &blinc_core::Path, x: f32, y: f32, scale: f32) -> blinc_core::Path {
+fn scale_and_translate_path(
+    path: &blinc_core::Path,
+    x: f32,
+    y: f32,
+    scale: f32,
+) -> blinc_core::Path {
     use blinc_core::{PathCommand, Point, Vec2};
 
     if scale == 1.0 && x == 0.0 && y == 0.0 {

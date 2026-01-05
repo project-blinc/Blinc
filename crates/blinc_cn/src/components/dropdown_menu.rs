@@ -340,7 +340,8 @@ impl DropdownMenuBuilder {
                             text(label)
                                 .size(14.0)
                                 .color(theme.color(ColorToken::TextPrimary))
-                                .no_cursor(),
+                                .no_cursor()
+                                .pointer_events_none(),
                         )
                         .child(
                             svg(chevron_svg)
@@ -354,7 +355,8 @@ impl DropdownMenuBuilder {
                 let trigger_div = div()
                     .w_fit()
                     .cursor(CursorStyle::Pointer)
-                    .child(trigger_content);
+                    .child(trigger_content)
+                    .pointer_events_none();
 
                 container.merge(trigger_div);
             })
@@ -607,8 +609,8 @@ fn build_dropdown_content(
                         text(&item_label)
                             .size(font_size)
                             .color(item_text_color)
-                            .no_cursor(),
-                    );
+                            .no_cursor().pointer_events_none(),
+                    ).pointer_events_none();
 
                     // Right side: shortcut or submenu arrow
                     let right_side: Option<Div> = if let Some(ref shortcut) = item_shortcut {
@@ -620,7 +622,7 @@ fn build_dropdown_content(
                         ))
                     } else if has_submenu {
                         let chevron_right = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>"#;
-                        Some(div().child(svg(chevron_right).size(12.0, 12.0).color(text_tertiary)))
+                        Some(div().child(svg(chevron_right).size(12.0, 12.0).color(text_tertiary)).pointer_events_none())
                     } else {
                         None
                     };

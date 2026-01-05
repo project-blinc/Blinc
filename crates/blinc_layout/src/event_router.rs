@@ -69,6 +69,9 @@ pub struct HitTestResult {
     pub bounds_width: f32,
     /// The bounds height of the hit element
     pub bounds_height: f32,
+    /// Bounds for each ancestor node (for correct bounds when bubbling)
+    /// Maps node_id.index() to (x, y, width, height)
+    pub ancestor_bounds: std::collections::HashMap<u32, (f32, f32, f32, f32)>,
 }
 
 /// Callback for element events
@@ -130,6 +133,10 @@ pub struct EventRouter {
     /// Delta from drag start
     drag_delta_x: f32,
     drag_delta_y: f32,
+
+    /// Bounds for each ancestor from the last hit test
+    /// Maps node_id.to_raw() to (x, y, width, height)
+    last_hit_ancestor_bounds: std::collections::HashMap<u32, (f32, f32, f32, f32)>,
 }
 
 impl Default for EventRouter {
@@ -163,6 +170,7 @@ impl EventRouter {
             drag_start_y: 0.0,
             drag_delta_x: 0.0,
             drag_delta_y: 0.0,
+            last_hit_ancestor_bounds: std::collections::HashMap::new(),
         }
     }
 
@@ -185,6 +193,19 @@ impl EventRouter {
     /// These are updated whenever a hit test is performed (mouse move, click, etc.)
     pub fn last_hit_bounds_pos(&self) -> (f32, f32) {
         (self.last_hit_bounds_x, self.last_hit_bounds_y)
+    }
+
+    /// Get bounds for a specific node from the last hit test
+    ///
+    /// Returns the absolute bounds (x, y, width, height) for a node that was in
+    /// the hit chain. This is used for event bubbling to ensure each handler
+    /// receives the correct bounds for its own node, not the original hit target.
+    ///
+    /// Returns None if the node wasn't in the last hit chain.
+    pub fn get_node_bounds(&self, node: LayoutNodeId) -> Option<(f32, f32, f32, f32)> {
+        self.last_hit_ancestor_bounds
+            .get(&(node.to_raw() as u32))
+            .copied()
     }
 
     /// Get the current drag delta (offset from drag start position)
@@ -450,6 +471,8 @@ impl EventRouter {
             self.last_hit_bounds_y = hit.bounds_y;
             self.last_hit_bounds_width = hit.bounds_width;
             self.last_hit_bounds_height = hit.bounds_height;
+            // Store ancestor bounds for proper bounds lookup during event bubbling
+            self.last_hit_ancestor_bounds = hit.ancestor_bounds.clone();
 
             // Set focus to the clicked element WITH its ancestors (for BLUR bubbling later)
             self.set_focus_with_ancestors(Some(hit.node), hit.ancestors.clone());
@@ -856,7 +879,15 @@ impl EventRouter {
     /// that contains the point.
     pub fn hit_test(&self, tree: &RenderTree, x: f32, y: f32) -> Option<HitTestResult> {
         let root = tree.root()?;
-        self.hit_test_node(tree, root, x, y, (0.0, 0.0), Vec::new())
+        self.hit_test_node(
+            tree,
+            root,
+            x,
+            y,
+            (0.0, 0.0),
+            Vec::new(),
+            std::collections::HashMap::new(),
+        )
     }
 
     /// Hit test to find all elements at a point
@@ -865,7 +896,16 @@ impl EventRouter {
     pub fn hit_test_all(&self, tree: &RenderTree, x: f32, y: f32) -> Vec<HitTestResult> {
         let mut results = Vec::new();
         if let Some(root) = tree.root() {
-            self.hit_test_node_all(tree, root, x, y, (0.0, 0.0), Vec::new(), &mut results);
+            self.hit_test_node_all(
+                tree,
+                root,
+                x,
+                y,
+                (0.0, 0.0),
+                Vec::new(),
+                std::collections::HashMap::new(),
+                &mut results,
+            );
         }
         results
     }
@@ -879,6 +919,7 @@ impl EventRouter {
         y: f32,
         parent_offset: (f32, f32),
         mut ancestors: Vec<LayoutNodeId>,
+        mut ancestor_bounds: std::collections::HashMap<u32, (f32, f32, f32, f32)>,
     ) -> Option<HitTestResult> {
         let bounds = tree.layout().get_bounds(node, parent_offset)?;
 
@@ -900,6 +941,11 @@ impl EventRouter {
         );
 
         ancestors.push(node);
+        // Store this node's bounds for event bubbling
+        ancestor_bounds.insert(
+            node.to_raw() as u32,
+            (bounds.x, bounds.y, bounds.width, bounds.height),
+        );
 
         // Get scroll offset for this node (if it's a scroll container)
         // Children are rendered at bounds + scroll_offset, so we need to
@@ -919,14 +965,35 @@ impl EventRouter {
             children
         );
         for child in children.into_iter().rev() {
-            if let Some(result) =
-                self.hit_test_node(tree, child, x, y, child_offset, ancestors.clone())
-            {
+            if let Some(result) = self.hit_test_node(
+                tree,
+                child,
+                x,
+                y,
+                child_offset,
+                ancestors.clone(),
+                ancestor_bounds.clone(),
+            ) {
                 return Some(result);
             }
         }
 
-        // No child hit, this node is the target
+        // No child hit - check if this node has pointer_events_none
+        // If so, return None to let the hit fall through to siblings
+        let pointer_events_none = tree
+            .get_render_node(node)
+            .map(|n| n.props.pointer_events_none)
+            .unwrap_or(false);
+
+        if pointer_events_none {
+            tracing::trace!(
+                "hit_test_node: node={:?} has pointer_events_none, passing through",
+                node
+            );
+            return None;
+        }
+
+        // This node is the target
         tracing::trace!(
             "hit_test_node: FINAL target node={:?} (no children hit at point)",
             node
@@ -940,6 +1007,7 @@ impl EventRouter {
             bounds_y: bounds.y,
             bounds_width: bounds.width,
             bounds_height: bounds.height,
+            ancestor_bounds,
         })
     }
 
@@ -952,6 +1020,7 @@ impl EventRouter {
         y: f32,
         parent_offset: (f32, f32),
         mut ancestors: Vec<LayoutNodeId>,
+        mut ancestor_bounds: std::collections::HashMap<u32, (f32, f32, f32, f32)>,
         results: &mut Vec<HitTestResult>,
     ) {
         let Some(bounds) = tree.layout().get_bounds(node, parent_offset) else {
@@ -964,18 +1033,33 @@ impl EventRouter {
         }
 
         ancestors.push(node);
+        // Store this node's bounds
+        ancestor_bounds.insert(
+            node.to_raw() as u32,
+            (bounds.x, bounds.y, bounds.width, bounds.height),
+        );
 
-        // Add this node to results
-        results.push(HitTestResult {
-            node,
-            local_x: x - bounds.x,
-            local_y: y - bounds.y,
-            ancestors: ancestors.clone(),
-            bounds_x: bounds.x,
-            bounds_y: bounds.y,
-            bounds_width: bounds.width,
-            bounds_height: bounds.height,
-        });
+        // Check if this node has pointer_events_none - if so, skip adding it to results
+        // but still recurse into children (they may capture events)
+        let pointer_events_none = tree
+            .get_render_node(node)
+            .map(|n| n.props.pointer_events_none)
+            .unwrap_or(false);
+
+        if !pointer_events_none {
+            // Add this node to results
+            results.push(HitTestResult {
+                node,
+                local_x: x - bounds.x,
+                local_y: y - bounds.y,
+                ancestors: ancestors.clone(),
+                bounds_x: bounds.x,
+                bounds_y: bounds.y,
+                bounds_width: bounds.width,
+                bounds_height: bounds.height,
+                ancestor_bounds: ancestor_bounds.clone(),
+            });
+        }
 
         // Get scroll offset for this node (if it's a scroll container)
         // Children are rendered at bounds + scroll_offset, so we need to
@@ -986,7 +1070,16 @@ impl EventRouter {
         // Check children
         let children = tree.layout().children(node);
         for child in children {
-            self.hit_test_node_all(tree, child, x, y, child_offset, ancestors.clone(), results);
+            self.hit_test_node_all(
+                tree,
+                child,
+                x,
+                y,
+                child_offset,
+                ancestors.clone(),
+                ancestor_bounds.clone(),
+                results,
+            );
         }
     }
 

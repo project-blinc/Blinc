@@ -1010,9 +1010,12 @@ impl ElementBuilder for StackChild {
     fn render_props(&self) -> RenderProps {
         // Wrapper clips its children for proper z-ordering in Stack
         // is_stack_layer causes z_layer to increment when entering this node
+        // pointer_events_none allows clicks to pass through to siblings when
+        // children don't capture the click (important for overlay backdrops)
         RenderProps {
             clips_content: true,
             is_stack_layer: true,
+            pointer_events_none: true,
             ..RenderProps::default()
         }
     }

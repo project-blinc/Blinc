@@ -1991,25 +1991,40 @@ impl WindowedApp {
                             }
 
                             // Dispatch mouse/touch events (scroll is handled above with nested support)
-                            for event in pending_events {
-                                // Skip scroll events - already handled with nested scroll support
-                                if event.event_type == blinc_core::events::event_types::SCROLL {
-                                    continue;
+                            if let Some(ref mut windowed_ctx) = ctx {
+                                let router = &windowed_ctx.event_router;
+                                for event in pending_events {
+                                    // Skip scroll events - already handled with nested scroll support
+                                    if event.event_type == blinc_core::events::event_types::SCROLL {
+                                        continue;
+                                    }
+                                    // Look up the correct bounds for this specific node.
+                                    // When events bubble from a child to a parent handler,
+                                    // we need the parent's bounds, not the original hit target's bounds.
+                                    let (bounds_x, bounds_y, bounds_width, bounds_height) =
+                                        router.get_node_bounds(event.node_id).unwrap_or((
+                                            event.bounds_x,
+                                            event.bounds_y,
+                                            event.bounds_width,
+                                            event.bounds_height,
+                                        ));
+                                    let local_x = event.mouse_x - bounds_x;
+                                    let local_y = event.mouse_y - bounds_y;
+                                    tree.dispatch_event_full(
+                                        event.node_id,
+                                        event.event_type,
+                                        event.mouse_x,
+                                        event.mouse_y,
+                                        local_x,
+                                        local_y,
+                                        bounds_x,
+                                        bounds_y,
+                                        bounds_width,
+                                        bounds_height,
+                                        event.drag_delta_x,
+                                        event.drag_delta_y,
+                                    );
                                 }
-                                tree.dispatch_event_full(
-                                    event.node_id,
-                                    event.event_type,
-                                    event.mouse_x,
-                                    event.mouse_y,
-                                    event.local_x,
-                                    event.local_y,
-                                    event.bounds_x,
-                                    event.bounds_y,
-                                    event.bounds_width,
-                                    event.bounds_height,
-                                    event.drag_delta_x,
-                                    event.drag_delta_y,
-                                );
                             }
 
                             // Note: Overlay events are now dispatched through the main tree

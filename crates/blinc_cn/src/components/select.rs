@@ -299,9 +299,10 @@ impl Select {
                     let (trigger_x, trigger_y, trigger_w, trigger_h) =
                         (ctx.bounds_x, ctx.bounds_y, ctx.bounds_width, ctx.bounds_height);
 
-                    // Position dropdown below the trigger, centered horizontally
-                    let dropdown_x = trigger_x + trigger_w / 2.0;
-                    let dropdown_y = trigger_y + trigger_h - 4.0;
+                    // Position dropdown directly below the trigger, left-aligned (same as DropdownMenuBuilder)
+                    let offset = 4.0;
+                    let dropdown_x = trigger_x;
+                    let dropdown_y = trigger_y + trigger_h + offset;
                     tracing::debug!(
                         "Select dropdown position: x={:.1}, y={:.1} (trigger bounds: {:.1}, {:.1}, {:.1}, {:.1})",
                         dropdown_x, dropdown_y, trigger_x, trigger_y, trigger_w, trigger_h

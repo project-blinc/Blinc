@@ -11,8 +11,7 @@ use blinc_animation::AnimationScheduler;
 use indexmap::IndexMap;
 
 use blinc_core::{
-    Brush, ClipShape, Color, CornerRadius, DrawContext, GlassStyle, Rect, Shadow, Stroke,
-    Transform,
+    Brush, ClipShape, Color, CornerRadius, DrawContext, GlassStyle, Rect, Shadow, Stroke, Transform,
 };
 use taffy::prelude::*;
 
@@ -3247,11 +3246,18 @@ impl RenderTree {
         for rebuild in pending {
             // Skip if this node doesn't exist in this tree - save for other trees
             if !self.layout_tree.node_exists(rebuild.parent_id) {
-                tracing::debug!("Subtree rebuild: node {:?} not in this tree, requeuing", rebuild.parent_id);
+                tracing::debug!(
+                    "Subtree rebuild: node {:?} not in this tree, requeuing",
+                    rebuild.parent_id
+                );
                 not_in_this_tree.push(rebuild);
                 continue;
             }
-            tracing::debug!("Subtree rebuild: processing node {:?}, needs_layout={}", rebuild.parent_id, rebuild.needs_layout);
+            tracing::debug!(
+                "Subtree rebuild: processing node {:?}, needs_layout={}",
+                rebuild.parent_id,
+                rebuild.needs_layout
+            );
             if rebuild.needs_layout {
                 // Full structural rebuild - remove old children and build new ones
                 needs_layout = true;

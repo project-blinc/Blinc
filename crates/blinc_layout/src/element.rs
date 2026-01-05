@@ -868,6 +868,10 @@ pub struct RenderProps {
     pub is_stack_layer: bool,
     /// Cursor style when hovering over this element (None = inherit from parent)
     pub cursor: Option<CursorStyle>,
+    /// Whether this element is transparent to hit-testing (pointer-events: none)
+    /// When true, this element will not capture clicks/hovers - only its children can.
+    /// Used by Stack layers to allow clicks to pass through to siblings.
+    pub pointer_events_none: bool,
 }
 
 impl Default for RenderProps {
@@ -890,6 +894,7 @@ impl Default for RenderProps {
             motion_should_replay: false,
             is_stack_layer: false,
             cursor: None,
+            pointer_events_none: false,
         }
     }
 }

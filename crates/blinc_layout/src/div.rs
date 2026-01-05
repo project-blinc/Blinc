@@ -378,6 +378,7 @@ pub struct Div {
     pub(crate) transform: Option<Transform>,
     pub(crate) opacity: f32,
     pub(crate) cursor: Option<crate::element::CursorStyle>,
+    pub(crate) pointer_events_none: bool,
     pub(crate) event_handlers: crate::event_handler::EventHandlers,
     /// Element ID for selector API queries
     pub(crate) element_id: Option<String>,
@@ -406,6 +407,7 @@ impl Div {
             transform: None,
             opacity: 1.0,
             cursor: None,
+            pointer_events_none: false,
             event_handlers: crate::event_handler::EventHandlers::new(),
             element_id: None,
         }
@@ -2020,6 +2022,16 @@ impl Div {
         self.cursor(crate::element::CursorStyle::NotAllowed)
     }
 
+    /// Make this element transparent to hit-testing (pointer-events: none)
+    ///
+    /// When set, this element will not capture mouse clicks or hover events.
+    /// Only its children can receive events. Useful for wrapper elements that
+    /// should not block interaction with elements behind them.
+    pub fn pointer_events_none(mut self) -> Self {
+        self.pointer_events_none = true;
+        self
+    }
+
     // =========================================================================
     // Children
     // =========================================================================
@@ -2738,6 +2750,7 @@ impl ElementBuilder for Div {
             motion_stable_id: None,
             motion_should_replay: false,
             is_stack_layer: false,
+            pointer_events_none: self.pointer_events_none,
             cursor: self.cursor,
         }
     }

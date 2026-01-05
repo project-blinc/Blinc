@@ -677,7 +677,7 @@ fn dropdown_menu_section() -> impl ElementBuilder {
                 // Dropdown with custom trigger
                 .child(
                     cn::dropdown_menu_custom(|is_open| {
-                        div().child(
+                        div().w(100.0).child(
                             cn::button(if is_open {
                                 "Close Menu"
                             } else {

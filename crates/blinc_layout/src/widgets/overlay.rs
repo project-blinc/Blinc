@@ -40,6 +40,7 @@ use blinc_core::Color;
 use indexmap::IndexMap;
 
 use crate::div::{div, Div};
+use crate::key::InstanceKey;
 use crate::renderer::RenderTree;
 use crate::stack::stack;
 use crate::stateful::StateTransitions;
@@ -1120,14 +1121,12 @@ impl OverlayManagerInner {
         tree.compute_layout(width, height);
         Some(tree)
     }
-
 }
 
 /// The element ID used for the overlay layer container
 pub const OVERLAY_LAYER_ID: &'static str = "__blinc_overlay_layer__";
 
 impl OverlayManagerInner {
-
     /// Build the overlay layer container for the main UI tree
     ///
     /// This ALWAYS returns a Div container with a stable ID, even when empty.
@@ -1144,7 +1143,10 @@ impl OverlayManagerInner {
 
         tracing::info!(
             "build_overlay_layer: viewport={}x{}, has_visible={}, overlay_count={}",
-            width, height, has_visible, overlay_count
+            width,
+            height,
+            has_visible,
+            overlay_count
         );
 
         // Container size: full viewport when overlays visible, zero when empty
@@ -1173,7 +1175,8 @@ impl OverlayManagerInner {
                 if overlay.is_visible() {
                     tracing::info!(
                         "build_overlay_layer: adding overlay {:?}, state={:?}",
-                        overlay.config.kind, overlay.state
+                        overlay.config.kind,
+                        overlay.state
                     );
                     layer = layer.child(self.build_single_overlay(overlay, width, height));
                 }
@@ -1236,13 +1239,49 @@ impl OverlayManagerInner {
                 .color
                 .with_alpha(backdrop_config.color.a * backdrop_opacity);
 
+            // Build backdrop div with click-to-dismiss if enabled
+            let backdrop_div = if backdrop_config.dismiss_on_click {
+                let overlay_handle = overlay.handle;
+                let on_close_callback = overlay.on_close.clone();
+                let backdrop_key =
+                    InstanceKey::explicit(format!("overlay_backdrop_{}", overlay_handle.0));
+
+                div()
+                    .id(backdrop_key.get())
+                    .absolute()
+                    .left(0.0)
+                    .top(0.0)
+                    .w(vp_width)
+                    .h(vp_height)
+                    .bg(backdrop_color)
+                    .on_click(move |_| {
+                        println!("Backdrop clicked! Dismissing overlay {:?}", overlay_handle);
+                        // Close this overlay via the global overlay manager
+                        if let Some(ctx) = crate::overlay_state::OverlayContext::try_get() {
+                            ctx.overlay_manager().lock().unwrap().close(overlay_handle);
+                        }
+                        // Call the on_close callback if provided
+                        if let Some(ref cb) = on_close_callback {
+                            cb();
+                        }
+                    })
+            } else {
+                div()
+                    .absolute()
+                    .left(0.0)
+                    .top(0.0)
+                    .w(vp_width)
+                    .h(vp_height)
+                    .bg(backdrop_color)
+            };
+
             // Use stack: first child (backdrop) renders behind, second child (content) on top
             div().w(vp_width).h(vp_height).child(
                 stack()
-                    .w_full()
-                    .h_full()
+                    .w(vp_width)
+                    .h(vp_height)
                     // Backdrop layer (behind) - fills entire viewport with animated opacity
-                    .child(div().w_full().h_full().bg(backdrop_color))
+                    .child(backdrop_div)
                     // Content layer (on top) - positioned according to config
                     // Content animation is handled by user via motion() container
                     .child(self.position_content(overlay, content, vp_width, vp_height)),
@@ -1274,13 +1313,7 @@ impl OverlayManagerInner {
 
             OverlayPosition::AtPoint { x, y } => {
                 // Position content at specific point using absolute positioning within viewport
-                // Wrap in a full viewport container with top-left alignment so margins work correctly
-                div()
-                    .w(vp_width)
-                    .h(vp_height)
-                    .items_start()
-                    .justify_start()
-                    .child(content.absolute().left(*x).top(*y))
+                content.absolute().left(*x).top(*y)
             }
 
             OverlayPosition::Corner(corner) => {

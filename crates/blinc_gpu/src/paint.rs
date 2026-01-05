@@ -42,10 +42,10 @@
 //! ```
 
 use blinc_core::{
-    Affine2D, BillboardFacing, BlendMode, Brush, Camera, ClipShape, CornerRadius, DrawCommand,
-    DrawContext, Environment, ImageId, ImageOptions, LayerConfig, LayerId, Light, Mat4, MaterialId,
-    MeshId, MeshInstance, Path, Point, Rect, SdfBuilder, Shadow, ShapeId, Size, Stroke, TextStyle,
-    Transform,
+    Affine2D, BillboardFacing, BlendMode, Brush, Camera, ClipShape, Color, CornerRadius,
+    DrawCommand, DrawContext, Environment, ImageId, ImageOptions, LayerConfig, LayerId, Light,
+    Mat4, MaterialId, MeshId, MeshInstance, Path, Point, Rect, SdfBuilder, Shadow, ShapeId, Size,
+    Stroke, TextStyle, Transform,
 };
 
 use crate::path::{tessellate_fill, tessellate_stroke};
@@ -591,6 +591,21 @@ impl<'a> GpuPaintContext<'a> {
         self.camera = None;
     }
 
+    /// Apply opacity to a brush by modifying the color's alpha channel
+    fn apply_opacity_to_brush(brush: Brush, opacity: f32) -> Brush {
+        if opacity >= 1.0 {
+            return brush;
+        }
+        match brush {
+            Brush::Solid(color) => {
+                Brush::Solid(Color::rgba(color.r, color.g, color.b, color.a * opacity))
+            }
+            // For gradients, we'd need to modify each stop's color
+            // For now, return as-is since SVGs typically use solid colors
+            other => other,
+        }
+    }
+
     /// Resize the viewport
     pub fn resize(&mut self, width: f32, height: f32) {
         self.viewport = Size::new(width, height);
@@ -763,6 +778,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
     }
 
     fn fill_path(&mut self, path: &Path, brush: Brush) {
+        // Apply current opacity to the brush
+        let opacity = self.combined_opacity();
+        let brush = Self::apply_opacity_to_brush(brush, opacity);
+
         // Tessellate the path using lyon
         let tessellated = tessellate_fill(path, &brush);
         if !tessellated.is_empty() {
@@ -775,6 +794,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
     }
 
     fn stroke_path(&mut self, path: &Path, stroke: &Stroke, brush: Brush) {
+        // Apply current opacity to the brush
+        let opacity = self.combined_opacity();
+        let brush = Self::apply_opacity_to_brush(brush, opacity);
+
         // Tessellate the stroke using lyon
         let tessellated = tessellate_stroke(path, stroke, &brush);
         if !tessellated.is_empty() {

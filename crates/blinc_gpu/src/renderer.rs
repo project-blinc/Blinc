@@ -2148,14 +2148,13 @@ impl GpuRenderer {
             self.update_path_buffers(batch);
 
             // Render paths
-            if let (Some(vb), Some(ib)) =
-                (&self.buffers.path_vertices, &self.buffers.path_indices)
+            if let (Some(vb), Some(ib)) = (&self.buffers.path_vertices, &self.buffers.path_indices)
             {
-                let mut encoder = self
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("Blinc Glass Path Encoder"),
-                    });
+                let mut encoder =
+                    self.device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Blinc Glass Path Encoder"),
+                        });
 
                 let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Glass Path Render Pass"),
