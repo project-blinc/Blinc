@@ -66,14 +66,14 @@ use std::cell::OnceCell;
 use std::sync::{Arc, Mutex};
 
 use blinc_animation::{AnimationPreset, MultiKeyframeAnimation};
-use blinc_core::{use_state_keyed, State};
+use blinc_core::{use_state_keyed, BlincContextState, Color, State};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::motion::motion_derived;
 use blinc_layout::prelude::*;
 use blinc_layout::stateful::Stateful;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
-use blinc_theme::{ColorToken, RadiusToken, ThemeState};
+use blinc_theme::{BlincTheme, ColorScheme, ColorToken, RadiusToken, ThemeState};
 
 use blinc_layout::InstanceKey;
 
@@ -492,6 +492,8 @@ impl TabsBuilder {
         let theme = ThemeState::get();
         let config = &self.config;
 
+        
+
         // Get current value from state - use State<T>::get() directly
         let current_value = config.state.get();
 
@@ -511,10 +513,16 @@ impl TabsBuilder {
         }
 
         // Theme colors - use SecondaryHover for better contrast with text
-        let tab_list_bg = theme.color(ColorToken::SecondaryHover);
+        let tab_list_bg = theme.color(ColorToken::SurfaceOverlay);
         let radius = theme.radius(RadiusToken::Md);
         let content_margin = theme.spacing().space_1;
         let size = config.size;
+
+        let border = if matches!(theme.scheme(), ColorScheme::Dark) {
+            theme.color(ColorToken::Surface)
+        } else {
+            Color::TRANSPARENT
+        };
 
         // ========================================
         // Container 1: Tab Button Area
@@ -524,6 +532,8 @@ impl TabsBuilder {
         let on_change = config.on_change.clone();
 
         let unique_state_component_key = use_button_state(self.key.get());
+
+        let trigger_key = self.key.derive("tab_triggers");
 
         let tab_button_area = Stateful::with_shared_state(unique_state_component_key)
             .deps(&[config.state.signal_id()])
@@ -535,15 +545,26 @@ impl TabsBuilder {
             .flex_row()
             .items_center()
             .gap(4.0)
+            .border(1.0, border)
             .on_state(move |_state, container: &mut Div| {
                 let active_value = state_for_buttons.get();
 
-                let mut buttons = div().w_fit().flex_row().items_center().gap(4.0);
+                let mut buttons = div()
+                    .h(size.height())
+                    .w_full()
+                    .bg(tab_list_bg)
+                    .rounded(radius)
+                    .p(4.0)
+                    .flex_row()
+                    .items_center()
+                    .border(1.0, border)
+                    .gap(4.0);
 
                 for tab in tabs_for_buttons.iter() {
                     let is_active = tab.menu_item.value() == active_value;
 
                     let tab_trigger = build_tab_trigger(
+                        &trigger_key,
                         &tab.menu_item,
                         is_active,
                         size,
@@ -581,15 +602,33 @@ impl TabsBuilder {
                         let content = (tab.content)();
                         if transition != TabsTransition::None {
                             let tab_motion_key = format!("{}:{}", motion_base_key, active_value);
-                            let mut m = motion_derived(&tab_motion_key).replay();
+
+                            let mut m = motion_derived(&tab_motion_key);
+
                             if let Some(enter) = transition.enter_animation() {
                                 m = m.enter_animation(enter);
                             }
                             // Wrap in div since merge() expects Div
-                            container.merge(div().w_full().flex_grow().child(m.child(content)));
+                            container.merge(
+                                div()
+                                    .w_full()
+                                    .mt(content_margin)
+                                    .flex_grow()
+                                    .child(m.child(content)),
+                            );
+
+                            // TODO: conditionally trigger animation only after content mounted.
+                            //  let existing_motion = BlincContextState::get().query_motion(&tab_motion_key);
+                            // if !existing_motion.is_animating() {
+                            //     if let Some(enter) = transition.enter_animation() {
+                            //         existing_motion.enter_animation(enter).start();
+                            //     }
+                            // }
                         } else {
                             // Wrap content in div to ensure it fills parent
-                            container.merge(div().w_full().flex_grow().child(content));
+                            container.merge(
+                                div().mt(content_margin).w_full().flex_grow().child(content),
+                            );
                         }
                         break;
                     }
@@ -610,16 +649,17 @@ impl TabsBuilder {
 
 /// Build a simple tab trigger without nested Stateful (no hover effects)
 fn build_tab_trigger(
+    trigger_key: &str,
     menu_item: &TabMenuItem,
     is_active: bool,
     size: TabsSize,
     tab_state: State<String>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
-) -> Div {
+) -> Stateful<ButtonState> {
     let theme = ThemeState::get();
     let text_primary = theme.color(ColorToken::TextPrimary);
-    let text_tertiary = theme.color(ColorToken::TextTertiary);
-    let surface = theme.color(ColorToken::Surface);
+    let text_secondary = theme.color(ColorToken::TextSecondary);
+    let surface = theme.color(ColorToken::SurfaceElevated);
     let radius = theme.radius(RadiusToken::Md);
 
     let value = menu_item.value.clone();
@@ -629,13 +669,13 @@ fn build_tab_trigger(
     let inner_height = size.height() - 8.0;
 
     // Determine colors based on state
-    // Use TextPrimary for active, TextTertiary for inactive (better contrast on muted bg)
+    // Use TextPrimary for active, TextSecondary for inactive (better contrast on muted bg)
     let text_color = if disabled {
-        text_tertiary.with_alpha(0.5)
+        text_secondary.with_alpha(0.5)
     } else if is_active {
         text_primary
     } else {
-        text_tertiary
+        text_secondary
     };
 
     let bg = if is_active && !disabled {
@@ -690,15 +730,17 @@ fn build_tab_trigger(
         );
     }
 
+    let trigger_btn_state = use_button_state(&format!("{}:{}", trigger_key, value));
+
     // Build the trigger div
-    let mut trigger = div()
+    let mut trigger = stateful(trigger_btn_state)
         .h(inner_height)
         .padding_x(Length::Px(size.padding_x()))
         .flex_row()
         .items_center()
         .justify_center()
         .rounded(radius)
-        .bg(bg)
+        .bg(bg.clone())
         .cursor(if disabled {
             CursorStyle::Default
         } else {

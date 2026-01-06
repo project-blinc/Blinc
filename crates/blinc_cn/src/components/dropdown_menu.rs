@@ -311,8 +311,7 @@ impl DropdownMenuBuilder {
             .on_state(move |state, container: &mut Div| {
                 let is_open = open_state_for_trigger.get();
                 let bg = btn_variant.background(theme, *state);
-                // println!("Dropdown trigger state: {:?}, open: {}", state, is_open);
-                // println!("Dropdown trigger bg: {:?}", bg);
+               
                 // Build trigger content
                 let trigger_content: Div = if let Some(ref builder) = trigger_builder {
                     builder(is_open)
@@ -602,27 +601,16 @@ fn build_dropdown_content(
                 })
                 .on_state(move |state, container: &mut Div| {
 
-                    if let Some(handle_id) = handle_overflow_state_for_click.get() {
-                        let mgr = get_overlay_manager();
-                        let handle = OverlayHandle::from_raw(handle_id);
-
-                        // Check if overlay is already closing or pending close
-                        if mgr.is_closing(handle) || mgr.is_pending_close(handle) {
-                            // Close already in progress, don't trigger again
-                            return;
-                        }
-                    }
-
 
                     let theme = ThemeState::get();
                     // Apply hover background based on button state
-                    let item_bg = if *state == ButtonState::Hovered && !item_disabled {
+                    let item_bg = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !item_disabled {
                         theme.color(ColorToken::SecondaryHover).with_alpha(0.65)
                     } else {
                         bg
                     };
 
-                    let text_color = if *state == ButtonState::Hovered && !item_disabled {
+                    let text_color = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !item_disabled {
                         theme.color(ColorToken::TextSecondary)
                     } else {
                         item_text_color
@@ -682,10 +670,14 @@ fn build_dropdown_content(
                         if let Some(ref cb) = item_on_click {
                             cb();
                         }
+
+                      
                         // Close the overlay - state updates are handled by on_close callback
                         // after the exit animation completes (deferred in overlay manager)
                         if let Some(handle_id) = handle_state_for_click.get() {
+                            
                             let mgr = get_overlay_manager();
+                              
                             mgr.close(OverlayHandle::from_raw(handle_id));
                         }
                         // Don't update state here - let on_close callback handle it after animation
