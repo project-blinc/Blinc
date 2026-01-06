@@ -100,6 +100,25 @@ impl Default for OverlayKind {
 }
 
 // =============================================================================
+// AnchorDirection - for positioned overlays like hover cards
+// =============================================================================
+
+/// Direction an overlay is anchored relative to a trigger element.
+/// Used to calculate correct bounds for occlusion testing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum AnchorDirection {
+    /// Overlay appears above the trigger (y is the bottom edge of the overlay)
+    Top,
+    /// Overlay appears below the trigger (y is the top edge of the overlay)
+    #[default]
+    Bottom,
+    /// Overlay appears to the left of the trigger (x is the right edge)
+    Left,
+    /// Overlay appears to the right of the trigger (x is the left edge)
+    Right,
+}
+
+// =============================================================================
 // OverlayState - FSM for overlay lifecycle
 // =============================================================================
 
@@ -176,6 +195,7 @@ impl StateTransitions for OverlayState {
 
             // Interrupt opening with close
             (Opening, CLOSE) | (Opening, ESCAPE) => Some(Closing),
+
 
             // Cancel close - interrupt exit animation and return to Open state
             // Used when mouse re-enters hover card during exit animation
@@ -410,6 +430,12 @@ pub struct OverlayConfig {
     /// when transitioning to Closing state. The full key will be `"motion:{motion_key}"`.
     /// Use this with `motion_derived(motion_key)` in your content builder.
     pub motion_key: Option<String>,
+    /// Direction the overlay is anchored relative to its trigger.
+    ///
+    /// Used to calculate correct bounds for occlusion testing. For example,
+    /// a hover card with `Top` direction has its y coordinate at the BOTTOM edge,
+    /// not the top edge.
+    pub anchor_direction: AnchorDirection,
 }
 
 impl Default for OverlayConfig {
@@ -434,6 +460,7 @@ impl OverlayConfig {
             z_priority: 100,
             size: None,
             motion_key: None,
+            anchor_direction: AnchorDirection::Bottom,
         }
     }
 
@@ -460,6 +487,7 @@ impl OverlayConfig {
             z_priority: 200,
             size: None,
             motion_key: None,
+            anchor_direction: AnchorDirection::Bottom,
         }
     }
 
@@ -478,6 +506,7 @@ impl OverlayConfig {
             z_priority: 300,
             size: None,
             motion_key: None,
+            anchor_direction: AnchorDirection::Bottom,
         }
     }
 
@@ -501,6 +530,7 @@ impl OverlayConfig {
             z_priority: 150,
             size: None,
             motion_key: None,
+            anchor_direction: AnchorDirection::Bottom,
         }
     }
 
@@ -524,6 +554,7 @@ impl OverlayConfig {
             z_priority: 150,
             size: None,
             motion_key: None,
+            anchor_direction: AnchorDirection::Bottom, // Will be overridden by anchor_direction()
         }
     }
 }
@@ -584,6 +615,9 @@ pub struct ActiveOverlay {
     pub cached_size: Option<(f32, f32)>,
     /// Callback invoked when the overlay is closed (backdrop click, escape, etc.)
     on_close: Option<OnCloseCallback>,
+    /// Flag: start close delay when Opening -> Open transition completes
+    /// Used when hover_leave is called during Opening state
+    pending_close_on_open: bool,
 }
 
 impl ActiveOverlay {
@@ -796,6 +830,7 @@ impl OverlayManagerInner {
             pending_close_at_ms: None,
             cached_size: None,
             on_close,
+            pending_close_on_open: false,
         };
 
         self.overlays.insert(handle, overlay);
@@ -843,6 +878,21 @@ impl OverlayManagerInner {
                                 overlay.opened_at_ms = Some(current_time_ms);
                                 // State transition doesn't change content, just animation
                                 animation_dirty = true;
+
+                                // Check if we queued a close during Opening (TOP hover card case)
+                                // If mouse left before opening completed, close immediately
+                                // without showing the card or playing exit animation
+                                if overlay.pending_close_on_open {
+                                    overlay.pending_close_on_open = false;
+                                    tracing::debug!(
+                                        "Overlay {:?} just opened but pending_close_on_open - removing immediately",
+                                        handle
+                                    );
+                                    // Go directly to Closed (skip both Open state and exit animation)
+                                    // This prevents the "blink" when mouse leaves trigger before card opens
+                                    overlay.state = OverlayState::Closed;
+                                    content_dirty = true;
+                                }
                             }
                         } else {
                             // Animation still in progress, keep redrawing (no content change)
@@ -999,14 +1049,30 @@ impl OverlayManagerInner {
     /// after the delay unless `hover_enter` is called.
     pub fn hover_leave(&mut self, handle: OverlayHandle) {
         if let Some(overlay) = self.overlays.get_mut(&handle) {
+            let old_state = overlay.state;
+
+            // If overlay is still Opening, queue the close for when it opens
+            // This handles the TOP hover card case where mouse leaves trigger
+            // before the card finishes opening (mouse moving away from card)
+            // if old_state == OverlayState::Opening {
+            //     tracing::debug!("hover_leave: overlay is Opening, queuing close for when open");
+            //     overlay.pending_close_on_open = true;
+            //     return;
+            // }
+
             if overlay.transition(overlay_events::HOVER_LEAVE) {
-                // Record when pending close started
-                overlay.pending_close_at_ms = Some(self.current_time_ms);
+                let new_state = overlay.state;
                 tracing::debug!(
-                    "Overlay {:?} hover leave -> PendingClose at {}ms",
+                    "Overlay {:?} hover leave: {:?} -> {:?} at {}ms",
                     handle,
+                    old_state,
+                    new_state,
                     self.current_time_ms
                 );
+                // If transitioned to PendingClose, record when it started
+                if new_state == OverlayState::PendingClose {
+                    overlay.pending_close_at_ms = Some(self.current_time_ms);
+                }
                 // No dirty flag needed - update loop will handle the delay
             }
         }
@@ -1018,6 +1084,12 @@ impl OverlayManagerInner {
     /// and returns to Open state.
     pub fn hover_enter(&mut self, handle: OverlayHandle) {
         if let Some(overlay) = self.overlays.get_mut(&handle) {
+            // Cancel any queued close-on-open (mouse entered card during Opening)
+            if overlay.pending_close_on_open {
+                tracing::debug!("hover_enter: canceling pending_close_on_open");
+                overlay.pending_close_on_open = false;
+            }
+
             if overlay.transition(overlay_events::HOVER_ENTER) {
                 // Clear pending close timestamp
                 overlay.pending_close_at_ms = None;
@@ -1030,11 +1102,16 @@ impl OverlayManagerInner {
         }
     }
 
-    /// Check if an overlay is in PendingClose state
+    /// Check if an overlay is in PendingClose state or has queued close
+    ///
+    /// Returns true if:
+    /// - Overlay is in PendingClose state (waiting for close delay), OR
+    /// - Overlay is in Opening state with pending_close_on_open flag set
+    ///   (close will happen as soon as opening animation completes)
     pub fn is_pending_close(&self, handle: OverlayHandle) -> bool {
         self.overlays
             .get(&handle)
-            .map(|o| o.state.is_pending_close())
+            .map(|o| o.state.is_pending_close() || o.pending_close_on_open)
             .unwrap_or(false)
     }
 
@@ -1054,7 +1131,7 @@ impl OverlayManagerInner {
     /// This can be used to determine if a hit test point is within an overlay's bounds,
     /// which helps block hover events on UI elements underneath overlays.
     ///
-    /// Note: Returns default size (300x200) for overlays without cached size.
+    /// Note: Uses default size (300x200) for overlays without cached size.
     pub fn get_visible_overlay_bounds(&self) -> Vec<(f32, f32, f32, f32)> {
         let (vp_width, vp_height) = self.viewport;
 
@@ -1062,10 +1139,11 @@ impl OverlayManagerInner {
             .values()
             .filter(|o| o.is_visible())
             .filter_map(|overlay| {
+                // Use cached size if available, otherwise use a reasonable default
                 let (w, h) = overlay.cached_size.unwrap_or((300.0, 200.0));
 
                 // Calculate position based on OverlayPosition
-                let (x, y) = match &overlay.config.position {
+                let (mut x, mut y) = match &overlay.config.position {
                     OverlayPosition::AtPoint { x, y } => (*x, *y),
                     OverlayPosition::Centered => {
                         // Centered position - use viewport center minus half size
@@ -1087,6 +1165,32 @@ impl OverlayManagerInner {
                         return None;
                     }
                 };
+
+                // Adjust position based on anchor direction
+                // For AtPoint positions, the (x, y) may be a different edge depending on direction
+                if matches!(overlay.config.position, OverlayPosition::AtPoint { .. }) {
+                    match overlay.config.anchor_direction {
+                        AnchorDirection::Top => {
+                            // y is the bottom edge of the overlay, so top edge is y - h
+                            y -= h;
+                        }
+                        AnchorDirection::Left => {
+                            // x is the right edge of the overlay, so left edge is x - w
+                            x -= w;
+                        }
+                        AnchorDirection::Bottom | AnchorDirection::Right => {
+                            // x/y already represents the top-left corner, no adjustment needed
+                        }
+                    }
+                }
+
+                tracing::debug!(
+                    "get_visible_overlay_bounds: kind={:?} pos={:?} dir={:?} bounds=({}, {}, {}, {})",
+                    overlay.config.kind,
+                    overlay.config.position,
+                    overlay.config.anchor_direction,
+                    x, y, w, h
+                );
 
                 Some((x, y, w, h))
             })
@@ -1463,11 +1567,13 @@ impl OverlayManagerInner {
             let has_close_delay = overlay.config.close_delay_ms.is_some();
             let on_close_callback = overlay.on_close.clone();
             content.on_hover_leave(move |_| {
+                tracing::debug!("OVERLAY dismiss_on_hover_leave handler fired");
                 if let Some(ctx) = crate::overlay_state::OverlayContext::try_get() {
                     let mgr = ctx.overlay_manager();
                     let mut inner = mgr.lock().unwrap();
                     if has_close_delay {
                         // Use hover_leave to start close delay countdown
+                        tracing::debug!("OVERLAY: calling hover_leave (has_close_delay=true)");
                         inner.hover_leave(overlay_handle);
                     } else {
                         // Close immediately (no delay configured)
@@ -2267,6 +2373,21 @@ impl DropdownBuilder {
     /// ```
     pub fn motion_key(mut self, key: impl Into<String>) -> Self {
         self.config.motion_key = Some(key.into());
+        self
+    }
+
+    /// Set the anchor direction for correct occlusion testing
+    ///
+    /// For positioned overlays (via `.at(x, y)`), this specifies which edge
+    /// the (x, y) point represents:
+    /// - `Top`: overlay appears above trigger, y is the bottom edge
+    /// - `Bottom`: overlay appears below trigger, y is the top edge (default)
+    /// - `Left`: overlay appears left of trigger, x is the right edge
+    /// - `Right`: overlay appears right of trigger, x is the left edge
+    ///
+    /// This is used to calculate correct bounds for hit test occlusion.
+    pub fn anchor_direction(mut self, direction: AnchorDirection) -> Self {
+        self.config.anchor_direction = direction;
         self
     }
 

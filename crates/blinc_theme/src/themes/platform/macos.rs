@@ -42,7 +42,7 @@ impl MacOSTheme {
                 // Surfaces
                 background: Color::from_hex(0xF5F5F7),
                 surface: Color::WHITE,
-                surface_elevated: Color::WHITE,
+                surface_elevated: Color::from_hex(0xF3F3F3),
                 surface_overlay: Color::from_hex(0xE8E8ED),
                 // Text
                 text_primary: Color::from_hex(0x1D1D1F),

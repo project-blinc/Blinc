@@ -1090,7 +1090,9 @@ impl EventRouter {
         };
 
         // Check if point is within bounds
-        if !self.point_in_bounds(x, y, &bounds) {
+        let in_bounds = self.point_in_bounds(x, y, &bounds);
+
+        if !in_bounds {
             return;
         }
 
@@ -1131,6 +1133,7 @@ impl EventRouter {
 
         // Check children
         let children = tree.layout().children(node);
+
         for child in children {
             self.hit_test_node_all(
                 tree,
@@ -1241,10 +1244,19 @@ impl EventRouter {
 
         // Point is in overlay bounds - filter out hits that are NOT in the overlay layer
         if let Some(overlay_id) = overlay_layer_id {
-            all_hits
+            let result: Vec<_> = all_hits
                 .into_iter()
                 .filter(|hit| hit.ancestors.contains(&overlay_id))
-                .collect()
+                .collect();
+
+            // Log when we're in overlay bounds but filtering
+            if result.is_empty() {
+                tracing::debug!(
+                    "hit_test_with_occlusion: in overlay bounds at ({:.1}, {:.1}), overlay_id={:?}, but no hits pass filter",
+                    x, y, overlay_id
+                );
+            }
+            result
         } else {
             all_hits
         }

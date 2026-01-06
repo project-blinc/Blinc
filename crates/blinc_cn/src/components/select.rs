@@ -662,11 +662,18 @@ fn build_dropdown_content(
                 CursorStyle::Pointer
             })
             .on_state(move |state, container: &mut Div| {
+                let theme = ThemeState::get();
                 // Apply hover background based on button state
                 let item_bg = if *state == ButtonState::Hovered && !is_opt_disabled {
-                    surface_elevated
+                    theme.color(ColorToken::SecondaryHover).with_alpha(0.65)
                 } else {
                     base_bg
+                };
+
+                let text_color = if *state == ButtonState::Hovered && !is_opt_disabled {
+                    theme.color(ColorToken::TextSecondary)
+                } else {
+                    option_text_color
                 };
 
                 let content = div()
@@ -684,7 +691,7 @@ fn build_dropdown_content(
                                 text(&opt_label)
                                     .size(font_size)
                                     .no_cursor()
-                                    .color(option_text_color),
+                                    .color(text_color),
                             )
                         },
                     );

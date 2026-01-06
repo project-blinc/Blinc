@@ -2204,16 +2204,17 @@ impl WindowedApp {
                             );
                             windowed_ctx.overlay_manager.update(current_time);
 
-                            // Check if overlay content changed OR animations are active
-                            // During animations (enter/exit), the backdrop opacity changes each frame,
-                            // so we need to rebuild the overlay layer to update the backdrop color.
+                            // Check if overlay content changed (new overlay opened/closed)
+                            // NOTE: We only rebuild on actual content changes, NOT during animations.
+                            // Animation visual updates (backdrop opacity, motion transforms) are handled
+                            // by the motion system and render-time interpolation, not content rebuilds.
+                            // Rebuilding during animation breaks event handlers because node IDs change.
                             let overlay_content_dirty = windowed_ctx.overlay_manager.is_dirty();
-                            let overlay_animating = windowed_ctx.overlay_manager.has_animating_overlays();
 
-                            if overlay_content_dirty || overlay_animating {
+                            if overlay_content_dirty {
                                 tracing::debug!(
-                                    "Overlay rebuild: dirty={}, animating={}, has_visible={}",
-                                    overlay_content_dirty, overlay_animating,
+                                    "Overlay rebuild: dirty={}, has_visible={}",
+                                    overlay_content_dirty,
                                     windowed_ctx.overlay_manager.has_visible_overlays()
                                 );
                                 // Look up the overlay layer node by its element ID
@@ -2228,10 +2229,8 @@ impl WindowedApp {
                                     tracing::warn!("Overlay changed but node '{}' not found in registry - will rebuild on next frame",
                                         blinc_layout::widgets::overlay::OVERLAY_LAYER_ID);
                                 }
-                                // Consume the dirty flag if it was set
-                                if overlay_content_dirty {
-                                    windowed_ctx.overlay_manager.take_dirty();
-                                }
+                                // Consume the dirty flag
+                                windowed_ctx.overlay_manager.take_dirty();
                             }
 
                             // Check if stateful elements requested a redraw (hover/press changes)

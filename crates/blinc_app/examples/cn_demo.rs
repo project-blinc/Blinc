@@ -11,7 +11,7 @@ use blinc_cn::prelude::*;
 use blinc_core::Color;
 use blinc_layout::selector::ScrollRef;
 use blinc_layout::widgets::text_input::text_input_data;
-use blinc_theme::{ColorScheme, ColorToken, ThemeState};
+use blinc_theme::{BlincTheme, ColorScheme, ColorToken, ThemeState};
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -33,6 +33,7 @@ fn main() -> Result<()> {
 fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
     eprintln!("build_ui called");
     let theme = ThemeState::get();
+    eprintln!("Current theme platform: {:?}", blinc_theme::platform::Platform::current());
     let bg = theme.color(ColorToken::Background);
 
     // Create scroll ref to track scroll position
