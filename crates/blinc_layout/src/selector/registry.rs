@@ -297,6 +297,16 @@ impl ElementRegistry {
             .unwrap_or(false)
     }
 
+    /// Clear the triggered state for an on_ready callback
+    ///
+    /// This allows the callback to fire again. Used when a motion resets
+    /// from Visible back to Suspended state (e.g., for tab re-entry animations).
+    pub fn clear_on_ready_triggered(&self, string_id: &str) {
+        if let Ok(mut triggered) = self.triggered_on_ready_ids.lock() {
+            triggered.remove(string_id);
+        }
+    }
+
     /// Register an on_ready callback by string ID directly
     ///
     /// This is the preferred method for registering on_ready callbacks, as it

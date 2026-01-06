@@ -41,6 +41,7 @@ pub mod fsm;
 pub mod layer;
 pub mod reactive;
 pub mod runtime;
+pub mod store;
 pub mod value;
 
 pub use draw::{
@@ -74,4 +75,10 @@ pub use context_state::{
     query, query_motion, request_rebuild, use_signal_keyed, use_state_keyed, AnyElementRegistry,
     BlincContextState, Bounds, BoundsCallback, FocusCallback, HookState, MotionAnimationState,
     MotionStateCallback, QueryCallback, ScrollCallback, SharedHookState, StateKey,
+};
+
+// Re-export store types
+pub use store::{
+    clear_all_stores, create_store, create_store_with, get_store_state, kv_delete, kv_get, kv_set,
+    remove_store, set_store_state, update_store_state, KVStore, Store, SubscriptionHandle,
 };

@@ -50,8 +50,10 @@
 //! ```
 
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use crate::div::{ElementBuilder, ElementTypeId};
+use crate::element::ElementBounds;
 use crate::element::{MotionAnimation, MotionKeyframe, RenderProps};
 use crate::key::InstanceKey;
 
@@ -402,6 +404,16 @@ pub struct Motion {
     /// Useful for tab transitions where content changes but key stays stable
     replay: bool,
 
+    /// Whether to start in suspended state (waiting for explicit start)
+    /// When true, the motion starts with opacity 0 and waits for `query_motion(key).start()`
+    /// to trigger the enter animation. Useful for tab transitions where you want to
+    /// mount content invisibly, then trigger animation manually.
+    suspended: bool,
+
+    /// Callback to invoke when the motion container is laid out and ready
+    /// Used with `suspended` to trigger animation start after content is mounted
+    on_ready_callback: Option<Arc<dyn Fn(ElementBounds) + Send + Sync>>,
+
     // =========================================================================
     // Continuous animation bindings (AnimatedValue driven)
     // =========================================================================
@@ -495,6 +507,8 @@ pub fn motion() -> Motion {
         key: InstanceKey::new("motion"),
         use_stable_key: true, // Default to stable keying for overlays
         replay: false,
+        suspended: false,
+        on_ready_callback: None,
         translate_x: None,
         translate_y: None,
         scale: None,
@@ -550,6 +564,8 @@ pub fn motion_derived(parent_key: &str) -> Motion {
         key: InstanceKey::explicit(format!("motion:{}", parent_key)),
         use_stable_key: true,
         replay: false,
+        suspended: false,
+        on_ready_callback: None,
         translate_x: None,
         translate_y: None,
         scale: None,
@@ -1079,6 +1095,70 @@ impl Motion {
         self.replay
     }
 
+    /// Start in suspended state (waiting for explicit start)
+    ///
+    /// When enabled, the motion starts with opacity 0 and waits for
+    /// `query_motion(key).start()` to trigger the enter animation.
+    ///
+    /// This is useful for tab transitions and other cases where you want to:
+    /// 1. Mount the content invisibly
+    /// 2. Perform any setup/measurement (via `on_ready`)
+    /// 3. Then trigger the animation manually
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // In tabs.rs on_state callback:
+    /// let motion_key = format!("tabs_motion:{}", active_tab);
+    ///
+    /// // Create suspended motion
+    /// let m = motion_derived(&motion_key)
+    ///     .suspended()
+    ///     .enter_animation(enter)
+    ///     .child(content);
+    ///
+    /// // Trigger animation after mounting (e.g., in on_ready callback)
+    /// query_motion(&motion_key).start();
+    /// ```
+    pub fn suspended(mut self) -> Self {
+        self.suspended = true;
+        self
+    }
+
+    /// Check if suspended mode is enabled
+    pub fn is_suspended(&self) -> bool {
+        self.suspended
+    }
+
+    /// Register a callback to be invoked when the motion container is ready
+    ///
+    /// The callback fires once after the motion is laid out for the first time.
+    /// This is the ideal place to start suspended animations after content is mounted.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Tab content with suspended animation that starts after mount
+    /// let motion_key = format!("tabs_motion:{}", active_tab);
+    /// let full_key = format!("motion:{}:child:0", motion_key);
+    ///
+    /// motion_derived(&motion_key)
+    ///     .suspended()
+    ///     .enter_animation(enter)
+    ///     .on_ready(move |_bounds| {
+    ///         // Content is mounted - start the animation
+    ///         query_motion(&full_key).start();
+    ///     })
+    ///     .child(content)
+    /// ```
+    pub fn on_ready<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(ElementBounds) + Send + Sync + 'static,
+    {
+        self.on_ready_callback = Some(Arc::new(callback));
+        self
+    }
+
     /// Get the motion animation configuration for a child at given index
     ///
     /// Takes stagger into account to compute the correct delay for each child.
@@ -1150,6 +1230,288 @@ impl Motion {
     }
 }
 
+// ElementBuilder impl moved after MotionPresence section to keep it together
+
+// =============================================================================
+// MotionPresence - State Machine for Enter/Exit Lifecycle
+// =============================================================================
+
+/// Custom event types for motion presence state machine
+pub mod motion_events {
+    /// Content mounted, start enter animation
+    pub const MOUNT: u32 = 30001;
+    /// Enter animation completed
+    pub const ENTER_COMPLETE: u32 = 30002;
+    /// Request to exit (start exit animation)
+    pub const EXIT: u32 = 30003;
+    /// Exit animation completed
+    pub const EXIT_COMPLETE: u32 = 30004;
+    /// Key changed - new content is replacing old
+    pub const KEY_CHANGED: u32 = 30005;
+}
+
+/// State machine for motion presence lifecycle
+///
+/// Tracks whether content is entering, visible, or exiting.
+/// Used by `MotionPresence` to manage sequenced enter/exit animations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum MotionPresenceState {
+    /// No content mounted
+    #[default]
+    Empty,
+    /// Content mounted, enter animation playing
+    Entering,
+    /// Content fully visible
+    Visible,
+    /// Exit animation playing, content still rendered
+    Exiting,
+}
+
+impl MotionPresenceState {
+    /// Check if content should be rendered
+    pub fn is_mounted(&self) -> bool {
+        !matches!(self, MotionPresenceState::Empty)
+    }
+
+    /// Check if currently animating (entering or exiting)
+    pub fn is_animating(&self) -> bool {
+        matches!(
+            self,
+            MotionPresenceState::Entering | MotionPresenceState::Exiting
+        )
+    }
+
+    /// Check if exit animation is playing
+    pub fn is_exiting(&self) -> bool {
+        matches!(self, MotionPresenceState::Exiting)
+    }
+
+    /// Check if fully visible and not animating
+    pub fn is_visible(&self) -> bool {
+        matches!(self, MotionPresenceState::Visible)
+    }
+}
+
+impl crate::stateful::StateTransitions for MotionPresenceState {
+    fn on_event(&self, event: u32) -> Option<Self> {
+        use motion_events::*;
+        use MotionPresenceState::*;
+
+        match (self, event) {
+            // Empty -> Entering: Content mounted
+            (Empty, MOUNT) => Some(Entering),
+
+            // Entering -> Visible: Enter animation finished
+            (Entering, ENTER_COMPLETE) => Some(Visible),
+
+            // Visible -> Exiting: Start exit animation
+            (Visible, EXIT) | (Visible, KEY_CHANGED) => Some(Exiting),
+
+            // Exiting -> Empty: Exit animation finished, content removed
+            (Exiting, EXIT_COMPLETE) => Some(Empty),
+
+            // If key changes while entering, let it finish then exit
+            (Entering, KEY_CHANGED) => Some(Entering), // Queue the exit for later
+
+            // No transition
+            _ => None,
+        }
+    }
+}
+
+/// Tracked child that is currently exiting
+#[derive(Clone)]
+pub struct ExitingChild {
+    /// Unique key for this child
+    pub key: String,
+    /// The motion key for tracking animation state
+    pub motion_key: String,
+}
+
+/// State tracked for MotionPresence via blinc_store
+#[derive(Clone, Default)]
+pub struct MotionPresenceStore {
+    /// Current child key (if any)
+    pub current_key: Option<String>,
+    /// Children that are currently exiting
+    pub exiting: Vec<ExitingChild>,
+    /// Current state of the presence state machine
+    pub state: MotionPresenceState,
+    /// Whether we're waiting for enter animation to start
+    pub pending_enter: bool,
+}
+
+impl MotionPresenceStore {
+    /// Check if a specific key is currently exiting
+    pub fn is_key_exiting(&self, key: &str) -> bool {
+        self.exiting.iter().any(|e| e.key == key)
+    }
+
+    /// Remove a key from the exiting list
+    pub fn remove_exiting(&mut self, key: &str) {
+        self.exiting.retain(|e| e.key != key);
+    }
+
+    /// Add a child to the exiting list
+    pub fn add_exiting(&mut self, key: String, motion_key: String) {
+        // Don't add duplicates
+        if !self.is_key_exiting(&key) {
+            self.exiting.push(ExitingChild { key, motion_key });
+        }
+    }
+
+    /// Check if we have any children exiting
+    pub fn has_exiting(&self) -> bool {
+        !self.exiting.is_empty()
+    }
+}
+
+/// Get the global store for MotionPresence states
+pub fn motion_presence_store() -> &'static blinc_core::Store<MotionPresenceStore> {
+    blinc_core::create_store::<MotionPresenceStore>("motion_presence")
+}
+
+/// Query the current presence state for a given store key
+pub fn query_presence_state(store_key: &str) -> MotionPresenceStore {
+    motion_presence_store().get(store_key)
+}
+
+/// Update the presence state for a given store key
+pub fn update_presence_state<F>(store_key: &str, f: F)
+where
+    F: FnOnce(&mut MotionPresenceStore),
+{
+    motion_presence_store().update(store_key, f);
+}
+
+/// Check and clear any completed exit animations for a store key
+///
+/// Returns true if any exits were cleared (meaning we should re-render).
+pub fn check_and_clear_exiting(store_key: &str) -> bool {
+    use crate::selector::query_motion;
+
+    let state = motion_presence_store().get(store_key);
+    let mut cleared_any = false;
+
+    for child in &state.exiting {
+        let motion = query_motion(&child.motion_key);
+        // Motion is done if it's not animating (Visible, Removed, or NotFound)
+        if !motion.is_animating() {
+            tracing::debug!(
+                "MotionPresence '{}': exit complete for '{}' (motion state: {:?})",
+                store_key,
+                child.key,
+                motion.state()
+            );
+            cleared_any = true;
+        }
+    }
+
+    if cleared_any {
+        motion_presence_store().update(store_key, |s| {
+            s.exiting.retain(|child| {
+                let motion = query_motion(&child.motion_key);
+                motion.is_animating()
+            });
+        });
+    }
+
+    cleared_any
+}
+
+/// Start exit animation for a child and add to exiting list
+pub fn start_exit_for_key(store_key: &str, child_key: &str, motion_key: &str) {
+    use crate::selector::query_motion;
+
+    tracing::debug!(
+        "MotionPresence '{}': starting exit for '{}' (motion: '{}')",
+        store_key,
+        child_key,
+        motion_key
+    );
+
+    // Trigger the exit animation
+    query_motion(motion_key).exit();
+
+    // Add to exiting list
+    motion_presence_store().update(store_key, |s| {
+        s.add_exiting(child_key.to_string(), motion_key.to_string());
+        s.state = MotionPresenceState::Exiting;
+    });
+}
+
+/// Check if all exits are complete and trigger enter for new content
+pub fn check_ready_for_enter(store_key: &str) -> bool {
+    let state = motion_presence_store().get(store_key);
+
+    // If we have pending enter and no more exiting children
+    if state.pending_enter && state.exiting.is_empty() {
+        tracing::debug!(
+            "MotionPresence '{}': all exits complete, ready for enter",
+            store_key
+        );
+
+        motion_presence_store().update(store_key, |s| {
+            s.pending_enter = false;
+            s.state = MotionPresenceState::Entering;
+        });
+
+        return true;
+    }
+
+    false
+}
+
+#[cfg(test)]
+mod tests_motion_presence {
+    use super::*;
+
+    #[test]
+    fn test_motion_presence_state_transitions() {
+        use crate::stateful::StateTransitions;
+
+        let state = MotionPresenceState::Empty;
+        assert_eq!(
+            state.on_event(motion_events::MOUNT),
+            Some(MotionPresenceState::Entering)
+        );
+
+        let state = MotionPresenceState::Entering;
+        assert_eq!(
+            state.on_event(motion_events::ENTER_COMPLETE),
+            Some(MotionPresenceState::Visible)
+        );
+
+        let state = MotionPresenceState::Visible;
+        assert_eq!(
+            state.on_event(motion_events::EXIT),
+            Some(MotionPresenceState::Exiting)
+        );
+
+        let state = MotionPresenceState::Exiting;
+        assert_eq!(
+            state.on_event(motion_events::EXIT_COMPLETE),
+            Some(MotionPresenceState::Empty)
+        );
+    }
+
+    #[test]
+    fn test_motion_presence_state_helpers() {
+        assert!(!MotionPresenceState::Empty.is_mounted());
+        assert!(MotionPresenceState::Entering.is_mounted());
+        assert!(MotionPresenceState::Visible.is_mounted());
+        assert!(MotionPresenceState::Exiting.is_mounted());
+
+        assert!(MotionPresenceState::Entering.is_animating());
+        assert!(!MotionPresenceState::Visible.is_animating());
+        assert!(MotionPresenceState::Exiting.is_animating());
+
+        assert!(MotionPresenceState::Exiting.is_exiting());
+        assert!(!MotionPresenceState::Visible.is_exiting());
+    }
+}
+
+// ElementBuilder implementation for Motion
 impl ElementBuilder for Motion {
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
         // Push motion context so children know they're inside this motion
@@ -1212,6 +1574,10 @@ impl ElementBuilder for Motion {
         self.replay
     }
 
+    fn motion_is_suspended(&self) -> bool {
+        self.suspended
+    }
+
     #[allow(deprecated)]
     fn motion_is_exiting(&self) -> bool {
         self.is_exiting
@@ -1219,6 +1585,10 @@ impl ElementBuilder for Motion {
 
     fn layout_style(&self) -> Option<&taffy::Style> {
         Some(&self.style)
+    }
+
+    fn motion_on_ready_callback(&self) -> Option<Arc<dyn Fn(ElementBounds) + Send + Sync>> {
+        self.on_ready_callback.clone()
     }
 }
 

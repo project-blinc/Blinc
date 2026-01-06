@@ -149,6 +149,35 @@ pub fn take_global_motion_exit_starts() -> Vec<String> {
     std::mem::take(&mut *PENDING_MOTION_EXIT_STARTS.lock().unwrap())
 }
 
+// =============================================================================
+// Global pending motion start queue (for suspended motions)
+// =============================================================================
+
+/// Global queue for motion keys that should start their enter animation from suspended state
+///
+/// This allows components to explicitly start suspended animations without needing
+/// direct access to RenderState.
+static PENDING_MOTION_STARTS: LazyLock<Mutex<Vec<String>>> =
+    LazyLock::new(|| Mutex::new(Vec::new()));
+
+/// Queue a stable motion key to start its enter animation from suspended state
+///
+/// Call this to explicitly start a suspended motion's enter animation.
+/// The motion must be in `Suspended` state for this to have an effect.
+pub fn queue_global_motion_start(key: String) {
+    let mut queue = PENDING_MOTION_STARTS.lock().unwrap();
+    if !queue.contains(&key) {
+        queue.push(key);
+    }
+}
+
+/// Take all pending global motion starts
+///
+/// Returns the queued keys and clears the queue.
+pub fn take_global_motion_starts() -> Vec<String> {
+    std::mem::take(&mut *PENDING_MOTION_STARTS.lock().unwrap())
+}
+
 /// Buffer zone around viewport for prefetching content
 /// This prevents pop-in when scrolling slowly
 const VIEWPORT_BUFFER: f32 = 100.0;
@@ -156,6 +185,9 @@ const VIEWPORT_BUFFER: f32 = 100.0;
 /// State of a motion animation
 #[derive(Clone, Debug)]
 pub enum MotionState {
+    /// Animation is suspended (waiting for explicit start)
+    /// Content is rendered with opacity 0, waiting for `MotionHandle.start()` to trigger
+    Suspended,
     /// Animation hasn't started yet (waiting for delay)
     Waiting { remaining_delay_ms: f32 },
     /// Animation is playing (enter animation)
@@ -409,6 +441,7 @@ impl RenderState {
             states.clear();
             for (key, motion) in &self.stable_motions {
                 let state = match &motion.state {
+                    MotionState::Suspended => MotionAnimationState::Suspended,
                     MotionState::Waiting { .. } => MotionAnimationState::Waiting,
                     MotionState::Entering { progress, .. } => MotionAnimationState::Entering {
                         progress: *progress,
@@ -559,7 +592,8 @@ impl RenderState {
                     true // Still animating
                 }
             }
-            MotionState::Visible => false, // Not animating
+            MotionState::Suspended => true, // Still animating (waiting for start)
+            MotionState::Visible => false,  // Not animating
             MotionState::Exiting {
                 progress,
                 duration_ms,
@@ -968,12 +1002,13 @@ impl RenderState {
             // not just the ones that changed. Use `replay_stable_motion(key)` instead,
             // called from an on_ready callback when the motion is first mounted.
 
-            // If already animating or visible, leave it alone
+            // If already animating, suspended, or visible, leave it alone
             match existing.state {
-                MotionState::Waiting { .. }
+                MotionState::Suspended
+                | MotionState::Waiting { .. }
                 | MotionState::Entering { .. }
                 | MotionState::Visible => {
-                    // Don't restart - animation is either in progress or completed
+                    // Don't restart - animation is either suspended, in progress, or completed
                     return;
                 }
                 MotionState::Exiting { .. } => {
@@ -1064,6 +1099,133 @@ impl RenderState {
                 motion.state = MotionState::Visible;
                 motion.current = MotionKeyframe::default(); // Reset to default (fully visible)
             }
+        }
+    }
+
+    /// Start a suspended stable-keyed motion
+    ///
+    /// Unlike `start_stable_motion`, this creates the motion in `Suspended` state.
+    /// The motion renders with opacity 0 and waits for an explicit `start()` call
+    /// via `MotionHandle.start()` to begin the enter animation.
+    ///
+    /// This is useful for tab transitions and other cases where you want to:
+    /// 1. Mount the content invisibly
+    /// 2. Perform any setup/measurement
+    /// 3. Then trigger the animation manually
+    ///
+    /// **Important**: Unlike regular motions, suspended motions will reset to
+    /// `Suspended` state when this is called again, even if the motion is already
+    /// `Visible`. This enables tab-like behavior where each time a tab becomes
+    /// active, it resets to suspended and waits for explicit `start()`.
+    ///
+    /// # Parameters
+    ///
+    /// * `key` - Stable string key for this motion
+    /// * `config` - Animation configuration (enter/exit animations)
+    /// Returns `true` if a new motion was created or an existing one was reset
+    /// (meaning the on_ready callback should be re-registered).
+    pub fn start_stable_motion_suspended(&mut self, key: &str, config: MotionAnimation) -> bool {
+        // Mark this key as used this frame (for garbage collection)
+        self.stable_motions_used.insert(key.to_string());
+
+        // Check if motion already exists
+        if let Some(existing) = self.stable_motions.get_mut(key) {
+            match existing.state {
+                // Already suspended or animating - leave it alone
+                MotionState::Suspended
+                | MotionState::Waiting { .. }
+                | MotionState::Entering { .. } => {
+                    return false;
+                }
+                // Motion is visible - leave it visible, don't reset
+                // The suspended animation is only for first appearance
+                // Re-entry animations should use .replay() instead
+                MotionState::Visible => {
+                    return false;
+                }
+                // Exiting - let it finish, don't interrupt
+                MotionState::Exiting { .. } => {
+                    return false;
+                }
+                MotionState::Removed => {
+                    tracing::debug!(
+                        "Motion '{}': Removed state, NOT restarting suspended (wait for cleanup)",
+                        key
+                    );
+                    return false;
+                }
+            }
+        }
+
+        // Create new suspended motion
+        tracing::debug!(
+            "Motion '{}': Creating new SUSPENDED motion (will wait for start())",
+            key
+        );
+
+        // Initial keyframe has opacity 0 for suspended state
+        let mut current = config.enter_from.clone().unwrap_or_default();
+        current.opacity = Some(0.0);
+
+        self.stable_motions.insert(
+            key.to_string(),
+            ActiveMotion {
+                config,
+                state: MotionState::Suspended,
+                current,
+            },
+        );
+
+        // New motion created, on_ready callback should be registered
+        true
+    }
+
+    /// Start the enter animation for a suspended motion
+    ///
+    /// Transitions a motion from `Suspended` → `Waiting` or `Entering` state.
+    /// No-op if the motion is not in `Suspended` state.
+    pub fn start_suspended_motion(&mut self, key: &str) {
+        if let Some(motion) = self.stable_motions.get_mut(key) {
+            if matches!(motion.state, MotionState::Suspended) {
+                let config = &motion.config;
+                tracing::debug!(
+                    "Motion '{}': Starting from suspended (enter_duration={}ms)",
+                    key,
+                    config.enter_duration_ms
+                );
+
+                // Transition to the appropriate next state
+                motion.state = if config.enter_delay_ms > 0 {
+                    MotionState::Waiting {
+                        remaining_delay_ms: config.enter_delay_ms as f32,
+                    }
+                } else if config.enter_from.is_some() && config.enter_duration_ms > 0 {
+                    MotionState::Entering {
+                        progress: 0.0,
+                        duration_ms: config.enter_duration_ms as f32,
+                    }
+                } else {
+                    MotionState::Visible
+                };
+
+                // Reset current values to enter_from state
+                motion.current = if matches!(motion.state, MotionState::Visible) {
+                    MotionKeyframe::default()
+                } else {
+                    config.enter_from.clone().unwrap_or_default()
+                };
+            }
+        }
+    }
+
+    /// Process all pending motion starts from the global queue
+    ///
+    /// Call this during the render loop to start any suspended motions
+    /// that were queued via `queue_global_motion_start()`.
+    pub fn process_global_motion_starts(&mut self) {
+        let keys = take_global_motion_starts();
+        for key in keys {
+            self.start_suspended_motion(&key);
         }
     }
 
@@ -1173,6 +1335,7 @@ impl RenderState {
 
         match self.stable_motions.get(key) {
             Some(motion) => match &motion.state {
+                MotionState::Suspended => MotionAnimationState::Suspended,
                 MotionState::Waiting { .. } => MotionAnimationState::Waiting,
                 MotionState::Entering { progress, .. } => MotionAnimationState::Entering {
                     progress: *progress,
@@ -1298,8 +1461,9 @@ impl RenderState {
                     }
                 }
             }
-            MotionState::Visible | MotionState::Removed => {
-                // Nothing to do
+            MotionState::Suspended | MotionState::Visible | MotionState::Removed => {
+                // Suspended: waiting for explicit start() call - no tick needed
+                // Visible/Removed: animation complete - nothing to do
             }
         }
     }

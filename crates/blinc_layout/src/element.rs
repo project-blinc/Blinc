@@ -863,6 +863,13 @@ pub struct RenderProps {
     /// Whether the motion animation should replay from the beginning
     /// Used with motion_stable_id to force animation restart on content change
     pub motion_should_replay: bool,
+    /// Whether the motion animation should start in suspended state
+    /// When true, the motion starts with opacity 0 and waits for explicit start
+    pub motion_is_suspended: bool,
+    /// Callback to invoke when the motion is laid out and ready
+    /// Used with suspended animations to start the animation after content is mounted
+    pub motion_on_ready_callback:
+        Option<std::sync::Arc<dyn Fn(ElementBounds) + Send + Sync + 'static>>,
     /// Whether this is a Stack layer that increments z_layer for proper z-ordering
     /// When true, entering this node increments the DrawContext's z_layer
     pub is_stack_layer: bool,
@@ -906,6 +913,8 @@ impl Default for RenderProps {
             motion: None,
             motion_stable_id: None,
             motion_should_replay: false,
+            motion_is_suspended: false,
+            motion_on_ready_callback: None,
             is_stack_layer: false,
             cursor: None,
             pointer_events_none: false,

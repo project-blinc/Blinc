@@ -517,7 +517,7 @@ impl MotionHandle {
 
     /// Check if the animation is still playing (not settled)
     ///
-    /// Returns true if the motion is in `Waiting`, `Entering`, or `Exiting` state.
+    /// Returns true if the motion is in `Suspended`, `Waiting`, `Entering`, or `Exiting` state.
     pub fn is_animating(&self) -> bool {
         self.state.is_animating()
     }
@@ -528,6 +528,13 @@ impl MotionHandle {
     /// This is when it's safe to render child content with hover effects.
     pub fn is_settled(&self) -> bool {
         self.state.is_settled()
+    }
+
+    /// Check if the motion is suspended (waiting for explicit start)
+    ///
+    /// A suspended motion is mounted with opacity 0 and waits for `start()` to be called.
+    pub fn is_suspended(&self) -> bool {
+        self.state.is_suspended()
     }
 
     /// Check if the element is entering
@@ -542,7 +549,7 @@ impl MotionHandle {
 
     /// Get the animation progress (0.0 to 1.0)
     ///
-    /// Returns 0.0 for Waiting, 1.0 for Visible/Removed, and the actual
+    /// Returns 0.0 for Suspended/Waiting, 1.0 for Visible/Removed, and the actual
     /// progress for Entering/Exiting states.
     pub fn progress(&self) -> f32 {
         self.state.progress()
@@ -551,6 +558,39 @@ impl MotionHandle {
     /// Check if a motion with this key exists
     pub fn exists(&self) -> bool {
         !matches!(self.state, MotionAnimationState::NotFound)
+    }
+
+    /// Start the enter animation for a suspended motion
+    ///
+    /// Use this to explicitly trigger the enter animation for a motion that was
+    /// created with `.suspended()`. The motion transitions from `Suspended` →
+    /// `Waiting` or `Entering` state.
+    ///
+    /// This is useful for tab transitions and other cases where you want to:
+    /// 1. Mount the content invisibly (opacity 0)
+    /// 2. Perform any setup/measurement
+    /// 3. Then trigger the animation manually
+    ///
+    /// No-op if the motion is not in `Suspended` state.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // In tabs.rs on_state callback:
+    /// let motion_key = format!("tabs_motion:{}", active_tab);
+    ///
+    /// // Create suspended motion first
+    /// let m = motion_derived(&motion_key)
+    ///     .suspended()
+    ///     .enter_animation(enter)
+    ///     .child(content);
+    ///
+    /// // Then trigger the animation after mounting
+    /// query_motion(&motion_key).start();
+    /// ```
+    pub fn start(&self) {
+        // Queue the start to be processed during the next render frame
+        crate::queue_global_motion_start(self.key.clone());
     }
 
     /// Cancel the exit animation and return the motion to Visible state

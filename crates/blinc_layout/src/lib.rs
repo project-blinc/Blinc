@@ -126,7 +126,8 @@ pub use canvas::{canvas, Canvas, CanvasBounds, CanvasData, CanvasRenderFn};
 // Render state (dynamic properties separate from tree structure)
 pub use render_state::{
     create_shared_motion_states, queue_global_motion_exit_cancel, queue_global_motion_exit_start,
-    ActiveMotion, MotionState, NodeRenderState, Overlay, RenderState, SharedMotionStates,
+    queue_global_motion_start, ActiveMotion, MotionState, NodeRenderState, Overlay, RenderState,
+    SharedMotionStates,
 };
 
 // Stateful elements
@@ -145,9 +146,11 @@ pub use units::{pct, px, sp, Length, Unit};
 
 // Motion container for entry/exit animations
 pub use motion::{
-    current_motion_key, is_inside_animating_motion, is_inside_motion, motion, motion_derived,
-    ElementAnimation, Motion, MotionBindings, SharedAnimatedValue, SlideDirection, StaggerConfig,
-    StaggerDirection,
+    check_and_clear_exiting, check_ready_for_enter, current_motion_key, is_inside_animating_motion,
+    is_inside_motion, motion, motion_derived, motion_events, motion_presence_store,
+    query_presence_state, start_exit_for_key, update_presence_state, ElementAnimation,
+    ExitingChild, Motion, MotionBindings, MotionPresenceState, MotionPresenceStore,
+    SharedAnimatedValue, SlideDirection, StaggerConfig, StaggerDirection,
 };
 
 // Text measurement

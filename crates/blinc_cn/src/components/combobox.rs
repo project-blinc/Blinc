@@ -976,10 +976,13 @@ fn build_dropdown_content(
 
     dropdown_div = dropdown_div.child(options_stateful);
 
+    let motion_key_str = format!("combobox_{}", key);
+    let motion_key_with_child = format!("{}:child:0", motion_key_str);
+
     // Wrap dropdown in motion container for enter/exit animations
     // Use motion_derived with key so the overlay can trigger exit animation
     div().child(
-        motion_derived(key)
+        motion_derived(&motion_key_with_child)
             .enter_animation(AnimationPreset::dropdown_in(150))
             .exit_animation(AnimationPreset::dropdown_out(100))
             .child(dropdown_div),

@@ -2712,6 +2712,14 @@ pub trait ElementBuilder {
         false
     }
 
+    /// Check if this motion should start in suspended state
+    ///
+    /// When true, the motion starts with opacity 0 and waits for
+    /// `query_motion(key).start()` to trigger the enter animation.
+    fn motion_is_suspended(&self) -> bool {
+        false
+    }
+
     /// DEPRECATED: Check if this motion should start its exit animation
     ///
     /// This method is deprecated. Motion exit is now triggered explicitly via
@@ -2767,6 +2775,17 @@ pub trait ElementBuilder {
     fn bound_scroll_ref(&self) -> Option<&crate::selector::ScrollRef> {
         None
     }
+
+    /// Get the on_ready callback for this motion container
+    ///
+    /// Motion containers can register a callback that fires once after the
+    /// motion is laid out. Used with suspended animations to start the
+    /// animation after content is mounted.
+    fn motion_on_ready_callback(
+        &self,
+    ) -> Option<std::sync::Arc<dyn Fn(crate::element::ElementBounds) + Send + Sync>> {
+        None
+    }
 }
 
 impl ElementBuilder for Div {
@@ -2805,6 +2824,8 @@ impl ElementBuilder for Div {
             motion: None,
             motion_stable_id: None,
             motion_should_replay: false,
+            motion_is_suspended: false,
+            motion_on_ready_callback: None,
             is_stack_layer: self.is_stack_layer,
             pointer_events_none: self.pointer_events_none,
             cursor: self.cursor,

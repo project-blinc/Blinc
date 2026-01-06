@@ -618,6 +618,8 @@ impl ElementBuilder for RichText {
             motion: None,
             motion_stable_id: None,
             motion_should_replay: false,
+            motion_is_suspended: false,
+            motion_on_ready_callback: None,
             is_stack_layer: false,
             pointer_events_none: false,
             cursor: self.cursor,

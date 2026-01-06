@@ -681,13 +681,18 @@ fn build_dropdown_content(
             .on_state(move |state, container: &mut Div| {
                 let theme = ThemeState::get();
                 // Apply hover background based on button state
-                let item_bg = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !is_opt_disabled {
+                let item_bg = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed)
+                    && !is_opt_disabled
+                {
                     theme.color(ColorToken::SecondaryHover).with_alpha(0.65)
                 } else {
                     base_bg
                 };
 
-                let text_color = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !is_opt_disabled {
+                let text_color = if (*state == ButtonState::Hovered
+                    || *state == ButtonState::Pressed)
+                    && !is_opt_disabled
+                {
                     theme.color(ColorToken::TextSecondary)
                 } else {
                     option_text_color

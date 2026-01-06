@@ -63,21 +63,76 @@
 //! ```
 
 use std::cell::OnceCell;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use blinc_animation::{AnimationPreset, MultiKeyframeAnimation};
-use blinc_core::{use_state_keyed, BlincContextState, Color, State};
+use blinc_core::{Color, State};
 use blinc_layout::div::ElementTypeId;
+// For query_motion to trigger suspended animations
 use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::motion::motion_derived;
 use blinc_layout::prelude::*;
 use blinc_layout::stateful::Stateful;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
-use blinc_theme::{BlincTheme, ColorScheme, ColorToken, RadiusToken, ThemeState};
+use blinc_theme::{ColorScheme, ColorToken, RadiusToken, ThemeState};
 
+use blinc_layout::selector::query_motion;
+use blinc_layout::stateful::request_redraw;
 use blinc_layout::InstanceKey;
 
 use crate::button::use_button_state;
+
+// =============================================================================
+// Tab Transition Tracking (simple cross-fade)
+// =============================================================================
+
+/// Tracks exiting tabs for cross-fade transitions
+#[derive(Clone, Debug, Default)]
+struct TabTransitionState {
+    /// Currently active tab
+    current_tab: String,
+    /// Tab that's exiting (if any)
+    exiting_tab: Option<String>,
+}
+
+/// Get the tab transition store
+fn tab_transitions_store() -> &'static blinc_core::Store<TabTransitionState> {
+    blinc_core::create_store::<TabTransitionState>("tab-transitions")
+}
+
+/// Update transition state when tab changes - starts exit animation on old tab
+fn update_tab_transition(tabs_id: &str, new_tab: &str, motion_base_key: &str) {
+    tab_transitions_store().update(tabs_id, |state| {
+        if state.current_tab != new_tab && !state.current_tab.is_empty() {
+            // Tab changed - start exit animation on old tab
+            let old_tab = state.current_tab.clone();
+            let exit_motion_key = format!("motion:{}:{}:child:0", motion_base_key, old_tab);
+            query_motion(&exit_motion_key).exit();
+            state.exiting_tab = Some(old_tab);
+        }
+        state.current_tab = new_tab.to_string();
+    });
+}
+
+/// Check if exiting tab's animation is complete and clear if so
+fn check_and_clear_exiting_tab(tabs_id: &str, motion_base_key: &str) -> Option<String> {
+    tab_transitions_store().update_with(tabs_id, |state| {
+        if let Some(ref exiting) = state.exiting_tab {
+            let exit_motion_key = format!("motion:{}:{}:child:0", motion_base_key, exiting);
+            let motion = query_motion(&exit_motion_key);
+
+            if !motion.is_animating() {
+                // Exit complete - clear exiting tab
+                state.exiting_tab = None;
+                return None;
+            }
+            // Still animating - keep rendering exiting tab
+            request_redraw();
+            return Some(exiting.clone());
+        }
+        None
+    })
+}
 
 /// Tabs size variants
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -287,11 +342,11 @@ impl TabsTransition {
     fn enter_animation(&self) -> Option<MultiKeyframeAnimation> {
         match self {
             TabsTransition::None => None,
-            TabsTransition::Fade => Some(AnimationPreset::fade_in(200)),
-            TabsTransition::SlideLeft => Some(AnimationPreset::slide_in_left(200, 20.0)),
-            TabsTransition::SlideRight => Some(AnimationPreset::slide_in_right(200, 20.0)),
-            TabsTransition::SlideUp => Some(AnimationPreset::slide_in_top(200, 20.0)),
-            TabsTransition::SlideDown => Some(AnimationPreset::slide_in_bottom(200, 20.0)),
+            TabsTransition::Fade => Some(AnimationPreset::fade_in(250)),
+            TabsTransition::SlideLeft => Some(AnimationPreset::slide_in_left(250, 20.0)),
+            TabsTransition::SlideRight => Some(AnimationPreset::slide_in_right(250, 50.0)),
+            TabsTransition::SlideUp => Some(AnimationPreset::slide_in_top(250, 20.0)),
+            TabsTransition::SlideDown => Some(AnimationPreset::slide_in_bottom(250, 20.0)),
         }
     }
 
@@ -299,11 +354,11 @@ impl TabsTransition {
     fn exit_animation(&self) -> Option<MultiKeyframeAnimation> {
         match self {
             TabsTransition::None => None,
-            TabsTransition::Fade => Some(AnimationPreset::fade_out(150)),
-            TabsTransition::SlideLeft => Some(AnimationPreset::slide_out_left(150, 20.0)),
-            TabsTransition::SlideRight => Some(AnimationPreset::slide_out_right(150, 20.0)),
-            TabsTransition::SlideUp => Some(AnimationPreset::slide_out_top(150, 20.0)),
-            TabsTransition::SlideDown => Some(AnimationPreset::slide_out_bottom(150, 20.0)),
+            TabsTransition::Fade => Some(AnimationPreset::fade_out(200)),
+            TabsTransition::SlideLeft => Some(AnimationPreset::slide_out_left(200, 20.0)),
+            TabsTransition::SlideRight => Some(AnimationPreset::slide_out_right(200, 25.0)),
+            TabsTransition::SlideUp => Some(AnimationPreset::slide_out_top(200, 20.0)),
+            TabsTransition::SlideDown => Some(AnimationPreset::slide_out_bottom(200, 20.0)),
         }
     }
 }
@@ -492,8 +547,6 @@ impl TabsBuilder {
         let theme = ThemeState::get();
         let config = &self.config;
 
-        
-
         // Get current value from state - use State<T>::get() directly
         let current_value = config.state.get();
 
@@ -530,10 +583,13 @@ impl TabsBuilder {
         let tabs_for_buttons = config.tabs.clone();
         let state_for_buttons = config.state.clone();
         let on_change = config.on_change.clone();
+        let transition = config.transition;
 
         let unique_state_component_key = use_button_state(self.key.get());
 
         let trigger_key = self.key.derive("tab_triggers");
+        // Create motion base key for triggering animations from tab buttons (already a String)
+        let motion_base_key_str = self.key.derive("motion");
 
         let tab_button_area = Stateful::with_shared_state(unique_state_component_key)
             .deps(&[config.state.signal_id()])
@@ -562,6 +618,14 @@ impl TabsBuilder {
 
                 for tab in tabs_for_buttons.iter() {
                     let is_active = tab.menu_item.value() == active_value;
+                    let value = tab.menu_item.value();
+
+                    // Build motion key for this tab's content
+                    let tab_motion_key = if transition != TabsTransition::None {
+                        Some(format!("{}:{}", motion_base_key_str, value))
+                    } else {
+                        None
+                    };
 
                     let tab_trigger = build_tab_trigger(
                         &trigger_key,
@@ -570,6 +634,7 @@ impl TabsBuilder {
                         size,
                         state_for_buttons.clone(),
                         on_change.clone(),
+                        tab_motion_key,
                     );
 
                     buttons = buttons.child(tab_trigger);
@@ -586,6 +651,7 @@ impl TabsBuilder {
         let transition = config.transition;
         // Clone the base key for deriving motion keys inside on_state
         let motion_base_key = self.key.derive("motion");
+        let tabs_id = self.key.get().to_string();
 
         let content_area_state = use_shared_state(&self.key.derive("content_area"));
         let tab_content_area = Stateful::with_shared_state(content_area_state)
@@ -596,41 +662,82 @@ impl TabsBuilder {
             .on_state(move |_state: &(), container: &mut Div| {
                 let active_value = state_for_content.get();
 
-                // Find and render the active tab's content
-                for tab in &tabs_for_content {
-                    if tab.menu_item.value() == active_value {
-                        let content = (tab.content)();
-                        if transition != TabsTransition::None {
-                            let tab_motion_key = format!("{}:{}", motion_base_key, active_value);
+                // Update transition tracking (triggers exit animation if tab changed)
+                update_tab_transition(&tabs_id, &active_value, &motion_base_key);
 
-                            let mut m = motion_derived(&tab_motion_key);
+                // Check for exiting tab (clear if animation complete)
+                let exiting_tab = check_and_clear_exiting_tab(&tabs_id, &motion_base_key);
 
-                            if let Some(enter) = transition.enter_animation() {
-                                m = m.enter_animation(enter);
-                            }
-                            // Wrap in div since merge() expects Div
-                            container.merge(
+                // Helper to build content for a specific tab
+                let build_tab_content = |tab_value: &str, is_exiting: bool| -> Option<Div> {
+                    tabs_for_content
+                        .iter()
+                        .find(|t| t.menu_item.value() == tab_value)
+                        .map(|tab| {
+                            let content = (tab.content)();
+                            if transition != TabsTransition::None {
+                                let tab_motion_key = format!("{}:{}", motion_base_key, tab_value);
+                                let mut m = motion_derived(&tab_motion_key);
+
+                                // Enter animation for non-exiting tabs
+                                if !is_exiting {
+                                    if let Some(enter) = transition.enter_animation() {
+                                        m = m.enter_animation(enter);
+                                    }
+                                }
+                                // Exit animation always configured
+                                if let Some(exit) = transition.exit_animation() {
+                                    m = m.exit_animation(exit);
+                                }
+
                                 div()
                                     .w_full()
-                                    .mt(content_margin)
                                     .flex_grow()
-                                    .child(m.child(content)),
-                            );
+                                    .absolute()
+                                    .left(0.0)
+                                    .top(0.0)
+                                    .right(0.0)
+                                    .bottom(0.0)
+                                    .child(m.child(content))
+                            } else {
+                                div().w_full().flex_grow().child(content)
+                            }
+                        })
+                };
 
-                            // TODO: conditionally trigger animation only after content mounted.
-                            //  let existing_motion = BlincContextState::get().query_motion(&tab_motion_key);
-                            // if !existing_motion.is_animating() {
-                            //     if let Some(enter) = transition.enter_animation() {
-                            //         existing_motion.enter_animation(enter).start();
-                            //     }
-                            // }
-                        } else {
-                            // Wrap content in div to ensure it fills parent
-                            container.merge(
-                                div().mt(content_margin).w_full().flex_grow().child(content),
-                            );
-                        }
-                        break;
+                // Cross-fade: render both exiting and current tabs in a stack
+                if let Some(ref exiting) = exiting_tab {
+                    use blinc_layout::stack::stack;
+                    let mut content_stack = stack().w_full().flex_grow();
+
+                    // Add exiting tab content (underneath, fading out)
+                    if let Some(exiting_content) = build_tab_content(exiting, true) {
+                        content_stack = content_stack.child(exiting_content);
+                    }
+
+                    // Add current tab content (on top, fading in)
+                    if let Some(current_content) = build_tab_content(&active_value, false) {
+                        content_stack = content_stack.child(current_content);
+                    }
+
+                    container.merge(
+                        div()
+                            .w_full()
+                            .mt(content_margin)
+                            .flex_grow()
+                            .relative()
+                            .child(content_stack),
+                    );
+                } else {
+                    // No transition - just render current tab
+                    if let Some(current_content) = build_tab_content(&active_value, false) {
+                        container.merge(
+                            div()
+                                .w_full()
+                                .mt(content_margin)
+                                .flex_grow()
+                                .child(current_content),
+                        );
                     }
                 }
             });
@@ -655,6 +762,7 @@ fn build_tab_trigger(
     size: TabsSize,
     tab_state: State<String>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
+    motion_key: Option<String>,
 ) -> Stateful<ButtonState> {
     let theme = ThemeState::get();
     let text_primary = theme.color(ColorToken::TextPrimary);
@@ -757,6 +865,12 @@ fn build_tab_trigger(
     if !disabled && !is_active {
         let value_for_click = value.clone();
         trigger = trigger.on_click(move |_| {
+            // Start the motion animation for the new tab content
+            if let Some(ref mk) = motion_key {
+                let full_motion_key = format!("motion:{}:child:0", mk);
+                query_motion(&full_motion_key).start();
+            }
+
             tab_state.set(value_for_click.clone());
             if let Some(ref cb) = on_change {
                 cb(&value_for_click);

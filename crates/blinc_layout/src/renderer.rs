@@ -1276,9 +1276,14 @@ impl RenderTree {
         } else {
             None
         };
-        // Get replay and exiting flags from Motion container
+        // Get replay, suspended, and exiting flags from Motion container
         let motion_should_replay = if is_motion {
             element.motion_should_replay()
+        } else {
+            false
+        };
+        let motion_is_suspended = if is_motion {
+            element.motion_is_suspended()
         } else {
             false
         };
@@ -1290,6 +1295,12 @@ impl RenderTree {
             element.motion_is_exiting()
         } else {
             false
+        };
+        // Get on_ready callback from Motion container for suspended animations
+        let motion_on_ready_callback = if is_motion {
+            element.motion_on_ready_callback()
+        } else {
+            None
         };
 
         // Match children by index (they were built in order)
@@ -1309,7 +1320,9 @@ impl RenderTree {
                         Some(motion_config),
                         child_stable_id,
                         motion_should_replay,
+                        motion_is_suspended,
                         motion_is_exiting,
+                        motion_on_ready_callback.clone(),
                     );
                     continue;
                 }
@@ -1327,7 +1340,11 @@ impl RenderTree {
         motion_config: Option<crate::element::MotionAnimation>,
         motion_stable_id: Option<String>,
         motion_should_replay: bool,
+        motion_is_suspended: bool,
         motion_is_exiting: bool,
+        motion_on_ready_callback: Option<
+            std::sync::Arc<dyn Fn(crate::element::ElementBounds) + Send + Sync>,
+        >,
     ) {
         let mut props = element.render_props();
         props.node_id = Some(node_id);
@@ -1337,6 +1354,8 @@ impl RenderTree {
             props.motion = motion_config;
             props.motion_stable_id = motion_stable_id.clone();
             props.motion_should_replay = motion_should_replay;
+            props.motion_is_suspended = motion_is_suspended;
+            props.motion_on_ready_callback = motion_on_ready_callback;
             // DEPRECATED: motion_is_exiting is no longer used for triggering exit.
             // Motion exit is now triggered explicitly via MotionHandle.exit().
             props.motion_is_exiting = motion_is_exiting;
@@ -2559,13 +2578,36 @@ impl RenderTree {
             if let Some(ref motion_config) = render_node.props.motion {
                 // Use stable key if available (for overlays), otherwise use node_id
                 if let Some(ref stable_key) = render_node.props.motion_stable_id {
-                    // Start or replay stable motion based on replay flag
-                    // Motion exit is now triggered explicitly via MotionHandle.exit()
-                    render_state.start_stable_motion(
-                        stable_key,
-                        motion_config.clone(),
-                        render_node.props.motion_should_replay,
-                    );
+                    // Check if this motion should start suspended
+                    if render_node.props.motion_is_suspended {
+                        // Start in suspended state - waits for explicit start()
+                        // Returns true if the motion was newly created or reset from Visible
+                        let needs_on_ready = render_state
+                            .start_stable_motion_suspended(stable_key, motion_config.clone());
+
+                        // Register on_ready callback if provided and motion was created/reset
+                        // This will fire once the element is laid out, allowing
+                        // the callback to trigger the suspended animation start
+                        if needs_on_ready {
+                            if let Some(ref callback) = render_node.props.motion_on_ready_callback {
+                                // Clear any previous triggered state so the callback can fire again
+                                self.element_registry.clear_on_ready_triggered(stable_key);
+                                // Register the stable_key with the node_id so that
+                                // process_on_ready_callbacks can look up bounds
+                                self.element_registry.register(stable_key, node_id);
+                                self.element_registry
+                                    .register_on_ready_for_id(stable_key, callback.clone());
+                            }
+                        }
+                    } else {
+                        // Start or replay stable motion based on replay flag
+                        // Motion exit is now triggered explicitly via MotionHandle.exit()
+                        render_state.start_stable_motion(
+                            stable_key,
+                            motion_config.clone(),
+                            render_node.props.motion_should_replay,
+                        );
+                    }
                 } else {
                     render_state.start_enter_motion(node_id, motion_config.clone());
                 }

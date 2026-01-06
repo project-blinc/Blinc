@@ -175,6 +175,9 @@ pub type ScrollCallback = Arc<dyn Fn(&str) + Send + Sync>;
 /// Used by MotionHandle to query animation progress.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum MotionAnimationState {
+    /// Animation is suspended (waiting for explicit start)
+    /// The motion is mounted with opacity 0, waiting for `MotionHandle.start()` to trigger
+    Suspended,
     /// Animation hasn't started yet (waiting for delay)
     Waiting,
     /// Element is entering (fade-in, scale-in, etc.)
@@ -197,10 +200,14 @@ pub enum MotionAnimationState {
 
 impl MotionAnimationState {
     /// Check if the animation is still playing (not settled)
+    ///
+    /// Returns true for `Waiting`, `Entering`, `Exiting`, or `Suspended` states.
+    /// Suspended is considered "animating" because the motion is waiting to start.
     pub fn is_animating(&self) -> bool {
         matches!(
             self,
-            MotionAnimationState::Waiting
+            MotionAnimationState::Suspended
+                | MotionAnimationState::Waiting
                 | MotionAnimationState::Entering { .. }
                 | MotionAnimationState::Exiting { .. }
         )
@@ -209,6 +216,11 @@ impl MotionAnimationState {
     /// Check if the animation has settled (fully visible)
     pub fn is_settled(&self) -> bool {
         matches!(self, MotionAnimationState::Visible)
+    }
+
+    /// Check if the motion is suspended (waiting for explicit start)
+    pub fn is_suspended(&self) -> bool {
+        matches!(self, MotionAnimationState::Suspended)
     }
 
     /// Check if the element is entering
@@ -223,10 +235,11 @@ impl MotionAnimationState {
 
     /// Get the animation progress (0.0 to 1.0)
     ///
-    /// Returns 0.0 for Waiting, 1.0 for Visible/Removed, and the actual
+    /// Returns 0.0 for Suspended/Waiting, 1.0 for Visible/Removed, and the actual
     /// progress for Entering/Exiting states.
     pub fn progress(&self) -> f32 {
         match self {
+            MotionAnimationState::Suspended => 0.0,
             MotionAnimationState::Waiting => 0.0,
             MotionAnimationState::Entering { progress } => *progress,
             MotionAnimationState::Visible => 1.0,

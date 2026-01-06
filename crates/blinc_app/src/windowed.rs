@@ -2203,6 +2203,8 @@ impl WindowedApp {
                             // incorrectly think the exit animation is complete.
                             rs.process_global_motion_exit_starts();
                             rs.process_global_motion_exit_cancels();
+                            // Process suspended motion starts queued via query_motion(key).start()
+                            rs.process_global_motion_starts();
 
                             // Sync motion states to shared store so overlay can query them
                             // This must happen after processing exits but before overlay update
@@ -2466,6 +2468,9 @@ impl WindowedApp {
 
                             // Process any pending motion exit starts (explicit exit triggers)
                             rs.process_global_motion_exit_starts();
+
+                            // Process suspended motion starts queued via query_motion(key).start()
+                            rs.process_global_motion_starts();
 
                             // Tick render state (handles cursor blink, color animations, etc.)
                             // This updates dynamic properties without touching tree structure

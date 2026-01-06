@@ -311,7 +311,7 @@ impl DropdownMenuBuilder {
             .on_state(move |state, container: &mut Div| {
                 let is_open = open_state_for_trigger.get();
                 let bg = btn_variant.background(theme, *state);
-               
+
                 // Build trigger content
                 let trigger_content: Div = if let Some(ref builder) = trigger_builder {
                     builder(is_open)
@@ -671,13 +671,10 @@ fn build_dropdown_content(
                             cb();
                         }
 
-                      
                         // Close the overlay - state updates are handled by on_close callback
                         // after the exit animation completes (deferred in overlay manager)
                         if let Some(handle_id) = handle_state_for_click.get() {
-                            
                             let mgr = get_overlay_manager();
-                              
                             mgr.close(OverlayHandle::from_raw(handle_id));
                         }
                         // Don't update state here - let on_close callback handle it after animation
