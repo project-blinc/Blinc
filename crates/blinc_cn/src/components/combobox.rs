@@ -45,7 +45,7 @@ use blinc_core::context_state::BlincContextState;
 use blinc_core::State;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
-use blinc_layout::motion::motion;
+use blinc_layout::motion::motion_derived;
 use blinc_layout::overlay_state::get_overlay_manager;
 use blinc_layout::prelude::*;
 use blinc_layout::stateful::{ButtonState, Stateful};
@@ -249,6 +249,7 @@ impl Combobox {
         let placeholder_for_content = config.placeholder.clone();
         // Clone instance_key for use in closures (it's a &str that needs to outlive 'static)
         let instance_key_owned = instance_key.to_string();
+        let instance_key_for_motion_check = instance_key.to_string();
 
         // The click handler is on the Stateful itself (not the inner div) so it gets registered
         // Use w_full() to ensure the Stateful takes the same width as its parent container
@@ -338,6 +339,16 @@ impl Combobox {
                 let is_currently_open = open_state_for_click.get();
 
                 if is_currently_open {
+                    // Check if motion is already animating (exit in progress)
+                    // to avoid double-triggering close
+                    let motion_key_check =
+                        format!("motion:combobox_{}:child:0", instance_key_for_motion_check);
+                    let motion = blinc_layout::selector::query_motion(&motion_key_check);
+                    if motion.is_animating() {
+                        // Exit animation already in progress, don't trigger again
+                        return;
+                    }
+
                     // Close the dropdown - state updates are handled by on_close callback
                     // after the exit animation completes (deferred in overlay manager)
                     if let Some(handle_id) = overlay_handle_for_click.get() {
@@ -378,12 +389,18 @@ impl Combobox {
                     let search_data_for_close = search_data_for_click.clone();
                     let search_query_for_close = search_query_state.clone();
 
+                    // Create a unique motion key for this combobox instance
+                    // The motion is on the child of the wrapper div, so we need ":child:0" suffix
+                    let motion_key_str = format!("combobox_{}", key_for_content);
+                    let motion_key_with_child = format!("{}:child:0", motion_key_str);
+
                     // Show dropdown via overlay manager
                     let mgr = get_overlay_manager();
                     let handle = mgr
                         .dropdown()
                         .at(dropdown_x, dropdown_y)
                         .dismiss_on_escape(true)
+                        .motion_key(&motion_key_with_child)
                         .content(move || {
                             build_dropdown_content(
                                 &opts,
@@ -947,8 +964,9 @@ fn build_dropdown_content(
     dropdown_div = dropdown_div.child(options_stateful);
 
     // Wrap dropdown in motion container for enter/exit animations
+    // Use motion_derived with key so the overlay can trigger exit animation
     div().child(
-        motion()
+        motion_derived(key)
             .enter_animation(AnimationPreset::dropdown_in(150))
             .exit_animation(AnimationPreset::dropdown_out(100))
             .child(dropdown_div),

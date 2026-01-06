@@ -211,6 +211,7 @@ impl Select {
         let select_btn_state = use_button_state(&format!("{}_btn", instance_key));
         // Clone instance_key for use in closures (it's a &str that needs to outlive 'static)
         let instance_key_owned = instance_key.to_string();
+        let instance_key_for_motion_check = instance_key.to_string();
         // The click handler is on the Stateful itself (not the inner div) so it gets registered
         // Use w_full() to ensure the Stateful takes the same width as its parent container
         let select_element = Stateful::with_shared_state(select_btn_state)
@@ -289,6 +290,15 @@ impl Select {
                 let is_currently_open = open_state_for_click.get();
 
                 if is_currently_open {
+                    // Check if motion is already animating (exit in progress)
+                    // to avoid double-triggering close
+                    let motion_key_check = format!("motion:select_{}:child:0", instance_key_for_motion_check);
+                    let motion = blinc_layout::selector::query_motion(&motion_key_check);
+                    if motion.is_animating() {
+                        // Exit animation already in progress, don't trigger again
+                        return;
+                    }
+
                     // Close the dropdown - state updates are handled by on_close callback
                     // after the exit animation completes (deferred in overlay manager)
                     if let Some(handle_id) = overlay_handle_for_click.get() {
