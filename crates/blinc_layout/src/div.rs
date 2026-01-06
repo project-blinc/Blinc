@@ -2712,10 +2712,18 @@ pub trait ElementBuilder {
         false
     }
 
-    /// Check if this motion should start its exit animation
+    /// DEPRECATED: Check if this motion should start its exit animation
     ///
-    /// Returns true if the overlay was closing when this motion was constructed.
-    /// Used to trigger exit animations when the overlay transitions to Closing state.
+    /// This method is deprecated. Motion exit is now triggered explicitly via
+    /// `MotionHandle.exit()` / `query_motion(key).exit()` instead of capturing
+    /// the is_overlay_closing() flag at build time.
+    ///
+    /// The old mechanism was flawed because the flag reset after build_content(),
+    /// breaking multi-frame exit animations.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use query_motion(key).exit() to explicitly trigger motion exit"
+    )]
     fn motion_is_exiting(&self) -> bool {
         false
     }
@@ -2774,6 +2782,7 @@ impl ElementBuilder for Div {
         node
     }
 
+    #[allow(deprecated)]
     fn render_props(&self) -> RenderProps {
         // Check if overflow is set to clip content (Clip or Scroll)
         // Overflow::Visible is the only mode that doesn't clip

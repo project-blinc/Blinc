@@ -421,8 +421,14 @@ pub struct Motion {
     rotation_timeline: Option<TimelineRotation>,
     /// Animated opacity
     opacity: Option<SharedAnimatedValue>,
-    /// Whether the overlay was closing when this motion was constructed
-    /// Captured at construction time since the flag resets after build_content()
+    /// DEPRECATED: Whether the overlay was closing when this motion was constructed
+    ///
+    /// This field is deprecated and always false. Motion exit is now triggered
+    /// explicitly via `MotionHandle.exit()` / `query_motion(key).exit()`.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use query_motion(key).exit() to explicitly trigger motion exit"
+    )]
     is_exiting: bool,
 }
 
@@ -468,6 +474,7 @@ fn motion_keyframe_to_properties(kf: &MotionKeyframe) -> blinc_animation::Keyfra
 /// }
 /// ```
 #[track_caller]
+#[allow(deprecated)]
 pub fn motion() -> Motion {
     Motion {
         children: Vec::new(),
@@ -496,9 +503,9 @@ pub fn motion() -> Motion {
         rotation: None,
         rotation_timeline: None,
         opacity: None,
-        // Capture closing state at construction time - this is the only reliable time
-        // to check since the overlay_closing flag is reset after build_content() returns
-        is_exiting: crate::overlay_state::is_overlay_closing(),
+        // Motion exit is now triggered explicitly via MotionHandle.exit()
+        // The is_exiting field is deprecated and always false
+        is_exiting: false,
     }
 }
 
@@ -523,6 +530,7 @@ pub fn motion() -> Motion {
 ///         container.merge(div().child(m));
 ///     })
 /// ```
+#[allow(deprecated)]
 pub fn motion_derived(parent_key: &str) -> Motion {
     Motion {
         children: Vec::new(),
@@ -550,7 +558,9 @@ pub fn motion_derived(parent_key: &str) -> Motion {
         rotation: None,
         rotation_timeline: None,
         opacity: None,
-        is_exiting: crate::overlay_state::is_overlay_closing(),
+        // Motion exit is now triggered explicitly via MotionHandle.exit()
+        // The is_exiting field is deprecated and always false
+        is_exiting: false,
     }
 }
 
@@ -1202,6 +1212,7 @@ impl ElementBuilder for Motion {
         self.replay
     }
 
+    #[allow(deprecated)]
     fn motion_is_exiting(&self) -> bool {
         self.is_exiting
     }

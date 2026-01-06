@@ -244,6 +244,7 @@ impl ElementBuilder for Svg {
         tree.create_node(self.style.clone())
     }
 
+    #[allow(deprecated)]
     fn render_props(&self) -> RenderProps {
         RenderProps {
             background: None,

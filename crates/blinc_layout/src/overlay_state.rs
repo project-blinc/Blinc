@@ -34,17 +34,36 @@ use crate::widgets::overlay::OverlayManager;
 static OVERLAY_CONTEXT: OnceLock<OverlayContext> = OnceLock::new();
 
 /// Thread-local flag indicating if we're currently rendering closing overlay content
-/// When true, motion() containers should start their exit animations instead of reinitializing
+///
+/// DEPRECATED: This mechanism is being replaced by explicit `MotionHandle.exit()` calls.
+/// Motion exit should be triggered explicitly via `query_motion(key).exit()` instead of
+/// relying on this flag captured at construction time.
 thread_local! {
     static OVERLAY_CLOSING: Cell<bool> = const { Cell::new(false) };
 }
 
 /// Check if we're currently rendering overlay content that is closing
+///
+/// DEPRECATED: Use `query_motion(key).exit()` to explicitly trigger motion exit instead.
+/// This flag-based mechanism doesn't work correctly because the flag resets after
+/// `build_content()` returns, breaking multi-frame exit animations.
+#[deprecated(
+    since = "0.1.0",
+    note = "Use query_motion(key).exit() to explicitly trigger motion exit"
+)]
 pub fn is_overlay_closing() -> bool {
     OVERLAY_CLOSING.with(|c| c.get())
 }
 
 /// Set the overlay closing flag (call before/after building closing overlay content)
+///
+/// DEPRECATED: Use `query_motion(key).exit()` to explicitly trigger motion exit instead.
+/// This flag-based mechanism doesn't work correctly because the flag resets after
+/// `build_content()` returns, breaking multi-frame exit animations.
+#[deprecated(
+    since = "0.1.0",
+    note = "Use query_motion(key).exit() to explicitly trigger motion exit"
+)]
 pub fn set_overlay_closing(closing: bool) {
     OVERLAY_CLOSING.with(|c| c.set(closing));
 }

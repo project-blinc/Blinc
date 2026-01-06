@@ -954,48 +954,14 @@ impl RenderState {
     /// If `replay` is true, the animation restarts from the beginning even if
     /// it already exists (useful for tab transitions where content changes).
     ///
-    /// If `is_exiting` is true (captured at build time when overlay was closing),
-    /// this will start the exit animation instead of leaving the motion alone.
-    pub fn start_stable_motion(
-        &mut self,
-        key: &str,
-        config: MotionAnimation,
-        replay: bool,
-        is_exiting: bool,
-    ) {
+    /// Motion exit is now triggered explicitly via `MotionHandle.exit()` /
+    /// `start_stable_motion_exit()` instead of the old `is_exiting` flag.
+    pub fn start_stable_motion(&mut self, key: &str, config: MotionAnimation, replay: bool) {
         // Mark this key as used this frame (for garbage collection)
         self.stable_motions_used.insert(key.to_string());
 
-        // Use the is_exiting flag that was captured at build time
-        let is_closing = is_exiting;
-
         // Check if motion already exists
         if let Some(existing) = self.stable_motions.get_mut(key) {
-            // If closing and not already exiting, start exit animation
-            if is_closing
-                && !matches!(
-                    existing.state,
-                    MotionState::Exiting { .. } | MotionState::Removed
-                )
-            {
-                // Start exit animation
-                if config.exit_to.is_some() && config.exit_duration_ms > 0 {
-                    tracing::debug!(
-                        "start_stable_motion: Starting exit animation for key={}, duration={}ms",
-                        key,
-                        config.exit_duration_ms
-                    );
-                    existing.config = config;
-                    existing.state = MotionState::Exiting {
-                        progress: 0.0,
-                        duration_ms: existing.config.exit_duration_ms as f32,
-                    };
-                    // Don't reset existing.current - let exit animate from current position
-                    // This prevents visual snapping if enter animation was interrupted
-                }
-                return;
-            }
-
             // NOTE: replay flag is intentionally ignored here for existing motions.
             // The replay mechanism via this flag doesn't work correctly because
             // initialize_motion_animations is called for ALL motions in the tree,
@@ -1006,13 +972,24 @@ impl RenderState {
             match existing.state {
                 MotionState::Waiting { .. }
                 | MotionState::Entering { .. }
-                | MotionState::Visible
-                | MotionState::Exiting { .. } => {
+                | MotionState::Visible => {
                     // Don't restart - animation is either in progress or completed
+                    return;
+                }
+                MotionState::Exiting { .. } => {
+                    // Motion is exiting - do NOT cancel it automatically.
+                    // Exit animations should only be cancelled by an explicit cancel_exit() call.
+                    // This ensures exit animations play fully even when the tree is rebuilt
+                    // (e.g., during overlay close animation where content is still rendered).
+                    tracing::debug!(
+                        "Motion '{}': Exiting, continuing exit animation (use cancel_exit() to interrupt)",
+                        key
+                    );
                     return;
                 }
                 // Only restart if the motion was previously removed (overlay closed then reopened)
                 MotionState::Removed => {
+                    tracing::debug!("Motion '{}': Was Removed, restarting enter animation", key);
                     // Reset to initial enter state
                     existing.config = config.clone();
                     existing.state = if config.enter_delay_ms > 0 {
@@ -1038,6 +1015,7 @@ impl RenderState {
         }
 
         // Create new motion
+        tracing::debug!("Motion '{}': Creating new motion (enter_duration={}ms)", key, config.enter_duration_ms);
         let initial_state = if config.enter_delay_ms > 0 {
             MotionState::Waiting {
                 remaining_delay_ms: config.enter_delay_ms as f32,
@@ -1345,15 +1323,53 @@ impl RenderState {
 
     /// End the frame for stable motion tracking
     ///
-    /// Removes any stable motions that weren't accessed this frame.
-    /// Since each motion container gets a unique UUID key, unused motions
-    /// from closed overlays should be cleaned up to prevent memory leaks.
+    /// For motions that weren't accessed this frame (content removed from tree):
+    /// - If they have an exit animation, transition to Exiting state
+    /// - If already Exiting and complete (Removed), actually remove them
+    /// - This enables CSS-like behavior: mount = enter, unmount = exit
     pub fn end_stable_motion_frame(&mut self) {
-        // Remove motions that weren't used this frame
-        // With UUID-based keys, each new motion container gets a unique key,
-        // so we need to actually remove old entries rather than just marking them
-        self.stable_motions
-            .retain(|key, _| self.stable_motions_used.contains(key));
+        // Collect keys to remove (motions that completed exit)
+        let mut to_remove = Vec::new();
+
+        for (key, motion) in self.stable_motions.iter_mut() {
+            if !self.stable_motions_used.contains(key) {
+                // This motion's content was not in the tree this frame
+                match &motion.state {
+                    MotionState::Removed => {
+                        // Exit complete, safe to remove
+                        tracing::debug!("Motion '{}': Removed state, cleaning up", key);
+                        to_remove.push(key.clone());
+                    }
+                    MotionState::Exiting { .. } => {
+                        // Already exiting, let it continue
+                    }
+                    _ => {
+                        // Not exiting yet - start exit animation
+                        if motion.config.exit_to.is_some() && motion.config.exit_duration_ms > 0 {
+                            tracing::debug!(
+                                "Motion '{}': Starting exit animation ({}ms)",
+                                key,
+                                motion.config.exit_duration_ms
+                            );
+                            motion.state = MotionState::Exiting {
+                                progress: 0.0,
+                                duration_ms: motion.config.exit_duration_ms as f32,
+                            };
+                            motion.current = MotionKeyframe::default(); // Start from visible
+                        } else {
+                            // No exit animation configured, remove immediately
+                            tracing::debug!("Motion '{}': No exit config, removing immediately", key);
+                            to_remove.push(key.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Remove completed motions
+        for key in to_remove {
+            self.stable_motions.remove(&key);
+        }
     }
 
     // =========================================================================

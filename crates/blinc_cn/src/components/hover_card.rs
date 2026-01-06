@@ -192,13 +192,16 @@ impl HoverCardBuilder {
         let offset = self.offset;
         let content_builder = self.content.clone();
         let trigger_builder = self.trigger.clone();
-        let key_str = self.key.get().to_string();
+        // Use the instance key to create a unique motion key for this hover card
+        // This prevents collisions when multiple hover cards exist
+        let motion_key_str = format!("hovercard_{}", self.key.get());
 
         // Build trigger with hover handlers
         let overlay_handle_for_show = overlay_handle_state.clone();
         let overlay_handle_for_trigger_leave = overlay_handle_state.clone();
         let overlay_handle_for_trigger_enter = overlay_handle_state.clone();
         let content_builder_for_show = content_builder.clone();
+        let motion_key_for_trigger = motion_key_str.clone();
 
         // Build the trigger element with hover detection
         let trigger_content = (trigger_builder)();
@@ -208,6 +211,10 @@ impl HoverCardBuilder {
             .align_self_start() // Prevent stretching in flex containers
             .child(trigger_content)
             .on_hover_enter(move |ctx| {
+                // Build the full motion key (motion_derived adds "motion:" prefix)
+                // The actual animation is on the child, so we need ":child:0" suffix
+                let full_motion_key = format!("motion:{}:child:0", motion_key_for_trigger);
+
                 // First, check if we have an existing overlay that's pending close or closing
                 if let Some(handle_id) = overlay_handle_for_trigger_enter.get() {
                     let mgr = get_overlay_manager();
@@ -221,7 +228,7 @@ impl HoverCardBuilder {
                         }
                         // Also cancel any exit animation
                         let motion =
-                            blinc_layout::selector::query_motion("motion:hover_card_content");
+                            blinc_layout::selector::query_motion(&full_motion_key);
                         if motion.is_exiting() {
                             mgr.cancel_close(handle);
                             motion.cancel_exit();
@@ -233,7 +240,7 @@ impl HoverCardBuilder {
                 }
 
                 // Check if motion is already animating (entering) to prevent restart jitter
-                let motion = blinc_layout::selector::query_motion("motion:hover_card_content");
+                let motion = blinc_layout::selector::query_motion(&full_motion_key);
                 if motion.is_animating() && !motion.is_exiting() {
                     return;
                 }
@@ -260,7 +267,7 @@ impl HoverCardBuilder {
                         side,
                         content_fn_clone,
                         overlay_handle_for_content,
-                        key_str.clone(),
+                        motion_key_for_trigger.clone(),
                     );
 
                     overlay_handle_for_show.set(Some(handle.id()));
@@ -350,7 +357,7 @@ fn show_hover_card_overlay(
     side: HoverCardSide,
     content_fn: ContentBuilderFn,
     overlay_handle_state: State<Option<u64>>,
-    _key: String,
+    motion_key: String,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
     let bg = theme.color(ColorToken::SurfaceElevated);
@@ -364,18 +371,26 @@ fn show_hover_card_overlay(
     // This ensures only one hover card is visible at a time
     mgr.close_all_of(blinc_layout::widgets::overlay::OverlayKind::Tooltip);
 
-    // Clone state for hover leave handler
+    // Clone state and key for closures
     let overlay_handle_for_leave = overlay_handle_state.clone();
+    let motion_key_for_content = motion_key.clone();
+    let motion_key_for_hover = motion_key.clone();
 
     // Use hover_card() which is a TRANSIENT overlay - no backdrop, no scroll blocking
     // Multiple hover cards can coexist without interfering with each other
+    // Set the motion_key so overlay can trigger exit animation when closing
+    // The actual animation is on the child of motion_derived, so include ":child:0" suffix
+    let motion_key_with_child = format!("{}:child:0", motion_key);
     mgr.hover_card()
         .at(x, y)
+        .motion_key(&motion_key_with_child)
         .content(move || {
             let user_content = (content_fn)();
 
             // Clone for the hover enter closure (to cancel closing when mouse enters card)
             let overlay_handle_for_card_enter = overlay_handle_for_leave.clone();
+            // Clone the motion key for use inside the on_hover_enter closure
+            let motion_key_for_card_enter = motion_key_for_hover.clone();
 
             // Styled card container with hover enter detection
             // When mouse enters the card (after leaving trigger), cancel any pending close
@@ -404,7 +419,10 @@ fn show_hover_card_overlay(
                         }
 
                         // Also check if we're in Closing state (exit animation playing)
-                        let motion = blinc_layout::selector::query_motion("motion:hover_card_content");
+                        // Use the unique motion key for this hover card
+                        // The actual animation is on the child, so we need ":child:0" suffix
+                        let full_motion_key = format!("motion:{}:child:0", motion_key_for_card_enter);
+                        let motion = blinc_layout::selector::query_motion(&full_motion_key);
                         if motion.is_exiting() {
                             // Cancel close - transitions Closing -> Open
                             mgr.cancel_close(handle);
@@ -415,11 +433,12 @@ fn show_hover_card_overlay(
                 });
 
             // Wrap in motion for enter/exit animations
-            // Use motion_derived with stable key so animation state persists across rebuilds
+            // Use motion_derived with unique key so animation state persists across rebuilds
+            // and doesn't collide with other hover cards
             div().child(
-                blinc_layout::motion::motion_derived("hover_card_content")
+                blinc_layout::motion::motion_derived(&motion_key_for_content)
                     .enter_animation(AnimationPreset::grow_in(150))
-                    .exit_animation(AnimationPreset::grow_out(100))
+                    .exit_animation(AnimationPreset::grow_out(150))
                     .child(card),
             )
         })

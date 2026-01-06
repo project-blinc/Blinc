@@ -872,13 +872,23 @@ pub struct RenderProps {
     /// When true, this element will not capture clicks/hovers - only its children can.
     /// Used by Stack layers to allow clicks to pass through to siblings.
     pub pointer_events_none: bool,
-    /// Whether the motion should start exiting (set during build when overlay is closing)
-    /// This captures the is_overlay_closing() state at build time since initialize_motion_animations
-    /// runs later when the flag has already been reset.
+    /// DEPRECATED: Whether the motion should start exiting
+    ///
+    /// This field is deprecated. Motion exit is now triggered explicitly via
+    /// `MotionHandle.exit()` / `query_motion(key).exit()` instead of capturing
+    /// the is_overlay_closing() flag at build time.
+    ///
+    /// The old mechanism was flawed because the flag reset after build_content(),
+    /// breaking multi-frame exit animations.
+    #[deprecated(
+        since = "0.1.0",
+        note = "Use query_motion(key).exit() to explicitly trigger motion exit"
+    )]
     pub motion_is_exiting: bool,
 }
 
 impl Default for RenderProps {
+    #[allow(deprecated)]
     fn default() -> Self {
         Self {
             background: None,

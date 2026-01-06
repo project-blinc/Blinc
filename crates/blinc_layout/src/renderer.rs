@@ -1282,6 +1282,10 @@ impl RenderTree {
         } else {
             false
         };
+        // DEPRECATED: motion_is_exiting is no longer used for triggering exit.
+        // Motion exit is now triggered explicitly via MotionHandle.exit().
+        // This field is kept for backwards compatibility but always false.
+        #[allow(deprecated)]
         let motion_is_exiting = if is_motion {
             element.motion_is_exiting()
         } else {
@@ -1315,6 +1319,7 @@ impl RenderTree {
     }
 
     /// Collect render props with motion animation config from parent
+    #[allow(deprecated)]
     fn collect_render_props_boxed_with_motion(
         &mut self,
         element: &dyn ElementBuilder,
@@ -1332,8 +1337,8 @@ impl RenderTree {
             props.motion = motion_config;
             props.motion_stable_id = motion_stable_id.clone();
             props.motion_should_replay = motion_should_replay;
-            // Use the is_exiting flag from the Motion element, which captured
-            // the overlay closing state at construction time
+            // DEPRECATED: motion_is_exiting is no longer used for triggering exit.
+            // Motion exit is now triggered explicitly via MotionHandle.exit().
             props.motion_is_exiting = motion_is_exiting;
 
             // Queue replay with the CHILD's stable key (includes :child:N suffix)
@@ -2555,12 +2560,11 @@ impl RenderTree {
                 // Use stable key if available (for overlays), otherwise use node_id
                 if let Some(ref stable_key) = render_node.props.motion_stable_id {
                     // Start or replay stable motion based on replay flag
-                    // Pass motion_is_exiting which was captured at build time
+                    // Motion exit is now triggered explicitly via MotionHandle.exit()
                     render_state.start_stable_motion(
                         stable_key,
                         motion_config.clone(),
                         render_node.props.motion_should_replay,
-                        render_node.props.motion_is_exiting,
                     );
                 } else {
                     render_state.start_enter_motion(node_id, motion_config.clone());

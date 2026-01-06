@@ -342,13 +342,51 @@ impl EventRouter {
     /// Also emits DRAG events if a button is pressed (dragging).
     /// Returns the list of events that were emitted.
     pub fn on_mouse_move(&mut self, tree: &RenderTree, x: f32, y: f32) -> Vec<(LayoutNodeId, u32)> {
+        // Delegate to the internal implementation with no occlusion
+        self.on_mouse_move_internal(tree, x, y, &[], None)
+    }
+
+    /// Handle mouse move event with overlay occlusion awareness
+    ///
+    /// Same as `on_mouse_move`, but also checks for overlay occlusion.
+    /// Elements that are visually occluded by overlays will not receive hover events.
+    ///
+    /// # Arguments
+    /// - `tree` - The render tree
+    /// - `x`, `y` - Mouse position
+    /// - `overlay_bounds` - Bounds of visible overlays as (x, y, width, height)
+    /// - `overlay_layer_id` - LayoutNodeId of the overlay layer container
+    pub fn on_mouse_move_with_occlusion(
+        &mut self,
+        tree: &RenderTree,
+        x: f32,
+        y: f32,
+        overlay_bounds: &[(f32, f32, f32, f32)],
+        overlay_layer_id: Option<LayoutNodeId>,
+    ) -> Vec<(LayoutNodeId, u32)> {
+        self.on_mouse_move_internal(tree, x, y, overlay_bounds, overlay_layer_id)
+    }
+
+    /// Internal mouse move handler (shared implementation)
+    fn on_mouse_move_internal(
+        &mut self,
+        tree: &RenderTree,
+        x: f32,
+        y: f32,
+        overlay_bounds: &[(f32, f32, f32, f32)],
+        overlay_layer_id: Option<LayoutNodeId>,
+    ) -> Vec<(LayoutNodeId, u32)> {
         self.mouse_x = x;
         self.mouse_y = y;
 
         let mut events = Vec::new();
 
-        // Hit test to find elements under pointer
-        let hits = self.hit_test_all(tree, x, y);
+        // Hit test to find elements under pointer (with optional occlusion filtering)
+        let hits = if overlay_bounds.is_empty() {
+            self.hit_test_all(tree, x, y)
+        } else {
+            self.hit_test_all_with_occlusion(tree, x, y, overlay_bounds, overlay_layer_id)
+        };
         let current_hovered: HashSet<LayoutNodeId> = hits.iter().map(|h| h.node).collect();
 
         // Store bounds for all hit nodes (for event handlers to access via get_node_bounds)
@@ -1113,6 +1151,103 @@ impl EventRouter {
             && x < bounds.x + bounds.width
             && y >= bounds.y
             && y < bounds.y + bounds.height
+    }
+
+    /// Hit test with overlay occlusion awareness
+    ///
+    /// This method performs a standard hit test, but also checks if the hit point
+    /// is occluded by any visible overlay. If the point is within an overlay's bounds
+    /// but the hit target is NOT part of the overlay tree (i.e., it's a background element),
+    /// the hit is blocked and returns None.
+    ///
+    /// This prevents background triggers from receiving hover events when an overlay
+    /// (like a hover card) is covering them.
+    ///
+    /// # Arguments
+    /// - `tree` - The render tree to hit test against
+    /// - `x`, `y` - The point to test
+    /// - `overlay_bounds` - List of visible overlay bounds as (x, y, width, height)
+    /// - `overlay_layer_id` - The LayoutNodeId of the overlay layer in the tree
+    ///
+    /// # Returns
+    /// - `Some(HitTestResult)` if a valid hit is found (either in overlay or not occluded)
+    /// - `None` if no hit or if hit is occluded by overlay
+    pub fn hit_test_with_occlusion(
+        &self,
+        tree: &RenderTree,
+        x: f32,
+        y: f32,
+        overlay_bounds: &[(f32, f32, f32, f32)],
+        overlay_layer_id: Option<LayoutNodeId>,
+    ) -> Option<HitTestResult> {
+        // Perform standard hit test first
+        let hit = self.hit_test(tree, x, y)?;
+
+        // Check if the point is inside any overlay bounds
+        let in_overlay_bounds = overlay_bounds.iter().any(|&(ox, oy, ow, oh)| {
+            x >= ox && x < ox + ow && y >= oy && y < oy + oh
+        });
+
+        // If point is not in any overlay bounds, the hit is valid
+        if !in_overlay_bounds {
+            return Some(hit);
+        }
+
+        // Point is in overlay bounds - check if hit target is part of the overlay layer
+        if let Some(overlay_id) = overlay_layer_id {
+            // If the hit ancestors include the overlay layer, the hit is valid
+            // (the user clicked on something inside the overlay)
+            if hit.ancestors.contains(&overlay_id) {
+                return Some(hit);
+            }
+
+            // Hit target is NOT in overlay layer, but point is in overlay bounds
+            // This means the background element is being hovered through the overlay
+            // Block the hit
+            tracing::debug!(
+                "hit_test_with_occlusion: blocking hit on {:?} - occluded by overlay at ({:.1}, {:.1})",
+                hit.node, x, y
+            );
+            return None;
+        }
+
+        // No overlay layer specified, return the hit as-is
+        Some(hit)
+    }
+
+    /// Hit test all elements with overlay occlusion awareness
+    ///
+    /// Similar to `hit_test_with_occlusion`, but returns all hits that pass
+    /// the occlusion check. Elements that are occluded by overlays are filtered out.
+    pub fn hit_test_all_with_occlusion(
+        &self,
+        tree: &RenderTree,
+        x: f32,
+        y: f32,
+        overlay_bounds: &[(f32, f32, f32, f32)],
+        overlay_layer_id: Option<LayoutNodeId>,
+    ) -> Vec<HitTestResult> {
+        let all_hits = self.hit_test_all(tree, x, y);
+
+        // Check if the point is inside any overlay bounds
+        let in_overlay_bounds = overlay_bounds.iter().any(|&(ox, oy, ow, oh)| {
+            x >= ox && x < ox + ow && y >= oy && y < oy + oh
+        });
+
+        // If point is not in any overlay bounds, all hits are valid
+        if !in_overlay_bounds {
+            return all_hits;
+        }
+
+        // Point is in overlay bounds - filter out hits that are NOT in the overlay layer
+        if let Some(overlay_id) = overlay_layer_id {
+            all_hits
+                .into_iter()
+                .filter(|hit| hit.ancestors.contains(&overlay_id))
+                .collect()
+        } else {
+            all_hits
+        }
     }
 
     /// Emit an event via the callback

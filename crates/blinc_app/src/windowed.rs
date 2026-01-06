@@ -1619,8 +1619,22 @@ impl WindowedApp {
                                         let lx = x / scale;
                                         let ly = y / scale;
 
-                                        // Route mouse move through main tree (includes overlay content)
-                                        router.on_mouse_move(tree, lx, ly);
+                                        // Get overlay bounds and layer ID for occlusion-aware hit testing
+                                        // This prevents background elements from receiving hover events
+                                        // when they are visually occluded by overlay content
+                                        let overlay_bounds = windowed_ctx.overlay_manager.get_visible_overlay_bounds();
+                                        let overlay_layer_id = tree.query_by_id(
+                                            blinc_layout::widgets::overlay::OVERLAY_LAYER_ID
+                                        );
+
+                                        // Route mouse move through main tree with overlay occlusion awareness
+                                        router.on_mouse_move_with_occlusion(
+                                            tree,
+                                            lx,
+                                            ly,
+                                            &overlay_bounds,
+                                            overlay_layer_id,
+                                        );
 
                                         // Get drag delta from router (for DRAG events)
                                         let (drag_dx, drag_dy) = router.drag_delta();
@@ -1728,7 +1742,20 @@ impl WindowedApp {
                                     }
                                     MouseEvent::Entered => {
                                         let (mx, my) = router.mouse_position();
-                                        router.on_mouse_move(tree, mx, my);
+
+                                        // Use occlusion-aware hit testing when mouse enters window
+                                        let overlay_bounds = windowed_ctx.overlay_manager.get_visible_overlay_bounds();
+                                        let overlay_layer_id = tree.query_by_id(
+                                            blinc_layout::widgets::overlay::OVERLAY_LAYER_ID
+                                        );
+                                        router.on_mouse_move_with_occlusion(
+                                            tree,
+                                            mx,
+                                            my,
+                                            &overlay_bounds,
+                                            overlay_layer_id,
+                                        );
+
                                         for event in pending_events.iter_mut() {
                                             event.mouse_x = mx;
                                             event.mouse_y = my;
@@ -1887,7 +1914,20 @@ impl WindowedApp {
                                     TouchEvent::Moved { x, y, .. } => {
                                         let lx = x / scale;
                                         let ly = y / scale;
-                                        router.on_mouse_move(tree, lx, ly);
+
+                                        // Use occlusion-aware hit testing for touch move as well
+                                        let overlay_bounds = windowed_ctx.overlay_manager.get_visible_overlay_bounds();
+                                        let overlay_layer_id = tree.query_by_id(
+                                            blinc_layout::widgets::overlay::OVERLAY_LAYER_ID
+                                        );
+                                        router.on_mouse_move_with_occlusion(
+                                            tree,
+                                            lx,
+                                            ly,
+                                            &overlay_bounds,
+                                            overlay_layer_id,
+                                        );
+
                                         for event in pending_events.iter_mut() {
                                             event.mouse_x = lx;
                                             event.mouse_y = ly;
@@ -2226,7 +2266,10 @@ impl WindowedApp {
                                     if let Some(ref mut tree) = render_tree {
                                         tracing::debug!("Subtree rebuilds processed, recomputing layout");
                                         tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
+                                        // Begin/end motion frame to track which motions are still in tree
+                                        rs.begin_stable_motion_frame();
                                         tree.initialize_motion_animations(rs);
+                                        rs.end_stable_motion_frame();
                                         rs.process_global_motion_replays();
                                     }
                                 }
@@ -2242,6 +2285,10 @@ impl WindowedApp {
                             // PHASE 2: Build/rebuild tree only for structural changes
                             // This must happen BEFORE tick() so motion animations are available
                             // =========================================================
+
+                            // Begin stable motion frame tracking
+                            // This clears the "used" set so we can detect which motions are no longer in the tree
+                            rs.begin_stable_motion_frame();
 
                             if needs_rebuild || render_tree.is_none() {
                                 // Reset call counters for stable key generation
@@ -2297,6 +2344,8 @@ impl WindowedApp {
 
                                         // Initialize motion animations for any nodes wrapped in motion() containers
                                         tree.initialize_motion_animations(rs);
+                                        // End motion frame to detect unmounted motions and trigger exit animations
+                                        rs.end_stable_motion_frame();
                                         // Process any motion replay requests queued during tree building
                                         rs.process_global_motion_replays();
 
@@ -2333,6 +2382,8 @@ impl WindowedApp {
 
                                                 // Initialize motion animations for any new nodes wrapped in motion() containers
                                                 existing_tree.initialize_motion_animations(rs);
+                                                // End motion frame to detect unmounted motions and trigger exit animations
+                                                rs.end_stable_motion_frame();
 
                                                 // Process any global motion replays that were queued during tree building
                                                 rs.process_global_motion_replays();
@@ -2357,6 +2408,8 @@ impl WindowedApp {
 
                                     // Initialize motion animations for any nodes wrapped in motion() containers
                                     tree.initialize_motion_animations(rs);
+                                    // End motion frame to detect unmounted motions and trigger exit animations
+                                    rs.end_stable_motion_frame();
 
                                     // Process any global motion replays that were queued during tree building
                                     rs.process_global_motion_replays();
@@ -2376,6 +2429,13 @@ impl WindowedApp {
                                         }
                                     }
                                 }
+                            } else {
+                                // No rebuild needed - still need to end the motion frame
+                                // If an existing tree exists, initialize motions to mark them as used
+                                if let Some(ref tree) = render_tree {
+                                    tree.initialize_motion_animations(rs);
+                                }
+                                rs.end_stable_motion_frame();
                             }
 
                             // Note: on_ready callbacks are only executed after the FIRST rebuild

@@ -404,6 +404,12 @@ pub struct OverlayConfig {
     pub z_priority: i32,
     /// Explicit size (None = content-sized)
     pub size: Option<(f32, f32)>,
+    /// Motion key for content animation
+    ///
+    /// When set, the overlay will trigger exit animation on this motion key
+    /// when transitioning to Closing state. The full key will be `"motion:{motion_key}"`.
+    /// Use this with `motion_derived(motion_key)` in your content builder.
+    pub motion_key: Option<String>,
 }
 
 impl Default for OverlayConfig {
@@ -427,6 +433,7 @@ impl OverlayConfig {
             focus_trap: true,
             z_priority: 100,
             size: None,
+            motion_key: None,
         }
     }
 
@@ -452,6 +459,7 @@ impl OverlayConfig {
             focus_trap: false,
             z_priority: 200,
             size: None,
+            motion_key: None,
         }
     }
 
@@ -469,6 +477,7 @@ impl OverlayConfig {
             focus_trap: false,
             z_priority: 300,
             size: None,
+            motion_key: None,
         }
     }
 
@@ -491,6 +500,7 @@ impl OverlayConfig {
             focus_trap: false,
             z_priority: 150,
             size: None,
+            motion_key: None,
         }
     }
 
@@ -513,6 +523,7 @@ impl OverlayConfig {
             focus_trap: false,
             z_priority: 150,
             size: None,
+            motion_key: None,
         }
     }
 }
@@ -587,9 +598,28 @@ impl ActiveOverlay {
     }
 
     /// Transition to a new state
+    ///
+    /// When transitioning to Closing state, this will automatically trigger
+    /// the exit animation on any motion container with the overlay's motion key
+    /// (if configured via `OverlayConfig.motion_key`).
     pub fn transition(&mut self, event: u32) -> bool {
         if let Some(new_state) = self.state.on_event(event) {
+            let old_state = self.state;
             self.state = new_state;
+
+            // When transitioning TO Closing state, trigger motion exit if motion_key is configured
+            if new_state == OverlayState::Closing && old_state != OverlayState::Closing {
+                if let Some(ref key) = self.config.motion_key {
+                    let full_motion_key = format!("motion:{}", key);
+                    crate::selector::query_motion(&full_motion_key).exit();
+                    tracing::debug!(
+                        "Overlay {:?} transitioning to Closing - triggered motion exit for key={}",
+                        self.handle,
+                        full_motion_key
+                    );
+                }
+            }
+
             true
         } else {
             false
@@ -870,24 +900,43 @@ impl OverlayManagerInner {
                     }
 
                     // Check if exit animation has completed
+                    // Must wait for BOTH:
+                    // 1. Overlay's own exit duration
+                    // 2. Motion animation (if motion_key configured) to complete
                     let exit_duration = overlay.config.animation.exit.duration_ms();
-                    if let Some(close_started) = overlay.close_started_at_ms {
+                    let overlay_exit_complete = if let Some(close_started) = overlay.close_started_at_ms
+                    {
                         let elapsed = current_time_ms.saturating_sub(close_started);
-                        if elapsed >= exit_duration as u64 {
-                            // Animation complete, transition to Closed
-                            tracing::debug!(
-                                "Overlay {:?} exit animation complete, elapsed={}ms",
-                                handle,
-                                elapsed
-                            );
-                            if overlay.transition(overlay_events::ANIMATION_COMPLETE) {
-                                // Overlay will be removed - this is a content change
-                                content_dirty = true;
-                            }
-                        } else {
-                            // Animation still in progress, keep redrawing (no content change)
-                            animation_dirty = true;
+                        elapsed >= exit_duration as u64
+                    } else {
+                        false
+                    };
+
+                    // Check if motion animation has completed (if configured)
+                    let motion_exit_complete = if let Some(ref key) = overlay.config.motion_key {
+                        let full_motion_key = format!("motion:{}", key);
+                        let motion = crate::selector::query_motion(&full_motion_key);
+                        // Motion is complete if it's not animating (either Visible, Removed, or doesn't exist)
+                        !motion.is_animating()
+                    } else {
+                        true // No motion configured, consider it complete
+                    };
+
+                    if overlay_exit_complete && motion_exit_complete {
+                        // Both animations complete, transition to Closed
+                        tracing::debug!(
+                            "Overlay {:?} exit complete (overlay_exit={}, motion_exit={})",
+                            handle,
+                            overlay_exit_complete,
+                            motion_exit_complete
+                        );
+                        if overlay.transition(overlay_events::ANIMATION_COMPLETE) {
+                            // Overlay will be removed - this is a content change
+                            content_dirty = true;
                         }
+                    } else {
+                        // Animation still in progress, keep redrawing (no content change)
+                        animation_dirty = true;
                     }
                 }
                 OverlayState::Closed => {
@@ -997,6 +1046,51 @@ impl OverlayManagerInner {
         if let Some(overlay) = self.overlays.get_mut(&handle) {
             overlay.cached_size = Some((width, height));
         }
+    }
+
+    /// Get bounds of all visible overlays for occlusion testing
+    ///
+    /// Returns a list of (x, y, width, height) rectangles for all visible overlay content.
+    /// This can be used to determine if a hit test point is within an overlay's bounds,
+    /// which helps block hover events on UI elements underneath overlays.
+    ///
+    /// Note: Returns default size (300x200) for overlays without cached size.
+    pub fn get_visible_overlay_bounds(&self) -> Vec<(f32, f32, f32, f32)> {
+        let (vp_width, vp_height) = self.viewport;
+
+        self.overlays
+            .values()
+            .filter(|o| o.is_visible())
+            .filter_map(|overlay| {
+                let (w, h) = overlay.cached_size.unwrap_or((300.0, 200.0));
+
+                // Calculate position based on OverlayPosition
+                let (x, y) = match &overlay.config.position {
+                    OverlayPosition::AtPoint { x, y } => (*x, *y),
+                    OverlayPosition::Centered => {
+                        // Centered position - use viewport center minus half size
+                        ((vp_width - w) / 2.0, (vp_height - h) / 2.0)
+                    }
+                    OverlayPosition::Corner(corner) => {
+                        let margin = 16.0;
+                        match corner {
+                            Corner::TopLeft => (margin, margin),
+                            Corner::TopRight => (vp_width - w - margin, margin),
+                            Corner::BottomLeft => (margin, vp_height - h - margin),
+                            Corner::BottomRight => {
+                                (vp_width - w - margin, vp_height - h - margin)
+                            }
+                        }
+                    }
+                    OverlayPosition::RelativeToAnchor { .. } => {
+                        // We don't have anchor bounds here - return None
+                        return None;
+                    }
+                };
+
+                Some((x, y, w, h))
+            })
+            .collect()
     }
 
     /// Close the topmost overlay
@@ -1298,7 +1392,7 @@ impl OverlayManagerInner {
         let has_visible = self.has_visible_overlays();
         let overlay_count = self.overlays.len();
 
-        tracing::info!(
+        tracing::debug!(
             "build_overlay_layer: viewport={}x{}, has_visible={}, overlay_count={}",
             width,
             height,
@@ -1314,7 +1408,7 @@ impl OverlayManagerInner {
             (0.0, 0.0)
         };
 
-        tracing::info!("build_overlay_layer: layer size={}x{}", layer_w, layer_h);
+        tracing::debug!("build_overlay_layer: layer size={}x{}", layer_w, layer_h);
 
         // Always return a container with a stable ID
         // This allows subtree rebuilds to find and update it
@@ -1333,11 +1427,6 @@ impl OverlayManagerInner {
         if has_visible && width > 0.0 && height > 0.0 {
             for overlay in self.overlays_sorted() {
                 if overlay.is_visible() {
-                    tracing::info!(
-                        "build_overlay_layer: adding overlay {:?}, state={:?}",
-                        overlay.config.kind,
-                        overlay.state
-                    );
                     layer = layer.child(self.build_single_overlay(overlay, width, height));
                 }
             }
@@ -1356,16 +1445,10 @@ impl OverlayManagerInner {
 
     /// Build a single overlay with backdrop and content
     fn build_single_overlay(&self, overlay: &ActiveOverlay, vp_width: f32, vp_height: f32) -> Div {
-        // Set the closing flag if this overlay is closing, so motion() containers
-        // know to start their exit animations instead of reinitializing
-        let is_closing = overlay.state == OverlayState::Closing;
-        crate::overlay_state::set_overlay_closing(is_closing);
-
         // Content is built by the user - they should wrap it in motion() for animations
+        // Motion exit is triggered explicitly via query_motion(key).exit() when
+        // transitioning to Closing state (see transition() method).
         let content = overlay.build_content();
-
-        // Reset the closing flag after building content
-        crate::overlay_state::set_overlay_closing(false);
 
         // Apply size constraints if specified
         let content = if let Some((w, h)) = overlay.config.size {
@@ -1706,6 +1789,13 @@ pub trait OverlayManagerExt {
     /// Use this for visual state updates that don't require the overlay tree to be rebuilt,
     /// such as hover state changes. This avoids re-triggering motion animations.
     fn request_redraw(&self);
+
+    /// Get bounds of all visible overlays for occlusion testing
+    ///
+    /// Returns a list of (x, y, width, height) rectangles for all visible overlay content.
+    /// Use this for overlay-aware hit testing to prevent hover events on elements
+    /// that are covered by overlays.
+    fn get_visible_overlay_bounds(&self) -> Vec<(f32, f32, f32, f32)>;
 }
 
 impl OverlayManagerExt for OverlayManager {
@@ -1850,6 +1940,10 @@ impl OverlayManagerExt for OverlayManager {
 
     fn request_redraw(&self) {
         self.lock().unwrap().mark_animation_dirty();
+    }
+
+    fn get_visible_overlay_bounds(&self) -> Vec<(f32, f32, f32, f32)> {
+        self.lock().unwrap().get_visible_overlay_bounds()
     }
 }
 
@@ -2149,6 +2243,30 @@ impl DropdownBuilder {
         F: Fn() + Send + Sync + 'static,
     {
         self.on_close = Some(Arc::new(f));
+        self
+    }
+
+    /// Set the motion key for triggering content exit animations
+    ///
+    /// When the overlay transitions to Closing state, it will automatically
+    /// trigger exit animation on the motion with this key. Use the same key
+    /// with `motion_derived(key)` in your content builder.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// mgr.hover_card()
+    ///     .motion_key("my_hover_card")
+    ///     .content(move || {
+    ///         motion_derived("my_hover_card")
+    ///             .enter_animation(AnimationPreset::grow_in(150))
+    ///             .exit_animation(AnimationPreset::grow_out(100))
+    ///             .child(card_content)
+    ///     })
+    ///     .show()
+    /// ```
+    pub fn motion_key(mut self, key: impl Into<String>) -> Self {
+        self.config.motion_key = Some(key.into());
         self
     }
 
