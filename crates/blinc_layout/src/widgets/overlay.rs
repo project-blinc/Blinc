@@ -1561,6 +1561,8 @@ impl OverlayManagerInner {
         // This allows subtree rebuilds to find and update it
         // Use .stack_layer() to ensure overlay content renders above main UI
         // through z_layer increment in the interleaved rendering system
+        // Use .pointer_events_none() so the container itself doesn't block events,
+        // but children (individual overlays) can still capture events
         let mut layer = div()
             .id(OVERLAY_LAYER_ID)
             .w(layer_w)
@@ -1568,7 +1570,8 @@ impl OverlayManagerInner {
             .absolute()
             .left(0.0)
             .top(0.0)
-            .stack_layer();
+            .stack_layer()
+            .pointer_events_none();
 
         // Add visible overlays as children
         if has_visible && width > 0.0 && height > 0.0 {
@@ -1727,9 +1730,12 @@ impl OverlayManagerInner {
         match &overlay.config.position {
             OverlayPosition::Centered => {
                 // Center using flexbox
+                // pointer_events_none allows scroll events to pass through to UI below
+                // while the actual content (child) still receives events
                 div()
                     .w(vp_width)
                     .h(vp_height)
+                    .pointer_events_none()
                     .items_center()
                     .justify_center()
                     .child(content)
@@ -1751,9 +1757,11 @@ impl OverlayManagerInner {
             } => {
                 // For now, treat as point position
                 // TODO: Look up anchor bounds from tree
+                // pointer_events_none allows scroll events to pass through to UI below
                 div()
                     .w(vp_width)
                     .h(vp_height)
+                    .pointer_events_none()
                     .child(content.ml(*offset_x).mt(*offset_y))
             }
         }
@@ -1768,7 +1776,9 @@ impl OverlayManagerInner {
         vp_height: f32,
         margin: f32,
     ) -> Div {
-        let container = div().w(vp_width).h(vp_height);
+        // pointer_events_none allows scroll events to pass through to UI below
+        // while the actual content (child) still receives events
+        let container = div().w(vp_width).h(vp_height).pointer_events_none();
 
         match corner {
             Corner::TopLeft => container
