@@ -2438,6 +2438,14 @@ impl DropdownBuilder {
         self
     }
 
+    /// Set the animation for enter/exit transitions
+    ///
+    /// Use `OverlayAnimation::none()` for instant show/hide.
+    pub fn animation(mut self, animation: OverlayAnimation) -> Self {
+        self.config.animation = animation;
+        self
+    }
+
     /// Show the dropdown
     pub fn show(self) -> OverlayHandle {
         let content = self.content.unwrap_or_else(|| Box::new(|| div()));

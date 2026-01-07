@@ -580,9 +580,9 @@ fn slider_section(ctx: &WindowedContext) -> impl ElementBuilder {
     section_container().child(section_title("Sliders")).child(
         div()
             .flex_col()
-            .gap(24.0)
+            .gap(4.0)
             .child(
-                div().w(300.0).child(
+                div().h_fit().w(300.0).child(
                     cn::slider(&volume)
                         .label("Volume")
                         .show_value()
@@ -590,7 +590,7 @@ fn slider_section(ctx: &WindowedContext) -> impl ElementBuilder {
                 ),
             )
             .child(
-                div().w(300.0).child(
+                div().h_fit().w(300.0).child(
                     cn::slider(&brightness)
                         .label("Brightness")
                         .min(0.0)
@@ -601,7 +601,7 @@ fn slider_section(ctx: &WindowedContext) -> impl ElementBuilder {
                 ),
             )
             .child(
-                div().w(300.0).child(
+                div().h_fit().w(300.0).child(
                     cn::slider(&disabled_slider)
                         .label("Disabled")
                         .disabled(true)

@@ -214,6 +214,15 @@ pub(crate) fn use_button_state(key: &str) -> SharedState<ButtonState> {
     use_shared_state::<ButtonState>(key)
 }
 
+/// Reset a button state to Idle
+///
+/// Call this when an overlay closes to clear any lingering hover/pressed states.
+pub(crate) fn reset_button_state(key: &str) {
+    let state = use_button_state(key);
+    let mut inner = state.lock().unwrap();
+    inner.state = ButtonState::Idle;
+}
+
 /// Create a button with a label
 ///
 /// Uses `#[track_caller]` with UUID to generate a unique instance key.

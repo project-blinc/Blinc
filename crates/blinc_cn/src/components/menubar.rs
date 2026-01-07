@@ -45,11 +45,11 @@ use blinc_layout::prelude::*;
 use blinc_layout::stateful::{ButtonState, Stateful};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::hr::hr_with_bg;
-use blinc_layout::widgets::overlay::{OverlayHandle, OverlayManagerExt};
+use blinc_layout::widgets::overlay::{OverlayAnimation, OverlayHandle, OverlayManagerExt};
 use blinc_layout::InstanceKey;
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
-use crate::button::use_button_state;
+use crate::button::{reset_button_state, use_button_state};
 use super::context_menu::{ContextMenuItem, SubmenuBuilder};
 
 /// How menus are triggered to open
@@ -608,6 +608,7 @@ fn show_menubar_dropdown(
     let padding = 12.0;
 
     let items = items.to_vec();
+    let item_count = items.len();
 
     let handle_state_for_content = handle_state.clone();
     let active_menu_for_content = active_menu_state.clone();
@@ -618,16 +619,23 @@ fn show_menubar_dropdown(
 
     // Motion key for animation
     let motion_key_str = format!("menubar_{}", key);
+    let key_for_close = key.clone();
     // let motion_key_with_child = format!("{}:child:0", motion_key_str);
 
     let handle = mgr
         .dropdown()
         .at(x, y)
+        .animation(OverlayAnimation::none()) // Instant show/hide
         .dismiss_on_escape(true)
         // .motion_key(&motion_key_with_child)
         .on_close(move || {
             active_menu_for_close.set(None);
             handle_state_for_close.set(None);
+            // Reset all button states to clear lingering hover/pressed states
+            for idx in 0..item_count {
+                let item_key = format!("{}_item-{}", key_for_close, idx);
+                reset_button_state(&item_key);
+            }
         })
         .content(move || {
             build_menubar_dropdown_content(
@@ -672,6 +680,7 @@ fn show_menubar_hover_dropdown(
     let padding = 12.0;
 
     let items = items.to_vec();
+    let item_count = items.len();
 
     let handle_state_for_content = handle_state.clone();
     let active_menu_for_content = active_menu_state.clone();
@@ -682,6 +691,7 @@ fn show_menubar_hover_dropdown(
     let mgr = get_overlay_manager();
 
     let menu_key = key.clone();
+    let key_for_close = key.clone();
 
     // Use hover_card() for transient hover-based overlay
     // No motion animation - menus show/hide instantly for snappy feel
@@ -689,10 +699,16 @@ fn show_menubar_hover_dropdown(
         .hover_card()
         .at(x, y)
         .anchor_direction(blinc_layout::widgets::overlay::AnchorDirection::Bottom)
+        .animation(OverlayAnimation::none()) // Instant show/hide
         .dismiss_on_escape(true)
         .on_close(move || {
             active_menu_for_close.set(None);
             handle_state_for_close.set(None);
+            // Reset all button states to clear lingering hover/pressed states
+            for idx in 0..item_count {
+                let item_key = format!("{}_item-{}", key_for_close, idx);
+                reset_button_state(&item_key);
+            }
         })
         .content(move || {
             build_menubar_hover_dropdown_content(
@@ -983,6 +999,7 @@ fn show_menubar_submenu(
     let padding = 12.0;
 
     let items = items.to_vec();
+    let item_count = items.len();
 
     let submenu_handle_for_content = submenu_handle_state.clone();
     let parent_handle_for_content = parent_handle_state.clone();
@@ -991,14 +1008,22 @@ fn show_menubar_submenu(
 
     let mgr = get_overlay_manager();
 
+    let key_for_close = key.clone();
+
     // Use hover_card() for transient hover-based overlay (like main menu)
     let handle = mgr
         .hover_card()
         .at(x, y)
         .anchor_direction(blinc_layout::widgets::overlay::AnchorDirection::Right)
+        .animation(OverlayAnimation::none()) // Instant show/hide
         .dismiss_on_escape(true)
         .on_close(move || {
             submenu_handle_for_close.set(None);
+            // Reset all button states to clear lingering hover/pressed states
+            for idx in 0..item_count {
+                let item_key = format!("{}_item-{}", key_for_close, idx);
+                reset_button_state(&item_key);
+            }
         })
         .content(move || {
             build_menubar_submenu_content(

@@ -250,7 +250,7 @@ impl Slider {
         // Clones for event handlers
         let value_state_for_click = config.value_state.clone();
         let value_state_for_drag = config.value_state.clone();
-        let value_state_for_fill = config.value_state.clone();
+        // let value_state_for_fill = config.value_state.clone();
         let on_change_for_click = config.on_change.clone();
         let on_change_for_drag = config.on_change.clone();
 
