@@ -49,8 +49,8 @@ use blinc_layout::widgets::overlay::{OverlayAnimation, OverlayHandle, OverlayMan
 use blinc_layout::InstanceKey;
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
-use crate::button::{reset_button_state, use_button_state};
 use super::context_menu::{ContextMenuItem, SubmenuBuilder};
+use crate::button::{reset_button_state, use_button_state};
 
 /// How menus are triggered to open
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -375,6 +375,7 @@ impl MenubarBuilder {
             .flex_row()
             .items_center()
             .h_fit()
+            .px(4.0)
             .bg(bg)
             .border_bottom(1.0, border);
 
@@ -460,7 +461,13 @@ impl MenubarBuilder {
                         }
                     };
 
-                    container.merge(trigger_content);
+                    container.merge(
+                        trigger_content
+                            .h_fit()
+                            .px(style_px / 4.0) // Convert to quarter units used by Stateful
+                            .py(style_py / 4.0)
+                            .cursor_pointer(),
+                    );
                 });
 
             // Add click handler (used for Click mode, or to toggle in Hover mode)
@@ -1567,7 +1574,9 @@ mod tests {
     #[test]
     fn test_menubar_builder() {
         let mb = menubar()
-            .menu("File", |m| m.item("New", || {}).separator().item("Exit", || {}))
+            .menu("File", |m| {
+                m.item("New", || {}).separator().item("Exit", || {})
+            })
             .menu("Edit", |m| {
                 m.item_with_shortcut("Undo", "Ctrl+Z", || {})
                     .item_with_shortcut("Redo", "Ctrl+Y", || {})
@@ -1575,10 +1584,16 @@ mod tests {
 
         assert_eq!(mb.menus.len(), 2);
         let file_str = String::from("File");
-        assert!(matches!(&mb.menus[0].trigger, MenubarTrigger::Label(file_str)));
+        assert!(matches!(
+            &mb.menus[0].trigger,
+            MenubarTrigger::Label(file_str)
+        ));
         assert_eq!(mb.menus[0].items.len(), 3); // New, separator, Exit
         let edit_str = String::from("Edit");
-        assert!(matches!(&mb.menus[1].trigger,  MenubarTrigger::Label(edit_str)));
+        assert!(matches!(
+            &mb.menus[1].trigger,
+            MenubarTrigger::Label(edit_str)
+        ));
         assert_eq!(mb.menus[1].items.len(), 2);
     }
 

@@ -73,6 +73,7 @@ impl Label {
 
             div()
                 .flex_row()
+                .h_fit()
                 .gap(2.0)
                 .child(
                     text(&config.text)
@@ -82,7 +83,7 @@ impl Label {
                 )
                 .child(text("*").size(font_size).color(required_color).medium())
         } else {
-            div().child(
+            div().h_fit().child(
                 text(&config.text)
                     .size(font_size)
                     .color(text_color)

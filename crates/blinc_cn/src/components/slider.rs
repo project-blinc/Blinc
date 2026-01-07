@@ -472,7 +472,7 @@ impl Slider {
         // If there's a label or show_value, wrap in a container
         let inner = if config.label.is_some() || config.show_value {
             let spacing = theme.spacing_value(blinc_theme::SpacingToken::Space2);
-            let mut outer = div().flex_col().gap_px(spacing);
+            let mut outer = div().h_fit().flex_col().gap_px(spacing);
 
             // Apply width to container
             if let Some(w) = width {
@@ -527,7 +527,7 @@ impl Slider {
             outer
         } else {
             // Wrap container in a div for consistent return type
-            div().child(slider_container)
+            div().h_fit().child(slider_container)
         };
 
         Self { inner }

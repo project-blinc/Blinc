@@ -1102,6 +1102,33 @@ impl Div {
         self
     }
 
+    /// Align this element to start on cross-axis (overrides parent's align-items)
+    ///
+    /// In a flex-row parent, this prevents height stretching.
+    /// In a flex-col parent, this prevents width stretching.
+    pub fn self_start(mut self) -> Self {
+        self.style.align_self = Some(AlignSelf::FlexStart);
+        self
+    }
+
+    /// Align this element to center on cross-axis (overrides parent's align-items)
+    pub fn self_center(mut self) -> Self {
+        self.style.align_self = Some(AlignSelf::Center);
+        self
+    }
+
+    /// Align this element to end on cross-axis (overrides parent's align-items)
+    pub fn self_end(mut self) -> Self {
+        self.style.align_self = Some(AlignSelf::FlexEnd);
+        self
+    }
+
+    /// Stretch this element on cross-axis (overrides parent's align-items)
+    pub fn self_stretch(mut self) -> Self {
+        self.style.align_self = Some(AlignSelf::Stretch);
+        self
+    }
+
     // =========================================================================
     // Sizing (pixel values)
     // =========================================================================

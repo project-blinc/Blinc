@@ -136,8 +136,8 @@ impl RadioGroup {
 
         // Build options container
         let mut options_container = match config.layout {
-            RadioLayout::Vertical => div().flex_col().gap(gap),
-            RadioLayout::Horizontal => div().flex_row().gap(gap).flex_wrap(),
+            RadioLayout::Vertical => div().flex_col().gap(gap).h_fit(),
+            RadioLayout::Horizontal => div().flex_row().gap(gap).flex_wrap().h_fit(),
         };
 
         // Add each radio button
@@ -157,6 +157,7 @@ impl RadioGroup {
             div()
                 .flex_col()
                 .gap(spacing)
+                .h_fit()
                 .child(lbl)
                 .child(options_container)
         } else {

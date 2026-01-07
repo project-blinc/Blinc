@@ -453,7 +453,7 @@ impl Combobox {
         // If there's a label, wrap in a container
         let inner = if let Some(ref label_text) = config.label {
             let spacing = theme.spacing_value(SpacingToken::Space2);
-            let mut outer = div().flex_col().gap_px(spacing).w(container_width);
+            let mut outer = div().flex_col().gap_px(spacing).w(container_width).h_fit();
 
             let mut lbl = label(label_text).size(LabelSize::Medium);
             if disabled {

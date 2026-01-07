@@ -183,7 +183,7 @@ impl Textarea {
             } else {
                 // Build a container with label, textarea, and description/error
                 let spacing = theme.spacing_value(SpacingToken::Space2);
-                let mut container = div().flex_col().gap_px(spacing);
+                let mut container = div().flex_col().gap_px(spacing).h_fit();
 
                 // Apply width to container
                 if config.full_width {

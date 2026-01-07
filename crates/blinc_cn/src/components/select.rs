@@ -279,7 +279,7 @@ impl Select {
                             .flex_shrink_0(),
                     ).cursor_pointer();
 
-                let main_container = div().relative().w_full().child(trigger);
+                let main_container = div().relative().h_fit().w_full().child(trigger);
                 container.merge(main_container);
             })
             .on_click(move |ctx| {
@@ -384,7 +384,7 @@ impl Select {
         // Build the outer container with optional label
         // Use explicit width to maintain consistent size (don't shrink to content)
         let container_width = config.width.unwrap_or(dropdown_width);
-        let mut select_container = div().w(container_width).child(select_element);
+        let mut select_container = div().w(container_width).h_fit().child(select_element);
 
         if disabled {
             select_container = select_container.opacity(0.5);
@@ -394,7 +394,7 @@ impl Select {
         let inner = if let Some(ref label_text) = config.label {
             let spacing = theme.spacing_value(SpacingToken::Space2);
             // Use same width as container for consistency
-            let mut outer = div().flex_col().gap_px(spacing).w(container_width);
+            let mut outer = div().flex_col().gap_px(spacing).w(container_width).h_fit();
 
             let mut lbl = label(label_text).size(LabelSize::Medium);
             if disabled {

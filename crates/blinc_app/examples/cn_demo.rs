@@ -195,78 +195,80 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
 
 fn menubar_demo() -> impl ElementBuilder {
     section_container().child(section_title("Menubar")).child(
-        cn::menubar()
-            .trigger_mode(cn::MenuTriggerMode::Hover) // Open menus on hover
-            .menu("File", |m| {
-                m.item("New", || tracing::info!("New clicked"))
-                    .item_with_shortcut("Open", "Ctrl+O", || tracing::info!("Open clicked"))
-                    .item_with_shortcut("Save", "Ctrl+S", || tracing::info!("Save clicked"))
-                    .item_with_shortcut("Save As...", "Ctrl+Shift+S", || {
-                        tracing::info!("Save As clicked")
-                    })
-                    .separator()
-                    .submenu("Recent Files", |sub| {
-                        sub.item("document1.txt", || tracing::info!("Recent: document1.txt"))
-                            .item("project.rs", || tracing::info!("Recent: project.rs"))
-                            .item("config.toml", || tracing::info!("Recent: config.toml"))
-                    })
-                    .separator()
-                    .item_with_shortcut("Exit", "Alt+F4", || tracing::info!("Exit clicked"))
-            })
-            .menu("Edit", |m| {
-                m.item_with_shortcut("Undo", "Ctrl+Z", || tracing::info!("Undo clicked"))
-                    .item_with_shortcut("Redo", "Ctrl+Y", || tracing::info!("Redo clicked"))
-                    .separator()
-                    .item_with_shortcut("Cut", "Ctrl+X", || tracing::info!("Cut clicked"))
-                    .item_with_shortcut("Copy", "Ctrl+C", || tracing::info!("Copy clicked"))
-                    .item_with_shortcut("Paste", "Ctrl+V", || tracing::info!("Paste clicked"))
-                    .separator()
-                    .item_with_shortcut("Select All", "Ctrl+A", || {
-                        tracing::info!("Select All clicked")
-                    })
-            })
-            .menu("View", |m| {
-                m.item("Zoom In", || tracing::info!("Zoom In clicked"))
-                    .item("Zoom Out", || tracing::info!("Zoom Out clicked"))
-                    .item("Reset Zoom", || tracing::info!("Reset Zoom clicked"))
-                    .separator()
-                    .item("Toggle Sidebar", || {
-                        tracing::info!("Toggle Sidebar clicked")
-                    })
-                    .item("Toggle Fullscreen", || {
-                        tracing::info!("Toggle Fullscreen clicked")
-                    })
-            })
-            .menu("Help", |m| {
-                m.item("Documentation", || tracing::info!("Documentation clicked"))
-                    .item("Keyboard Shortcuts", || {
-                        tracing::info!("Keyboard Shortcuts clicked")
-                    })
-                    .separator()
-                    .item("About", || tracing::info!("About clicked"))
-            })
-            // Custom trigger example - button with dynamic text
-            .menu_custom(
-                |is_open| {
-                    let theme = ThemeState::get();
-                    let text_color = theme.color(ColorToken::TextPrimary);
-                    let icon = if is_open { "▼" } else { "▶" };
-                    div()
-                        .flex_row()
-                        .items_center()
-                        .gap(1.0)
-                        .px(2.0)
-                        .py(1.0)
-                        .child(text(icon).size(10.0).color(text_color))
-                        .child(text("Actions").size(14.0).color(text_color))
-                },
-                |m| {
-                    m.item("Run Task", || tracing::info!("Run Task clicked"))
-                        .item("Build Project", || tracing::info!("Build Project clicked"))
+        div().flex_row().flex_wrap().child(
+            cn::menubar()
+                .trigger_mode(cn::MenuTriggerMode::Hover) // Open menus on hover
+                .menu("File", |m| {
+                    m.item("New", || tracing::info!("New clicked"))
+                        .item_with_shortcut("Open", "Ctrl+O", || tracing::info!("Open clicked"))
+                        .item_with_shortcut("Save", "Ctrl+S", || tracing::info!("Save clicked"))
+                        .item_with_shortcut("Save As...", "Ctrl+Shift+S", || {
+                            tracing::info!("Save As clicked")
+                        })
                         .separator()
-                        .item("Clear Cache", || tracing::info!("Clear Cache clicked"))
-                },
-            ),
+                        .submenu("Recent Files", |sub| {
+                            sub.item("document1.txt", || tracing::info!("Recent: document1.txt"))
+                                .item("project.rs", || tracing::info!("Recent: project.rs"))
+                                .item("config.toml", || tracing::info!("Recent: config.toml"))
+                        })
+                        .separator()
+                        .item_with_shortcut("Exit", "Alt+F4", || tracing::info!("Exit clicked"))
+                })
+                .menu("Edit", |m| {
+                    m.item_with_shortcut("Undo", "Ctrl+Z", || tracing::info!("Undo clicked"))
+                        .item_with_shortcut("Redo", "Ctrl+Y", || tracing::info!("Redo clicked"))
+                        .separator()
+                        .item_with_shortcut("Cut", "Ctrl+X", || tracing::info!("Cut clicked"))
+                        .item_with_shortcut("Copy", "Ctrl+C", || tracing::info!("Copy clicked"))
+                        .item_with_shortcut("Paste", "Ctrl+V", || tracing::info!("Paste clicked"))
+                        .separator()
+                        .item_with_shortcut("Select All", "Ctrl+A", || {
+                            tracing::info!("Select All clicked")
+                        })
+                })
+                .menu("View", |m| {
+                    m.item("Zoom In", || tracing::info!("Zoom In clicked"))
+                        .item("Zoom Out", || tracing::info!("Zoom Out clicked"))
+                        .item("Reset Zoom", || tracing::info!("Reset Zoom clicked"))
+                        .separator()
+                        .item("Toggle Sidebar", || {
+                            tracing::info!("Toggle Sidebar clicked")
+                        })
+                        .item("Toggle Fullscreen", || {
+                            tracing::info!("Toggle Fullscreen clicked")
+                        })
+                })
+                .menu("Help", |m| {
+                    m.item("Documentation", || tracing::info!("Documentation clicked"))
+                        .item("Keyboard Shortcuts", || {
+                            tracing::info!("Keyboard Shortcuts clicked")
+                        })
+                        .separator()
+                        .item("About", || tracing::info!("About clicked"))
+                })
+                // Custom trigger example - button with dynamic text
+                .menu_custom(
+                    |is_open| {
+                        let theme = ThemeState::get();
+                        let text_color = theme.color(ColorToken::TextPrimary);
+                        let icon = if is_open { "▼" } else { "▶" };
+                        div()
+                            .flex_row()
+                            .items_center()
+                            .gap(1.0)
+                            .px(2.0)
+                            .py(1.0)
+                            .child(text(icon).size(10.0).color(text_color))
+                            .child(text("Actions").size(14.0).color(text_color))
+                    },
+                    |m| {
+                        m.item("Run Task", || tracing::info!("Run Task clicked"))
+                            .item("Build Project", || tracing::info!("Build Project clicked"))
+                            .separator()
+                            .item("Clear Cache", || tracing::info!("Clear Cache clicked"))
+                    },
+                ),
+        ),
     )
 }
 
@@ -479,13 +481,16 @@ fn form_inputs_section(_ctx: &WindowedContext) -> impl ElementBuilder {
         .child(
             div()
                 .flex_row()
-                .flex_wrap()
+                .w_full()
+                .justify_between()
                 .gap(4.0)
+                .h_fit()
                 // Column 1: Text inputs
                 .child(
                     div()
-                        .w(280.0)
                         .flex_col()
+                        .flex_wrap()
+                        .h_fit()
                         .gap(16.0)
                         .child(
                             cn::input(&username_data)
@@ -508,15 +513,16 @@ fn form_inputs_section(_ctx: &WindowedContext) -> impl ElementBuilder {
                 // Column 2: Textarea
                 .child(
                     div()
-                        .w(300.0)
                         .flex_col()
+                        .flex_wrap()
                         .h_fit()
                         .gap(4.0)
                         .child(
                             cn::textarea(&bio_state)
                                 .label("Bio")
                                 .placeholder("Tell us about yourself...")
-                                .rows(4),
+                                .rows(4)
+                                .w(280.0),
                         )
                         .child(cn::label("Labels can be standalone")),
                 ),
@@ -580,6 +586,8 @@ fn slider_section(ctx: &WindowedContext) -> impl ElementBuilder {
     section_container().child(section_title("Sliders")).child(
         div()
             .flex_col()
+            .items_start() // Prevent width stretching
+            .h_fit()
             .gap(4.0)
             .child(
                 div().h_fit().w(300.0).child(
@@ -659,7 +667,9 @@ fn select_section(ctx: &WindowedContext) -> impl ElementBuilder {
         div()
             .flex_row()
             .flex_wrap()
-            .gap(24.0)
+            .items_start()
+            .h_fit() // Prevent height stretching
+            .gap(4.0)
             // Basic select with placeholder
             .child(
                 div().w(200.0).child(
@@ -711,7 +721,9 @@ fn combobox_section(ctx: &WindowedContext) -> impl ElementBuilder {
         div()
             .flex_row()
             .flex_wrap()
+            .items_start() // Prevent height stretching
             .gap(10.0)
+            .h_fit()
             // Basic searchable combobox
             .child(
                 div().w(220.0).child(
@@ -1318,8 +1330,9 @@ fn accordion_section() -> impl ElementBuilder {
         .child(section_title("Accordion"))
         .child(
             div()
-                .flex_row()
+                .flex_col()
                 .flex_wrap()
+                .w_full()
                 .h_fit()
                 .gap(24.0)
                 // Single-open accordion (default)

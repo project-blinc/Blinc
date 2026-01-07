@@ -56,7 +56,6 @@ impl Card {
             .p_px(padding)
             .flex_col()
             .items_start() // Align content to start, not center
-            .h_fit() // Don't stretch to fill parent height
             .gap_px(gap); // 16px gap between sections
 
         Self { inner }

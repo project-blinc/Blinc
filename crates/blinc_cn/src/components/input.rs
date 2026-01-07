@@ -164,8 +164,9 @@ impl Input {
         }
 
         // Build a container with label, input, and description/error
+        // Use h_fit() to prevent height stretching in flex containers
         let spacing = theme.spacing_value(SpacingToken::Space2);
-        let mut container = div().flex_col().gap_px(spacing);
+        let mut container = div().flex_col().gap_px(spacing).h_fit();
 
         // Apply width to container
         if config.full_width {
