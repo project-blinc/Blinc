@@ -489,7 +489,10 @@ impl Div {
     ///     .animate_layout(LayoutAnimationConfig::all().with_spring(SpringConfig::gentle()))
     ///     .child(content)
     /// ```
-    pub fn animate_layout(mut self, config: crate::layout_animation::LayoutAnimationConfig) -> Self {
+    pub fn animate_layout(
+        mut self,
+        config: crate::layout_animation::LayoutAnimationConfig,
+    ) -> Self {
         self.layout_animation = Some(config);
         self
     }

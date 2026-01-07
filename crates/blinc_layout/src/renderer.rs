@@ -2061,7 +2061,8 @@ impl RenderTree {
 
         // Clean up completed animations (node ID based)
         // Clean up completed animations (node ID based)
-        self.layout_animations.retain(|_, state| state.is_animating());
+        self.layout_animations
+            .retain(|_, state| state.is_animating());
 
         // Clean up completed animations (stable key based)
         self.layout_animations_by_key
@@ -3916,10 +3917,26 @@ impl RenderTree {
             let sides = &render_node.props.border_sides;
             let uniform_border = render_node.props.border_width;
 
-            let left_inset = sides.left.as_ref().map(|b| b.width).unwrap_or(uniform_border);
-            let right_inset = sides.right.as_ref().map(|b| b.width).unwrap_or(uniform_border);
-            let top_inset = sides.top.as_ref().map(|b| b.width).unwrap_or(uniform_border);
-            let bottom_inset = sides.bottom.as_ref().map(|b| b.width).unwrap_or(uniform_border);
+            let left_inset = sides
+                .left
+                .as_ref()
+                .map(|b| b.width)
+                .unwrap_or(uniform_border);
+            let right_inset = sides
+                .right
+                .as_ref()
+                .map(|b| b.width)
+                .unwrap_or(uniform_border);
+            let top_inset = sides
+                .top
+                .as_ref()
+                .map(|b| b.width)
+                .unwrap_or(uniform_border);
+            let bottom_inset = sides
+                .bottom
+                .as_ref()
+                .map(|b| b.width)
+                .unwrap_or(uniform_border);
 
             // Inset clip by border width to exclude border area from clipping region
             let clip_rect = Rect::new(
@@ -4441,18 +4458,34 @@ impl RenderTree {
 
         // Push inset clip for children if this element has borders
         // This prevents children from rendering over the parent's border
-        let has_border = render_node.props.border_width > 0.0
-            || render_node.props.border_sides.has_any();
+        let has_border =
+            render_node.props.border_width > 0.0 || render_node.props.border_sides.has_any();
         let push_children_clip = clips_content && has_border;
         if push_children_clip {
             // Calculate border insets from either uniform border or per-side borders
             let sides = &render_node.props.border_sides;
             let uniform_border = render_node.props.border_width;
 
-            let left_inset = sides.left.as_ref().map(|b| b.width).unwrap_or(uniform_border);
-            let right_inset = sides.right.as_ref().map(|b| b.width).unwrap_or(uniform_border);
-            let top_inset = sides.top.as_ref().map(|b| b.width).unwrap_or(uniform_border);
-            let bottom_inset = sides.bottom.as_ref().map(|b| b.width).unwrap_or(uniform_border);
+            let left_inset = sides
+                .left
+                .as_ref()
+                .map(|b| b.width)
+                .unwrap_or(uniform_border);
+            let right_inset = sides
+                .right
+                .as_ref()
+                .map(|b| b.width)
+                .unwrap_or(uniform_border);
+            let top_inset = sides
+                .top
+                .as_ref()
+                .map(|b| b.width)
+                .unwrap_or(uniform_border);
+            let bottom_inset = sides
+                .bottom
+                .as_ref()
+                .map(|b| b.width)
+                .unwrap_or(uniform_border);
 
             let clip_rect = Rect::new(
                 left_inset,
@@ -4693,10 +4726,26 @@ impl RenderTree {
             let uniform_border = render_node.props.border_width;
             let radius = render_node.props.border_radius;
 
-            let left_inset = sides.left.as_ref().map(|b| b.width).unwrap_or(uniform_border);
-            let right_inset = sides.right.as_ref().map(|b| b.width).unwrap_or(uniform_border);
-            let top_inset = sides.top.as_ref().map(|b| b.width).unwrap_or(uniform_border);
-            let bottom_inset = sides.bottom.as_ref().map(|b| b.width).unwrap_or(uniform_border);
+            let left_inset = sides
+                .left
+                .as_ref()
+                .map(|b| b.width)
+                .unwrap_or(uniform_border);
+            let right_inset = sides
+                .right
+                .as_ref()
+                .map(|b| b.width)
+                .unwrap_or(uniform_border);
+            let top_inset = sides
+                .top
+                .as_ref()
+                .map(|b| b.width)
+                .unwrap_or(uniform_border);
+            let bottom_inset = sides
+                .bottom
+                .as_ref()
+                .map(|b| b.width)
+                .unwrap_or(uniform_border);
 
             // Inset clip by border width to exclude border area from clipping region
             let clip_rect = Rect::new(

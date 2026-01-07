@@ -33,11 +33,11 @@ use crate::widgets::overlay::OverlayManager;
 /// Global overlay context instance
 static OVERLAY_CONTEXT: OnceLock<OverlayContext> = OnceLock::new();
 
-/// Thread-local flag indicating if we're currently rendering closing overlay content
-///
-/// DEPRECATED: This mechanism is being replaced by explicit `MotionHandle.exit()` calls.
-/// Motion exit should be triggered explicitly via `query_motion(key).exit()` instead of
-/// relying on this flag captured at construction time.
+// Thread-local flag indicating if we're currently rendering closing overlay content
+//
+// DEPRECATED: This mechanism is being replaced by explicit `MotionHandle.exit()` calls.
+// Motion exit should be triggered explicitly via `query_motion(key).exit()` instead of
+// relying on this flag captured at construction time.
 thread_local! {
     static OVERLAY_CLOSING: Cell<bool> = const { Cell::new(false) };
 }

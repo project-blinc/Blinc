@@ -1230,7 +1230,6 @@ fn tabs_section(ctx: &WindowedContext) -> impl ElementBuilder {
 // ============================================================================
 
 fn accordion_section() -> impl ElementBuilder {
-
     section_container()
         .child(section_title("Accordion"))
         .child(

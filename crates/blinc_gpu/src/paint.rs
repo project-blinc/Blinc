@@ -485,10 +485,34 @@ impl<'a> GpuPaintContext<'a> {
         // Each corner's radius is only valid if the intersection edge matches the source edge
         // Format: (radius, source_min_x, source_min_y, source_max_x, source_max_y)
         let mut corner_sources: [(f32, f32, f32, f32, f32); 4] = [
-            (0.0, f32::NEG_INFINITY, f32::NEG_INFINITY, f32::INFINITY, f32::INFINITY), // top_left
-            (0.0, f32::NEG_INFINITY, f32::NEG_INFINITY, f32::INFINITY, f32::INFINITY), // top_right
-            (0.0, f32::NEG_INFINITY, f32::NEG_INFINITY, f32::INFINITY, f32::INFINITY), // bottom_right
-            (0.0, f32::NEG_INFINITY, f32::NEG_INFINITY, f32::INFINITY, f32::INFINITY), // bottom_left
+            (
+                0.0,
+                f32::NEG_INFINITY,
+                f32::NEG_INFINITY,
+                f32::INFINITY,
+                f32::INFINITY,
+            ), // top_left
+            (
+                0.0,
+                f32::NEG_INFINITY,
+                f32::NEG_INFINITY,
+                f32::INFINITY,
+                f32::INFINITY,
+            ), // top_right
+            (
+                0.0,
+                f32::NEG_INFINITY,
+                f32::NEG_INFINITY,
+                f32::INFINITY,
+                f32::INFINITY,
+            ), // bottom_right
+            (
+                0.0,
+                f32::NEG_INFINITY,
+                f32::NEG_INFINITY,
+                f32::INFINITY,
+                f32::INFINITY,
+            ), // bottom_left
         ];
 
         // Track whether the topmost clip is a plain Rect (not rounded)

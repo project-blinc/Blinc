@@ -69,7 +69,10 @@ fn text_measure_function(
     let height = known_dimensions.height;
 
     if let (Some(w), Some(h)) = (width, height) {
-        return Size { width: w, height: h };
+        return Size {
+            width: w,
+            height: h,
+        };
     }
 
     // If no context (not a text node), return zero
@@ -177,9 +180,11 @@ impl LayoutTree {
     /// Compute layout for a tree rooted at the given node
     pub fn compute_layout(&mut self, root: LayoutNodeId, available_space: Size<AvailableSpace>) {
         if let Some(&taffy_node) = self.node_map.get(root) {
-            let _ = self
-                .taffy
-                .compute_layout_with_measure(taffy_node, available_space, text_measure_function);
+            let _ = self.taffy.compute_layout_with_measure(
+                taffy_node,
+                available_space,
+                text_measure_function,
+            );
         }
     }
 
