@@ -352,8 +352,6 @@ impl AccordionBuilder {
                             .py(2.0)
                             .px(1.0)
                             .overflow_clip()
-                            .items_center()
-                            .justify_center()
                             .animate_layout(
                                 LayoutAnimationConfig::all().with_key(anim_key).snappy(),
                             )
