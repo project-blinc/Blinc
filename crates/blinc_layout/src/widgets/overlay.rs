@@ -1575,14 +1575,108 @@ impl OverlayManagerInner {
 
         // Add visible overlays as children
         if has_visible && width > 0.0 && height > 0.0 {
+            // Separate toasts from other overlays and group toasts by corner
+            let mut toasts_by_corner: std::collections::HashMap<Corner, Vec<&ActiveOverlay>> =
+                std::collections::HashMap::new();
+            let mut non_toasts: Vec<&ActiveOverlay> = Vec::new();
+
             for overlay in self.overlays_sorted() {
                 if overlay.is_visible() {
-                    layer = layer.child(self.build_single_overlay(overlay, width, height));
+                    if overlay.config.kind == OverlayKind::Toast {
+                        if let OverlayPosition::Corner(corner) = overlay.config.position {
+                            toasts_by_corner.entry(corner).or_default().push(overlay);
+                        } else {
+                            // Toast without Corner position - render as regular overlay
+                            non_toasts.push(overlay);
+                        }
+                    } else {
+                        non_toasts.push(overlay);
+                    }
                 }
+            }
+
+            // Render non-toast overlays
+            for overlay in non_toasts {
+                layer = layer.child(self.build_single_overlay(overlay, width, height));
+            }
+
+            // Render toast stacks for each corner
+            for (corner, toasts) in toasts_by_corner {
+                layer = layer.child(self.build_toast_stack(&toasts, corner, width, height));
             }
         }
 
         layer
+    }
+
+    /// Build a vertically stacked container for toasts in a corner
+    fn build_toast_stack(
+        &self,
+        toasts: &[&ActiveOverlay],
+        corner: Corner,
+        vp_width: f32,
+        vp_height: f32,
+    ) -> Div {
+        let margin = 16.0;
+
+        // Create container with proper corner alignment
+        // pointer_events_none allows scroll events to pass through to UI below
+        let mut container = div()
+            .w(vp_width)
+            .h(vp_height)
+            .pointer_events_none()
+            .p(margin);
+
+        // Determine flex direction based on corner (top corners stack down, bottom stack up)
+        let (container, reverse) = match corner {
+            Corner::TopLeft => (container.items_start().justify_start(), false),
+            Corner::TopRight => (container.items_end().justify_start(), false),
+            Corner::BottomLeft => (container.items_start().justify_end(), true),
+            Corner::BottomRight => (container.items_end().justify_end(), true),
+        };
+
+        // Build inner stack container for toasts
+        let mut toast_stack = div().flex_col().gap(self.toast_gap);
+
+        // For bottom corners, reverse the order so newest appears at bottom
+        let toasts_ordered: Vec<_> = if reverse {
+            toasts.iter().rev().collect()
+        } else {
+            toasts.iter().collect()
+        };
+
+        for toast in toasts_ordered {
+            let content = toast.build_content();
+            // Apply size constraints if specified
+            let content = if let Some((w, h)) = toast.config.size {
+                content.w(w).h(h)
+            } else {
+                content
+            };
+
+            // Wrap content with hover leave handler if dismiss_on_hover_leave is enabled
+            let content = if toast.config.dismiss_on_hover_leave {
+                let overlay_handle = toast.handle;
+                let has_close_delay = toast.config.close_delay_ms.is_some();
+                content.on_hover_leave(move |_| {
+                    if let Some(ctx) = crate::overlay_state::OverlayContext::try_get() {
+                        let mgr = ctx.overlay_manager();
+                        let mut inner = mgr.lock().unwrap();
+                        if has_close_delay {
+                            inner.hover_leave(overlay_handle);
+                        } else {
+                            inner.close(overlay_handle);
+                        }
+                    }
+                })
+            } else {
+                content
+            };
+
+            toast_stack = toast_stack.child(content);
+        }
+
+        container.child(toast_stack)
     }
 
     /// Build overlay layer content for subtree rebuild

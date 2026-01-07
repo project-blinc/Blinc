@@ -1470,6 +1470,22 @@ fn toast_section(_ctx: &WindowedContext) -> impl ElementBuilder {
                             })
                             .show();
                     }),
+            )
+            // Multiple toasts at once (for stacking test)
+            .child(
+                cn::button("Show 3 Toasts")
+                    .variant(ButtonVariant::Primary)
+                    .on_click(|_| {
+                        cn::toast("First Toast")
+                            .description("This is the first toast.")
+                            .show();
+                        cn::toast_success("Second Toast")
+                            .description("This is the second toast.")
+                            .show();
+                        cn::toast_warning("Third Toast")
+                            .description("This is the third toast.")
+                            .show();
+                    }),
             ),
     )
 }
