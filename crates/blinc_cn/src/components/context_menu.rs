@@ -59,6 +59,7 @@ use blinc_layout::motion::motion_derived;
 use blinc_layout::overlay_state::get_overlay_manager;
 use blinc_layout::prelude::*;
 use blinc_layout::stateful::{ButtonState, Stateful};
+use blinc_layout::widgets::hr::hr_with_bg;
 use blinc_layout::widgets::overlay::{OverlayHandle, OverlayManagerExt};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
@@ -188,6 +189,11 @@ impl ContextMenuItem {
     /// Check if this item has a submenu
     pub fn has_submenu(&self) -> bool {
         self.submenu.is_some()
+    }
+
+    /// Get the submenu items if any
+    pub fn get_submenu(&self) -> Option<&Vec<ContextMenuItem>> {
+        self.submenu.as_ref()
     }
 
     /// Get the click handler (clones the Arc)
@@ -448,6 +454,283 @@ impl Default for SubmenuBuilder {
     }
 }
 
+/// Show a submenu overlay positioned to the right of the parent item
+fn show_context_submenu(
+    x: f32,
+    y: f32,
+    items: &[ContextMenuItem],
+    min_width: f32,
+    parent_handle_state: State<Option<u64>>,
+    submenu_handle_state: State<Option<u64>>,
+    key: String,
+) -> OverlayHandle {
+    let theme = ThemeState::get();
+    let bg = theme.color(ColorToken::Surface);
+    let border = theme.color(ColorToken::Border);
+    let text_color = theme.color(ColorToken::TextPrimary);
+    let text_secondary = theme.color(ColorToken::TextSecondary);
+    let text_tertiary = theme.color(ColorToken::TextTertiary);
+    let surface_elevated = theme.color(ColorToken::SurfaceElevated);
+    let radius = theme.radius(RadiusToken::Md);
+    let font_size = 14.0;
+    let padding = 12.0;
+
+    let items = items.to_vec();
+
+    let submenu_handle_for_content = submenu_handle_state.clone();
+    let parent_handle_for_content = parent_handle_state.clone();
+    let submenu_handle_for_close = submenu_handle_state.clone();
+
+    let mgr = get_overlay_manager();
+
+    let motion_key_str = format!("ctx_submenu_{}", key);
+    let motion_key_with_child = format!("{}:child:0", motion_key_str);
+
+    let handle = mgr
+        .dropdown()
+        .at(x, y)
+        .dismiss_on_escape(true)
+        .motion_key(&motion_key_with_child)
+        .on_close(move || {
+            submenu_handle_for_close.set(None);
+        })
+        .content(move || {
+            build_submenu_content(
+                &items,
+                min_width,
+                &parent_handle_for_content,
+                &submenu_handle_for_content,
+                &motion_key_str,
+                bg,
+                border,
+                text_color,
+                text_secondary,
+                text_tertiary,
+                surface_elevated,
+                radius,
+                font_size,
+                padding,
+            )
+        })
+        .show();
+
+    handle
+}
+
+/// Build submenu content (recursive for nested submenus)
+#[allow(clippy::too_many_arguments)]
+fn build_submenu_content(
+    items: &[ContextMenuItem],
+    width: f32,
+    parent_handle_state: &State<Option<u64>>,
+    submenu_handle_state: &State<Option<u64>>,
+    key: &str,
+    bg: Color,
+    border: Color,
+    text_color: Color,
+    text_secondary: Color,
+    text_tertiary: Color,
+    surface_elevated: Color,
+    radius: f32,
+    font_size: f32,
+    padding: f32,
+) -> Div {
+    let menu_id = key;
+
+    // State for tracking nested submenus
+    let nested_submenu_handle: State<Option<u64>> =
+        BlincContextState::get().use_state_keyed(&format!("{}_nested", key), || None);
+
+    let mut menu = div()
+        .id(menu_id)
+        .flex_col()
+        .w(width)
+        .bg(bg)
+        .border(1.0, border)
+        .rounded(radius)
+        .shadow_lg()
+        .overflow_clip()
+        .h_fit();
+
+    for (idx, item) in items.iter().enumerate() {
+        if item.is_separator {
+            menu = menu.child(hr_with_bg(bg));
+        } else {
+            let item_label = item.label.clone();
+            let item_shortcut = item.shortcut.clone();
+            let item_icon = item.icon.clone();
+            let item_disabled = item.disabled;
+            let item_on_click = item.on_click.clone();
+            let has_submenu = item.submenu.is_some();
+            let submenu_items = item.submenu.clone();
+
+            let parent_handle_for_click = parent_handle_state.clone();
+            let submenu_handle_for_click = submenu_handle_state.clone();
+            let nested_submenu_for_hover = nested_submenu_handle.clone();
+            let nested_submenu_for_leave = nested_submenu_handle.clone();
+
+            let item_key = format!("{}_item-{}", key, idx);
+            let submenu_key = format!("{}_sub-{}", key, idx);
+            let button_state = use_button_state(&item_key);
+
+            let item_text_color = if item_disabled {
+                text_tertiary
+            } else {
+                text_color
+            };
+
+            let shortcut_color = text_secondary;
+
+            let mut row = Stateful::with_shared_state(button_state)
+                .w_full()
+                .h_fit()
+                .py(padding / 4.0)
+                .px(padding / 2.0)
+                .bg(bg)
+                .cursor(if item_disabled {
+                    CursorStyle::NotAllowed
+                } else {
+                    CursorStyle::Pointer
+                })
+                .on_state(move |state, container: &mut Div| {
+                    let theme = ThemeState::get();
+                    let item_bg = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !item_disabled {
+                        theme.color(ColorToken::SecondaryHover).with_alpha(0.65)
+                    } else {
+                        bg
+                    };
+
+                    let text_col = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !item_disabled {
+                        theme.color(ColorToken::TextSecondary)
+                    } else {
+                        item_text_color
+                    };
+
+                    let mut left_side = div()
+                        .w_fit()
+                        .h_fit()
+                        .flex_row()
+                        .items_center()
+                        .gap(padding / 4.0);
+
+                    if let Some(ref icon_svg) = item_icon {
+                        left_side = left_side.child(svg(icon_svg).size(16.0, 16.0).color(item_text_color));
+                    }
+
+                    left_side = left_side.child(
+                        text(&item_label)
+                            .size(font_size)
+                            .color(text_col)
+                            .no_cursor().pointer_events_none(),
+                    ).pointer_events_none();
+
+                    let right_side: Option<Div> = if let Some(ref shortcut) = item_shortcut {
+                        Some(div().child(
+                            text(shortcut)
+                                .size(font_size - 2.0)
+                                .color(shortcut_color)
+                                .no_cursor(),
+                        ))
+                    } else if has_submenu {
+                        let chevron_right = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>"#;
+                        Some(div().child(svg(chevron_right).size(12.0, 12.0).color(text_tertiary)).pointer_events_none())
+                    } else {
+                        None
+                    };
+
+                    let mut row_content = div()
+                        .w_full()
+                        .h_fit()
+                        .flex_row()
+                        .items_center()
+                        .justify_between()
+                        .bg(item_bg)
+                        .child(left_side);
+
+                    if let Some(right) = right_side {
+                        row_content = row_content.child(right);
+                    }
+
+                    container.merge(row_content);
+                })
+                .on_click(move |_| {
+                    if !item_disabled && !has_submenu {
+                        if let Some(ref cb) = item_on_click {
+                            cb();
+                        }
+
+                        // Close the submenu
+                        if let Some(handle_id) = submenu_handle_for_click.get() {
+                            let mgr = get_overlay_manager();
+                            mgr.close(OverlayHandle::from_raw(handle_id));
+                        }
+
+                        // Close the parent menu
+                        if let Some(handle_id) = parent_handle_for_click.get() {
+                            let mgr = get_overlay_manager();
+                            mgr.close(OverlayHandle::from_raw(handle_id));
+                        }
+                    }
+                });
+
+            // Add hover handlers for submenu items
+            if has_submenu && !item_disabled {
+                let submenu_items_for_hover = submenu_items.clone();
+                let parent_handle_for_submenu = parent_handle_state.clone();
+                let submenu_key_for_hover = submenu_key.clone();
+
+                row = row.on_hover_enter(move |ctx| {
+                    // Close any existing nested submenu
+                    if let Some(handle_id) = nested_submenu_for_hover.get() {
+                        let mgr = get_overlay_manager();
+                        let handle = OverlayHandle::from_raw(handle_id);
+                        if !mgr.is_closing(handle) && !mgr.is_pending_close(handle) {
+                            mgr.close(handle);
+                        }
+                    }
+
+                    // Show new nested submenu
+                    if let Some(ref items) = submenu_items_for_hover {
+                        let x = ctx.bounds_x + ctx.bounds_width + 4.0;
+                        let y = ctx.bounds_y;
+
+                        let handle = show_context_submenu(
+                            x,
+                            y,
+                            items,
+                            160.0,
+                            parent_handle_for_submenu.clone(),
+                            nested_submenu_for_hover.clone(),
+                            submenu_key_for_hover.clone(),
+                        );
+                        nested_submenu_for_hover.set(Some(handle.id()));
+                    }
+                });
+            } else {
+                // Close nested submenu when hovering non-submenu item
+                row = row.on_hover_enter(move |_| {
+                    if let Some(handle_id) = nested_submenu_for_leave.get() {
+                        let mgr = get_overlay_manager();
+                        let handle = OverlayHandle::from_raw(handle_id);
+                        if !mgr.is_closing(handle) && !mgr.is_pending_close(handle) {
+                            mgr.close(handle);
+                        }
+                    }
+                });
+            }
+
+            menu = menu.child(row);
+        }
+    }
+
+    div().child(
+        motion_derived(key)
+            .enter_animation(AnimationPreset::context_menu_in(150))
+            .exit_animation(AnimationPreset::context_menu_out(100))
+            .child(menu),
+    )
+}
+
 /// Build the menu content div
 ///
 /// Uses the same layout pattern as the Select dropdown for consistency.
@@ -469,6 +752,10 @@ fn build_menu_content(
 ) -> Div {
     // Generate a unique ID for the menu based on the key
     let menu_id = key;
+
+    // State for tracking open submenu
+    let submenu_handle: State<Option<u64>> =
+        BlincContextState::get().use_state_keyed(&format!("{}_submenu", key), || None);
 
     let mut menu = div()
         .id(menu_id)
@@ -497,11 +784,15 @@ fn build_menu_content(
             let item_disabled = item.disabled;
             let item_on_click = item.on_click.clone();
             let has_submenu = item.submenu.is_some();
+            let submenu_items = item.submenu.clone();
 
             let handle_state_for_click = overlay_handle_state.clone();
+            let submenu_handle_for_hover = submenu_handle.clone();
+            let submenu_handle_for_leave = submenu_handle.clone();
 
             // Create a stable key for this item's button state
             let item_key = format!("{}_item-{}", key, idx);
+            let submenu_key = format!("{}_sub-{}", key, idx);
             let button_state = use_button_state(&item_key);
 
             let item_text_color = if item_disabled {
@@ -513,7 +804,7 @@ fn build_menu_content(
             let shortcut_color = text_secondary;
 
             // Build the stateful menu item row
-            let row = Stateful::with_shared_state(button_state)
+            let mut row = Stateful::with_shared_state(button_state)
                 .w_full()
                 .h_fit()
                 .py(padding / 4.0)
@@ -533,7 +824,7 @@ fn build_menu_content(
                         bg
                     };
 
-                    let text_color = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !item_disabled {
+                    let text_col = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !item_disabled {
                         theme.color(ColorToken::TextSecondary)
                     } else {
                         item_text_color
@@ -554,7 +845,7 @@ fn build_menu_content(
                     left_side = left_side.child(
                         text(&item_label)
                             .size(font_size)
-                            .color(text_color)
+                            .color(text_col)
                             .no_cursor(),
                     );
 
@@ -589,7 +880,7 @@ fn build_menu_content(
                     container.merge(row_content);
                 })
                 .on_click(move |_| {
-                    if !item_disabled {
+                    if !item_disabled && !has_submenu {
                         // Execute the callback
                         if let Some(ref cb) = item_on_click {
                             cb();
@@ -602,6 +893,52 @@ fn build_menu_content(
                         }
                     }
                 });
+
+            // Add hover handlers for submenu items
+            if has_submenu && !item_disabled {
+                let submenu_items_for_hover = submenu_items.clone();
+                let overlay_handle_for_submenu = overlay_handle_state.clone();
+                let submenu_key_for_hover = submenu_key.clone();
+
+                row = row.on_hover_enter(move |ctx| {
+                    // Close any existing submenu
+                    if let Some(handle_id) = submenu_handle_for_hover.get() {
+                        let mgr = get_overlay_manager();
+                        let handle = OverlayHandle::from_raw(handle_id);
+                        if !mgr.is_closing(handle) && !mgr.is_pending_close(handle) {
+                            mgr.close(handle);
+                        }
+                    }
+
+                    // Show submenu to the right of this item
+                    if let Some(ref items) = submenu_items_for_hover {
+                        let x = ctx.bounds_x + ctx.bounds_width + 4.0;
+                        let y = ctx.bounds_y;
+
+                        let handle = show_context_submenu(
+                            x,
+                            y,
+                            items,
+                            160.0,
+                            overlay_handle_for_submenu.clone(),
+                            submenu_handle_for_hover.clone(),
+                            submenu_key_for_hover.clone(),
+                        );
+                        submenu_handle_for_hover.set(Some(handle.id()));
+                    }
+                });
+            } else {
+                // When hovering a non-submenu item, close any open submenu
+                row = row.on_hover_enter(move |_| {
+                    if let Some(handle_id) = submenu_handle_for_leave.get() {
+                        let mgr = get_overlay_manager();
+                        let handle = OverlayHandle::from_raw(handle_id);
+                        if !mgr.is_closing(handle) && !mgr.is_pending_close(handle) {
+                            mgr.close(handle);
+                        }
+                    }
+                });
+            }
 
             menu = menu.child(row);
         }

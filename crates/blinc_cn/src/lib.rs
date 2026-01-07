@@ -61,6 +61,7 @@ pub mod cn {
     pub use crate::components::dropdown_menu::{dropdown_menu, dropdown_menu_custom};
     pub use crate::components::hover_card::hover_card;
     pub use crate::components::input::input;
+    pub use crate::components::menubar::{menubar, MenuTriggerMode, MenuTriggerStyle};
     pub use crate::components::label::label;
     pub use crate::components::progress::{progress, progress_animated};
     pub use crate::components::radio::radio_group;
@@ -108,6 +109,7 @@ pub mod prelude {
     pub use crate::components::hover_card::{
         hover_card, HoverCard, HoverCardAlign, HoverCardBuilder, HoverCardSide,
     };
+    pub use crate::components::menubar::{menubar, Menubar, MenubarBuilder, MenubarMenu, MenubarTrigger, MenuTriggerMode, MenuTriggerStyle};
     pub use crate::components::input::{input, Input, InputBgColors, InputBorderColors, InputSize};
     pub use crate::components::label::{label, Label, LabelBuilder, LabelSize};
     pub use crate::components::progress::{

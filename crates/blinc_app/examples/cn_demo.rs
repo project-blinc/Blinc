@@ -12,7 +12,7 @@ use blinc_core::Color;
 use blinc_layout::layout_animation::LayoutAnimationConfig;
 use blinc_layout::selector::ScrollRef;
 use blinc_layout::widgets::text_input::text_input_data;
-use blinc_theme::{BlincTheme, ColorScheme, ColorToken, ThemeState};
+use blinc_theme::{ColorScheme, ColorToken, ThemeState};
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -29,105 +29,6 @@ fn main() -> Result<()> {
     };
 
     WindowedApp::run(config, |ctx| build_ui(ctx))
-}
-
-/// Test for layout animation - toggles div height on click
-fn layout_animation_test() -> impl ElementBuilder {
-    use blinc_core::context_state::BlincContextState;
-    use blinc_layout::prelude::use_shared_state_with;
-    use blinc_layout::stateful::Stateful;
-
-    let theme = ThemeState::get();
-    let surface = theme.color(ColorToken::Surface);
-    let border = theme.color(ColorToken::Border);
-    let text_primary = theme.color(ColorToken::TextPrimary);
-    let text_secondary = theme.color(ColorToken::TextSecondary);
-
-    // State for toggling - use State<bool> for reactivity
-    let is_expanded: blinc_core::State<bool> =
-        BlincContextState::get().use_state_keyed("layout_anim_test_expanded", || false);
-
-    let signal_id = is_expanded.signal_id();
-    let is_expanded_for_click = is_expanded.clone();
-    let is_expanded_for_state = is_expanded.clone();
-
-    // Use shared state with unit type, deps on the signal
-    let state_handle = use_shared_state_with("layout_anim_test_state", ());
-
-    section_container()
-        .child(section_title("Layout Animation Test"))
-        .child(
-            text("Click the box to add/remove children. The container should animate its height.")
-                .size(14.0)
-                .color(text_secondary),
-        )
-        .child(
-            Stateful::with_shared_state(state_handle)
-                .deps(&[signal_id])
-                .on_state(move |_: &(), container: &mut Div| {
-                    let expanded = is_expanded_for_state.get();
-                    let is_expanded_click = is_expanded_for_click.clone();
-
-                    // The container has layout animation with STABLE KEY
-                    // This key persists across rebuilds so animation can track bounds changes
-                    let mut animated_container = div()
-                        .w(300.0)
-                        .bg(surface)
-                        .border(2.0, border)
-                        .rounded(8.0)
-                        .overflow_clip()
-                        .flex_col()
-                        .gap(8.0)
-                        .p(12.0)
-                        .animate_layout(
-                            LayoutAnimationConfig::height()
-                                .with_key("layout-test-container")
-                                .snappy(),
-                        )
-                        .cursor_pointer()
-                        .on_click(move |_| {
-                            let current = is_expanded_click.get();
-                            is_expanded_click.set(!current);
-                            tracing::info!(
-                                "Layout animation test: toggled to {}",
-                                if !current { "expanded" } else { "collapsed" }
-                            );
-                        });
-
-                    // Always show header
-                    animated_container = animated_container.child(
-                        text("Click me to toggle content")
-                            .size(14.0)
-                            .weight(FontWeight::Medium)
-                            .color(text_primary),
-                    );
-
-                    // Conditionally add more children when expanded
-                    if expanded {
-                        animated_container = animated_container
-                            .child(text("Item 1").size(14.0).color(text_secondary))
-                            .child(text("Item 2").size(14.0).color(text_secondary))
-                            .child(text("Item 3").size(14.0).color(text_secondary))
-                            .child(text("Item 4").size(14.0).color(text_secondary));
-                    }
-
-                    let status = text(format!(
-                        "State: {} ({} children)",
-                        if expanded { "expanded" } else { "collapsed" },
-                        if expanded { 5 } else { 1 }
-                    ))
-                    .size(12.0)
-                    .color(text_secondary);
-
-                    container.merge(
-                        div()
-                            .flex_col()
-                            .gap(12.0)
-                            .child(animated_container)
-                            .child(status),
-                    );
-                }),
-        )
 }
 
 fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
@@ -161,8 +62,9 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                         .gap(theme.spacing().space_8)
                         // Accordion at top for layout animation testing
                         .child(accordion_section())
+                        .child(menubar_demo())
                         // Test layout animation
-                        .child(layout_animation_test())
+                        // .child(layout_animation_test())
                         // Component sections
                         .child(progress_section(ctx, &scroll_ref))
                         .child(buttons_section(ctx))
@@ -186,6 +88,186 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                         .child(misc_section()),
                 ),
         )
+}
+
+// /// Test for layout animation - toggles div height on click
+// fn layout_animation_test() -> impl ElementBuilder {
+//     use blinc_core::context_state::BlincContextState;
+//     use blinc_layout::prelude::use_shared_state_with;
+//     use blinc_layout::stateful::Stateful;
+
+//     let theme = ThemeState::get();
+//     let surface = theme.color(ColorToken::Surface);
+//     let border = theme.color(ColorToken::Border);
+//     let text_primary = theme.color(ColorToken::TextPrimary);
+//     let text_secondary = theme.color(ColorToken::TextSecondary);
+
+//     // State for toggling - use State<bool> for reactivity
+//     let is_expanded: blinc_core::State<bool> =
+//         BlincContextState::get().use_state_keyed("layout_anim_test_expanded", || false);
+
+//     let signal_id = is_expanded.signal_id();
+//     let is_expanded_for_click = is_expanded.clone();
+//     let is_expanded_for_state = is_expanded.clone();
+
+//     // Use shared state with unit type, deps on the signal
+//     let state_handle = use_shared_state_with("layout_anim_test_state", ());
+
+//     section_container()
+//         .child(section_title("Layout Animation Test"))
+//         .child(
+//             text("Click the box to add/remove children. The container should animate its height.")
+//                 .size(14.0)
+//                 .color(text_secondary),
+//         )
+//         .child(
+//             Stateful::with_shared_state(state_handle)
+//                 .deps(&[signal_id])
+//                 .on_state(move |_: &(), container: &mut Div| {
+//                     let expanded = is_expanded_for_state.get();
+//                     let is_expanded_click = is_expanded_for_click.clone();
+
+//                     // The container has layout animation with STABLE KEY
+//                     // This key persists across rebuilds so animation can track bounds changes
+//                     let mut animated_container = div()
+//                         .w(300.0)
+//                         .bg(surface)
+//                         .border(2.0, border)
+//                         .rounded(8.0)
+//                         .overflow_clip()
+//                         .flex_col()
+//                         .gap(8.0)
+//                         .p(12.0)
+//                         .animate_layout(
+//                             LayoutAnimationConfig::height()
+//                                 .with_key("layout-test-container")
+//                                 .snappy(),
+//                         )
+//                         .cursor_pointer()
+//                         .on_click(move |_| {
+//                             let current = is_expanded_click.get();
+//                             is_expanded_click.set(!current);
+//                             tracing::info!(
+//                                 "Layout animation test: toggled to {}",
+//                                 if !current { "expanded" } else { "collapsed" }
+//                             );
+//                         });
+
+//                     // Always show header
+//                     animated_container = animated_container.child(
+//                         text("Click me to toggle content")
+//                             .size(14.0)
+//                             .weight(FontWeight::Medium)
+//                             .color(text_primary),
+//                     );
+
+//                     // Conditionally add more children when expanded
+//                     if expanded {
+//                         animated_container = animated_container
+//                             .child(text("Item 1").size(14.0).color(text_secondary))
+//                             .child(text("Item 2").size(14.0).color(text_secondary))
+//                             .child(text("Item 3").size(14.0).color(text_secondary))
+//                             .child(text("Item 4").size(14.0).color(text_secondary));
+//                     }
+
+//                     let status = text(format!(
+//                         "State: {} ({} children)",
+//                         if expanded { "expanded" } else { "collapsed" },
+//                         if expanded { 5 } else { 1 }
+//                     ))
+//                     .size(12.0)
+//                     .color(text_secondary);
+
+//                     container.merge(
+//                         div()
+//                             .flex_col()
+//                             .gap(12.0)
+//                             .child(animated_container)
+//                             .child(status),
+//                     );
+//                 }),
+//         )
+// }
+
+// ============================================================================
+// MENUBAR DEMO
+// ============================================================================
+
+fn menubar_demo() -> impl ElementBuilder {
+    section_container().child(section_title("Menubar")).child(
+        cn::menubar()
+            .trigger_mode(cn::MenuTriggerMode::Hover) // Open menus on hover
+            .menu("File", |m| {
+                m.item("New", || tracing::info!("New clicked"))
+                    .item_with_shortcut("Open", "Ctrl+O", || tracing::info!("Open clicked"))
+                    .item_with_shortcut("Save", "Ctrl+S", || tracing::info!("Save clicked"))
+                    .item_with_shortcut("Save As...", "Ctrl+Shift+S", || {
+                        tracing::info!("Save As clicked")
+                    })
+                    .separator()
+                    .submenu("Recent Files", |sub| {
+                        sub.item("document1.txt", || tracing::info!("Recent: document1.txt"))
+                            .item("project.rs", || tracing::info!("Recent: project.rs"))
+                            .item("config.toml", || tracing::info!("Recent: config.toml"))
+                    })
+                    .separator()
+                    .item_with_shortcut("Exit", "Alt+F4", || tracing::info!("Exit clicked"))
+            })
+            .menu("Edit", |m| {
+                m.item_with_shortcut("Undo", "Ctrl+Z", || tracing::info!("Undo clicked"))
+                    .item_with_shortcut("Redo", "Ctrl+Y", || tracing::info!("Redo clicked"))
+                    .separator()
+                    .item_with_shortcut("Cut", "Ctrl+X", || tracing::info!("Cut clicked"))
+                    .item_with_shortcut("Copy", "Ctrl+C", || tracing::info!("Copy clicked"))
+                    .item_with_shortcut("Paste", "Ctrl+V", || tracing::info!("Paste clicked"))
+                    .separator()
+                    .item_with_shortcut("Select All", "Ctrl+A", || {
+                        tracing::info!("Select All clicked")
+                    })
+            })
+            .menu("View", |m| {
+                m.item("Zoom In", || tracing::info!("Zoom In clicked"))
+                    .item("Zoom Out", || tracing::info!("Zoom Out clicked"))
+                    .item("Reset Zoom", || tracing::info!("Reset Zoom clicked"))
+                    .separator()
+                    .item("Toggle Sidebar", || {
+                        tracing::info!("Toggle Sidebar clicked")
+                    })
+                    .item("Toggle Fullscreen", || {
+                        tracing::info!("Toggle Fullscreen clicked")
+                    })
+            })
+            .menu("Help", |m| {
+                m.item("Documentation", || tracing::info!("Documentation clicked"))
+                    .item("Keyboard Shortcuts", || {
+                        tracing::info!("Keyboard Shortcuts clicked")
+                    })
+                    .separator()
+                    .item("About", || tracing::info!("About clicked"))
+            })
+            // Custom trigger example - button with dynamic text
+            .menu_custom(
+                |is_open| {
+                    let theme = ThemeState::get();
+                    let text_color = theme.color(ColorToken::TextPrimary);
+                    let icon = if is_open { "▼" } else { "▶" };
+                    div()
+                        .flex_row()
+                        .items_center()
+                        .gap(1.0)
+                        .px(2.0)
+                        .py(1.0)
+                        .child(text(icon).size(10.0).color(text_color))
+                        .child(text("Actions").size(14.0).color(text_color))
+                },
+                |m| {
+                    m.item("Run Task", || tracing::info!("Run Task clicked"))
+                        .item("Build Project", || tracing::info!("Build Project clicked"))
+                        .separator()
+                        .item("Clear Cache", || tracing::info!("Clear Cache clicked"))
+                },
+            ),
+    )
 }
 
 /// Header with title and theme toggle
@@ -398,7 +480,7 @@ fn form_inputs_section(_ctx: &WindowedContext) -> impl ElementBuilder {
             div()
                 .flex_row()
                 .flex_wrap()
-                .gap(24.0)
+                .gap(4.0)
                 // Column 1: Text inputs
                 .child(
                     div()
@@ -428,7 +510,8 @@ fn form_inputs_section(_ctx: &WindowedContext) -> impl ElementBuilder {
                     div()
                         .w(300.0)
                         .flex_col()
-                        .gap(16.0)
+                        .h_fit()
+                        .gap(4.0)
                         .child(
                             cn::textarea(&bio_state)
                                 .label("Bio")
@@ -628,7 +711,7 @@ fn combobox_section(ctx: &WindowedContext) -> impl ElementBuilder {
         div()
             .flex_row()
             .flex_wrap()
-            .gap(24.0)
+            .gap(10.0)
             // Basic searchable combobox
             .child(
                 div().w(220.0).child(

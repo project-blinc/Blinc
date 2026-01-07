@@ -83,7 +83,7 @@ Modal and overlay components.
 | **Drawer** | overlay, motion | Planned |
 | **Dropdown Menu** | overlay, scroll | ✅ Done |
 | **Context Menu** | overlay, scroll | ✅ Done |
-| **Menubar** | div, overlay | Planned |
+| **Menubar** | div, overlay | ✅ Done |
 | **Hover Card** | overlay, motion | ✅ Done |
 
 ### 6. Navigation (Priority: Medium)
