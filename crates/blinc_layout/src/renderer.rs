@@ -4245,22 +4245,6 @@ impl RenderTree {
             ctx.set_z_layer(current_z + 1);
         }
 
-        // Push clip if needed (either from element or from layout animation)
-        // Layout animations need clipping to hide content that exceeds animated bounds
-        // NOTE: This clip is for the element itself. Children get an INSET clip pushed later
-        // to prevent them from rendering over the border.
-        let clips_content = render_node.props.clips_content || has_layout_animation;
-        if clips_content {
-            let clip_rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
-            let radius = render_node.props.border_radius;
-            let clip_shape = if radius.is_uniform() && radius.top_left > 0.0 {
-                ClipShape::rounded_rect(clip_rect, radius)
-            } else {
-                ClipShape::rect(clip_rect)
-            };
-            ctx.push_clip(clip_shape);
-        }
-
         // Determine effective layer:
         // - Children of glass elements render in foreground
         // - Children of foreground elements also render in foreground
@@ -4276,27 +4260,13 @@ impl RenderTree {
             render_node.props.layer
         };
 
-        // Render if this node matches target layer
+        // Draw shadow BEFORE pushing clip (shadows extend beyond element bounds)
+        // This must be done before the clip is applied so shadows aren't clipped
+        let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
+        let radius = render_node.props.border_radius;
         if effective_layer == target_layer {
-            let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
-            let radius = render_node.props.border_radius;
-
-            // Apply motion opacity to rendering
-            // TODO: When DrawContext supports opacity, apply motion_opacity here
-            // For now, we rely on the brush alpha
-
-            if let Some(Material::Glass(glass)) = &render_node.props.material {
-                let glass_brush = Brush::Glass(GlassStyle {
-                    blur: glass.blur,
-                    tint: glass.tint,
-                    saturation: glass.saturation,
-                    brightness: glass.brightness,
-                    noise: glass.noise,
-                    border_thickness: glass.border_thickness,
-                    shadow: render_node.props.shadow.clone(),
-                });
-                ctx.fill_rect(rect, radius, glass_brush);
-            } else {
+            // Glass elements have shadows handled by the GPU glass system
+            if !matches!(render_node.props.material, Some(Material::Glass(_))) {
                 if let Some(ref shadow) = render_node.props.shadow {
                     // Apply motion opacity to shadow color
                     let shadow = if motion_opacity < 1.0 {
@@ -4314,6 +4284,43 @@ impl RenderTree {
                     };
                     ctx.draw_shadow(rect, radius, shadow);
                 }
+            }
+        }
+
+        // Push clip if needed (either from element or from layout animation)
+        // Layout animations need clipping to hide content that exceeds animated bounds
+        // NOTE: This clip is for the element itself. Children get an INSET clip pushed later
+        // to prevent them from rendering over the border.
+        let clips_content = render_node.props.clips_content || has_layout_animation;
+        if clips_content {
+            let clip_rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
+            let clip_shape = if radius.is_uniform() && radius.top_left > 0.0 {
+                ClipShape::rounded_rect(clip_rect, radius)
+            } else {
+                ClipShape::rect(clip_rect)
+            };
+            ctx.push_clip(clip_shape);
+        }
+
+        // Render if this node matches target layer
+        if effective_layer == target_layer {
+            // Apply motion opacity to rendering
+            // TODO: When DrawContext supports opacity, apply motion_opacity here
+            // For now, we rely on the brush alpha
+
+            if let Some(Material::Glass(glass)) = &render_node.props.material {
+                let glass_brush = Brush::Glass(GlassStyle {
+                    blur: glass.blur,
+                    tint: glass.tint,
+                    saturation: glass.saturation,
+                    brightness: glass.brightness,
+                    noise: glass.noise,
+                    border_thickness: glass.border_thickness,
+                    shadow: render_node.props.shadow.clone(),
+                });
+                ctx.fill_rect(rect, radius, glass_brush);
+            } else {
+                // Shadow already drawn before clip was pushed
                 if let Some(ref bg) = render_node.props.background {
                     // Apply motion opacity to background
                     let brush = if motion_opacity < 1.0 {
