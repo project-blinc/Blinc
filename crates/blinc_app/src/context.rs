@@ -996,7 +996,9 @@ impl RenderContext {
     ) {
         use blinc_layout::Material;
 
-        let Some(bounds) = tree.layout().get_bounds(node, parent_offset) else {
+        // Use animated bounds if this node has layout animation, otherwise use layout bounds
+        // This ensures children are positioned correctly during layout animation transitions
+        let Some(bounds) = tree.get_render_bounds(node, parent_offset) else {
             return;
         };
 
@@ -1092,6 +1094,10 @@ impl RenderContext {
             .map(|n| n.props.clips_content)
             .unwrap_or(false);
 
+        // Check if this node has an active layout animation (also needs clipping)
+        // Layout animations need to clip children to animated bounds
+        let has_layout_animation = tree.is_layout_animating(node);
+
         // Check if this is a Stack layer - if so, increment z_layer for proper z-ordering
         let is_stack_layer = tree
             .get_render_node(node)
@@ -1101,11 +1107,22 @@ impl RenderContext {
             *z_layer += 1;
         }
 
-        // Update clip bounds for children if this node clips
+        // Update clip bounds for children if this node clips (either via clips_content or layout animation)
         // When a node clips, we INTERSECT its bounds with any existing clip
         // This ensures nested clipping works correctly (inner clips can't expand outer clips)
-        let child_clip = if clips_content {
-            let this_clip = [abs_x, abs_y, bounds.width, bounds.height];
+        let should_clip = clips_content || has_layout_animation;
+        let child_clip = if should_clip {
+            // For layout animation, use animated bounds for clipping
+            // This ensures content is clipped to the animating size during transition
+            let clip_bounds = if has_layout_animation {
+                // Get animated bounds - these are the interpolated bounds during animation
+                tree.get_render_bounds(node, parent_offset)
+                    .map(|b| [b.x, b.y, b.width, b.height])
+                    .unwrap_or([abs_x, abs_y, bounds.width, bounds.height])
+            } else {
+                [abs_x, abs_y, bounds.width, bounds.height]
+            };
+            let this_clip = clip_bounds;
             if let Some(parent_clip) = current_clip {
                 // Intersect: take the overlap of parent_clip and this_clip
                 let x1 = parent_clip[0].max(this_clip[0]);

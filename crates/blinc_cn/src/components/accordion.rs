@@ -243,7 +243,7 @@ impl AccordionBuilder {
         let text_primary = theme.color(ColorToken::TextPrimary);
         let text_secondary = theme.color(ColorToken::TextSecondary);
         let border_color = theme.color(ColorToken::Border);
-        let radius = theme.radius(RadiusToken::Md);
+        let radius = theme.radius(RadiusToken::Lg);
 
         let key_for_container = format!("{}_container", self.instance_key.get());
         let container_state_handle = use_shared_state_with(&key_for_container, ());
@@ -255,17 +255,23 @@ impl AccordionBuilder {
         let all_item_states: Vec<AccordionItemState> =
             items_with_state.iter().map(|(_, s)| s.clone()).collect();
 
+        let content_key = format!("{}_content", key_for_container);
+
         // Build the entire accordion as a single Stateful that reacts to ALL item open states
         let accordion_stateful = Stateful::with_shared_state(container_state_handle)
             .deps(&all_signal_ids)
-            .flex_col()
-            .w_full()
             .on_state(move |_state: &(), container: &mut Div| {
                 let mut content = div()
+                    .animate_layout(
+                        LayoutAnimationConfig::height()
+                            .with_key(&content_key)
+                            .snappy(),
+                    )
                     .flex_col()
                     .w_full()
-                    .h_fit()
                     .rounded(radius)
+                    .shadow_md()
+                    .bg(theme.color(ColorToken::SurfaceElevated))
                     .border(1.0, border_color);
 
                 for (index, (item, item_state)) in items_with_state.iter().enumerate() {
@@ -284,15 +290,6 @@ impl AccordionBuilder {
 
                     let section_is_open = is_open.get();
 
-                    // Build content - conditionally shown with proper height
-                    // // Note: motion() wrapper removed for now - layout debugging
-                    // let collapsible_content = if section_is_open {
-
-                    // } else {
-                    //     // Empty placeholder when closed
-                    //     div()
-                    // };
-
                     // Build trigger - stateless div since container rebuilds on state change
                     let chevron_svg = if section_is_open {
                         CHEVRON_UP_SVG
@@ -303,6 +300,7 @@ impl AccordionBuilder {
                     let mut trigger = div()
                         .flex_row()
                         .w_full()
+                        .padding_x(Length::Px(12.0))
                         .justify_between()
                         .items_center()
                         .cursor(CursorStyle::Pointer)
@@ -338,30 +336,55 @@ impl AccordionBuilder {
                                 .set_target(target_opacity);
                         });
 
-                    if !section_is_open {
-                        trigger = trigger.padding_y(Length::Px(12.0));
-                    }
+                    // Trigger always has consistent padding
+                    trigger = trigger.padding_y(Length::Px(16.0));
 
-                    // Combine trigger and collapsible content
-                    // The item_div has animate_layout for smooth height AND y position transitions
-                    // Height animates open/close, Y position animates siblings moving
-                    // Using stable key based on item_key so animation persists across rebuilds
-                    let anim_key = format!("accordion-item-{}", item_key);
-                    let mut item_div = div()
-                        .padding_x(Length::Px(12.0))
-                        .flex_col()
-                        .flex_auto()
-                        .overflow_clip()
-                        .w_full()
+                    // Structure: item_wrapper contains trigger (always visible) + collapsible content
+                    // Only the collapsible content area animates, keeping trigger always visible
+                    let anim_key = format!("accordion-content-{}", item_key);
+
+                    // Build the collapsible content area with layout animation
+                    let collapsible_content = if section_is_open {
+                        div()
+                            .bg(theme.color(ColorToken::Background))
+                            .flex_col()
+                            .w_full()
+                            .py(2.0)
+                            .border(1.0, border_color)
+                            .overflow_clip()
+                            .animate_layout(
+                                LayoutAnimationConfig::height().with_key(anim_key).snappy(),
+                            )
+                            .pb(3.0) // 12px bottom padding
+                            .child(content_fn())
+                    } else {
+                        // When closed, still render the animated container but empty
+                        // This allows height animation from 0 to content height
+                        div()
+                            .flex_col()
+                            .w_full()
+                            .py(0.0)
+                            .bg(theme.color(ColorToken::Background))
+                            .border(1.0, border_color)
+                            .h(0.0) // Collapsed height
+                            .overflow_clip()
+                            .animate_layout(
+                                LayoutAnimationConfig::height().with_key(anim_key).snappy(),
+                            )
+                    };
+
+                    let item_wrapper_key = format!("accordion-item-wrapper-{}", item_key);
+                    // Item wrapper: trigger (always visible) + collapsible content
+                    let item_div = div()
                         .animate_layout(
-                            LayoutAnimationConfig::all().with_key(anim_key).gentle(), // Use gentle spring for visible animation
+                            LayoutAnimationConfig::all()
+                                .with_key(item_wrapper_key)
+                                .snappy(),
                         )
-                        .child(trigger);
-                    //.child(collapsible_content);
-
-                    if section_is_open {
-                        item_div = item_div.padding_y(Length::Px(16.0)).child(content_fn());
-                    }
+                        .flex_col()
+                        .w_full()
+                        .child(trigger)
+                        .child(collapsible_content);
 
                     content = content.child(item_div);
 
@@ -375,7 +398,7 @@ impl AccordionBuilder {
                     }
                 }
 
-                container.merge(content);
+                container.set_child(content);
             });
 
         Accordion {

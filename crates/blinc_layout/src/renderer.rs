@@ -5143,9 +5143,9 @@ impl RenderTree {
         inside_glass: bool,
         inside_foreground: bool,
     ) {
-        // Get bounds with (0,0) to get pure layout position relative to parent
-        // parent_offset accumulates absolute position from ancestors + scroll + motion
-        let Some(bounds) = self.layout_tree.get_bounds(node, (0.0, 0.0)) else {
+        // Use get_render_bounds to get animated bounds if layout animation is active
+        // This ensures text respects layout animations (FLIP-style bounds animation)
+        let Some(bounds) = self.get_render_bounds(node, (0.0, 0.0)) else {
             return;
         };
 
@@ -5242,9 +5242,9 @@ impl RenderTree {
         inside_glass: bool,
         inside_foreground: bool,
     ) {
-        // Get bounds with (0,0) to get pure layout position relative to parent
-        // parent_offset accumulates absolute position from ancestors + scroll + motion
-        let Some(bounds) = self.layout_tree.get_bounds(node, (0.0, 0.0)) else {
+        // Use get_render_bounds to get animated bounds if layout animation is active
+        // This ensures SVG respects layout animations (FLIP-style bounds animation)
+        let Some(bounds) = self.get_render_bounds(node, (0.0, 0.0)) else {
             return;
         };
 
