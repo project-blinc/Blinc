@@ -188,8 +188,9 @@ pub fn has_pending_subtree_rebuilds() -> bool {
 /// The windowed app checks these when signals change.
 /// Using a HashMap with unique keys ensures that re-registration replaces the old
 /// entry instead of accumulating duplicates on each rebuild.
+/// Uses Arc instead of Box to allow cloning callbacks before releasing the lock.
 static STATEFUL_DEPS: LazyLock<
-    Mutex<std::collections::HashMap<u64, (Vec<SignalId>, Box<dyn Fn() + Send + Sync>)>>,
+    Mutex<std::collections::HashMap<u64, (Vec<SignalId>, Arc<dyn Fn() + Send + Sync>)>>,
 > = LazyLock::new(|| Mutex::new(std::collections::HashMap::new()));
 
 /// Register a stateful element's dependencies
@@ -201,7 +202,7 @@ static STATEFUL_DEPS: LazyLock<
 pub(crate) fn register_stateful_deps(
     stateful_key: u64,
     deps: Vec<SignalId>,
-    refresh_fn: Box<dyn Fn() + Send + Sync>,
+    refresh_fn: Arc<dyn Fn() + Send + Sync>,
 ) {
     STATEFUL_DEPS
         .lock()
@@ -214,14 +215,37 @@ pub(crate) fn register_stateful_deps(
 /// Called by windowed app after signal updates.
 /// Returns true if any deps matched and subtree rebuilds were queued.
 pub fn check_stateful_deps(changed_signals: &[SignalId]) -> bool {
-    let registry = STATEFUL_DEPS.lock().unwrap();
-    let mut triggered = false;
-    for (_key, (deps, refresh_fn)) in registry.iter() {
-        // If any dep is in changed_signals, trigger the refresh
-        if deps.iter().any(|d| changed_signals.contains(d)) {
-            refresh_fn();
-            triggered = true;
+    // Collect matching refresh callbacks first, then release lock before calling them.
+    // This prevents deadlock when refresh callbacks call use_signal() -> use_effect()
+    // -> register_stateful_deps() which would try to acquire the same lock.
+    let callbacks_to_call: Vec<Arc<dyn Fn() + Send + Sync>> = {
+        let registry = STATEFUL_DEPS.lock().unwrap();
+        if !changed_signals.is_empty() {
+            tracing::info!(
+                "check_stateful_deps: checking {} changed signals against {} registered statefuls",
+                changed_signals.len(),
+                registry.len()
+            );
         }
+        registry
+            .iter()
+            .filter_map(|(key, (deps, refresh_fn))| {
+                if deps.iter().any(|d| changed_signals.contains(d)) {
+                    tracing::info!(
+                        "check_stateful_deps: will trigger refresh for stateful_key={}",
+                        key
+                    );
+                    Some(Arc::clone(refresh_fn))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    };
+    // Lock is now released - safe to call callbacks that may re-acquire the lock
+    let triggered = !callbacks_to_call.is_empty();
+    for callback in callbacks_to_call {
+        callback();
     }
     triggered
 }
@@ -695,6 +719,10 @@ pub struct StatefulInner<S: StateTransitions> {
     /// Current event being processed (set during event handler invocation)
     /// This allows `StateContext::event()` to access the triggering event.
     pub(crate) current_event: Option<crate::event_handler::EventContext>,
+
+    /// Refresh callback for re-registering deps dynamically
+    /// Set during StatefulBuilder::on_state() and used by use_effect()
+    pub(crate) refresh_callback: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl<S: StateTransitions> StatefulInner<S> {
@@ -710,6 +738,7 @@ impl<S: StateTransitions> StatefulInner<S> {
             deps: Vec::new(),
             ancestor_motion_key: None,
             current_event: None,
+            refresh_callback: None,
         }
     }
 }
@@ -1006,7 +1035,12 @@ impl<S: StateTransitions> StateContext<S> {
         F: FnOnce() -> T,
     {
         let signal_key = format!("{}:signal:{}", self.full_key(), name);
-        blinc_core::context_state::use_state_keyed(&signal_key, init)
+        let state = blinc_core::context_state::use_state_keyed(&signal_key, init);
+
+        // Automatically register as dependency so on_state re-runs when signal changes
+        self.use_effect(&state);
+
+        state
     }
 
     /// Derive a stable key for a child element
@@ -1113,6 +1147,42 @@ impl<S: StateTransitions> StateContext<S> {
         }
 
         shared
+    }
+
+    /// Declarative spring animation - set target and get current value in one call
+    ///
+    /// This is a convenience method that combines `use_animated_value_with_config()`,
+    /// `set_target()`, and `get()` into a single declarative API.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Before (verbose):
+    /// let scale = ctx.use_animated_value_with_config("scale", 1.0, SpringConfig::wobbly());
+    /// scale.lock().unwrap().set_target(target_scale);
+    /// let current_scale = scale.lock().unwrap().get();
+    ///
+    /// // After (convenient):
+    /// let current_scale = ctx.use_spring("scale", target_scale, SpringConfig::wobbly());
+    /// ```
+    pub fn use_spring(&self, name: &str, target: f32, config: SpringConfig) -> f32 {
+        let animated = self.use_animated_value_with_config(name, target, config);
+        let mut guard = animated.lock().unwrap();
+        guard.set_target(target);
+        guard.get()
+    }
+
+    /// Declarative spring animation with default stiff config
+    ///
+    /// Shorthand for `use_spring(name, target, SpringConfig::stiff())`.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let current_opacity = ctx.spring("opacity", if hovered { 1.0 } else { 0.5 });
+    /// ```
+    pub fn spring(&self, name: &str, target: f32) -> f32 {
+        self.use_spring(name, target, SpringConfig::stiff())
     }
 
     /// Create/retrieve a persistent animated timeline scoped to this stateful
@@ -1241,6 +1311,69 @@ impl<S: StateTransitions> StateContext<S> {
     /// ```
     pub fn dep_signal_id(&self, index: usize) -> Option<blinc_core::SignalId> {
         self.deps.get(index).copied()
+    }
+
+    /// Register a signal as a dependency for this stateful element
+    ///
+    /// When the signal changes, the `on_state` callback will be re-invoked.
+    /// This is useful when you create signals with `ctx.use_signal()` and need
+    /// the stateful to react to their changes.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// stateful::<ButtonState>()
+    ///     .on_state(|ctx| {
+    ///         // Create a counter signal
+    ///         let count = ctx.use_signal("count", || 0);
+    ///
+    ///         // Register it as a dependency - on_state re-runs when count changes
+    ///         ctx.use_effect(&count);
+    ///
+    ///         // Update count on click (via ctx.event())
+    ///         if let Some(event) = ctx.event() {
+    ///             if event.event_type == POINTER_UP {
+    ///                 count.update(|n| n + 1);
+    ///             }
+    ///         }
+    ///
+    ///         div().child(text(&format!("Count: {}", count.get())))
+    ///     })
+    /// ```
+    pub fn use_effect<T: Clone + Send + 'static>(&self, signal: &blinc_core::State<T>) {
+        let signal_id = signal.signal_id();
+
+        // Lock shared state and check if signal is already a dependency
+        let mut inner = self.shared_state.lock().unwrap();
+
+        if inner.deps.contains(&signal_id) {
+            // Already registered, nothing to do
+            return;
+        }
+
+        // Add to deps
+        inner.deps.push(signal_id);
+        tracing::info!("use_effect: registered signal {:?}, total deps: {}", signal_id, inner.deps.len());
+
+        // Get the refresh callback and current deps
+        let refresh_callback = inner.refresh_callback.clone();
+        let deps = inner.deps.clone();
+
+        // Drop lock before registering
+        drop(inner);
+
+        // Re-register with updated deps
+        if let Some(callback) = refresh_callback {
+            let stateful_key = Arc::as_ptr(&self.shared_state) as u64;
+            tracing::debug!("use_effect: re-registering deps for stateful_key={}", stateful_key);
+            register_stateful_deps(
+                stateful_key,
+                deps,
+                Arc::new(move || callback()),
+            );
+        } else {
+            tracing::warn!("use_effect: no refresh_callback available!");
+        }
     }
 }
 
@@ -1395,21 +1528,27 @@ impl<S: StateTransitions + Default> StatefulBuilder<S> {
         // This sets up on_mouse_down, on_mouse_up, etc. to trigger StateTransitions::on_event()
         let stateful = stateful.register_state_handlers();
 
+        // Create and store refresh callback BEFORE apply_state_callback
+        // This is needed because use_signal() calls use_effect() which needs refresh_callback
+        let shared = Arc::clone(&stateful.shared_state);
+        let shared_for_refresh = Arc::clone(&shared);
+        let refresh_callback: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+            refresh_stateful(&shared_for_refresh);
+        });
+
+        // Store refresh callback in StatefulInner for use_effect
+        stateful.shared_state.lock().unwrap().refresh_callback = Some(Arc::clone(&refresh_callback));
+
         // Apply initial state callback to set up visual state
+        // This may call use_signal() which needs the refresh_callback above
         stateful.apply_state_callback();
 
         // Register deps with the signal framework so changes trigger callback refresh
-        if !deps.is_empty() {
-            let shared = Arc::clone(&stateful.shared_state);
+        // Note: deps may have been added by use_signal() during apply_state_callback()
+        let current_deps = stateful.shared_state.lock().unwrap().deps.clone();
+        if !current_deps.is_empty() {
             let stateful_key = Arc::as_ptr(&shared) as u64;
-            let shared_for_refresh = Arc::clone(&shared);
-            register_stateful_deps(
-                stateful_key,
-                deps,
-                Box::new(move || {
-                    refresh_stateful(&shared_for_refresh);
-                }),
-            );
+            register_stateful_deps(stateful_key, current_deps, Arc::new(move || refresh_callback()));
         }
 
         stateful
@@ -1535,6 +1674,7 @@ impl<S: StateTransitions> Stateful<S> {
                 deps: Vec::new(),
                 ancestor_motion_key: None,
                 current_event: None,
+                refresh_callback: None,
             })),
             children_cache: RefCell::new(Vec::new()),
             event_handlers_cache: RefCell::new(crate::event_handler::EventHandlers::new()),
@@ -1678,7 +1818,7 @@ impl<S: StateTransitions> Stateful<S> {
             register_stateful_deps(
                 stateful_key,
                 deps,
-                Box::new(move || {
+                Arc::new(move || {
                     refresh_stateful(&shared_for_refresh);
                 }),
             );
@@ -1905,7 +2045,12 @@ impl<S: StateTransitions> Stateful<S> {
     /// Call this when external state (like a label) changes and you need
     /// to update the element's props and/or children without a ButtonState change.
     fn refresh_props_internal(shared: &Arc<Mutex<StatefulInner<S>>>) {
-        let guard = shared.lock().unwrap();
+        let mut guard = shared.lock().unwrap();
+
+        // Clear current_event - this refresh is due to signal changes, not events.
+        // Without this, the callback would see a stale event and potentially
+        // re-trigger signal updates, causing infinite loops.
+        guard.current_event = None;
 
         // Need node_id and callback to refresh
         let (callback, state_copy, cached_node_id, base_props, base_style) =

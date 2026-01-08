@@ -703,6 +703,10 @@ impl<T: Clone + Send + 'static> State<T> {
     /// Does not trigger rebuild. Use `update_rebuild()` for structural changes.
     pub fn update(&self, f: impl FnOnce(T) -> T) {
         self.reactive.lock().unwrap().update(self.signal, f);
+        // Notify stateful elements if callback is set
+        if let Some(ref callback) = self.stateful_deps_callback {
+            callback(&[self.signal.id()]);
+        }
     }
 
     /// Update the value AND trigger a UI tree rebuild

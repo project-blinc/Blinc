@@ -90,7 +90,9 @@ stateful::<ButtonState>()
 | `ctx.state()` | Get the current state value |
 | `ctx.event()` | Get the event that triggered this callback (if any) |
 | `ctx.use_signal(name, init)` | Create/retrieve a scoped signal |
-| `ctx.use_animated_value(name, initial)` | Create/retrieve an animated value |
+| `ctx.use_spring(name, target, config)` | Declarative spring animation (recommended) |
+| `ctx.spring(name, target)` | Declarative spring with default stiff config |
+| `ctx.use_animated_value(name, initial)` | Low-level animated value handle |
 | `ctx.use_timeline(name)` | Create/retrieve an animated timeline |
 | `ctx.dep::<T>(index)` | Get dependency value by index |
 | `ctx.dep_as_state::<T>(index)` | Get dependency as State<T> handle |
@@ -273,22 +275,47 @@ stateful::<ButtonState>()
 
 ## Animated Values
 
-Use `ctx.use_animated_value()` for spring-physics animations scoped to the container:
+### Declarative API (Recommended)
+
+Use `ctx.use_spring()` for declarative spring animations - specify the target and get the current animated value:
 
 ```rust
 stateful::<ButtonState>()
     .on_state(|ctx| {
-        // Persisted animated value with spring physics
+        // Declarative: specify target, get current value
+        let target_scale = match ctx.state() {
+            ButtonState::Hovered => 1.1,
+            _ => 1.0,
+        };
+        let current_scale = ctx.use_spring("scale", target_scale, SpringConfig::wobbly());
+
+        // For default stiff spring, use ctx.spring()
+        let opacity = ctx.spring("opacity", if ctx.state() == ButtonState::Idle { 0.8 } else { 1.0 });
+
+        div()
+            .transform(Transform::scale(current_scale, current_scale))
+            .opacity(opacity)
+    })
+```
+
+### Low-Level API
+
+For more control, use `ctx.use_animated_value()` which returns a `SharedAnimatedValue`:
+
+```rust
+stateful::<ButtonState>()
+    .on_state(|ctx| {
+        // Get the animated value handle
         let scale = ctx.use_animated_value("scale", 1.0);
 
-        // Optionally use custom spring config
+        // With custom spring config
         let opacity = ctx.use_animated_value_with_config(
             "opacity",
             1.0,
             SpringConfig::bouncy(),
         );
 
-        // Set target (animates automatically)
+        // Manually set target and get value
         match ctx.state() {
             ButtonState::Hovered => {
                 scale.lock().unwrap().set_target(1.1);
