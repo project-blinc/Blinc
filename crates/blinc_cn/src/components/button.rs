@@ -377,13 +377,6 @@ impl Button {
                 visual.child(content)
             });
 
-        // Set cursor on the Stateful container
-        stateful = stateful.cursor(if disabled {
-            CursorStyle::NotAllowed
-        } else {
-            CursorStyle::Pointer
-        });
-
         // Add border for outline variant (base styling)
         if let Some(border_color) = border {
             stateful = stateful.border(1.0, border_color);
@@ -403,8 +396,14 @@ impl Button {
         }
 
         // Wrap in a div for consistent ElementBuilder behavior
+        // Set cursor on outer wrapper to ensure proper cursor display
+        let cursor_style = if disabled {
+            CursorStyle::NotAllowed
+        } else {
+            CursorStyle::Pointer
+        };
         Self {
-            inner: div().child(stateful),
+            inner: div().cursor(cursor_style).child(stateful),
         }
     }
 }
