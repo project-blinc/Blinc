@@ -29,7 +29,7 @@ use blinc_core::Color;
 use blinc_layout::div::ElementBuilder;
 use blinc_layout::element::CursorStyle;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{use_shared_state, ButtonState, SharedState, Stateful};
+use blinc_layout::stateful::{stateful_with_key, use_shared_state, ButtonState, SharedState};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::InstanceKey;
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
@@ -283,9 +283,8 @@ impl Button {
     fn from_config(instance_key: &str, config: ButtonConfig) -> Self {
         let theme = ThemeState::get();
 
-        // Get persistent state for this button using the unique instance key
+        // Get persistent state key for this button using the unique instance key
         let state_key = format!("_cn_btn_{}", instance_key);
-        let button_state = use_button_state(&state_key);
 
         // Get sizes from config
         let height = config.btn_size.height();
@@ -300,49 +299,20 @@ impl Button {
         let border = variant.border(&theme);
         let disabled = config.disabled;
 
-        // Get initial colors for the label (will be updated by on_state)
-        let initial_fg = variant.foreground(&theme);
-
-        // Build content with icon + label or just label
-        let mut content = blinc_layout::div::div().flex_row().items_center().gap(6.0);
-        let label_text = text(&label)
-            .size(font_size)
-            .color(initial_fg)
-            .no_wrap()
-            .v_center()
-            .no_cursor();
-
-        if let Some(ref icon_str) = icon {
-            let icon_text = svg(icon_str).size(font_size, font_size).color(initial_fg);
-            match icon_position {
-                IconPosition::Start => {
-                    content = content.child(icon_text).child(label_text);
-                }
-                IconPosition::End => {
-                    content = content.child(label_text).child(icon_text);
-                }
-            }
-        } else {
-            content = content.child(label_text);
-        }
-
-        // Create stateful container with FSM button state using persistent handle
-        let mut stateful = Stateful::with_shared_state(button_state)
-            .h(height)
-            .padding_x(Length::Px(px))
-            .padding_y(Length::Px(py))
-            .rounded(radius)
-            .items_center()
-            .justify_center()
-            .cursor(if disabled {
-                CursorStyle::NotAllowed
+        // Create stateful container with FSM button state
+        let mut stateful = stateful_with_key::<ButtonState>(&state_key)
+            .initial(if disabled {
+                ButtonState::Disabled
             } else {
-                CursorStyle::Pointer
+                ButtonState::Idle
             })
-            .w_fit()
-            .on_state(move |state: &ButtonState, container: &mut Div| {
+            .on_state(move |ctx| {
+                let state = ctx.state();
                 let theme = ThemeState::get();
-                let bg = variant.background(&theme, *state);
+                let bg = variant.background(&theme, state);
+
+                // Get foreground color for this state
+                let fg = variant.foreground(&theme);
 
                 // Scale for pressed state
                 let scale = if matches!(state, ButtonState::Pressed) && !disabled {
@@ -351,32 +321,63 @@ impl Button {
                     1.0
                 };
 
-                // Build merge div with background and transform
-                let mut merge_div = div()
+                // Build content with icon + label or just label
+                let mut content = blinc_layout::div::div().flex_row().items_center().gap(6.0);
+                let label_text = text(&label)
+                    .size(font_size)
+                    .color(fg)
+                    .no_wrap()
+                    .v_center()
+                    .no_cursor();
+
+                if let Some(ref icon_str) = icon {
+                    let icon_svg = svg(icon_str).size(font_size, font_size).color(fg);
+                    match icon_position {
+                        IconPosition::Start => {
+                            content = content.child(icon_svg).child(label_text);
+                        }
+                        IconPosition::End => {
+                            content = content.child(label_text).child(icon_svg);
+                        }
+                    }
+                } else {
+                    content = content.child(label_text);
+                }
+
+                // Build the button visual
+                let mut visual = div()
+                    .h(height)
                     .padding_x(Length::Px(px))
                     .padding_y(Length::Px(py))
+                    .rounded(radius)
+                    .items_center()
+                    .justify_center()
+                    .cursor(if disabled {
+                        CursorStyle::NotAllowed
+                    } else {
+                        CursorStyle::Pointer
+                    })
+                    .w_fit()
                     .bg(bg)
-                    .transform(blinc_core::Transform::scale(scale, scale))
-                    .cursor_pointer();
+                    .transform(blinc_core::Transform::scale(scale, scale));
 
-                // Include border for outline variant (must be reapplied each state change)
+                // Include border for outline variant
                 if let Some(border_color) = variant.border(&theme) {
-                    merge_div = merge_div.border(1.0, border_color);
+                    visual = visual.border(1.0, border_color);
                 }
 
                 if variant != ButtonVariant::Link && variant != ButtonVariant::Ghost {
-                    merge_div = merge_div.shadow_md();
+                    visual = visual.shadow_md();
                 }
 
                 if variant == ButtonVariant::Outline {
-                    merge_div = merge_div.shadow_sm();
+                    visual = visual.shadow_sm();
                 }
 
-                container.merge(merge_div);
-            })
-            .child(content);
+                visual.child(content)
+            });
 
-        // Add border for outline variant
+        // Add border for outline variant (base styling)
         if let Some(border_color) = border {
             stateful = stateful.border(1.0, border_color);
         }
@@ -384,11 +385,6 @@ impl Button {
         // Add click handler if provided
         if let Some(handler) = config.on_click {
             stateful = stateful.on_click(move |ctx| handler(ctx));
-        }
-
-        // If disabled, set initial state to Disabled
-        if disabled {
-            stateful.set_state(ButtonState::Disabled);
         }
 
         if variant != ButtonVariant::Link && variant != ButtonVariant::Ghost {

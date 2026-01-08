@@ -1855,6 +1855,72 @@ impl<S: StateTransitions> StateContext<S> {
             tracing::warn!("use_effect: no refresh_callback available!");
         }
     }
+
+    /// Query a motion container by name within this stateful's scope
+    ///
+    /// The motion key is automatically derived from the stateful's full key,
+    /// so you don't need to manually track keys.
+    ///
+    /// # Key Format
+    ///
+    /// The full key is: `motion:{stateful_key}:motion:{name}:child:0`
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// stateful::<ButtonState>()
+    ///     .on_state(|ctx| {
+    ///         // Create a motion with auto-derived key
+    ///         let content = ctx.motion("content")
+    ///             .fade_in(200)
+    ///             .child(my_content());
+    ///
+    ///         // Query the same motion to check its state
+    ///         let motion = ctx.query_motion("content");
+    ///         if motion.is_settled() {
+    ///             // Animation complete, enable interactions
+    ///         }
+    ///
+    ///         div().child(content)
+    ///     })
+    /// ```
+    pub fn query_motion(&self, name: &str) -> crate::selector::MotionHandle {
+        let motion_key = format!(
+            "motion:{}:motion:{}:child:0",
+            self.full_key(),
+            name
+        );
+        crate::selector::query_motion(&motion_key)
+    }
+
+    /// Create a motion container with an auto-derived stable key
+    ///
+    /// This is the preferred way to create motion containers inside stateful callbacks.
+    /// The key is automatically derived from the stateful's full key, ensuring stable
+    /// animation state across rebuilds.
+    ///
+    /// # Key Format
+    ///
+    /// The motion key is: `{stateful_key}:motion:{name}`
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// stateful::<ButtonState>()
+    ///     .on_state(|ctx| {
+    ///         // Motion with auto-derived key - stable across rebuilds
+    ///         let content = ctx.motion("content")
+    ///             .fade_in(200)
+    ///             .scale_in(1.1, 300)
+    ///             .child(expanded_content());
+    ///
+    ///         div().child(content)
+    ///     })
+    /// ```
+    pub fn motion(&self, name: &str) -> crate::motion::Motion {
+        let motion_key = format!("{}:motion:{}", self.full_key(), name);
+        crate::motion::motion_derived(&motion_key)
+    }
 }
 
 // =========================================================================

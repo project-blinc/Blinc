@@ -42,7 +42,7 @@ use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::motion::motion_derived;
 use blinc_layout::overlay_state::get_overlay_manager;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, Stateful};
+use blinc_layout::stateful::{stateful_with_key, ButtonState};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::hr::hr_with_bg;
 use blinc_layout::widgets::overlay::{OverlayAnimation, OverlayHandle, OverlayManagerExt};
@@ -50,7 +50,7 @@ use blinc_layout::InstanceKey;
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
 use super::context_menu::{ContextMenuItem, SubmenuBuilder};
-use crate::button::{reset_button_state, use_button_state};
+use crate::button::reset_button_state;
 
 /// How menus are triggered to open
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -392,8 +392,6 @@ impl MenubarBuilder {
             let overlay_handle_for_show = overlay_handle_state.clone();
             let overlay_handle_for_hover = overlay_handle_state.clone();
 
-            let button_state = use_button_state(&format!("{}_btn", menu_key));
-
             // Clone menu items and key for different handlers
             let menu_items_for_hover = menu_items.clone();
             let menu_key_for_hover = menu_key.clone();
@@ -407,20 +405,17 @@ impl MenubarBuilder {
             let style_radius = trigger_style.radius;
 
             // Build the menu trigger button
-            let mut trigger = Stateful::with_shared_state(button_state)
-                .h_fit()
-                .px(style_px / 4.0) // Convert to quarter units used by Stateful
-                .py(style_py / 4.0)
-                .cursor_pointer()
-                .deps(&[active_menu.signal_id()])
-                .on_state(move |state, container: &mut Div| {
+            let mut trigger = stateful_with_key::<ButtonState>(&format!("{}_btn", menu_key))
+                .deps([active_menu.signal_id()])
+                .on_state(move |ctx| {
+                    let state = ctx.state();
                     let theme = ThemeState::get();
                     let is_active = active_menu_for_state.get() == Some(idx);
 
                     // Background: highlight when hovered, pressed, or active (menu open)
                     let item_bg = if is_active
-                        || *state == ButtonState::Hovered
-                        || *state == ButtonState::Pressed
+                        || state == ButtonState::Hovered
+                        || state == ButtonState::Pressed
                     {
                         style_hover_bg.unwrap_or_else(|| {
                             theme.color(ColorToken::SecondaryHover).with_alpha(0.65)
@@ -461,13 +456,11 @@ impl MenubarBuilder {
                         }
                     };
 
-                    container.merge(
-                        trigger_content
-                            .h_fit()
-                            .px(style_px / 4.0) // Convert to quarter units used by Stateful
-                            .py(style_py / 4.0)
-                            .cursor_pointer(),
-                    );
+                    trigger_content
+                        .h_fit()
+                        .px(style_px / 4.0)
+                        .py(style_py / 4.0)
+                        .cursor_pointer()
                 });
 
             // Add click handler (used for Click mode, or to toggle in Hover mode)
@@ -819,7 +812,6 @@ fn build_menubar_hover_dropdown_content(
             // Create a stable key for this item's button state
             let item_key = format!("{}_item-{}", key, idx);
             let submenu_key = format!("{}_sub-{}", key, idx);
-            let button_state = use_button_state(&item_key);
 
             let item_text_color = if item_disabled {
                 text_tertiary
@@ -828,24 +820,20 @@ fn build_menubar_hover_dropdown_content(
             };
 
             let shortcut_color = text_secondary;
+            let cursor = if item_disabled {
+                CursorStyle::NotAllowed
+            } else {
+                CursorStyle::Pointer
+            };
 
             // Build the stateful row element
-            let mut row = Stateful::with_shared_state(button_state)
-                .w_full()
-                .h_fit()
-                .py(padding / 4.0)
-                .px(padding / 2.0)
-                .bg(bg)
-                .cursor(if item_disabled {
-                    CursorStyle::NotAllowed
-                } else {
-                    CursorStyle::Pointer
-                })
-                .on_state(move |state, container: &mut Div| {
+            let mut row = stateful_with_key::<ButtonState>(&item_key)
+                .on_state(move |ctx| {
+                    let state = ctx.state();
                     let theme = ThemeState::get();
                     // Apply hover background based on button state
-                    let item_bg = if (*state == ButtonState::Hovered
-                        || *state == ButtonState::Pressed)
+                    let item_bg = if (state == ButtonState::Hovered
+                        || state == ButtonState::Pressed)
                         && !item_disabled
                     {
                         theme.color(ColorToken::SecondaryHover).with_alpha(0.65)
@@ -853,8 +841,8 @@ fn build_menubar_hover_dropdown_content(
                         bg
                     };
 
-                    let text_col = if (*state == ButtonState::Hovered
-                        || *state == ButtonState::Pressed)
+                    let text_col = if (state == ButtonState::Hovered
+                        || state == ButtonState::Pressed)
                         && !item_disabled
                     {
                         theme.color(ColorToken::TextSecondary)
@@ -917,7 +905,13 @@ fn build_menubar_hover_dropdown_content(
                         row_content = row_content.child(right);
                     }
 
-                    container.merge(row_content);
+                    row_content
+                        .w_full()
+                        .h_fit()
+                        .py(padding / 4.0)
+                        .px(padding / 2.0)
+                        .bg(bg)
+                        .cursor(cursor)
                 })
                 .on_click(move |_| {
                     if !item_disabled && !has_submenu {
@@ -1145,7 +1139,6 @@ fn build_menubar_submenu_content(
 
             let item_key = format!("{}_item-{}", key, idx);
             let submenu_key = format!("{}_sub-{}", key, idx);
-            let button_state = use_button_state(&item_key);
 
             let item_text_color = if item_disabled {
                 text_tertiary
@@ -1154,27 +1147,23 @@ fn build_menubar_submenu_content(
             };
 
             let shortcut_color = text_secondary;
+            let cursor = if item_disabled {
+                CursorStyle::NotAllowed
+            } else {
+                CursorStyle::Pointer
+            };
 
-            let mut row = Stateful::with_shared_state(button_state)
-                .w_full()
-                .h_fit()
-                .py(padding / 4.0)
-                .px(padding / 2.0)
-                .bg(bg)
-                .cursor(if item_disabled {
-                    CursorStyle::NotAllowed
-                } else {
-                    CursorStyle::Pointer
-                })
-                .on_state(move |state, container: &mut Div| {
+            let mut row = stateful_with_key::<ButtonState>(&item_key)
+                .on_state(move |ctx| {
+                    let state = ctx.state();
                     let theme = ThemeState::get();
-                    let item_bg = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !item_disabled {
+                    let item_bg = if (state == ButtonState::Hovered || state == ButtonState::Pressed) && !item_disabled {
                         theme.color(ColorToken::SecondaryHover).with_alpha(0.65)
                     } else {
                         bg
                     };
 
-                    let text_col = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !item_disabled {
+                    let text_col = if (state == ButtonState::Hovered || state == ButtonState::Pressed) && !item_disabled {
                         theme.color(ColorToken::TextSecondary)
                     } else {
                         item_text_color
@@ -1225,7 +1214,13 @@ fn build_menubar_submenu_content(
                         row_content = row_content.child(right);
                     }
 
-                    container.merge(row_content);
+                    row_content
+                        .w_full()
+                        .h_fit()
+                        .py(padding / 4.0)
+                        .px(padding / 2.0)
+                        .bg(bg)
+                        .cursor(cursor)
                 })
                 .on_click(move |_| {
                     if !item_disabled && !has_submenu {
@@ -1345,7 +1340,6 @@ fn build_menubar_dropdown_content(
             // Create a stable key for this item's button state
             let item_key = format!("{}_item-{}", key, idx);
             let submenu_key = format!("{}_sub-{}", key, idx);
-            let button_state = use_button_state(&item_key);
 
             let item_text_color = if item_disabled {
                 text_tertiary
@@ -1354,24 +1348,20 @@ fn build_menubar_dropdown_content(
             };
 
             let shortcut_color = text_secondary;
+            let cursor = if item_disabled {
+                CursorStyle::NotAllowed
+            } else {
+                CursorStyle::Pointer
+            };
 
             // Build the stateful row element
-            let mut row = Stateful::with_shared_state(button_state)
-                .w_full()
-                .h_fit()
-                .py(padding / 4.0)
-                .px(padding / 2.0)
-                .bg(bg)
-                .cursor(if item_disabled {
-                    CursorStyle::NotAllowed
-                } else {
-                    CursorStyle::Pointer
-                })
-                .on_state(move |state, container: &mut Div| {
+            let mut row = stateful_with_key::<ButtonState>(&item_key)
+                .on_state(move |ctx| {
+                    let state = ctx.state();
                     let theme = ThemeState::get();
                     // Apply hover background based on button state
-                    let item_bg = if (*state == ButtonState::Hovered
-                        || *state == ButtonState::Pressed)
+                    let item_bg = if (state == ButtonState::Hovered
+                        || state == ButtonState::Pressed)
                         && !item_disabled
                     {
                         theme.color(ColorToken::SecondaryHover).with_alpha(0.65)
@@ -1379,8 +1369,8 @@ fn build_menubar_dropdown_content(
                         bg
                     };
 
-                    let text_col = if (*state == ButtonState::Hovered
-                        || *state == ButtonState::Pressed)
+                    let text_col = if (state == ButtonState::Hovered
+                        || state == ButtonState::Pressed)
                         && !item_disabled
                     {
                         theme.color(ColorToken::TextSecondary)
@@ -1443,7 +1433,13 @@ fn build_menubar_dropdown_content(
                         row_content = row_content.child(right);
                     }
 
-                    container.merge(row_content);
+                    row_content
+                        .w_full()
+                        .h_fit()
+                        .py(padding / 4.0)
+                        .px(padding / 2.0)
+                        .bg(bg)
+                        .cursor(cursor)
                 })
                 .on_click(move |_| {
                     if !item_disabled && !has_submenu {

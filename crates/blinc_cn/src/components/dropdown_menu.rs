@@ -55,7 +55,7 @@ use blinc_layout::element::{CursorStyle, ElementBounds, RenderProps};
 use blinc_layout::motion::motion_derived;
 use blinc_layout::overlay_state::get_overlay_manager;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, Stateful};
+use blinc_layout::stateful::{stateful_with_key, ButtonState, Stateful};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::hr::hr_with_bg;
 use blinc_layout::widgets::overlay::{OverlayHandle, OverlayManagerExt};
@@ -293,7 +293,7 @@ impl DropdownMenuBuilder {
         let trigger_builder = self.trigger_builder.clone();
 
         let btn_variant = ButtonVariant::Outline;
-        let button_state = use_button_state(&self.key.derive("button"));
+        let button_key = self.key.derive("button");
         // Get the key string for use in closures (InstanceKey is not Sync)
         let menu_key = self.key.get().to_string();
 
@@ -303,14 +303,12 @@ impl DropdownMenuBuilder {
         let overlay_handle_for_trigger = overlay_handle_state.clone();
         let items_for_show = items.clone();
 
-        let trigger = Stateful::with_shared_state(button_state)
-            //.id(&trigger_id)
-            .bg(btn_variant.background(theme, ButtonState::Idle))
-            .cursor_pointer()
-            .deps(&[open_state.signal_id()])
-            .on_state(move |state, container: &mut Div| {
+        let trigger = stateful_with_key::<ButtonState>(&button_key)
+            .deps([open_state.signal_id()])
+            .on_state(move |ctx| {
+                let state = ctx.state();
                 let is_open = open_state_for_trigger.get();
-                let bg = btn_variant.background(theme, *state);
+                let bg = btn_variant.background(theme, state);
 
                 // Build trigger content
                 let trigger_content: Div = if let Some(ref builder) = trigger_builder {
@@ -351,13 +349,11 @@ impl DropdownMenuBuilder {
                     div() // Fallback empty div
                 };
 
-                let trigger_div = div()
+                div()
                     .w_fit()
-                    .cursor(CursorStyle::Pointer)
+                    .bg(btn_variant.background(theme, ButtonState::Idle))
+                    .cursor_pointer()
                     .child(trigger_content)
-                    .pointer_events_none();
-
-                container.merge(trigger_div);
             })
             .on_click(move |ctx| {
                 // Use bounds directly from EventContext - more reliable than querying
@@ -647,7 +643,6 @@ fn build_submenu_content(
 
             let item_key = format!("{}_item-{}", key, idx);
             let submenu_key = format!("{}_sub-{}", key, idx);
-            let button_state = use_button_state(&item_key);
 
             let item_text_color = if item_disabled {
                 text_tertiary
@@ -657,26 +652,17 @@ fn build_submenu_content(
 
             let shortcut_color = text_secondary;
 
-            let mut row = Stateful::with_shared_state(button_state)
-                .w_full()
-                .h_fit()
-                .py(padding / 4.0)
-                .px(padding / 2.0)
-                .bg(bg)
-                .cursor(if item_disabled {
-                    CursorStyle::NotAllowed
-                } else {
-                    CursorStyle::Pointer
-                })
-                .on_state(move |state, container: &mut Div| {
+            let mut row = stateful_with_key::<ButtonState>(&item_key)
+                .on_state(move |ctx| {
+                    let state = ctx.state();
                     let theme = ThemeState::get();
-                    let item_bg = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !item_disabled {
+                    let item_bg = if (state == ButtonState::Hovered || state == ButtonState::Pressed) && !item_disabled {
                         theme.color(ColorToken::SecondaryHover).with_alpha(0.65)
                     } else {
                         bg
                     };
 
-                    let text_col = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !item_disabled {
+                    let text_col = if (state == ButtonState::Hovered || state == ButtonState::Pressed) && !item_disabled {
                         theme.color(ColorToken::TextSecondary)
                     } else {
                         item_text_color
@@ -717,17 +703,24 @@ fn build_submenu_content(
                     let mut row_content = div()
                         .w_full()
                         .h_fit()
+                        .py(padding / 4.0)
+                        .px(padding / 2.0)
+                        .bg(item_bg)
+                        .cursor(if item_disabled {
+                            CursorStyle::NotAllowed
+                        } else {
+                            CursorStyle::Pointer
+                        })
                         .flex_row()
                         .items_center()
                         .justify_between()
-                        .bg(item_bg)
                         .child(left_side);
 
                     if let Some(right) = right_side {
                         row_content = row_content.child(right);
                     }
 
-                    container.merge(row_content);
+                    row_content
                 })
                 .on_click(move |_| {
                     if !item_disabled && !has_submenu {
@@ -863,7 +856,6 @@ fn build_dropdown_content(
             // Create a stable key for this item's button state
             let item_key = format!("{}_item-{}", key, idx);
             let submenu_key = format!("{}_sub-{}", key, idx);
-            let button_state = use_button_state(&item_key);
 
             let item_text_color = if item_disabled {
                 text_tertiary
@@ -874,27 +866,18 @@ fn build_dropdown_content(
             let shortcut_color = text_secondary;
 
             // Build the stateful row element
-            let mut row = Stateful::with_shared_state(button_state)
-                .w_full()
-                .h_fit()
-                .py(padding / 4.0)
-                .px(padding / 2.0)
-                .bg(bg)
-                .cursor(if item_disabled {
-                    CursorStyle::NotAllowed
-                } else {
-                    CursorStyle::Pointer
-                })
-                .on_state(move |state, container: &mut Div| {
+            let mut row = stateful_with_key::<ButtonState>(&item_key)
+                .on_state(move |ctx| {
+                    let state = ctx.state();
                     let theme = ThemeState::get();
                     // Apply hover background based on button state
-                    let item_bg = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !item_disabled {
+                    let item_bg = if (state == ButtonState::Hovered || state == ButtonState::Pressed) && !item_disabled {
                         theme.color(ColorToken::SecondaryHover).with_alpha(0.65)
                     } else {
                         bg
                     };
 
-                    let text_col = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed) && !item_disabled {
+                    let text_col = if (state == ButtonState::Hovered || state == ButtonState::Pressed) && !item_disabled {
                         theme.color(ColorToken::TextSecondary)
                     } else {
                         item_text_color
@@ -937,17 +920,24 @@ fn build_dropdown_content(
                     let mut row_content = div()
                         .w_full()
                         .h_fit()
+                        .py(padding / 4.0)
+                        .px(padding / 2.0)
+                        .bg(item_bg)
+                        .cursor(if item_disabled {
+                            CursorStyle::NotAllowed
+                        } else {
+                            CursorStyle::Pointer
+                        })
                         .flex_row()
                         .items_center()
                         .justify_between()
-                        .bg(item_bg)
                         .child(left_side);
 
                     if let Some(right) = right_side {
                         row_content = row_content.child(right);
                     }
 
-                    container.merge(row_content);
+                    row_content
                 })
                 .on_click(move |_| {
                     if !item_disabled && !has_submenu {

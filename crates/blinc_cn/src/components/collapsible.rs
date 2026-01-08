@@ -44,7 +44,7 @@ use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::motion::{motion, SharedAnimatedValue};
 use blinc_layout::prelude::*;
 use blinc_layout::render_state::get_global_scheduler;
-use blinc_layout::stateful::{ButtonState, Stateful};
+use blinc_layout::stateful::{stateful, ButtonState};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::InstanceKey;
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
@@ -344,16 +344,10 @@ impl CollapsibleTrigger {
         let surface_hover = theme.color(ColorToken::SurfaceElevated);
         let radius = theme.radius(RadiusToken::Md);
 
-        let inner = Stateful::new(ButtonState::Idle)
-            .deps(&[is_open.signal_id()])
-            .flex_row()
-            .w_full()
-            .justify_between()
-            .items_center()
-            .p(12.0)
-            .rounded(radius)
-            .cursor(CursorStyle::Pointer)
-            .on_state(move |state: &ButtonState, container: &mut Div| {
+        let inner = stateful::<ButtonState>()
+            .deps([is_open.signal_id()])
+            .on_state(move |ctx| {
+                let state = ctx.state();
                 let section_is_open = is_open_for_state.get();
 
                 // Background color based on hover state
@@ -369,16 +363,17 @@ impl CollapsibleTrigger {
                     CHEVRON_DOWN_SVG
                 };
 
-                let trigger_content = div()
+                div()
                     .flex_row()
                     .w_full()
                     .justify_between()
                     .items_center()
+                    .p(12.0)
+                    .rounded(radius)
+                    .cursor(CursorStyle::Pointer)
                     .bg(bg)
                     .child(text(&label_text).size(14.0).color(text_primary))
-                    .child(svg(chevron_svg).size(16.0, 16.0).color(text_secondary));
-
-                container.merge(trigger_content);
+                    .child(svg(chevron_svg).size(16.0, 16.0).color(text_secondary))
             })
             .on_click(move |_| {
                 let current = is_open_for_click.get();

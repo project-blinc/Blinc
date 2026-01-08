@@ -44,6 +44,7 @@ use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
 use blinc_layout::prelude::*;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
+use blinc_layout::stateful::{stateful, ButtonState};
 use blinc_theme::{ColorToken, SpacingToken, ThemeState};
 use std::sync::Arc;
 
@@ -204,78 +205,74 @@ fn build_radio_button(
     };
 
     // Build the radio button circle
-    let mut radio = Stateful::new(ButtonState::Idle)
-        .flex_row()
-        .gap(theme.spacing_value(SpacingToken::Space4))
-        .items_center()
-        .cursor_pointer()
-        .deps(&[selected_state.signal_id()]);
+    let mut radio = stateful::<ButtonState>()
+        .deps([selected_state.signal_id()])
+        .on_state(move |ctx| {
+            let state = ctx.state();
+            let theme = ThemeState::get();
+            let is_selected = selected_state.get() == option_value;
+            let is_hovered = matches!(state, ButtonState::Hovered | ButtonState::Pressed);
+            let is_pressed = matches!(state, ButtonState::Pressed);
 
-    if option_disabled {
-        radio = radio.opacity(0.5);
-    }
+            // Border color based on state
+            let current_border = if is_selected {
+                selected_color
+            } else if is_hovered && !option_disabled {
+                hover_border
+            } else {
+                border
+            };
 
-    // State callback for visual changes
-    radio = radio.on_state(move |state: &ButtonState, container: &mut Div| {
-        let theme = ThemeState::get();
-        let is_selected = selected_state.get() == option_value;
-        let is_hovered = matches!(state, ButtonState::Hovered | ButtonState::Pressed);
-        let is_pressed = matches!(state, ButtonState::Pressed);
+            // Scale effect on hover
+            let scale = if is_hovered && !option_disabled {
+                1.05
+            } else {
+                1.0
+            };
 
-        // Border color based on state
-        let current_border = if is_selected {
-            selected_color
-        } else if is_hovered && !option_disabled {
-            hover_border
-        } else {
-            border
-        };
+            // Scale effect on press
+            let inner_scale = if is_pressed && !option_disabled {
+                0.8
+            } else {
+                1.0
+            };
 
-        // Scale effect on hover
-        let scale = if is_hovered && !option_disabled {
-            1.05
-        } else {
-            1.0
-        };
+            // Build the radio circle (outer ring)
+            let mut circle = div()
+                .w(outer_size)
+                .h(outer_size)
+                .rounded(outer_size / 2.0)
+                .border(border_width, current_border)
+                .items_center()
+                .justify_center()
+                .transform(Transform::scale(scale, scale));
 
-        // Scale effect on press
-        let inner_scale = if is_pressed && !option_disabled {
-            0.8
-        } else {
-            1.0
-        };
+            // Add inner dot if selected
+            if is_selected {
+                let inner_dot = div()
+                    .w(inner_size)
+                    .h(inner_size)
+                    .rounded(inner_size / 2.0)
+                    .bg(selected_color)
+                    .transform(Transform::scale(inner_scale, inner_scale));
+                circle = circle.child(inner_dot);
+            }
 
-        // Build the radio circle (outer ring)
-        let mut circle = div()
-            .w(outer_size)
-            .h(outer_size)
-            .rounded(outer_size / 2.0)
-            .border(border_width, current_border)
-            .items_center()
-            .justify_center()
-            .transform(Transform::scale(scale, scale));
+            // Build with label
+            let mut visual = div()
+                .flex_row()
+                .gap(theme.spacing_value(SpacingToken::Space4))
+                .items_center()
+                .cursor_pointer()
+                .child(circle)
+                .child(text(&option_label).size(14.0).color(label_color));
 
-        // Add inner dot if selected
-        if is_selected {
-            let inner_dot = div()
-                .w(inner_size)
-                .h(inner_size)
-                .rounded(inner_size / 2.0)
-                .bg(selected_color)
-                .transform(Transform::scale(inner_scale, inner_scale));
-            circle = circle.child(inner_dot);
-        }
+            if option_disabled {
+                visual = visual.opacity(0.5);
+            }
 
-        // Build with label
-        let visual = div()
-            .flex_row()
-            .gap(theme.spacing_value(SpacingToken::Space1))
-            .items_center()
-            .child(circle)
-            .child(text(&option_label).size(14.0).color(label_color));
-
-        container.merge(visual);
-    });
+            visual
+        });
 
     // Click handler
     radio = radio.on_click(move |_| {

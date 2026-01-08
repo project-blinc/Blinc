@@ -39,6 +39,7 @@ use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 use std::sync::Arc;
 
+use blinc_layout::stateful::{stateful, ButtonState};
 use blinc_layout::InstanceKey;
 
 /// SVG checkmark path - simple checkmark that fits in a 16x16 viewBox
@@ -143,62 +144,51 @@ impl Checkbox {
         let checked_state = config.checked_state.clone();
         let checked_state_for_click = config.checked_state.clone();
 
-        let mut checkbox = Stateful::new(ButtonState::Idle)
-            .w(box_size)
-            .h(box_size)
-            .rounded(radius)
-            .cursor_pointer()
-            .items_center()
-            .justify_center()
-            // Subscribe to the checked state signal for reactive updates
-            .deps(&[checked_state.signal_id()]);
+        let mut checkbox = stateful::<ButtonState>()
+            .deps([checked_state.signal_id()])
+            .on_state(move |ctx| {
+                let state = ctx.state();
+                let is_checked = checked_state.get();
+                let is_hovered = matches!(state, ButtonState::Hovered | ButtonState::Pressed);
 
-        if disabled {
-            checkbox = checkbox.opacity(0.5);
-        }
+                // Background and border with smooth color transitions
+                let bg = if is_checked { checked_bg } else { unchecked_bg };
+                let current_border = if is_hovered && !disabled {
+                    hover_border
+                } else {
+                    border
+                };
 
-        // State callback for visual changes with motion-like transitions
-        checkbox = checkbox.on_state(move |state: &ButtonState, container: &mut Div| {
-            let is_checked = checked_state.get();
-            let is_hovered = matches!(state, ButtonState::Hovered | ButtonState::Pressed);
+                // Apply scale effect on hover for subtle motion feedback
+                let scale = if is_hovered && !disabled { 1.05 } else { 1.0 };
 
-            // Background and border with smooth color transitions
-            let bg = if is_checked { checked_bg } else { unchecked_bg };
-            let current_border = if is_hovered && !disabled {
-                hover_border
-            } else {
-                border
-            };
+                // Build visual
+                let mut visual = div()
+                    .w(box_size)
+                    .h(box_size)
+                    .rounded(radius)
+                    .cursor_pointer()
+                    .items_center()
+                    .justify_center()
+                    .bg(bg)
+                    .border(border_width, current_border)
+                    .transform(blinc_core::Transform::scale(scale, scale));
 
-            // Apply scale effect on hover for subtle motion feedback
-            let scale = if is_hovered && !disabled { 1.05 } else { 1.0 };
+                if disabled {
+                    visual = visual.opacity(0.5);
+                }
 
-            // Clear existing children first to ensure checkmark is removed when unchecked
-            container.clear_children();
+                // Add checkmark if checked using SVG
+                if is_checked {
+                    visual = visual.child(
+                        svg(CHECKMARK_SVG)
+                            .size(checkmark_size, checkmark_size)
+                            .tint(check_mark_color),
+                    );
+                }
 
-            // Build visual update - use merge to preserve existing properties
-            let mut visual = div()
-                .bg(bg)
-                .w(box_size)
-                .h(box_size)
-                .border(border_width, current_border)
-                .items_center()
-                .justify_center()
-                .transform(blinc_core::Transform::scale(scale, scale));
-
-            // Add checkmark if checked using SVG
-            if is_checked {
-                visual = visual.child(
-                    svg(CHECKMARK_SVG)
-                        .size(checkmark_size, checkmark_size)
-                        .tint(check_mark_color),
-                );
-            } else {
-                visual = visual.child(div().w_full().h_full());
-            }
-
-            container.merge(visual);
-        });
+                visual
+            });
 
         // Add click handler to toggle the state (only if not disabled)
         checkbox = checkbox.on_click(move |_| {

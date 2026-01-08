@@ -48,14 +48,13 @@ use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::motion::motion_derived;
 use blinc_layout::overlay_state::get_overlay_manager;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, Stateful};
+use blinc_layout::stateful::{stateful_with_key, ButtonState};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::overlay::{OverlayHandle, OverlayManagerExt};
 use blinc_layout::widgets::scroll::scroll;
 use blinc_layout::widgets::text_input::SharedTextInputData;
 use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState};
 
-use crate::button::use_button_state;
 
 use super::label::{label, LabelSize};
 use blinc_layout::InstanceKey;
@@ -243,7 +242,7 @@ impl Combobox {
         let value_state_for_options = config.value_state.clone();
         let open_state_for_click = open_state.clone();
         let overlay_handle_for_click = overlay_handle_state.clone();
-        let select_btn_state = use_button_state(&format!("{}_btn", instance_key));
+        let select_btn_key = format!("{}_btn", instance_key);
         let search_data_for_click = search_input_data.clone();
         let allow_custom = config.allow_custom;
         let placeholder_for_content = config.placeholder.clone();
@@ -252,12 +251,10 @@ impl Combobox {
 
         // The click handler is on the Stateful itself (not the inner div) so it gets registered
         // Use w_full() to ensure the Stateful takes the same width as its parent container
-        let combobox_element = Stateful::with_shared_state(select_btn_state)
-            .deps(&[config.value_state.signal_id(), open_state.signal_id()])
-            .w_full()
-            .h(height)
-            .cursor_pointer()
-            .on_state(move |state, container: &mut Div| {
+        let combobox_element = stateful_with_key::<ButtonState>(&select_btn_key)
+            .deps([config.value_state.signal_id(), open_state.signal_id()])
+            .on_state(move |ctx| {
+                let state = ctx.state();
                 let is_open = open_state_for_display.get();
                 let current_val = value_state_for_display.get();
 
@@ -297,7 +294,7 @@ impl Combobox {
 
                 let bdr = if is_open {
                     border_focus
-                } else if *state == ButtonState::Hovered {
+                } else if state == ButtonState::Hovered {
                     border_hover
                 } else {
                     border
@@ -331,8 +328,7 @@ impl Combobox {
                     )
                     .cursor_pointer();
 
-                let main_container = div().relative().w_full().child(trigger);
-                container.merge(main_container);
+                div().relative().w_full().w_full().h(height).cursor_pointer().child(trigger)
             })
             .on_click(move |ctx| {
                 let is_currently_open = open_state_for_click.get();
@@ -761,14 +757,12 @@ fn build_dropdown_content(
     let search_query_for_opts = search_query_state.clone();
     let key_for_opts = key.to_string();
 
-    // Create a button state for the options container (used for deps-based updates)
+    // Create a key for the options container (used for deps-based updates)
     let options_container_key = format!("{}_options_container", key);
-    let options_container_state = use_button_state(&options_container_key);
 
-    let options_stateful = Stateful::with_shared_state(options_container_state)
-        .deps(&[search_query_state.signal_id()])
-        .w_full()
-        .on_state(move |_state, container: &mut Div| {
+    let options_stateful = stateful_with_key::<ButtonState>(&options_container_key)
+        .deps([search_query_state.signal_id()])
+        .on_state(move |_ctx| {
             // Get search text from State<String> (updated by text_input's on_change callback)
             let search_text = search_query_for_opts.get();
 
@@ -801,25 +795,22 @@ fn build_dropdown_content(
                     let search_query_for_custom = search_query_for_opts.clone();
 
                     let custom_item_key = format!("{}_custom", key_for_opts);
-                    let custom_button_state = use_button_state(&custom_item_key);
 
-                    let custom_item = Stateful::with_shared_state(custom_button_state)
-                        .w_full()
-                        .h_fit()
-                        .py(padding / 4.0)
-                        .px(padding / 2.0)
-                        .bg(bg)
-                        .cursor(CursorStyle::Pointer)
-                        .on_state(move |state, container: &mut Div| {
-                            let item_bg = if *state == ButtonState::Hovered {
+                    let custom_item = stateful_with_key::<ButtonState>(&custom_item_key)
+                        .on_state(move |ctx| {
+                            let state = ctx.state();
+                            let item_bg = if state == ButtonState::Hovered {
                                 surface_elevated
                             } else {
                                 bg
                             };
 
-                            let content = div()
+                            div()
                                 .w_full()
                                 .h_fit()
+                                .py(padding / 4.0)
+                                .px(padding / 2.0)
+                                .cursor(CursorStyle::Pointer)
                                 .flex_row()
                                 .items_center()
                                 .bg(item_bg)
@@ -830,9 +821,7 @@ fn build_dropdown_content(
                                             .no_cursor()
                                             .color(text_color),
                                     ),
-                                );
-
-                            container.merge(content);
+                                )
                         })
                         .on_click(move |_ctx| {
                             // Close the overlay - state updates are handled by on_close callback
@@ -893,29 +882,26 @@ fn build_dropdown_content(
                     let base_bg = if is_selected { surface_elevated } else { bg };
 
                     let item_key = format!("{}_opt-{}", key_for_opts, idx);
-                    let button_state = use_button_state(&item_key);
 
-                    let option_item = Stateful::with_shared_state(button_state)
-                        .w_full()
-                        .h_fit()
-                        .py(padding / 4.0)
-                        .px(padding / 2.0)
-                        .bg(base_bg)
-                        .cursor(if is_opt_disabled {
-                            CursorStyle::NotAllowed
-                        } else {
-                            CursorStyle::Pointer
-                        })
-                        .on_state(move |state, container: &mut Div| {
-                            let item_bg = if *state == ButtonState::Hovered && !is_opt_disabled {
+                    let option_item = stateful_with_key::<ButtonState>(&item_key)
+                        .on_state(move |ctx| {
+                            let state = ctx.state();
+                            let item_bg = if state == ButtonState::Hovered && !is_opt_disabled {
                                 surface_elevated
                             } else {
                                 base_bg
                             };
 
-                            let content = div()
+                            div()
                                 .w_full()
                                 .h_fit()
+                                .py(padding / 4.0)
+                                .px(padding / 2.0)
+                                .cursor(if is_opt_disabled {
+                                    CursorStyle::NotAllowed
+                                } else {
+                                    CursorStyle::Pointer
+                                })
                                 .flex_row()
                                 .items_center()
                                 .bg(item_bg)
@@ -928,9 +914,7 @@ fn build_dropdown_content(
                                             .no_cursor()
                                             .color(option_text_color),
                                     )
-                                });
-
-                            container.merge(content);
+                                })
                         })
                         .on_click(move |_ctx| {
                             if !is_opt_disabled {
@@ -965,13 +949,11 @@ fn build_dropdown_content(
             }
 
             // Wrap in scroll container
-            let scroll_content = div()
+            div()
                 .w_full()
                 .max_h(200.0)
                 .overflow_clip()
-                .child(scroll().w_full().h_full().child(options_content));
-
-            container.merge(scroll_content);
+                .child(scroll().w_full().h_full().child(options_content))
         });
 
     dropdown_div = dropdown_div.child(options_stateful);

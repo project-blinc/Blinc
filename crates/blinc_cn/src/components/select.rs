@@ -43,12 +43,11 @@ use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::motion::motion_derived;
 use blinc_layout::overlay_state::get_overlay_manager;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, Stateful};
+use blinc_layout::stateful::{stateful_with_key, ButtonState};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::overlay::{OverlayHandle, OverlayManagerExt};
 use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState};
 
-use crate::button::use_button_state;
 use crate::ButtonVariant;
 
 use super::label::{label, LabelSize};
@@ -208,19 +207,17 @@ impl Select {
         let open_state_for_click = open_state.clone();
         let overlay_handle_for_click = overlay_handle_state.clone();
         let btn_variant = ButtonVariant::Outline;
-        let select_btn_state = use_button_state(&format!("{}_btn", instance_key));
+        let select_btn_key = format!("{}_btn", instance_key);
         // Clone instance_key for use in closures (it's a &str that needs to outlive 'static)
         let instance_key_owned = instance_key.to_string();
         // The click handler is on the Stateful itself (not the inner div) so it gets registered
         // Use w_full() to ensure the Stateful takes the same width as its parent container
-        let select_element = Stateful::with_shared_state(select_btn_state)
-            .deps(&[config.value_state.signal_id(), open_state.signal_id()])
-            .w_full()
-            .h(height)
-            .cursor_pointer()
-            .on_state(move |state, container: &mut Div| {
+        let select_element = stateful_with_key::<ButtonState>(&select_btn_key)
+            .deps([config.value_state.signal_id(), open_state.signal_id()])
+            .on_state(move |ctx| {
+                let state = ctx.state();
                 let is_open = open_state_for_display.get();
-                let bg = btn_variant.background(theme, *state);
+                let bg = btn_variant.background(theme, state);
                 // Get current display value and selected option
                 let current_val = value_state_for_display.get();
                 let selected_option = options_for_display
@@ -279,8 +276,7 @@ impl Select {
                             .flex_shrink_0(),
                     ).cursor_pointer();
 
-                let main_container = div().relative().h_fit().w_full().child(trigger);
-                container.merge(main_container);
+                div().relative().h_fit().w_full().w_full().h(height).cursor_pointer().child(trigger)
             })
             .on_click(move |ctx| {
                 if disabled {
@@ -664,24 +660,14 @@ fn build_dropdown_content(
 
         // Create a stable key for this option's button state
         let item_key = format!("{}_opt-{}", key, idx);
-        let button_state = use_button_state(&item_key);
 
         // Build option item with Stateful for hover visual updates
-        let option_item = Stateful::with_shared_state(button_state)
-            .w_full()
-            .h_fit()
-            .py(padding / 4.0)
-            .px(padding / 2.0)
-            .bg(base_bg)
-            .cursor(if is_opt_disabled {
-                CursorStyle::NotAllowed
-            } else {
-                CursorStyle::Pointer
-            })
-            .on_state(move |state, container: &mut Div| {
+        let option_item = stateful_with_key::<ButtonState>(&item_key)
+            .on_state(move |ctx| {
+                let state = ctx.state();
                 let theme = ThemeState::get();
                 // Apply hover background based on button state
-                let item_bg = if (*state == ButtonState::Hovered || *state == ButtonState::Pressed)
+                let item_bg = if (state == ButtonState::Hovered || state == ButtonState::Pressed)
                     && !is_opt_disabled
                 {
                     theme.color(ColorToken::SecondaryHover).with_alpha(0.65)
@@ -689,8 +675,8 @@ fn build_dropdown_content(
                     base_bg
                 };
 
-                let text_color = if (*state == ButtonState::Hovered
-                    || *state == ButtonState::Pressed)
+                let text_color = if (state == ButtonState::Hovered
+                    || state == ButtonState::Pressed)
                     && !is_opt_disabled
                 {
                     theme.color(ColorToken::TextSecondary)
@@ -698,9 +684,16 @@ fn build_dropdown_content(
                     option_text_color
                 };
 
-                let content = div()
+                div()
                     .w_full()
                     .h_fit()
+                    .py(padding / 4.0)
+                    .px(padding / 2.0)
+                    .cursor(if is_opt_disabled {
+                        CursorStyle::NotAllowed
+                    } else {
+                        CursorStyle::Pointer
+                    })
                     .flex_row()
                     .items_center()
                     .bg(item_bg)
@@ -716,9 +709,7 @@ fn build_dropdown_content(
                                     .color(text_color),
                             )
                         },
-                    );
-
-                container.merge(content);
+                    )
             })
             .on_click(move |_ctx| {
                 if !is_opt_disabled {
