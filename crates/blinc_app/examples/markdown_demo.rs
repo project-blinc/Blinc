@@ -10,6 +10,7 @@ use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
 use blinc_core::{Color, SignalId, State};
 use blinc_layout::markdown::markdown_light;
+use blinc_layout::prelude::NoState;
 use std::sync::{Arc, Mutex};
 
 fn main() -> Result<()> {
@@ -255,13 +256,12 @@ fn build_editor_panel(
 }
 
 fn build_preview_panel(
-    ctx: &mut WindowedContext,
+    _ctx: &mut WindowedContext,
     text_state_handle: State<Arc<Mutex<TextAreaState>>>,
     change_signal_id: SignalId,
     width: f32,
     height: f32,
 ) -> impl ElementBuilder {
-    let preview_state = ctx.use_state(PreviewState::default());
 
     div()
         .w(width)
@@ -303,11 +303,9 @@ fn build_preview_panel(
                         .direction(ScrollDirection::Vertical)
                         .child(
                             div().h_fit().w_full().justify_center().p(4.0).child(
-                                stateful(preview_state)
-                                    .w_full()
-                                    .flex_grow()
-                                    .deps(&[change_signal_id])
-                                    .on_state(move |_state, container| {
+                                stateful::<NoState>()
+                                    .deps([change_signal_id])
+                                    .on_state(move |_ctx| {
                                         // Get the state value inside the reactive callback
                                         let text_state = text_state_handle.get();
                                         let markdown_content = text_state
@@ -315,23 +313,13 @@ fn build_preview_panel(
                                             .ok()
                                             .map(|s| s.value())
                                             .unwrap_or_default();
-                                        *container = std::mem::take(container)
-                                            .child(markdown_light(&markdown_content));
+                                        div()
+                                            .w_full()
+                                            .flex_grow()
+                                            .child(markdown_light(&markdown_content))
                                     }),
                             ),
                         ),
                 )
         })
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-enum PreviewState {
-    #[default]
-    Active,
-}
-
-impl StateTransitions for PreviewState {
-    fn on_event(&self, _event: u32) -> Option<Self> {
-        None
-    }
 }

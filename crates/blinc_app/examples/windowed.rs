@@ -12,7 +12,7 @@
 
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
-use blinc_core::Shadow;
+use blinc_core::{Shadow, Transform};
 use blinc_layout::stateful::ButtonState;
 
 fn main() -> Result<()> {
@@ -281,75 +281,77 @@ fn info_item(label: &str, value: &str) -> impl ElementBuilder {
 
 /// Create a feature card with reactive hover effects using Stateful<ButtonState>
 ///
-/// Uses ctx.use_state_for() for reusable component with unique label key,
-/// then passes it to stateful() for automatic event handling.
-fn feature_card(ctx: &WindowedContext, label: &str, accent: Color) -> impl ElementBuilder {
-    // Persistent state that survives across rebuilds (keyed by label for reusable component)
-    let handle = ctx.use_state_for(label, ButtonState::Idle);
+/// Uses the new stateful::<S>() API for automatic key generation.
+fn feature_card(_ctx: &WindowedContext, label: &str, accent: Color) -> impl ElementBuilder {
+    let label_owned = label.to_string();
+    let label_for_click = label.to_string();
 
-    stateful(handle)
-        .w_fit()
-        .p(4.0)
-        .flex_col()
-        .rounded(14.0)
-        .items_center()
-        .justify_center()
-        .on_state(move |state, div| match state {
-            ButtonState::Idle => {
-                div.set_bg(accent);
-                div.set_shadow(Shadow::new(0.0, 2.0, 4.0, Color::rgba(0.0, 0.0, 0.0, 0.2)));
-                div.set_rounded(14.0);
-            }
-            ButtonState::Hovered => {
-                let hover_color = Color::rgba(
-                    (accent.r * 1.15).min(1.0),
-                    (accent.g * 1.15).min(1.0),
-                    (accent.b * 1.15).min(1.0),
-                    accent.a,
-                );
+    stateful::<ButtonState>()
+        .initial(ButtonState::Idle)
+        .on_state(move |ctx| {
+            let state = ctx.state();
+            let (bg, shadow, rounded, transform) = match state {
+                ButtonState::Idle => (
+                    accent,
+                    Shadow::new(0.0, 2.0, 4.0, Color::rgba(0.0, 0.0, 0.0, 0.2)),
+                    14.0,
+                    Transform::default(),
+                ),
+                ButtonState::Hovered => {
+                    let hover_color = Color::rgba(
+                        (accent.r * 1.15).min(1.0),
+                        (accent.g * 1.15).min(1.0),
+                        (accent.b * 1.15).min(1.0),
+                        accent.a,
+                    );
+                    (
+                        hover_color,
+                        Shadow::new(0.0, 8.0, 16.0, Color::rgba(0.0, 0.0, 0.0, 0.35)),
+                        16.0,
+                        Transform::scale(1.05, 1.05),
+                    )
+                }
+                ButtonState::Pressed => {
+                    let press_color =
+                        Color::rgba(accent.r * 0.85, accent.g * 0.85, accent.b * 0.85, accent.a);
+                    (
+                        press_color,
+                        Shadow::new(0.0, 1.0, 2.0, Color::rgba(0.0, 0.0, 0.0, 0.15)),
+                        14.0,
+                        Transform::scale(0.95, 0.95),
+                    )
+                }
+                ButtonState::Disabled => (
+                    Color::GRAY,
+                    Shadow::new(0.0, 2.0, 4.0, Color::rgba(0.0, 0.0, 0.0, 0.2)),
+                    14.0,
+                    Transform::default(),
+                ),
+            };
 
-                div.set_bg(hover_color);
-                div.set_shadow(Shadow::new(
-                    0.0,
-                    8.0,
-                    16.0,
-                    Color::rgba(0.0, 0.0, 0.0, 0.35),
-                ));
-                div.set_rounded(16.0);
-                div.set_transform(Transform::scale(1.05, 1.05));
-            }
-            ButtonState::Pressed => {
-                let press_color =
-                    Color::rgba(accent.r * 0.85, accent.g * 0.85, accent.b * 0.85, accent.a);
-
-                div.set_bg(press_color);
-                div.set_shadow(Shadow::new(0.0, 1.0, 2.0, Color::rgba(0.0, 0.0, 0.0, 0.15)));
-                div.set_rounded(14.0);
-                div.set_transform(Transform::scale(0.95, 0.95));
-            }
-            ButtonState::Disabled => {
-                div.set_bg(Color::GRAY);
-                div.set_rounded(14.0);
-            }
+            div()
+                .w_fit()
+                .p(4.0)
+                .flex_col()
+                .rounded(rounded)
+                .items_center()
+                .justify_center()
+                .bg(bg)
+                .shadow(shadow)
+                .transform(transform)
+                .child(
+                    text(&label_owned)
+                        .text_center()
+                        .size(24.0)
+                        .color(Color::WHITE)
+                        .v_center(),
+                )
         })
-        .on_click({
-            let label = label.to_string();
-            move |_| tracing::info!("'{}' clicked!", label)
-        })
-        .child(
-            text(label)
-                .text_center()
-                .size(24.0)
-                .color(Color::WHITE)
-                .v_center(),
-        )
+        .on_click(move |_| tracing::info!("'{}' clicked!", label_for_click))
 }
 
 /// Build the image showcase card with hover effect using Stateful<ButtonState>
-fn build_image_showcase(ctx: &WindowedContext) -> impl ElementBuilder {
-    // use_state() auto-keys by source location (works for unique call sites)
-    let handle = ctx.use_state(ButtonState::Idle);
-
+fn build_image_showcase(_ctx: &WindowedContext) -> impl ElementBuilder {
     div()
         .glass()
         .shadow_xl()
@@ -360,27 +362,32 @@ fn build_image_showcase(ctx: &WindowedContext) -> impl ElementBuilder {
         .gap(16.0)
         // Image container with hover effect using stateful
         .child(
-            stateful(handle)
-                .on_state(|state, div| {
-                    match state {
-                        ButtonState::Idle | ButtonState::Disabled => {
-                            *div = div.swap()
-                                .shadow(Shadow::new(0.0, 4.0, 8.0, Color::rgba(0.0, 0.0, 0.0, 0.2)));
-                        }
-                        ButtonState::Hovered | ButtonState::Pressed => {
-                            *div = div.swap()
-                                .shadow(Shadow::new(0.0, 12.0, 24.0, Color::rgba(0.4, 0.6, 1.0, 0.5)))
-                                .transform(Transform::scale(1.03, 1.03));
-                        }
-                    }
-                })
-                .child(
-                    img("crates/blinc_app/examples/assets/original-c4197a5bf25a4356aa2bac6f82073eb2.webp")
-                        .w(120.0 * 4.0)
-                        .h(80.0 * 4.0)
-                        .cover()
-                        .rounded(12.0)
-                )
+            stateful::<ButtonState>()
+                .initial(ButtonState::Idle)
+                .on_state(|ctx| {
+                    let state = ctx.state();
+                    let (shadow, transform) = match state {
+                        ButtonState::Idle | ButtonState::Disabled => (
+                            Shadow::new(0.0, 4.0, 8.0, Color::rgba(0.0, 0.0, 0.0, 0.2)),
+                            Transform::default(),
+                        ),
+                        ButtonState::Hovered | ButtonState::Pressed => (
+                            Shadow::new(0.0, 12.0, 24.0, Color::rgba(0.4, 0.6, 1.0, 0.5)),
+                            Transform::scale(1.03, 1.03),
+                        ),
+                    };
+
+                    div()
+                        .shadow(shadow)
+                        .transform(transform)
+                        .child(
+                            img("crates/blinc_app/examples/assets/original-c4197a5bf25a4356aa2bac6f82073eb2.webp")
+                                .w(120.0 * 4.0)
+                                .h(80.0 * 4.0)
+                                .cover()
+                                .rounded(12.0)
+                        )
+                }),
         )
         .child(
             div()

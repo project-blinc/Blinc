@@ -270,6 +270,30 @@ pub trait StateTransitions:
     fn on_event(&self, event: u32) -> Option<Self>;
 }
 
+/// A no-op state type for dependency-based refreshing without state transitions
+///
+/// Use this when you need `stateful()` for reactive dependency tracking
+/// but don't have actual state transitions.
+///
+/// # Example
+///
+/// ```ignore
+/// // Rebuild when `direction` signal changes, no state machine needed
+/// stateful::<NoState>()
+///     .deps(&[direction.signal_id()])
+///     .on_state(|_ctx| {
+///         div().child(build_content(direction.get()))
+///     })
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct NoState;
+
+impl StateTransitions for NoState {
+    fn on_event(&self, _event: u32) -> Option<Self> {
+        None // Never transitions
+    }
+}
+
 /// Trait for converting user state to/from internal u32 representation
 ///
 /// This is auto-implemented for types that implement `Into<u32>` and `TryFrom<u32>`.
@@ -1127,7 +1151,28 @@ impl<S: StateTransitions + Default> StatefulBuilder<S> {
 
         // Set dependencies
         if !deps.is_empty() {
-            stateful.shared_state.lock().unwrap().deps = deps;
+            stateful.shared_state.lock().unwrap().deps = deps.clone();
+        }
+
+        // Register state handlers to enable event-driven state transitions
+        // This sets up on_mouse_down, on_mouse_up, etc. to trigger StateTransitions::on_event()
+        let stateful = stateful.register_state_handlers();
+
+        // Apply initial state callback to set up visual state
+        stateful.apply_state_callback();
+
+        // Register deps with the signal framework so changes trigger callback refresh
+        if !deps.is_empty() {
+            let shared = Arc::clone(&stateful.shared_state);
+            let stateful_key = Arc::as_ptr(&shared) as u64;
+            let shared_for_refresh = Arc::clone(&shared);
+            register_stateful_deps(
+                stateful_key,
+                deps,
+                Box::new(move || {
+                    refresh_stateful(&shared_for_refresh);
+                }),
+            );
         }
 
         stateful

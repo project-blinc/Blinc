@@ -12,8 +12,9 @@
 
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
+use blinc_core::{Color, Transform};
 use blinc_layout::stateful::ButtonState;
-use blinc_theme::{ColorToken, ThemeState};
+use blinc_theme::{ColorScheme, ColorToken, ThemeState};
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -109,68 +110,50 @@ fn header(ctx: &WindowedContext) -> impl ElementBuilder {
 }
 
 /// Theme toggle button
-fn theme_toggle_button(ctx: &WindowedContext, label: &str) -> impl ElementBuilder {
-    let theme = ThemeState::get();
-    let radius = theme.radii().radius_lg;
-
-    let handle = ctx.use_state_for("theme_toggle", ButtonState::Idle);
-
-    stateful(handle)
-        .w_fit()
-        .px(theme.spacing().space_2)
-        .py(theme.spacing().space_1)
-        .rounded(radius)
-        .bg(theme.color(ColorToken::Primary))
-        .items_center()
-        .border(1.0, theme.color(ColorToken::Border))
-        .on_state(|state, container| {
+fn theme_toggle_button(_ctx: &WindowedContext, _label: &str) -> impl ElementBuilder {
+    stateful::<ButtonState>()
+        .initial(ButtonState::Idle)
+        .on_state(|ctx| {
             // Fetch colors inside the callback so they update with theme changes
             let theme = ThemeState::get();
             let scheme = theme.scheme();
+            let radius = theme.radii().radius_lg;
 
             let primary = theme.color(ColorToken::Primary);
             let primary_hover = theme.color(ColorToken::PrimaryHover);
 
-            match state {
-                ButtonState::Idle => {
-                    container.set_bg(primary);
-                }
-                ButtonState::Hovered => {
-                    container.set_bg(primary_hover);
-                    container.set_transform(Transform::scale(1.02, 1.02));
-                }
-                ButtonState::Pressed => {
-                    container.set_bg(primary);
-                    container.set_transform(Transform::scale(0.98, 0.98));
-                }
-                ButtonState::Disabled => {
-                    container.set_bg(Color::GRAY);
-                }
-            }
+            let state = ctx.state();
+            let (bg, transform) = match state {
+                ButtonState::Idle => (primary, Transform::default()),
+                ButtonState::Hovered => (primary_hover, Transform::scale(1.02, 1.02)),
+                ButtonState::Pressed => (primary, Transform::scale(0.98, 0.98)),
+                ButtonState::Disabled => (Color::GRAY, Transform::default()),
+            };
 
             let toggle_label = match scheme {
                 ColorScheme::Light => "Switch to Dark",
                 ColorScheme::Dark => "Switch to Light",
             };
 
-            container.merge(
-                div().child(
+            div()
+                .w_fit()
+                .px(theme.spacing().space_2)
+                .py(theme.spacing().space_1)
+                .rounded(radius)
+                .bg(bg)
+                .transform(transform)
+                .items_center()
+                .border(1.0, theme.color(ColorToken::Border))
+                .child(
                     text(toggle_label)
                         .size(theme.typography().text_sm)
                         .weight(FontWeight::Medium)
                         .color(Color::WHITE),
-                ),
-            );
+                )
         })
         .on_click(|_| {
             ThemeState::get().toggle_scheme();
         })
-        .child(
-            text(label)
-                .size(theme.typography().text_sm)
-                .weight(FontWeight::Medium)
-                .color(Color::WHITE),
-        )
 }
 
 /// Color palette showcase
@@ -420,28 +403,24 @@ fn component_showcase(ctx: &WindowedContext) -> impl ElementBuilder {
 
 /// Themed button component
 fn themed_button(
-    ctx: &WindowedContext,
+    _ctx: &WindowedContext,
     label: &str,
     color_token: ColorToken,
 ) -> impl ElementBuilder {
-    let theme = ThemeState::get();
-    let color = theme.color(color_token);
-    let radius = theme.radii().radius_lg;
+    let label_owned = label.to_string();
+    let label_for_click = label.to_string();
 
-    let handle = ctx.use_state_for(format!("btn_{}", label), ButtonState::Idle);
-
-    stateful(handle)
-        .px(theme.spacing().space_4)
-        .py(theme.spacing().space_2_5)
-        .rounded(radius)
-        .bg(color)
-        .on_state(move |state, div| {
+    stateful::<ButtonState>()
+        .initial(ButtonState::Idle)
+        .on_state(move |ctx| {
             // Fetch color inside callback for theme reactivity
-            let base = ThemeState::get().color(color_token);
-            match state {
-                ButtonState::Idle => {
-                    div.set_bg(base);
-                }
+            let theme = ThemeState::get();
+            let base = theme.color(color_token);
+            let radius = theme.radii().radius_lg;
+
+            let state = ctx.state();
+            let (bg, transform) = match state {
+                ButtonState::Idle => (base, Transform::default()),
                 ButtonState::Hovered => {
                     let hover = Color::rgba(
                         (base.r * 1.1).min(1.0),
@@ -449,29 +428,29 @@ fn themed_button(
                         (base.b * 1.1).min(1.0),
                         base.a,
                     );
-                    div.set_bg(hover);
-                    div.set_transform(Transform::scale(1.02, 1.02));
+                    (hover, Transform::scale(1.02, 1.02))
                 }
                 ButtonState::Pressed => {
                     let pressed = Color::rgba(base.r * 0.9, base.g * 0.9, base.b * 0.9, base.a);
-                    div.set_bg(pressed);
-                    div.set_transform(Transform::scale(0.98, 0.98));
+                    (pressed, Transform::scale(0.98, 0.98))
                 }
-                ButtonState::Disabled => {
-                    div.set_bg(Color::GRAY);
-                }
-            }
+                ButtonState::Disabled => (Color::GRAY, Transform::default()),
+            };
+
+            div()
+                .px(theme.spacing().space_4)
+                .py(theme.spacing().space_2_5)
+                .rounded(radius)
+                .bg(bg)
+                .transform(transform)
+                .child(
+                    text(&label_owned)
+                        .size(theme.typography().text_sm)
+                        .weight(FontWeight::Medium)
+                        .color(Color::WHITE),
+                )
         })
-        .on_click({
-            let label = label.to_string();
-            move |_| tracing::info!("{} button clicked", label)
-        })
-        .child(
-            text(label)
-                .size(theme.typography().text_sm)
-                .weight(FontWeight::Medium)
-                .color(Color::WHITE),
-        )
+        .on_click(move |_| tracing::info!("{} button clicked", label_for_click))
 }
 
 /// Themed card component

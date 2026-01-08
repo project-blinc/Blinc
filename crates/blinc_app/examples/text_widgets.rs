@@ -6,7 +6,7 @@
 
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
-use blinc_core::Color;
+use blinc_core::{Color, Shadow, Transform};
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -193,9 +193,7 @@ fn build_values_display(
 }
 
 /// Build the form section with text area
-fn build_form_section(ctx: &WindowedContext, message: &SharedTextAreaState) -> impl ElementBuilder {
-    let button_state = ctx.use_state_for("submit_button", ButtonState::Idle);
-
+fn build_form_section(_ctx: &WindowedContext, message: &SharedTextAreaState) -> impl ElementBuilder {
     div()
         .flex_col()
         .gap(16.0)
@@ -237,13 +235,10 @@ fn build_form_section(ctx: &WindowedContext, message: &SharedTextAreaState) -> i
                 )
                 // Submit button using stateful API
                 .child(
-                    stateful(button_state)
-                        .w_full()
-                        .h(44.0)
-                        .rounded(8.0)
-                        .items_center()
-                        .justify_center()
-                        .on_state(|state, div| {
+                    stateful::<ButtonState>()
+                        .initial(ButtonState::Idle)
+                        .on_state(|ctx| {
+                            let state = ctx.state();
                             let (bg, scale) = match state {
                                 ButtonState::Idle => (Color::rgba(0.3, 0.6, 1.0, 1.0), 1.0),
                                 ButtonState::Hovered => (Color::rgba(0.4, 0.7, 1.0, 1.0), 1.0),
@@ -251,22 +246,25 @@ fn build_form_section(ctx: &WindowedContext, message: &SharedTextAreaState) -> i
                                 ButtonState::Disabled => (Color::rgba(0.3, 0.3, 0.35, 0.5), 1.0),
                             };
 
-                            // Use setter methods to update visual properties
-                            // This preserves layout properties (items_center, justify_center, etc.)
-                            div.set_bg(bg);
-                            div.set_rounded(8.0);
-                            div.set_shadow(Shadow::new(
-                                0.0,
-                                4.0,
-                                12.0,
-                                Color::rgba(0.3, 0.5, 1.0, 0.3),
-                            ));
-                            div.set_transform(Transform::scale(scale, scale));
+                            div()
+                                .w_full()
+                                .h(44.0)
+                                .rounded(8.0)
+                                .items_center()
+                                .justify_center()
+                                .bg(bg)
+                                .shadow(Shadow::new(
+                                    0.0,
+                                    4.0,
+                                    12.0,
+                                    Color::rgba(0.3, 0.5, 1.0, 0.3),
+                                ))
+                                .transform(Transform::scale(scale, scale))
+                                .child(label("Submit").color(Color::WHITE).v_center())
                         })
                         .on_click(|_| {
                             tracing::info!("Form submitted!");
-                        })
-                        .child(label("Submit").color(Color::WHITE).v_center()),
+                        }),
                 ),
         )
         // Show message preview

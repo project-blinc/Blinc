@@ -18,6 +18,7 @@ use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
 use blinc_core::Color;
 use blinc_layout::motion::{motion, StaggerConfig};
+use blinc_layout::prelude::stateful_from_handle;
 use blinc_layout::widgets::scroll::Scroll;
 use blinc_theme::theme;
 use std::sync::{Arc, Mutex};
@@ -227,8 +228,9 @@ fn pull_to_refresh_demo(ctx: &WindowedContext) -> Div {
     let pull_state_move = pull_state.clone();
 
     demo_card("Pull to Refresh", "stack + motion").child(
-        // stateful() = container with FSM state transitions
-        stateful(pull_state)
+        // stateful_from_handle() = container with FSM state transitions (using external state handle)
+        #[allow(deprecated)]
+        stateful_from_handle(pull_state)
             .w(160.0)
             .h(130.0)
             .rounded(8.0)

@@ -10,7 +10,8 @@
 
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
-use blinc_core::{Color, State};
+use blinc_core::{Color, State, Transform};
+use blinc_layout::prelude::NoState;
 use blinc_layout::selector::{ScrollBehavior, ScrollBlock, ScrollOptions, ScrollRef};
 use blinc_layout::units::px;
 
@@ -92,7 +93,7 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
 }
 
 fn build_carousel(
-    ctx: &WindowedContext,
+    _ctx: &WindowedContext,
     scroll_ref: &ScrollRef,
     current_index: &State<usize>,
 ) -> impl ElementBuilder {
@@ -126,7 +127,6 @@ fn build_carousel(
     ];
 
     // Only the indicator needs to update reactively
-    let indicator_state = ctx.use_state_for("carousel_indicator", ButtonState::Idle);
     let current_index_clone = current_index.clone();
 
     div()
@@ -176,17 +176,15 @@ fn build_carousel(
         )
         // Current card indicator - ONLY this updates reactively
         .child(
-            stateful(indicator_state)
-                .deps(&[current_index.signal_id()])
-                .on_state(move |_state, container| {
+            stateful::<NoState>()
+                .deps([current_index.signal_id()])
+                .on_state(move |_ctx| {
                     let current = current_index_clone.get();
-                    container.merge(
-                        div().child(
-                            text(&format!("Card {} of {}", current + 1, CARD_COUNT))
-                                .size(14.0)
-                                .color(Color::rgba(0.5, 0.5, 0.6, 1.0)),
-                        ),
-                    );
+                    div().child(
+                        text(&format!("Card {} of {}", current + 1, CARD_COUNT))
+                            .size(14.0)
+                            .color(Color::rgba(0.5, 0.5, 0.6, 1.0)),
+                    )
                 }),
         )
 }
@@ -271,25 +269,23 @@ fn build_carousel_dots(
 }
 
 fn build_dot(
-    ctx: &WindowedContext,
+    _ctx: &WindowedContext,
     index: usize,
     scroll_ref: &ScrollRef,
     current_index: &State<usize>,
 ) -> impl ElementBuilder {
-    let button_state = ctx.use_state_for(&format!("dot_{}", index), ButtonState::Idle);
-
     let current_index_signal = current_index.signal_id();
     let current_index_clone = current_index.clone();
     let current_index_for_click = current_index.clone();
     // Clone scroll_ref for the click handler
     let scroll_ref_clone = scroll_ref.clone();
 
-    stateful(button_state)
+    stateful::<ButtonState>()
+        .initial(ButtonState::Idle)
         // Bind to current_index signal so we re-render when selection changes
-        .deps(&[current_index_signal])
-        .h(12.0)
-        .rounded(6.0)
-        .on_state(move |state, div| {
+        .deps([current_index_signal])
+        .on_state(move |ctx| {
+            let state = ctx.state();
             // Read current selection inside on_state - will be fresh on each refresh
             let current_val = current_index_clone.get();
             let is_current = index == current_val;
@@ -307,20 +303,20 @@ fn build_dot(
                 ButtonState::Disabled => base_color.with_alpha(0.3),
             };
 
-            div.set_bg(color);
-
-            if *state == ButtonState::Hovered && !is_current {
-                div.set_transform(Transform::scale(1.1, 1.1));
-                return;
-            }
-
-            div.set_w(12.0);
-            // Set width based on current selection
-            if is_current {
-                div.set_transform(Transform::scale(2.0, 1.0));
+            let transform = if state == ButtonState::Hovered && !is_current {
+                Transform::scale(1.1, 1.1)
+            } else if is_current {
+                Transform::scale(2.0, 1.0)
             } else {
-                div.set_transform(Transform::scale(1.0, 1.0));
-            }
+                Transform::scale(1.0, 1.0)
+            };
+
+            div()
+                .h(12.0)
+                .rounded(6.0)
+                .w(12.0)
+                .bg(color)
+                .transform(transform)
         })
         .on_click(move |_| {
             // Use the selector API to scroll to the card by ID!

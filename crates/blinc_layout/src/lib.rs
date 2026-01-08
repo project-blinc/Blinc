@@ -228,6 +228,8 @@ pub mod prelude {
         Checkbox as StatefulCheckbox,
         CheckboxState as StatefulCheckboxState,
         ChildKeyCounter,
+        // No-op state for dependency-based refreshing
+        NoState,
         ScrollContainer,
         ScrollState,
         SharedState,

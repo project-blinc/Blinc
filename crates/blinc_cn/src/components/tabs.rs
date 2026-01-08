@@ -840,8 +840,9 @@ fn build_tab_trigger(
 
     let trigger_btn_state = use_button_state(&format!("{}:{}", trigger_key, value));
 
-    // Build the trigger div
-    let mut trigger = stateful(trigger_btn_state)
+    // Build the trigger div (using deprecated API for external state access)
+    #[allow(deprecated)]
+    let mut trigger = stateful_from_handle(trigger_btn_state)
         .h(inner_height)
         .padding_x(Length::Px(size.padding_x()))
         .padding_y(Length::Px(size.padding_x() / 2.0))
