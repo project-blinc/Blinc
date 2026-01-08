@@ -172,10 +172,20 @@ The callback receives a `StateContext` with these methods:
     let counter = ctx.use_signal("counter", || 0);
 
     // Create animated values (spring physics)
-    let opacity = ctx.use_animated_value("opacity", 1.0);
+    let scale = ctx.use_spring("scale", 1.0, SpringConfig::snappy());
 
     // Create animated timelines (keyframe sequences)
-    let timeline = ctx.use_timeline("fade");
+    let (entry_id, timeline) = ctx.use_timeline("fade", |t| {
+        let id = t.add(0, 500, 0.0, 1.0);
+        t.set_loop(-1);
+        t.start();
+        id
+    });
+
+    // Create keyframe animations with fluent API
+    let anim = ctx.use_keyframes("pulse", |k| {
+        k.at(0, 0.8).at(800, 1.2).ease(Easing::EaseInOut).ping_pong().loop_infinite()
+    });
 
     // Access dependency values by index
     let value: i32 = ctx.dep(0).unwrap_or_default();
@@ -347,33 +357,65 @@ stateful::<ButtonState>()
     })
 ```
 
-### Animated Values
+### Springs (use_spring)
 
 ```rust
 stateful::<ButtonState>()
     .on_state(|ctx| {
-        // Spring-animated value keyed to this stateful
-        let scale = ctx.use_animated_value("scale", 1.0);
+        // Target value changes based on state
+        let target = match ctx.state() {
+            ButtonState::Hovered => 1.1,
+            _ => 1.0,
+        };
 
-        // With custom spring config
-        let opacity = ctx.use_animated_value_with_config(
-            "opacity",
-            1.0,
-            SpringConfig::bouncy(),
-        );
+        // use_spring automatically animates to target
+        let scale = ctx.use_spring("scale", target, SpringConfig::snappy());
 
-        // Set target based on state
-        match ctx.state() {
-            ButtonState::Hovered => {
-                scale.lock().unwrap().set_target(1.1);
-            }
-            _ => {
-                scale.lock().unwrap().set_target(1.0);
-            }
-        }
+        div().transform(Transform::scale(scale, scale))
+    })
+```
 
-        let s = scale.lock().unwrap().get();
-        div().transform(Transform::scale(s, s))
+### Keyframes (use_keyframes)
+
+```rust
+stateful::<ButtonState>()
+    .on_state(|ctx| {
+        // Keyframe animation with ping-pong and easing
+        let pulse = ctx.use_keyframes("pulse", |k| {
+            k.at(0, 0.8)
+             .at(800, 1.2)
+             .ease(Easing::EaseInOut)
+             .ping_pong()
+             .loop_infinite()
+             .start()
+        });
+
+        let scale = pulse.get();
+        div().transform(Transform::scale(scale, scale))
+    })
+```
+
+### Timelines (use_timeline)
+
+```rust
+stateful::<NoState>()
+    .on_state(|ctx| {
+        // Timeline with staggered entries
+        let ((bar1, bar2), timeline) = ctx.use_timeline("bars", |t| {
+            let b1 = t.add_with_easing(0, 500, 0.0, 60.0, Easing::EaseInOut);
+            let b2 = t.add_with_easing(100, 500, 0.0, 60.0, Easing::EaseInOut);
+            t.set_alternate(true);
+            t.set_loop(-1);
+            t.start();
+            (b1, b2)
+        });
+
+        let x1 = timeline.get(bar1).unwrap_or(0.0);
+        let x2 = timeline.get(bar2).unwrap_or(0.0);
+
+        div()
+            .child(div().transform(Transform::translate(x1, 0.0)))
+            .child(div().transform(Transform::translate(x2, 0.0)))
     })
 ```
 
