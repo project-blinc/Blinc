@@ -386,6 +386,8 @@ pub struct Div {
     pub(crate) element_id: Option<String>,
     /// Layout animation configuration for FLIP-style bounds animation
     pub(crate) layout_animation: Option<crate::layout_animation::LayoutAnimationConfig>,
+    /// Visual animation configuration (new FLIP-style system, read-only layout)
+    pub(crate) visual_animation: Option<crate::visual_animation::VisualAnimationConfig>,
     /// Ancestor stateful context key for automatic key derivation
     ///
     /// When set, motion containers and layout animations will use this key
@@ -421,6 +423,7 @@ impl Div {
             event_handlers: crate::event_handler::EventHandlers::new(),
             element_id: None,
             layout_animation: None,
+            visual_animation: None,
             stateful_context_key: None,
         }
     }
@@ -449,6 +452,7 @@ impl Div {
             event_handlers: crate::event_handler::EventHandlers::new(),
             element_id: None,
             layout_animation: None,
+            visual_animation: None,
             stateful_context_key: None,
         }
     }
@@ -491,6 +495,13 @@ impl Div {
 
     /// Enable layout animation for this element
     ///
+    /// # Deprecated
+    ///
+    /// Use [`animate_bounds()`](Self::animate_bounds) instead. The new system:
+    /// - Never modifies taffy (read-only layout)
+    /// - Tracks visual offsets that animate back to zero (FLIP technique)
+    /// - Properly propagates parent animation offsets to children
+    ///
     /// When enabled, changes to the element's bounds (position/size) after layout
     /// computation will be smoothly animated using spring physics instead of
     /// snapping instantly.
@@ -511,6 +522,10 @@ impl Div {
     ///     .animate_layout(LayoutAnimationConfig::all().with_spring(SpringConfig::gentle()))
     ///     .child(content)
     /// ```
+    #[deprecated(
+        since = "0.3.0",
+        note = "Use animate_bounds() instead. The old system modifies taffy which causes parent-child misalignment issues."
+    )]
     pub fn animate_layout(
         mut self,
         config: crate::layout_animation::LayoutAnimationConfig,
@@ -527,6 +542,45 @@ impl Div {
             config
         };
         self.layout_animation = Some(config);
+        self
+    }
+
+    /// Enable visual bounds animation using the new FLIP-style system
+    ///
+    /// Unlike `animate_layout()`, this system never modifies the layout tree.
+    /// Instead, it tracks visual offsets and animates them back to zero.
+    ///
+    /// Key differences:
+    /// - Layout runs once with final positions (taffy is read-only)
+    /// - Animation tracks visual offset from layout position
+    /// - Parent offsets propagate to children hierarchically
+    /// - Pre-computed bounds used during rendering
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Animate height changes with FLIP-style animation
+    /// div()
+    ///     .animate_bounds(VisualAnimationConfig::height().with_key("my-content"))
+    ///     .overflow_clip()
+    ///     .child(content)
+    /// ```
+    pub fn animate_bounds(
+        mut self,
+        config: crate::visual_animation::VisualAnimationConfig,
+    ) -> Self {
+        // Auto-apply stable key if inside a stateful context
+        let config = if let Some(ref ctx_key) = self.stateful_context_key {
+            if config.key.is_none() {
+                let auto_key = format!("{}:visual_anim", ctx_key);
+                config.with_key(auto_key)
+            } else {
+                config
+            }
+        } else {
+            config
+        };
+        self.visual_animation = Some(config);
         self
     }
 
@@ -587,6 +641,34 @@ impl Div {
     #[inline]
     pub fn swap(&mut self) -> Self {
         std::mem::take(self)
+    }
+
+    /// Conditionally apply modifications based on a boolean condition
+    ///
+    /// This is useful for conditional styling without verbose if-else blocks.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// // Instead of:
+    /// let mut d = div();
+    /// if is_collapsed {
+    ///     d = d.h(0.0);
+    /// }
+    ///
+    /// // Write:
+    /// div().when(is_collapsed, |d| d.h(0.0))
+    /// ```
+    #[inline]
+    pub fn when<F>(self, condition: bool, f: F) -> Self
+    where
+        F: FnOnce(Self) -> Self,
+    {
+        if condition {
+            f(self)
+        } else {
+            self
+        }
     }
 
     /// Set the background color/brush without consuming self
@@ -814,6 +896,16 @@ impl Div {
         // Merge stateful context key - take other's if set
         if other.stateful_context_key.is_some() {
             self.stateful_context_key = other.stateful_context_key;
+        }
+
+        // Merge visual animation config - take other's if set
+        if other.visual_animation.is_some() {
+            self.visual_animation = other.visual_animation;
+        }
+
+        // Merge layout animation config (deprecated) - take other's if set
+        if other.layout_animation.is_some() {
+            self.layout_animation = other.layout_animation;
         }
 
         // Note: event_handlers are NOT merged - they're set on the base element
@@ -2959,6 +3051,14 @@ pub trait ElementBuilder {
     fn layout_animation_config(&self) -> Option<crate::layout_animation::LayoutAnimationConfig> {
         None
     }
+
+    /// Get visual animation config for new FLIP-style animations (read-only layout)
+    ///
+    /// Unlike layout_animation_config, this system never modifies taffy.
+    /// The animation tracks visual offsets that get animated back to zero.
+    fn visual_animation_config(&self) -> Option<crate::visual_animation::VisualAnimationConfig> {
+        None
+    }
 }
 
 impl ElementBuilder for Div {
@@ -3028,6 +3128,10 @@ impl ElementBuilder for Div {
 
     fn layout_animation_config(&self) -> Option<crate::layout_animation::LayoutAnimationConfig> {
         self.layout_animation.clone()
+    }
+
+    fn visual_animation_config(&self) -> Option<crate::visual_animation::VisualAnimationConfig> {
+        self.visual_animation.clone()
     }
 }
 

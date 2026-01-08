@@ -3776,6 +3776,14 @@ impl<S: StateTransitions + Default> ElementBuilder for BoundStateful<S> {
             .as_ref()
             .and_then(|s| s.layout_animation_config())
     }
+
+    fn visual_animation_config(&self) -> Option<crate::visual_animation::VisualAnimationConfig> {
+        self.storage
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|s| s.visual_animation_config())
+    }
 }
 
 impl<S: StateTransitions> ElementBuilder for Stateful<S> {
@@ -3890,6 +3898,11 @@ impl<S: StateTransitions> ElementBuilder for Stateful<S> {
     fn layout_animation_config(&self) -> Option<crate::layout_animation::LayoutAnimationConfig> {
         self.ensure_callback_invoked();
         self.inner.borrow().layout_animation_config()
+    }
+
+    fn visual_animation_config(&self) -> Option<crate::visual_animation::VisualAnimationConfig> {
+        self.ensure_callback_invoked();
+        self.inner.borrow().visual_animation_config()
     }
 }
 

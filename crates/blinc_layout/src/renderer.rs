@@ -22,6 +22,7 @@ use crate::div::{ElementBuilder, ElementTypeId};
 use crate::element::{ElementBounds, GlassMaterial, Material, RenderLayer, RenderProps};
 use crate::layout_animation::{LayoutAnimationConfig, LayoutAnimationState};
 use crate::selector::{ElementRegistry, ScrollRef};
+use crate::visual_animation::{AnimatedRenderBounds, VisualAnimation, VisualAnimationConfig};
 use crate::tree::{LayoutNodeId, LayoutTree};
 
 /// A computed glass panel ready for GPU rendering
@@ -385,6 +386,26 @@ pub struct RenderTree {
     layout_animations_by_key: HashMap<String, LayoutAnimationState>,
     /// Previous bounds tracked by stable key
     previous_bounds_by_key: HashMap<String, ElementBounds>,
+
+    // ========================================================================
+    // Visual Animation System (FLIP-style, read-only layout)
+    // ========================================================================
+
+    /// Visual animation configs for nodes (from element builders)
+    /// Maps stable_key to config specifying which properties to animate
+    visual_animation_configs: HashMap<String, VisualAnimationConfig>,
+    /// Stable key to node ID mapping for visual animations
+    /// Updated each frame when nodes register; key→node ensures we always have current node
+    visual_animation_key_to_node: HashMap<String, LayoutNodeId>,
+    /// Active visual animations (by stable key)
+    /// These track visual offsets from layout, never modify taffy
+    visual_animations: HashMap<String, VisualAnimation>,
+    /// Previous visual bounds by stable key (what was rendered last frame)
+    /// Used to detect bounds changes and initiate FLIP animations
+    previous_visual_bounds: HashMap<String, ElementBounds>,
+    /// Pre-computed animated render bounds for this frame
+    /// Calculated after layout, used during rendering
+    animated_render_bounds: HashMap<LayoutNodeId, AnimatedRenderBounds>,
 }
 
 /// Result of an incremental update attempt
@@ -437,6 +458,12 @@ impl RenderTree {
             layout_animation_key_to_node: HashMap::new(),
             layout_animations_by_key: HashMap::new(),
             previous_bounds_by_key: HashMap::new(),
+            // Visual animation system (FLIP-style)
+            visual_animation_configs: HashMap::new(),
+            visual_animation_key_to_node: HashMap::new(),
+            visual_animations: HashMap::new(),
+            previous_visual_bounds: HashMap::new(),
+            animated_render_bounds: HashMap::new(),
         }
     }
 
@@ -1100,6 +1127,16 @@ impl RenderTree {
             self.layout_animation_configs.insert(node_id, config);
         }
 
+        // Register visual animation config for new FLIP-style system
+        if let Some(config) = element.visual_animation_config() {
+            eprintln!(
+                "[VISUAL_ANIM] collect_render_props: registering config for {:?}, key={:?}",
+                node_id,
+                config.key
+            );
+            self.register_visual_animation_config(node_id, config);
+        }
+
         // Register element ID if present (for selector API)
         if let Some(id) = element.element_id() {
             self.element_registry.register(id, node_id);
@@ -1284,6 +1321,16 @@ impl RenderTree {
                 node_id
             );
             self.layout_animation_configs.insert(node_id, config);
+        }
+
+        // Register visual animation config for new FLIP-style system
+        if let Some(config) = element.visual_animation_config() {
+            eprintln!(
+                "[VISUAL_ANIM] collect_render_props_boxed: registering config for {:?}, key={:?}",
+                node_id,
+                config.key
+            );
+            self.register_visual_animation_config(node_id, config);
         }
 
         // Register element ID if present (for selector API)
@@ -1557,6 +1604,11 @@ impl RenderTree {
             self.layout_animation_configs.insert(node_id, config);
         }
 
+        // Register visual animation config for new FLIP-style system
+        if let Some(config) = element.visual_animation_config() {
+            self.register_visual_animation_config(node_id, config);
+        }
+
         // Register element ID if present (for selector API)
         if let Some(id) = element.element_id() {
             self.element_registry.register(id, node_id);
@@ -1827,6 +1879,17 @@ impl RenderTree {
 
             // Process on_ready callbacks for newly laid out elements
             self.process_on_ready_callbacks();
+
+            // =========================================================
+            // Visual Animation System (FLIP-style, read-only layout)
+            // =========================================================
+            // This runs AFTER layout is complete and does NOT modify taffy.
+            // It detects bounds changes and creates FLIP-style animations.
+            self.update_visual_animations();
+
+            // Pre-compute animated render bounds for all nodes
+            // This propagates parent animation offsets to children.
+            self.compute_animated_render_bounds();
         }
     }
 
@@ -1839,9 +1902,22 @@ impl RenderTree {
     fn apply_collapsing_animation_constraints(&mut self) -> Vec<(LayoutNodeId, Style)> {
         let mut overrides = Vec::new();
 
+        tracing::trace!(
+            "apply_collapsing_animation_constraints: checking {} stable-key animations",
+            self.layout_animations_by_key.len()
+        );
+
         // Check stable-key based animations
         for (stable_key, anim_state) in &self.layout_animations_by_key {
-            if !anim_state.is_collapsing() {
+            let is_collapsing = anim_state.is_collapsing();
+            tracing::trace!(
+                "  key='{}': is_collapsing={}, current_height={:.1}, target_height={:.1}",
+                stable_key,
+                is_collapsing,
+                anim_state.current_height(),
+                anim_state.end_bounds.height
+            );
+            if !is_collapsing {
                 continue;
             }
 
@@ -2114,12 +2190,14 @@ impl RenderTree {
                 // Check if there's an existing animation for this key
                 if let Some(existing_anim) = self.layout_animations_by_key.get_mut(stable_key) {
                     // Update existing animation's target
+                    let old_target = existing_anim.end_bounds.height;
                     existing_anim.update_target(new_bounds, &config);
-                    tracing::debug!(
-                        "Layout animation (keyed): updating target for key='{}': {:?} -> {:?}",
+                    tracing::info!(
+                        "Layout animation (keyed): updating target for key='{}': old_target={:.1} -> new_target={:.1}, is_collapsing={}",
                         stable_key,
-                        old,
-                        new_bounds
+                        old_target,
+                        new_bounds.height,
+                        existing_anim.is_collapsing()
                     );
                 } else {
                     // Try to create new animation
@@ -2137,6 +2215,13 @@ impl RenderTree {
                         );
                         self.layout_animations_by_key
                             .insert(stable_key.clone(), anim_state);
+                    } else {
+                        tracing::debug!(
+                            "Layout animation (keyed): no change for key='{}': old={:?}, new={:?}",
+                            stable_key,
+                            old,
+                            new_bounds
+                        );
                     }
                 }
             } else {
@@ -2182,8 +2267,16 @@ impl RenderTree {
             .retain(|_, state| state.is_animating());
 
         // Clean up completed animations (stable key based)
-        self.layout_animations_by_key
-            .retain(|_, state| state.is_animating());
+        self.layout_animations_by_key.retain(|key, state| {
+            let is_anim = state.is_animating();
+            if !is_anim {
+                tracing::debug!(
+                    "Layout animation (keyed): cleaning up settled animation for key='{}'",
+                    key
+                );
+            }
+            is_anim
+        });
     }
 
     /// Check if any layout animations are currently active
@@ -2229,7 +2322,30 @@ impl RenderTree {
         node_id: LayoutNodeId,
         parent_offset: (f32, f32),
     ) -> Option<ElementBounds> {
-        // First try to get animated bounds (node ID based)
+        // Check if this node has an ACTIVE visual animation
+        // Apply animation offsets to layout bounds (keeps parent-relative coordinates)
+        if let Some(key) = self
+            .visual_animation_key_to_node
+            .iter()
+            .find(|(_, &n)| n == node_id)
+            .map(|(k, _)| k.clone())
+        {
+            if let Some(anim) = self.visual_animations.get(&key) {
+                if anim.is_animating() {
+                    // Get layout bounds (relative to parent)
+                    let layout = self.layout_tree.get_bounds(node_id, parent_offset)?;
+                    // Apply animation offsets to layout bounds
+                    return Some(ElementBounds {
+                        x: layout.x + anim.offset.get_x(),
+                        y: layout.y + anim.offset.get_y(),
+                        width: (layout.width + anim.size_delta.get_width()).max(0.0),
+                        height: (layout.height + anim.size_delta.get_height()).max(0.0),
+                    });
+                }
+            }
+        }
+
+        // Then try old layout animations (node ID based) - deprecated
         if let Some(anim_bounds) = self.layout_animations.get(&node_id) {
             let current = anim_bounds.current_bounds();
             return Some(ElementBounds {
@@ -2240,7 +2356,7 @@ impl RenderTree {
             });
         }
 
-        // Try stable key based animations
+        // Try stable key based animations - deprecated
         if let Some(config) = self.layout_animation_configs.get(&node_id) {
             if let Some(ref stable_key) = config.stable_key {
                 if let Some(anim_state) = self.layout_animations_by_key.get(stable_key) {
@@ -2299,6 +2415,294 @@ impl RenderTree {
                 *guard = None;
             }
         }
+    }
+
+    // =========================================================================
+    // Visual Animation System (FLIP-style, read-only layout)
+    // =========================================================================
+
+    /// Register a visual animation config for a node
+    ///
+    /// This associates a VisualAnimationConfig with a node for FLIP-style animations.
+    /// The animation tracks visual offsets from layout bounds, never modifying taffy.
+    pub fn register_visual_animation_config(
+        &mut self,
+        node_id: LayoutNodeId,
+        config: VisualAnimationConfig,
+    ) {
+        let key = config
+            .key
+            .clone()
+            .unwrap_or_else(|| format!("node_{:?}", node_id));
+
+        eprintln!(
+            "[VISUAL_ANIM] Registering config: node={:?}, key={}",
+            node_id,
+            key
+        );
+
+        self.visual_animation_configs.insert(key.clone(), config);
+        // key→node direction ensures we always have the current node for each key
+        // (overwrites any stale node_id from previous rebuild)
+        self.visual_animation_key_to_node.insert(key, node_id);
+    }
+
+    /// Update visual animations for nodes with changed bounds
+    ///
+    /// This implements the FLIP technique:
+    /// 1. Compare current layout bounds vs previous visual bounds
+    /// 2. Calculate offset = previous - current (the "Invert" step)
+    /// 3. Create animation that plays offset back to 0 (the "Play" step)
+    ///
+    /// Called after layout computation but before rendering.
+    fn update_visual_animations(&mut self) {
+        if !self.visual_animation_configs.is_empty() {
+            eprintln!(
+                "[VISUAL_ANIM] update_visual_animations: {} configs registered",
+                self.visual_animation_configs.len()
+            );
+        }
+        if self.visual_animation_configs.is_empty() {
+            return;
+        }
+
+        // Get animation scheduler handle
+        let scheduler_handle = if let Some(arc) = self.animations.upgrade() {
+            arc.lock().unwrap().handle()
+        } else if let Some(handle) = crate::render_state::get_global_scheduler() {
+            handle
+        } else {
+            tracing::warn!("No animation scheduler available for visual animations");
+            return;
+        };
+
+        // Process each registered config
+        for (key, config) in &self.visual_animation_configs {
+            // Get the current node ID for this key (directly from key→node map)
+            let Some(&node_id) = self.visual_animation_key_to_node.get(key) else {
+                continue;
+            };
+
+            // Get current layout bounds from taffy
+            let Some(layout_bounds) = self.layout_tree.get_bounds(node_id, (0.0, 0.0)) else {
+                continue;
+            };
+
+            // Get previous visual bounds (what was rendered last frame)
+            let prev_visual = self.previous_visual_bounds.get(key).copied();
+
+            // Check if we have an existing animation
+            if let Some(existing_anim) = self.visual_animations.get_mut(key) {
+                // Animation in progress - update target if layout changed
+                if (existing_anim.to_bounds.width - layout_bounds.width).abs() > 0.5
+                    || (existing_anim.to_bounds.height - layout_bounds.height).abs() > 0.5
+                    || (existing_anim.to_bounds.x - layout_bounds.x).abs() > 0.5
+                    || (existing_anim.to_bounds.y - layout_bounds.y).abs() > 0.5
+                {
+                    tracing::debug!(
+                        "Visual animation: updating target for key='{}', to_bounds changed",
+                        key
+                    );
+                    existing_anim.update_target(layout_bounds, scheduler_handle.clone());
+                }
+
+                // Store current visual bounds for next frame
+                let current_visual = existing_anim.current_visual_bounds();
+                self.previous_visual_bounds
+                    .insert(key.clone(), current_visual);
+            } else if let Some(prev) = prev_visual {
+                // No animation yet - check if bounds changed significantly
+                let bounds_changed = (prev.width - layout_bounds.width).abs() > config.threshold
+                    || (prev.height - layout_bounds.height).abs() > config.threshold
+                    || (prev.x - layout_bounds.x).abs() > config.threshold
+                    || (prev.y - layout_bounds.y).abs() > config.threshold;
+
+                if bounds_changed {
+                    // Create new FLIP animation: from prev visual, to current layout
+                    if let Some(anim) = VisualAnimation::from_bounds_change(
+                        key.clone(),
+                        prev,
+                        layout_bounds,
+                        config,
+                        scheduler_handle.clone(),
+                    ) {
+                        tracing::debug!(
+                            "Visual animation: created for key='{}', from={:?} to={:?}, direction={:?}",
+                            key,
+                            prev,
+                            layout_bounds,
+                            anim.direction
+                        );
+                        self.visual_animations.insert(key.clone(), anim);
+                    }
+                }
+
+                // Store current visual bounds for next frame
+                // (use layout since no animation is active)
+                self.previous_visual_bounds
+                    .insert(key.clone(), layout_bounds);
+            } else {
+                // First frame - just store current layout bounds
+                self.previous_visual_bounds
+                    .insert(key.clone(), layout_bounds);
+            }
+        }
+
+        // Cleanup completed animations
+        self.visual_animations.retain(|key, anim| {
+            let is_animating = anim.is_animating();
+            if !is_animating {
+                tracing::debug!(
+                    "Visual animation: cleaning up completed animation for key='{}'",
+                    key
+                );
+            }
+            is_animating
+        });
+    }
+
+    /// Compute animated render bounds for all nodes
+    ///
+    /// This is the hierarchical computation phase:
+    /// 1. Start from root with identity bounds
+    /// 2. For each node, calculate its animated bounds accounting for:
+    ///    - Own animation state (if any)
+    ///    - Parent's animated offset (inherited)
+    /// 3. Store pre-computed bounds for use during rendering
+    ///
+    /// Called after update_visual_animations().
+    fn compute_animated_render_bounds(&mut self) {
+        // Clear previous computation
+        self.animated_render_bounds.clear();
+
+        // Get root node
+        let Some(root_id) = self.root else {
+            return;
+        };
+
+        // Start recursive computation from root
+        self.compute_bounds_recursive(
+            root_id,
+            0.0,
+            0.0, // Parent offset starts at screen origin
+        );
+    }
+
+    /// Recursively compute animated render bounds for a subtree
+    fn compute_bounds_recursive(&mut self, node_id: LayoutNodeId, parent_x: f32, parent_y: f32) {
+        // Get layout bounds relative to parent (from taffy)
+        let Some(layout_bounds) = self.layout_tree.get_bounds(node_id, (0.0, 0.0)) else {
+            return;
+        };
+
+        // Check if this node has an active visual animation
+        // Find the key for this node (reverse lookup - O(n) but typically few animated nodes)
+        let stable_key = self
+            .visual_animation_key_to_node
+            .iter()
+            .find(|(_, &n)| n == node_id)
+            .map(|(k, _)| k.clone());
+        let animation = stable_key
+            .as_ref()
+            .and_then(|k| self.visual_animations.get(k));
+        let config = stable_key
+            .as_ref()
+            .and_then(|k| self.visual_animation_configs.get(k));
+
+        // Calculate this node's animated bounds
+        let animated_bounds = if let Some(anim) = animation {
+            // Node has active animation - apply visual offset
+            let dx = anim.offset.get_x();
+            let dy = anim.offset.get_y();
+            let dw = anim.size_delta.get_width();
+            let dh = anim.size_delta.get_height();
+
+            // Position: layout + parent offset + animation offset
+            let x = parent_x + layout_bounds.x + dx;
+            let y = parent_y + layout_bounds.y + dy;
+
+            // Size: layout + animation delta
+            let width = layout_bounds.width + dw;
+            let height = layout_bounds.height + dh;
+
+            // Determine clip rect based on animation direction and config
+            let clip_rect = if let Some(cfg) = config {
+                use crate::visual_animation::ClipBehavior;
+                match cfg.clip_behavior {
+                    ClipBehavior::ClipToAnimated => {
+                        // Clip to animated (current) bounds
+                        Some(Rect::new(0.0, 0.0, width.max(0.0), height.max(0.0)))
+                    }
+                    ClipBehavior::ClipToLayout => {
+                        // Clip to layout (target) bounds
+                        Some(Rect::new(
+                            0.0,
+                            0.0,
+                            layout_bounds.width,
+                            layout_bounds.height,
+                        ))
+                    }
+                    ClipBehavior::NoClip => None,
+                }
+            } else {
+                // Default: clip to animated bounds
+                Some(Rect::new(0.0, 0.0, width.max(0.0), height.max(0.0)))
+            };
+
+            AnimatedRenderBounds {
+                x,
+                y,
+                width,
+                height,
+                clip_rect,
+            }
+        } else {
+            // No animation - use layout bounds + parent offset
+            AnimatedRenderBounds {
+                x: parent_x + layout_bounds.x,
+                y: parent_y + layout_bounds.y,
+                width: layout_bounds.width,
+                height: layout_bounds.height,
+                clip_rect: None,
+            }
+        };
+
+        // Store computed bounds
+        let child_parent_x = animated_bounds.x;
+        let child_parent_y = animated_bounds.y;
+        self.animated_render_bounds
+            .insert(node_id, animated_bounds);
+
+        // Recursively compute for children
+        // Children use THIS node's animated position as their parent offset
+        let children = self.layout_tree.children(node_id);
+        for child_id in children {
+            self.compute_bounds_recursive(child_id, child_parent_x, child_parent_y);
+        }
+    }
+
+    /// Get visual animated render bounds for a node
+    ///
+    /// Returns pre-computed animated bounds if available, otherwise None.
+    /// Use this during rendering to get hierarchically-correct animated positions.
+    pub fn get_visual_render_bounds(&self, node_id: LayoutNodeId) -> Option<&AnimatedRenderBounds> {
+        self.animated_render_bounds.get(&node_id)
+    }
+
+    /// Check if any visual animations are currently active
+    pub fn has_active_visual_animations(&self) -> bool {
+        self.visual_animations.values().any(|a| a.is_animating())
+    }
+
+    /// Check if a specific node has an active visual animation
+    pub fn is_visual_animating(&self, node_id: LayoutNodeId) -> bool {
+        // Find the key for this node (reverse lookup)
+        self.visual_animation_key_to_node
+            .iter()
+            .find(|(_, &n)| n == node_id)
+            .and_then(|(key, _)| self.visual_animations.get(key))
+            .map(|a| a.is_animating())
+            .unwrap_or(false)
     }
 
     // =========================================================================

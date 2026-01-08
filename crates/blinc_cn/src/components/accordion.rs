@@ -38,7 +38,7 @@ use blinc_core::context_state::BlincContextState;
 use blinc_core::{use_state_keyed, SignalId, State};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
-use blinc_layout::layout_animation::LayoutAnimationConfig;
+// LayoutAnimationConfig is no longer used - using new VisualAnimationConfig system
 use blinc_layout::motion::{motion, SharedAnimatedValue};
 use blinc_layout::prelude::*;
 use blinc_layout::render_state::get_global_scheduler;
@@ -91,6 +91,12 @@ impl ElementBuilder for Accordion {
     fn layout_style(&self) -> Option<&taffy::Style> {
         self.inner.layout_style()
     }
+
+    fn visual_animation_config(
+        &self,
+    ) -> Option<blinc_layout::visual_animation::VisualAnimationConfig> {
+        self.inner.visual_animation_config()
+    }
 }
 
 /// Content builder function type (cloneable via Arc)
@@ -142,19 +148,6 @@ impl AccordionBuilder {
     /// Get or build the accordion
     fn get_or_build(&self) -> &Accordion {
         self.built.get_or_init(|| self.build_component())
-        // self.built.get_or_init(|| {
-        //     let theme = ThemeState::get();
-
-        //     // Build container - we can't move items out, so build from scratch
-        //     // This is a limitation - the builder should be consumed via build_component()
-        //     let inner = div()
-        //         .flex_col()
-        //         .w_full()
-        //         .rounded(theme.radius(RadiusToken::Md))
-        //         .border(1.0, theme.color(ColorToken::Border));
-
-        //     Accordion { inner }
-        // })
     }
 
     /// Set to multi-open mode (multiple sections can be open at once)
@@ -248,6 +241,9 @@ impl AccordionBuilder {
         let key_for_container = format!("{}_container", self.instance_key.get());
         let container_state_handle = use_shared_state_with(&key_for_container, ());
 
+        // Clone for use inside the closure
+        let anim_key_for_container = key_for_container.clone();
+
         let item_count = items_with_state.len();
         let mode = self.mode;
 
@@ -255,24 +251,26 @@ impl AccordionBuilder {
         let all_item_states: Vec<AccordionItemState> =
             items_with_state.iter().map(|(_, s)| s.clone()).collect();
 
-        let content_key = format!("{}_content", key_for_container);
-
         // Build the entire accordion as a single Stateful that reacts to ALL item open states
         let accordion_stateful = Stateful::with_shared_state(container_state_handle)
             .deps(&all_signal_ids)
             .on_state(move |_state: &(), container: &mut Div| {
+                // Outer container animates height so border follows children expansion
                 let mut content = div()
-                    .animate_layout(
-                        LayoutAnimationConfig::height()
-                            .with_key(&content_key)
-                            .snappy(),
-                    )
                     .flex_col()
                     .w_full()
+                    .flex_shrink()
                     .rounded(radius)
                     .shadow_md()
                     .bg(theme.color(ColorToken::SurfaceElevated))
-                    .border(1.5, border_color);
+                    .border(1.5, border_color)
+                    .overflow_clip()
+                    .animate_bounds(
+                        blinc_layout::visual_animation::VisualAnimationConfig::height()
+                            .with_key(&anim_key_for_container)
+                            .clip_to_animated()
+                            .gentle(),
+                    );
 
                 for (index, (item, item_state)) in items_with_state.iter().enumerate() {
                     let is_open = item_state.is_open.clone();
@@ -337,67 +335,82 @@ impl AccordionBuilder {
                         });
 
                     // Trigger always has consistent padding
+                    // Note: No position animation on trigger - it doesn't move relative to item_div.
+                    // The item_div itself animates position within the container.
                     trigger = trigger.padding_y(Length::Px(16.0));
 
                     // Structure: item_wrapper contains trigger (always visible) + collapsible content
                     // Only the collapsible content area animates, keeping trigger always visible
                     let anim_key = format!("accordion-content-{}", item_key);
 
-                    // Build the collapsible content area with layout animation
-                    let collapsible_content = if section_is_open {
-                        div()
-                            .bg(theme.color(ColorToken::Background))
-                            .flex_col()
-                            .w_full()
-                            .py(2.0)
-                            .px(1.0)
-                            .overflow_clip()
-                            .animate_layout(
-                                LayoutAnimationConfig::all().with_key(anim_key).snappy(),
-                            )
-                            .child(content_fn())
-                    } else {
-                        // When closed, still render the animated container but empty
-                        // This allows height animation from 0 to content height
-                        div()
-                            .flex_col()
-                            .w_full()
-                            .py(0.0)
-                            .bg(theme.color(ColorToken::Background))
-                            // .border(1.0, border_color)
-                            .h(0.0) // Collapsed height
-                            .overflow_clip()
-                            .animate_layout(
-                                LayoutAnimationConfig::all().with_key(anim_key).snappy(),
-                            )
-                    };
-
-                    let item_wrapper_key = format!("accordion-item-wrapper-{}", item_key);
-                    // Item wrapper: trigger (always visible) + collapsible content
-                    let item_div = div()
-                        .animate_layout(
-                            LayoutAnimationConfig::all()
-                                .with_key(item_wrapper_key)
-                                .snappy(),
-                        )
+                    // Build the collapsible content area with FLIP-style visual animation
+                    // ALWAYS render content - during collapse, the content is visible while
+                    // the animated height shrinks. overflow_clip() hides overflow during animation.
+                    //
+                    // Using animate_bounds() (new system) instead of animate_layout() (old system):
+                    // - Layout runs once with final positions (taffy is read-only)
+                    // - Animation tracks visual offsets from layout position
+                    // - Parent offsets propagate to children hierarchically
+                    // Content animates HEIGHT only - position is handled by parent item_div
+                    // clip_to_animated ensures content clips to shrinking bounds during collapse
+                    //
+                    // IMPORTANT: Content must ALWAYS be rendered for collapse animation to work.
+                    // If content is conditionally removed, there's nothing to show during collapse.
+                    // The content is always present but clipped by overflow_clip and animate_bounds.
+                    // Padding is only applied when open to avoid gaps when collapsed.
+                    let collapsible_content = div()
                         .flex_col()
                         .w_full()
+                        .bg(theme.color(ColorToken::Background))
+                        .overflow_clip()
+                        .animate_bounds(
+                            blinc_layout::visual_animation::VisualAnimationConfig::height()
+                                .with_key(&anim_key)
+                                .clip_to_animated()
+                                .gentle(),
+                        )
+                        // Always render content so collapse animation has something to clip
+                        .child(content_fn())
+                        // Only add padding when open (padding adds to size even with h(0))
+                        .when(section_is_open, |d| d.py(2.0).px(1.0))
+                        // Set explicit height to 0 when collapsed - content is clipped
+                        .when(!section_is_open, |d| d.w_full().h(0.0).px(1.0));
+
+                    // Item wrapper: trigger (always visible) + collapsible content
+                    // Both item_div and separators animate position for fluid transitions
+                    let item_div_key = format!("accordion-item-{}", item_key);
+                    let item_div = div()
+                        .flex_col()
+                        .w_full()
+                        .animate_bounds(
+                            blinc_layout::visual_animation::VisualAnimationConfig::position()
+                                .with_key(&item_div_key)
+                                .gentle(),
+                        )
                         .child(trigger)
                         .child(collapsible_content);
 
                     content = content.child(item_div);
 
                     // Add separator between items (not after last)
+                    // Separator also animates position for fluid transitions
                     if index < item_count - 1 {
-                        content = content.child(hr_with_config(HrConfig {
-                            color: border_color,
-                            thickness: 1.0,
-                            margin_y: 0.0,
-                        }));
+                        let separator_key = format!("accordion-sep-{}", item_key);
+                        content = content.child(
+                            div()
+                                .w_full()
+                                .h(1.0)
+                                .bg(border_color)
+                                .animate_bounds(
+                                    blinc_layout::visual_animation::VisualAnimationConfig::position()
+                                        .with_key(&separator_key)
+                                        .gentle(),
+                                ),
+                        );
                     }
                 }
 
-                container.set_child(content);
+                container.merge(content);
             });
 
         Accordion {
@@ -431,6 +444,12 @@ impl ElementBuilder for AccordionBuilder {
 
     fn layout_style(&self) -> Option<&taffy::Style> {
         self.get_or_build().layout_style()
+    }
+
+    fn visual_animation_config(
+        &self,
+    ) -> Option<blinc_layout::visual_animation::VisualAnimationConfig> {
+        self.get_or_build().visual_animation_config()
     }
 }
 

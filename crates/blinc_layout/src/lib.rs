@@ -34,7 +34,7 @@ pub mod diff;
 pub mod div;
 pub mod element;
 
-// Layout animation system (FLIP-style bounds animation)
+// Layout animation systems
 pub mod element_style;
 pub mod event_handler;
 pub mod event_router;
@@ -42,6 +42,7 @@ pub mod image;
 pub mod interactive;
 pub mod layout_animation;
 pub mod motion;
+pub mod visual_animation;
 pub mod render_state;
 pub mod renderer;
 pub mod rich_text;

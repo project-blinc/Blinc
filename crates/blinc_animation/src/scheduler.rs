@@ -645,6 +645,17 @@ impl SchedulerHandle {
             .and_then(|inner| inner.lock().unwrap().springs.get(id).map(|s| s.value()))
     }
 
+    /// Check if a spring has settled (at rest at target)
+    ///
+    /// Returns `true` if the spring exists and has settled, or if the spring
+    /// doesn't exist (considered settled since there's nothing animating).
+    pub fn is_spring_settled(&self, id: SpringId) -> bool {
+        self.inner
+            .upgrade()
+            .and_then(|inner| inner.lock().unwrap().springs.get(id).map(|s| s.is_settled()))
+            .unwrap_or(true) // If spring gone, consider settled
+    }
+
     /// Remove a spring
     pub fn remove_spring(&self, id: SpringId) {
         if let Some(inner) = self.inner.upgrade() {
@@ -925,13 +936,25 @@ impl AnimatedValue {
     }
 
     /// Check if currently animating
+    ///
+    /// Returns `true` only while the spring is actively moving toward its target.
+    /// Once the spring has settled (reached target with near-zero velocity), this
+    /// returns `false`.
     pub fn is_animating(&self) -> bool {
         if let Some(id) = self.spring_id {
-            // Spring exists but may have been removed by scheduler
-            self.handle.get_spring_value(id).is_some()
+            // Check actual settled state, not just existence
+            !self.handle.is_spring_settled(id)
         } else {
             false
         }
+    }
+
+    /// Snap immediately to the target value, stopping any active animation
+    ///
+    /// This removes the spring entirely and sets the current value to the target.
+    /// Useful for immediately completing an animation.
+    pub fn snap_to_target(&mut self) {
+        self.set_immediate(self.target);
     }
 
     /// Get the current target value

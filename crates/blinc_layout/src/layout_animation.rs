@@ -37,10 +37,19 @@ use blinc_animation::{AnimatedValue, SchedulerHandle, SpringConfig};
 use crate::element::ElementBounds;
 
 // ============================================================================
-// Configuration
+// Configuration (DEPRECATED)
 // ============================================================================
 
 /// Configuration for which layout properties to animate
+///
+/// # Deprecated
+///
+/// Use [`VisualAnimationConfig`](crate::visual_animation::VisualAnimationConfig) instead.
+/// The new system uses FLIP-style animations that never modify the layout tree.
+#[deprecated(
+    since = "0.3.0",
+    note = "Use VisualAnimationConfig from visual_animation module. The old system modifies taffy which causes issues."
+)]
 #[derive(Clone, Debug)]
 pub struct LayoutAnimationConfig {
     /// Stable key for tracking this animation across rebuilds
@@ -411,6 +420,25 @@ impl LayoutAnimationState {
             // Use the larger of current animated or target for layout
             width: current.width.max(self.end_bounds.width),
             height: current.height.max(self.end_bounds.height),
+        }
+    }
+
+    /// Snap all springs to their target values, immediately completing the animation
+    ///
+    /// This is useful for immediately finishing an animation without waiting for
+    /// the springs to settle naturally.
+    pub fn snap_to_target(&mut self) {
+        if let Some(ref mut anim) = self.height_anim {
+            anim.snap_to_target();
+        }
+        if let Some(ref mut anim) = self.width_anim {
+            anim.snap_to_target();
+        }
+        if let Some(ref mut anim) = self.x_anim {
+            anim.snap_to_target();
+        }
+        if let Some(ref mut anim) = self.y_anim {
+            anim.snap_to_target();
         }
     }
 }
