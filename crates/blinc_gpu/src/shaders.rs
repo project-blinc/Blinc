@@ -1820,6 +1820,14 @@ struct LayerUniforms {
     opacity: f32,
     // Blend mode (see constants above)
     blend_mode: u32,
+    // Clip bounds (x, y, width, height) in pixels
+    clip_bounds: vec4<f32>,
+    // Clip corner radii (top-left, top-right, bottom-right, bottom-left)
+    clip_radius: vec4<f32>,
+    // Clip type: 0=none, 1=rect with optional rounded corners
+    clip_type: u32,
+    // Padding
+    _pad: vec3<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: LayerUniforms;
@@ -1829,6 +1837,35 @@ struct LayerUniforms {
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) uv: vec2<f32>,
+    @location(1) frag_pos: vec2<f32>,  // Fragment position in viewport pixels
+}
+
+// SDF for rounded rectangle clipping
+fn sd_rounded_rect_clip(p: vec2<f32>, rect: vec4<f32>, radii: vec4<f32>) -> f32 {
+    // rect: x, y, width, height
+    // radii: top-left, top-right, bottom-right, bottom-left
+    let center = rect.xy + rect.zw * 0.5;
+    let half_size = rect.zw * 0.5;
+    let q = abs(p - center) - half_size;
+
+    // Select corner radius based on quadrant
+    var r: f32;
+    if (p.x < center.x) {
+        if (p.y < center.y) {
+            r = radii.x;  // top-left
+        } else {
+            r = radii.w;  // bottom-left
+        }
+    } else {
+        if (p.y < center.y) {
+            r = radii.y;  // top-right
+        } else {
+            r = radii.z;  // bottom-right
+        }
+    }
+
+    let adjusted_q = q + r;
+    return length(max(adjusted_q, vec2<f32>(0.0))) + min(max(adjusted_q.x, adjusted_q.y), 0.0) - r;
 }
 
 // Full-screen quad vertices
@@ -1858,6 +1895,7 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     var out: VertexOutput;
     out.position = vec4<f32>(ndc.x, -ndc.y, 0.0, 1.0);  // Flip Y for wgpu
     out.uv = uv;
+    out.frag_pos = dest_pos;  // Pass fragment position in viewport pixels
     return out;
 }
 
@@ -1994,11 +2032,26 @@ fn apply_blend_mode(src: vec3<f32>, dst: vec3<f32>, mode: u32) -> vec3<f32> {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    // Apply clip if enabled
+    if (uniforms.clip_type == 1u) {
+        let dist = sd_rounded_rect_clip(in.frag_pos, uniforms.clip_bounds, uniforms.clip_radius);
+        if (dist > 0.5) {
+            discard;
+        }
+    }
+
     // Sample layer texture
     let src = textureSample(layer_texture, layer_sampler, in.uv);
 
     // Apply opacity
-    let src_alpha = src.a * uniforms.opacity;
+    var src_alpha = src.a * uniforms.opacity;
+
+    // Apply anti-aliased clip edge
+    if (uniforms.clip_type == 1u) {
+        let dist = sd_rounded_rect_clip(in.frag_pos, uniforms.clip_bounds, uniforms.clip_radius);
+        let clip_alpha = 1.0 - smoothstep(-0.5, 0.5, dist);
+        src_alpha *= clip_alpha;
+    }
 
     // Early out for fully transparent pixels
     if (src_alpha < 0.001) {
@@ -2037,6 +2090,12 @@ struct BlurUniforms {
     radius: f32,
     // Current iteration (0, 1, 2, ...) - affects sample offset
     iteration: u32,
+    // Whether to blur alpha (1) or preserve original alpha (0)
+    blur_alpha: u32,
+    // Padding for 16-byte alignment
+    _pad1: f32,
+    _pad2: f32,
+    _pad3: f32,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: BlurUniforms;
@@ -2077,38 +2136,98 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 
 @fragment
 fn fs_kawase_blur(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Calculate sample offset based on iteration
-    // Each iteration samples further from center
-    let offset = uniforms.radius * (f32(uniforms.iteration) + 0.5);
+    // Use small fixed offsets to preserve shape during multi-pass blur
+    // Larger radii use more passes rather than larger offsets
+    // This prevents corner fill-in by spreading gradually
+    let base_offset = f32(uniforms.iteration) + 0.5;
+    // Fixed small multiplier - more passes will accumulate the blur
+    let offset = base_offset * 1.2;
     let pixel_offset = offset * uniforms.texel_size;
 
-    // Kawase blur: sample 5 points in X pattern
-    var color = textureSample(input_texture, input_sampler, in.uv);
-    color += textureSample(input_texture, input_sampler, in.uv + vec2<f32>(-pixel_offset.x, -pixel_offset.y));
-    color += textureSample(input_texture, input_sampler, in.uv + vec2<f32>( pixel_offset.x, -pixel_offset.y));
-    color += textureSample(input_texture, input_sampler, in.uv + vec2<f32>(-pixel_offset.x,  pixel_offset.y));
-    color += textureSample(input_texture, input_sampler, in.uv + vec2<f32>( pixel_offset.x,  pixel_offset.y));
+    // Sample in + pattern (up, down, left, right) instead of X pattern
+    let uv_up = clamp(in.uv + vec2<f32>(0.0, -pixel_offset.y), vec2<f32>(0.0), vec2<f32>(1.0));
+    let uv_down = clamp(in.uv + vec2<f32>(0.0, pixel_offset.y), vec2<f32>(0.0), vec2<f32>(1.0));
+    let uv_left = clamp(in.uv + vec2<f32>(-pixel_offset.x, 0.0), vec2<f32>(0.0), vec2<f32>(1.0));
+    let uv_right = clamp(in.uv + vec2<f32>(pixel_offset.x, 0.0), vec2<f32>(0.0), vec2<f32>(1.0));
 
-    return color / 5.0;
+    // Sample 5 points in + pattern (center, up, down, left, right)
+    let s0 = textureSample(input_texture, input_sampler, in.uv);
+    let s1 = textureSample(input_texture, input_sampler, uv_up);
+    let s2 = textureSample(input_texture, input_sampler, uv_down);
+    let s3 = textureSample(input_texture, input_sampler, uv_left);
+    let s4 = textureSample(input_texture, input_sampler, uv_right);
+
+    if (uniforms.blur_alpha == 0u) {
+        // Element blur mode: preserve alpha, blur RGB only with alpha weighting
+        // This preserves corner radius while preventing darkening
+        let total_alpha = s0.a + s1.a + s2.a + s3.a + s4.a;
+
+        if (total_alpha < 0.001) {
+            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+
+        // Weight RGB by alpha to prevent black transparent pixels from darkening
+        let weighted_rgb = s0.rgb * s0.a + s1.rgb * s1.a + s2.rgb * s2.a + s3.rgb * s3.a + s4.rgb * s4.a;
+        let avg_rgb = weighted_rgb / total_alpha;
+
+        // Preserve center sample's alpha to maintain corner radius
+        return vec4<f32>(avg_rgb, s0.a);
+    } else {
+        // Shadow blur mode: only blur alpha for shadow shape
+        // Output white RGB since drop shadow shader uses uniform color, not texture RGB
+        let total_alpha = s0.a + s1.a + s2.a + s3.a + s4.a;
+        let avg_alpha = total_alpha / 5.0;
+
+        return vec4<f32>(1.0, 1.0, 1.0, avg_alpha);
+    }
 }
 
 // Single-pass box blur for low quality mode
 @fragment
 fn fs_box_blur(in: VertexOutput) -> @location(0) vec4<f32> {
     let radius = i32(uniforms.radius);
-    var color = vec4<f32>(0.0);
-    var samples = 0.0;
+    let center = textureSample(input_texture, input_sampler, in.uv);
 
-    // Sample in a square pattern
-    for (var x = -radius; x <= radius; x++) {
-        for (var y = -radius; y <= radius; y++) {
-            let offset = vec2<f32>(f32(x), f32(y)) * uniforms.texel_size;
-            color += textureSample(input_texture, input_sampler, in.uv + offset);
-            samples += 1.0;
+    if (uniforms.blur_alpha == 0u) {
+        // Element blur mode: preserve alpha, blur RGB with alpha weighting
+        var weighted_rgb = vec3<f32>(0.0);
+        var total_alpha = 0.0;
+
+        for (var x = -radius; x <= radius; x++) {
+            for (var y = -radius; y <= radius; y++) {
+                let offset = vec2<f32>(f32(x), f32(y)) * uniforms.texel_size;
+                let sample_uv = clamp(in.uv + offset, vec2<f32>(0.0), vec2<f32>(1.0));
+                let s = textureSample(input_texture, input_sampler, sample_uv);
+                weighted_rgb += s.rgb * s.a;
+                total_alpha += s.a;
+            }
         }
-    }
 
-    return color / samples;
+        if (total_alpha < 0.001) {
+            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+
+        let avg_rgb = weighted_rgb / total_alpha;
+        return vec4<f32>(avg_rgb, center.a);
+    } else {
+        // Shadow blur mode: only blur alpha for shadow shape
+        // Output white RGB since drop shadow shader uses uniform color, not texture RGB
+        var total_alpha = 0.0;
+        var samples = 0.0;
+
+        for (var x = -radius; x <= radius; x++) {
+            for (var y = -radius; y <= radius; y++) {
+                let offset = vec2<f32>(f32(x), f32(y)) * uniforms.texel_size;
+                let sample_uv = clamp(in.uv + offset, vec2<f32>(0.0), vec2<f32>(1.0));
+                let s = textureSample(input_texture, input_sampler, sample_uv);
+                total_alpha += s.a;
+                samples += 1.0;
+            }
+        }
+
+        let avg_alpha = total_alpha / samples;
+        return vec4<f32>(1.0, 1.0, 1.0, avg_alpha);
+    }
 }
 "#;
 
@@ -2190,29 +2309,32 @@ fn fs_color_matrix(in: VertexOutput) -> @location(0) vec4<f32> {
 }
 "#;
 
-/// Drop shadow shader for layer effects
+/// Shadow colorize shader for layer effects
 ///
-/// Renders a blurred, offset silhouette of the layer content.
+/// Takes a pre-blurred texture and colorizes its alpha channel to create shadow.
+/// This is used after Kawase blur for smooth shadows at any radius.
 pub const DROP_SHADOW_SHADER: &str = r#"
 // ============================================================================
-// Drop Shadow Shader (Layer Effects)
+// Shadow Colorize Shader (Layer Effects)
 // ============================================================================
 //
-// Creates a shadow by:
-// 1. Using the alpha channel of the source as the shadow shape
-// 2. Applying blur
-// 3. Offsetting and coloring
+// Takes a pre-blurred texture and:
+// 1. Samples the blurred alpha at offset position for shadow shape
+// 2. Colorizes with shadow color
+// 3. Composites shadow behind original content
+//
+// This shader expects the input to already be blurred using Kawase blur passes.
 
 struct DropShadowUniforms {
     // Shadow offset in pixels
     offset: vec2<f32>,
-    // Blur radius
+    // Blur radius (stored but not used - blur is pre-applied)
     blur_radius: f32,
     // Spread (expand/contract)
     spread: f32,
     // Shadow color (RGBA)
     color: vec4<f32>,
-    // Texture size for blur
+    // Texture size for offset calculation
     texel_size: vec2<f32>,
     // Padding
     _pad: vec2<f32>,
@@ -2221,6 +2343,8 @@ struct DropShadowUniforms {
 @group(0) @binding(0) var<uniform> uniforms: DropShadowUniforms;
 @group(0) @binding(1) var input_texture: texture_2d<f32>;
 @group(0) @binding(2) var input_sampler: sampler;
+// Original (unblurred) texture for compositing
+@group(0) @binding(3) var original_texture: texture_2d<f32>;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -2254,38 +2378,82 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     return out;
 }
 
-@fragment
-fn fs_drop_shadow(in: VertexOutput) -> @location(0) vec4<f32> {
-    // Sample with offset for shadow position
-    let shadow_uv = in.uv - uniforms.offset * uniforms.texel_size;
+// Calculate minimum distance to an opaque pixel by sampling in a pattern
+// This preserves the shape (including rounded corners) unlike blur-based approaches
+fn sample_min_distance(uv: vec2<f32>, radius: f32, texel_size: vec2<f32>) -> f32 {
+    // Check center first - if opaque, distance is 0
+    let center = textureSample(original_texture, input_sampler, uv);
+    if (center.a > 0.5) {
+        return 0.0;
+    }
 
-    // Simple box blur for shadow
-    var alpha = 0.0;
-    let blur_radius = i32(max(uniforms.blur_radius, 1.0));
-    var samples = 0.0;
+    // Sample in concentric rings to find nearest opaque pixel
+    // Start with small radius and expand - this gives good quality with fewer samples
+    var min_dist = radius + 1.0;
 
-    for (var x = -blur_radius; x <= blur_radius; x++) {
-        for (var y = -blur_radius; y <= blur_radius; y++) {
-            let offset = vec2<f32>(f32(x), f32(y)) * uniforms.texel_size;
-            let sample_uv = shadow_uv + offset;
+    // Sample at multiple distances and angles
+    let num_angles = 16;
+    let num_rings = 8;
 
-            // Clamp UV to prevent sampling outside texture
-            if (sample_uv.x >= 0.0 && sample_uv.x <= 1.0 && sample_uv.y >= 0.0 && sample_uv.y <= 1.0) {
-                alpha += textureSample(input_texture, input_sampler, sample_uv).a;
+    for (var ring = 1; ring <= num_rings; ring++) {
+        let dist = (f32(ring) / f32(num_rings)) * radius;
+        let pixel_dist = dist;
+
+        for (var i = 0; i < num_angles; i++) {
+            let angle = f32(i) * 6.28318530718 / f32(num_angles);
+            let offset = vec2<f32>(cos(angle), sin(angle)) * pixel_dist * texel_size;
+            let sample_uv = clamp(uv + offset, vec2<f32>(0.0), vec2<f32>(1.0));
+            let s = textureSample(original_texture, input_sampler, sample_uv);
+
+            if (s.a > 0.5) {
+                min_dist = min(min_dist, dist);
             }
-            samples += 1.0;
+        }
+
+        // Early exit if we found an opaque pixel in this ring
+        if (min_dist <= dist) {
+            break;
         }
     }
 
-    alpha = alpha / samples;
+    return min_dist;
+}
 
-    // Apply spread (threshold adjustment)
+@fragment
+fn fs_drop_shadow(in: VertexOutput) -> @location(0) vec4<f32> {
+    // Calculate shadow UV with offset
+    let shadow_uv = clamp(in.uv - uniforms.offset * uniforms.texel_size, vec2<f32>(0.0), vec2<f32>(1.0));
+
+    // Find minimum distance to the original shape
+    let dist = sample_min_distance(shadow_uv, uniforms.blur_radius, uniforms.texel_size);
+
+    // Convert distance to alpha using smooth falloff
+    // At distance 0, alpha = 1. At distance = blur_radius, alpha ≈ 0
+    var alpha = 1.0 - smoothstep(0.0, uniforms.blur_radius, dist);
+
+    // Apply spread (expand/contract the shape)
     if (uniforms.spread != 0.0) {
-        let threshold = 0.5 - uniforms.spread * 0.5;
-        alpha = smoothstep(threshold, threshold + 0.1, alpha);
+        // Positive spread = larger shadow, negative = smaller
+        let adjusted_dist = dist - uniforms.spread;
+        alpha = 1.0 - smoothstep(0.0, uniforms.blur_radius, max(adjusted_dist, 0.0));
     }
 
-    // Return shadow color with computed alpha
-    return vec4<f32>(uniforms.color.rgb, uniforms.color.a * alpha);
+    // Shadow color with computed alpha
+    let shadow_a = uniforms.color.a * alpha;
+    let shadow_rgb = uniforms.color.rgb;
+
+    // Sample original (unblurred) content at current position
+    let original = textureSample(original_texture, input_sampler, in.uv);
+
+    // Composite shadow behind original using porter-duff "over" for non-premultiplied colors
+    let result_a = original.a + shadow_a * (1.0 - original.a);
+
+    if (result_a < 0.001) {
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    }
+
+    let result_rgb = (original.rgb * original.a + shadow_rgb * shadow_a * (1.0 - original.a)) / result_a;
+
+    return vec4<f32>(result_rgb, result_a);
 }
 "#;

@@ -44,22 +44,19 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
         .flex_col()
         .child(header())
         .child(
-            scroll()
-                .w_full()
-                .h(ctx.height - 60.0)
-                .child(
-                    div()
-                        .w_full()
-                        .p(24.0)
-                        .flex_col()
-                        .gap(32.0)
-                        .child(blur_section())
-                        .child(drop_shadow_section())
-                        .child(glow_section())
-                        .child(color_effects_section())
-                        .child(backdrop_blur_section())
-                        .child(combined_effects_section()),
-                ),
+            scroll().w_full().h(ctx.height - 60.0).child(
+                div()
+                    .w_full()
+                    .p(24.0)
+                    .flex_col()
+                    .gap(32.0)
+                    .child(blur_section())
+                    .child(drop_shadow_section())
+                    .child(glow_section())
+                    .child(color_effects_section())
+                    // .child(backdrop_blur_section())
+                    .child(combined_effects_section()),
+            ),
         )
 }
 
@@ -141,10 +138,17 @@ fn blur_section() -> Div {
             div()
                 .flex_row()
                 .flex_wrap()
-                .gap(24.0)
+                .gap(10.0)
+                .p(10.0)
+                .background(Brush::Gradient(Gradient::linear(
+                    Point::new(0.0, 0.0),
+                    Point::new(200.0, 200.0),
+                    Color::from_hex(0xf97316),
+                    Color::from_hex(0xec4899),
+                )))
                 // Original
                 .child(effect_card("No Blur"))
-                // Low blur
+                // Low blur - gradient background to show blur effect
                 .child(
                     div()
                         .flex_col()
@@ -155,8 +159,8 @@ fn blur_section() -> Div {
                                 .w(120.0)
                                 .h(120.0)
                                 .rounded(12.0)
-                                .bg(Color::from_hex(0x3b82f6))
                                 .blur(4.0)
+                                .bg(Color::BLUE.with_alpha(0.3))
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -180,7 +184,7 @@ fn blur_section() -> Div {
                                 .w(120.0)
                                 .h(120.0)
                                 .rounded(12.0)
-                                .bg(Color::from_hex(0x3b82f6))
+                                .bg(Color::WHITE.with_alpha(0.3))
                                 .blur(8.0)
                                 .flex()
                                 .items_center()
@@ -205,8 +209,8 @@ fn blur_section() -> Div {
                                 .w(120.0)
                                 .h(120.0)
                                 .rounded(12.0)
-                                .bg(Color::from_hex(0x3b82f6))
                                 .blur(16.0)
+                                .bg(Color::WHITE.with_alpha(0.3))
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -230,9 +234,9 @@ fn blur_section() -> Div {
                                 .w(120.0)
                                 .h(120.0)
                                 .rounded(12.0)
-                                .bg(Color::from_hex(0x3b82f6))
                                 .blur_with_quality(24.0, BlurQuality::High)
                                 .flex()
+                                .bg(Color::WHITE.with_alpha(0.3))
                                 .items_center()
                                 .justify_center()
                                 .child(
@@ -356,7 +360,12 @@ fn drop_shadow_section() -> Div {
                                 .h(120.0)
                                 .rounded(12.0)
                                 .bg(Color::from_hex(0x3b82f6))
-                                .drop_shadow_effect(4.0, 4.0, 12.0, Color::rgba(0.23, 0.51, 0.96, 0.5))
+                                .drop_shadow_effect(
+                                    4.0,
+                                    4.0,
+                                    12.0,
+                                    Color::rgba(0.23, 0.51, 0.96, 0.5),
+                                )
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -394,7 +403,7 @@ fn glow_section() -> Div {
                 .gap(24.0)
                 // No glow
                 .child(effect_card("No Glow"))
-                // Subtle glow
+                // Subtle glow (blur=8, range=0, opacity=0.5)
                 .child(
                     div()
                         .flex_col()
@@ -406,7 +415,7 @@ fn glow_section() -> Div {
                                 .h(120.0)
                                 .rounded(12.0)
                                 .bg(Color::from_hex(0x3b82f6))
-                                .glow_effect(8.0, Color::from_hex(0x3b82f6), 0.5)
+                                .glow_effect(Color::from_hex(0x3b82f6), 8.0, 0.0, 0.5)
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -419,7 +428,7 @@ fn glow_section() -> Div {
                         )
                         .child(text("Subtle").size(12.0).color(text_secondary)),
                 )
-                // Medium glow
+                // Medium glow (blur=16, range=0, opacity=0.7)
                 .child(
                     div()
                         .flex_col()
@@ -431,7 +440,7 @@ fn glow_section() -> Div {
                                 .h(120.0)
                                 .rounded(12.0)
                                 .bg(Color::from_hex(0x3b82f6))
-                                .glow_effect(16.0, Color::from_hex(0x3b82f6), 0.7)
+                                .glow_effect(Color::from_hex(0x3b82f6), 16.0, 0.0, 0.7)
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -444,7 +453,7 @@ fn glow_section() -> Div {
                         )
                         .child(text("Medium").size(12.0).color(text_secondary)),
                 )
-                // Intense glow
+                // Intense glow (blur=24, range=0, opacity=1.0)
                 .child(
                     div()
                         .flex_col()
@@ -456,7 +465,7 @@ fn glow_section() -> Div {
                                 .h(120.0)
                                 .rounded(12.0)
                                 .bg(Color::from_hex(0x3b82f6))
-                                .glow_effect(24.0, Color::from_hex(0x3b82f6), 1.0)
+                                .glow_effect(Color::from_hex(0x3b82f6), 24.0, 0.0, 1.0)
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -469,7 +478,7 @@ fn glow_section() -> Div {
                         )
                         .child(text("Intense").size(12.0).color(text_secondary)),
                 )
-                // Different color glow
+                // Different color glow (pink)
                 .child(
                     div()
                         .flex_col()
@@ -481,7 +490,7 @@ fn glow_section() -> Div {
                                 .h(120.0)
                                 .rounded(12.0)
                                 .bg(Color::from_hex(0x3b82f6))
-                                .glow_effect(16.0, Color::from_hex(0xf43f5e), 0.8)
+                                .glow_effect(Color::from_hex(0xf43f5e), 16.0, 0.0, 0.8)
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -493,6 +502,31 @@ fn glow_section() -> Div {
                                 ),
                         )
                         .child(text("Pink Glow").size(12.0).color(text_secondary)),
+                )
+                // Extended range glow (blur=16, range=12, opacity=1.0)
+                .child(
+                    div()
+                        .flex_col()
+                        .items_center()
+                        .gap(8.0)
+                        .child(
+                            div()
+                                .w(120.0)
+                                .h(120.0)
+                                .rounded(12.0)
+                                .bg(Color::from_hex(0x3b82f6))
+                                .glow_effect(Color::from_hex(0x10b981), 16.0, 12.0, 1.0)
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(
+                                    text("Blinc")
+                                        .size(20.0)
+                                        .weight(FontWeight::Bold)
+                                        .color(Color::WHITE),
+                                ),
+                        )
+                        .child(text("Extended Range").size(12.0).color(text_secondary)),
                 ),
         )
 }
@@ -706,16 +740,12 @@ fn backdrop_blur_section() -> Div {
                         .relative()
                         .child(
                             // Some content behind
-                            div()
-                                .absolute()
-                                .top(40.0)
-                                .left(40.0)
-                                .child(
-                                    text("Content Behind Glass")
-                                        .size(24.0)
-                                        .weight(FontWeight::Bold)
-                                        .color(Color::WHITE),
-                                ),
+                            div().absolute().top(40.0).left(40.0).child(
+                                text("Content Behind Glass")
+                                    .size(24.0)
+                                    .weight(FontWeight::Bold)
+                                    .color(Color::WHITE),
+                            ),
                         )
                         .child(
                             // Glass panel
@@ -753,16 +783,12 @@ fn backdrop_blur_section() -> Div {
                         )))
                         .relative()
                         .child(
-                            div()
-                                .absolute()
-                                .top(30.0)
-                                .left(30.0)
-                                .child(
-                                    text("Radial BG")
-                                        .size(20.0)
-                                        .weight(FontWeight::Bold)
-                                        .color(Color::WHITE),
-                                ),
+                            div().absolute().top(30.0).left(30.0).child(
+                                text("Radial BG")
+                                    .size(20.0)
+                                    .weight(FontWeight::Bold)
+                                    .color(Color::WHITE),
+                            ),
                         )
                         .child(
                             div()
@@ -883,7 +909,7 @@ fn combined_effects_section() -> Div {
                                 .rounded(12.0)
                                 .bg(Color::from_hex(0x10b981))
                                 .sepia()
-                                .glow_effect(12.0, Color::from_hex(0xa3852f), 0.6)
+                                .glow_effect(Color::from_hex(0xa3852f),4.0, 5.0,  0.6)
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -910,7 +936,12 @@ fn combined_effects_section() -> Div {
                                 .bg(Color::from_hex(0xec4899))
                                 .saturation(1.5)
                                 .contrast(1.2)
-                                .drop_shadow_effect(3.0, 3.0, 10.0, Color::rgba(0.93, 0.28, 0.6, 0.5))
+                                .drop_shadow_effect(
+                                    3.0,
+                                    3.0,
+                                    10.0,
+                                    Color::rgba(0.93, 0.28, 0.6, 0.5),
+                                )
                                 .flex()
                                 .items_center()
                                 .justify_center()

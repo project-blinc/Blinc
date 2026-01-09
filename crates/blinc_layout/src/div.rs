@@ -2458,10 +2458,16 @@ impl Div {
     /// div()
     ///     .w(100.0).h(100.0)
     ///     .bg(Color::BLUE)
-    ///     .glow_effect(12.0, Color::CYAN, 1.5)
+    ///     .glow_effect(Color::CYAN, 8.0, 4.0, 0.8)
     /// ```
-    pub fn glow_effect(self, radius: f32, color: Color, intensity: f32) -> Self {
-        self.layer_effect(LayerEffect::glow(radius, color, intensity))
+    ///
+    /// ## Parameters
+    /// - `color`: Glow color
+    /// - `blur`: Blur softness (higher = softer edges), typically 4-24
+    /// - `range`: How far the glow extends from the element, typically 0-20
+    /// - `opacity`: Glow visibility (0.0 to 1.0)
+    pub fn glow_effect(self, color: Color, blur: f32, range: f32, opacity: f32) -> Self {
+        self.layer_effect(LayerEffect::glow(color, blur, range, opacity))
     }
 
     /// Apply grayscale filter

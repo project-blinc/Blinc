@@ -743,7 +743,11 @@ pub struct CompositeUniforms {
 /// - viewport_size: `vec2<f32>` (8 bytes)
 /// - opacity: f32 (4 bytes)
 /// - blend_mode: u32 (4 bytes)
-/// Total: 48 bytes
+/// - clip_bounds: `vec4<f32>` (16 bytes) - Clip region (x, y, width, height)
+/// - clip_radius: `vec4<f32>` (16 bytes) - Corner radii (tl, tr, br, bl)
+/// - clip_type: u32 (4 bytes) - 0=none, 1=rect
+/// - _pad: 28 bytes (12 bytes alignment + 16 bytes for vec3 stored as vec4)
+/// Total: 112 bytes
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LayerCompositeUniforms {
@@ -757,6 +761,14 @@ pub struct LayerCompositeUniforms {
     pub opacity: f32,
     /// Blend mode (see BlendMode enum)
     pub blend_mode: u32,
+    /// Clip bounds (x, y, width, height) in pixels
+    pub clip_bounds: [f32; 4],
+    /// Clip corner radii (top-left, top-right, bottom-right, bottom-left)
+    pub clip_radius: [f32; 4],
+    /// Clip type: 0=none, 1=rect with optional rounded corners
+    pub clip_type: u32,
+    /// Padding (12 bytes to align vec3 to 16, then 16 bytes for vec3 stored as vec4)
+    pub _pad: [f32; 7],
 }
 
 impl LayerCompositeUniforms {
@@ -775,6 +787,10 @@ impl LayerCompositeUniforms {
             viewport_size: [viewport_size.0, viewport_size.1],
             opacity,
             blend_mode: blend_mode as u32,
+            clip_bounds: [0.0, 0.0, viewport_size.0, viewport_size.1], // No clipping
+            clip_radius: [0.0, 0.0, 0.0, 0.0],
+            clip_type: 0, // No clip
+            _pad: [0.0; 7],
         }
     }
 
@@ -792,7 +808,23 @@ impl LayerCompositeUniforms {
             viewport_size: [viewport_size.0, viewport_size.1],
             opacity,
             blend_mode: blend_mode as u32,
+            clip_bounds: [0.0, 0.0, viewport_size.0, viewport_size.1], // No clipping
+            clip_radius: [0.0, 0.0, 0.0, 0.0],
+            clip_type: 0, // No clip
+            _pad: [0.0; 7],
         }
+    }
+
+    /// Set clip region with optional rounded corners
+    pub fn with_clip(
+        mut self,
+        bounds: [f32; 4],
+        radius: [f32; 4],
+    ) -> Self {
+        self.clip_bounds = bounds;
+        self.clip_radius = radius;
+        self.clip_type = 1;
+        self
     }
 }
 
@@ -875,10 +907,12 @@ impl Default for PathUniforms {
 
 /// Uniforms for Kawase blur shader
 ///
-/// Memory layout (16 bytes total):
+/// Memory layout (32 bytes total, padded to 16-byte alignment):
 /// - texel_size: `vec2<f32>` (8 bytes) - inverse texture size (1/width, 1/height)
 /// - radius: `f32` (4 bytes) - blur radius
 /// - iteration: `u32` (4 bytes) - current pass iteration
+/// - blur_alpha: `u32` (4 bytes) - whether to blur alpha (1) or preserve it (0)
+/// - _pad1, _pad2, _pad3: `f32` (12 bytes) - padding to 32 bytes
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct BlurUniforms {
@@ -888,6 +922,14 @@ pub struct BlurUniforms {
     pub radius: f32,
     /// Current iteration (0, 1, 2, ...) for multi-pass blur
     pub iteration: u32,
+    /// Whether to blur alpha channel (1 = blur alpha, 0 = preserve original alpha)
+    /// Use blur_alpha=0 for element blur (preserves corner radius)
+    /// Use blur_alpha=1 for shadow blur (creates soft edges)
+    pub blur_alpha: u32,
+    /// Padding for 16-byte alignment
+    pub _pad1: f32,
+    pub _pad2: f32,
+    pub _pad3: f32,
 }
 
 /// Uniforms for color matrix shader

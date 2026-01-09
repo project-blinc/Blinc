@@ -1284,7 +1284,7 @@ impl GpuRenderer {
                     },
                     count: None,
                 },
-                // Input texture
+                // Blurred input texture (for shadow alpha)
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
@@ -1300,6 +1300,17 @@ impl GpuRenderer {
                     binding: 2,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                // Original (unblurred) texture (for compositing)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
                     count: None,
                 },
             ],
@@ -1755,6 +1766,14 @@ impl GpuRenderer {
             push_constant_ranges: &[],
         });
 
+        // Blur outputs processed texture data - no blending needed
+        // With blending, (1.0, 1.0, 1.0, 0.5) would become (0.5, 0.5, 0.5, 0.5) = gray!
+        let blur_targets = &[Some(wgpu::ColorTargetState {
+            format: texture_format,
+            blend: None, // No blending - write blur output directly
+            write_mask: wgpu::ColorWrites::ALL,
+        })];
+
         let blur = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Blur Effect Pipeline"),
             layout: Some(&blur_layout),
@@ -1767,7 +1786,7 @@ impl GpuRenderer {
             fragment: Some(wgpu::FragmentState {
                 module: blur_shader,
                 entry_point: Some("fs_kawase_blur"),
-                targets: color_targets,
+                targets: blur_targets,
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
             primitive: effect_primitive_state,
@@ -1784,6 +1803,13 @@ impl GpuRenderer {
             push_constant_ranges: &[],
         });
 
+        // Color matrix outputs transformed texture data - no blending needed
+        let color_matrix_targets = &[Some(wgpu::ColorTargetState {
+            format: texture_format,
+            blend: None, // No blending - write transformed output directly
+            write_mask: wgpu::ColorWrites::ALL,
+        })];
+
         let color_matrix = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Color Matrix Effect Pipeline"),
             layout: Some(&color_matrix_layout),
@@ -1796,7 +1822,7 @@ impl GpuRenderer {
             fragment: Some(wgpu::FragmentState {
                 module: color_matrix_shader,
                 entry_point: Some("fs_color_matrix"),
-                targets: color_targets,
+                targets: color_matrix_targets,
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
             primitive: effect_primitive_state,
@@ -1813,6 +1839,14 @@ impl GpuRenderer {
             push_constant_ranges: &[],
         });
 
+        // Drop shadow outputs final composited result - no blending needed
+        // The shader composites shadow behind original, so we just write directly
+        let drop_shadow_targets = &[Some(wgpu::ColorTargetState {
+            format: texture_format,
+            blend: None, // No blending - shader outputs final result
+            write_mask: wgpu::ColorWrites::ALL,
+        })];
+
         let drop_shadow = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Drop Shadow Effect Pipeline"),
             layout: Some(&drop_shadow_layout),
@@ -1825,7 +1859,7 @@ impl GpuRenderer {
             fragment: Some(wgpu::FragmentState {
                 module: drop_shadow_shader,
                 entry_point: Some("fs_drop_shadow"),
-                targets: color_targets,
+                targets: drop_shadow_targets,
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
             primitive: effect_primitive_state,
@@ -2453,6 +2487,9 @@ impl GpuRenderer {
                 continue;
             }
 
+            // Calculate effect expansion (how much effects extend beyond original bounds)
+            let effect_expansion = Self::calculate_effect_expansion(&config.effects);
+
             // Render layer primitives to a viewport-sized texture
             let layer_texture = self
                 .layer_texture_cache
@@ -2470,12 +2507,22 @@ impl GpuRenderer {
             let effected = self.apply_layer_effects(&layer_texture, &config.effects);
             self.layer_texture_cache.release(layer_texture);
 
-            // Blit only the element's region back to target at correct position
+            // Expand the blit region to include effect expansion (shadows, glow, blur)
+            let expanded_pos = (
+                (layer_pos.0 - effect_expansion.0).max(0.0),
+                (layer_pos.1 - effect_expansion.1).max(0.0),
+            );
+            let expanded_size = (
+                layer_size.0 + effect_expansion.0 + effect_expansion.2,
+                layer_size.1 + effect_expansion.1 + effect_expansion.3,
+            );
+
+            // Blit the expanded region back to target
             self.blit_region_to_target(
                 &effected.view,
                 target,
-                layer_pos,
-                layer_size,
+                expanded_pos,
+                expanded_size,
                 config.opacity,
                 config.blend_mode,
             );
@@ -4607,6 +4654,9 @@ impl GpuRenderer {
     ///
     /// Renders from `input` to `output` using the blur shader with the specified
     /// radius and iteration index.
+    ///
+    /// `blur_alpha`: if true, blurs both RGB and alpha (for soft shadow edges);
+    ///               if false, preserves alpha while blurring RGB (for element blur)
     pub fn apply_blur_pass(
         &mut self,
         input: &wgpu::TextureView,
@@ -4614,6 +4664,7 @@ impl GpuRenderer {
         size: (u32, u32),
         radius: f32,
         iteration: u32,
+        blur_alpha: bool,
     ) {
         use crate::primitives::BlurUniforms;
 
@@ -4621,6 +4672,10 @@ impl GpuRenderer {
             texel_size: [1.0 / size.0 as f32, 1.0 / size.1 as f32],
             radius,
             iteration,
+            blur_alpha: if blur_alpha { 1 } else { 0 },
+            _pad1: 0.0,
+            _pad2: 0.0,
+            _pad3: 0.0,
         };
 
         let uniform_buffer = self
@@ -4685,12 +4740,16 @@ impl GpuRenderer {
     /// Performs multiple blur passes for higher quality blur.
     /// Uses ping-pong rendering between two textures.
     ///
+    /// `blur_alpha`: if true, blurs both RGB and alpha (for soft shadow edges);
+    ///               if false, preserves alpha while blurring RGB (for element blur)
+    ///
     /// Returns the final output texture (caller should release temp textures).
-    pub fn apply_blur(
+    pub fn apply_blur_with_alpha(
         &mut self,
         input: &LayerTexture,
         radius: f32,
         passes: u32,
+        blur_alpha: bool,
     ) -> LayerTexture {
         if passes == 0 {
             // No blur needed, return a copy
@@ -4731,16 +4790,16 @@ impl GpuRenderer {
         let mut temp_b = self.layer_texture_cache.acquire(&self.device, size, false);
 
         // First pass: input -> temp_a
-        self.apply_blur_pass(&input.view, &temp_a.view, size, radius, 0);
+        self.apply_blur_pass(&input.view, &temp_a.view, size, radius, 0, blur_alpha);
 
         // Subsequent passes alternate between temp_a and temp_b
         for i in 1..passes {
             if i % 2 == 1 {
                 // temp_a -> temp_b
-                self.apply_blur_pass(&temp_a.view, &temp_b.view, size, radius, i);
+                self.apply_blur_pass(&temp_a.view, &temp_b.view, size, radius, i, blur_alpha);
             } else {
                 // temp_b -> temp_a
-                self.apply_blur_pass(&temp_b.view, &temp_a.view, size, radius, i);
+                self.apply_blur_pass(&temp_b.view, &temp_a.view, size, radius, i, blur_alpha);
             }
         }
 
@@ -4755,6 +4814,30 @@ impl GpuRenderer {
             self.layer_texture_cache.release(temp_a);
             temp_b
         }
+    }
+
+    /// Apply multi-pass Kawase blur (element blur - preserves alpha)
+    ///
+    /// Convenience wrapper that preserves alpha for element blur effects.
+    pub fn apply_blur(
+        &mut self,
+        input: &LayerTexture,
+        radius: f32,
+        passes: u32,
+    ) -> LayerTexture {
+        self.apply_blur_with_alpha(input, radius, passes, false)
+    }
+
+    /// Apply multi-pass Kawase blur (shadow blur - blurs alpha for soft edges)
+    ///
+    /// Used for drop shadow and glow effects where we need soft alpha falloff.
+    pub fn apply_shadow_blur(
+        &mut self,
+        input: &LayerTexture,
+        radius: f32,
+        passes: u32,
+    ) -> LayerTexture {
+        self.apply_blur_with_alpha(input, radius, passes, true)
     }
 
     /// Apply color matrix transformation
@@ -4830,10 +4913,13 @@ impl GpuRenderer {
 
     /// Apply drop shadow effect
     ///
-    /// Creates a blurred, offset, colored shadow of the input.
+    /// Takes a pre-blurred texture (for shadow shape) and the original texture (for compositing).
+    /// The blurred texture's alpha is used to create the shadow, which is then colored and
+    /// composited behind the original content.
     pub fn apply_drop_shadow(
         &mut self,
-        input: &wgpu::TextureView,
+        blurred_input: &wgpu::TextureView,
+        original_input: &wgpu::TextureView,
         output: &wgpu::TextureView,
         size: (u32, u32),
         offset: (f32, f32),
@@ -4870,11 +4956,15 @@ impl GpuRenderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(input),
+                    resource: wgpu::BindingResource::TextureView(blurred_input),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::Sampler(&self.path_image_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(original_input),
                 },
             ],
         });
@@ -4987,6 +5077,61 @@ impl GpuRenderer {
     // Layer Command Processing
     // ─────────────────────────────────────────────────────────────────────────────
 
+    /// Calculate how much layer effects extend beyond the original content bounds.
+    ///
+    /// Returns (left, top, right, bottom) expansion in pixels.
+    /// Only effects that ADD content outside the element expand bounds (shadow, glow).
+    /// Blur does NOT expand because it just softens existing edges.
+    fn calculate_effect_expansion(effects: &[blinc_core::LayerEffect]) -> (f32, f32, f32, f32) {
+        use blinc_core::LayerEffect;
+
+        let mut left = 0.0f32;
+        let mut top = 0.0f32;
+        let mut right = 0.0f32;
+        let mut bottom = 0.0f32;
+
+        for effect in effects {
+            match effect {
+                LayerEffect::Blur { .. } => {
+                    // Blur does NOT expand bounds - it only softens existing edges
+                    // The blurred content stays within the original element bounds
+                }
+                LayerEffect::DropShadow {
+                    offset_x,
+                    offset_y,
+                    blur,
+                    spread,
+                    ..
+                } => {
+                    // Shadow expands based on blur, spread, and offset
+                    let blur_expand = blur * 2.0; // 2x blur radius is enough
+                    let spread_expand = spread.max(0.0);
+                    let total_expand = blur_expand + spread_expand;
+
+                    // Left/top expansion: when offset is negative, shadow goes that direction
+                    left = left.max(total_expand + (-offset_x).max(0.0));
+                    top = top.max(total_expand + (-offset_y).max(0.0));
+                    // Right/bottom expansion: when offset is positive, shadow goes that direction
+                    right = right.max(total_expand + offset_x.max(0.0));
+                    bottom = bottom.max(total_expand + offset_y.max(0.0));
+                }
+                LayerEffect::Glow { blur, range, .. } => {
+                    // Glow expands equally in all directions
+                    let expand = (blur + range) * 2.0; // Account for range
+                    left = left.max(expand);
+                    top = top.max(expand);
+                    right = right.max(expand);
+                    bottom = bottom.max(expand);
+                }
+                LayerEffect::ColorMatrix { .. } => {
+                    // Color matrix doesn't expand bounds
+                }
+            }
+        }
+
+        (left, top, right, bottom)
+    }
+
     /// Apply layer effects to a texture
     ///
     /// Processes a list of LayerEffects in order and returns the final result.
@@ -5065,7 +5210,8 @@ impl GpuRenderer {
             match effect {
                 LayerEffect::Blur { radius, quality: _ } => {
                     // Calculate number of passes based on radius
-                    let passes = (*radius / 4.0).ceil().max(1.0) as u32;
+                    // More passes = smoother blur. Kawase blur needs ~radius/2 passes minimum
+                    let passes = (*radius / 2.0).ceil().max(2.0) as u32;
                     let blurred = self.apply_blur(&current, *radius, passes);
                     self.layer_texture_cache.release(current);
                     current = blurred;
@@ -5078,9 +5224,12 @@ impl GpuRenderer {
                     spread,
                     color,
                 } => {
+                    // Use distance-based shadow - no blur pass needed
+                    // The shader samples the original texture to find shape edges
                     let temp = self.layer_texture_cache.acquire(&self.device, size, false);
                     self.apply_drop_shadow(
-                        &current.view,
+                        &current.view, // Not used for distance sampling
+                        &current.view, // Original texture for shape detection
                         &temp.view,
                         size,
                         (*offset_x, *offset_y),
@@ -5093,30 +5242,26 @@ impl GpuRenderer {
                 }
 
                 LayerEffect::Glow {
-                    radius,
                     color,
-                    intensity,
+                    blur,
+                    range,
+                    opacity,
                 } => {
-                    // Glow is implemented as a blurred, color-tinted version
-                    // For simplicity, apply blur and color enhancement directly
-                    // (A proper glow would composite the blur behind the original)
-                    let passes = (*radius / 4.0).ceil().max(1.0) as u32;
-                    let blurred = self.apply_blur(&current, *radius, passes);
-
-                    // Apply glow color and intensity via color matrix
-                    // Mix the glow color with the original using intensity as blend factor
-                    let glow_matrix = [
-                        1.0 - intensity + color.r * intensity, 0.0, 0.0, 0.0, 0.0,
-                        0.0, 1.0 - intensity + color.g * intensity, 0.0, 0.0, 0.0,
-                        0.0, 0.0, 1.0 - intensity + color.b * intensity, 0.0, 0.0,
-                        0.0, 0.0, 0.0, 1.0, 0.0,
-                    ];
-
-                    let tinted = self.layer_texture_cache.acquire(&self.device, size, false);
-                    self.apply_color_matrix(&blurred.view, &tinted.view, &glow_matrix);
-                    self.layer_texture_cache.release(blurred);
+                    // Use distance-based glow - no blur pass needed
+                    // The shader samples the original texture to find shape edges
+                    let temp = self.layer_texture_cache.acquire(&self.device, size, false);
+                    self.apply_drop_shadow(
+                        &current.view, // Not used for distance sampling
+                        &current.view, // Original texture for shape detection
+                        &temp.view,
+                        size,
+                        (0.0, 0.0), // No offset for glow
+                        *blur,
+                        *range,
+                        [color.r, color.g, color.b, color.a * opacity],
+                    );
                     self.layer_texture_cache.release(current);
-                    current = tinted;
+                    current = temp;
                 }
 
                 LayerEffect::ColorMatrix { matrix } => {
@@ -5296,12 +5441,18 @@ impl GpuRenderer {
         use crate::primitives::LayerCompositeUniforms;
 
         // Full viewport blit - source covers entire texture, dest covers entire viewport
+        let vp_w = self.viewport_size.0 as f32;
+        let vp_h = self.viewport_size.1 as f32;
         let uniforms = LayerCompositeUniforms {
             source_rect: [0.0, 0.0, 1.0, 1.0], // Full texture (normalized)
-            dest_rect: [0.0, 0.0, self.viewport_size.0 as f32, self.viewport_size.1 as f32],
-            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            dest_rect: [0.0, 0.0, vp_w, vp_h],
+            viewport_size: [vp_w, vp_h],
             opacity,
             blend_mode: blend_mode as u32,
+            clip_bounds: [0.0, 0.0, vp_w, vp_h], // No clipping
+            clip_radius: [0.0, 0.0, 0.0, 0.0],
+            clip_type: 0,
+            _pad: [0.0; 7],
         };
 
         let uniform_buffer = self
@@ -5375,6 +5526,20 @@ impl GpuRenderer {
         opacity: f32,
         blend_mode: blinc_core::BlendMode,
     ) {
+        self.blit_region_to_target_with_clip(source, target, position, size, opacity, blend_mode, None)
+    }
+
+    /// Blit a specific region with optional clip
+    fn blit_region_to_target_with_clip(
+        &mut self,
+        source: &wgpu::TextureView,
+        target: &wgpu::TextureView,
+        position: (f32, f32),
+        size: (f32, f32),
+        opacity: f32,
+        blend_mode: blinc_core::BlendMode,
+        clip: Option<([f32; 4], [f32; 4])>, // (bounds, radii)
+    ) {
         use crate::primitives::LayerCompositeUniforms;
 
         let vp_w = self.viewport_size.0 as f32;
@@ -5392,13 +5557,23 @@ impl GpuRenderer {
         // Dest rect in viewport pixel coordinates
         let dest_rect = [position.0, position.1, size.0, size.1];
 
-        let uniforms = LayerCompositeUniforms {
+        let mut uniforms = LayerCompositeUniforms {
             source_rect,
             dest_rect,
             viewport_size: [vp_w, vp_h],
             opacity,
             blend_mode: blend_mode as u32,
+            clip_bounds: [0.0, 0.0, vp_w, vp_h],
+            clip_radius: [0.0, 0.0, 0.0, 0.0],
+            clip_type: 0,
+            _pad: [0.0; 7],
         };
+
+        if let Some((bounds, radii)) = clip {
+            uniforms.clip_bounds = bounds;
+            uniforms.clip_radius = radii;
+            uniforms.clip_type = 1;
+        }
 
         let uniform_buffer = self
             .device

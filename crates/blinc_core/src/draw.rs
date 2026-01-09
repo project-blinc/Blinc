@@ -717,12 +717,14 @@ pub enum LayerEffect {
     },
     /// Outer glow effect
     Glow {
-        /// Glow radius in pixels
-        radius: f32,
         /// Glow color
         color: Color,
-        /// Glow intensity (multiplier)
-        intensity: f32,
+        /// Blur softness (higher = softer edges)
+        blur: f32,
+        /// Glow range (how far the glow extends from the element)
+        range: f32,
+        /// Glow opacity (0.0 to 1.0)
+        opacity: f32,
     },
     /// Color matrix transformation (4x5 matrix for RGBA + offset)
     ColorMatrix {
@@ -762,11 +764,18 @@ impl LayerEffect {
     }
 
     /// Create a glow effect
-    pub fn glow(radius: f32, color: Color, intensity: f32) -> Self {
+    ///
+    /// ## Parameters
+    /// - `color`: Glow color
+    /// - `blur`: Blur softness (higher = softer edges), typically 4-24
+    /// - `range`: How far the glow extends from the element, typically 0-20
+    /// - `opacity`: Glow visibility (0.0 to 1.0)
+    pub fn glow(color: Color, blur: f32, range: f32, opacity: f32) -> Self {
         Self::Glow {
-            radius,
             color,
-            intensity,
+            blur,
+            range,
+            opacity,
         }
     }
 
@@ -930,8 +939,14 @@ impl LayerConfig {
     }
 
     /// Add a glow effect
-    pub fn glow(self, radius: f32, color: Color, intensity: f32) -> Self {
-        self.effect(LayerEffect::glow(radius, color, intensity))
+    ///
+    /// ## Parameters
+    /// - `color`: Glow color
+    /// - `blur`: Blur softness (higher = softer edges), typically 4-24
+    /// - `range`: How far the glow extends from the element, typically 0-20
+    /// - `opacity`: Glow visibility (0.0 to 1.0)
+    pub fn glow(self, color: Color, blur: f32, range: f32, opacity: f32) -> Self {
+        self.effect(LayerEffect::glow(color, blur, range, opacity))
     }
 }
 
