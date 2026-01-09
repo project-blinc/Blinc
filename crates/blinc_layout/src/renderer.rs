@@ -11,7 +11,8 @@ use blinc_animation::AnimationScheduler;
 use indexmap::IndexMap;
 
 use blinc_core::{
-    Brush, ClipShape, Color, CornerRadius, DrawContext, GlassStyle, Rect, Shadow, Stroke, Transform,
+    BlendMode, Brush, ClipShape, Color, CornerRadius, DrawContext, GlassStyle, LayerConfig, Rect,
+    Shadow, Stroke, Transform,
 };
 use taffy::prelude::*;
 
@@ -4807,6 +4808,19 @@ impl RenderTree {
             render_node.props.layer
         };
 
+        // Push opacity layer if this node has partial opacity
+        // Children inside the layer automatically inherit the opacity via GPU composition
+        let has_opacity_layer = node_motion_opacity < 1.0;
+        if has_opacity_layer {
+            ctx.push_layer(LayerConfig {
+                id: None,
+                size: None,
+                blend_mode: BlendMode::Normal,
+                opacity: node_motion_opacity,
+                depth: false,
+            });
+        }
+
         // Draw shadow BEFORE pushing clip (shadows extend beyond element bounds)
         // This must be done before the clip is applied so shadows aren't clipped
         let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
@@ -4815,8 +4829,9 @@ impl RenderTree {
             // Glass elements have shadows handled by the GPU glass system
             if !matches!(render_node.props.material, Some(Material::Glass(_))) {
                 if let Some(ref shadow) = render_node.props.shadow {
-                    // Apply motion opacity to shadow color
-                    let shadow = if motion_opacity < 1.0 {
+                    // When using opacity layer, draw shadow at full opacity (layer handles it)
+                    // Otherwise, apply motion opacity to shadow color for fallback
+                    let shadow = if !has_opacity_layer && motion_opacity < 1.0 {
                         Shadow {
                             color: Color::rgba(
                                 shadow.color.r,
@@ -4851,9 +4866,8 @@ impl RenderTree {
 
         // Render if this node matches target layer
         if effective_layer == target_layer {
-            // Apply motion opacity to rendering
-            // TODO: When DrawContext supports opacity, apply motion_opacity here
-            // For now, we rely on the brush alpha
+            // Motion opacity is now handled via push_layer when has_opacity_layer=true
+            // The opacity layer applies opacity to all content via GPU composition
 
             if let Some(Material::Glass(glass)) = &render_node.props.material {
                 let glass_brush = Brush::Glass(GlassStyle {
@@ -4869,8 +4883,9 @@ impl RenderTree {
             } else {
                 // Shadow already drawn before clip was pushed
                 if let Some(ref bg) = render_node.props.background {
-                    // Apply motion opacity to background
-                    let brush = if motion_opacity < 1.0 {
+                    // When using opacity layer, draw at full opacity (layer handles it)
+                    // Otherwise, apply motion opacity to brush for fallback
+                    let brush = if !has_opacity_layer && motion_opacity < 1.0 {
                         apply_opacity_to_brush(bg, motion_opacity)
                     } else {
                         bg.clone()
@@ -4884,9 +4899,9 @@ impl RenderTree {
             if render_node.props.border_sides.has_any() {
                 let sides = &render_node.props.border_sides;
 
-                // Helper to apply motion opacity
+                // Helper to apply motion opacity (only when not using opacity layer)
                 let apply_motion = |color: Color| -> Color {
-                    if motion_opacity < 1.0 {
+                    if !has_opacity_layer && motion_opacity < 1.0 {
                         Color::rgba(color.r, color.g, color.b, color.a * motion_opacity)
                     } else {
                         color
@@ -4966,7 +4981,8 @@ impl RenderTree {
             } else if render_node.props.border_width > 0.0 {
                 if let Some(ref border_color) = render_node.props.border_color {
                     let stroke = Stroke::new(render_node.props.border_width);
-                    let brush = if motion_opacity < 1.0 {
+                    // When using opacity layer, draw at full opacity (layer handles it)
+                    let brush = if !has_opacity_layer && motion_opacity < 1.0 {
                         let mut color = *border_color;
                         color.a *= motion_opacity;
                         Brush::Solid(color)
@@ -5055,7 +5071,9 @@ impl RenderTree {
         }
 
         // Render children, passing down the effective opacity and layer inheritance
-        // This ensures all children inherit the parent motion's opacity and foreground layer
+        // When we pushed an opacity layer, pass 1.0 to children (layer handles the opacity)
+        // Otherwise, pass the combined opacity for brush-based fallback
+        let child_inherited_opacity = if has_opacity_layer { 1.0 } else { motion_opacity };
         for child_id in self.layout_tree.children(node) {
             self.render_layer_with_motion(
                 ctx,
@@ -5065,7 +5083,7 @@ impl RenderTree {
                 children_inside_glass,
                 children_inside_foreground,
                 render_state,
-                motion_opacity, // Pass current opacity to children
+                child_inherited_opacity,
             );
         }
 
@@ -5082,6 +5100,11 @@ impl RenderTree {
         // Pop clip
         if clips_content {
             ctx.pop_clip();
+        }
+
+        // Pop opacity layer (must be after clips, before transforms)
+        if has_opacity_layer {
+            ctx.pop_layer();
         }
 
         // Pop element transforms
