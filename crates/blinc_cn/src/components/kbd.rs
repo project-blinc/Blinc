@@ -94,7 +94,7 @@ impl KbdBuilder {
         let (font_size, px, py, radius) = match self.config.size {
             KbdSize::Small => (10.0, 4.0, 2.0, theme.radius(RadiusToken::Sm)),
             KbdSize::Medium => (12.0, 6.0, 2.0, theme.radius(RadiusToken::Sm)),
-            KbdSize::Large => (14.0, 8.0, 4.0, theme.radius(RadiusToken::Md)),
+            KbdSize::Large => (14.0, 8.0, 4.0, theme.radius(RadiusToken::Sm)),
         };
 
         // Build the Kbd element
