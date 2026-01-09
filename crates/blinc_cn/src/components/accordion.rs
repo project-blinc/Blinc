@@ -361,7 +361,7 @@ impl AccordionBuilder {
                     let collapsible_content = div()
                         .flex_col()
                         .w_full()
-                        .bg(theme.color(ColorToken::Background))
+                        .bg(theme.color(ColorToken::Surface))
                         .border_top(1.0, border_color)
                         .overflow_clip()
                         .animate_bounds(
