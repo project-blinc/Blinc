@@ -104,6 +104,7 @@ impl KbdBuilder {
             .w_fit()
             .bg(bg)
             .border(1.0, border_color)
+            .border_bottom(3.0, border_color)
             .rounded(radius)
             .padding_x_px(px)
             .padding_y_px(py)

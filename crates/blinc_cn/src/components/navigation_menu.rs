@@ -128,7 +128,6 @@ impl NavigationMenu {
                                         .flex_row()
                                         .items_center()
                                         .h_fit()
-                                        
                                         .px(3.0)
                                         .py(2.0)
                                         .rounded(radius)
@@ -199,7 +198,6 @@ impl NavigationMenu {
                                         .flex_row()
                                         .items_center()
                                         .h_fit()
-                                        
                                         .gap(1.0)
                                         .px(3.0)
                                         .py(2.0)

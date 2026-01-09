@@ -81,8 +81,8 @@ pub use key::{reset_call_counters, InstanceKey};
 
 // Core types
 pub use element::{
-    BorderSide, BorderSides, CursorStyle, DynRenderProps, ElementBounds, MotionAnimation,
-    MotionKeyframe, RenderLayer, RenderProps, ResolvedRenderProps,
+    BorderBuilder, BorderSide, BorderSides, CursorStyle, DynRenderProps, ElementBounds,
+    MotionAnimation, MotionKeyframe, RenderLayer, RenderProps, ResolvedRenderProps,
 };
 
 // Diff and reconciliation

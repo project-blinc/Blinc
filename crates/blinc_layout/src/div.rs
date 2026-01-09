@@ -2084,6 +2084,32 @@ impl Div {
         self
     }
 
+    /// Configure borders using a builder pattern
+    ///
+    /// This provides a fluent API for setting multiple border sides at once
+    /// without accidentally overriding previously set sides.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Set left and bottom borders
+    /// div().borders(|b| b.left(4.0, Color::BLUE).bottom(1.0, Color::gray(0.3)))
+    ///
+    /// // Set all borders, then override one
+    /// div().borders(|b| b.all(1.0, Color::gray(0.2)).left(4.0, Color::BLUE))
+    ///
+    /// // Set horizontal borders only
+    /// div().borders(|b| b.x(1.0, Color::RED))
+    /// ```
+    pub fn borders<F>(mut self, f: F) -> Self
+    where
+        F: FnOnce(crate::element::BorderBuilder) -> crate::element::BorderBuilder,
+    {
+        let builder = f(crate::element::BorderBuilder::new());
+        self.border_sides = builder.build();
+        self
+    }
+
     // =========================================================================
     // Layer (for rendering order)
     // =========================================================================

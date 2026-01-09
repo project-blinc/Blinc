@@ -828,6 +828,90 @@ impl BorderSides {
     }
 }
 
+/// Builder for constructing per-side borders with a fluent API
+///
+/// # Example
+///
+/// ```ignore
+/// use blinc_layout::element::BorderBuilder;
+/// use blinc_core::Color;
+///
+/// // Create borders with different sides
+/// let borders = BorderBuilder::new()
+///     .left(4.0, Color::BLUE)
+///     .bottom(1.0, Color::gray(0.3))
+///     .build();
+///
+/// // Or use the shorthand on Div
+/// div().borders(|b| b.left(4.0, Color::BLUE).bottom(1.0, Color::gray(0.3)))
+/// ```
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BorderBuilder {
+    sides: BorderSides,
+}
+
+impl BorderBuilder {
+    /// Create a new border builder with no borders
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the left border
+    pub fn left(mut self, width: f32, color: Color) -> Self {
+        self.sides.left = Some(BorderSide::new(width, color));
+        self
+    }
+
+    /// Set the right border
+    pub fn right(mut self, width: f32, color: Color) -> Self {
+        self.sides.right = Some(BorderSide::new(width, color));
+        self
+    }
+
+    /// Set the top border
+    pub fn top(mut self, width: f32, color: Color) -> Self {
+        self.sides.top = Some(BorderSide::new(width, color));
+        self
+    }
+
+    /// Set the bottom border
+    pub fn bottom(mut self, width: f32, color: Color) -> Self {
+        self.sides.bottom = Some(BorderSide::new(width, color));
+        self
+    }
+
+    /// Set horizontal borders (left and right)
+    pub fn x(mut self, width: f32, color: Color) -> Self {
+        let side = BorderSide::new(width, color);
+        self.sides.left = Some(side);
+        self.sides.right = Some(side);
+        self
+    }
+
+    /// Set vertical borders (top and bottom)
+    pub fn y(mut self, width: f32, color: Color) -> Self {
+        let side = BorderSide::new(width, color);
+        self.sides.top = Some(side);
+        self.sides.bottom = Some(side);
+        self
+    }
+
+    /// Set all borders to the same value
+    pub fn all(mut self, width: f32, color: Color) -> Self {
+        let side = BorderSide::new(width, color);
+        self.sides.top = Some(side);
+        self.sides.right = Some(side);
+        self.sides.bottom = Some(side);
+        self.sides.left = Some(side);
+        self
+    }
+
+    /// Build the BorderSides configuration
+    pub fn build(self) -> BorderSides {
+        self.sides
+    }
+}
+
 /// Visual properties for rendering an element
 #[derive(Clone)]
 pub struct RenderProps {
