@@ -33,6 +33,7 @@ fn main() -> Result<()> {
 fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
     eprintln!("build_ui called");
     let theme = ThemeState::get();
+    theme.set_scheme(ColorScheme::Light);
     eprintln!(
         "Current theme platform: {:?}",
         blinc_theme::platform::Platform::current()
@@ -288,9 +289,9 @@ fn header(ctx: &WindowedContext) -> impl ElementBuilder {
     let border = theme.color(ColorToken::Border);
 
     // Theme toggle switch state
-    let is_dark = ctx.use_state_keyed("theme_is_dark", || {
-        ThemeState::get().scheme() == ColorScheme::Dark
-    });
+    // let is_dark = ctx.use_state_keyed("theme_is_dark", || {
+    //     ThemeState::get().scheme() == ColorScheme::Dark
+    // });
     let scheduler = ctx.animation_handle();
 
     div()
@@ -318,13 +319,13 @@ fn header(ctx: &WindowedContext) -> impl ElementBuilder {
                         .color(text_secondary),
                 ),
         )
-        .child(
-            cn::switch(&is_dark, scheduler)
-                .label("Dark Mode")
-                .on_change(|_| {
-                    ThemeState::get().toggle_scheme();
-                }),
-        )
+        // .child(
+        //     // cn::switch(&is_dark, scheduler)
+        //     //     .label("Dark Mode")
+        //     //     .on_change(|_| {
+        //     //         ThemeState::get().toggle_scheme();
+        //     //     }),
+        // )
 }
 
 /// Section title helper

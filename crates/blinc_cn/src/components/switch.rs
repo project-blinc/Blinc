@@ -13,31 +13,31 @@
 //!     let enabled = ctx.use_state_for("notifications", false);
 //!
 //!     // Smooth animation enabled by default when scheduler is provided
-//!     cn::switch(&enabled, ctx.animation_handle())
+//!     cn::switch(&enabled)
 //!         .label("Enable notifications")
 //!         .on_change(|is_on| println!("Switch: {}", is_on))
 //! }
 //!
 //! // Different sizes
 //! let dark_mode = ctx.use_state_for("dark_mode", true);
-//! cn::switch(&dark_mode, ctx.animation_handle())
+//! cn::switch(&dark_mode)
 //!     .size(SwitchSize::Small)
 //!
 //! // Custom colors
-//! cn::switch(&enabled, ctx.animation_handle())
+//! cn::switch(&enabled)
 //!     .on_color(Color::GREEN)
 //!     .off_color(Color::GRAY)
 //!
 //! // Disabled state
-//! cn::switch(&enabled, ctx.animation_handle())
+//! cn::switch(&enabled)
 //!     .disabled(true)
 //!
 //! // Custom spring config for different feel
-//! cn::switch(&enabled, ctx.animation_handle())
+//! cn::switch(&enabled)
 //!     .spring(SpringConfig::wobbly())
 //! ```
 
-use blinc_animation::{AnimatedValue, SchedulerHandle, SpringConfig};
+use blinc_animation::{AnimatedValue, SchedulerHandle, SpringConfig, get_scheduler};
 use blinc_core::{Color, State, Transform};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
@@ -105,10 +105,10 @@ impl Switch {
     /// # Example
     /// ```ignore
     /// let enabled = ctx.use_state_for("my_switch", false);
-    /// cn::switch(&enabled, ctx.animation_handle())
+    /// cn::switch(&enabled)
     /// ```
-    pub fn new(on_state: &State<bool>, scheduler: SchedulerHandle) -> Self {
-        Self::with_config(SwitchConfig::new(on_state.clone(), scheduler))
+    pub fn new(on_state: &State<bool>) -> Self {
+        Self::with_config(SwitchConfig::new(on_state.clone()))
     }
 
     /// Create from a full configuration
@@ -277,13 +277,15 @@ struct SwitchConfig {
 }
 
 impl SwitchConfig {
-    fn new(on_state: State<bool>, scheduler: SchedulerHandle) -> Self {
+    fn new(on_state: State<bool>) -> Self {
         let size = SwitchSize::default();
         let padding = 2.0;
         let thumb_travel = size.track_width() - size.thumb_size() - (padding * 2.0);
         let is_on = on_state.get();
         let initial_x = if is_on { thumb_travel } else { 0.0 };
         let initial_color_t = if is_on { 1.0 } else { 0.0 };
+
+        let scheduler = get_scheduler();
 
         let spring_config = SpringConfig::snappy();
         let thumb_anim: SharedAnimatedValue = Arc::new(Mutex::new(AnimatedValue::new(
@@ -322,9 +324,9 @@ pub struct SwitchBuilder {
 
 impl SwitchBuilder {
     /// Create a new switch builder with state and scheduler from context
-    pub fn new(on_state: &State<bool>, scheduler: SchedulerHandle) -> Self {
+    pub fn new(on_state: &State<bool>) -> Self {
         Self {
-            config: SwitchConfig::new(on_state.clone(), scheduler),
+            config: SwitchConfig::new(on_state.clone()),
             built: std::cell::OnceCell::new(),
         }
     }
@@ -439,13 +441,13 @@ impl ElementBuilder for SwitchBuilder {
 /// fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
 ///     let dark_mode = ctx.use_state_for("dark_mode", false);
 ///
-///     cn::switch(&dark_mode, ctx.animation_handle())
+///     cn::switch(&dark_mode)
 ///         .label("Dark mode")
 ///         .on_change(|enabled| println!("Dark mode: {}", enabled))
 /// }
 /// ```
-pub fn switch(state: &State<bool>, scheduler: SchedulerHandle) -> SwitchBuilder {
-    SwitchBuilder::new(state, scheduler)
+pub fn switch(state: &State<bool>) -> SwitchBuilder {
+    SwitchBuilder::new(state)
 }
 
 #[cfg(test)]
