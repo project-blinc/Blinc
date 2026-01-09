@@ -39,10 +39,10 @@ use std::sync::Arc;
 use blinc_core::State;
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
 use blinc_layout::element::CursorStyle;
-use blinc_layout::visual_animation::VisualAnimationConfig;
 use blinc_layout::prelude::*;
 use blinc_layout::stateful::{stateful_with_key, ButtonState, NoState};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
+use blinc_layout::visual_animation::VisualAnimationConfig;
 use blinc_layout::InstanceKey;
 use blinc_theme::{ColorToken, ThemeState};
 
@@ -119,10 +119,6 @@ impl Sidebar {
         // Single source of truth: the collapsed state from parent
         let is_collapsed = builder.is_collapsed.get();
 
-        // Layout animation key for smooth width transitions
-        let layout_anim_key = format!("{}_layout", key.clone());
-        let content_anim_key = format!("{}_content", key.clone());
-
         // Create stateful container that rebuilds when collapsed state changes
         let container_key = format!("{}_container", key.clone());
         // let is_collapsed_for_container = is_collapsed.clone();
@@ -131,8 +127,17 @@ impl Sidebar {
             .deps([builder.is_collapsed.signal_id()])
             .on_state(move |ctx| {
                 let collapsed = ctx.use_signal("collapsed", || is_collapsed);
+                // Layout animation keys for smooth width transitions
+                let layout_anim_key = format!("{}_layout", key.clone());
+                let content_anim_key = format!("{}_content", key.clone());
+                let sidebar_anim_key = format!("{}_sidebar_container", key.clone());
 
-                let sidebar_content = div().flex_col().h_full().overflow_clip();
+                let sidebar_content = div().flex_col().h_full().overflow_clip().animate_bounds(
+                    VisualAnimationConfig::size()
+                        .with_key(&sidebar_anim_key)
+                        .clip_to_animated()
+                        .snappy(),
+                );
 
                 // // Convert pixel widths to layout units (divide by 4)
                 let mut toggle_btn = div();
@@ -178,11 +183,12 @@ impl Sidebar {
                                         .animate_bounds(
                                             VisualAnimationConfig::size()
                                                 .with_key(&toggle_anim_key)
+                                                .clip_to_animated()
                                                 .snappy(),
                                         )
                                         .child(div().flex_shrink_0().self_end().child(
                                             svg(icon).size(18.0, 18.0).color(text_secondary),
-                                        ))
+                                        ).pointer_events_none())
                                 })
                                 .on_click(move |_| {
                                     // is_collapsed_for_click.set(!current);
@@ -204,7 +210,7 @@ impl Sidebar {
                     .overflow_clip() // Critical for animation clipping
                     .py(2.0)
                     .animate_bounds(
-                        VisualAnimationConfig::width()
+                        VisualAnimationConfig::all()
                             .with_key(&layout_anim_key)
                             .clip_to_animated()
                             .snappy(),
@@ -221,7 +227,7 @@ impl Sidebar {
                         let title_anim_key = format!("{}_section_{}_title", ctx.key(), section_idx);
 
                         // Always render title, but height animates to 0 when collapsed
-                        let mut title_div = div()
+                        let title_div = div()
                             .w_fit()
                             .h_fit()
                             .overflow_clip()
@@ -231,9 +237,8 @@ impl Sidebar {
                                     .clip_to_animated()
                                     .snappy(),
                             )
-                            
-                            .child(if !is_collapsed {
-                                div().child(
+                            .when(!is_collapsed, |d| {
+                                d.px(3.0).py(2.0).child(
                                     text(&title.to_uppercase())
                                         .size(11.0)
                                         .color(text_tertiary)
@@ -241,15 +246,8 @@ impl Sidebar {
                                         .no_cursor()
                                         .no_wrap(),
                                 )
-                            } else {
-                                div().p(0.0).h(0.0).w(0.0)
                             });
-
-                            if !is_collapsed {
-                                title_div = title_div.px(3.0).py(2.0);
-                            } else {
-                                title_div = title_div.p(0.0);
-                            }
+                        // .when(is_collapsed, |d| d.p(0.0).h(0.0).w(0.0));
 
                         items_container = items_container.child(title_div);
                     }
@@ -290,40 +288,42 @@ impl Sidebar {
                                 // Conditionally render: icon-only when collapsed, icon+label when expanded
                                 // Animate position so items slide smoothly when section titles disappear
                                 let item_anim_key = format!("{}_anim", ctx.key());
-                                let mut item_div =
-                                    div()
-                                        .w_fit()
-                                        .h_fit()
-                                        .flex_row()
-                                        .items_center()
-                                        .gap(3.0)
-                                        .px(3.0)
-                                        .py(2.0)
-                                        .bg(bg)
-                                        .cursor(CursorStyle::Pointer)
-                                        .animate_bounds(
-                                            VisualAnimationConfig::size()
-                                                .with_key(&item_anim_key)
-                                                .snappy(),
-                                        )
-                                        .child(div().flex_shrink_0().child(
+                                div()
+                                    .w_fit()
+                                    .h_fit()
+                                    .flex_row()
+                                    .items_center()
+                                    .gap(3.0)
+                                    .px(3.0)
+                                    .py(2.0)
+                                    .bg(bg)
+                                    .cursor(CursorStyle::Pointer)
+                                    .overflow_clip()
+                                    .animate_bounds(
+                                        VisualAnimationConfig::all()
+                                            .with_key(&item_anim_key)
+                                            .clip_to_animated()
+                                            .snappy(),
+                                    )
+                                    .when(!is_collapsed, |d| {
+                                        d.child(div().flex_shrink_0().child(
                                             svg(&item_icon).size(18.0, 18.0).color(icon_color),
-                                        ));
-
-                                // Only add label when expanded
-                                if !is_collapsed {
-                                    item_div = item_div.child(
-                                        div().flex_shrink_0().child(
-                                            text(&item_label)
-                                                .size(14.0)
-                                                .color(text_col)
-                                                .no_cursor()
-                                                .no_wrap(),
-                                        ),
-                                    );
-                                }
-
-                                item_div
+                                        ))
+                                        .child(
+                                            div().child(
+                                                text(&item_label)
+                                                    .size(14.0)
+                                                    .color(text_col)
+                                                    .no_cursor()
+                                                    .no_wrap(),
+                                            ),
+                                        )
+                                    })
+                                    .when(is_collapsed, |d| {
+                                        d.child(div().flex_shrink_0().child(
+                                            svg(&item_icon).size(18.0, 18.0).color(icon_color),
+                                        ))
+                                    })
                             })
                             .on_click(move |_| {
                                 item_on_click();
@@ -339,17 +339,22 @@ impl Sidebar {
                 if let Some(ref content_fn) = content_builder {
                     let main_content = content_fn();
                     // Wrap main content with flex_1 and animate_bounds for smooth expansion
+                    // Use all() to animate both position (x changes when sidebar shrinks)
+                    // and size (width grows when sidebar shrinks)
                     let content_wrapper = div()
                         .flex_1()
                         .h_full()
                         .overflow_clip()
                         .animate_bounds(
-                            VisualAnimationConfig::size()
+                            VisualAnimationConfig::all()
                                 .with_key(&content_anim_key)
+                                .clip_to_animated()
                                 .snappy(),
                         )
                         .child(main_content);
 
+                    // Outer container just needs flex-row layout
+                    // (no animation needed - its bounds are w_full/h_full and don't change)
                     div()
                         .flex_row()
                         .w_full()
