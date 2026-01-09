@@ -821,6 +821,22 @@ pub struct PathBatch {
     pub clip_radius: [f32; 4],
     /// Clip type for this batch: 0=none, 1=rect, 2=circle, 3=ellipse
     pub clip_type: u32,
+    /// Whether to use gradient texture (for >2 stop gradients)
+    pub use_gradient_texture: bool,
+    /// Gradient stops for texture rasterization (when use_gradient_texture is true)
+    pub gradient_stops: Option<Vec<blinc_core::GradientStop>>,
+    /// Whether to use image texture
+    pub use_image_texture: bool,
+    /// Image source path for image brush (None if not using image)
+    pub image_source: Option<String>,
+    /// Image UV bounds: (u_min, v_min, u_max, v_max)
+    pub image_uv_bounds: [f32; 4],
+    /// Whether to use glass effect
+    pub use_glass_effect: bool,
+    /// Glass parameters: (blur_radius, saturation, tint_strength, opacity)
+    pub glass_params: [f32; 4],
+    /// Glass tint color (RGBA)
+    pub glass_tint: [f32; 4],
 }
 
 /// Batch of GPU primitives for efficient rendering
@@ -854,10 +870,8 @@ impl PrimitiveBatch {
         self.foreground_primitives.clear();
         self.glass_primitives.clear();
         self.glyphs.clear();
-        self.paths.vertices.clear();
-        self.paths.indices.clear();
-        self.foreground_paths.vertices.clear();
-        self.foreground_paths.indices.clear();
+        self.paths = PathBatch::default();
+        self.foreground_paths = PathBatch::default();
     }
 
     pub fn push(&mut self, primitive: GpuPrimitive) {
@@ -974,6 +988,91 @@ impl PrimitiveBatch {
         self.foreground_paths.clip_bounds = clip_bounds;
         self.foreground_paths.clip_radius = clip_radius;
         self.foreground_paths.clip_type = clip_type as u32;
+
+        let base_vertex = self.foreground_paths.vertices.len() as u32;
+        self.foreground_paths.vertices.extend(tessellated.vertices);
+        self.foreground_paths
+            .indices
+            .extend(tessellated.indices.iter().map(|i| i + base_vertex));
+    }
+
+    /// Add tessellated path geometry with clip data and brush info to the batch
+    pub fn push_path_with_brush_info(
+        &mut self,
+        tessellated: crate::path::TessellatedPath,
+        clip_bounds: [f32; 4],
+        clip_radius: [f32; 4],
+        clip_type: ClipType,
+        brush_info: &crate::path::PathBrushInfo,
+    ) {
+        if tessellated.is_empty() {
+            return;
+        }
+
+        // Update clip data
+        self.paths.clip_bounds = clip_bounds;
+        self.paths.clip_radius = clip_radius;
+        self.paths.clip_type = clip_type as u32;
+
+        // Update brush metadata
+        self.paths.use_gradient_texture = brush_info.needs_gradient_texture;
+        self.paths.gradient_stops = brush_info.gradient_stops.clone();
+        self.paths.use_image_texture =
+            matches!(brush_info.brush_type, crate::path::PathBrushType::Image);
+        self.paths.image_source = brush_info.image_source.clone();
+        self.paths.image_uv_bounds = [0.0, 0.0, 1.0, 1.0]; // Default full UV range
+        self.paths.use_glass_effect =
+            matches!(brush_info.brush_type, crate::path::PathBrushType::Glass);
+        self.paths.glass_params = brush_info.glass_params;
+        self.paths.glass_tint = [
+            brush_info.glass_tint.r,
+            brush_info.glass_tint.g,
+            brush_info.glass_tint.b,
+            brush_info.glass_tint.a,
+        ];
+
+        // Offset indices by current vertex count
+        let base_vertex = self.paths.vertices.len() as u32;
+        self.paths.vertices.extend(tessellated.vertices);
+        self.paths
+            .indices
+            .extend(tessellated.indices.iter().map(|i| i + base_vertex));
+    }
+
+    /// Add tessellated path geometry with clip data and brush info to the foreground batch
+    pub fn push_foreground_path_with_brush_info(
+        &mut self,
+        tessellated: crate::path::TessellatedPath,
+        clip_bounds: [f32; 4],
+        clip_radius: [f32; 4],
+        clip_type: ClipType,
+        brush_info: &crate::path::PathBrushInfo,
+    ) {
+        if tessellated.is_empty() {
+            return;
+        }
+
+        // Update clip data
+        self.foreground_paths.clip_bounds = clip_bounds;
+        self.foreground_paths.clip_radius = clip_radius;
+        self.foreground_paths.clip_type = clip_type as u32;
+
+        // Update brush metadata
+        self.foreground_paths.use_gradient_texture = brush_info.needs_gradient_texture;
+        self.foreground_paths.gradient_stops = brush_info.gradient_stops.clone();
+        self.foreground_paths.use_image_texture =
+            matches!(brush_info.brush_type, crate::path::PathBrushType::Image);
+        self.foreground_paths.image_source = brush_info.image_source.clone();
+        self.foreground_paths.image_uv_bounds = [0.0, 0.0, 1.0, 1.0];
+        self.foreground_paths.use_glass_effect =
+            matches!(brush_info.brush_type, crate::path::PathBrushType::Glass);
+        self.foreground_paths.glass_params = brush_info.glass_params;
+        self.foreground_paths.glass_tint = [
+            brush_info.glass_tint.r,
+            brush_info.glass_tint.g,
+            brush_info.glass_tint.b,
+            brush_info.glass_tint.a,
+        ];
 
         let base_vertex = self.foreground_paths.vertices.len() as u32;
         self.foreground_paths.vertices.extend(tessellated.vertices);

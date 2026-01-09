@@ -48,7 +48,7 @@ use blinc_core::{
     Stroke, TextStyle, Transform,
 };
 
-use crate::path::{tessellate_fill, tessellate_stroke};
+use crate::path::{extract_brush_info, tessellate_fill, tessellate_stroke};
 use crate::primitives::{
     ClipType, FillType, GpuGlassPrimitive, GpuPrimitive, PrimitiveBatch, PrimitiveType,
 };
@@ -893,6 +893,9 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         let opacity = self.combined_opacity();
         let brush = Self::apply_opacity_to_brush(brush, opacity);
 
+        // Extract brush info for advanced features (multi-stop gradients, images, glass)
+        let brush_info = extract_brush_info(&brush);
+
         // Tessellate the path using lyon
         let tessellated = tessellate_fill(path, &brush);
         if !tessellated.is_empty() {
@@ -900,15 +903,21 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             let (clip_bounds, clip_radius, clip_type) = self.get_clip_data();
 
             if self.is_foreground {
-                self.batch.push_foreground_path_with_clip(
+                self.batch.push_foreground_path_with_brush_info(
                     tessellated,
                     clip_bounds,
                     clip_radius,
                     clip_type,
+                    &brush_info,
                 );
             } else {
-                self.batch
-                    .push_path_with_clip(tessellated, clip_bounds, clip_radius, clip_type);
+                self.batch.push_path_with_brush_info(
+                    tessellated,
+                    clip_bounds,
+                    clip_radius,
+                    clip_type,
+                    &brush_info,
+                );
             }
         }
     }
@@ -918,6 +927,9 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         let opacity = self.combined_opacity();
         let brush = Self::apply_opacity_to_brush(brush, opacity);
 
+        // Extract brush info for advanced features (multi-stop gradients, images, glass)
+        let brush_info = extract_brush_info(&brush);
+
         // Tessellate the stroke using lyon
         let tessellated = tessellate_stroke(path, stroke, &brush);
         if !tessellated.is_empty() {
@@ -925,15 +937,21 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             let (clip_bounds, clip_radius, clip_type) = self.get_clip_data();
 
             if self.is_foreground {
-                self.batch.push_foreground_path_with_clip(
+                self.batch.push_foreground_path_with_brush_info(
                     tessellated,
                     clip_bounds,
                     clip_radius,
                     clip_type,
+                    &brush_info,
                 );
             } else {
-                self.batch
-                    .push_path_with_clip(tessellated, clip_bounds, clip_radius, clip_type);
+                self.batch.push_path_with_brush_info(
+                    tessellated,
+                    clip_bounds,
+                    clip_radius,
+                    clip_type,
+                    &brush_info,
+                );
             }
         }
     }

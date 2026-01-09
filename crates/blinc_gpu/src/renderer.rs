@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use wgpu::util::DeviceExt;
 
-use crate::gradient_texture::GradientTextureCache;
+use crate::gradient_texture::{GradientTextureCache, RasterizedGradient};
 use crate::image::GpuImageInstance;
 use crate::path::PathVertex;
 use crate::primitives::{
@@ -1769,12 +1769,27 @@ impl GpuRenderer {
 
     /// Update path vertex and index buffers
     fn update_path_buffers(&mut self, batch: &PrimitiveBatch) {
-        // Update path uniforms with clip data from batch
+        // Upload gradient texture if needed for multi-stop gradients
+        if batch.paths.use_gradient_texture {
+            if let Some(ref stops) = batch.paths.gradient_stops {
+                let rasterized =
+                    RasterizedGradient::from_stops(stops, crate::gradient_texture::SpreadMode::Pad);
+                self.gradient_texture_cache.upload(&self.queue, &rasterized);
+            }
+        }
+
+        // Update path uniforms with clip data and brush metadata from batch
         let path_uniforms = PathUniforms {
             viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
             clip_bounds: batch.paths.clip_bounds,
             clip_radius: batch.paths.clip_radius,
             clip_type: batch.paths.clip_type,
+            use_gradient_texture: if batch.paths.use_gradient_texture { 1 } else { 0 },
+            use_image_texture: if batch.paths.use_image_texture { 1 } else { 0 },
+            use_glass_effect: if batch.paths.use_glass_effect { 1 } else { 0 },
+            image_uv_bounds: batch.paths.image_uv_bounds,
+            glass_params: batch.paths.glass_params,
+            glass_tint: batch.paths.glass_tint,
             ..PathUniforms::default()
         };
         self.queue.write_buffer(

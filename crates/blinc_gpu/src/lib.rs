@@ -28,7 +28,10 @@ pub use backbuffer::{Backbuffer, BackbufferConfig, FrameContext};
 pub use gradient_texture::{GradientTextureCache, RasterizedGradient, GRADIENT_TEXTURE_WIDTH};
 pub use image::{GpuImage, GpuImageInstance, ImageRenderingContext};
 pub use paint::GpuPaintContext;
-pub use path::{tessellate_fill, tessellate_stroke, PathVertex, TessellatedPath};
+pub use path::{
+    extract_brush_info, tessellate_fill, tessellate_stroke, PathBrushInfo, PathBrushType,
+    PathVertex, TessellatedPath,
+};
 pub use primitives::{
     ClipType, CompositeUniforms, FillType, GlassType, GlassUniforms, GpuGlassPrimitive, GpuGlyph,
     GpuPrimitive, PathBatch, PathUniforms, PrimitiveBatch, PrimitiveType, Uniforms,

@@ -547,69 +547,167 @@ fn compute_path_bounds(path: &Path) -> (f32, f32, f32, f32) {
     }
 }
 
-/// Extract gradient info from brush
-fn extract_gradient_info(brush: &Brush) -> (u32, Color, Color, [f32; 4]) {
+/// Brush type for path rendering
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PathBrushType {
+    /// Solid color fill
+    #[default]
+    Solid,
+    /// Linear gradient (2-stop fast path or multi-stop texture)
+    LinearGradient,
+    /// Radial gradient (2-stop fast path or multi-stop texture)
+    RadialGradient,
+    /// Image texture fill
+    Image,
+    /// Glass/blur effect
+    Glass,
+}
+
+/// Extended brush information for path rendering
+#[derive(Clone, Debug)]
+pub struct PathBrushInfo {
+    /// Type of brush
+    pub brush_type: PathBrushType,
+    /// Gradient type for vertex shader: 0=solid, 1=linear, 2=radial
+    pub gradient_type: u32,
+    /// Start color (or solid color)
+    pub start_color: Color,
+    /// End color (for 2-stop gradients)
+    pub end_color: Color,
+    /// Gradient parameters: linear (x1,y1,x2,y2), radial (cx,cy,r,0)
+    pub gradient_params: [f32; 4],
+    /// Whether gradient has >2 stops (needs texture lookup)
+    pub needs_gradient_texture: bool,
+    /// Gradient stops for multi-stop gradients (for texture rasterization)
+    pub gradient_stops: Option<Vec<blinc_core::GradientStop>>,
+    /// Image source path for image brushes
+    pub image_source: Option<String>,
+    /// Image tint color
+    pub image_tint: Color,
+    /// Glass parameters: (blur, saturation, tint_strength, opacity)
+    pub glass_params: [f32; 4],
+    /// Glass tint color
+    pub glass_tint: Color,
+}
+
+impl Default for PathBrushInfo {
+    fn default() -> Self {
+        Self {
+            brush_type: PathBrushType::Solid,
+            gradient_type: 0,
+            start_color: Color::BLACK,
+            end_color: Color::BLACK,
+            gradient_params: [0.0, 0.0, 1.0, 1.0],
+            needs_gradient_texture: false,
+            gradient_stops: None,
+            image_source: None,
+            image_tint: Color::WHITE,
+            glass_params: [20.0, 1.0, 0.5, 0.9],
+            glass_tint: Color::rgba(1.0, 1.0, 1.0, 0.3),
+        }
+    }
+}
+
+/// Extract comprehensive brush info for path rendering
+pub fn extract_brush_info(brush: &Brush) -> PathBrushInfo {
     match brush {
-        Brush::Solid(color) => (0, *color, *color, [0.0, 0.0, 1.0, 1.0]),
-        Brush::Glass(style) => {
-            // Glass effects are not supported on tessellated paths
-            // Return the tint color as a fallback
-            (0, style.tint, style.tint, [0.0, 0.0, 1.0, 1.0])
-        }
-        Brush::Image(img) => {
-            // Image backgrounds are not supported on tessellated paths
-            // Return the tint color as a fallback
-            (0, img.tint, img.tint, [0.0, 0.0, 1.0, 1.0])
-        }
+        Brush::Solid(color) => PathBrushInfo {
+            brush_type: PathBrushType::Solid,
+            gradient_type: 0,
+            start_color: *color,
+            end_color: *color,
+            ..Default::default()
+        },
+        Brush::Glass(style) => PathBrushInfo {
+            brush_type: PathBrushType::Glass,
+            gradient_type: 0,
+            start_color: style.tint,
+            end_color: style.tint,
+            glass_params: [style.blur, style.saturation, 0.5, style.tint.a],
+            glass_tint: style.tint,
+            ..Default::default()
+        },
+        Brush::Image(img) => PathBrushInfo {
+            brush_type: PathBrushType::Image,
+            gradient_type: 0,
+            start_color: img.tint,
+            end_color: img.tint,
+            image_source: Some(img.source.clone()),
+            image_tint: img.tint,
+            ..Default::default()
+        },
         Brush::Gradient(gradient) => {
+            let stops = gradient.stops();
             let start_color = gradient.first_color();
             let end_color = gradient.last_color();
+            let needs_texture = stops.len() > 2;
 
             match gradient {
-                Gradient::Linear { start, end, .. } => {
+                Gradient::Linear { start, end, stops, .. } => {
                     tracing::debug!(
-                        "Linear gradient: start=({}, {}), end=({}, {}), colors=({:?} -> {:?})",
+                        "Linear gradient: start=({}, {}), end=({}, {}), stops={}, colors=({:?} -> {:?})",
                         start.x,
                         start.y,
                         end.x,
                         end.y,
+                        stops.len(),
                         start_color,
                         end_color
                     );
-                    (1, start_color, end_color, [start.x, start.y, end.x, end.y])
+                    PathBrushInfo {
+                        brush_type: PathBrushType::LinearGradient,
+                        gradient_type: 1,
+                        start_color,
+                        end_color,
+                        gradient_params: [start.x, start.y, end.x, end.y],
+                        needs_gradient_texture: needs_texture,
+                        gradient_stops: if needs_texture { Some(stops.clone()) } else { None },
+                        ..Default::default()
+                    }
                 }
-                Gradient::Radial { center, radius, .. } => {
+                Gradient::Radial { center, radius, stops, .. } => {
                     tracing::debug!(
-                        "Radial gradient: center=({}, {}), radius={}, colors=({:?} -> {:?})",
+                        "Radial gradient: center=({}, {}), radius={}, stops={}, colors=({:?} -> {:?})",
                         center.x,
                         center.y,
                         radius,
+                        stops.len(),
                         start_color,
                         end_color
                     );
-                    (
-                        2,
+                    PathBrushInfo {
+                        brush_type: PathBrushType::RadialGradient,
+                        gradient_type: 2,
                         start_color,
                         end_color,
-                        [center.x, center.y, *radius, 0.0],
-                    )
+                        gradient_params: [center.x, center.y, *radius, 0.0],
+                        needs_gradient_texture: needs_texture,
+                        gradient_stops: if needs_texture { Some(stops.clone()) } else { None },
+                        ..Default::default()
+                    }
                 }
-                Gradient::Conic {
-                    center,
-                    start_angle,
-                    ..
-                } => {
+                Gradient::Conic { center, start_angle, stops, .. } => {
                     // Treat conic as radial for now
-                    (
-                        2,
+                    PathBrushInfo {
+                        brush_type: PathBrushType::RadialGradient,
+                        gradient_type: 2,
                         start_color,
                         end_color,
-                        [center.x, center.y, 100.0, *start_angle],
-                    )
+                        gradient_params: [center.x, center.y, 100.0, *start_angle],
+                        needs_gradient_texture: needs_texture,
+                        gradient_stops: if needs_texture { Some(stops.clone()) } else { None },
+                        ..Default::default()
+                    }
                 }
             }
         }
     }
+}
+
+/// Extract gradient info from brush (legacy function for backward compatibility)
+fn extract_gradient_info(brush: &Brush) -> (u32, Color, Color, [f32; 4]) {
+    let info = extract_brush_info(brush);
+    (info.gradient_type, info.start_color, info.end_color, info.gradient_params)
 }
 
 /// Tessellate a path for filling
