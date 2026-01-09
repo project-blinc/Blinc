@@ -55,7 +55,6 @@ use blinc_layout::widgets::scroll::scroll;
 use blinc_layout::widgets::text_input::SharedTextInputData;
 use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState};
 
-
 use super::label::{label, LabelSize};
 use blinc_layout::InstanceKey;
 
@@ -328,7 +327,13 @@ impl Combobox {
                     )
                     .cursor_pointer();
 
-                div().relative().w_full().w_full().h(height).cursor_pointer().child(trigger)
+                div()
+                    .relative()
+                    .w_full()
+                    .w_full()
+                    .h(height)
+                    .cursor_pointer()
+                    .child(trigger)
             })
             .on_click(move |ctx| {
                 let is_currently_open = open_state_for_click.get();

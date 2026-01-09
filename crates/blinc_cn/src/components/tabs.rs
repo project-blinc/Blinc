@@ -769,101 +769,100 @@ fn build_tab_trigger(
     let badge_text = menu_item.badge.clone();
     let trigger_state_key = format!("{}:{}", trigger_key, value);
 
-    let mut trigger = stateful_with_key::<ButtonState>(&trigger_state_key)
-        .on_state(move |ctx| {
-            let state = ctx.state();
-            let theme = ThemeState::get();
+    let mut trigger = stateful_with_key::<ButtonState>(&trigger_state_key).on_state(move |ctx| {
+        let state = ctx.state();
+        let theme = ThemeState::get();
 
-            // Determine colors based on active and hover state
-            let is_hovered = matches!(state, ButtonState::Hovered | ButtonState::Pressed);
+        // Determine colors based on active and hover state
+        let is_hovered = matches!(state, ButtonState::Hovered | ButtonState::Pressed);
 
-            let text_color = if disabled {
-                text_secondary.with_alpha(0.5)
-            } else if is_active {
-                text_primary
-            } else if is_hovered {
-                text_primary.with_alpha(0.8)
+        let text_color = if disabled {
+            text_secondary.with_alpha(0.5)
+        } else if is_active {
+            text_primary
+        } else if is_hovered {
+            text_primary.with_alpha(0.8)
+        } else {
+            text_secondary
+        };
+
+        let bg = if is_active && !disabled {
+            surface
+        } else if is_hovered && !disabled {
+            surface.with_alpha(0.5)
+        } else {
+            Color::TRANSPARENT
+        };
+
+        // Build content
+        let mut content = div().flex_row().items_center().gap(theme.spacing().space_2);
+
+        // Add icon if present
+        if let Some(ref icon) = icon_svg {
+            content = content.child(
+                svg(icon)
+                    .size(size.icon_size(), size.icon_size())
+                    .color(text_color),
+            );
+        }
+
+        // Add label if present
+        if let Some(ref label) = label_text {
+            content = content.child(
+                text(label)
+                    .size(size.font_size())
+                    .color(text_color)
+                    .weight(if is_active {
+                        FontWeight::Medium
+                    } else {
+                        FontWeight::Normal
+                    })
+                    .no_cursor(),
+            );
+        }
+
+        // Add badge if present
+        if let Some(ref badge) = badge_text {
+            let primary = theme.color(ColorToken::Primary);
+            content = content.child(
+                div()
+                    .px(theme.spacing().space_1_5)
+                    .py(1.0)
+                    .bg(primary)
+                    .rounded(theme.radius(RadiusToken::Full))
+                    .child(
+                        text(badge)
+                            .size(size.badge_font_size())
+                            .color(theme.color(ColorToken::PrimaryActive))
+                            .medium()
+                            .no_cursor(),
+                    ),
+            );
+        }
+
+        let mut trigger_div = div()
+            .h(inner_height)
+            .padding_x(Length::Px(size.padding_x()))
+            .padding_y(Length::Px(size.padding_x() / 2.0))
+            .flex_row()
+            .items_center()
+            .justify_center()
+            .rounded(radius)
+            .bg(bg)
+            .cursor(if disabled {
+                CursorStyle::Default
             } else {
-                text_secondary
-            };
+                CursorStyle::Pointer
+            })
+            .child(content);
 
-            let bg = if is_active && !disabled {
-                surface
-            } else if is_hovered && !disabled {
-                surface.with_alpha(0.5)
-            } else {
-                Color::TRANSPARENT
-            };
+        // Add shadow for active tab
+        if is_active && !disabled {
+            trigger_div = trigger_div.shadow_sm();
+        }
 
-            // Build content
-            let mut content = div().flex_row().items_center().gap(theme.spacing().space_2);
-
-            // Add icon if present
-            if let Some(ref icon) = icon_svg {
-                content = content.child(
-                    svg(icon)
-                        .size(size.icon_size(), size.icon_size())
-                        .color(text_color),
-                );
-            }
-
-            // Add label if present
-            if let Some(ref label) = label_text {
-                content = content.child(
-                    text(label)
-                        .size(size.font_size())
-                        .color(text_color)
-                        .weight(if is_active {
-                            FontWeight::Medium
-                        } else {
-                            FontWeight::Normal
-                        })
-                        .no_cursor(),
-                );
-            }
-
-            // Add badge if present
-            if let Some(ref badge) = badge_text {
-                let primary = theme.color(ColorToken::Primary);
-                content = content.child(
-                    div()
-                        .px(theme.spacing().space_1_5)
-                        .py(1.0)
-                        .bg(primary)
-                        .rounded(theme.radius(RadiusToken::Full))
-                        .child(
-                            text(badge)
-                                .size(size.badge_font_size())
-                                .color(theme.color(ColorToken::PrimaryActive))
-                                .medium()
-                                .no_cursor(),
-                        ),
-                );
-            }
-
-            let mut trigger_div = div()
-                .h(inner_height)
-                .padding_x(Length::Px(size.padding_x()))
-                .padding_y(Length::Px(size.padding_x() / 2.0))
-                .flex_row()
-                .items_center()
-                .justify_center()
-                .rounded(radius)
-                .bg(bg)
-                .cursor(if disabled {
-                    CursorStyle::Default
-                } else {
-                    CursorStyle::Pointer
-                })
-                .child(content);
-
-            // Add shadow for active tab
-            if is_active && !disabled {
-                trigger_div = trigger_div.shadow_sm();
-            }
-
-            trigger_div
-        });
+        trigger_div
+    });
 
     // Add click handler if not disabled and not active
     if !disabled && !is_active {

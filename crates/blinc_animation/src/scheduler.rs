@@ -652,7 +652,14 @@ impl SchedulerHandle {
     pub fn is_spring_settled(&self, id: SpringId) -> bool {
         self.inner
             .upgrade()
-            .and_then(|inner| inner.lock().unwrap().springs.get(id).map(|s| s.is_settled()))
+            .and_then(|inner| {
+                inner
+                    .lock()
+                    .unwrap()
+                    .springs
+                    .get(id)
+                    .map(|s| s.is_settled())
+            })
             .unwrap_or(true) // If spring gone, consider settled
     }
 

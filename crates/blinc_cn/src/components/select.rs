@@ -675,8 +675,7 @@ fn build_dropdown_content(
                     base_bg
                 };
 
-                let text_color = if (state == ButtonState::Hovered
-                    || state == ButtonState::Pressed)
+                let text_color = if (state == ButtonState::Hovered || state == ButtonState::Pressed)
                     && !is_opt_disabled
                 {
                     theme.color(ColorToken::TextSecondary)

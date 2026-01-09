@@ -42,7 +42,9 @@ use blinc_layout::overlay_state::get_overlay_manager;
 use blinc_layout::prelude::*;
 use blinc_layout::stateful::{stateful_with_key, ButtonState, NoState};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
-use blinc_layout::widgets::overlay::{OverlayAnimation, OverlayHandle, OverlayKind, OverlayManagerExt};
+use blinc_layout::widgets::overlay::{
+    OverlayAnimation, OverlayHandle, OverlayKind, OverlayManagerExt,
+};
 use blinc_layout::InstanceKey;
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
@@ -443,7 +445,8 @@ impl NavigationMenuBuilder {
 
     /// Get or build the component
     fn get_or_build(&self) -> &NavigationMenu {
-        self.built.get_or_init(|| NavigationMenu::from_builder(self))
+        self.built
+            .get_or_init(|| NavigationMenu::from_builder(self))
     }
 
     /// Add a simple link item
@@ -541,12 +544,19 @@ impl NavigationLink {
                 let mut content = div()
                     .flex_col()
                     .gap(1.0)
-                    .px(3.0)  // Horizontal padding on item
-                    .py(2.0)  // Vertical padding on item
+                    .px(3.0) // Horizontal padding on item
+                    .py(2.0) // Vertical padding on item
                     .rounded(radius)
                     .bg(bg)
                     .cursor(CursorStyle::Pointer)
-                    .child(text(&label).size(14.0).medium().color(text_primary).no_cursor().pointer_events_none());
+                    .child(
+                        text(&label)
+                            .size(14.0)
+                            .medium()
+                            .color(text_primary)
+                            .no_cursor()
+                            .pointer_events_none(),
+                    );
 
                 if let Some(ref desc) = description {
                     content = content.child(

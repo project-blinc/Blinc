@@ -147,54 +147,57 @@ impl Sidebar {
                     let is_collapsed_for_click = collapsed.clone();
                     let toggle_key = format!("{}_toggle", ctx.key());
 
-                    toggle_btn =
-                        toggle_btn.child(
-                            stateful_with_key::<ButtonState>(&toggle_key)
-                                .deps([collapsed.signal_id()])
-                                .on_state(move |ctx| {
-                                    let state = ctx.state();
-                                    let theme = ThemeState::get();
-                                    let collapsed_inner = is_collapsed_for_state.get();
+                    toggle_btn = toggle_btn.child(
+                        stateful_with_key::<ButtonState>(&toggle_key)
+                            .deps([collapsed.signal_id()])
+                            .on_state(move |ctx| {
+                                let state = ctx.state();
+                                let theme = ThemeState::get();
+                                let collapsed_inner = is_collapsed_for_state.get();
 
-                                    let bg = match state {
-                                        ButtonState::Hovered | ButtonState::Pressed => {
-                                            theme.color(ColorToken::SecondaryHover).with_alpha(0.5)
-                                        }
-                                        _ => blinc_core::Color::TRANSPARENT,
-                                    };
+                                let bg = match state {
+                                    ButtonState::Hovered | ButtonState::Pressed => {
+                                        theme.color(ColorToken::SecondaryHover).with_alpha(0.5)
+                                    }
+                                    _ => blinc_core::Color::TRANSPARENT,
+                                };
 
-                                    let icon = if collapsed_inner {
-                                        CHEVRON_RIGHT_SVG
-                                    } else {
-                                        CHEVRON_LEFT_SVG
-                                    };
+                                let icon = if collapsed_inner {
+                                    CHEVRON_RIGHT_SVG
+                                } else {
+                                    CHEVRON_LEFT_SVG
+                                };
 
-                                    // Match item styling: w_fit, flex_row, same padding
-                                    let toggle_anim_key = format!("{}_anim", ctx.key());
-                                    div()
-                                        .w_fit()
-                                        .flex_row()
-                                        .items_center()
-                                        .gap(3.0)
-                                        .px(3.0)
-                                        .py(2.0)
-                                        .bg(bg)
-                                        .cursor(CursorStyle::Pointer)
-                                        .animate_bounds(
-                                            VisualAnimationConfig::size()
-                                                .with_key(&toggle_anim_key)
-                                                .clip_to_animated()
-                                                .snappy(),
-                                        )
-                                        .child(div().flex_shrink_0().self_end().child(
-                                            svg(icon).size(18.0, 18.0).color(text_secondary),
-                                        ).pointer_events_none())
-                                })
-                                .on_click(move |_| {
-                                    // is_collapsed_for_click.set(!current);
-                                    is_collapsed_for_click.update(|c| !c);
-                                }),
-                        );
+                                // Match item styling: w_fit, flex_row, same padding
+                                let toggle_anim_key = format!("{}_anim", ctx.key());
+                                div()
+                                    .w_fit()
+                                    .flex_row()
+                                    .items_center()
+                                    .gap(3.0)
+                                    .px(3.0)
+                                    .py(2.0)
+                                    .bg(bg)
+                                    .cursor(CursorStyle::Pointer)
+                                    .animate_bounds(
+                                        VisualAnimationConfig::size()
+                                            .with_key(&toggle_anim_key)
+                                            .clip_to_animated()
+                                            .snappy(),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex_shrink_0()
+                                            .self_end()
+                                            .child(svg(icon).size(18.0, 18.0).color(text_secondary))
+                                            .pointer_events_none(),
+                                    )
+                            })
+                            .on_click(move |_| {
+                                // is_collapsed_for_click.set(!current);
+                                is_collapsed_for_click.update(|c| !c);
+                            }),
+                    );
                 }
 
                 // Sections and items container

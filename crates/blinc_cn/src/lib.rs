@@ -93,7 +93,8 @@ pub mod prelude {
     pub use crate::components::alert::{alert, alert_box, Alert, AlertBox, AlertVariant};
     pub use crate::components::badge::{badge, Badge, BadgeVariant};
     pub use crate::components::breadcrumb::{
-        breadcrumb, Breadcrumb, BreadcrumbBuilder, BreadcrumbItem, BreadcrumbSeparator, BreadcrumbSize,
+        breadcrumb, Breadcrumb, BreadcrumbBuilder, BreadcrumbItem, BreadcrumbSeparator,
+        BreadcrumbSize,
     };
     pub use crate::components::button::{
         button, Button, ButtonBuilder, ButtonSize, ButtonVariant, IconPosition,

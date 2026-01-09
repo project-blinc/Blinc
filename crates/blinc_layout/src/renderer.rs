@@ -22,8 +22,8 @@ use crate::div::{ElementBuilder, ElementTypeId};
 use crate::element::{ElementBounds, GlassMaterial, Material, RenderLayer, RenderProps};
 use crate::layout_animation::{LayoutAnimationConfig, LayoutAnimationState};
 use crate::selector::{ElementRegistry, ScrollRef};
-use crate::visual_animation::{AnimatedRenderBounds, VisualAnimation, VisualAnimationConfig};
 use crate::tree::{LayoutNodeId, LayoutTree};
+use crate::visual_animation::{AnimatedRenderBounds, VisualAnimation, VisualAnimationConfig};
 
 /// A computed glass panel ready for GPU rendering
 ///
@@ -390,7 +390,6 @@ pub struct RenderTree {
     // ========================================================================
     // Visual Animation System (FLIP-style, read-only layout)
     // ========================================================================
-
     /// Visual animation configs for nodes (from element builders)
     /// Maps stable_key to config specifying which properties to animate
     visual_animation_configs: HashMap<String, VisualAnimationConfig>,
@@ -1131,8 +1130,7 @@ impl RenderTree {
         if let Some(config) = element.visual_animation_config() {
             eprintln!(
                 "[VISUAL_ANIM] collect_render_props: registering config for {:?}, key={:?}",
-                node_id,
-                config.key
+                node_id, config.key
             );
             self.register_visual_animation_config(node_id, config);
         }
@@ -1327,8 +1325,7 @@ impl RenderTree {
         if let Some(config) = element.visual_animation_config() {
             eprintln!(
                 "[VISUAL_ANIM] collect_render_props_boxed: registering config for {:?}, key={:?}",
-                node_id,
-                config.key
+                node_id, config.key
             );
             self.register_visual_animation_config(node_id, config);
         }
@@ -2437,8 +2434,7 @@ impl RenderTree {
 
         eprintln!(
             "[VISUAL_ANIM] Registering config: node={:?}, key={}",
-            node_id,
-            key
+            node_id, key
         );
 
         self.visual_animation_configs.insert(key.clone(), config);
@@ -2582,9 +2578,7 @@ impl RenderTree {
 
         // Start recursive computation from root
         self.compute_bounds_recursive(
-            root_id,
-            0.0,
-            0.0, // Parent offset starts at screen origin
+            root_id, 0.0, 0.0, // Parent offset starts at screen origin
         );
     }
 
@@ -2670,8 +2664,7 @@ impl RenderTree {
         // Store computed bounds
         let child_parent_x = animated_bounds.x;
         let child_parent_y = animated_bounds.y;
-        self.animated_render_bounds
-            .insert(node_id, animated_bounds);
+        self.animated_render_bounds.insert(node_id, animated_bounds);
 
         // Recursively compute for children
         // Children use THIS node's animated position as their parent offset

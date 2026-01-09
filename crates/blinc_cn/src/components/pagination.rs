@@ -134,11 +134,8 @@ impl Pagination {
                 let mut container = div().flex_row().items_center().gap(gap);
 
                 // Calculate visible page range
-                let (start_page, end_page) = calculate_page_range(
-                    current_page,
-                    total_pages,
-                    visible_pages,
-                );
+                let (start_page, end_page) =
+                    calculate_page_range(current_page, total_pages, visible_pages);
 
                 let show_start_ellipsis = start_page > 1;
                 let show_end_ellipsis = end_page < total_pages;
@@ -212,7 +209,11 @@ impl Pagination {
                             .h(button_size)
                             .items_center()
                             .justify_center()
-                            .child(svg(ELLIPSIS_SVG).size(icon_size, icon_size).color(text_tertiary)),
+                            .child(
+                                svg(ELLIPSIS_SVG)
+                                    .size(icon_size, icon_size)
+                                    .color(text_tertiary),
+                            ),
                     );
                 }
 
@@ -256,7 +257,11 @@ impl Pagination {
                             .h(button_size)
                             .items_center()
                             .justify_center()
-                            .child(svg(ELLIPSIS_SVG).size(icon_size, icon_size).color(text_tertiary)),
+                            .child(
+                                svg(ELLIPSIS_SVG)
+                                    .size(icon_size, icon_size)
+                                    .color(text_tertiary),
+                            ),
                     );
                 }
 
@@ -374,7 +379,10 @@ where
             let theme = ThemeState::get();
 
             let (bg, icon_color) = if is_disabled {
-                (blinc_core::Color::TRANSPARENT, text_tertiary.with_alpha(0.5))
+                (
+                    blinc_core::Color::TRANSPARENT,
+                    text_tertiary.with_alpha(0.5),
+                )
             } else {
                 match state {
                     ButtonState::Hovered | ButtonState::Pressed => {
@@ -391,7 +399,14 @@ where
                 .items_center()
                 .justify_center()
                 .bg(bg)
-                .border(1.0, if is_disabled { border.with_alpha(0.5) } else { border })
+                .border(
+                    1.0,
+                    if is_disabled {
+                        border.with_alpha(0.5)
+                    } else {
+                        border
+                    },
+                )
                 .cursor(if is_disabled {
                     CursorStyle::NotAllowed
                 } else {

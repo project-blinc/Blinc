@@ -42,7 +42,6 @@ pub mod image;
 pub mod interactive;
 pub mod layout_animation;
 pub mod motion;
-pub mod visual_animation;
 pub mod render_state;
 pub mod renderer;
 pub mod rich_text;
@@ -59,6 +58,7 @@ pub mod text_selection;
 pub mod tree;
 pub mod typography;
 pub mod units;
+pub mod visual_animation;
 pub mod widgets;
 
 // Markdown rendering

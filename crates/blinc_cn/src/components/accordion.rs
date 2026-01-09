@@ -397,15 +397,11 @@ impl AccordionBuilder {
                     if index < item_count - 1 {
                         let separator_key = format!("accordion-sep-{}", item_key);
                         content = content.child(
-                            div()
-                                .w_full()
-                                .h(1.0)
-                                .bg(border_color)
-                                .animate_bounds(
-                                    blinc_layout::visual_animation::VisualAnimationConfig::position()
-                                        .with_key(&separator_key)
-                                        .gentle(),
-                                ),
+                            div().w_full().h(1.0).bg(border_color).animate_bounds(
+                                blinc_layout::visual_animation::VisualAnimationConfig::position()
+                                    .with_key(&separator_key)
+                                    .gentle(),
+                            ),
                         );
                     }
                 }

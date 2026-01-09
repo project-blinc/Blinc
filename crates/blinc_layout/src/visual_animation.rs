@@ -161,10 +161,10 @@ impl VisualAnimation {
         let dh = from_bounds.height - to_bounds.height;
 
         // Check if any property has significant change
-        let has_position_change = config.animate.position
-            && (dx.abs() > config.threshold || dy.abs() > config.threshold);
-        let has_size_change = config.animate.size
-            && (dw.abs() > config.threshold || dh.abs() > config.threshold);
+        let has_position_change =
+            config.animate.position && (dx.abs() > config.threshold || dy.abs() > config.threshold);
+        let has_size_change =
+            config.animate.size && (dw.abs() > config.threshold || dh.abs() > config.threshold);
 
         if !has_position_change && !has_size_change {
             return None;
@@ -541,7 +541,13 @@ mod tests {
 
     #[test]
     fn test_animation_direction() {
-        assert_eq!(AnimationDirection::Collapsing, AnimationDirection::Collapsing);
-        assert_ne!(AnimationDirection::Expanding, AnimationDirection::Collapsing);
+        assert_eq!(
+            AnimationDirection::Collapsing,
+            AnimationDirection::Collapsing
+        );
+        assert_ne!(
+            AnimationDirection::Expanding,
+            AnimationDirection::Collapsing
+        );
     }
 }

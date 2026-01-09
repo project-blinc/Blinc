@@ -1977,14 +1977,11 @@ fn sidebar_section(ctx: &WindowedContext) -> impl ElementBuilder {
                             .item("Support", help_icon, || tracing::info!("Support clicked"))
                             .content(|| {
                                 let theme = ThemeState::get();
-                                div()
-                                    .bg(theme.color(ColorToken::Background))
-                                    .p(24.0)
-                                    .child(
-                                        text("Main Content Area")
-                                            .size(18.0)
-                                            .color(theme.color(ColorToken::TextPrimary)),
-                                    )
+                                div().bg(theme.color(ColorToken::Background)).p(24.0).child(
+                                    text("Main Content Area")
+                                        .size(18.0)
+                                        .color(theme.color(ColorToken::TextPrimary)),
+                                )
                             }),
                     ),
             ),
