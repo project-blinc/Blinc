@@ -448,6 +448,11 @@ impl<'a> GpuPaintContext<'a> {
                 // Return transparent as a fallback
                 ([0.0; 4], [0.0; 4], [0.0, 0.0, 1.0, 0.0], FillType::Solid)
             }
+            Brush::Blur(_) => {
+                // Blur is handled via glass primitives, not regular primitives
+                // Return transparent as a fallback (should never be used)
+                ([0.0; 4], [0.0; 4], [0.0, 0.0, 1.0, 0.0], FillType::Solid)
+            }
             Brush::Gradient(gradient) => {
                 let (stops, fill_type, gradient_params) = match gradient {
                     blinc_core::Gradient::Linear {
@@ -1069,6 +1074,77 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 ClipType::Circle | ClipType::Ellipse => {
                     // For circle/ellipse clips, use as rect for now
                     // Full support would require shader changes
+                    glass = glass.with_clip_rect(
+                        clip_bounds[0] - clip_bounds[2],
+                        clip_bounds[1] - clip_bounds[3],
+                        clip_bounds[2] * 2.0,
+                        clip_bounds[3] * 2.0,
+                    );
+                }
+            }
+
+            self.batch.push_glass(glass);
+            return;
+        }
+
+        // Handle Blur brush - convert to glass primitive with just blur and optional tint
+        if let Brush::Blur(style) = &brush {
+            let mut glass = GpuGlassPrimitive::new(
+                transformed.x(),
+                transformed.y(),
+                transformed.width(),
+                transformed.height(),
+            )
+            .with_corner_radius_per_corner(
+                scaled_radius.top_left,
+                scaled_radius.top_right,
+                scaled_radius.bottom_right,
+                scaled_radius.bottom_left,
+            )
+            .with_blur(style.radius)
+            .with_saturation(1.0) // No saturation adjustment for pure blur
+            .with_brightness(1.0); // No brightness adjustment
+
+            // Apply tint if specified
+            if let Some(ref tint) = style.tint {
+                glass = glass.with_tint(
+                    tint.r,
+                    tint.g,
+                    tint.b,
+                    tint.a * style.opacity,
+                );
+            } else {
+                // Default to slight white tint for visibility
+                glass = glass.with_tint(1.0, 1.0, 1.0, 0.1 * style.opacity);
+            }
+
+            // Apply current clip bounds to glass primitive
+            let (clip_bounds, clip_radius, clip_type) = self.get_clip_data();
+            match clip_type {
+                ClipType::None => {}
+                ClipType::Rect => {
+                    let has_radius = clip_radius.iter().any(|&r| r > 0.0);
+                    if has_radius {
+                        glass = glass.with_clip_rounded_rect_per_corner(
+                            clip_bounds[0],
+                            clip_bounds[1],
+                            clip_bounds[2],
+                            clip_bounds[3],
+                            clip_radius[0],
+                            clip_radius[1],
+                            clip_radius[2],
+                            clip_radius[3],
+                        );
+                    } else {
+                        glass = glass.with_clip_rect(
+                            clip_bounds[0],
+                            clip_bounds[1],
+                            clip_bounds[2],
+                            clip_bounds[3],
+                        );
+                    }
+                }
+                ClipType::Circle | ClipType::Ellipse => {
                     glass = glass.with_clip_rect(
                         clip_bounds[0] - clip_bounds[2],
                         clip_bounds[1] - clip_bounds[3],
@@ -2066,10 +2142,12 @@ mod tests {
         // Push a layer with opacity and blend mode
         let config = LayerConfig {
             id: None,
+            position: None,
             size: None,
             blend_mode: BlendMode::Multiply,
             opacity: 0.5,
             depth: false,
+            effects: Vec::new(),
         };
         ctx.push_layer(config);
 
@@ -2102,10 +2180,12 @@ mod tests {
         // Push first layer
         let config1 = LayerConfig {
             id: None,
+            position: None,
             size: None,
             blend_mode: BlendMode::Normal,
             opacity: 0.8,
             depth: false,
+            effects: Vec::new(),
         };
         ctx.push_layer(config1);
         assert_eq!(ctx.layer_stack.len(), 1);
@@ -2114,10 +2194,12 @@ mod tests {
         // Push second layer (nested)
         let config2 = LayerConfig {
             id: None,
+            position: None,
             size: None,
             blend_mode: BlendMode::Screen,
             opacity: 0.5,
             depth: false,
+            effects: Vec::new(),
         };
         ctx.push_layer(config2);
         assert_eq!(ctx.layer_stack.len(), 2);

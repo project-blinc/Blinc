@@ -15,8 +15,8 @@ use crate::primitives::{
     Uniforms,
 };
 use crate::shaders::{
-    COMPOSITE_SHADER, GLASS_SHADER, IMAGE_SHADER, LAYER_COMPOSITE_SHADER, PATH_SHADER, SDF_SHADER,
-    TEXT_SHADER,
+    BLUR_SHADER, COLOR_MATRIX_SHADER, COMPOSITE_SHADER, DROP_SHADOW_SHADER, GLASS_SHADER,
+    IMAGE_SHADER, LAYER_COMPOSITE_SHADER, PATH_SHADER, SDF_SHADER, TEXT_SHADER,
 };
 
 /// Error type for renderer operations
@@ -108,6 +108,12 @@ struct Pipelines {
     path_overlay: wgpu::RenderPipeline,
     /// Pipeline for layer composition (blend modes)
     layer_composite: wgpu::RenderPipeline,
+    /// Pipeline for Kawase blur effect
+    blur: wgpu::RenderPipeline,
+    /// Pipeline for color matrix transformation
+    color_matrix: wgpu::RenderPipeline,
+    /// Pipeline for drop shadow effect
+    drop_shadow: wgpu::RenderPipeline,
 }
 
 /// Cached MSAA pipelines for dynamic sample counts
@@ -242,7 +248,8 @@ impl LayerTexture {
             format,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC,
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
 
@@ -473,6 +480,12 @@ struct BindGroupLayouts {
     path: wgpu::BindGroupLayout,
     /// Layout for layer composition shader
     layer_composite: wgpu::BindGroupLayout,
+    /// Layout for blur effect shader
+    blur: wgpu::BindGroupLayout,
+    /// Layout for color matrix effect shader
+    color_matrix: wgpu::BindGroupLayout,
+    /// Layout for drop shadow effect shader
+    drop_shadow: wgpu::BindGroupLayout,
 }
 
 impl GpuRenderer {
@@ -697,6 +710,22 @@ impl GpuRenderer {
             source: wgpu::ShaderSource::Wgsl(LAYER_COMPOSITE_SHADER.into()),
         });
 
+        // Effect shaders
+        let blur_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Blur Effect Shader"),
+            source: wgpu::ShaderSource::Wgsl(BLUR_SHADER.into()),
+        });
+
+        let color_matrix_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Color Matrix Effect Shader"),
+            source: wgpu::ShaderSource::Wgsl(COLOR_MATRIX_SHADER.into()),
+        });
+
+        let drop_shadow_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Drop Shadow Effect Shader"),
+            source: wgpu::ShaderSource::Wgsl(DROP_SHADOW_SHADER.into()),
+        });
+
         // Create pipelines
         let pipelines = Self::create_pipelines(
             &device,
@@ -707,6 +736,9 @@ impl GpuRenderer {
             &composite_shader,
             &path_shader,
             &layer_composite_shader,
+            &blur_shader,
+            &color_matrix_shader,
+            &drop_shadow_shader,
             texture_format,
             config.sample_count,
         );
@@ -1165,6 +1197,114 @@ impl GpuRenderer {
             ],
         });
 
+        // Blur effect bind group layout
+        let blur = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Blur Effect Bind Group Layout"),
+            entries: &[
+                // BlurUniforms
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // Input texture
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                // Input sampler
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+        // Color matrix effect bind group layout
+        let color_matrix = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Color Matrix Effect Bind Group Layout"),
+            entries: &[
+                // ColorMatrixUniforms
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // Input texture
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                // Input sampler
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+        // Drop shadow effect bind group layout
+        let drop_shadow = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Drop Shadow Effect Bind Group Layout"),
+            entries: &[
+                // DropShadowUniforms
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // Input texture
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                // Input sampler
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
         BindGroupLayouts {
             sdf,
             glass,
@@ -1172,6 +1312,9 @@ impl GpuRenderer {
             composite,
             path,
             layer_composite,
+            blur,
+            color_matrix,
+            drop_shadow,
         }
     }
 
@@ -1184,6 +1327,9 @@ impl GpuRenderer {
         composite_shader: &wgpu::ShaderModule,
         path_shader: &wgpu::ShaderModule,
         layer_composite_shader: &wgpu::ShaderModule,
+        blur_shader: &wgpu::ShaderModule,
+        color_matrix_shader: &wgpu::ShaderModule,
+        drop_shadow_shader: &wgpu::ShaderModule,
         texture_format: wgpu::TextureFormat,
         sample_count: u32,
     ) -> Pipelines {
@@ -1587,6 +1733,108 @@ impl GpuRenderer {
             cache: None,
         });
 
+        // -------------------------------------------------------------------------
+        // Effect Pipelines (post-processing)
+        // -------------------------------------------------------------------------
+
+        // Effect pipelines share similar configuration: no vertex buffers, fullscreen quad
+        let effect_primitive_state = wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,
+            unclipped_depth: false,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            conservative: false,
+        };
+
+        // Blur pipeline layout
+        let blur_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Blur Effect Pipeline Layout"),
+            bind_group_layouts: &[&layouts.blur],
+            push_constant_ranges: &[],
+        });
+
+        let blur = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Blur Effect Pipeline"),
+            layout: Some(&blur_layout),
+            vertex: wgpu::VertexState {
+                module: blur_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: blur_shader,
+                entry_point: Some("fs_kawase_blur"),
+                targets: color_targets,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: effect_primitive_state,
+            depth_stencil: None,
+            multisample: overlay_multisample_state, // 1x sampled
+            multiview: None,
+            cache: None,
+        });
+
+        // Color matrix pipeline layout
+        let color_matrix_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Color Matrix Effect Pipeline Layout"),
+            bind_group_layouts: &[&layouts.color_matrix],
+            push_constant_ranges: &[],
+        });
+
+        let color_matrix = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Color Matrix Effect Pipeline"),
+            layout: Some(&color_matrix_layout),
+            vertex: wgpu::VertexState {
+                module: color_matrix_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: color_matrix_shader,
+                entry_point: Some("fs_color_matrix"),
+                targets: color_targets,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: effect_primitive_state,
+            depth_stencil: None,
+            multisample: overlay_multisample_state, // 1x sampled
+            multiview: None,
+            cache: None,
+        });
+
+        // Drop shadow pipeline layout
+        let drop_shadow_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Drop Shadow Effect Pipeline Layout"),
+            bind_group_layouts: &[&layouts.drop_shadow],
+            push_constant_ranges: &[],
+        });
+
+        let drop_shadow = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Drop Shadow Effect Pipeline"),
+            layout: Some(&drop_shadow_layout),
+            vertex: wgpu::VertexState {
+                module: drop_shadow_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: drop_shadow_shader,
+                entry_point: Some("fs_drop_shadow"),
+                targets: color_targets,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: effect_primitive_state,
+            depth_stencil: None,
+            multisample: overlay_multisample_state, // 1x sampled
+            multiview: None,
+            cache: None,
+        });
+
         Pipelines {
             sdf,
             sdf_overlay,
@@ -1598,6 +1846,9 @@ impl GpuRenderer {
             path,
             path_overlay,
             layer_composite,
+            blur,
+            color_matrix,
+            drop_shadow,
         }
     }
 
@@ -1993,6 +2244,39 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         clear_color: [f64; 4],
     ) {
+        // Check if we have layer commands with effects that need processing
+        let has_layer_effects = batch.layer_commands.iter().any(|entry| {
+            if let crate::primitives::LayerCommand::Push { config } = &entry.command {
+                !config.effects.is_empty()
+            } else {
+                false
+            }
+        });
+
+        tracing::trace!(
+            "render_with_clear: {} primitives, {} layer commands, has_layer_effects={}",
+            batch.primitives.len(),
+            batch.layer_commands.len(),
+            has_layer_effects
+        );
+
+        // If we have layer effects, use the layer-aware rendering path
+        if has_layer_effects {
+            self.render_with_layer_effects(target, batch, clear_color);
+            return;
+        }
+
+        // Standard rendering (no layer effects)
+        self.render_with_clear_simple(target, batch, clear_color);
+    }
+
+    /// Simple render with clear (no layer effect processing)
+    fn render_with_clear_simple(
+        &mut self,
+        target: &wgpu::TextureView,
+        batch: &PrimitiveBatch,
+        clear_color: [f64; 4],
+    ) {
         // Update uniforms
         let uniforms = Uniforms {
             viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
@@ -2054,6 +2338,232 @@ impl GpuRenderer {
             }
 
             // Render paths
+            if has_paths {
+                if let (Some(vb), Some(ib)) =
+                    (&self.buffers.path_vertices, &self.buffers.path_indices)
+                {
+                    render_pass.set_pipeline(&self.pipelines.path);
+                    render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
+                    render_pass.set_vertex_buffer(0, vb.slice(..));
+                    render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
+                }
+            }
+        }
+
+        // Submit commands
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Render with layer effect processing
+    ///
+    /// This implements a correct layer effect system:
+    /// 1. Identify primitive ranges for effect layers
+    /// 2. Render non-effect primitives to target (skipping those in effect layers)
+    /// 3. For each effect layer, render to viewport-sized texture, apply effects, blit at position
+    fn render_with_layer_effects(
+        &mut self,
+        target: &wgpu::TextureView,
+        batch: &PrimitiveBatch,
+        clear_color: [f64; 4],
+    ) {
+        use crate::primitives::LayerCommand;
+
+        // Build list of effect layers with their primitive ranges
+        let mut effect_layers: Vec<(usize, usize, blinc_core::LayerConfig)> = Vec::new();
+        let mut layer_stack: Vec<(usize, blinc_core::LayerConfig)> = Vec::new();
+
+        for entry in &batch.layer_commands {
+            match &entry.command {
+                LayerCommand::Push { config } => {
+                    layer_stack.push((entry.primitive_index, config.clone()));
+                }
+                LayerCommand::Pop => {
+                    if let Some((start_idx, config)) = layer_stack.pop() {
+                        if !config.effects.is_empty() {
+                            effect_layers.push((start_idx, entry.primitive_index, config));
+                        }
+                    }
+                }
+                LayerCommand::Sample { .. } => {}
+            }
+        }
+
+        // If no effect layers, just render normally
+        if effect_layers.is_empty() {
+            self.render_with_clear_simple(target, batch, clear_color);
+            return;
+        }
+
+        // Build set of primitive indices that belong to effect layers (to skip in first pass)
+        let mut effect_primitives = std::collections::HashSet::new();
+        for (start, end, _) in &effect_layers {
+            for i in *start..*end {
+                effect_primitives.insert(i);
+            }
+        }
+
+        // First pass: render primitives that are NOT in effect layers
+        self.render_primitives_excluding(target, batch, &effect_primitives, clear_color);
+
+        // Process each effect layer
+        for (start_idx, end_idx, config) in effect_layers {
+            if start_idx >= end_idx || end_idx > batch.primitives.len() {
+                continue;
+            }
+
+            let layer_pos = config.position.map(|p| (p.x, p.y)).unwrap_or((0.0, 0.0));
+            let layer_size = config
+                .size
+                .map(|s| (s.width, s.height))
+                .unwrap_or((self.viewport_size.0 as f32, self.viewport_size.1 as f32));
+
+            // Render layer primitives to a viewport-sized texture
+            let layer_texture = self
+                .layer_texture_cache
+                .acquire(&self.device, self.viewport_size, false);
+
+            self.render_primitive_range(
+                &layer_texture.view,
+                batch,
+                start_idx,
+                end_idx,
+                [0.0, 0.0, 0.0, 0.0], // Clear to transparent
+            );
+
+            // Apply effects to the texture
+            let effected = self.apply_layer_effects(&layer_texture, &config.effects);
+            self.layer_texture_cache.release(layer_texture);
+
+            // Blit only the element's region back to target at correct position
+            self.blit_region_to_target(
+                &effected.view,
+                target,
+                layer_pos,
+                layer_size,
+                config.opacity,
+                config.blend_mode,
+            );
+
+            self.layer_texture_cache.release(effected);
+        }
+    }
+
+    /// Render primitives excluding those in the given set
+    fn render_primitives_excluding(
+        &mut self,
+        target: &wgpu::TextureView,
+        batch: &PrimitiveBatch,
+        exclude: &std::collections::HashSet<usize>,
+        clear_color: [f64; 4],
+    ) {
+        // If nothing to exclude, use simple path
+        if exclude.is_empty() {
+            self.render_with_clear_simple(target, batch, clear_color);
+            return;
+        }
+
+        // Build list of primitives to render (excluding those in effect layers)
+        let included_primitives: Vec<GpuPrimitive> = batch
+            .primitives
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !exclude.contains(i))
+            .map(|(_, p)| *p)
+            .collect();
+
+        if included_primitives.is_empty() && batch.paths.vertices.is_empty() {
+            // Just clear the target
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Clear Encoder"),
+                });
+            {
+                let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Clear Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: target,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: clear_color[0],
+                                g: clear_color[1],
+                                b: clear_color[2],
+                                a: clear_color[3],
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+            }
+            self.queue.submit(std::iter::once(encoder.finish()));
+            return;
+        }
+
+        // Update uniforms
+        let uniforms = Uniforms {
+            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            _padding: [0.0; 2],
+        };
+        self.queue
+            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+
+        // Update primitives buffer with filtered primitives
+        if !included_primitives.is_empty() {
+            self.queue.write_buffer(
+                &self.buffers.primitives,
+                0,
+                bytemuck::cast_slice(&included_primitives),
+            );
+        }
+
+        // Update path buffers if we have path geometry
+        let has_paths = !batch.paths.vertices.is_empty() && !batch.paths.indices.is_empty();
+        if has_paths {
+            self.update_path_buffers(batch);
+        }
+
+        // Create command encoder
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Filtered Render Encoder"),
+            });
+
+        // Begin render pass
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Filtered Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: clear_color[0],
+                            g: clear_color[1],
+                            b: clear_color[2],
+                            a: clear_color[3],
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            // Render SDF primitives (filtered)
+            if !included_primitives.is_empty() {
+                render_pass.set_pipeline(&self.pipelines.sdf);
+                render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
+                render_pass.draw(0..6, 0..included_primitives.len() as u32);
+            }
+
+            // Render paths (always rendered - path filtering would be more complex)
             if has_paths {
                 if let (Some(vb), Some(ib)) =
                     (&self.buffers.path_vertices, &self.buffers.path_indices)
@@ -2371,6 +2881,82 @@ impl GpuRenderer {
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 
+    /// Render primitives to a backdrop texture for glass blur sampling
+    ///
+    /// This renders the background primitives to a lower-resolution texture
+    /// that glass primitives sample from for their blur effect.
+    pub fn render_to_backdrop(
+        &mut self,
+        backdrop: &wgpu::TextureView,
+        backdrop_size: (u32, u32),
+        batch: &PrimitiveBatch,
+    ) {
+        if batch.primitives.is_empty() {
+            return;
+        }
+
+        // Update uniforms for backdrop (typically half resolution)
+        let backdrop_uniforms = Uniforms {
+            viewport_size: [backdrop_size.0 as f32, backdrop_size.1 as f32],
+            _padding: [0.0; 2],
+        };
+        self.queue.write_buffer(
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&backdrop_uniforms),
+        );
+
+        // Update primitives buffer
+        self.queue.write_buffer(
+            &self.buffers.primitives,
+            0,
+            bytemuck::cast_slice(&batch.primitives),
+        );
+
+        // Create command encoder
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Backdrop Render Encoder"),
+            });
+
+        // Render to backdrop texture
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Backdrop Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: backdrop,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&self.pipelines.sdf);
+            render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
+            render_pass.draw(0..6, 0..batch.primitives.len() as u32);
+        }
+
+        // Submit commands
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        // Restore main viewport uniforms
+        let main_uniforms = Uniforms {
+            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            _padding: [0.0; 2],
+        };
+        self.queue.write_buffer(
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&main_uniforms),
+        );
+    }
+
     /// Render glass frame with backdrop and glass primitives in a single encoder submission.
     /// This is more efficient than separate render calls as it reduces command buffer overhead.
     ///
@@ -2675,6 +3261,22 @@ impl GpuRenderer {
     /// * `target` - The single-sampled texture view to render to (existing content is preserved)
     /// * `batch` - The primitive batch to render
     pub fn render_overlay(&mut self, target: &wgpu::TextureView, batch: &PrimitiveBatch) {
+        // Check if we have layer commands with effects that need processing
+        let has_layer_effects = batch.layer_commands.iter().any(|entry| {
+            if let crate::primitives::LayerCommand::Push { config } = &entry.command {
+                !config.effects.is_empty()
+            } else {
+                false
+            }
+        });
+
+        // If we have layer effects, use the layer-aware rendering path
+        if has_layer_effects {
+            self.render_overlay_with_layer_effects(target, batch);
+            return;
+        }
+
+        // Standard overlay rendering (no layer effects)
         // Update uniforms
         let uniforms = Uniforms {
             viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
@@ -2736,6 +3338,154 @@ impl GpuRenderer {
             }
 
             // Render SDF primitives using overlay pipeline
+            if !batch.primitives.is_empty() {
+                render_pass.set_pipeline(&self.pipelines.sdf_overlay);
+                render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
+                render_pass.draw(0..6, 0..batch.primitives.len() as u32);
+            }
+        }
+
+        // Submit commands
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Render overlay with layer effect processing
+    ///
+    /// Handles layer commands with effects by rendering layer content to offscreen
+    /// textures, applying effects, and compositing back.
+    fn render_overlay_with_layer_effects(
+        &mut self,
+        target: &wgpu::TextureView,
+        batch: &PrimitiveBatch,
+    ) {
+        use crate::primitives::LayerCommand;
+
+        // First, do the standard overlay render
+        self.render_overlay_simple(target, batch);
+
+        // Then process layer commands with effects
+        let mut layer_stack: Vec<(usize, blinc_core::LayerConfig)> = Vec::new();
+
+        for entry in &batch.layer_commands {
+            match &entry.command {
+                LayerCommand::Push { config } => {
+                    layer_stack.push((entry.primitive_index, config.clone()));
+                }
+                LayerCommand::Pop => {
+                    if let Some((start_idx, config)) = layer_stack.pop() {
+                        // Only process if this layer has effects
+                        if config.effects.is_empty() {
+                            continue;
+                        }
+
+                        // Get layer size (use viewport if not specified)
+                        let layer_size = config
+                            .size
+                            .map(|s| (s.width as u32, s.height as u32))
+                            .unwrap_or(self.viewport_size);
+
+                        // Render layer content to offscreen texture
+                        let layer_texture = self
+                            .layer_texture_cache
+                            .acquire(&self.device, layer_size, false);
+
+                        // Render the primitives for this layer
+                        let end_idx = entry.primitive_index;
+                        if start_idx < end_idx && end_idx <= batch.primitives.len() {
+                            self.render_primitive_range(
+                                &layer_texture.view,
+                                batch,
+                                start_idx,
+                                end_idx,
+                                [0.0, 0.0, 0.0, 0.0],
+                            );
+                        }
+
+                        // Apply effects
+                        let effected = self.apply_layer_effects(&layer_texture, &config.effects);
+                        self.layer_texture_cache.release(layer_texture);
+
+                        // Composite back to main target with opacity
+                        self.blit_texture_to_target(
+                            &effected.view,
+                            target,
+                            config.opacity,
+                            config.blend_mode,
+                        );
+
+                        self.layer_texture_cache.release(effected);
+                    }
+                }
+                LayerCommand::Sample { .. } => {
+                    // Sample commands handled elsewhere
+                }
+            }
+        }
+    }
+
+    /// Simple overlay render without layer effect processing
+    fn render_overlay_simple(&mut self, target: &wgpu::TextureView, batch: &PrimitiveBatch) {
+        // Update uniforms
+        let uniforms = Uniforms {
+            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            _padding: [0.0; 2],
+        };
+        self.queue
+            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+
+        // Update primitives buffer
+        if !batch.primitives.is_empty() {
+            self.queue.write_buffer(
+                &self.buffers.primitives,
+                0,
+                bytemuck::cast_slice(&batch.primitives),
+            );
+        }
+
+        // Update path buffers if we have path geometry
+        let has_paths = !batch.paths.vertices.is_empty() && !batch.paths.indices.is_empty();
+        if has_paths {
+            self.update_path_buffers(batch);
+        }
+
+        // Create command encoder
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Blinc Overlay Simple Render Encoder"),
+            });
+
+        // Begin render pass (load existing content, don't clear)
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Blinc Overlay Simple Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            // Render paths first
+            if has_paths {
+                if let (Some(vb), Some(ib)) =
+                    (&self.buffers.path_vertices, &self.buffers.path_indices)
+                {
+                    render_pass.set_pipeline(&self.pipelines.path_overlay);
+                    render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
+                    render_pass.set_vertex_buffer(0, vb.slice(..));
+                    render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                    render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
+                }
+            }
+
+            // Render SDF primitives
             if !batch.primitives.is_empty() {
                 render_pass.set_pipeline(&self.pipelines.sdf_overlay);
                 render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
@@ -3812,6 +4562,872 @@ impl GpuRenderer {
         render_pass.set_pipeline(&self.pipelines.layer_composite);
         render_pass.set_bind_group(0, &bind_group, &[]);
         render_pass.draw(0..6, 0..1);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Effect Application Methods
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Apply a single Kawase blur pass
+    ///
+    /// Renders from `input` to `output` using the blur shader with the specified
+    /// radius and iteration index.
+    pub fn apply_blur_pass(
+        &mut self,
+        input: &wgpu::TextureView,
+        output: &wgpu::TextureView,
+        size: (u32, u32),
+        radius: f32,
+        iteration: u32,
+    ) {
+        use crate::primitives::BlurUniforms;
+
+        let uniforms = BlurUniforms {
+            texel_size: [1.0 / size.0 as f32, 1.0 / size.1 as f32],
+            radius,
+            iteration,
+        };
+
+        let uniform_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Blur Uniforms Buffer"),
+                contents: bytemuck::cast_slice(&[uniforms]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Blur Effect Bind Group"),
+            layout: &self.bind_group_layouts.blur,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(input),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.path_image_sampler),
+                },
+            ],
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Blur Pass Encoder"),
+            });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Blur Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: output,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&self.pipelines.blur);
+            render_pass.set_bind_group(0, &bind_group, &[]);
+            render_pass.draw(0..6, 0..1);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Apply multi-pass Kawase blur
+    ///
+    /// Performs multiple blur passes for higher quality blur.
+    /// Uses ping-pong rendering between two textures.
+    ///
+    /// Returns the final output texture (caller should release temp textures).
+    pub fn apply_blur(
+        &mut self,
+        input: &LayerTexture,
+        radius: f32,
+        passes: u32,
+    ) -> LayerTexture {
+        if passes == 0 {
+            // No blur needed, return a copy
+            let output = self.layer_texture_cache.acquire(&self.device, input.size, false);
+            // Copy input to output
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Blur Copy Encoder"),
+                });
+            encoder.copy_texture_to_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &input.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::ImageCopyTexture {
+                    texture: &output.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::Extent3d {
+                    width: input.size.0,
+                    height: input.size.1,
+                    depth_or_array_layers: 1,
+                },
+            );
+            self.queue.submit(std::iter::once(encoder.finish()));
+            return output;
+        }
+
+        let size = input.size;
+
+        // For ping-pong we need two temp textures
+        let mut temp_a = self.layer_texture_cache.acquire(&self.device, size, false);
+        let mut temp_b = self.layer_texture_cache.acquire(&self.device, size, false);
+
+        // First pass: input -> temp_a
+        self.apply_blur_pass(&input.view, &temp_a.view, size, radius, 0);
+
+        // Subsequent passes alternate between temp_a and temp_b
+        for i in 1..passes {
+            if i % 2 == 1 {
+                // temp_a -> temp_b
+                self.apply_blur_pass(&temp_a.view, &temp_b.view, size, radius, i);
+            } else {
+                // temp_b -> temp_a
+                self.apply_blur_pass(&temp_b.view, &temp_a.view, size, radius, i);
+            }
+        }
+
+        // Return the correct temp texture based on which has the final result
+        // Release the other one back to the cache
+        if passes % 2 == 1 {
+            // Odd number of passes: result is in temp_a
+            self.layer_texture_cache.release(temp_b);
+            temp_a
+        } else {
+            // Even number of passes: result is in temp_b
+            self.layer_texture_cache.release(temp_a);
+            temp_b
+        }
+    }
+
+    /// Apply color matrix transformation
+    ///
+    /// Transforms colors using a 4x5 matrix (4x4 matrix + offset column).
+    /// Useful for grayscale, sepia, saturation, brightness, contrast, etc.
+    pub fn apply_color_matrix(
+        &mut self,
+        input: &wgpu::TextureView,
+        output: &wgpu::TextureView,
+        matrix: &[f32; 20],
+    ) {
+        use crate::primitives::ColorMatrixUniforms;
+
+        let uniforms = ColorMatrixUniforms::from_matrix(matrix);
+
+        let uniform_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Color Matrix Uniforms Buffer"),
+                contents: bytemuck::cast_slice(&[uniforms]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Color Matrix Effect Bind Group"),
+            layout: &self.bind_group_layouts.color_matrix,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(input),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.path_image_sampler),
+                },
+            ],
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Color Matrix Pass Encoder"),
+            });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Color Matrix Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: output,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&self.pipelines.color_matrix);
+            render_pass.set_bind_group(0, &bind_group, &[]);
+            render_pass.draw(0..6, 0..1);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Apply drop shadow effect
+    ///
+    /// Creates a blurred, offset, colored shadow of the input.
+    pub fn apply_drop_shadow(
+        &mut self,
+        input: &wgpu::TextureView,
+        output: &wgpu::TextureView,
+        size: (u32, u32),
+        offset: (f32, f32),
+        blur_radius: f32,
+        spread: f32,
+        color: [f32; 4],
+    ) {
+        use crate::primitives::DropShadowUniforms;
+
+        let uniforms = DropShadowUniforms {
+            offset: [offset.0, offset.1],
+            blur_radius,
+            spread,
+            color,
+            texel_size: [1.0 / size.0 as f32, 1.0 / size.1 as f32],
+            _pad: [0.0, 0.0],
+        };
+
+        let uniform_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Drop Shadow Uniforms Buffer"),
+                contents: bytemuck::cast_slice(&[uniforms]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Drop Shadow Effect Bind Group"),
+            layout: &self.bind_group_layouts.drop_shadow,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(input),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.path_image_sampler),
+                },
+            ],
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Drop Shadow Pass Encoder"),
+            });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Drop Shadow Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: output,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&self.pipelines.drop_shadow);
+            render_pass.set_bind_group(0, &bind_group, &[]);
+            render_pass.draw(0..6, 0..1);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Helper to create common color matrices
+    pub fn grayscale_matrix() -> [f32; 20] {
+        // Luminance weights (ITU-R BT.709)
+        let r = 0.2126;
+        let g = 0.7152;
+        let b = 0.0722;
+        [
+            r, g, b, 0.0, 0.0,
+            r, g, b, 0.0, 0.0,
+            r, g, b, 0.0, 0.0,
+            0.0, 0.0, 0.0, 1.0, 0.0,
+        ]
+    }
+
+    /// Create sepia tone color matrix
+    pub fn sepia_matrix() -> [f32; 20] {
+        [
+            0.393, 0.769, 0.189, 0.0, 0.0,
+            0.349, 0.686, 0.168, 0.0, 0.0,
+            0.272, 0.534, 0.131, 0.0, 0.0,
+            0.0, 0.0, 0.0, 1.0, 0.0,
+        ]
+    }
+
+    /// Create saturation adjustment matrix
+    pub fn saturation_matrix(saturation: f32) -> [f32; 20] {
+        let s = saturation;
+        let r = 0.2126;
+        let g = 0.7152;
+        let b = 0.0722;
+        let sr = (1.0 - s) * r;
+        let sg = (1.0 - s) * g;
+        let sb = (1.0 - s) * b;
+        [
+            sr + s, sg, sb, 0.0, 0.0,
+            sr, sg + s, sb, 0.0, 0.0,
+            sr, sg, sb + s, 0.0, 0.0,
+            0.0, 0.0, 0.0, 1.0, 0.0,
+        ]
+    }
+
+    /// Create brightness adjustment matrix
+    pub fn brightness_matrix(brightness: f32) -> [f32; 20] {
+        let b = brightness - 1.0; // 0 = no change, positive = brighter
+        [
+            1.0, 0.0, 0.0, 0.0, b,
+            0.0, 1.0, 0.0, 0.0, b,
+            0.0, 0.0, 1.0, 0.0, b,
+            0.0, 0.0, 0.0, 1.0, 0.0,
+        ]
+    }
+
+    /// Create contrast adjustment matrix
+    pub fn contrast_matrix(contrast: f32) -> [f32; 20] {
+        let c = contrast;
+        let t = (1.0 - c) / 2.0;
+        [
+            c, 0.0, 0.0, 0.0, t,
+            0.0, c, 0.0, 0.0, t,
+            0.0, 0.0, c, 0.0, t,
+            0.0, 0.0, 0.0, 1.0, 0.0,
+        ]
+    }
+
+    /// Create invert color matrix
+    pub fn invert_matrix() -> [f32; 20] {
+        [
+            -1.0, 0.0, 0.0, 0.0, 1.0,
+            0.0, -1.0, 0.0, 0.0, 1.0,
+            0.0, 0.0, -1.0, 0.0, 1.0,
+            0.0, 0.0, 0.0, 1.0, 0.0,
+        ]
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Layer Command Processing
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// Apply layer effects to a texture
+    ///
+    /// Processes a list of LayerEffects in order and returns the final result.
+    /// The input texture is not modified; a new texture with effects applied is returned.
+    pub fn apply_layer_effects(
+        &mut self,
+        input: &LayerTexture,
+        effects: &[blinc_core::LayerEffect],
+    ) -> LayerTexture {
+        use blinc_core::LayerEffect;
+
+        if effects.is_empty() {
+            // No effects, just return a copy
+            let output = self.layer_texture_cache.acquire(&self.device, input.size, false);
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Layer Effect Copy Encoder"),
+                });
+            encoder.copy_texture_to_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &input.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::ImageCopyTexture {
+                    texture: &output.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::Extent3d {
+                    width: input.size.0,
+                    height: input.size.1,
+                    depth_or_array_layers: 1,
+                },
+            );
+            self.queue.submit(std::iter::once(encoder.finish()));
+            return output;
+        }
+
+        let size = input.size;
+        let mut current = self.layer_texture_cache.acquire(&self.device, size, false);
+
+        // Copy input to current
+        {
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Layer Effect Init Copy"),
+                });
+            encoder.copy_texture_to_texture(
+                wgpu::ImageCopyTexture {
+                    texture: &input.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::ImageCopyTexture {
+                    texture: &current.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::Extent3d {
+                    width: size.0,
+                    height: size.1,
+                    depth_or_array_layers: 1,
+                },
+            );
+            self.queue.submit(std::iter::once(encoder.finish()));
+        }
+
+        for effect in effects {
+            match effect {
+                LayerEffect::Blur { radius, quality: _ } => {
+                    // Calculate number of passes based on radius
+                    let passes = (*radius / 4.0).ceil().max(1.0) as u32;
+                    let blurred = self.apply_blur(&current, *radius, passes);
+                    self.layer_texture_cache.release(current);
+                    current = blurred;
+                }
+
+                LayerEffect::DropShadow {
+                    offset_x,
+                    offset_y,
+                    blur,
+                    spread,
+                    color,
+                } => {
+                    let temp = self.layer_texture_cache.acquire(&self.device, size, false);
+                    self.apply_drop_shadow(
+                        &current.view,
+                        &temp.view,
+                        size,
+                        (*offset_x, *offset_y),
+                        *blur,
+                        *spread,
+                        [color.r, color.g, color.b, color.a],
+                    );
+                    self.layer_texture_cache.release(current);
+                    current = temp;
+                }
+
+                LayerEffect::Glow {
+                    radius,
+                    color,
+                    intensity,
+                } => {
+                    // Glow is implemented as a blurred, color-tinted version
+                    // For simplicity, apply blur and color enhancement directly
+                    // (A proper glow would composite the blur behind the original)
+                    let passes = (*radius / 4.0).ceil().max(1.0) as u32;
+                    let blurred = self.apply_blur(&current, *radius, passes);
+
+                    // Apply glow color and intensity via color matrix
+                    // Mix the glow color with the original using intensity as blend factor
+                    let glow_matrix = [
+                        1.0 - intensity + color.r * intensity, 0.0, 0.0, 0.0, 0.0,
+                        0.0, 1.0 - intensity + color.g * intensity, 0.0, 0.0, 0.0,
+                        0.0, 0.0, 1.0 - intensity + color.b * intensity, 0.0, 0.0,
+                        0.0, 0.0, 0.0, 1.0, 0.0,
+                    ];
+
+                    let tinted = self.layer_texture_cache.acquire(&self.device, size, false);
+                    self.apply_color_matrix(&blurred.view, &tinted.view, &glow_matrix);
+                    self.layer_texture_cache.release(blurred);
+                    self.layer_texture_cache.release(current);
+                    current = tinted;
+                }
+
+                LayerEffect::ColorMatrix { matrix } => {
+                    let temp = self.layer_texture_cache.acquire(&self.device, size, false);
+                    self.apply_color_matrix(&current.view, &temp.view, matrix);
+                    self.layer_texture_cache.release(current);
+                    current = temp;
+                }
+            }
+        }
+
+        current
+    }
+
+    /// Composite two textures together
+    ///
+    /// Blends `top` over `bottom` using the specified blend mode and opacity.
+    pub fn composite_textures(
+        &mut self,
+        bottom: &wgpu::TextureView,
+        top: &wgpu::TextureView,
+        output: &wgpu::TextureView,
+        size: (u32, u32),
+        blend_mode: blinc_core::BlendMode,
+        opacity: f32,
+    ) {
+        use crate::primitives::CompositeUniforms;
+
+        let uniforms = CompositeUniforms {
+            opacity,
+            blend_mode: blend_mode as u32,
+            _padding: [0.0; 2],
+        };
+
+        let uniform_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Composite Uniforms Buffer"),
+                contents: bytemuck::cast_slice(&[uniforms]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Composite Bind Group"),
+            layout: &self.bind_group_layouts.composite,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(bottom),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(top),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&self.path_image_sampler),
+                },
+            ],
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Composite Pass Encoder"),
+            });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Composite Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: output,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&self.pipelines.composite);
+            render_pass.set_bind_group(0, &bind_group, &[]);
+            render_pass.draw(0..6, 0..1);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Render a range of primitives to a target
+    fn render_primitive_range(
+        &mut self,
+        target: &wgpu::TextureView,
+        batch: &PrimitiveBatch,
+        start_idx: usize,
+        end_idx: usize,
+        clear_color: [f64; 4],
+    ) {
+        if start_idx >= end_idx {
+            return;
+        }
+
+        // Extract the primitive range
+        let primitive_count = end_idx - start_idx;
+        let primitives = &batch.primitives[start_idx..end_idx];
+
+        if primitives.is_empty() {
+            return;
+        }
+
+        // Update uniforms
+        let uniforms = Uniforms {
+            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            _padding: [0.0; 2],
+        };
+        self.queue
+            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+
+        // Write primitive range to buffer
+        self.queue.write_buffer(
+            &self.buffers.primitives,
+            0,
+            bytemuck::cast_slice(primitives),
+        );
+
+        // Create command encoder
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Primitive Range Render Encoder"),
+            });
+
+        // Begin render pass
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Primitive Range Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: clear_color[0],
+                            g: clear_color[1],
+                            b: clear_color[2],
+                            a: clear_color[3],
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&self.pipelines.sdf);
+            render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
+            render_pass.draw(0..6, 0..primitive_count as u32);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Blit a texture to the target with blending
+    fn blit_texture_to_target(
+        &mut self,
+        source: &wgpu::TextureView,
+        target: &wgpu::TextureView,
+        opacity: f32,
+        blend_mode: blinc_core::BlendMode,
+    ) {
+        use crate::primitives::LayerCompositeUniforms;
+
+        // Full viewport blit - source covers entire texture, dest covers entire viewport
+        let uniforms = LayerCompositeUniforms {
+            source_rect: [0.0, 0.0, 1.0, 1.0], // Full texture (normalized)
+            dest_rect: [0.0, 0.0, self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            opacity,
+            blend_mode: blend_mode as u32,
+        };
+
+        let uniform_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Blit Uniforms Buffer"),
+                contents: bytemuck::cast_slice(&[uniforms]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Blit Bind Group"),
+            layout: &self.bind_group_layouts.layer_composite,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(source),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.path_image_sampler),
+                },
+            ],
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Blit Encoder"),
+            });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Blit Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        // Load existing content - we're blending on top
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&self.pipelines.layer_composite);
+            render_pass.set_bind_group(0, &bind_group, &[]);
+            render_pass.draw(0..6, 0..1);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Blit a specific region from source texture to target at given position
+    ///
+    /// This is used for layer effects where we need to composite only the
+    /// element's region back to the target at the correct position.
+    fn blit_region_to_target(
+        &mut self,
+        source: &wgpu::TextureView,
+        target: &wgpu::TextureView,
+        position: (f32, f32),
+        size: (f32, f32),
+        opacity: f32,
+        blend_mode: blinc_core::BlendMode,
+    ) {
+        use crate::primitives::LayerCompositeUniforms;
+
+        let vp_w = self.viewport_size.0 as f32;
+        let vp_h = self.viewport_size.1 as f32;
+
+        // Source rect in normalized coordinates (0-1)
+        // The source texture is viewport-sized, so we extract the element's region
+        let source_rect = [
+            position.0 / vp_w,
+            position.1 / vp_h,
+            size.0 / vp_w,
+            size.1 / vp_h,
+        ];
+
+        // Dest rect in viewport pixel coordinates
+        let dest_rect = [position.0, position.1, size.0, size.1];
+
+        let uniforms = LayerCompositeUniforms {
+            source_rect,
+            dest_rect,
+            viewport_size: [vp_w, vp_h],
+            opacity,
+            blend_mode: blend_mode as u32,
+        };
+
+        let uniform_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Region Blit Uniforms Buffer"),
+                contents: bytemuck::cast_slice(&[uniforms]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Region Blit Bind Group"),
+            layout: &self.bind_group_layouts.layer_composite,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(source),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.path_image_sampler),
+                },
+            ],
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Region Blit Encoder"),
+            });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Region Blit Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            // Set scissor rect to only affect the element's region
+            render_pass.set_scissor_rect(
+                position.0.max(0.0) as u32,
+                position.1.max(0.0) as u32,
+                size.0.min(vp_w - position.0).max(1.0) as u32,
+                size.1.min(vp_h - position.1).max(1.0) as u32,
+            );
+
+            render_pass.set_pipeline(&self.pipelines.layer_composite);
+            render_pass.set_bind_group(0, &bind_group, &[]);
+            render_pass.draw(0..6, 0..1);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
     }
 }
 

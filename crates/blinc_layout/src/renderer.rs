@@ -4883,16 +4883,23 @@ impl RenderTree {
             render_node.props.layer
         };
 
-        // Push opacity layer if this node has partial opacity
+        // Push layer if this node has partial opacity OR layer effects
         // Children inside the layer automatically inherit the opacity via GPU composition
-        let has_opacity_layer = node_motion_opacity < 1.0;
-        if has_opacity_layer {
+        // Layer effects (blur, drop shadow, glow, color matrix) are applied when layer is composited
+        // IMPORTANT: Only push layer when element's layer matches current target to avoid duplicate
+        // layer commands across multiple render passes
+        let has_layer_effects = !render_node.props.layer_effects.is_empty();
+        let has_opacity_layer = node_motion_opacity < 1.0 || has_layer_effects;
+        let should_push_layer = has_opacity_layer && effective_layer == target_layer;
+        if should_push_layer {
             ctx.push_layer(LayerConfig {
                 id: None,
-                size: None,
+                position: Some(blinc_core::Point::new(bounds.x, bounds.y)),
+                size: Some(blinc_core::Size::new(bounds.width, bounds.height)),
                 blend_mode: BlendMode::Normal,
                 opacity: node_motion_opacity,
                 depth: false,
+                effects: render_node.props.layer_effects.clone(),
             });
         }
 
@@ -5182,7 +5189,7 @@ impl RenderTree {
         }
 
         // Pop opacity layer (must be after clips, before transforms)
-        if has_opacity_layer {
+        if should_push_layer {
             ctx.pop_layer();
         }
 
@@ -6328,6 +6335,12 @@ fn apply_opacity_to_brush(brush: &Brush, opacity: f32) -> Brush {
             // Image brushes - return as-is for now
             // TODO: Apply opacity to image brush
             Brush::Image(image.clone())
+        }
+        Brush::Blur(blur) => {
+            // Blur with adjusted opacity
+            let mut blur_adjusted = *blur;
+            blur_adjusted.opacity *= opacity;
+            Brush::Blur(blur_adjusted)
         }
     }
 }

@@ -781,6 +781,7 @@ impl ElementBuilder for Image {
             is_stack_layer: false,
             pointer_events_none: false,
             cursor: None,
+            layer_effects: Vec::new(),
             motion_is_exiting: false,
         }
     }
@@ -813,6 +814,14 @@ impl ElementBuilder for Image {
                     }
                     Brush::Glass(_) => [0.1, 0.1, 0.1, 0.5], // Semi-transparent for glass
                     Brush::Image(_) => [0.0, 0.0, 0.0, 0.0],
+                    Brush::Blur(blur) => {
+                        // Use tint color if present, otherwise transparent
+                        if let Some(tint) = &blur.tint {
+                            [tint.r, tint.g, tint.b, tint.a * blur.opacity]
+                        } else {
+                            [0.0, 0.0, 0.0, 0.0]
+                        }
+                    }
                 };
                 (4, color, None) // Type 4 = Brush (treated as color for now)
             }

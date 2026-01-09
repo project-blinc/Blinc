@@ -18,7 +18,7 @@ use std::sync::{
     Arc, Mutex,
 };
 
-use blinc_core::{Brush, Color, CornerRadius, Shadow, Transform};
+use blinc_core::{BlurQuality, BlurStyle, Brush, Color, CornerRadius, LayerEffect, Shadow, Transform};
 use blinc_theme::ThemeState;
 use taffy::prelude::*;
 use taffy::Overflow;
@@ -379,6 +379,8 @@ pub struct Div {
     pub(crate) opacity: f32,
     pub(crate) cursor: Option<crate::element::CursorStyle>,
     pub(crate) pointer_events_none: bool,
+    /// Layer effects (blur, drop shadow, glow, color matrix) applied to this element
+    pub(crate) layer_effects: Vec<LayerEffect>,
     /// Marks this as a stack layer for z-ordering (increments z_layer for interleaved rendering)
     pub(crate) is_stack_layer: bool,
     pub(crate) event_handlers: crate::event_handler::EventHandlers,
@@ -419,6 +421,7 @@ impl Div {
             opacity: 1.0,
             cursor: None,
             pointer_events_none: false,
+            layer_effects: Vec::new(),
             is_stack_layer: false,
             event_handlers: crate::event_handler::EventHandlers::new(),
             element_id: None,
@@ -448,6 +451,7 @@ impl Div {
             opacity: 1.0,
             cursor: None,
             pointer_events_none: false,
+            layer_effects: Vec::new(),
             is_stack_layer: false,
             event_handlers: crate::event_handler::EventHandlers::new(),
             element_id: None,
@@ -1896,6 +1900,65 @@ impl Div {
     }
 
     // -------------------------------------------------------------------------
+    // Backdrop Blur (CSS backdrop-filter: blur())
+    // -------------------------------------------------------------------------
+
+    /// Apply backdrop blur effect to content behind this element
+    ///
+    /// This blurs whatever is rendered behind this element, similar to
+    /// CSS `backdrop-filter: blur()`. For a full frosted glass effect with
+    /// tinting and noise, use `.glass()` instead.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// div()
+    ///     .w(200.0).h(100.0)
+    ///     .backdrop_blur(10.0) // 10px blur radius
+    ///     .bg(Color::rgba(255, 255, 255, 128)) // Semi-transparent overlay
+    /// ```
+    pub fn backdrop_blur(self, radius: f32) -> Self {
+        self.background(Brush::Blur(BlurStyle::with_radius(radius)))
+    }
+
+    /// Apply backdrop blur with full style control
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// div()
+    ///     .backdrop_blur_style(
+    ///         BlurStyle::new()
+    ///             .radius(20.0)
+    ///             .quality(BlurQuality::High)
+    ///             .tint(Color::rgba(255, 255, 255, 50))
+    ///     )
+    /// ```
+    pub fn backdrop_blur_style(self, style: BlurStyle) -> Self {
+        self.background(Brush::Blur(style))
+    }
+
+    /// Light backdrop blur (5px, subtle)
+    pub fn backdrop_blur_light(self) -> Self {
+        self.background(Brush::Blur(BlurStyle::light()))
+    }
+
+    /// Medium backdrop blur (10px, default)
+    pub fn backdrop_blur_medium(self) -> Self {
+        self.background(Brush::Blur(BlurStyle::medium()))
+    }
+
+    /// Heavy backdrop blur (20px, strong)
+    pub fn backdrop_blur_heavy(self) -> Self {
+        self.background(Brush::Blur(BlurStyle::heavy()))
+    }
+
+    /// Maximum backdrop blur (50px)
+    pub fn backdrop_blur_max(self) -> Self {
+        self.background(Brush::Blur(BlurStyle::max()))
+    }
+
+    // -------------------------------------------------------------------------
     // Theme-based background colors
     // -------------------------------------------------------------------------
 
@@ -2311,6 +2374,119 @@ impl Div {
     /// Invisible (opacity = 0.0)
     pub fn invisible(self) -> Self {
         self.opacity(0.0)
+    }
+
+    // =========================================================================
+    // Layer Effects (Post-Processing)
+    // =========================================================================
+
+    /// Add a layer effect to this element
+    ///
+    /// Layer effects are applied during layer composition and include:
+    /// - Blur (Gaussian blur)
+    /// - DropShadow (offset shadow behind element)
+    /// - Glow (outer glow)
+    /// - ColorMatrix (color transformation)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// div()
+    ///     .w(100.0).h(100.0)
+    ///     .bg(Color::BLUE)
+    ///     .layer_effect(LayerEffect::blur(8.0))
+    /// ```
+    pub fn layer_effect(mut self, effect: LayerEffect) -> Self {
+        self.layer_effects.push(effect);
+        self
+    }
+
+    /// Add a blur effect
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// div()
+    ///     .w(100.0).h(100.0)
+    ///     .bg(Color::BLUE)
+    ///     .blur(8.0) // 8px blur radius
+    /// ```
+    pub fn blur(self, radius: f32) -> Self {
+        self.layer_effect(LayerEffect::blur(radius))
+    }
+
+    /// Add a blur effect with specific quality
+    ///
+    /// Quality options:
+    /// - `BlurQuality::Low` - Single-pass box blur (fastest)
+    /// - `BlurQuality::Medium` - Two-pass separable Gaussian (balanced)
+    /// - `BlurQuality::High` - Multi-pass Kawase blur (highest quality)
+    pub fn blur_with_quality(self, radius: f32, quality: BlurQuality) -> Self {
+        self.layer_effect(LayerEffect::blur_with_quality(radius, quality))
+    }
+
+    /// Add a drop shadow effect
+    ///
+    /// This is a layer-level shadow effect (post-processing), different from
+    /// the element shadow set via `.shadow()` which is rendered inline.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// div()
+    ///     .w(100.0).h(100.0)
+    ///     .bg(Color::WHITE)
+    ///     .drop_shadow_effect(4.0, 4.0, 8.0, Color::rgba(0, 0, 0, 128))
+    /// ```
+    pub fn drop_shadow_effect(
+        self,
+        offset_x: f32,
+        offset_y: f32,
+        blur: f32,
+        color: Color,
+    ) -> Self {
+        self.layer_effect(LayerEffect::drop_shadow(offset_x, offset_y, blur, color))
+    }
+
+    /// Add a glow effect
+    ///
+    /// Creates an outer glow around the element.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// div()
+    ///     .w(100.0).h(100.0)
+    ///     .bg(Color::BLUE)
+    ///     .glow_effect(12.0, Color::CYAN, 1.5)
+    /// ```
+    pub fn glow_effect(self, radius: f32, color: Color, intensity: f32) -> Self {
+        self.layer_effect(LayerEffect::glow(radius, color, intensity))
+    }
+
+    /// Apply grayscale filter
+    pub fn grayscale(self) -> Self {
+        self.layer_effect(LayerEffect::grayscale())
+    }
+
+    /// Apply sepia filter
+    pub fn sepia(self) -> Self {
+        self.layer_effect(LayerEffect::sepia())
+    }
+
+    /// Adjust brightness (1.0 = normal, <1.0 = darker, >1.0 = brighter)
+    pub fn brightness(self, factor: f32) -> Self {
+        self.layer_effect(LayerEffect::brightness(factor))
+    }
+
+    /// Adjust contrast (1.0 = normal, <1.0 = less contrast, >1.0 = more contrast)
+    pub fn contrast(self, factor: f32) -> Self {
+        self.layer_effect(LayerEffect::contrast(factor))
+    }
+
+    /// Adjust saturation (0.0 = grayscale, 1.0 = normal, >1.0 = oversaturated)
+    pub fn saturation(self, factor: f32) -> Self {
+        self.layer_effect(LayerEffect::saturation(factor))
     }
 
     // =========================================================================
@@ -3163,6 +3339,7 @@ impl ElementBuilder for Div {
             is_stack_layer: self.is_stack_layer,
             pointer_events_none: self.pointer_events_none,
             cursor: self.cursor,
+            layer_effects: self.layer_effects.clone(),
             motion_is_exiting: false,
         }
     }

@@ -677,14 +677,188 @@ pub struct MeshInstance {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Layer Effects
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Post-processing effect quality levels
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BlurQuality {
+    /// Single-pass box blur (fastest, lowest quality)
+    Low,
+    /// Two-pass separable Gaussian (balanced)
+    #[default]
+    Medium,
+    /// Multi-pass Kawase blur (slowest, highest quality)
+    High,
+}
+
+/// Post-processing effects that can be applied to layers
+#[derive(Clone, Debug, PartialEq)]
+pub enum LayerEffect {
+    /// Gaussian blur effect
+    Blur {
+        /// Blur radius in pixels
+        radius: f32,
+        /// Quality level (affects performance and visual quality)
+        quality: BlurQuality,
+    },
+    /// Drop shadow effect (rendered behind the layer)
+    DropShadow {
+        /// Horizontal offset
+        offset_x: f32,
+        /// Vertical offset
+        offset_y: f32,
+        /// Blur radius
+        blur: f32,
+        /// Spread radius (positive expands, negative contracts)
+        spread: f32,
+        /// Shadow color
+        color: Color,
+    },
+    /// Outer glow effect
+    Glow {
+        /// Glow radius in pixels
+        radius: f32,
+        /// Glow color
+        color: Color,
+        /// Glow intensity (multiplier)
+        intensity: f32,
+    },
+    /// Color matrix transformation (4x5 matrix for RGBA + offset)
+    ColorMatrix {
+        /// 4x5 color transformation matrix stored row-major:
+        /// `[R_new]` = `[m0  m1  m2  m3  m4 ]` * `[R]`
+        /// `[G_new]` = `[m5  m6  m7  m8  m9 ]` * `[G]`
+        /// `[B_new]` = `[m10 m11 m12 m13 m14]` * `[B]`
+        /// `[A_new]` = `[m15 m16 m17 m18 m19]` * `[A]`
+        ///                                       `[1]`
+        matrix: [f32; 20],
+    },
+}
+
+impl LayerEffect {
+    /// Create a blur effect with default quality
+    pub fn blur(radius: f32) -> Self {
+        Self::Blur {
+            radius,
+            quality: BlurQuality::default(),
+        }
+    }
+
+    /// Create a blur effect with specified quality
+    pub fn blur_with_quality(radius: f32, quality: BlurQuality) -> Self {
+        Self::Blur { radius, quality }
+    }
+
+    /// Create a drop shadow effect
+    pub fn drop_shadow(offset_x: f32, offset_y: f32, blur: f32, color: Color) -> Self {
+        Self::DropShadow {
+            offset_x,
+            offset_y,
+            blur,
+            spread: 0.0,
+            color,
+        }
+    }
+
+    /// Create a glow effect
+    pub fn glow(radius: f32, color: Color, intensity: f32) -> Self {
+        Self::Glow {
+            radius,
+            color,
+            intensity,
+        }
+    }
+
+    /// Create an identity color matrix (no change)
+    pub fn color_matrix_identity() -> Self {
+        Self::ColorMatrix {
+            matrix: [
+                1.0, 0.0, 0.0, 0.0, 0.0, // R
+                0.0, 1.0, 0.0, 0.0, 0.0, // G
+                0.0, 0.0, 1.0, 0.0, 0.0, // B
+                0.0, 0.0, 0.0, 1.0, 0.0, // A
+            ],
+        }
+    }
+
+    /// Create a grayscale color matrix
+    pub fn grayscale() -> Self {
+        Self::ColorMatrix {
+            matrix: [
+                0.299, 0.587, 0.114, 0.0, 0.0, // R = 0.299R + 0.587G + 0.114B
+                0.299, 0.587, 0.114, 0.0, 0.0, // G = same
+                0.299, 0.587, 0.114, 0.0, 0.0, // B = same
+                0.0, 0.0, 0.0, 1.0, 0.0,       // A = A
+            ],
+        }
+    }
+
+    /// Create a sepia color matrix
+    pub fn sepia() -> Self {
+        Self::ColorMatrix {
+            matrix: [
+                0.393, 0.769, 0.189, 0.0, 0.0, // R
+                0.349, 0.686, 0.168, 0.0, 0.0, // G
+                0.272, 0.534, 0.131, 0.0, 0.0, // B
+                0.0, 0.0, 0.0, 1.0, 0.0,       // A
+            ],
+        }
+    }
+
+    /// Create a brightness adjustment matrix
+    pub fn brightness(factor: f32) -> Self {
+        Self::ColorMatrix {
+            matrix: [
+                factor, 0.0, 0.0, 0.0, 0.0, // R
+                0.0, factor, 0.0, 0.0, 0.0, // G
+                0.0, 0.0, factor, 0.0, 0.0, // B
+                0.0, 0.0, 0.0, 1.0, 0.0,    // A
+            ],
+        }
+    }
+
+    /// Create a contrast adjustment matrix
+    pub fn contrast(factor: f32) -> Self {
+        let offset = 0.5 * (1.0 - factor);
+        Self::ColorMatrix {
+            matrix: [
+                factor, 0.0, 0.0, 0.0, offset, // R
+                0.0, factor, 0.0, 0.0, offset, // G
+                0.0, 0.0, factor, 0.0, offset, // B
+                0.0, 0.0, 0.0, 1.0, 0.0,       // A
+            ],
+        }
+    }
+
+    /// Create a saturation adjustment matrix
+    pub fn saturation(factor: f32) -> Self {
+        let inv = 1.0 - factor;
+        let r = 0.299 * inv;
+        let g = 0.587 * inv;
+        let b = 0.114 * inv;
+        Self::ColorMatrix {
+            matrix: [
+                r + factor, g, b, 0.0, 0.0, // R
+                r, g + factor, b, 0.0, 0.0, // G
+                r, g, b + factor, 0.0, 0.0, // B
+                0.0, 0.0, 0.0, 1.0, 0.0,    // A
+            ],
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Layer Configuration
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Configuration for offscreen layers
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct LayerConfig {
     /// Layer ID (optional)
     pub id: Option<LayerId>,
+    /// Layer position in viewport coordinates (for proper compositing)
+    pub position: Option<crate::Point>,
     /// Layer size (None = inherit from parent)
     pub size: Option<Size>,
     /// Blend mode with parent
@@ -693,17 +867,71 @@ pub struct LayerConfig {
     pub opacity: f32,
     /// Enable depth buffer
     pub depth: bool,
+    /// Post-processing effects to apply when layer is composited
+    pub effects: Vec<LayerEffect>,
 }
 
-impl Default for LayerConfig {
-    fn default() -> Self {
-        Self {
-            id: None,
-            size: None,
-            blend_mode: BlendMode::Normal,
-            opacity: 1.0,
-            depth: false,
-        }
+impl LayerConfig {
+    /// Create a new layer config with default values
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the layer ID
+    pub fn id(mut self, id: LayerId) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    /// Set the layer size
+    pub fn size(mut self, size: Size) -> Self {
+        self.size = Some(size);
+        self
+    }
+
+    /// Set the layer position in viewport coordinates
+    pub fn position(mut self, position: crate::Point) -> Self {
+        self.position = Some(position);
+        self
+    }
+
+    /// Set the blend mode
+    pub fn blend_mode(mut self, mode: BlendMode) -> Self {
+        self.blend_mode = mode;
+        self
+    }
+
+    /// Set the opacity
+    pub fn opacity(mut self, opacity: f32) -> Self {
+        self.opacity = opacity;
+        self
+    }
+
+    /// Enable depth buffer
+    pub fn with_depth(mut self) -> Self {
+        self.depth = true;
+        self
+    }
+
+    /// Add a post-processing effect
+    pub fn effect(mut self, effect: LayerEffect) -> Self {
+        self.effects.push(effect);
+        self
+    }
+
+    /// Add a blur effect
+    pub fn blur(self, radius: f32) -> Self {
+        self.effect(LayerEffect::blur(radius))
+    }
+
+    /// Add a drop shadow effect
+    pub fn drop_shadow(self, offset_x: f32, offset_y: f32, blur: f32, color: Color) -> Self {
+        self.effect(LayerEffect::drop_shadow(offset_x, offset_y, blur, color))
+    }
+
+    /// Add a glow effect
+    pub fn glow(self, radius: f32, color: Color, intensity: f32) -> Self {
+        self.effect(LayerEffect::glow(radius, color, intensity))
     }
 }
 

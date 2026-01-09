@@ -862,6 +862,14 @@ fn hash_brush(brush: &Brush, hasher: &mut impl Hasher) {
             3u8.hash(hasher);
             hash_image_brush(image, hasher);
         }
+        Brush::Blur(blur) => {
+            4u8.hash(hasher);
+            hash_f32(blur.radius, hasher);
+            hash_f32(blur.opacity, hasher);
+            if let Some(tint) = &blur.tint {
+                hash_color(tint, hasher);
+            }
+        }
     }
 }
 

@@ -815,6 +815,8 @@ pub enum Brush {
     Gradient(Gradient),
     /// Glass/frosted blur effect - blurs content behind the shape
     Glass(GlassStyle),
+    /// Pure backdrop blur effect - blurs content behind without glass styling
+    Blur(BlurStyle),
     /// Image fill for backgrounds
     Image(ImageBrush),
 }
@@ -834,6 +836,12 @@ impl From<GlassStyle> for Brush {
 impl From<ImageBrush> for Brush {
     fn from(brush: ImageBrush) -> Self {
         Brush::Image(brush)
+    }
+}
+
+impl From<BlurStyle> for Brush {
+    fn from(style: BlurStyle) -> Self {
+        Brush::Blur(style)
     }
 }
 
@@ -1050,6 +1058,117 @@ impl GlassStyle {
     /// Frosted glass with grain texture
     pub fn frosted() -> Self {
         Self::new().noise(0.03)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Blur Style
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Pure backdrop blur effect configuration
+///
+/// Unlike `GlassStyle`, this provides just blur without tinting, noise, or other
+/// glass-specific effects. Use this when you want a simple blur effect on the
+/// content behind an element.
+#[derive(Clone, Copy, Debug)]
+pub struct BlurStyle {
+    /// Blur radius in pixels (0-50, default 10)
+    pub radius: f32,
+    /// Blur quality setting
+    pub quality: crate::draw::BlurQuality,
+    /// Optional tint color (applied after blur)
+    pub tint: Option<Color>,
+    /// Opacity of the blur effect (0.0-1.0, default 1.0)
+    pub opacity: f32,
+}
+
+impl Default for BlurStyle {
+    fn default() -> Self {
+        Self {
+            radius: 10.0,
+            quality: crate::draw::BlurQuality::Medium,
+            tint: None,
+            opacity: 1.0,
+        }
+    }
+}
+
+impl BlurStyle {
+    /// Create a new blur style with default settings
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create blur with specified radius
+    pub fn with_radius(radius: f32) -> Self {
+        Self {
+            radius,
+            ..Default::default()
+        }
+    }
+
+    /// Set blur radius
+    pub fn radius(mut self, radius: f32) -> Self {
+        self.radius = radius;
+        self
+    }
+
+    /// Set blur quality
+    pub fn quality(mut self, quality: crate::draw::BlurQuality) -> Self {
+        self.quality = quality;
+        self
+    }
+
+    /// Set optional tint color
+    pub fn tint(mut self, color: Color) -> Self {
+        self.tint = Some(color);
+        self
+    }
+
+    /// Set opacity
+    pub fn opacity(mut self, opacity: f32) -> Self {
+        self.opacity = opacity;
+        self
+    }
+
+    // Presets
+
+    /// Light blur (subtle, 5px)
+    pub fn light() -> Self {
+        Self::with_radius(5.0)
+    }
+
+    /// Medium blur (default, 10px)
+    pub fn medium() -> Self {
+        Self::with_radius(10.0)
+    }
+
+    /// Heavy blur (20px)
+    pub fn heavy() -> Self {
+        Self::with_radius(20.0)
+    }
+
+    /// Maximum blur (50px)
+    pub fn max() -> Self {
+        Self::with_radius(50.0)
+    }
+
+    /// High quality blur (Kawase multi-pass)
+    pub fn high_quality(mut self) -> Self {
+        self.quality = crate::draw::BlurQuality::High;
+        self
+    }
+
+    /// Low quality blur (fast box blur)
+    pub fn low_quality(mut self) -> Self {
+        self.quality = crate::draw::BlurQuality::Low;
+        self
+    }
+}
+
+impl From<f32> for BlurStyle {
+    fn from(radius: f32) -> Self {
+        Self::with_radius(radius)
     }
 }
 

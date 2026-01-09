@@ -322,8 +322,8 @@ pub mod prelude {
     // Canvas element
     pub use crate::canvas::{canvas, Canvas, CanvasBounds};
 
-    // Re-export Shadow and Transform from blinc_core for convenience
-    pub use blinc_core::{Shadow, Transform};
+    // Re-export Shadow, Transform, and layer effect types from blinc_core for convenience
+    pub use blinc_core::{BlurQuality, BlurStyle, LayerEffect, Shadow, Transform};
 
     // Animation integration
     pub use crate::animated::{AnimatedProperties, AnimationBuilder};

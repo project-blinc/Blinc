@@ -267,6 +267,7 @@ impl ElementBuilder for Svg {
             is_stack_layer: false,
             pointer_events_none: false,
             cursor: None,
+            layer_effects: Vec::new(),
             motion_is_exiting: false,
         }
     }

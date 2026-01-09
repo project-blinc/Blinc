@@ -334,7 +334,15 @@ impl RenderContext {
             self.render_images_ref(target, &fg_images);
 
             // Step 6: Render foreground and text
-            if self.renderer.unified_text_rendering() {
+            // Use batch-based rendering when layer effects are present
+            let has_layer_effects = fg_batch.has_layer_effects();
+            if has_layer_effects {
+                // Layer effects require batch-based rendering to process layer commands
+                fg_batch.convert_glyphs_to_primitives();
+                if !fg_batch.is_empty() {
+                    self.renderer.render_overlay(target, &fg_batch);
+                }
+            } else if self.renderer.unified_text_rendering() {
                 // Unified rendering: combine text glyphs with foreground primitives
                 let unified_primitives = fg_batch.get_unified_foreground_primitives();
                 if !unified_primitives.is_empty() {
@@ -378,7 +386,19 @@ impl RenderContext {
             self.render_images(target, &images, width as f32, height as f32);
 
             // Render foreground and text
-            if self.renderer.unified_text_rendering() {
+            // Use batch-based rendering when layer effects are present to preserve
+            // layer commands for effect processing
+            let has_layer_effects = fg_batch.has_layer_effects();
+            if has_layer_effects {
+                // Layer effects require batch-based rendering to process layer commands
+                // First convert glyphs to primitives so they're included in the batch
+                fg_batch.convert_glyphs_to_primitives();
+
+                // Use render_overlay which supports layer effect processing
+                if !fg_batch.is_empty() {
+                    self.renderer.render_overlay(target, &fg_batch);
+                }
+            } else if self.renderer.unified_text_rendering() {
                 // Unified rendering: combine text glyphs with foreground primitives
                 // This ensures text and shapes transform together during animations
                 let unified_primitives = fg_batch.get_unified_foreground_primitives();
@@ -1767,6 +1787,7 @@ impl RenderContext {
         self.renderer.resize(width, height);
 
         let has_glass = batch.glass_count() > 0;
+        let has_layer_effects_in_batch = batch.has_layer_effects();
 
         // Only allocate glass textures when glass is actually used
         if has_glass {
@@ -1775,12 +1796,38 @@ impl RenderContext {
         let use_msaa_overlay = self.sample_count > 1;
 
         if has_glass {
-            // Glass path
+            // Glass path with layer effects support
             let (bg_images, fg_images): (Vec<_>, Vec<_>) = images
                 .iter()
                 .partition(|img| img.layer == RenderLayer::Background);
 
-            {
+            if has_layer_effects_in_batch {
+                // When we have layer effects, we need a more complex render path:
+                // 1. Render backdrop for glass blur sampling
+                // 2. Use render_with_clear which handles layer effects
+                // 3. Render glass primitives on top
+                let backdrop = self.backdrop_texture.as_ref().unwrap();
+
+                // First render to backdrop texture for glass blur sampling
+                self.renderer.render_to_backdrop(
+                    &backdrop.view,
+                    (backdrop.width, backdrop.height),
+                    &batch,
+                );
+
+                // Then use render_with_clear which handles layer effects
+                self.renderer.render_with_clear(target, &batch, [0.0, 0.0, 0.0, 1.0]);
+
+                // Finally render glass primitives on top
+                if batch.glass_count() > 0 {
+                    self.renderer.render_glass(
+                        target,
+                        &backdrop.view,
+                        &batch,
+                    );
+                }
+            } else {
+                // No layer effects, use optimized glass frame rendering
                 let backdrop = self.backdrop_texture.as_ref().unwrap();
                 self.renderer.render_glass_frame(
                     target,
@@ -1822,8 +1869,9 @@ impl RenderContext {
             let max_text_z = glyphs_by_layer.keys().cloned().max().unwrap_or(0);
             let max_decoration_z = decorations_by_layer.keys().cloned().max().unwrap_or(0);
             let max_layer = max_z.max(max_text_z).max(max_decoration_z);
+            let has_layer_effects = batch.has_layer_effects();
 
-            if max_layer > 0 {
+            if max_layer > 0 && !has_layer_effects {
                 // Interleaved z-layer rendering for proper Stack z-ordering
                 // First pass: render z_layer=0 primitives with clear
                 let z0_primitives = batch.primitives_for_layer(0);

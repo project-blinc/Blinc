@@ -2017,3 +2017,275 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return premultiplied;
 }
 "#;
+
+/// Kawase blur shader for layer effects
+///
+/// Implements multi-pass Kawase blur which approximates Gaussian blur
+/// with better performance. Each pass samples 5 points in an X pattern.
+pub const BLUR_SHADER: &str = r#"
+// ============================================================================
+// Kawase Blur Shader (Layer Effects)
+// ============================================================================
+//
+// Multi-pass blur using Kawase algorithm for efficient Gaussian approximation.
+// Run multiple passes with increasing iteration values for stronger blur.
+
+struct BlurUniforms {
+    // Inverse texture size (1/width, 1/height)
+    texel_size: vec2<f32>,
+    // Base blur radius
+    radius: f32,
+    // Current iteration (0, 1, 2, ...) - affects sample offset
+    iteration: u32,
+}
+
+@group(0) @binding(0) var<uniform> uniforms: BlurUniforms;
+@group(0) @binding(1) var input_texture: texture_2d<f32>;
+@group(0) @binding(2) var input_sampler: sampler;
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+}
+
+// Full-screen quad vertices
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+    var positions = array<vec2<f32>, 6>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>( 1.0, -1.0),
+        vec2<f32>(-1.0,  1.0),
+        vec2<f32>( 1.0, -1.0),
+        vec2<f32>( 1.0,  1.0),
+        vec2<f32>(-1.0,  1.0),
+    );
+
+    var uvs = array<vec2<f32>, 6>(
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(0.0, 0.0),
+    );
+
+    var out: VertexOutput;
+    out.position = vec4<f32>(positions[vertex_index], 0.0, 1.0);
+    out.uv = uvs[vertex_index];
+    return out;
+}
+
+@fragment
+fn fs_kawase_blur(in: VertexOutput) -> @location(0) vec4<f32> {
+    // Calculate sample offset based on iteration
+    // Each iteration samples further from center
+    let offset = uniforms.radius * (f32(uniforms.iteration) + 0.5);
+    let pixel_offset = offset * uniforms.texel_size;
+
+    // Kawase blur: sample 5 points in X pattern
+    var color = textureSample(input_texture, input_sampler, in.uv);
+    color += textureSample(input_texture, input_sampler, in.uv + vec2<f32>(-pixel_offset.x, -pixel_offset.y));
+    color += textureSample(input_texture, input_sampler, in.uv + vec2<f32>( pixel_offset.x, -pixel_offset.y));
+    color += textureSample(input_texture, input_sampler, in.uv + vec2<f32>(-pixel_offset.x,  pixel_offset.y));
+    color += textureSample(input_texture, input_sampler, in.uv + vec2<f32>( pixel_offset.x,  pixel_offset.y));
+
+    return color / 5.0;
+}
+
+// Single-pass box blur for low quality mode
+@fragment
+fn fs_box_blur(in: VertexOutput) -> @location(0) vec4<f32> {
+    let radius = i32(uniforms.radius);
+    var color = vec4<f32>(0.0);
+    var samples = 0.0;
+
+    // Sample in a square pattern
+    for (var x = -radius; x <= radius; x++) {
+        for (var y = -radius; y <= radius; y++) {
+            let offset = vec2<f32>(f32(x), f32(y)) * uniforms.texel_size;
+            color += textureSample(input_texture, input_sampler, in.uv + offset);
+            samples += 1.0;
+        }
+    }
+
+    return color / samples;
+}
+"#;
+
+/// Color matrix shader for layer effects
+///
+/// Applies a 4x5 color transformation matrix to achieve effects like:
+/// grayscale, sepia, brightness, contrast, saturation adjustments.
+pub const COLOR_MATRIX_SHADER: &str = r#"
+// ============================================================================
+// Color Matrix Shader (Layer Effects)
+// ============================================================================
+//
+// Applies a 4x5 color transformation matrix:
+// [R']   [m0  m1  m2  m3  m4 ]   [R]
+// [G'] = [m5  m6  m7  m8  m9 ] * [G]
+// [B']   [m10 m11 m12 m13 m14]   [B]
+// [A']   [m15 m16 m17 m18 m19]   [A]
+//                                [1]
+
+struct ColorMatrixUniforms {
+    // 4x5 matrix stored as 5 vec4s (rows)
+    row0: vec4<f32>,  // [m0,  m1,  m2,  m3 ]
+    row1: vec4<f32>,  // [m5,  m6,  m7,  m8 ]
+    row2: vec4<f32>,  // [m10, m11, m12, m13]
+    row3: vec4<f32>,  // [m15, m16, m17, m18]
+    // Offset column (m4, m9, m14, m19)
+    offset: vec4<f32>,
+}
+
+@group(0) @binding(0) var<uniform> uniforms: ColorMatrixUniforms;
+@group(0) @binding(1) var input_texture: texture_2d<f32>;
+@group(0) @binding(2) var input_sampler: sampler;
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+}
+
+// Full-screen quad vertices
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+    var positions = array<vec2<f32>, 6>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>( 1.0, -1.0),
+        vec2<f32>(-1.0,  1.0),
+        vec2<f32>( 1.0, -1.0),
+        vec2<f32>( 1.0,  1.0),
+        vec2<f32>(-1.0,  1.0),
+    );
+
+    var uvs = array<vec2<f32>, 6>(
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(0.0, 0.0),
+    );
+
+    var out: VertexOutput;
+    out.position = vec4<f32>(positions[vertex_index], 0.0, 1.0);
+    out.uv = uvs[vertex_index];
+    return out;
+}
+
+@fragment
+fn fs_color_matrix(in: VertexOutput) -> @location(0) vec4<f32> {
+    let src = textureSample(input_texture, input_sampler, in.uv);
+
+    // Apply 4x4 matrix multiplication + offset
+    var result: vec4<f32>;
+    result.r = dot(uniforms.row0, src) + uniforms.offset.r;
+    result.g = dot(uniforms.row1, src) + uniforms.offset.g;
+    result.b = dot(uniforms.row2, src) + uniforms.offset.b;
+    result.a = dot(uniforms.row3, src) + uniforms.offset.a;
+
+    // Clamp to valid range
+    return clamp(result, vec4<f32>(0.0), vec4<f32>(1.0));
+}
+"#;
+
+/// Drop shadow shader for layer effects
+///
+/// Renders a blurred, offset silhouette of the layer content.
+pub const DROP_SHADOW_SHADER: &str = r#"
+// ============================================================================
+// Drop Shadow Shader (Layer Effects)
+// ============================================================================
+//
+// Creates a shadow by:
+// 1. Using the alpha channel of the source as the shadow shape
+// 2. Applying blur
+// 3. Offsetting and coloring
+
+struct DropShadowUniforms {
+    // Shadow offset in pixels
+    offset: vec2<f32>,
+    // Blur radius
+    blur_radius: f32,
+    // Spread (expand/contract)
+    spread: f32,
+    // Shadow color (RGBA)
+    color: vec4<f32>,
+    // Texture size for blur
+    texel_size: vec2<f32>,
+    // Padding
+    _pad: vec2<f32>,
+}
+
+@group(0) @binding(0) var<uniform> uniforms: DropShadowUniforms;
+@group(0) @binding(1) var input_texture: texture_2d<f32>;
+@group(0) @binding(2) var input_sampler: sampler;
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+}
+
+// Full-screen quad vertices
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+    var positions = array<vec2<f32>, 6>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>( 1.0, -1.0),
+        vec2<f32>(-1.0,  1.0),
+        vec2<f32>( 1.0, -1.0),
+        vec2<f32>( 1.0,  1.0),
+        vec2<f32>(-1.0,  1.0),
+    );
+
+    var uvs = array<vec2<f32>, 6>(
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(0.0, 0.0),
+    );
+
+    var out: VertexOutput;
+    out.position = vec4<f32>(positions[vertex_index], 0.0, 1.0);
+    out.uv = uvs[vertex_index];
+    return out;
+}
+
+@fragment
+fn fs_drop_shadow(in: VertexOutput) -> @location(0) vec4<f32> {
+    // Sample with offset for shadow position
+    let shadow_uv = in.uv - uniforms.offset * uniforms.texel_size;
+
+    // Simple box blur for shadow
+    var alpha = 0.0;
+    let blur_radius = i32(max(uniforms.blur_radius, 1.0));
+    var samples = 0.0;
+
+    for (var x = -blur_radius; x <= blur_radius; x++) {
+        for (var y = -blur_radius; y <= blur_radius; y++) {
+            let offset = vec2<f32>(f32(x), f32(y)) * uniforms.texel_size;
+            let sample_uv = shadow_uv + offset;
+
+            // Clamp UV to prevent sampling outside texture
+            if (sample_uv.x >= 0.0 && sample_uv.x <= 1.0 && sample_uv.y >= 0.0 && sample_uv.y <= 1.0) {
+                alpha += textureSample(input_texture, input_sampler, sample_uv).a;
+            }
+            samples += 1.0;
+        }
+    }
+
+    alpha = alpha / samples;
+
+    // Apply spread (threshold adjustment)
+    if (uniforms.spread != 0.0) {
+        let threshold = 0.5 - uniforms.spread * 0.5;
+        alpha = smoothstep(threshold, threshold + 0.1, alpha);
+    }
+
+    // Return shadow color with computed alpha
+    return vec4<f32>(uniforms.color.rgb, uniforms.color.a * alpha);
+}
+"#;

@@ -4,7 +4,8 @@
 //! rendered via the DrawContext API.
 
 use blinc_core::{
-    Brush, Color, CornerRadius, DynFloat, DynValue, Rect, Shadow, Transform, ValueContext,
+    BlurQuality, Brush, Color, CornerRadius, DynFloat, DynValue, LayerEffect, Rect, Shadow,
+    Transform, ValueContext,
 };
 use taffy::Layout;
 
@@ -963,6 +964,9 @@ pub struct RenderProps {
     /// When true, this element will not capture clicks/hovers - only its children can.
     /// Used by Stack layers to allow clicks to pass through to siblings.
     pub pointer_events_none: bool,
+    /// Layer effects applied to this element (blur, drop shadow, glow, color matrix)
+    /// Effects are applied during layer composition when the element is rendered
+    pub layer_effects: Vec<LayerEffect>,
     /// DEPRECATED: Whether the motion should start exiting
     ///
     /// This field is deprecated. Motion exit is now triggered explicitly via
@@ -1002,6 +1006,7 @@ impl Default for RenderProps {
             is_stack_layer: false,
             cursor: None,
             pointer_events_none: false,
+            layer_effects: Vec::new(),
             motion_is_exiting: false,
         }
     }

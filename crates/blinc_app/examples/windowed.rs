@@ -38,9 +38,9 @@ fn main() -> Result<()> {
 /// Build the UI based on the current window context
 fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
     // Scale factor based on window size (baseline 800x600)
-    let scale_x = ctx.width / 800.0;
-    let scale_y = ctx.height / 600.0;
-    let scale = (scale_x + scale_y) / 2.0;
+    // let scale_x = ctx.width / 800.0;
+    // let scale_y = ctx.height / 600.0;
+    // let scale = 1.0;
 
     // Root container with purple background
     div()
@@ -48,16 +48,17 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
         .h(ctx.height)
         .bg(Color::rgba(0.4, 0.2, 0.6, 1.0))
         // Background color blobs layer
-        .child(build_blobs(ctx.width, ctx.height, scale))
+        .child(build_blobs())
         // Main content layer
-        .child(build_content(ctx))
+        .child(scroll().w_full().h(ctx.height).child(build_content(ctx)))
 }
 
 /// Build the colorful background blobs, scaled to window size
-fn build_blobs(width: f32, height: f32, scale: f32) -> impl ElementBuilder {
+fn build_blobs() -> impl ElementBuilder {
+    let scale = 1.0;
     div()
-        .w(width)
-        .h(height)
+        .w_full()
+        .h_full()
         .absolute()
         // Large pink blob - top right
         .child(
@@ -151,19 +152,20 @@ fn build_content(ctx: &WindowedContext) -> impl ElementBuilder {
     let focused = ctx.focused;
 
     div()
-        .w(ctx.width)
-        .h(ctx.height)
+        .w_full()
+        .h_fit()
         .flex_col()
-        .items_center()
+        .p(10.0)
         .justify_center()
-        .gap(24.0)
+        .items_center()
+        .gap(10.0)
         // Glass card with welcome message
         .child(
             div()
                 .glass()
                 .shadow_xl()
                 .rounded(56.0)
-                .p(40.0)
+                .p(10.0)
                 .flex_col()
                 .items_center()
                 .justify_center()
@@ -356,10 +358,10 @@ fn build_image_showcase(_ctx: &WindowedContext) -> impl ElementBuilder {
         .glass()
         .shadow_xl()
         .rounded(40.0)
-        .p(16.0)
+        .p(10.0)
         .flex_row()
         .items_center()
-        .gap(16.0)
+        .gap(10.0)
         // Image container with hover effect using stateful
         .child(
             stateful::<ButtonState>()
@@ -378,13 +380,13 @@ fn build_image_showcase(_ctx: &WindowedContext) -> impl ElementBuilder {
                     };
 
                     div()
-                        .shadow(shadow)
-                        .transform(transform)
                         .child(
                             img("crates/blinc_app/examples/assets/original-c4197a5bf25a4356aa2bac6f82073eb2.webp")
-                                .w(120.0 * 4.0)
-                                .h(80.0 * 4.0)
+                                .w(120.0)
+                                .h(80.0)
                                 .cover()
+                                .shadow(shadow)
+                                .transform(transform)
                                 .rounded(12.0)
                         )
                 }),

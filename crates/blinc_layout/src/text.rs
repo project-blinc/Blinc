@@ -599,6 +599,7 @@ impl ElementBuilder for Text {
             is_stack_layer: false,
             pointer_events_none: self.pointer_events_none,
             cursor: self.cursor,
+            layer_effects: Vec::new(),
             motion_is_exiting: false,
         }
     }

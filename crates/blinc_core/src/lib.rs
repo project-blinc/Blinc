@@ -45,14 +45,15 @@ pub mod store;
 pub mod value;
 
 pub use draw::{
-    DrawCommand, DrawContext, DrawContextExt, FontWeight, ImageId, ImageOptions, LayerConfig,
-    LineCap, LineJoin, MaterialId, MeshId, MeshInstance, Path, PathCommand, RecordingContext,
-    SdfBuilder, ShapeId, Stroke, TextAlign, TextBaseline, TextStyle, Transform,
+    BlurQuality, DrawCommand, DrawContext, DrawContextExt, FontWeight, ImageId, ImageOptions,
+    LayerConfig, LayerEffect, LineCap, LineJoin, MaterialId, MeshId, MeshInstance, Path,
+    PathCommand, RecordingContext, SdfBuilder, ShapeId, Stroke, TextAlign, TextBaseline, TextStyle,
+    Transform,
 };
 pub use events::{Event, EventData, EventDispatcher, EventType, KeyCode, Modifiers};
 pub use fsm::{FsmId, FsmRuntime, StateId, StateMachine, Transition};
 pub use layer::{
-    Affine2D, BillboardFacing, BlendMode, Brush, CachePolicy, Camera, CameraProjection,
+    Affine2D, BillboardFacing, BlendMode, BlurStyle, Brush, CachePolicy, Camera, CameraProjection,
     Canvas2DCommand, Canvas2DCommands, ClipShape, Color, CornerRadius, Environment, GlassStyle,
     Gradient, GradientSpace, GradientSpread, GradientStop, ImageBrush, ImageFit, ImagePosition,
     Layer, LayerId, LayerIdGenerator, LayerProperties, Light, Mat4, Point, PointerEvents,

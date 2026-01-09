@@ -725,6 +725,19 @@ pub fn extract_brush_info(brush: &Brush) -> PathBrushInfo {
                 }
             }
         }
+        Brush::Blur(style) => {
+            // Blur brush is treated like glass for path rendering
+            let tint = style.tint.unwrap_or(Color::rgba(1.0, 1.0, 1.0, 0.3));
+            PathBrushInfo {
+                brush_type: PathBrushType::Glass,
+                gradient_type: 0,
+                start_color: tint,
+                end_color: tint,
+                glass_params: [style.radius, 1.0, 0.5, style.opacity],
+                glass_tint: tint,
+                ..Default::default()
+            }
+        }
     }
 }
 
@@ -905,6 +918,11 @@ fn brush_to_color(brush: &Brush) -> Color {
                 .first()
                 .map(|s| s.color)
                 .unwrap_or(Color::BLACK)
+        }
+        Brush::Blur(style) => {
+            // Blur effects are not supported on tessellated paths
+            // Return the tint color or semi-transparent white
+            style.tint.unwrap_or(Color::rgba(1.0, 1.0, 1.0, 0.3))
         }
     }
 }
