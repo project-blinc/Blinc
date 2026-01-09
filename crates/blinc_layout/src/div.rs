@@ -2041,35 +2041,50 @@ impl Div {
 
     /// Set left border only (useful for blockquotes)
     ///
+    /// If a uniform border was previously set, other sides will inherit from it.
+    ///
     /// # Example
     /// ```ignore
     /// div().border_left(4.0, Color::BLUE).pl(16.0)
     /// ```
     pub fn border_left(mut self, width: f32, color: Color) -> Self {
+        self.inherit_uniform_border_to_sides();
         self.border_sides.left = Some(crate::element::BorderSide::new(width, color));
         self
     }
 
     /// Set right border only
+    ///
+    /// If a uniform border was previously set, other sides will inherit from it.
     pub fn border_right(mut self, width: f32, color: Color) -> Self {
+        self.inherit_uniform_border_to_sides();
         self.border_sides.right = Some(crate::element::BorderSide::new(width, color));
         self
     }
 
     /// Set top border only
+    ///
+    /// If a uniform border was previously set, other sides will inherit from it.
     pub fn border_top(mut self, width: f32, color: Color) -> Self {
+        self.inherit_uniform_border_to_sides();
         self.border_sides.top = Some(crate::element::BorderSide::new(width, color));
         self
     }
 
     /// Set bottom border only
+    ///
+    /// If a uniform border was previously set, other sides will inherit from it.
     pub fn border_bottom(mut self, width: f32, color: Color) -> Self {
+        self.inherit_uniform_border_to_sides();
         self.border_sides.bottom = Some(crate::element::BorderSide::new(width, color));
         self
     }
 
     /// Set horizontal borders (left and right)
+    ///
+    /// If a uniform border was previously set, vertical sides will inherit from it.
     pub fn border_x(mut self, width: f32, color: Color) -> Self {
+        self.inherit_uniform_border_to_sides();
         let side = crate::element::BorderSide::new(width, color);
         self.border_sides.left = Some(side);
         self.border_sides.right = Some(side);
@@ -2077,11 +2092,31 @@ impl Div {
     }
 
     /// Set vertical borders (top and bottom)
+    ///
+    /// If a uniform border was previously set, horizontal sides will inherit from it.
     pub fn border_y(mut self, width: f32, color: Color) -> Self {
+        self.inherit_uniform_border_to_sides();
         let side = crate::element::BorderSide::new(width, color);
         self.border_sides.top = Some(side);
         self.border_sides.bottom = Some(side);
         self
+    }
+
+    /// Helper to inherit uniform border to per-side borders before modifying a specific side
+    ///
+    /// This ensures that when you do `.border(1.0, color).border_bottom(3.0, color)`,
+    /// the other three sides get the uniform border instead of being empty.
+    fn inherit_uniform_border_to_sides(&mut self) {
+        // Only inherit if we have a uniform border and no per-side borders yet
+        if self.border_width > 0.0 && !self.border_sides.has_any() {
+            if let Some(color) = self.border_color {
+                let side = crate::element::BorderSide::new(self.border_width, color);
+                self.border_sides.top = Some(side);
+                self.border_sides.right = Some(side);
+                self.border_sides.bottom = Some(side);
+                self.border_sides.left = Some(side);
+            }
+        }
     }
 
     /// Configure borders using a builder pattern
