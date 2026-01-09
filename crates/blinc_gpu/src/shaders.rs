@@ -1353,7 +1353,14 @@ pub const PATH_SHADER: &str = r#"
 //
 // Renders tessellated vector paths as colored triangles.
 // Supports solid colors and gradients via per-vertex UV coordinates.
-// Uses edge-distance anti-aliasing for smooth edges.
+// Supports multi-stop gradients via 1D texture lookup.
+// Supports clipping via rect/circle/ellipse shapes.
+
+// Clip type constants
+const CLIP_NONE: u32 = 0u;
+const CLIP_RECT: u32 = 1u;
+const CLIP_CIRCLE: u32 = 2u;
+const CLIP_ELLIPSE: u32 = 3u;
 
 struct Uniforms {
     // viewport_size (vec2) + padding (vec2) = 16 bytes, offset 0
@@ -1364,10 +1371,30 @@ struct Uniforms {
     transform_row0: vec4<f32>,
     transform_row1: vec4<f32>,
     transform_row2: vec4<f32>,
+    // Clip parameters = 32 bytes, offset 64
+    clip_bounds: vec4<f32>,   // (x, y, width, height) or (cx, cy, rx, ry)
+    clip_radius: vec4<f32>,   // corner radii or (rx, ry, 0, 0)
+    // clip_type + flags = 16 bytes, offset 96
+    clip_type: u32,
+    use_gradient_texture: u32,  // 0=use vertex colors, 1=sample gradient texture
+    use_image_texture: u32,     // 0=no image, 1=sample image texture
+    use_glass_effect: u32,      // 0=no glass, 1=glass effect on path
+    // Image UV bounds = 16 bytes, offset 112
+    image_uv_bounds: vec4<f32>, // (u_min, v_min, u_max, v_max)
+    // Glass parameters = 16 bytes, offset 128
+    glass_params: vec4<f32>,    // (blur_radius, saturation, tint_strength, opacity)
+    // Glass tint color = 16 bytes, offset 144
+    glass_tint: vec4<f32>,      // RGBA tint color
 }
-// Total: 64 bytes
+// Total: 160 bytes
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+@group(0) @binding(1) var gradient_texture: texture_1d<f32>;
+@group(0) @binding(2) var gradient_sampler: sampler;
+@group(0) @binding(3) var image_texture: texture_2d<f32>;
+@group(0) @binding(4) var image_sampler: sampler;
+@group(0) @binding(5) var backdrop_texture: texture_2d<f32>;
+@group(0) @binding(6) var backdrop_sampler: sampler;
 
 struct VertexInput {
     @location(0) position: vec2<f32>,
@@ -1387,7 +1414,92 @@ struct VertexOutput {
     @location(3) @interpolate(flat) gradient_params: vec4<f32>,
     @location(4) @interpolate(flat) gradient_type: u32,
     @location(5) edge_distance: f32,
+    @location(6) screen_pos: vec2<f32>,      // screen position for clip calculations
 }
+
+// ============================================================================
+// SDF Functions for Clipping
+// ============================================================================
+
+// Rounded rectangle SDF
+fn sd_rounded_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec4<f32>) -> f32 {
+    let half_size = size * 0.5;
+    let center = origin + half_size;
+    let rel = p - center;
+    let q = abs(rel) - half_size;
+
+    // Select corner radius based on quadrant
+    // radius: (top-left, top-right, bottom-right, bottom-left)
+    var r: f32;
+    if rel.y < 0.0 {
+        if rel.x > 0.0 {
+            r = radius.y; // top-right
+        } else {
+            r = radius.x; // top-left
+        }
+    } else {
+        if rel.x > 0.0 {
+            r = radius.z; // bottom-right
+        } else {
+            r = radius.w; // bottom-left
+        }
+    }
+
+    r = min(r, min(half_size.x, half_size.y));
+    let q_adjusted = q + vec2<f32>(r);
+    return length(max(q_adjusted, vec2<f32>(0.0))) + min(max(q_adjusted.x, q_adjusted.y), 0.0) - r;
+}
+
+// Circle SDF
+fn sd_circle(p: vec2<f32>, center: vec2<f32>, radius: f32) -> f32 {
+    return length(p - center) - radius;
+}
+
+// Ellipse SDF (approximation)
+fn sd_ellipse(p: vec2<f32>, center: vec2<f32>, radii: vec2<f32>) -> f32 {
+    let p_centered = p - center;
+    let p_norm = p_centered / radii;
+    let dist = length(p_norm);
+    return (dist - 1.0) * min(radii.x, radii.y);
+}
+
+// Calculate clip alpha (1.0 = inside clip, 0.0 = outside)
+fn calculate_clip_alpha(p: vec2<f32>, clip_bounds: vec4<f32>, clip_radius: vec4<f32>, clip_type: u32) -> f32 {
+    if clip_type == CLIP_NONE {
+        return 1.0;
+    }
+
+    var clip_d: f32;
+
+    switch clip_type {
+        case CLIP_RECT: {
+            let clip_origin = clip_bounds.xy;
+            let clip_size = clip_bounds.zw;
+            clip_d = sd_rounded_rect(p, clip_origin, clip_size, clip_radius);
+        }
+        case CLIP_CIRCLE: {
+            let center = clip_bounds.xy;
+            let radius = clip_radius.x;
+            clip_d = sd_circle(p, center, radius);
+        }
+        case CLIP_ELLIPSE: {
+            let center = clip_bounds.xy;
+            let radii = clip_radius.xy;
+            clip_d = sd_ellipse(p, center, radii);
+        }
+        default: {
+            return 1.0;
+        }
+    }
+
+    // Anti-aliased clip edge
+    let aa_width = fwidth(clip_d) * 0.5;
+    return 1.0 - smoothstep(-aa_width, aa_width, clip_d);
+}
+
+// ============================================================================
+// Vertex Shader
+// ============================================================================
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
@@ -1400,6 +1512,9 @@ fn vs_main(in: VertexInput) -> VertexOutput {
         dot(uniforms.transform_row1.xyz, p),
         dot(uniforms.transform_row2.xyz, p)
     );
+
+    // Store screen position for clip calculations
+    out.screen_pos = transformed.xy;
 
     // Convert to clip space (-1 to 1)
     let clip_pos = vec2<f32>(
@@ -1418,12 +1533,83 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     return out;
 }
 
+// ============================================================================
+// Fragment Shader
+// ============================================================================
+
+// Simple box blur for glass effect (samples backdrop in a small radius)
+fn sample_blur(uv: vec2<f32>, blur_radius: f32, viewport_size: vec2<f32>) -> vec4<f32> {
+    let pixel_size = 1.0 / viewport_size;
+    var total = vec4<f32>(0.0);
+    var samples = 0.0;
+
+    // Simple 5x5 box blur
+    let sample_radius = i32(clamp(blur_radius * 0.1, 1.0, 3.0));
+    for (var x = -sample_radius; x <= sample_radius; x++) {
+        for (var y = -sample_radius; y <= sample_radius; y++) {
+            let offset = vec2<f32>(f32(x), f32(y)) * pixel_size * blur_radius * 0.5;
+            let sample_uv = clamp(uv + offset, vec2<f32>(0.0), vec2<f32>(1.0));
+            total += textureSample(backdrop_texture, backdrop_sampler, sample_uv);
+            samples += 1.0;
+        }
+    }
+
+    return total / samples;
+}
+
+// Adjust saturation of a color
+fn adjust_saturation(color: vec3<f32>, saturation: f32) -> vec3<f32> {
+    let gray = dot(color, vec3<f32>(0.299, 0.587, 0.114));
+    return mix(vec3<f32>(gray), color, saturation);
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    // Calculate clip alpha first
+    let clip_alpha = calculate_clip_alpha(
+        in.screen_pos,
+        uniforms.clip_bounds,
+        uniforms.clip_radius,
+        uniforms.clip_type
+    );
+
+    // Early out if fully clipped
+    if clip_alpha < 0.001 {
+        discard;
+    }
+
     var color: vec4<f32>;
 
-    // gradient_type: 0 = solid, 1 = linear, 2 = radial
-    if (in.gradient_type == 0u) {
+    // Check for glass effect first
+    if (uniforms.use_glass_effect == 1u) {
+        // Glass effect: sample and blur backdrop, apply tint
+        let screen_uv = in.screen_pos / uniforms.viewport_size;
+        let blur_radius = uniforms.glass_params.x;
+        let saturation = uniforms.glass_params.y;
+        let tint_strength = uniforms.glass_params.z;
+        let glass_opacity = uniforms.glass_params.w;
+
+        // Sample blurred backdrop
+        var backdrop = sample_blur(screen_uv, blur_radius, uniforms.viewport_size);
+
+        // Adjust saturation
+        backdrop = vec4<f32>(adjust_saturation(backdrop.rgb, saturation), backdrop.a);
+
+        // Apply tint
+        let tinted = mix(backdrop.rgb, uniforms.glass_tint.rgb, tint_strength * uniforms.glass_tint.a);
+
+        // Final color with glass opacity
+        color = vec4<f32>(tinted, glass_opacity);
+    } else if (uniforms.use_image_texture == 1u) {
+        // Image brush: sample from image texture using UV coordinates
+        // Map the path UV (0-1 in bounding box) to image UV bounds
+        let uv_min = uniforms.image_uv_bounds.xy;
+        let uv_max = uniforms.image_uv_bounds.zw;
+        let image_uv = uv_min + in.uv * (uv_max - uv_min);
+        color = textureSample(image_texture, image_sampler, image_uv);
+        // Apply tint from vertex color (multiply)
+        color = vec4<f32>(color.rgb * in.color.rgb, color.a * in.color.a);
+    } else if (in.gradient_type == 0u) {
         // Solid color
         color = in.color;
     } else if (in.gradient_type == 1u) {
@@ -1442,17 +1628,34 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         } else {
             t = 0.0;
         }
-        color = mix(in.color, in.end_color, t);
+
+        // Sample from gradient texture or mix vertex colors
+        if (uniforms.use_gradient_texture == 1u) {
+            // Multi-stop gradient: sample from 1D texture
+            color = textureSample(gradient_texture, gradient_sampler, t);
+        } else {
+            // 2-stop fast path: mix vertex colors
+            color = mix(in.color, in.end_color, t);
+        }
     } else {
         // Radial gradient - params: (cx, cy, r, 0) in ObjectBoundingBox space
         let center = in.gradient_params.xy;
         let radius = in.gradient_params.z;
         let dist = length(in.uv - center);
         let t = clamp(dist / max(radius, 0.001), 0.0, 1.0);
-        color = mix(in.color, in.end_color, t);
+
+        // Sample from gradient texture or mix vertex colors
+        if (uniforms.use_gradient_texture == 1u) {
+            // Multi-stop gradient: sample from 1D texture
+            color = textureSample(gradient_texture, gradient_sampler, t);
+        } else {
+            // 2-stop fast path: mix vertex colors
+            color = mix(in.color, in.end_color, t);
+        }
     }
 
-    color.a *= uniforms.opacity;
+    // Apply opacity and clip alpha
+    color.a *= uniforms.opacity * clip_alpha;
     return color;
 }
 "#;

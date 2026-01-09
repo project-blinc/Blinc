@@ -896,10 +896,19 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         // Tessellate the path using lyon
         let tessellated = tessellate_fill(path, &brush);
         if !tessellated.is_empty() {
+            // Capture current clip state for paths
+            let (clip_bounds, clip_radius, clip_type) = self.get_clip_data();
+
             if self.is_foreground {
-                self.batch.push_foreground_path(tessellated);
+                self.batch.push_foreground_path_with_clip(
+                    tessellated,
+                    clip_bounds,
+                    clip_radius,
+                    clip_type,
+                );
             } else {
-                self.batch.push_path(tessellated);
+                self.batch
+                    .push_path_with_clip(tessellated, clip_bounds, clip_radius, clip_type);
             }
         }
     }
@@ -912,10 +921,19 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         // Tessellate the stroke using lyon
         let tessellated = tessellate_stroke(path, stroke, &brush);
         if !tessellated.is_empty() {
+            // Capture current clip state for paths
+            let (clip_bounds, clip_radius, clip_type) = self.get_clip_data();
+
             if self.is_foreground {
-                self.batch.push_foreground_path(tessellated);
+                self.batch.push_foreground_path_with_clip(
+                    tessellated,
+                    clip_bounds,
+                    clip_radius,
+                    clip_type,
+                );
             } else {
-                self.batch.push_path(tessellated);
+                self.batch
+                    .push_path_with_clip(tessellated, clip_bounds, clip_radius, clip_type);
             }
         }
     }

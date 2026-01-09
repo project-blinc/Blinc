@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use wgpu::util::DeviceExt;
 
+use crate::gradient_texture::GradientTextureCache;
 use crate::image::GpuImageInstance;
 use crate::path::PathVertex;
 use crate::primitives::{
@@ -246,6 +247,12 @@ pub struct GpuRenderer {
     glyph_sampler: wgpu::Sampler,
     /// Cached SDF bind group with actual glyph atlas textures (for unified text rendering)
     cached_sdf_with_glyphs: Option<CachedSdfWithGlyphs>,
+    /// Gradient texture cache for multi-stop gradient support on paths
+    gradient_texture_cache: GradientTextureCache,
+    /// Placeholder image texture (1x1 white) for path bind group when no image is used
+    placeholder_path_image_view: wgpu::TextureView,
+    /// Sampler for path image textures
+    path_image_sampler: wgpu::Sampler,
 }
 
 /// Image rendering pipeline (created lazily on first image render)
@@ -430,7 +437,7 @@ impl GpuRenderer {
                     .unwrap_or(surface_caps.formats[0])
             }
         });
-        tracing::info!("Selected texture format: {:?}", texture_format);
+        tracing::debug!("Selected texture format: {:?}", texture_format);
 
         let renderer = Self::create_renderer(
             instance,
@@ -547,6 +554,59 @@ impl GpuRenderer {
             ..Default::default()
         });
 
+        // Create gradient texture cache for multi-stop gradients on paths
+        let gradient_texture_cache = GradientTextureCache::new(&device, &queue);
+
+        // Create placeholder image texture for paths (1x1 white)
+        let placeholder_path_image = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Placeholder Path Image"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        // Initialize with white pixel
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &placeholder_path_image,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &[255u8, 255, 255, 255], // White pixel
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(4),
+                rows_per_image: Some(1),
+            },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
+        let placeholder_path_image_view =
+            placeholder_path_image.create_view(&wgpu::TextureViewDescriptor::default());
+
+        // Create sampler for path image textures
+        let path_image_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Path Image Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
         // Create initial bind groups
         let bind_groups = Self::create_bind_groups(
             &device,
@@ -555,6 +615,9 @@ impl GpuRenderer {
             &placeholder_glyph_atlas_view,
             &placeholder_color_glyph_atlas_view,
             &glyph_sampler,
+            &gradient_texture_cache,
+            &placeholder_path_image_view,
+            &path_image_sampler,
         );
 
         Ok(Self {
@@ -579,6 +642,9 @@ impl GpuRenderer {
             placeholder_color_glyph_atlas_view,
             glyph_sampler,
             cached_sdf_with_glyphs: None,
+            gradient_texture_cache,
+            placeholder_path_image_view,
+            path_image_sampler,
         })
     }
 
@@ -782,11 +848,11 @@ impl GpuRenderer {
             ],
         });
 
-        // Path bind group layout (just uniforms - vertices come from vertex buffer)
+        // Path bind group layout (uniforms + gradient texture + image texture + backdrop for glass)
         let path = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Path Bind Group Layout"),
             entries: &[
-                // Uniforms (viewport_size, transform, opacity)
+                // Uniforms (viewport_size, transform, opacity, clip, glass params, etc.)
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
@@ -795,6 +861,60 @@ impl GpuRenderer {
                         has_dynamic_offset: false,
                         min_binding_size: None,
                     },
+                    count: None,
+                },
+                // Gradient texture (1D texture for multi-stop gradients)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D1,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                // Gradient sampler
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                // Image texture (2D texture for image brush)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                // Image sampler
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                // Backdrop texture (2D texture for glass effect)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                // Backdrop sampler
+                wgpu::BindGroupLayoutEntry {
+                    binding: 6,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
             ],
@@ -1239,6 +1359,9 @@ impl GpuRenderer {
         glyph_atlas_view: &wgpu::TextureView,
         color_glyph_atlas_view: &wgpu::TextureView,
         glyph_sampler: &wgpu::Sampler,
+        gradient_texture_cache: &GradientTextureCache,
+        path_image_view: &wgpu::TextureView,
+        path_image_sampler: &wgpu::Sampler,
     ) -> BindGroups {
         let sdf = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("SDF Bind Group"),
@@ -1270,14 +1393,46 @@ impl GpuRenderer {
             ],
         });
 
-        // Path bind group
+        // Path bind group (with gradient texture, image texture, and backdrop for glass)
         let path = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Path Bind Group"),
             layout: &layouts.path,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffers.path_uniforms.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffers.path_uniforms.as_entire_binding(),
+                },
+                // Gradient texture (binding 1)
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&gradient_texture_cache.view),
+                },
+                // Gradient sampler (binding 2)
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&gradient_texture_cache.sampler),
+                },
+                // Image texture (binding 3)
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(path_image_view),
+                },
+                // Image sampler (binding 4)
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(path_image_sampler),
+                },
+                // Backdrop texture (binding 5) - uses placeholder, will be replaced when glass is enabled
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::TextureView(path_image_view),
+                },
+                // Backdrop sampler (binding 6)
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: wgpu::BindingResource::Sampler(path_image_sampler),
+                },
+            ],
         });
 
         // Glass bind group will be created when we have a backdrop texture
@@ -1614,9 +1769,12 @@ impl GpuRenderer {
 
     /// Update path vertex and index buffers
     fn update_path_buffers(&mut self, batch: &PrimitiveBatch) {
-        // Update path uniforms
+        // Update path uniforms with clip data from batch
         let path_uniforms = PathUniforms {
             viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            clip_bounds: batch.paths.clip_bounds,
+            clip_radius: batch.paths.clip_radius,
+            clip_type: batch.paths.clip_type,
             ..PathUniforms::default()
         };
         self.queue.write_buffer(

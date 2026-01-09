@@ -15,6 +15,7 @@
 //! - **Path Rendering**: Vector path tessellation via lyon
 
 pub mod backbuffer;
+pub mod gradient_texture;
 pub mod image;
 pub mod paint;
 pub mod path;
@@ -24,6 +25,7 @@ pub mod shaders;
 pub mod text;
 
 pub use backbuffer::{Backbuffer, BackbufferConfig, FrameContext};
+pub use gradient_texture::{GradientTextureCache, RasterizedGradient, GRADIENT_TEXTURE_WIDTH};
 pub use image::{GpuImage, GpuImageInstance, ImageRenderingContext};
 pub use paint::GpuPaintContext;
 pub use path::{tessellate_fill, tessellate_stroke, PathVertex, TessellatedPath};

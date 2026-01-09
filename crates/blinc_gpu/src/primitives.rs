@@ -743,7 +743,16 @@ pub struct CompositeUniforms {
 /// - transform_row0: `vec4<f32>` (16 bytes)
 /// - transform_row1: `vec4<f32>` (16 bytes)
 /// - transform_row2: `vec4<f32>` (16 bytes)
-/// Total: 64 bytes
+/// - clip_bounds: `vec4<f32>` (16 bytes) - (x, y, width, height) or (cx, cy, rx, ry)
+/// - clip_radius: `vec4<f32>` (16 bytes) - corner radii (tl, tr, br, bl) or (rx, ry, 0, 0)
+/// - clip_type: `u32` (4 bytes) - 0=none, 1=rect, 2=circle, 3=ellipse
+/// - use_gradient_texture: `u32` (4 bytes) - 0=use vertex colors, 1=sample gradient texture
+/// - use_image_texture: `u32` (4 bytes) - 0=no image, 1=sample image texture
+/// - use_glass_effect: `u32` (4 bytes) - 0=no glass, 1=glass effect on path
+/// - image_uv_bounds: `vec4<f32>` (16 bytes) - (u_min, v_min, u_max, v_max) for image UV mapping
+/// - glass_params: `vec4<f32>` (16 bytes) - (blur_radius, saturation, tint_strength, opacity)
+/// - glass_tint: `vec4<f32>` (16 bytes) - glass tint color RGBA
+/// Total: 160 bytes
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct PathUniforms {
@@ -752,6 +761,25 @@ pub struct PathUniforms {
     pub _pad0: f32,
     /// 3x3 transform matrix stored as 3 vec4s (xyz used, w is padding)
     pub transform: [[f32; 4]; 3],
+    /// Clip bounds: (x, y, width, height) for rects, (cx, cy, rx, ry) for circles/ellipses
+    pub clip_bounds: [f32; 4],
+    /// Clip corner radii for rounded rects: (top-left, top-right, bottom-right, bottom-left)
+    /// For circles/ellipses: (rx, ry, 0, 0)
+    pub clip_radius: [f32; 4],
+    /// Clip type: 0=none, 1=rect, 2=circle, 3=ellipse
+    pub clip_type: u32,
+    /// Use gradient texture: 0=use vertex colors (2-stop fast path), 1=sample gradient texture
+    pub use_gradient_texture: u32,
+    /// Use image texture: 0=no image, 1=sample image texture for brush
+    pub use_image_texture: u32,
+    /// Use glass effect: 0=no glass, 1=glass effect on path (requires mask texture)
+    pub use_glass_effect: u32,
+    /// Image UV bounds for mapping: (u_min, v_min, u_max, v_max)
+    pub image_uv_bounds: [f32; 4],
+    /// Glass parameters: (blur_radius, saturation, tint_strength, opacity)
+    pub glass_params: [f32; 4],
+    /// Glass tint color (RGBA)
+    pub glass_tint: [f32; 4],
 }
 
 impl Default for PathUniforms {
@@ -766,6 +794,16 @@ impl Default for PathUniforms {
                 [0.0, 1.0, 0.0, 0.0],
                 [0.0, 0.0, 1.0, 0.0],
             ],
+            // Default: no clipping (huge bounds)
+            clip_bounds: [-10000.0, -10000.0, 100000.0, 100000.0],
+            clip_radius: [0.0; 4],
+            clip_type: ClipType::None as u32,
+            use_gradient_texture: 0, // Default: use vertex colors (2-stop fast path)
+            use_image_texture: 0,    // Default: no image texture
+            use_glass_effect: 0,     // Default: no glass effect
+            image_uv_bounds: [0.0, 0.0, 1.0, 1.0], // Default: full UV range
+            glass_params: [20.0, 1.0, 0.5, 0.9], // Default: blur=20, sat=1, tint=0.5, opacity=0.9
+            glass_tint: [1.0, 1.0, 1.0, 0.3],    // Default: white with 30% alpha
         }
     }
 }
@@ -777,6 +815,12 @@ pub struct PathBatch {
     pub vertices: Vec<crate::path::PathVertex>,
     /// Indices for all paths in this batch
     pub indices: Vec<u32>,
+    /// Clip bounds for this batch: (x, y, width, height) or (cx, cy, rx, ry)
+    pub clip_bounds: [f32; 4],
+    /// Clip corner radii for this batch
+    pub clip_radius: [f32; 4],
+    /// Clip type for this batch: 0=none, 1=rect, 2=circle, 3=ellipse
+    pub clip_type: u32,
 }
 
 /// Batch of GPU primitives for efficient rendering
@@ -884,6 +928,53 @@ impl PrimitiveBatch {
         if tessellated.is_empty() {
             return;
         }
+        let base_vertex = self.foreground_paths.vertices.len() as u32;
+        self.foreground_paths.vertices.extend(tessellated.vertices);
+        self.foreground_paths
+            .indices
+            .extend(tessellated.indices.iter().map(|i| i + base_vertex));
+    }
+
+    /// Add tessellated path geometry with clip data to the batch
+    pub fn push_path_with_clip(
+        &mut self,
+        tessellated: crate::path::TessellatedPath,
+        clip_bounds: [f32; 4],
+        clip_radius: [f32; 4],
+        clip_type: ClipType,
+    ) {
+        if tessellated.is_empty() {
+            return;
+        }
+        // Update clip data on the batch (last path's clip wins)
+        self.paths.clip_bounds = clip_bounds;
+        self.paths.clip_radius = clip_radius;
+        self.paths.clip_type = clip_type as u32;
+
+        // Offset indices by current vertex count
+        let base_vertex = self.paths.vertices.len() as u32;
+        self.paths.vertices.extend(tessellated.vertices);
+        self.paths
+            .indices
+            .extend(tessellated.indices.iter().map(|i| i + base_vertex));
+    }
+
+    /// Add tessellated path geometry with clip data to the foreground batch
+    pub fn push_foreground_path_with_clip(
+        &mut self,
+        tessellated: crate::path::TessellatedPath,
+        clip_bounds: [f32; 4],
+        clip_radius: [f32; 4],
+        clip_type: ClipType,
+    ) {
+        if tessellated.is_empty() {
+            return;
+        }
+        // Update clip data on the batch (last path's clip wins)
+        self.foreground_paths.clip_bounds = clip_bounds;
+        self.foreground_paths.clip_radius = clip_radius;
+        self.foreground_paths.clip_type = clip_type as u32;
+
         let base_vertex = self.foreground_paths.vertices.len() as u32;
         self.foreground_paths.vertices.extend(tessellated.vertices);
         self.foreground_paths
