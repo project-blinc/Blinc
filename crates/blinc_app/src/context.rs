@@ -16,6 +16,8 @@ use blinc_layout::render_state::Overlay;
 use blinc_layout::renderer::ElementType;
 use blinc_svg::SvgDocument;
 use lru::LruCache;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 
@@ -23,6 +25,9 @@ use crate::error::Result;
 
 /// Maximum number of images to keep in cache (prevents unbounded memory growth)
 const IMAGE_CACHE_CAPACITY: usize = 128;
+
+/// Maximum number of parsed SVG documents to cache
+const SVG_CACHE_CAPACITY: usize = 64;
 
 /// Internal render context that manages GPU resources and rendering
 pub struct RenderContext {
@@ -38,6 +43,8 @@ pub struct RenderContext {
     msaa_texture: Option<CachedTexture>,
     // LRU cache for images (prevents unbounded memory growth)
     image_cache: LruCache<String, GpuImage>,
+    // LRU cache for parsed SVG documents (avoids re-parsing)
+    svg_cache: LruCache<u64, SvgDocument>,
     // Scratch buffers for per-frame allocations (reused to avoid allocations)
     scratch_glyphs: Vec<GpuGlyph>,
     scratch_texts: Vec<TextElement>,
@@ -165,6 +172,7 @@ impl RenderContext {
             backdrop_texture: None,
             msaa_texture: None,
             image_cache: LruCache::new(NonZeroUsize::new(IMAGE_CACHE_CAPACITY).unwrap()),
+            svg_cache: LruCache::new(NonZeroUsize::new(SVG_CACHE_CAPACITY).unwrap()),
             scratch_glyphs: Vec::with_capacity(1024), // Pre-allocate for typical text
             scratch_texts: Vec::with_capacity(64),    // Pre-allocate for text elements
             scratch_svgs: Vec::with_capacity(32),     // Pre-allocate for SVG elements
@@ -863,7 +871,7 @@ impl RenderContext {
     }
 
     /// Render an SVG element with clipping and opacity support
-    fn render_svg_element(&self, ctx: &mut GpuPaintContext, svg: &SvgElement) {
+    fn render_svg_element(&mut self, ctx: &mut GpuPaintContext, svg: &SvgElement) {
         // Skip completely transparent SVGs
         if svg.motion_opacity <= 0.001 {
             return;
@@ -886,8 +894,22 @@ impl RenderContext {
             }
         }
 
-        let Ok(doc) = SvgDocument::from_str(&svg.source) else {
-            return;
+        // Hash the SVG source for cache lookup (faster than using string as key)
+        let svg_hash = {
+            let mut hasher = DefaultHasher::new();
+            svg.source.hash(&mut hasher);
+            hasher.finish()
+        };
+
+        // Try cache lookup first, parse only on miss
+        let doc = if let Some(cached) = self.svg_cache.get(&svg_hash) {
+            cached.clone()
+        } else {
+            let Ok(parsed) = SvgDocument::from_str(&svg.source) else {
+                return;
+            };
+            self.svg_cache.put(svg_hash, parsed.clone());
+            parsed
         };
 
         // Apply clipping if present
