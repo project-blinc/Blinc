@@ -11,8 +11,8 @@ use crate::gradient_texture::{GradientTextureCache, RasterizedGradient};
 use crate::image::GpuImageInstance;
 use crate::path::PathVertex;
 use crate::primitives::{
-    GlassType, GlassUniforms, GpuGlassPrimitive, GpuGlyph, GpuPrimitive, PathUniforms,
-    PrimitiveBatch, Uniforms,
+    BlurUniforms, ColorMatrixUniforms, DropShadowUniforms, GlassType, GlassUniforms, GlowUniforms,
+    GpuGlassPrimitive, GpuGlyph, GpuPrimitive, PathUniforms, PrimitiveBatch, Uniforms,
 };
 use crate::shaders::{
     BLUR_SHADER, COLOR_MATRIX_SHADER, COMPOSITE_SHADER, DROP_SHADOW_SHADER, GLASS_SHADER,
@@ -150,6 +150,14 @@ struct Buffers {
     path_vertices: Option<wgpu::Buffer>,
     /// Index buffer for path geometry (dynamic, recreated as needed)
     path_indices: Option<wgpu::Buffer>,
+    /// Cached uniform buffer for blur effect
+    blur_uniforms: wgpu::Buffer,
+    /// Cached uniform buffer for drop shadow effect
+    drop_shadow_uniforms: wgpu::Buffer,
+    /// Cached uniform buffer for glow effect
+    glow_uniforms: wgpu::Buffer,
+    /// Cached uniform buffer for color matrix effect
+    color_matrix_uniforms: wgpu::Buffer,
 }
 
 /// Bind groups for shader resources
@@ -2290,6 +2298,35 @@ impl GpuRenderer {
             mapped_at_creation: false,
         });
 
+        // Cached effect uniform buffers (avoid per-frame allocation)
+        let blur_uniforms = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Blur Uniforms Buffer"),
+            size: std::mem::size_of::<BlurUniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let drop_shadow_uniforms = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Drop Shadow Uniforms Buffer"),
+            size: std::mem::size_of::<DropShadowUniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let glow_uniforms = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Glow Uniforms Buffer"),
+            size: std::mem::size_of::<GlowUniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let color_matrix_uniforms = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Color Matrix Uniforms Buffer"),
+            size: std::mem::size_of::<ColorMatrixUniforms>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         Buffers {
             uniforms,
             primitives,
@@ -2299,6 +2336,10 @@ impl GpuRenderer {
             path_uniforms,
             path_vertices: None,
             path_indices: None,
+            blur_uniforms,
+            drop_shadow_uniforms,
+            glow_uniforms,
+            color_matrix_uniforms,
         }
     }
 
@@ -2804,6 +2845,7 @@ impl GpuRenderer {
 
         // First pass: render primitives that are NOT in effect layers
         self.render_primitives_excluding(target, batch, &effect_primitives, clear_color);
+        drop(effect_primitives); // Free HashSet immediately - not needed after first pass
 
         // Process each effect layer
         for (start_idx, end_idx, config) in effect_layers {
@@ -2881,10 +2923,6 @@ impl GpuRenderer {
             // Use content_size for blitting (not layer_texture.size which may be larger)
             let tight_size = content_size;
 
-            // Apply effects to the tight texture
-            let effected = self.apply_layer_effects(&layer_texture, &config.effects);
-            self.layer_texture_cache.release(layer_texture);
-
             // Calculate the destination position and size for blitting
             // Don't clamp to 0 - allow negative positions for scrolled content
             // The blit function will handle off-screen portions correctly
@@ -2897,20 +2935,39 @@ impl GpuRenderer {
                 layer_size.1 + effect_expansion.1 + effect_expansion.3,
             );
 
-            // Blit the tight texture back to target at the correct position
-            // Pass through the clip bounds so effects don't bleed outside scroll containers
-            self.blit_tight_texture_to_target(
-                &effected.view,
-                tight_size,
-                target,
-                expanded_pos,
-                expanded_size,
-                config.opacity,
-                config.blend_mode,
-                layer_clip,
-            );
+            // Skip texture copy when no effects - use layer_texture directly
+            if config.effects.is_empty() {
+                // Blit directly without effect processing (skip copy)
+                self.blit_tight_texture_to_target(
+                    &layer_texture.view,
+                    tight_size,
+                    target,
+                    expanded_pos,
+                    expanded_size,
+                    config.opacity,
+                    config.blend_mode,
+                    layer_clip,
+                );
+                self.layer_texture_cache.release(layer_texture);
+            } else {
+                // Apply effects to the tight texture
+                let effected = self.apply_layer_effects(&layer_texture, &config.effects);
+                self.layer_texture_cache.release(layer_texture);
 
-            self.layer_texture_cache.release(effected);
+                // Blit the effected texture back to target at the correct position
+                // Pass through the clip bounds so effects don't bleed outside scroll containers
+                self.blit_tight_texture_to_target(
+                    &effected.view,
+                    tight_size,
+                    target,
+                    expanded_pos,
+                    expanded_size,
+                    config.opacity,
+                    config.blend_mode,
+                    layer_clip,
+                );
+                self.layer_texture_cache.release(effected);
+            }
         }
     }
 
@@ -3927,19 +3984,32 @@ impl GpuRenderer {
                             );
                         }
 
-                        // Apply effects
-                        let effected = self.apply_layer_effects(&layer_texture, &config.effects);
-                        self.layer_texture_cache.release(layer_texture);
+                        // Skip texture copy when no effects - use layer_texture directly
+                        if config.effects.is_empty() {
+                            // Composite directly without effect processing (skip copy)
+                            self.blit_texture_to_target(
+                                &layer_texture.view,
+                                target,
+                                config.opacity,
+                                config.blend_mode,
+                            );
+                            self.layer_texture_cache.release(layer_texture);
+                        } else {
+                            // Apply effects
+                            let effected =
+                                self.apply_layer_effects(&layer_texture, &config.effects);
+                            self.layer_texture_cache.release(layer_texture);
 
-                        // Composite back to main target with opacity
-                        self.blit_texture_to_target(
-                            &effected.view,
-                            target,
-                            config.opacity,
-                            config.blend_mode,
-                        );
+                            // Composite back to main target with opacity
+                            self.blit_texture_to_target(
+                                &effected.view,
+                                target,
+                                config.opacity,
+                                config.blend_mode,
+                            );
 
-                        self.layer_texture_cache.release(effected);
+                            self.layer_texture_cache.release(effected);
+                        }
                     }
                 }
                 LayerCommand::Sample { .. } => {
@@ -5110,8 +5180,6 @@ impl GpuRenderer {
         iteration: u32,
         blur_alpha: bool,
     ) {
-        use crate::primitives::BlurUniforms;
-
         let uniforms = BlurUniforms {
             texel_size: [1.0 / size.0 as f32, 1.0 / size.1 as f32],
             radius,
@@ -5122,13 +5190,12 @@ impl GpuRenderer {
             _pad3: 0.0,
         };
 
-        let uniform_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Blur Uniforms Buffer"),
-                contents: bytemuck::cast_slice(&[uniforms]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        // Use cached buffer instead of creating per-pass
+        self.queue.write_buffer(
+            &self.buffers.blur_uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Blur Effect Bind Group"),
@@ -5136,7 +5203,7 @@ impl GpuRenderer {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
+                    resource: self.buffers.blur_uniforms.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -5291,17 +5358,14 @@ impl GpuRenderer {
         output: &wgpu::TextureView,
         matrix: &[f32; 20],
     ) {
-        use crate::primitives::ColorMatrixUniforms;
-
         let uniforms = ColorMatrixUniforms::from_matrix(matrix);
 
-        let uniform_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Color Matrix Uniforms Buffer"),
-                contents: bytemuck::cast_slice(&[uniforms]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        // Use cached buffer instead of creating per-pass
+        self.queue.write_buffer(
+            &self.buffers.color_matrix_uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Color Matrix Effect Bind Group"),
@@ -5309,7 +5373,7 @@ impl GpuRenderer {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
+                    resource: self.buffers.color_matrix_uniforms.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -5368,8 +5432,6 @@ impl GpuRenderer {
         spread: f32,
         color: [f32; 4],
     ) {
-        use crate::primitives::DropShadowUniforms;
-
         let uniforms = DropShadowUniforms {
             offset: [offset.0, offset.1],
             blur_radius,
@@ -5379,13 +5441,12 @@ impl GpuRenderer {
             _pad: [0.0, 0.0],
         };
 
-        let uniform_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Drop Shadow Uniforms Buffer"),
-                contents: bytemuck::cast_slice(&[uniforms]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        // Use cached buffer instead of creating per-pass
+        self.queue.write_buffer(
+            &self.buffers.drop_shadow_uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Drop Shadow Effect Bind Group"),
@@ -5393,7 +5454,7 @@ impl GpuRenderer {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
+                    resource: self.buffers.drop_shadow_uniforms.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -5454,8 +5515,6 @@ impl GpuRenderer {
         range: f32,
         opacity: f32,
     ) {
-        use crate::primitives::GlowUniforms;
-
         let uniforms = GlowUniforms {
             color,
             blur,
@@ -5466,13 +5525,12 @@ impl GpuRenderer {
             _pad1: [0.0, 0.0],
         };
 
-        let uniform_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Glow Uniforms Buffer"),
-                contents: bytemuck::cast_slice(&[uniforms]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        // Use cached buffer instead of creating per-pass
+        self.queue.write_buffer(
+            &self.buffers.glow_uniforms,
+            0,
+            bytemuck::bytes_of(&uniforms),
+        );
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Glow Effect Bind Group"),
@@ -5480,7 +5538,7 @@ impl GpuRenderer {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
+                    resource: self.buffers.glow_uniforms.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -6037,12 +6095,14 @@ impl GpuRenderer {
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 
-        // Write offset primitives to buffer
+        // Write offset primitives to buffer and capture count for draw call
+        let primitive_count = offset_primitives.len() as u32;
         self.queue.write_buffer(
             &self.buffers.primitives,
             0,
             bytemuck::cast_slice(&offset_primitives),
         );
+        drop(offset_primitives); // Free Vec immediately - data is now on GPU
 
         // Create command encoder
         let mut encoder = self
@@ -6070,7 +6130,7 @@ impl GpuRenderer {
 
             render_pass.set_pipeline(&self.pipelines.sdf);
             render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
-            render_pass.draw(0..6, 0..offset_primitives.len() as u32);
+            render_pass.draw(0..6, 0..primitive_count);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

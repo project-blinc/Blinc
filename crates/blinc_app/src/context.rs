@@ -40,6 +40,9 @@ pub struct RenderContext {
     image_cache: LruCache<String, GpuImage>,
     // Scratch buffers for per-frame allocations (reused to avoid allocations)
     scratch_glyphs: Vec<GpuGlyph>,
+    scratch_texts: Vec<TextElement>,
+    scratch_svgs: Vec<SvgElement>,
+    scratch_images: Vec<ImageElement>,
 }
 
 struct CachedTexture {
@@ -163,6 +166,9 @@ impl RenderContext {
             msaa_texture: None,
             image_cache: LruCache::new(NonZeroUsize::new(IMAGE_CACHE_CAPACITY).unwrap()),
             scratch_glyphs: Vec::with_capacity(1024), // Pre-allocate for typical text
+            scratch_texts: Vec::with_capacity(64),    // Pre-allocate for text elements
+            scratch_svgs: Vec::with_capacity(32),     // Pre-allocate for SVG elements
+            scratch_images: Vec::with_capacity(32),   // Pre-allocate for image elements
         }
     }
 
@@ -431,10 +437,30 @@ impl RenderContext {
             }
         }
 
+        // Return scratch buffers for reuse on next frame
+        self.return_scratch_elements(texts, svgs, images);
+
         // Poll the device to free completed command buffers and prevent memory accumulation
         self.renderer.poll();
 
         Ok(())
+    }
+
+    /// Return element vectors to scratch pool for reuse
+    #[inline]
+    fn return_scratch_elements(
+        &mut self,
+        mut texts: Vec<TextElement>,
+        mut svgs: Vec<SvgElement>,
+        mut images: Vec<ImageElement>,
+    ) {
+        // Clear and keep capacity for reuse
+        texts.clear();
+        svgs.clear();
+        images.clear();
+        self.scratch_texts = texts;
+        self.scratch_svgs = svgs;
+        self.scratch_images = images;
     }
 
     /// Ensure glass-related textures exist and are the right size.
@@ -945,7 +971,7 @@ impl RenderContext {
 
     /// Collect text, SVG, and image elements from the render tree
     fn collect_render_elements(
-        &self,
+        &mut self,
         tree: &RenderTree,
     ) -> (Vec<TextElement>, Vec<SvgElement>, Vec<ImageElement>) {
         self.collect_render_elements_with_state(tree, None)
@@ -953,13 +979,18 @@ impl RenderContext {
 
     /// Collect text, SVG, and image elements with motion state
     fn collect_render_elements_with_state(
-        &self,
+        &mut self,
         tree: &RenderTree,
         render_state: Option<&blinc_layout::RenderState>,
     ) -> (Vec<TextElement>, Vec<SvgElement>, Vec<ImageElement>) {
-        let mut texts = Vec::new();
-        let mut svgs = Vec::new();
-        let mut images = Vec::new();
+        // Reuse scratch buffers - take them, clear, populate, and return
+        // On next call they'll be reallocated if not returned
+        let mut texts = std::mem::take(&mut self.scratch_texts);
+        let mut svgs = std::mem::take(&mut self.scratch_svgs);
+        let mut images = std::mem::take(&mut self.scratch_images);
+        texts.clear();
+        svgs.clear();
+        images.clear();
 
         // Get the scale factor from the tree for DPI scaling
         let scale = tree.scale_factor();
@@ -1952,6 +1983,9 @@ impl RenderContext {
             self.render_layout_debug(target, tree, scale);
         }
 
+        // Return scratch buffers for reuse on next frame
+        self.return_scratch_elements(texts, svgs, images);
+
         Ok(())
     }
 
@@ -2126,6 +2160,9 @@ impl RenderContext {
             let scale = tree.scale_factor();
             self.render_layout_debug(target, tree, scale);
         }
+
+        // Return scratch buffers for reuse on next frame
+        self.return_scratch_elements(texts, svgs, images);
 
         Ok(())
     }
