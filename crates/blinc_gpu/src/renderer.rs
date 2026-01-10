@@ -2575,24 +2575,25 @@ impl GpuRenderer {
             // Calculate effect expansion (how much effects extend beyond original bounds)
             let effect_expansion = Self::calculate_effect_expansion(&config.effects);
 
-            // Render layer primitives to a viewport-sized texture
-            let layer_texture = self
-                .layer_texture_cache
-                .acquire(&self.device, self.viewport_size, false);
-
-            self.render_primitive_range(
-                &layer_texture.view,
+            // Render layer primitives to a TIGHT texture (not viewport-sized!)
+            // This significantly reduces memory usage and effect processing time
+            let layer_texture = self.render_primitive_range_tight(
                 batch,
                 start_idx,
                 end_idx,
-                [0.0, 0.0, 0.0, 0.0], // Clear to transparent
+                layer_pos,
+                layer_size,
+                effect_expansion,
             );
 
-            // Apply effects to the texture
+            // Remember the tight texture size for blitting
+            let tight_size = layer_texture.size;
+
+            // Apply effects to the tight texture
             let effected = self.apply_layer_effects(&layer_texture, &config.effects);
             self.layer_texture_cache.release(layer_texture);
 
-            // Expand the blit region to include effect expansion (shadows, glow, blur)
+            // Calculate the destination position and size for blitting
             let expanded_pos = (
                 (layer_pos.0 - effect_expansion.0).max(0.0),
                 (layer_pos.1 - effect_expansion.1).max(0.0),
@@ -2602,9 +2603,10 @@ impl GpuRenderer {
                 layer_size.1 + effect_expansion.1 + effect_expansion.3,
             );
 
-            // Blit the expanded region back to target
-            self.blit_region_to_target(
+            // Blit the tight texture back to target at the correct position
+            self.blit_tight_texture_to_target(
                 &effected.view,
+                tight_size,
                 target,
                 expanded_pos,
                 expanded_size,
@@ -5592,6 +5594,228 @@ impl GpuRenderer {
             render_pass.set_pipeline(&self.pipelines.sdf);
             render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
             render_pass.draw(0..6, 0..primitive_count as u32);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
+    /// Render a range of primitives to a tight-fit texture with offset
+    ///
+    /// This method renders primitives to a texture sized to fit the content,
+    /// offsetting primitive positions so they start at (0,0).
+    /// Returns the texture and the offset used.
+    fn render_primitive_range_tight(
+        &mut self,
+        batch: &PrimitiveBatch,
+        start_idx: usize,
+        end_idx: usize,
+        layer_pos: (f32, f32),
+        layer_size: (f32, f32),
+        effect_expansion: (f32, f32, f32, f32), // (left, top, right, bottom)
+    ) -> LayerTexture {
+        // Calculate tight texture size including effect expansion
+        let texture_width = (layer_size.0 + effect_expansion.0 + effect_expansion.2)
+            .ceil()
+            .max(1.0) as u32;
+        let texture_height = (layer_size.1 + effect_expansion.1 + effect_expansion.3)
+            .ceil()
+            .max(1.0) as u32;
+
+        // Round up to reasonable sizes for cache efficiency (64px increments)
+        let texture_width = ((texture_width + 63) / 64 * 64).min(self.viewport_size.0);
+        let texture_height = ((texture_height + 63) / 64 * 64).min(self.viewport_size.1);
+
+        let texture_size = (texture_width, texture_height);
+
+        // Acquire a texture of the tight size
+        let layer_texture = self
+            .layer_texture_cache
+            .acquire(&self.device, texture_size, false);
+
+        if start_idx >= end_idx {
+            return layer_texture;
+        }
+
+        // Extract primitives and offset their positions
+        let primitives = &batch.primitives[start_idx..end_idx];
+        if primitives.is_empty() {
+            return layer_texture;
+        }
+
+        // Offset primitives so content starts at (effect_expansion.left, effect_expansion.top)
+        // This leaves room for effects on the left/top edges
+        let offset_x = layer_pos.0 - effect_expansion.0;
+        let offset_y = layer_pos.1 - effect_expansion.1;
+
+        let mut offset_primitives: Vec<GpuPrimitive> = primitives
+            .iter()
+            .map(|p| {
+                let mut op = *p;
+                op.bounds[0] -= offset_x;
+                op.bounds[1] -= offset_y;
+                // Also offset clip bounds if they're valid
+                if op.clip_bounds[2] < 50000.0 {
+                    // Not the "no clip" default
+                    op.clip_bounds[0] -= offset_x;
+                    op.clip_bounds[1] -= offset_y;
+                }
+                op
+            })
+            .collect();
+
+        // Update uniforms with tight texture size
+        let uniforms = Uniforms {
+            viewport_size: [texture_size.0 as f32, texture_size.1 as f32],
+            _padding: [0.0; 2],
+        };
+        self.queue
+            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+
+        // Write offset primitives to buffer
+        self.queue.write_buffer(
+            &self.buffers.primitives,
+            0,
+            bytemuck::cast_slice(&offset_primitives),
+        );
+
+        // Create command encoder
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Tight Render Encoder"),
+            });
+
+        // Begin render pass
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Tight Primitive Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &layer_texture.view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&self.pipelines.sdf);
+            render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
+            render_pass.draw(0..6, 0..offset_primitives.len() as u32);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        // Restore viewport uniforms for subsequent operations
+        let restore_uniforms = Uniforms {
+            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            _padding: [0.0; 2],
+        };
+        self.queue
+            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&restore_uniforms));
+
+        layer_texture
+    }
+
+    /// Blit a tight texture to the target at the correct position
+    fn blit_tight_texture_to_target(
+        &mut self,
+        source: &wgpu::TextureView,
+        source_size: (u32, u32),
+        target: &wgpu::TextureView,
+        dest_pos: (f32, f32),
+        dest_size: (f32, f32),
+        opacity: f32,
+        blend_mode: blinc_core::BlendMode,
+    ) {
+        use crate::primitives::LayerCompositeUniforms;
+
+        let vp_w = self.viewport_size.0 as f32;
+        let vp_h = self.viewport_size.1 as f32;
+
+        // Source rect: we use the actual content area of the texture (normalized)
+        // The texture may be slightly larger due to 64px rounding
+        let src_width_norm = dest_size.0 / source_size.0 as f32;
+        let src_height_norm = dest_size.1 / source_size.1 as f32;
+        let source_rect = [0.0, 0.0, src_width_norm.min(1.0), src_height_norm.min(1.0)];
+
+        // Dest rect in viewport pixel coordinates
+        let dest_rect = [dest_pos.0, dest_pos.1, dest_size.0, dest_size.1];
+
+        let uniforms = LayerCompositeUniforms {
+            source_rect,
+            dest_rect,
+            viewport_size: [vp_w, vp_h],
+            opacity,
+            blend_mode: blend_mode as u32,
+            clip_bounds: [0.0, 0.0, vp_w, vp_h],
+            clip_radius: [0.0, 0.0, 0.0, 0.0],
+            clip_type: 0,
+            _pad: [0.0; 7],
+        };
+
+        let uniform_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Tight Blit Uniforms Buffer"),
+                contents: bytemuck::cast_slice(&[uniforms]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Tight Blit Bind Group"),
+            layout: &self.bind_group_layouts.layer_composite,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(source),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.path_image_sampler),
+                },
+            ],
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Tight Blit Encoder"),
+            });
+
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Tight Blit Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            // Set scissor rect to only affect the element's region
+            let scissor_x = dest_pos.0.max(0.0) as u32;
+            let scissor_y = dest_pos.1.max(0.0) as u32;
+            let scissor_w = dest_size.0.min(vp_w - dest_pos.0).max(1.0) as u32;
+            let scissor_h = dest_size.1.min(vp_h - dest_pos.1).max(1.0) as u32;
+
+            render_pass.set_scissor_rect(scissor_x, scissor_y, scissor_w, scissor_h);
+            render_pass.set_pipeline(&self.pipelines.layer_composite);
+            render_pass.set_bind_group(0, &bind_group, &[]);
+            render_pass.draw(0..6, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
