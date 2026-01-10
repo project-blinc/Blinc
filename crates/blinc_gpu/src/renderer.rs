@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use wgpu::util::DeviceExt;
 
-use crate::gradient_texture::{GradientTextureCache, RasterizedGradient};
+use crate::gradient_texture::GradientTextureCache;
 use crate::image::GpuImageInstance;
 use crate::path::PathVertex;
 use crate::primitives::{
@@ -3108,9 +3108,11 @@ impl GpuRenderer {
         // Upload gradient texture if needed for multi-stop gradients
         if batch.paths.use_gradient_texture {
             if let Some(ref stops) = batch.paths.gradient_stops {
-                let rasterized =
-                    RasterizedGradient::from_stops(stops, crate::gradient_texture::SpreadMode::Pad);
-                self.gradient_texture_cache.upload(&self.queue, &rasterized);
+                self.gradient_texture_cache.upload_stops(
+                    &self.queue,
+                    stops,
+                    crate::gradient_texture::SpreadMode::Pad,
+                );
             }
         }
 

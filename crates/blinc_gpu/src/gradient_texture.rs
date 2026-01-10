@@ -9,6 +9,12 @@
 //! - A placeholder texture is used for 2-stop gradients (fast path)
 
 use blinc_core::{Color, GradientStop};
+use lru::LruCache;
+use std::hash::{Hash, Hasher};
+use std::num::NonZeroUsize;
+
+/// Maximum number of cached rasterized gradients
+const GRADIENT_CACHE_CAPACITY: usize = 32;
 
 /// How gradient colors are spread outside the gradient's defined range
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -166,7 +172,28 @@ fn lerp_color(a: &Color, b: &Color, t: f32) -> Color {
     }
 }
 
-/// GPU gradient texture cache
+/// Compute a hash for gradient stops (offset + RGBA values)
+fn hash_gradient_stops(stops: &[GradientStop], spread: SpreadMode) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    let mut hasher = DefaultHasher::new();
+
+    // Hash spread mode
+    (spread as u8).hash(&mut hasher);
+
+    // Hash each stop's offset and color components
+    for stop in stops {
+        // Convert f32 to bits for deterministic hashing
+        stop.offset.to_bits().hash(&mut hasher);
+        stop.color.r.to_bits().hash(&mut hasher);
+        stop.color.g.to_bits().hash(&mut hasher);
+        stop.color.b.to_bits().hash(&mut hasher);
+        stop.color.a.to_bits().hash(&mut hasher);
+    }
+
+    hasher.finish()
+}
+
+/// GPU gradient texture cache with LRU caching for rasterized gradients
 pub struct GradientTextureCache {
     /// The gradient texture (256x1 RGBA)
     pub texture: wgpu::Texture,
@@ -176,6 +203,10 @@ pub struct GradientTextureCache {
     pub sampler: wgpu::Sampler,
     /// Whether the texture contains valid gradient data
     pub has_gradient: bool,
+    /// LRU cache for rasterized gradient pixel data (avoids re-rasterizing)
+    rasterized_cache: LruCache<u64, Box<[u8; GRADIENT_TEXTURE_WIDTH as usize * 4]>>,
+    /// Hash of the currently uploaded gradient (to avoid redundant uploads)
+    current_hash: Option<u64>,
 }
 
 impl GradientTextureCache {
@@ -236,10 +267,68 @@ impl GradientTextureCache {
             view,
             sampler,
             has_gradient: false,
+            rasterized_cache: LruCache::new(
+                NonZeroUsize::new(GRADIENT_CACHE_CAPACITY).unwrap(),
+            ),
+            current_hash: None,
         }
     }
 
-    /// Upload a rasterized gradient to the GPU texture
+    /// Upload gradient stops with caching (avoids re-rasterizing identical gradients)
+    ///
+    /// Returns true if the gradient was uploaded, false if it was already current
+    pub fn upload_stops(
+        &mut self,
+        queue: &wgpu::Queue,
+        stops: &[GradientStop],
+        spread: SpreadMode,
+    ) -> bool {
+        let hash = hash_gradient_stops(stops, spread);
+
+        // Skip upload if this gradient is already on the GPU
+        if self.current_hash == Some(hash) {
+            return false;
+        }
+
+        // Look up or rasterize the gradient
+        let pixels: &[u8; GRADIENT_TEXTURE_WIDTH as usize * 4] =
+            if let Some(cached) = self.rasterized_cache.get(&hash) {
+                cached.as_ref()
+            } else {
+                // Rasterize and cache
+                let rasterized = RasterizedGradient::from_stops(stops, spread);
+                self.rasterized_cache
+                    .put(hash, Box::new(rasterized.pixels));
+                self.rasterized_cache.get(&hash).unwrap().as_ref()
+            };
+
+        // Upload to GPU
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &self.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            pixels,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(GRADIENT_TEXTURE_WIDTH * 4),
+                rows_per_image: Some(1),
+            },
+            wgpu::Extent3d {
+                width: GRADIENT_TEXTURE_WIDTH,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        self.has_gradient = stops.len() > 2;
+        self.current_hash = Some(hash);
+        true
+    }
+
+    /// Upload a rasterized gradient to the GPU texture (legacy method)
     pub fn upload(&mut self, queue: &wgpu::Queue, gradient: &RasterizedGradient) {
         queue.write_texture(
             wgpu::ImageCopyTexture {
@@ -268,6 +357,7 @@ impl GradientTextureCache {
         let placeholder = RasterizedGradient::two_stop(Color::WHITE, Color::WHITE);
         self.upload(queue, &placeholder);
         self.has_gradient = false;
+        self.current_hash = None;
     }
 }
 
