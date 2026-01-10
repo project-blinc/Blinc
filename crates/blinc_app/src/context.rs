@@ -1082,7 +1082,12 @@ impl RenderContext {
             if self.rasterized_svg_cache.get(&cache_key).is_none() {
                 // Rasterize the SVG
                 let rasterized = if let Some(tint) = svg.tint {
-                    RasterizedSvg::from_str_with_tint(&svg.source, raster_width, raster_height, tint)
+                    RasterizedSvg::from_str_with_tint(
+                        &svg.source,
+                        raster_width,
+                        raster_height,
+                        tint,
+                    )
                 } else {
                     RasterizedSvg::from_str(&svg.source, raster_width, raster_height)
                 };
@@ -1114,8 +1119,8 @@ impl RenderContext {
             };
 
             // Create instance at SVG position
-            let mut instance =
-                GpuImageInstance::new(svg.x, svg.y, svg.width, svg.height).with_opacity(svg.motion_opacity);
+            let mut instance = GpuImageInstance::new(svg.x, svg.y, svg.width, svg.height)
+                .with_opacity(svg.motion_opacity);
 
             // Apply clip bounds if specified
             if let Some([clip_x, clip_y, clip_w, clip_h]) = svg.clip_bounds {

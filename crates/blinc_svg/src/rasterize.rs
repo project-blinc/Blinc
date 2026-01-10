@@ -30,7 +30,9 @@ impl RasterizedSvg {
     /// Rasterize SVG data to the specified size
     pub fn from_data(data: &[u8], width: u32, height: u32) -> Result<Self, SvgError> {
         if width == 0 || height == 0 {
-            return Err(SvgError::Parse("Invalid dimensions: width and height must be > 0".into()));
+            return Err(SvgError::Parse(
+                "Invalid dimensions: width and height must be > 0".into(),
+            ));
         }
 
         // Trim leading whitespace - XML declaration must be at start if present
@@ -41,8 +43,7 @@ impl RasterizedSvg {
 
         // Parse SVG
         let options = Options::default();
-        let tree = Tree::from_data(data, &options)
-            .map_err(|e| SvgError::Parse(e.to_string()))?;
+        let tree = Tree::from_data(data, &options).map_err(|e| SvgError::Parse(e.to_string()))?;
 
         Self::from_tree(&tree, width, height)
     }
@@ -50,7 +51,9 @@ impl RasterizedSvg {
     /// Rasterize a parsed usvg Tree to the specified size
     pub fn from_tree(tree: &Tree, width: u32, height: u32) -> Result<Self, SvgError> {
         if width == 0 || height == 0 {
-            return Err(SvgError::Parse("Invalid dimensions: width and height must be > 0".into()));
+            return Err(SvgError::Parse(
+                "Invalid dimensions: width and height must be > 0".into(),
+            ));
         }
 
         // Create pixmap
@@ -69,8 +72,7 @@ impl RasterizedSvg {
         let offset_x = (width as f32 - scaled_width) / 2.0;
         let offset_y = (height as f32 - scaled_height) / 2.0;
 
-        let transform = Transform::from_scale(scale, scale)
-            .post_translate(offset_x, offset_y);
+        let transform = Transform::from_scale(scale, scale).post_translate(offset_x, offset_y);
 
         // Render
         resvg::render(tree, transform, &mut pixmap.as_mut());
@@ -187,9 +189,9 @@ mod tests {
         for chunk in rasterized.pixels.chunks_exact(4) {
             if chunk[3] == 255 {
                 // Fully opaque pixel: premultiplied green should be (0, 255, 0, 255)
-                assert_eq!(chunk[0], 0);   // R = 0
+                assert_eq!(chunk[0], 0); // R = 0
                 assert_eq!(chunk[1], 255); // G = 255 (1.0 * 1.0 * 255)
-                assert_eq!(chunk[2], 0);   // B = 0
+                assert_eq!(chunk[2], 0); // B = 0
                 break;
             }
         }

@@ -4762,8 +4762,7 @@ impl GpuRenderer {
                 &self.pipelines.path
             };
 
-            if let (Some(vb), Some(ib)) =
-                (&self.buffers.path_vertices, &self.buffers.path_indices)
+            if let (Some(vb), Some(ib)) = (&self.buffers.path_vertices, &self.buffers.path_indices)
             {
                 render_pass.set_pipeline(path_pipeline);
                 render_pass.set_bind_group(0, &self.bind_groups.path, &[]);

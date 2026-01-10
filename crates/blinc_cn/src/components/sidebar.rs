@@ -130,7 +130,6 @@ impl Sidebar {
 
                 let mut sections = sections.clone();
 
-                
                 // Layout animation keys for smooth width transitions
                 let layout_anim_key = format!("{}_layout", key.clone());
                 let content_anim_key = format!("{}_content", key.clone());
@@ -227,7 +226,8 @@ impl Sidebar {
                     items_container = items_container.child(toggle_btn);
                 }
 
-                let active_menu: State<Option<SidebarItem>> = ctx.use_signal("active_menu", || None);
+                let active_menu: State<Option<SidebarItem>> =
+                    ctx.use_signal("active_menu", || None);
                 for (section_idx, section) in sections.iter_mut().enumerate() {
                     // Section title - animate height to 0 when collapsed
                     if let Some(ref title) = section.title {
@@ -260,7 +260,6 @@ impl Sidebar {
                         items_container = items_container.child(title_div);
                     }
 
-                    
                     // Items - conditionally render icon-only (collapsed) or icon+label (expanded)
                     for (item_idx, item) in section.items.iter_mut().enumerate() {
                         let item_key = format!("{}_item_{}_{}", ctx.key(), section_idx, item_idx);
@@ -269,11 +268,11 @@ impl Sidebar {
                         let mut item_is_active = item.is_active;
                         if item_is_active {
                             item.is_active = false; // clear from loop
-                        } 
+                        }
                         if let Some(active_item) = active_menu.get() {
                             item_is_active = active_item.label == item.label;
                         }
-                        
+
                         let item_on_click = item.on_click.clone();
                         let collapsed_for_item = collapsed.clone();
 
@@ -287,7 +286,6 @@ impl Sidebar {
                                 let theme = ThemeState::get();
                                 let is_collapsed = collapsed_for_item.get();
 
-
                                 let (bg, icon_color, text_col) = if item_is_active {
                                     (primary.with_alpha(0.15), primary, text_primary)
                                 } else {
@@ -295,7 +293,7 @@ impl Sidebar {
                                         ButtonState::Hovered | ButtonState::Pressed => (
                                             theme.color(ColorToken::SecondaryHover).with_alpha(0.5),
                                             primary,
-                                            text_primary
+                                            text_primary,
                                         ),
                                         _ => (
                                             blinc_core::Color::TRANSPARENT,
