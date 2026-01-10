@@ -2868,7 +2868,8 @@ impl GpuRenderer {
 
             // Render layer primitives to a TIGHT texture (not viewport-sized!)
             // This significantly reduces memory usage and effect processing time
-            let layer_texture = self.render_primitive_range_tight(
+            // Returns both texture and content_size (which may differ from texture.size due to pool bucket rounding)
+            let (layer_texture, content_size) = self.render_primitive_range_tight(
                 batch,
                 start_idx,
                 end_idx,
@@ -2877,8 +2878,8 @@ impl GpuRenderer {
                 effect_expansion,
             );
 
-            // Remember the tight texture size for blitting
-            let tight_size = layer_texture.size;
+            // Use content_size for blitting (not layer_texture.size which may be larger)
+            let tight_size = content_size;
 
             // Apply effects to the tight texture
             let effected = self.apply_layer_effects(&layer_texture, &config.effects);
@@ -5962,7 +5963,9 @@ impl GpuRenderer {
     ///
     /// This method renders primitives to a texture sized to fit the content,
     /// offsetting primitive positions so they start at (0,0).
-    /// Returns the texture and the offset used.
+    ///
+    /// Returns the texture AND the actual content size (which may differ from
+    /// texture.size due to pool bucket rounding).
     fn render_primitive_range_tight(
         &mut self,
         batch: &PrimitiveBatch,
@@ -5971,7 +5974,7 @@ impl GpuRenderer {
         layer_pos: (f32, f32),
         layer_size: (f32, f32),
         effect_expansion: (f32, f32, f32, f32), // (left, top, right, bottom)
-    ) -> LayerTexture {
+    ) -> (LayerTexture, (u32, u32)) {
         // Calculate tight texture size including effect expansion
         let texture_width = (layer_size.0 + effect_expansion.0 + effect_expansion.2)
             .ceil()
@@ -5984,21 +5987,23 @@ impl GpuRenderer {
         let texture_width = ((texture_width + 63) / 64 * 64).min(self.viewport_size.0);
         let texture_height = ((texture_height + 63) / 64 * 64).min(self.viewport_size.1);
 
-        let texture_size = (texture_width, texture_height);
+        // This is the actual content size (64px rounded), which may differ from
+        // the texture returned by acquire() due to bucket rounding
+        let content_size = (texture_width, texture_height);
 
-        // Acquire a texture of the tight size
+        // Acquire a texture of at least the tight size
         let layer_texture = self
             .layer_texture_cache
-            .acquire(&self.device, texture_size, false);
+            .acquire(&self.device, content_size, false);
 
         if start_idx >= end_idx {
-            return layer_texture;
+            return (layer_texture, content_size);
         }
 
         // Extract primitives and offset their positions
         let primitives = &batch.primitives[start_idx..end_idx];
         if primitives.is_empty() {
-            return layer_texture;
+            return (layer_texture, content_size);
         }
 
         // Offset primitives so content starts at (effect_expansion.left, effect_expansion.top)
@@ -6024,9 +6029,9 @@ impl GpuRenderer {
             })
             .collect();
 
-        // Update uniforms with tight texture size
+        // Update uniforms with content size (the viewport for this tight render)
         let uniforms = Uniforms {
-            viewport_size: [texture_size.0 as f32, texture_size.1 as f32],
+            viewport_size: [content_size.0 as f32, content_size.1 as f32],
             _padding: [0.0; 2],
         };
         self.queue
@@ -6081,7 +6086,7 @@ impl GpuRenderer {
             bytemuck::bytes_of(&restore_uniforms),
         );
 
-        layer_texture
+        (layer_texture, content_size)
     }
 
     /// Blit a tight texture to the target at the correct position
