@@ -11,12 +11,13 @@ use crate::gradient_texture::{GradientTextureCache, RasterizedGradient};
 use crate::image::GpuImageInstance;
 use crate::path::PathVertex;
 use crate::primitives::{
-    GlassUniforms, GpuGlassPrimitive, GpuGlyph, GpuPrimitive, PathUniforms, PrimitiveBatch,
-    Uniforms,
+    GlassType, GlassUniforms, GpuGlassPrimitive, GpuGlyph, GpuPrimitive, PathUniforms,
+    PrimitiveBatch, Uniforms,
 };
 use crate::shaders::{
     BLUR_SHADER, COLOR_MATRIX_SHADER, COMPOSITE_SHADER, DROP_SHADOW_SHADER, GLASS_SHADER,
-    GLOW_SHADER, IMAGE_SHADER, LAYER_COMPOSITE_SHADER, PATH_SHADER, SDF_SHADER, TEXT_SHADER,
+    GLOW_SHADER, IMAGE_SHADER, LAYER_COMPOSITE_SHADER, PATH_SHADER, SDF_SHADER,
+    SIMPLE_GLASS_SHADER, TEXT_SHADER,
 };
 
 /// Error type for renderer operations
@@ -90,8 +91,10 @@ struct Pipelines {
     sdf: wgpu::RenderPipeline,
     /// Pipeline for SDF primitives rendering on top of existing content (1x sampled)
     sdf_overlay: wgpu::RenderPipeline,
-    /// Pipeline for glass/vibrancy effects
+    /// Pipeline for glass/vibrancy effects (liquid glass with refraction)
     glass: wgpu::RenderPipeline,
+    /// Pipeline for simple frosted glass (pure blur, no refraction)
+    simple_glass: wgpu::RenderPipeline,
     /// Pipeline for text rendering (MSAA)
     #[allow(dead_code)]
     text: wgpu::RenderPipeline,
@@ -712,6 +715,11 @@ impl GpuRenderer {
             source: wgpu::ShaderSource::Wgsl(GLASS_SHADER.into()),
         });
 
+        let simple_glass_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Simple Glass Shader"),
+            source: wgpu::ShaderSource::Wgsl(SIMPLE_GLASS_SHADER.into()),
+        });
+
         let text_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Text Shader"),
             source: wgpu::ShaderSource::Wgsl(TEXT_SHADER.into()),
@@ -759,6 +767,7 @@ impl GpuRenderer {
             &bind_group_layouts,
             &sdf_shader,
             &glass_shader,
+            &simple_glass_shader,
             &text_shader,
             &composite_shader,
             &path_shader,
@@ -1399,6 +1408,7 @@ impl GpuRenderer {
         layouts: &BindGroupLayouts,
         sdf_shader: &wgpu::ShaderModule,
         glass_shader: &wgpu::ShaderModule,
+        simple_glass_shader: &wgpu::ShaderModule,
         text_shader: &wgpu::ShaderModule,
         composite_shader: &wgpu::ShaderModule,
         path_shader: &wgpu::ShaderModule,
@@ -1528,6 +1538,30 @@ impl GpuRenderer {
             },
             fragment: Some(wgpu::FragmentState {
                 module: glass_shader,
+                entry_point: Some("fs_main"),
+                targets: color_targets,
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: primitive_state,
+            depth_stencil: None,
+            multisample: glass_multisample_state,
+            multiview: None,
+            cache: None,
+        });
+
+        // Simple glass pipeline - pure frosted glass without liquid effects
+        // Uses the same bind group layout as liquid glass
+        let simple_glass = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Simple Glass Pipeline"),
+            layout: Some(&glass_layout),
+            vertex: wgpu::VertexState {
+                module: simple_glass_shader,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: simple_glass_shader,
                 entry_point: Some("fs_main"),
                 targets: color_targets,
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
@@ -1975,6 +2009,7 @@ impl GpuRenderer {
             sdf,
             sdf_overlay,
             glass,
+            simple_glass,
             text,
             text_overlay,
             composite,
@@ -2557,28 +2592,39 @@ impl GpuRenderer {
             // But primitives are at screen-space coordinates after transforms
             // We need to compute the actual bounding box from primitives
             let primitives = &batch.primitives[start_idx..end_idx];
-            let (layer_pos, layer_size) = if primitives.is_empty() {
+            let (layer_pos, layer_size, layer_clip) = if primitives.is_empty() {
                 // Fallback to config values if no primitives
                 let pos = config.position.map(|p| (p.x, p.y)).unwrap_or((0.0, 0.0));
                 let size = config.size.map(|s| (s.width, s.height))
                     .unwrap_or((self.viewport_size.0 as f32, self.viewport_size.1 as f32));
-                (pos, size)
+                (pos, size, None)
             } else {
                 // Compute bounding box from primitives (which are in screen coordinates)
                 let mut min_x = f32::MAX;
                 let mut min_y = f32::MAX;
                 let mut max_x = f32::MIN;
                 let mut max_y = f32::MIN;
+                // Extract clip bounds from the first primitive with a valid clip
+                // All primitives in a layer should have the same clip (from scroll container)
+                let mut clip: Option<([f32; 4], [f32; 4])> = None;
                 for p in primitives {
                     let (px, py, pw, ph) = (p.bounds[0], p.bounds[1], p.bounds[2], p.bounds[3]);
                     min_x = min_x.min(px);
                     min_y = min_y.min(py);
                     max_x = max_x.max(px + pw);
                     max_y = max_y.max(py + ph);
+                    // Check for valid clip bounds (not the default "no clip" values)
+                    // Default is [-10000, -10000, 100000, 100000]
+                    if clip.is_none()
+                        && p.clip_bounds[0] > -5000.0
+                        && p.clip_bounds[2] < 90000.0
+                    {
+                        clip = Some((p.clip_bounds, p.clip_radius));
+                    }
                 }
                 let width = (max_x - min_x).max(1.0);
                 let height = (max_y - min_y).max(1.0);
-                ((min_x, min_y), (width, height))
+                ((min_x, min_y), (width, height), clip)
             };
 
             // Skip layers that are entirely outside the viewport
@@ -2616,9 +2662,11 @@ impl GpuRenderer {
             self.layer_texture_cache.release(layer_texture);
 
             // Calculate the destination position and size for blitting
+            // Don't clamp to 0 - allow negative positions for scrolled content
+            // The blit function will handle off-screen portions correctly
             let expanded_pos = (
-                (layer_pos.0 - effect_expansion.0).max(0.0),
-                (layer_pos.1 - effect_expansion.1).max(0.0),
+                layer_pos.0 - effect_expansion.0,
+                layer_pos.1 - effect_expansion.1,
             );
             let expanded_size = (
                 layer_size.0 + effect_expansion.0 + effect_expansion.2,
@@ -2626,6 +2674,7 @@ impl GpuRenderer {
             );
 
             // Blit the tight texture back to target at the correct position
+            // Pass through the clip bounds so effects don't bleed outside scroll containers
             self.blit_tight_texture_to_target(
                 &effected.view,
                 tight_size,
@@ -2634,6 +2683,7 @@ impl GpuRenderer {
                 expanded_size,
                 config.opacity,
                 config.blend_mode,
+                layer_clip,
             );
 
             self.layer_texture_cache.release(effected);
@@ -2942,6 +2992,9 @@ impl GpuRenderer {
     }
 
     /// Render glass primitives (requires backdrop texture)
+    ///
+    /// Splits primitives into simple (frosted) and liquid (refracted) glass,
+    /// rendering each with the appropriate shader.
     pub fn render_glass(
         &mut self,
         target: &wgpu::TextureView,
@@ -2951,6 +3004,30 @@ impl GpuRenderer {
         if batch.glass_primitives.is_empty() {
             return;
         }
+
+        // Split primitives: simple glass first, then liquid glass
+        // This allows us to render each group with its respective pipeline
+        let mut simple_primitives: Vec<GpuGlassPrimitive> = Vec::new();
+        let mut liquid_primitives: Vec<GpuGlassPrimitive> = Vec::new();
+
+        for prim in &batch.glass_primitives {
+            if prim.type_info[0] == GlassType::Simple as u32 {
+                simple_primitives.push(*prim);
+            } else {
+                liquid_primitives.push(*prim);
+            }
+        }
+
+        let simple_count = simple_primitives.len();
+        let liquid_count = liquid_primitives.len();
+
+        if simple_count == 0 && liquid_count == 0 {
+            return;
+        }
+
+        // Combine: simple primitives first, then liquid primitives
+        let mut ordered_primitives = simple_primitives;
+        ordered_primitives.extend(liquid_primitives);
 
         // Ensure glass resources are cached (sampler is reused across frames)
         let current_size = self.viewport_size;
@@ -2991,11 +3068,11 @@ impl GpuRenderer {
             bytemuck::bytes_of(&glass_uniforms),
         );
 
-        // Update glass primitives buffer
+        // Update glass primitives buffer with ordered primitives
         self.queue.write_buffer(
             &self.buffers.glass_primitives,
             0,
-            bytemuck::cast_slice(&batch.glass_primitives),
+            bytemuck::cast_slice(&ordered_primitives),
         );
 
         // Create or reuse glass bind group
@@ -3063,9 +3140,19 @@ impl GpuRenderer {
                 occlusion_query_set: None,
             });
 
-            render_pass.set_pipeline(&self.pipelines.glass);
-            render_pass.set_bind_group(0, glass_bind_group, &[]);
-            render_pass.draw(0..6, 0..batch.glass_primitives.len() as u32);
+            // Render simple glass primitives with the simple_glass pipeline
+            if simple_count > 0 {
+                render_pass.set_pipeline(&self.pipelines.simple_glass);
+                render_pass.set_bind_group(0, glass_bind_group, &[]);
+                render_pass.draw(0..6, 0..simple_count as u32);
+            }
+
+            // Render liquid glass primitives with the glass pipeline
+            if liquid_count > 0 {
+                render_pass.set_pipeline(&self.pipelines.glass);
+                render_pass.set_bind_group(0, glass_bind_group, &[]);
+                render_pass.draw(0..6, simple_count as u32..(simple_count + liquid_count) as u32);
+            }
         }
 
         // Submit commands
@@ -3183,12 +3270,29 @@ impl GpuRenderer {
             );
         }
 
-        // Update glass primitives buffer
-        if !batch.glass_primitives.is_empty() {
+        // Split glass primitives into simple and liquid for separate rendering
+        let mut simple_primitives: Vec<GpuGlassPrimitive> = Vec::new();
+        let mut liquid_primitives: Vec<GpuGlassPrimitive> = Vec::new();
+        for prim in &batch.glass_primitives {
+            if prim.type_info[0] == GlassType::Simple as u32 {
+                simple_primitives.push(*prim);
+            } else {
+                liquid_primitives.push(*prim);
+            }
+        }
+        let simple_count = simple_primitives.len();
+        let liquid_count = liquid_primitives.len();
+
+        // Combine: simple first, then liquid
+        let mut ordered_glass_primitives = simple_primitives;
+        ordered_glass_primitives.extend(liquid_primitives);
+
+        // Update glass primitives buffer with ordered primitives
+        if !ordered_glass_primitives.is_empty() {
             self.queue.write_buffer(
                 &self.buffers.glass_primitives,
                 0,
-                bytemuck::cast_slice(&batch.glass_primitives),
+                bytemuck::cast_slice(&ordered_glass_primitives),
             );
         }
 
@@ -3327,7 +3431,7 @@ impl GpuRenderer {
         }
 
         // Pass 3: Render glass primitives with backdrop blur
-        if !batch.glass_primitives.is_empty() {
+        if simple_count > 0 || liquid_count > 0 {
             let glass_bind_group = self
                 .cached_glass
                 .as_ref()
@@ -3351,9 +3455,19 @@ impl GpuRenderer {
                 occlusion_query_set: None,
             });
 
-            render_pass.set_pipeline(&self.pipelines.glass);
-            render_pass.set_bind_group(0, glass_bind_group, &[]);
-            render_pass.draw(0..6, 0..batch.glass_primitives.len() as u32);
+            // Render simple glass primitives with simple_glass pipeline
+            if simple_count > 0 {
+                render_pass.set_pipeline(&self.pipelines.simple_glass);
+                render_pass.set_bind_group(0, glass_bind_group, &[]);
+                render_pass.draw(0..6, 0..simple_count as u32);
+            }
+
+            // Render liquid glass primitives with glass pipeline
+            if liquid_count > 0 {
+                render_pass.set_pipeline(&self.pipelines.glass);
+                render_pass.set_bind_group(0, glass_bind_group, &[]);
+                render_pass.draw(0..6, simple_count as u32..(simple_count + liquid_count) as u32);
+            }
         }
 
         // Submit background and glass passes first
@@ -5677,7 +5791,9 @@ impl GpuRenderer {
                 op.bounds[1] -= offset_y;
                 // Also offset clip bounds if they're valid (not the "no clip" default)
                 // Default "no clip" is [-10000.0, -10000.0, 100000.0, 100000.0]
-                if op.clip_bounds[0] > -5000.0 {
+                // A real clip has x > -5000 AND width < 90000 (reasonable viewport sizes)
+                let has_real_clip = op.clip_bounds[0] > -5000.0 && op.clip_bounds[2] < 90000.0;
+                if has_real_clip {
                     op.clip_bounds[0] -= offset_x;
                     op.clip_bounds[1] -= offset_y;
                 }
@@ -5752,20 +5868,65 @@ impl GpuRenderer {
         dest_size: (f32, f32),
         opacity: f32,
         blend_mode: blinc_core::BlendMode,
+        clip: Option<([f32; 4], [f32; 4])>, // (clip_bounds, clip_radius)
     ) {
         use crate::primitives::LayerCompositeUniforms;
 
         let vp_w = self.viewport_size.0 as f32;
         let vp_h = self.viewport_size.1 as f32;
 
-        // Source rect: we use the actual content area of the texture (normalized)
-        // The texture may be slightly larger due to 64px rounding
-        let src_width_norm = dest_size.0 / source_size.0 as f32;
-        let src_height_norm = dest_size.1 / source_size.1 as f32;
-        let source_rect = [0.0, 0.0, src_width_norm.min(1.0), src_height_norm.min(1.0)];
+        // Calculate the visible region by intersecting dest rect with viewport and clip bounds
+        // Start with destination rect
+        let mut vis_x0 = dest_pos.0;
+        let mut vis_y0 = dest_pos.1;
+        let mut vis_x1 = dest_pos.0 + dest_size.0;
+        let mut vis_y1 = dest_pos.1 + dest_size.1;
 
-        // Dest rect in viewport pixel coordinates
-        let dest_rect = [dest_pos.0, dest_pos.1, dest_size.0, dest_size.1];
+        // Intersect with viewport
+        vis_x0 = vis_x0.max(0.0);
+        vis_y0 = vis_y0.max(0.0);
+        vis_x1 = vis_x1.min(vp_w);
+        vis_y1 = vis_y1.min(vp_h);
+
+        // Intersect with clip bounds if provided
+        let (clip_bounds, clip_radius, clip_type) = match clip {
+            Some((bounds, radius)) => {
+                // Intersect with clip bounds
+                vis_x0 = vis_x0.max(bounds[0]);
+                vis_y0 = vis_y0.max(bounds[1]);
+                vis_x1 = vis_x1.min(bounds[0] + bounds[2]);
+                vis_y1 = vis_y1.min(bounds[1] + bounds[3]);
+                (bounds, radius, 1)
+            }
+            None => ([0.0, 0.0, vp_w, vp_h], [0.0; 4], 0),
+        };
+
+        // Check if anything is visible
+        let vis_w = vis_x1 - vis_x0;
+        let vis_h = vis_y1 - vis_y0;
+        if vis_w <= 0.0 || vis_h <= 0.0 {
+            return; // Nothing visible, skip rendering
+        }
+
+        // Calculate source rect based on what portion is visible
+        // Map visible region back to source texture coordinates
+        let src_total_w = dest_size.0 / source_size.0 as f32;
+        let src_total_h = dest_size.1 / source_size.1 as f32;
+
+        // Calculate what portion of the dest rect is visible
+        let vis_offset_x = vis_x0 - dest_pos.0;
+        let vis_offset_y = vis_y0 - dest_pos.1;
+
+        // Map to source texture coordinates
+        let src_x0 = (vis_offset_x / dest_size.0) * src_total_w;
+        let src_y0 = (vis_offset_y / dest_size.1) * src_total_h;
+        let src_w = (vis_w / dest_size.0) * src_total_w;
+        let src_h = (vis_h / dest_size.1) * src_total_h;
+
+        let source_rect = [src_x0.min(1.0), src_y0.min(1.0), src_w.min(1.0), src_h.min(1.0)];
+
+        // Dest rect is now the visible region
+        let dest_rect = [vis_x0, vis_y0, vis_w, vis_h];
 
         let uniforms = LayerCompositeUniforms {
             source_rect,
@@ -5773,9 +5934,9 @@ impl GpuRenderer {
             viewport_size: [vp_w, vp_h],
             opacity,
             blend_mode: blend_mode as u32,
-            clip_bounds: [0.0, 0.0, vp_w, vp_h],
-            clip_radius: [0.0, 0.0, 0.0, 0.0],
-            clip_type: 0,
+            clip_bounds,
+            clip_radius,
+            clip_type,
             _pad: [0.0; 7],
         };
 
@@ -5828,11 +5989,11 @@ impl GpuRenderer {
                 occlusion_query_set: None,
             });
 
-            // Set scissor rect to only affect the element's region
-            let scissor_x = dest_pos.0.max(0.0) as u32;
-            let scissor_y = dest_pos.1.max(0.0) as u32;
-            let scissor_w = dest_size.0.min(vp_w - dest_pos.0).max(1.0) as u32;
-            let scissor_h = dest_size.1.min(vp_h - dest_pos.1).max(1.0) as u32;
+            // Set scissor rect to the visible region (already intersected with clip bounds)
+            let scissor_x = vis_x0.max(0.0) as u32;
+            let scissor_y = vis_y0.max(0.0) as u32;
+            let scissor_w = vis_w.max(1.0) as u32;
+            let scissor_h = vis_h.max(1.0) as u32;
 
             render_pass.set_scissor_rect(scissor_x, scissor_y, scissor_w, scissor_h);
             render_pass.set_pipeline(&self.pipelines.layer_composite);
