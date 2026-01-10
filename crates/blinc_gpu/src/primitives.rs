@@ -1402,6 +1402,11 @@ impl PrimitiveBatch {
             && self.foreground_paths.vertices.is_empty()
     }
 
+    /// Check if the batch contains any tessellated path geometry
+    pub fn has_paths(&self) -> bool {
+        !self.paths.vertices.is_empty() || !self.foreground_paths.vertices.is_empty()
+    }
+
     pub fn path_vertex_count(&self) -> usize {
         self.paths.vertices.len()
     }

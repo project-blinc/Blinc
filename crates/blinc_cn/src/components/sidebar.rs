@@ -127,6 +127,10 @@ impl Sidebar {
             .deps([builder.is_collapsed.signal_id()])
             .on_state(move |ctx| {
                 let collapsed = ctx.use_signal("collapsed", || is_collapsed);
+
+                let mut sections = sections.clone();
+
+                
                 // Layout animation keys for smooth width transitions
                 let layout_anim_key = format!("{}_layout", key.clone());
                 let content_anim_key = format!("{}_content", key.clone());
@@ -223,7 +227,8 @@ impl Sidebar {
                     items_container = items_container.child(toggle_btn);
                 }
 
-                for (section_idx, section) in sections.iter().enumerate() {
+                let active_menu: State<Option<SidebarItem>> = ctx.use_signal("active_menu", || None);
+                for (section_idx, section) in sections.iter_mut().enumerate() {
                     // Section title - animate height to 0 when collapsed
                     if let Some(ref title) = section.title {
                         let is_collapsed = collapsed.get();
@@ -255,14 +260,25 @@ impl Sidebar {
                         items_container = items_container.child(title_div);
                     }
 
+                    
                     // Items - conditionally render icon-only (collapsed) or icon+label (expanded)
-                    for (item_idx, item) in section.items.iter().enumerate() {
+                    for (item_idx, item) in section.items.iter_mut().enumerate() {
                         let item_key = format!("{}_item_{}_{}", ctx.key(), section_idx, item_idx);
                         let item_label = item.label.clone();
                         let item_icon = item.icon.clone();
-                        let item_is_active = item.is_active;
+                        let mut item_is_active = item.is_active;
+                        if item_is_active {
+                            item.is_active = false; // clear from loop
+                        } 
+                        if let Some(active_item) = active_menu.get() {
+                            item_is_active = active_item.label == item.label;
+                        }
+                        
                         let item_on_click = item.on_click.clone();
                         let collapsed_for_item = collapsed.clone();
+
+                        let active_menu_for_trigger = active_menu.clone();
+                        let item_for_trigger = item.clone();
 
                         let item_element = stateful_with_key::<ButtonState>(&item_key)
                             .deps([collapsed.signal_id()])
@@ -271,14 +287,15 @@ impl Sidebar {
                                 let theme = ThemeState::get();
                                 let is_collapsed = collapsed_for_item.get();
 
+
                                 let (bg, icon_color, text_col) = if item_is_active {
                                     (primary.with_alpha(0.15), primary, text_primary)
                                 } else {
                                     match state {
                                         ButtonState::Hovered | ButtonState::Pressed => (
                                             theme.color(ColorToken::SecondaryHover).with_alpha(0.5),
-                                            text_primary,
-                                            text_primary,
+                                            primary,
+                                            text_primary
                                         ),
                                         _ => (
                                             blinc_core::Color::TRANSPARENT,
@@ -329,6 +346,7 @@ impl Sidebar {
                                     })
                             })
                             .on_click(move |_| {
+                                active_menu_for_trigger.update(|_| Some(item_for_trigger.clone()));
                                 item_on_click();
                             });
 
@@ -340,7 +358,8 @@ impl Sidebar {
 
                 // If content builder is provided, wrap both in a flex-row container
                 if let Some(ref content_fn) = content_builder {
-                    let main_content = content_fn();
+                    let active = active_menu.get();
+                    let main_content = content_fn(active);
                     // Wrap main content with flex_1 and animate_bounds for smooth expansion
                     // Use all() to animate both position (x changes when sidebar shrinks)
                     // and size (width grows when sidebar shrinks)
@@ -423,7 +442,7 @@ impl ElementBuilder for Sidebar {
 }
 
 /// Content builder function type
-type ContentBuilderFn = Arc<dyn Fn() -> Div + Send + Sync>;
+type ContentBuilderFn = Arc<dyn Fn(Option<SidebarItem>) -> Div + Send + Sync>;
 
 /// Builder for sidebar component
 pub struct SidebarBuilder {
@@ -547,7 +566,7 @@ impl SidebarBuilder {
     /// ```
     pub fn content<F>(mut self, builder: F) -> Self
     where
-        F: Fn() -> Div + Send + Sync + 'static,
+        F: Fn(Option<SidebarItem>) -> Div + Send + Sync + 'static,
     {
         self.content_builder = Some(Arc::new(builder));
         self

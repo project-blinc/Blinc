@@ -4575,6 +4575,229 @@ impl GpuRenderer {
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 
+    /// Render only paths with MSAA anti-aliasing
+    ///
+    /// This is used when SDF primitives are rendered separately (unified rendering mode)
+    /// but paths still need MSAA for smooth edges.
+    pub fn render_paths_overlay_msaa(
+        &mut self,
+        target: &wgpu::TextureView,
+        batch: &PrimitiveBatch,
+        sample_count: u32,
+    ) {
+        if batch.paths.vertices.is_empty() || batch.paths.indices.is_empty() {
+            return;
+        }
+
+        // Ensure we have MSAA pipelines for this sample count
+        let need_new_pipelines = match &self.msaa_pipelines {
+            Some(p) => p.sample_count != sample_count,
+            None => true,
+        };
+        if need_new_pipelines && sample_count > 1 {
+            self.msaa_pipelines = Some(Self::create_msaa_pipelines(
+                &self.device,
+                &self.bind_group_layouts,
+                self.texture_format,
+                sample_count,
+            ));
+        }
+
+        let (width, height) = self.viewport_size;
+
+        // Check if we need to recreate cached MSAA textures
+        let need_new_textures = match &self.cached_msaa {
+            Some(cached) => {
+                cached.width != width
+                    || cached.height != height
+                    || cached.sample_count != sample_count
+            }
+            None => true,
+        };
+
+        if need_new_textures {
+            // Create MSAA texture for rendering
+            let msaa_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Path MSAA Texture"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count,
+                dimension: wgpu::TextureDimension::D2,
+                format: self.texture_format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            let msaa_view = msaa_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+            // Create resolve texture
+            let resolve_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Path Resolve Texture"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: self.texture_format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            let resolve_view = resolve_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+            // Create sampler
+            let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("Path Blend Sampler"),
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                ..Default::default()
+            });
+
+            // Create composite uniforms
+            #[repr(C)]
+            #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+            struct CompositeUniforms {
+                opacity: f32,
+                blend_mode: u32,
+                _padding: [f32; 2],
+            }
+            let composite_uniforms = CompositeUniforms {
+                opacity: 1.0,
+                blend_mode: 0,
+                _padding: [0.0; 2],
+            };
+            let composite_uniform_buffer =
+                self.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Path Composite Uniforms Buffer"),
+                        contents: bytemuck::bytes_of(&composite_uniforms),
+                        usage: wgpu::BufferUsages::UNIFORM,
+                    });
+
+            // Create bind group for compositing
+            let composite_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Path Composite Bind Group"),
+                layout: &self.bind_group_layouts.composite,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: composite_uniform_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&resolve_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                ],
+            });
+
+            self.cached_msaa = Some(CachedMsaaTextures {
+                msaa_texture,
+                msaa_view,
+                resolve_texture,
+                resolve_view,
+                width,
+                height,
+                sample_count,
+                sampler,
+                composite_uniform_buffer,
+                composite_bind_group,
+            });
+        }
+
+        // Update uniforms
+        let uniforms = Uniforms {
+            viewport_size: [width as f32, height as f32],
+            _padding: [0.0; 2],
+        };
+        self.queue
+            .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+
+        // Update path buffers
+        self.update_path_buffers(batch);
+
+        // Get references to the cached textures
+        let cached = self.cached_msaa.as_ref().unwrap();
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Path MSAA Render Encoder"),
+            });
+
+        // Pass 1: Render paths to MSAA texture with resolve
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Path MSAA Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &cached.msaa_view,
+                    resolve_target: Some(&cached.resolve_view),
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Discard,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            // Get the appropriate pipeline for the sample count
+            let path_pipeline = if sample_count > 1 {
+                if let Some(ref msaa) = self.msaa_pipelines {
+                    &msaa.path
+                } else {
+                    &self.pipelines.path
+                }
+            } else {
+                &self.pipelines.path
+            };
+
+            if let (Some(vb), Some(ib)) =
+                (&self.buffers.path_vertices, &self.buffers.path_indices)
+            {
+                render_pass.set_pipeline(path_pipeline);
+                render_pass.set_bind_group(0, &self.bind_groups.path, &[]);
+                render_pass.set_vertex_buffer(0, vb.slice(..));
+                render_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..batch.paths.indices.len() as u32, 0, 0..1);
+            }
+        }
+
+        // Pass 2: Blend resolved texture onto target
+        {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Path Blend Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            render_pass.set_pipeline(&self.pipelines.composite_overlay);
+            render_pass.set_bind_group(0, &cached.composite_bind_group, &[]);
+            render_pass.draw(0..3, 0..1);
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+    }
+
     /// Render text glyphs with a provided atlas texture
     ///
     /// # Arguments

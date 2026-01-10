@@ -14,7 +14,7 @@ use blinc_layout::div::{FontFamily, FontWeight, GenericFont, TextAlign, TextVert
 use blinc_layout::prelude::*;
 use blinc_layout::render_state::Overlay;
 use blinc_layout::renderer::ElementType;
-use blinc_svg::SvgDocument;
+use blinc_svg::{RasterizedSvg, SvgDocument};
 use lru::LruCache;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -28,6 +28,10 @@ const IMAGE_CACHE_CAPACITY: usize = 128;
 
 /// Maximum number of parsed SVG documents to cache
 const SVG_CACHE_CAPACITY: usize = 64;
+
+/// Maximum number of rasterized SVG textures to cache
+/// Key is (svg_hash, width, height, tint_hash) - separate textures for different sizes/tints
+const RASTERIZED_SVG_CACHE_CAPACITY: usize = 64;
 
 /// Internal render context that manages GPU resources and rendering
 pub struct RenderContext {
@@ -45,6 +49,8 @@ pub struct RenderContext {
     image_cache: LruCache<String, GpuImage>,
     // LRU cache for parsed SVG documents (avoids re-parsing)
     svg_cache: LruCache<u64, SvgDocument>,
+    // LRU cache for rasterized SVG textures (CPU-rasterized with proper AA)
+    rasterized_svg_cache: LruCache<u64, GpuImage>,
     // Scratch buffers for per-frame allocations (reused to avoid allocations)
     scratch_glyphs: Vec<GpuGlyph>,
     scratch_texts: Vec<TextElement>,
@@ -173,6 +179,9 @@ impl RenderContext {
             msaa_texture: None,
             image_cache: LruCache::new(NonZeroUsize::new(IMAGE_CACHE_CAPACITY).unwrap()),
             svg_cache: LruCache::new(NonZeroUsize::new(SVG_CACHE_CAPACITY).unwrap()),
+            rasterized_svg_cache: LruCache::new(
+                NonZeroUsize::new(RASTERIZED_SVG_CACHE_CAPACITY).unwrap(),
+            ),
             scratch_glyphs: Vec::with_capacity(1024), // Pre-allocate for typical text
             scratch_texts: Vec::with_capacity(64),    // Pre-allocate for text elements
             scratch_svgs: Vec::with_capacity(32),     // Pre-allocate for SVG elements
@@ -190,6 +199,9 @@ impl RenderContext {
         height: u32,
         target: &wgpu::TextureView,
     ) -> Result<()> {
+        // Get scale factor for HiDPI rendering
+        let scale_factor = tree.scale_factor();
+
         // Create paint contexts for each layer with text rendering support
         let mut bg_ctx =
             GpuPaintContext::with_text_context(width as f32, height as f32, &mut self.text_ctx);
@@ -207,7 +219,7 @@ impl RenderContext {
         tree.render_to_layer(&mut fg_ctx, RenderLayer::Foreground);
 
         // Take the batch from fg_ctx before reusing text_ctx for text elements
-        let fg_batch = fg_ctx.take_batch();
+        let mut fg_batch = fg_ctx.take_batch();
 
         // Collect text, SVG, and image elements
         let (texts, svgs, images) = self.collect_render_elements(tree);
@@ -297,17 +309,8 @@ impl RenderContext {
             }
         }
 
-        // Render SVGs to a new foreground context (svg_ctx)
-        // We need a fresh context since fg_ctx's batch was already taken
-        let mut svg_ctx = GpuPaintContext::new(width as f32, height as f32);
-        tracing::debug!("Rendering {} SVGs", svgs.len());
-        for svg in &svgs {
-            self.render_svg_element(&mut svg_ctx, svg);
-        }
-
-        // Merge SVG batch into foreground batch
-        let mut fg_batch = fg_batch;
-        fg_batch.merge(svg_ctx.take_batch());
+        // SVGs are rendered as rasterized images (not tessellated paths) for better anti-aliasing
+        // They will be rendered later via render_rasterized_svgs
 
         self.renderer.resize(width, height);
 
@@ -356,11 +359,20 @@ impl RenderContext {
                 if !fg_batch.is_empty() {
                     self.renderer.render_overlay(target, &fg_batch);
                 }
+                // Render SVGs as rasterized images for high-quality anti-aliasing
+                if !svgs.is_empty() {
+                    self.render_rasterized_svgs(target, &svgs, scale_factor);
+                }
             } else if self.renderer.unified_text_rendering() {
                 // Unified rendering: combine text glyphs with foreground primitives
                 let unified_primitives = fg_batch.get_unified_foreground_primitives();
                 if !unified_primitives.is_empty() {
                     self.render_unified(target, &unified_primitives);
+                }
+
+                // Render SVGs as rasterized images for high-quality anti-aliasing
+                if !svgs.is_empty() {
+                    self.render_rasterized_svgs(target, &svgs, scale_factor);
                 }
             } else {
                 // Legacy rendering: separate foreground and text passes
@@ -376,6 +388,11 @@ impl RenderContext {
                 // Step 7: Render text
                 if !all_glyphs.is_empty() {
                     self.render_text(target, &all_glyphs);
+                }
+
+                // Render SVGs as rasterized images for high-quality anti-aliasing
+                if !svgs.is_empty() {
+                    self.render_rasterized_svgs(target, &svgs, scale_factor);
                 }
             }
 
@@ -412,12 +429,21 @@ impl RenderContext {
                 if !fg_batch.is_empty() {
                     self.renderer.render_overlay(target, &fg_batch);
                 }
+                // Render SVGs as rasterized images for high-quality anti-aliasing
+                if !svgs.is_empty() {
+                    self.render_rasterized_svgs(target, &svgs, scale_factor);
+                }
             } else if self.renderer.unified_text_rendering() {
                 // Unified rendering: combine text glyphs with foreground primitives
                 // This ensures text and shapes transform together during animations
                 let unified_primitives = fg_batch.get_unified_foreground_primitives();
                 if !unified_primitives.is_empty() {
                     self.render_unified(target, &unified_primitives);
+                }
+
+                // Render SVGs as rasterized images for high-quality anti-aliasing
+                if !svgs.is_empty() {
+                    self.render_rasterized_svgs(target, &svgs, scale_factor);
                 }
             } else {
                 // Legacy rendering: separate foreground and text passes
@@ -433,6 +459,11 @@ impl RenderContext {
                 // Render text
                 if !all_glyphs.is_empty() {
                     self.render_text(target, &all_glyphs);
+                }
+
+                // Render SVGs as rasterized images for high-quality anti-aliasing
+                if !svgs.is_empty() {
+                    self.render_rasterized_svgs(target, &svgs, scale_factor);
                 }
             }
 
@@ -988,6 +1019,109 @@ impl RenderContext {
                     ctx.stroke_path(&scaled, &scaled_stroke, tint_brush.clone());
                 }
             }
+        }
+    }
+
+    /// Render SVG elements using CPU rasterization for high-quality anti-aliased output
+    ///
+    /// This method rasterizes SVGs using resvg/tiny-skia and renders them as textures,
+    /// providing much better anti-aliasing than tessellation-based path rendering.
+    ///
+    /// The `scale_factor` parameter is the display's DPI scale (e.g., 2.0 for Retina).
+    /// SVGs are rasterized at physical pixel resolution for crisp rendering on HiDPI displays.
+    fn render_rasterized_svgs(
+        &mut self,
+        target: &wgpu::TextureView,
+        svgs: &[SvgElement],
+        scale_factor: f32,
+    ) {
+        for svg in svgs {
+            // Skip completely transparent SVGs
+            if svg.motion_opacity <= 0.001 {
+                continue;
+            }
+
+            // Skip SVGs completely outside their clip bounds
+            if let Some([clip_x, clip_y, clip_w, clip_h]) = svg.clip_bounds {
+                let svg_right = svg.x + svg.width;
+                let svg_bottom = svg.y + svg.height;
+                let clip_right = clip_x + clip_w;
+                let clip_bottom = clip_y + clip_h;
+
+                if svg.x >= clip_right
+                    || svg_right <= clip_x
+                    || svg.y >= clip_bottom
+                    || svg_bottom <= clip_y
+                {
+                    continue;
+                }
+            }
+
+            // Rasterize at physical pixel resolution for HiDPI displays
+            // svg.width/height are logical sizes, multiply by scale_factor for physical pixels
+            let raster_width = ((svg.width * scale_factor).ceil() as u32).max(1);
+            let raster_height = ((svg.height * scale_factor).ceil() as u32).max(1);
+
+            // Compute cache key: hash of (svg_source, width, height, scale, tint)
+            let cache_key = {
+                let mut hasher = DefaultHasher::new();
+                svg.source.hash(&mut hasher);
+                raster_width.hash(&mut hasher);
+                raster_height.hash(&mut hasher);
+                // Include tint in cache key (hash as bits to handle f32)
+                if let Some(tint) = &svg.tint {
+                    tint.r.to_bits().hash(&mut hasher);
+                    tint.g.to_bits().hash(&mut hasher);
+                    tint.b.to_bits().hash(&mut hasher);
+                    tint.a.to_bits().hash(&mut hasher);
+                }
+                hasher.finish()
+            };
+
+            // Check cache or rasterize on miss
+            if self.rasterized_svg_cache.get(&cache_key).is_none() {
+                // Rasterize the SVG
+                let rasterized = if let Some(tint) = svg.tint {
+                    RasterizedSvg::from_str_with_tint(&svg.source, raster_width, raster_height, tint)
+                } else {
+                    RasterizedSvg::from_str(&svg.source, raster_width, raster_height)
+                };
+
+                let Ok(rasterized) = rasterized else {
+                    tracing::warn!("Failed to rasterize SVG");
+                    continue;
+                };
+
+                // Upload to GPU
+                let gpu_image = GpuImage::from_rgba(
+                    &self.device,
+                    &self.queue,
+                    rasterized.data(),
+                    rasterized.width,
+                    rasterized.height,
+                    Some("Rasterized SVG"),
+                );
+
+                self.rasterized_svg_cache.put(cache_key, gpu_image);
+            }
+
+            // Get the cached GPU image
+            let Some(gpu_image) = self.rasterized_svg_cache.get(&cache_key) else {
+                continue;
+            };
+
+            // Create instance at SVG position
+            let mut instance =
+                GpuImageInstance::new(svg.x, svg.y, svg.width, svg.height).with_opacity(svg.motion_opacity);
+
+            // Apply clip bounds if specified
+            if let Some([clip_x, clip_y, clip_w, clip_h]) = svg.clip_bounds {
+                instance = instance.with_clip_rect(clip_x, clip_y, clip_w, clip_h);
+            }
+
+            // Render the rasterized SVG as an image
+            self.renderer
+                .render_images(target, gpu_image.view(), &[instance]);
         }
     }
 
@@ -1696,6 +1830,9 @@ impl RenderContext {
         height: u32,
         target: &wgpu::TextureView,
     ) -> Result<()> {
+        // Get scale factor for HiDPI rendering
+        let scale_factor = tree.scale_factor();
+
         // Create a single paint context for all layers with text rendering support
         let mut ctx =
             GpuPaintContext::with_text_context(width as f32, height as f32, &mut self.text_ctx);
@@ -1827,15 +1964,8 @@ impl RenderContext {
             }
         }
 
-        // Render SVGs
-        let mut svg_ctx = GpuPaintContext::new(width as f32, height as f32);
-        for svg in &svgs {
-            self.render_svg_element(&mut svg_ctx, svg);
-        }
-
-        // Merge SVG batch into main batch
-        let mut batch = batch;
-        batch.merge(svg_ctx.take_batch());
+        // SVGs are rendered as rasterized images (not tessellated paths) for better anti-aliasing
+        // They will be rendered later via render_rasterized_svgs
 
         self.renderer.resize(width, height);
 
@@ -1910,6 +2040,11 @@ impl RenderContext {
                     self.renderer.render_primitives_overlay(target, primitives);
                 }
             }
+
+            // Render SVGs as rasterized images for high-quality anti-aliasing
+            if !svgs.is_empty() {
+                self.render_rasterized_svgs(target, &svgs, scale_factor);
+            }
         } else {
             // Simple path (no glass)
             // Pre-generate text decorations grouped by layer for interleaved rendering
@@ -1966,8 +2101,10 @@ impl RenderContext {
                     self.render_text_decorations_for_layer(target, &decorations_by_layer, z);
                 }
 
-                // Render paths (SVGs) - they don't have z-layers, render after all primitives
-                self.renderer.render_paths_overlay(target, &batch);
+                // Render SVGs as rasterized images for high-quality anti-aliasing
+                if !svgs.is_empty() {
+                    self.render_rasterized_svgs(target, &svgs, scale_factor);
+                }
 
                 // Images render on top (existing behavior)
                 self.render_images(target, &images, width as f32, height as f32);
@@ -1977,6 +2114,11 @@ impl RenderContext {
                     .render_with_clear(target, &batch, [0.0, 0.0, 0.0, 1.0]);
 
                 self.render_images(target, &images, width as f32, height as f32);
+
+                // Render SVGs as rasterized images for high-quality anti-aliasing
+                if !svgs.is_empty() {
+                    self.render_rasterized_svgs(target, &svgs, scale_factor);
+                }
 
                 // Collect all glyphs for flat rendering
                 let all_glyphs: Vec<_> = glyphs_by_layer.values().flatten().cloned().collect();
@@ -2023,6 +2165,9 @@ impl RenderContext {
         height: u32,
         target: &wgpu::TextureView,
     ) -> Result<()> {
+        // Get scale factor for HiDPI rendering
+        let scale_factor = tree.scale_factor();
+
         // Create a single paint context for all layers with text rendering support
         let mut ctx =
             GpuPaintContext::with_text_context(width as f32, height as f32, &mut self.text_ctx);
@@ -2120,15 +2265,8 @@ impl RenderContext {
             }
         }
 
-        // Render SVGs
-        let mut svg_ctx = GpuPaintContext::new(width as f32, height as f32);
-        for svg in &svgs {
-            self.render_svg_element(&mut svg_ctx, svg);
-        }
-
-        // Merge SVG batch into main batch
-        let mut batch = batch;
-        batch.merge(svg_ctx.take_batch());
+        // SVGs are rendered as rasterized images (not tessellated paths) for better anti-aliasing
+        // They will be rendered later via render_rasterized_svgs
 
         self.renderer.resize(width, height);
 

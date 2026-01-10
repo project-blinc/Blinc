@@ -786,10 +786,10 @@ fn context_menu_section() -> impl ElementBuilder {
     let text_secondary = theme.color(ColorToken::TextSecondary);
 
     // Common icon SVGs for menu items
-    let scissors_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg>"#;
-    let copy_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>"#;
-    let clipboard_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>"#;
-    let trash_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>"#;
+    let scissors_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg>"#;
+    let copy_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>"#;
+    let clipboard_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>"#;
+    let trash_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>"#;
 
     section_container()
         .child(section_title("Context Menu"))
@@ -1675,7 +1675,7 @@ fn breadcrumb_section() -> impl ElementBuilder {
     let text_secondary = theme.color(ColorToken::TextSecondary);
 
     // Home icon for breadcrumb
-    let home_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>"#;
+    let home_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>"#;
 
     section_container()
         .child(section_title("Breadcrumb"))
@@ -1972,13 +1972,58 @@ fn sidebar_section(ctx: &WindowedContext) -> impl ElementBuilder {
                             })
                             .section("Help")
                             .item("Support", help_icon, || tracing::info!("Support clicked"))
-                            .content(|| {
+                            .content(|_active_item| {
                                 let theme = ThemeState::get();
-                                div().bg(theme.color(ColorToken::Background)).p(24.0).child(
-                                    text("Main Content Area")
-                                        .size(18.0)
-                                        .color(theme.color(ColorToken::TextPrimary)),
-                                )
+
+                                // Large icons for anti-aliasing comparison
+                                let large_search = r#"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>"#;
+                                let large_settings = r#"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>"#;
+                                let small_search = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>"#;
+
+                                div()
+                                    .bg(theme.color(ColorToken::Background))
+                                    .p(24.0)
+                                    .flex_col()
+                                    .gap(24.0)
+                                    .child(
+                                        text("Icon Size Comparison")
+                                            .size(18.0)
+                                            .weight(FontWeight::SemiBold)
+                                            .color(theme.color(ColorToken::TextPrimary)),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex_row()
+                                            .justify_between()
+                                            .gap(2.0)
+                                            .items_end()
+                                            // Large 64x64 icons
+                                            .child(
+                                                div()
+                                                    .flex_col()
+                                                    .items_center()
+                                                    .gap(8.0)
+                                                    .child(svg(large_search).tint(theme.color(ColorToken::TextPrimary)))
+                                                    .child(text("64×64 Search").size(12.0).color(theme.color(ColorToken::TextSecondary)))
+                                            )
+                                            .child(
+                                                div()
+                                                    .flex_col()
+                                                    .items_center()
+                                                    .gap(8.0)
+                                                    .child(svg(large_settings).tint(theme.color(ColorToken::TextPrimary)))
+                                                    .child(text("64×64 Settings").size(12.0).color(theme.color(ColorToken::TextSecondary)))
+                                            )
+                                            // Small 20x20 icons for comparison
+                                            .child(
+                                                div()
+                                                    .flex_col()
+                                                    .items_center()
+                                                    .gap(8.0)
+                                                    .child(svg(small_search).tint(theme.color(ColorToken::TextPrimary)))
+                                                    .child(text("20×20 Search").size(12.0).color(theme.color(ColorToken::TextSecondary)))
+                                            ),
+                                    )
                             }),
                     ),
             ),

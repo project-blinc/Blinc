@@ -2094,6 +2094,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Apply opacity and clip alpha
+    // Note: edge-distance AA disabled - fwidth on tessellated geometry produces
+    // unpredictable values that cause thin strokes to disappear
     color.a *= uniforms.opacity * clip_alpha;
     return color;
 }
