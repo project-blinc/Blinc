@@ -36,8 +36,8 @@ pub use capture::{
     TreeDiff, TreeSnapshot, VisualProps, WindowResizeEvent,
 };
 pub use server::{
-    start_local_server, start_local_server_named, DebugServer, DebugServerConfig, ServerHandle,
-    ServerMessage,
+    start_local_server, start_local_server_named, ClientCommand, DebugServer, DebugServerConfig,
+    ServerHandle, ServerMessage,
 };
 pub use session::{
     RecordingConfig, RecordingExport, RecordingSession, SessionState, SessionStats,

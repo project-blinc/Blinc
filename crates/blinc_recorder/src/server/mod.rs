@@ -10,6 +10,6 @@
 mod local;
 
 pub use local::{
-    start_local_server, start_local_server_named, DebugServer, DebugServerConfig, ServerHandle,
-    ServerMessage,
+    start_local_server, start_local_server_named, ClientCommand, DebugServer, DebugServerConfig,
+    ServerHandle, ServerMessage,
 };
