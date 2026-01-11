@@ -220,6 +220,25 @@ pub struct CenterScoop {
     pub corner_radius: f32,
 }
 
+/// Configuration for a centered bulge (outward protrusion) on an edge
+///
+/// This creates an outward curve in the center of an edge - the opposite of a scoop.
+/// Useful for highlighting active items in a bottom navigation bar.
+///
+/// ```text
+/// ─────────╲         ╱─────────
+///           ╲───────╱           ← bulge protrudes outward
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CenterBulge {
+    /// Width of the bulge
+    pub width: f32,
+    /// Height of the bulge (how far it protrudes outward)
+    pub height: f32,
+    /// Corner radius at bulge entry/exit points for smoother transitions
+    pub corner_radius: f32,
+}
+
 // =============================================================================
 // Notch Element
 // =============================================================================
@@ -238,6 +257,10 @@ pub struct Notch {
     // Center scoop configuration (for Dynamic Island-style centered notches)
     pub(crate) top_center_scoop: Option<CenterScoop>,
     pub(crate) bottom_center_scoop: Option<CenterScoop>,
+
+    // Center bulge configuration (for active menu highlighting)
+    pub(crate) top_center_bulge: Option<CenterBulge>,
+    pub(crate) bottom_center_bulge: Option<CenterBulge>,
 
     // Layout
     pub(crate) style: Style,
@@ -266,6 +289,8 @@ impl Notch {
             corners: CornersConfig::NONE,
             top_center_scoop: None,
             bottom_center_scoop: None,
+            top_center_bulge: None,
+            bottom_center_bulge: None,
             style: Style::default(),
             children: Vec::new(),
             background: None,
@@ -603,6 +628,81 @@ impl Notch {
         self.bottom_center_scoop = Some(CenterScoop {
             width,
             depth,
+            corner_radius,
+        });
+        self
+    }
+
+    // =========================================================================
+    // Center Bulges (Outward Protrusions)
+    // =========================================================================
+
+    /// Add a center bulge on the top edge
+    ///
+    /// Creates an outward curve in the center of the top edge - the opposite of a scoop.
+    /// The bulge protrudes OUT of the shape (upward).
+    ///
+    /// ```text
+    ///           ╱───────╲
+    ///     ╭────╱         ╲────╮
+    ///     │                   │  ← bulge protrudes upward
+    ///     ╰───────────────────╯
+    /// ```
+    pub fn center_bulge_top(mut self, width: f32, height: f32) -> Self {
+        self.top_center_bulge = Some(CenterBulge {
+            width,
+            height,
+            corner_radius: 0.0,
+        });
+        self
+    }
+
+    /// Add a center bulge on the top edge with rounded corners
+    ///
+    /// Like `center_bulge_top`, but with smooth corner transitions at bulge entry/exit.
+    pub fn center_bulge_top_rounded(mut self, width: f32, height: f32, corner_radius: f32) -> Self {
+        self.top_center_bulge = Some(CenterBulge {
+            width,
+            height,
+            corner_radius,
+        });
+        self
+    }
+
+    /// Add a center bulge on the bottom edge
+    ///
+    /// Creates an outward curve in the center of the bottom edge - the opposite of a scoop.
+    /// The bulge protrudes OUT of the shape (downward).
+    /// Perfect for highlighting active items in a bottom navigation bar.
+    ///
+    /// ```text
+    ///     ╭───────────────────╮
+    ///     │                   │
+    ///     ╰────╲         ╱────╯
+    ///           ╲───────╱       ← bulge protrudes downward (active indicator)
+    /// ```
+    pub fn center_bulge_bottom(mut self, width: f32, height: f32) -> Self {
+        self.bottom_center_bulge = Some(CenterBulge {
+            width,
+            height,
+            corner_radius: 0.0,
+        });
+        self
+    }
+
+    /// Add a center bulge on the bottom edge with rounded corners
+    ///
+    /// Like `center_bulge_bottom`, but with smooth corner transitions at bulge entry/exit.
+    /// Great for smooth, polished active menu indicators.
+    pub fn center_bulge_bottom_rounded(
+        mut self,
+        width: f32,
+        height: f32,
+        corner_radius: f32,
+    ) -> Self {
+        self.bottom_center_bulge = Some(CenterBulge {
+            width,
+            height,
             corner_radius,
         });
         self
@@ -1229,20 +1329,24 @@ impl Default for Notch {
 // Path Building for Complex Notchs
 // =============================================================================
 
-/// Build the path for a shape with configurable corners and center scoops
+/// Build the path for a shape with configurable corners, scoops, and bulges
 ///
 /// This handles convex (standard rounding), concave curves, step notches,
-/// and center scoops (Dynamic Island-style centered indentations).
+/// center scoops (Dynamic Island-style centered indentations), and
+/// center bulges (outward protrusions for active menu highlighting).
 /// The path is built clockwise starting from the top-left corner.
 ///
 /// For convex corners: the curve stays inside the bounds
 /// For concave corners: the curve bows outward, extending beyond the bounds
 /// For center scoops: the curve bows inward, staying inside the bounds
+/// For center bulges: the curve protrudes outward, extending beyond the bounds
 fn build_shape_path(
     bounds: Rect,
     corners: &CornersConfig,
     top_center_scoop: Option<&CenterScoop>,
     bottom_center_scoop: Option<&CenterScoop>,
+    top_center_bulge: Option<&CenterBulge>,
+    bottom_center_bulge: Option<&CenterBulge>,
 ) -> Path {
     let w = bounds.width();
     let h = bounds.height();
@@ -1372,6 +1476,105 @@ fn build_shape_path(
                 scoop_end_x,
                 y + K * ry, // control 2
                 scoop_end_x,
+                y, // end at right edge
+            );
+
+            // Line to top edge end
+            path = path.line_to(top_end_x, y);
+        }
+    } else if let Some(bulge) = top_center_bulge {
+        // Draw top center bulge - protrudes UPWARD out of the shape
+        let center_x = x + w / 2.0;
+        let bulge_start_x = center_x - bulge.width / 2.0;
+        let bulge_end_x = center_x + bulge.width / 2.0;
+        let bulge_top_y = y - bulge.height; // Protrudes upward (negative y)
+
+        // Corner radius for smooth entry/exit transitions
+        let cr = bulge.corner_radius.min(bulge.width / 4.0).max(0.0);
+
+        const K: f32 = 0.5522847498;
+
+        if cr > 0.0 {
+            // With corner radius: smooth convex entry/exit transitions
+            // Control points placed at the "corner" for smooth quarter-circle curves
+            let effective_start_x = bulge_start_x + cr;
+            let effective_end_x = bulge_end_x - cr;
+            let effective_start_y = y - cr; // Going upward
+            let effective_rx = (effective_end_x - effective_start_x) / 2.0;
+            let effective_ry = bulge.height - cr;
+
+            // Line to entry corner point
+            path = path.line_to(bulge_start_x, y);
+
+            // Entry corner: smooth convex quarter-circle transition
+            // Control at corner where horizontal tangent from start meets vertical tangent to end
+            path = path.quad_to(
+                effective_start_x, // control x: at the corner (right of start)
+                y,                 // control y: at edge level (horizontal tangent)
+                effective_start_x,
+                effective_start_y, // end at main bulge start
+            );
+
+            // Main bulge curve: from effective start to top center
+            path = path.cubic_to(
+                effective_start_x,
+                effective_start_y - K * effective_ry, // control 1
+                center_x - K * effective_rx,
+                bulge_top_y, // control 2
+                center_x,
+                bulge_top_y, // end at top center
+            );
+
+            // Main bulge curve: from top center to effective end
+            path = path.cubic_to(
+                center_x + K * effective_rx,
+                bulge_top_y, // control 1
+                effective_end_x,
+                effective_start_y - K * effective_ry, // control 2
+                effective_end_x,
+                effective_start_y, // end at effective end
+            );
+
+            // Exit corner: smooth convex quarter-circle transition back to edge
+            // Control at corner where vertical tangent from start meets horizontal tangent to end
+            path = path.quad_to(
+                effective_end_x, // control x: at the corner (left of end)
+                y,               // control y: at edge level (horizontal tangent)
+                bulge_end_x,
+                y, // end at top edge
+            );
+
+            // Line to top edge end
+            path = path.line_to(top_end_x, y);
+        } else {
+            // Without corner radius: smooth arc with horizontal tangents at edges
+            // This creates a curve that smoothly wraps around circular content
+            let rx = bulge.width / 2.0;
+
+            // Line to bulge start
+            path = path.line_to(bulge_start_x, y);
+
+            // First half arc: from left edge to top center
+            // Both control points positioned for horizontal tangents:
+            // - At start: tangent is horizontal (going right toward center)
+            // - At end: tangent is horizontal (at the peak of the curve)
+            path = path.cubic_to(
+                bulge_start_x + K * rx, // control 1 x: offset right (horizontal tangent at start)
+                y,                      // control 1 y: same as start y
+                center_x - K * rx,      // control 2 x: offset left from center
+                bulge_top_y,            // control 2 y: same as end (horizontal tangent at peak)
+                center_x,
+                bulge_top_y, // end at top center
+            );
+
+            // Second half arc: from top center to right edge
+            // Both control points positioned for horizontal tangents
+            path = path.cubic_to(
+                center_x + K * rx,    // control 1 x: offset right from center
+                bulge_top_y,          // control 1 y: same as start (horizontal tangent at peak)
+                bulge_end_x - K * rx, // control 2 x: offset left (horizontal tangent at end)
+                y,                    // control 2 y: same as end y
+                bulge_end_x,
                 y, // end at right edge
             );
 
@@ -1525,6 +1728,104 @@ fn build_shape_path(
                 scoop_end_x,
                 y + h - K * ry, // control 2
                 scoop_end_x,
+                y + h, // end at left edge
+            );
+
+            // Line to bottom edge end
+            path = path.line_to(bottom_end_x, y + h);
+        }
+    } else if let Some(bulge) = bottom_center_bulge {
+        // Draw bottom center bulge - protrudes DOWNWARD out of the shape
+        // Path is going from right to left on bottom edge
+        let center_x = x + w / 2.0;
+        let bulge_start_x = center_x + bulge.width / 2.0; // Start from right side
+        let bulge_end_x = center_x - bulge.width / 2.0; // End at left side
+        let bulge_bottom_y = y + h + bulge.height; // Protrudes downward (positive y)
+
+        // Corner radius for smooth entry/exit transitions
+        let cr = bulge.corner_radius.min(bulge.width / 4.0).max(0.0);
+
+        const K: f32 = 0.5522847498;
+
+        if cr > 0.0 {
+            // With corner radius: smooth convex entry/exit transitions
+            // Control points placed at the "corner" for smooth quarter-circle curves
+            let effective_start_x = bulge_start_x - cr; // Inset from right
+            let effective_end_x = bulge_end_x + cr; // Inset from left
+            let effective_start_y = y + h + cr; // Going downward
+            let effective_rx = (effective_start_x - effective_end_x) / 2.0;
+            let effective_ry = bulge.height - cr;
+
+            // Line to entry corner point (from right)
+            path = path.line_to(bulge_start_x, y + h);
+
+            // Entry corner: smooth convex quarter-circle transition going downward
+            // Control at corner where horizontal tangent from start meets vertical tangent to end
+            path = path.quad_to(
+                effective_start_x, // control x: at the corner (left of start, path goes right-to-left)
+                y + h,             // control y: at edge level (horizontal tangent)
+                effective_start_x,
+                effective_start_y, // end at main bulge start
+            );
+
+            // Main bulge curve: from effective start to bottom center
+            path = path.cubic_to(
+                effective_start_x,
+                effective_start_y + K * effective_ry, // control 1
+                center_x + K * effective_rx,
+                bulge_bottom_y, // control 2
+                center_x,
+                bulge_bottom_y, // end at bottom center
+            );
+
+            // Main bulge curve: from bottom center to effective end
+            path = path.cubic_to(
+                center_x - K * effective_rx,
+                bulge_bottom_y, // control 1
+                effective_end_x,
+                effective_start_y + K * effective_ry, // control 2
+                effective_end_x,
+                effective_start_y, // end at effective end
+            );
+
+            // Exit corner: smooth convex quarter-circle transition back to edge
+            // Control at corner where vertical tangent from start meets horizontal tangent to end
+            path = path.quad_to(
+                effective_end_x, // control x: at the corner (right of end)
+                y + h,           // control y: at edge level (horizontal tangent)
+                bulge_end_x,
+                y + h, // end at bottom edge
+            );
+
+            // Line to bottom edge end
+            path = path.line_to(bottom_end_x, y + h);
+        } else {
+            // Without corner radius: smooth arc with horizontal tangents at edges
+            // Path goes right-to-left on bottom edge
+            let rx = bulge.width / 2.0;
+
+            // Line to bulge start (from right)
+            path = path.line_to(bulge_start_x, y + h);
+
+            // First half arc: from right edge to bottom center
+            // Both control points positioned for horizontal tangents
+            path = path.cubic_to(
+                bulge_start_x - K * rx, // control 1 x: offset left (horizontal tangent at start)
+                y + h,                  // control 1 y: same as start y
+                center_x + K * rx,      // control 2 x: offset right from center
+                bulge_bottom_y,         // control 2 y: same as end (horizontal tangent at peak)
+                center_x,
+                bulge_bottom_y, // end at bottom center
+            );
+
+            // Second half arc: from bottom center to left edge
+            // Both control points positioned for horizontal tangents
+            path = path.cubic_to(
+                center_x - K * rx,    // control 1 x: offset left from center
+                bulge_bottom_y,       // control 1 y: same as start (horizontal tangent at peak)
+                bulge_end_x + K * rx, // control 2 x: offset right (horizontal tangent at end)
+                y + h,                // control 2 y: same as end y
+                bulge_end_x,
                 y + h, // end at left edge
             );
 
@@ -1776,11 +2077,14 @@ impl ElementBuilder for Notch {
     }
 
     fn render_props(&self) -> RenderProps {
-        // If we have concave curves, step corners, OR center scoops, we need custom canvas rendering
-        // Otherwise, we can use standard div rendering with CornerRadius
+        // If we have concave curves, step corners, center scoops, OR center bulges,
+        // we need custom canvas rendering. Otherwise use standard div rendering.
         let has_center_scoop =
             self.top_center_scoop.is_some() || self.bottom_center_scoop.is_some();
-        let needs_custom = self.corners.needs_custom_rendering() || has_center_scoop;
+        let has_center_bulge =
+            self.top_center_bulge.is_some() || self.bottom_center_bulge.is_some();
+        let needs_custom =
+            self.corners.needs_custom_rendering() || has_center_scoop || has_center_bulge;
 
         if needs_custom {
             // For shapes with custom corners/scoops, we'll set background to None here
@@ -1821,11 +2125,14 @@ impl ElementBuilder for Notch {
     }
 
     fn element_type_id(&self) -> ElementTypeId {
-        // If we have custom corners OR center scoops, use Canvas type for custom rendering
+        // If we have custom corners, center scoops, OR center bulges, use Canvas type
         // Otherwise, use Div for standard rendering
         let has_center_scoop =
             self.top_center_scoop.is_some() || self.bottom_center_scoop.is_some();
-        let needs_custom = self.corners.needs_custom_rendering() || has_center_scoop;
+        let has_center_bulge =
+            self.top_center_bulge.is_some() || self.bottom_center_bulge.is_some();
+        let needs_custom =
+            self.corners.needs_custom_rendering() || has_center_scoop || has_center_bulge;
         if needs_custom {
             ElementTypeId::Canvas
         } else {
@@ -1838,10 +2145,13 @@ impl ElementBuilder for Notch {
     }
 
     fn canvas_render_info(&self) -> Option<CanvasRenderFn> {
-        // Only provide canvas render if we have custom corners or center scoops
+        // Only provide canvas render if we have custom corners, scoops, or bulges
         let has_center_scoop =
             self.top_center_scoop.is_some() || self.bottom_center_scoop.is_some();
-        let needs_custom = self.corners.needs_custom_rendering() || has_center_scoop;
+        let has_center_bulge =
+            self.top_center_bulge.is_some() || self.bottom_center_bulge.is_some();
+        let needs_custom =
+            self.corners.needs_custom_rendering() || has_center_scoop || has_center_bulge;
         if !needs_custom {
             return None;
         }
@@ -1849,6 +2159,8 @@ impl ElementBuilder for Notch {
         let corners = self.corners;
         let top_center_scoop = self.top_center_scoop;
         let bottom_center_scoop = self.bottom_center_scoop;
+        let top_center_bulge = self.top_center_bulge;
+        let bottom_center_bulge = self.bottom_center_bulge;
         let background = self.background.clone();
         let border_color = self.border_color;
         let border_width = self.border_width;
@@ -1877,22 +2189,35 @@ impl ElementBuilder for Notch {
                     } else {
                         0.0
                     };
-                let top_offset = if corners.top_left.is_concave() || corners.top_right.is_concave()
-                {
-                    tl_r.max(tr_r)
-                } else {
-                    0.0
+                // Top offset: concave corners extend upward, bulges also protrude upward
+                let top_offset = {
+                    let corner_offset =
+                        if corners.top_left.is_concave() || corners.top_right.is_concave() {
+                            tl_r.max(tr_r)
+                        } else {
+                            0.0
+                        };
+                    let bulge_offset = top_center_bulge.map(|b| b.height).unwrap_or(0.0);
+                    corner_offset.max(bulge_offset)
                 };
-                let bottom_offset =
-                    if corners.bottom_left.is_concave() || corners.bottom_right.is_concave() {
-                        bl_r.max(br_r)
-                    } else {
-                        0.0
-                    };
+
+                // Bottom offset: concave corners extend downward, bulges also protrude downward
+                let bottom_offset = {
+                    let corner_offset =
+                        if corners.bottom_left.is_concave() || corners.bottom_right.is_concave() {
+                            bl_r.max(br_r)
+                        } else {
+                            0.0
+                        };
+                    let bulge_offset = bottom_center_bulge.map(|b| b.height).unwrap_or(0.0);
+                    corner_offset.max(bulge_offset)
+                };
+
                 // NOTE: Center scoops do NOT add to the rect offset like concave corners.
                 // The scoop curves INTO the shape (not outward), so the rect stays at bounds origin.
+                // However, bulges DO protrude outward and need offset space.
 
-                // Create the rect with offsets so concave curves stay within bounds
+                // Create the rect with offsets so concave curves and bulges stay within bounds
                 let rect = Rect::new(
                     left_offset,
                     top_offset,
@@ -1900,12 +2225,14 @@ impl ElementBuilder for Notch {
                     bounds.height - top_offset - bottom_offset,
                 );
 
-                // Build the path for any combination of corner types and center scoops
+                // Build the path for any combination of corner types, scoops, and bulges
                 let path = build_shape_path(
                     rect,
                     &corners,
                     top_center_scoop.as_ref(),
                     bottom_center_scoop.as_ref(),
+                    top_center_bulge.as_ref(),
+                    bottom_center_bulge.as_ref(),
                 );
 
                 // Draw shadow first (behind the fill)

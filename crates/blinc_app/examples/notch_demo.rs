@@ -42,6 +42,14 @@ const MUSIC_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" he
 
 const PLUS_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>"#;
 
+const HOME_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>"#;
+
+const SEARCH_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>"#;
+
+const USER_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>"#;
+
+const SETTINGS_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>"#;
+
 /// Menu item data
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum MenuItem {
@@ -213,10 +221,24 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                     .flex_col()
                     .items_center()
                     .justify_center()
+                    .gap(24.0)
                     .child(
                         text("Hover over the icons in the menu bar above")
                             .size(16.0)
                             .color(theme.color(ColorToken::TextSecondary)),
+                    )
+                    // Navigation bar with active indicator bulge
+                    .child(
+                        div()
+                            .flex_col()
+                            .items_center()
+                            .gap(8.0)
+                            .child(
+                                text("Navigation Bar with Bulge Active Indicator")
+                                    .size(12.0)
+                                    .color(theme.color(ColorToken::TextSecondary)),
+                            )
+                            .child(active_nav_bar()),
                     ),
             )
             // Bottom dock bar with center scoop
@@ -443,6 +465,83 @@ fn dropdown_content(item: Option<MenuItem>) -> Div {
 
         None => div(),
     }
+}
+
+/// Navigation bar demonstrating the center bulge feature for active indicators
+fn active_nav_bar() -> impl ElementBuilder {
+    let nav_bg = Color::from_hex(0x1e293b); // Slate-800
+    let active_bg = Color::from_hex(0x3b82f6); // Blue-500
+    let icon_color = Color::WHITE.with_alpha(0.7);
+    let active_icon_color = Color::WHITE;
+    let bulge_height = 8.0;
+    // let bulge_corner_radius = 0.0;
+
+    // Container for the nav bar
+    div().flex_row().justify_center().child(
+        // Navigation bar with bulge for active item
+        notch()
+            // Bulge protrudes top to highlight the active center item
+            .center_bulge_top(58.0, bulge_height)
+            .rounded(16.0)
+            .bg(nav_bg)
+            .h(56.0 + bulge_height) // Extra height for bulge
+            .px(8.0)
+            .flex_row()
+            .items_center()
+            .gap(4.0)
+            // Home icon (inactive)
+            .child(
+                div()
+                    .w(56.0)
+                    .h(44.0)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(svg(HOME_SVG).square(22.0).color(icon_color)),
+            )
+            // Search icon (inactive)
+            .child(
+                div()
+                    .w(56.0)
+                    .h(44.0)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(svg(SEARCH_SVG).square(22.0).color(icon_color)),
+            )
+            // Center item (ACTIVE) - positioned in the bulge
+            .child(
+                div()
+                    .w(44.0)
+                    .h(44.0)
+                    .rounded_full()
+                    .bg(active_bg)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(svg(PLUS_SVG).square(24.0).color(active_icon_color)),
+            )
+            // User icon (inactive)
+            .child(
+                div()
+                    .w(56.0)
+                    .h(44.0)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(svg(USER_SVG).square(22.0).color(icon_color)),
+            )
+            // Settings icon (inactive)
+            .child(
+                div()
+                    .w(56.0)
+                    .h(44.0)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(svg(SETTINGS_SVG).square(22.0).color(icon_color)),
+            ),
+    )
 }
 
 /// Bottom dock bar with Dynamic Island-style center scoop
