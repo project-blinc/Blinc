@@ -59,7 +59,8 @@ Components for displaying data.
 | **Data Table** | table, scroll, sorting | Planned |
 | **Progress** | div | ✅ Done |
 | **Calendar** | div, text, grid | Planned |
-| **Chart** | canvas | Planned |
+| **Chart** | svg, div | ✅ Done |
+| **Tree View** | Stateful, div, motion | ✅ Done |
 
 ### 4. Feedback (Priority: Medium)
 
@@ -121,7 +122,7 @@ Text components.
 
 ### 9. Icons (Priority: High)
 
-Icon system with pluggable icon libraries.
+Icon system with Lucide icons. See [blinc-icons-implementation.md](./blinc-icons-implementation.md) for detailed plan.
 
 | Component | Primitives Used | Status  |
 |-----------|-----------------|---------|
