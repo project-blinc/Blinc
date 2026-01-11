@@ -50,6 +50,25 @@ pub struct GlassPanel {
     pub node_id: LayoutNodeId,
 }
 
+/// Debug statistics for the render tree
+///
+/// Used by `BLINC_DEBUG=motion` to display animation stats.
+#[derive(Clone, Debug, Default)]
+pub struct RenderTreeDebugStats {
+    /// Number of active visual (FLIP) animations
+    pub visual_animation_count: usize,
+    /// Number of registered visual animation configs
+    pub visual_animation_config_count: usize,
+    /// Number of active layout animations
+    pub layout_animation_count: usize,
+    /// Number of pre-computed animated bounds
+    pub animated_bounds_count: usize,
+    /// Total number of render nodes
+    pub render_node_count: usize,
+    /// Number of scroll physics instances
+    pub scroll_physics_count: usize,
+}
+
 /// Stores an element's type for rendering
 #[derive(Clone)]
 pub enum ElementType {
@@ -1042,6 +1061,21 @@ impl RenderTree {
     /// Get the current scale factor
     pub fn scale_factor(&self) -> f32 {
         self.scale_factor
+    }
+
+    /// Get debug statistics for the render tree
+    ///
+    /// Returns counts of active animations and other debug info.
+    /// Used by `BLINC_DEBUG=motion` to display animation stats.
+    pub fn debug_stats(&self) -> RenderTreeDebugStats {
+        RenderTreeDebugStats {
+            visual_animation_count: self.visual_animations.len(),
+            visual_animation_config_count: self.visual_animation_configs.len(),
+            layout_animation_count: self.layout_animations_by_key.len(),
+            animated_bounds_count: self.animated_render_bounds.len(),
+            render_node_count: self.render_nodes.len(),
+            scroll_physics_count: self.scroll_physics.len(),
+        }
     }
 
     /// Recursively build elements into the tree

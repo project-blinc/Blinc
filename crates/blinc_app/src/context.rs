@@ -656,6 +656,102 @@ impl RenderContext {
         }
     }
 
+    /// Render debug visualization for motion/animations
+    ///
+    /// When `BLINC_DEBUG=motion` (or `all`) is set, this renders:
+    /// - Top-right corner overlay showing animation stats
+    /// - Number of active visual animations, layout animations, etc.
+    fn render_motion_debug(
+        &mut self,
+        target: &wgpu::TextureView,
+        tree: &RenderTree,
+        width: u32,
+        _height: u32,
+    ) {
+        let stats = tree.debug_stats();
+        let mut debug_primitives = Vec::new();
+
+        // Background for the debug panel
+        let panel_width = 200.0;
+        let panel_height = 100.0;
+        let panel_x = width as f32 - panel_width - 10.0;
+        let panel_y = 10.0;
+
+        // Semi-transparent dark background
+        debug_primitives.push(
+            GpuPrimitive::rect(panel_x, panel_y, panel_width, panel_height)
+                .with_color(0.1, 0.1, 0.15, 0.85)
+                .with_corner_radius(6.0),
+        );
+
+        // Status indicator - green if any animations active
+        let has_active = stats.visual_animation_count > 0
+            || stats.layout_animation_count > 0
+            || stats.animated_bounds_count > 0;
+
+        let (r, g, b, a) = if has_active {
+            (0.2, 0.9, 0.3, 1.0) // Green when animating
+        } else {
+            (0.4, 0.4, 0.5, 1.0) // Gray when idle
+        };
+
+        debug_primitives.push(
+            GpuPrimitive::rect(panel_x + 10.0, panel_y + 12.0, 10.0, 10.0)
+                .with_color(r, g, b, a)
+                .with_corner_radius(5.0),
+        );
+
+        // Visual bars showing animation counts
+        let bar_x = panel_x + 12.0;
+        let bar_width = panel_width - 24.0;
+        let bar_height = 6.0;
+
+        // Visual animations bar (cyan)
+        let visual_ratio = (stats.visual_animation_count as f32).min(10.0) / 10.0;
+        if visual_ratio > 0.0 {
+            debug_primitives.push(
+                GpuPrimitive::rect(bar_x, panel_y + 35.0, bar_width * visual_ratio, bar_height)
+                    .with_color(0.0, 0.8, 0.9, 0.9)
+                    .with_corner_radius(3.0),
+            );
+        }
+
+        // Layout animations bar (magenta)
+        let layout_ratio = (stats.layout_animation_count as f32).min(10.0) / 10.0;
+        if layout_ratio > 0.0 {
+            debug_primitives.push(
+                GpuPrimitive::rect(bar_x, panel_y + 50.0, bar_width * layout_ratio, bar_height)
+                    .with_color(0.9, 0.2, 0.8, 0.9)
+                    .with_corner_radius(3.0),
+            );
+        }
+
+        // Animated bounds bar (yellow)
+        let bounds_ratio = (stats.animated_bounds_count as f32).min(50.0) / 50.0;
+        if bounds_ratio > 0.0 {
+            debug_primitives.push(
+                GpuPrimitive::rect(bar_x, panel_y + 65.0, bar_width * bounds_ratio, bar_height)
+                    .with_color(0.95, 0.85, 0.2, 0.9)
+                    .with_corner_radius(3.0),
+            );
+        }
+
+        // Scroll physics indicator (orange dots)
+        let scroll_count = stats.scroll_physics_count.min(8);
+        for i in 0..scroll_count {
+            debug_primitives.push(
+                GpuPrimitive::rect(bar_x + (i as f32 * 14.0), panel_y + 80.0, 8.0, 8.0)
+                    .with_color(1.0, 0.6, 0.2, 0.9)
+                    .with_corner_radius(4.0),
+            );
+        }
+
+        if !debug_primitives.is_empty() {
+            self.renderer
+                .render_primitives_overlay(target, &debug_primitives);
+        }
+    }
+
     /// Render images to the backdrop texture (for images that should be blurred by glass)
     fn render_images_to_backdrop(&mut self, images: &[&ImageElement]) {
         let Some(ref backdrop) = self.backdrop_texture else {
@@ -2192,6 +2288,9 @@ impl RenderContext {
             let scale = tree.scale_factor();
             self.render_layout_debug(target, tree, scale);
         }
+        if debug.motion {
+            self.render_motion_debug(target, tree, width, height);
+        }
 
         // Return scratch buffers for reuse on next frame
         self.return_scratch_elements(texts, svgs, images);
@@ -2366,6 +2465,9 @@ impl RenderContext {
             let scale = tree.scale_factor();
             self.render_layout_debug(target, tree, scale);
         }
+        if debug.motion {
+            self.render_motion_debug(target, tree, width, height);
+        }
 
         // Return scratch buffers for reuse on next frame
         self.return_scratch_elements(texts, svgs, images);
@@ -2452,6 +2554,7 @@ fn to_gpu_generic_font(generic: GenericFont) -> GpuGenericFont {
 /// Set environment variable `BLINC_DEBUG` to enable debug visualization:
 /// - `text`: Show text bounding boxes and baselines
 /// - `layout`: Show all element bounding boxes (useful for debugging hit-testing)
+/// - `motion`: Show active animation stats overlay
 /// - `all` or `1` or `true`: Show all debug visualizations
 #[derive(Clone, Copy)]
 pub struct DebugMode {
@@ -2459,6 +2562,8 @@ pub struct DebugMode {
     pub text: bool,
     /// Show all element bounding boxes
     pub layout: bool,
+    /// Show motion/animation debug info
+    pub motion: bool,
 }
 
 impl DebugMode {
@@ -2471,13 +2576,14 @@ impl DebugMode {
         let all = debug_value == "all" || debug_value == "1" || debug_value == "true";
         let text = all || debug_value == "text";
         let layout = all || debug_value == "layout";
+        let motion = all || debug_value == "motion";
 
-        Self { text, layout }
+        Self { text, layout, motion }
     }
 
     /// Check if any debug mode is enabled
     pub fn any_enabled(&self) -> bool {
-        self.text || self.layout
+        self.text || self.layout || self.motion
     }
 }
 

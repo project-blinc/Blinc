@@ -126,7 +126,7 @@ pub use text::{text, Text};
 // Renderer
 pub use renderer::{
     GlassPanel, ImageData, LayoutRenderer, OnReadyCallback, OnReadyEntry, RenderTree,
-    StyledTextData, StyledTextSpan, SvgData, TextData, UpdateResult,
+    RenderTreeDebugStats, StyledTextData, StyledTextSpan, SvgData, TextData, UpdateResult,
 };
 
 // Canvas element
