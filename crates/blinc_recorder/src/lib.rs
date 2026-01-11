@@ -162,6 +162,18 @@ pub fn install_hooks() {
                 }
             });
         ctx.set_recorder_snapshot_callback(snapshot_callback);
+
+        // Update callback: log element updates with their category
+        let update_callback: blinc_core::RecorderUpdateCallback =
+            Arc::new(|element_id: &str, category: blinc_core::UpdateCategory| {
+                tracing::trace!(
+                    target: "blinc_recorder::updates",
+                    element_id = %element_id,
+                    category = ?category,
+                    "element update"
+                );
+            });
+        ctx.set_recorder_update_callback(update_callback);
     }
 }
 
@@ -172,6 +184,7 @@ pub fn uninstall_hooks() {
     if let Some(ctx) = BlincContextState::try_get() {
         ctx.clear_recorder_event_callback();
         ctx.clear_recorder_snapshot_callback();
+        ctx.clear_recorder_update_callback();
     }
 }
 

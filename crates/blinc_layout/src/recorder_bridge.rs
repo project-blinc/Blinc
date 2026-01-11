@@ -114,6 +114,35 @@ pub fn is_recording_snapshots() -> bool {
         .unwrap_or(false)
 }
 
+/// Check if update recording is currently enabled.
+pub fn is_recording_updates() -> bool {
+    BlincContextState::try_get()
+        .map(|ctx| ctx.is_recording_updates())
+        .unwrap_or(false)
+}
+
+/// Record an element update with category.
+///
+/// This is called when diff/stateful detects element changes.
+pub fn record_update(element_id: &str, category: blinc_core::UpdateCategory) {
+    if let Some(ctx) = BlincContextState::try_get() {
+        if ctx.is_recording_updates() {
+            ctx.record_update(element_id, category);
+        }
+    }
+}
+
+/// Convert ChangeCategory from diff module to UpdateCategory for recording.
+pub fn change_category_to_update(change: &crate::diff::ChangeCategory) -> blinc_core::UpdateCategory {
+    if change.children {
+        blinc_core::UpdateCategory::Structural
+    } else if change.layout {
+        blinc_core::UpdateCategory::Layout
+    } else {
+        blinc_core::UpdateCategory::Visual
+    }
+}
+
 // ============================================================================
 // Tree Snapshot Types
 // ============================================================================

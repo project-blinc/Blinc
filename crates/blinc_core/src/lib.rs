@@ -76,7 +76,8 @@ pub use context_state::{
     query, query_motion, request_rebuild, use_signal_keyed, use_state_keyed, AnyElementRegistry,
     BlincContextState, Bounds, BoundsCallback, FocusCallback, HookState, MotionAnimationState,
     MotionStateCallback, QueryCallback, RecordedEventAny, RecorderEventCallback,
-    RecorderSnapshotCallback, ScrollCallback, SharedHookState, StateKey, TreeSnapshotAny,
+    RecorderSnapshotCallback, RecorderUpdateCallback, ScrollCallback, SharedHookState, StateKey,
+    TreeSnapshotAny, UpdateCategory,
 };
 
 // Re-export store types

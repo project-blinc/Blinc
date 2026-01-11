@@ -274,6 +274,20 @@ pub type TreeSnapshotAny = Box<dyn Any + Send>;
 /// Callback for capturing tree snapshots after each frame
 pub type RecorderSnapshotCallback = Arc<dyn Fn(TreeSnapshotAny) + Send + Sync>;
 
+/// Update category for element change tracking
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UpdateCategory {
+    /// Visual-only change (color, opacity, etc.)
+    Visual,
+    /// Layout change (position, size)
+    Layout,
+    /// Structural change (children added/removed)
+    Structural,
+}
+
+/// Callback for tracking element updates with category
+pub type RecorderUpdateCallback = Arc<dyn Fn(&str, UpdateCategory) + Send + Sync>;
+
 /// Type-erased element registry storage
 /// This allows blinc_core to store the registry without depending on blinc_layout
 pub type AnyElementRegistry = Arc<dyn Any + Send + Sync>;
@@ -324,6 +338,8 @@ pub struct BlincContextState {
     recorder_event_callback: RwLock<Option<RecorderEventCallback>>,
     /// Callback for capturing tree snapshots
     recorder_snapshot_callback: RwLock<Option<RecorderSnapshotCallback>>,
+    /// Callback for tracking element updates with category
+    recorder_update_callback: RwLock<Option<RecorderUpdateCallback>>,
 }
 
 impl BlincContextState {
@@ -349,6 +365,7 @@ impl BlincContextState {
             motion_cancel_exit_callback: RwLock::new(None),
             recorder_event_callback: RwLock::new(None),
             recorder_snapshot_callback: RwLock::new(None),
+            recorder_update_callback: RwLock::new(None),
         };
 
         if CONTEXT_STATE.set(state).is_err() {
@@ -379,6 +396,7 @@ impl BlincContextState {
             motion_cancel_exit_callback: RwLock::new(None),
             recorder_event_callback: RwLock::new(None),
             recorder_snapshot_callback: RwLock::new(None),
+            recorder_update_callback: RwLock::new(None),
         };
 
         if CONTEXT_STATE.set(state).is_err() {
@@ -802,6 +820,32 @@ impl BlincContextState {
     /// Check if snapshot recording is enabled
     pub fn is_recording_snapshots(&self) -> bool {
         self.recorder_snapshot_callback.read().unwrap().is_some()
+    }
+
+    /// Set the recorder update callback
+    ///
+    /// Called by `blinc_recorder` to track element update categories.
+    pub fn set_recorder_update_callback(&self, callback: RecorderUpdateCallback) {
+        *self.recorder_update_callback.write().unwrap() = Some(callback);
+    }
+
+    /// Clear the recorder update callback
+    pub fn clear_recorder_update_callback(&self) {
+        *self.recorder_update_callback.write().unwrap() = None;
+    }
+
+    /// Record an element update if a recorder callback is set
+    ///
+    /// This is called by diff/stateful when element updates are detected.
+    pub fn record_update(&self, element_id: &str, category: UpdateCategory) {
+        if let Some(ref cb) = *self.recorder_update_callback.read().unwrap() {
+            cb(element_id, category);
+        }
+    }
+
+    /// Check if update recording is enabled
+    pub fn is_recording_updates(&self) -> bool {
+        self.recorder_update_callback.read().unwrap().is_some()
     }
 }
 
