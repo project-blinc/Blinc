@@ -5,10 +5,11 @@ use crate::capture::{
     RecordedEvent, RecordingClock, Timestamp, TimestampedEvent, TreeDiff, TreeSnapshot,
 };
 use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
 /// State of the recording session.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SessionState {
     /// Not recording.
     Idle,
@@ -43,7 +44,7 @@ pub struct RecordingSession {
 }
 
 /// Statistics for a recording session.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SessionStats {
     /// Total events recorded.
     pub total_events: u64,
@@ -252,7 +253,7 @@ impl RecordingSession {
 }
 
 /// Exported recording data for serialization.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RecordingExport {
     pub config: RecordingConfig,
     pub events: Vec<TimestampedEvent>,
@@ -278,6 +279,10 @@ impl SharedRecordingSession {
 
     pub fn is_recording(&self) -> bool {
         self.inner.read().is_recording()
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.inner.read().state() == SessionState::Paused
     }
 
     pub fn start(&self) {

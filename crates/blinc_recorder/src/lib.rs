@@ -26,6 +26,7 @@
 //! ```
 
 pub mod capture;
+pub mod server;
 pub mod session;
 
 pub use capture::{
@@ -33,6 +34,10 @@ pub use capture::{
     Modifiers, MouseButton, MouseEvent, MouseMoveEvent, Point, PropertyChange, Rect,
     RecordedEvent, RecordingClock, ScrollEvent, TextInputEvent, Timestamp, TimestampedEvent,
     TreeDiff, TreeSnapshot, VisualProps, WindowResizeEvent,
+};
+pub use server::{
+    start_local_server, start_local_server_named, DebugServer, DebugServerConfig, ServerHandle,
+    ServerMessage,
 };
 pub use session::{
     RecordingConfig, RecordingExport, RecordingSession, SessionState, SessionStats,
@@ -223,6 +228,91 @@ macro_rules! enable_debug_recording {
         $crate::install_recorder(session.clone());
         session.start();
         session
+    }};
+}
+
+/// Convenience macro for enabling debug server with recording.
+///
+/// This macro:
+/// 1. Creates a recording session with debug configuration
+/// 2. Installs it as the thread-local recorder
+/// 3. Installs hooks into BlincContextState (if available)
+/// 4. Starts a local socket server for debugger connections
+/// 5. Starts recording
+///
+/// In release builds (without debug_assertions), this is a no-op that returns
+/// a minimal recording session without starting a server.
+///
+/// # Example
+///
+/// ```ignore
+/// fn main() {
+///     // Basic usage - uses default app name "blinc_app"
+///     let (session, server) = blinc_recorder::enable_debug_server!();
+///
+///     // Your app code...
+///
+///     // The server will be shut down when `server` is dropped
+/// }
+/// ```
+///
+/// ```ignore
+/// fn main() {
+///     // With custom app name
+///     let (session, server) = blinc_recorder::enable_debug_server!("my_app");
+///
+///     // Your app code...
+/// }
+/// ```
+#[macro_export]
+macro_rules! enable_debug_server {
+    () => {{
+        #[cfg(debug_assertions)]
+        {
+            let session = std::sync::Arc::new($crate::SharedRecordingSession::new(
+                $crate::RecordingConfig::debug(),
+            ));
+            $crate::install_recorder(session.clone());
+            $crate::install_hooks();
+
+            let server_handle = $crate::start_local_server(session.clone())
+                .expect("Failed to start debug server");
+
+            session.start();
+            (session, Some(server_handle))
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            // No-op in release builds
+            let session = std::sync::Arc::new($crate::SharedRecordingSession::new(
+                $crate::RecordingConfig::minimal(),
+            ));
+            (session, None::<$crate::ServerHandle>)
+        }
+    }};
+    ($app_name:expr) => {{
+        #[cfg(debug_assertions)]
+        {
+            let session = std::sync::Arc::new($crate::SharedRecordingSession::new(
+                $crate::RecordingConfig::debug(),
+            ));
+            $crate::install_recorder(session.clone());
+            $crate::install_hooks();
+
+            let server_handle = $crate::start_local_server_named($app_name, session.clone())
+                .expect("Failed to start debug server");
+
+            session.start();
+            (session, Some(server_handle))
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            let _ = $app_name; // Suppress unused warning
+            let session = std::sync::Arc::new($crate::SharedRecordingSession::new(
+                $crate::RecordingConfig::minimal(),
+            ));
+            (session, None::<$crate::ServerHandle>)
+        }
     }};
 }
 
