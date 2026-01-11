@@ -227,6 +227,8 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                             .color(theme.color(ColorToken::TextSecondary)),
                     ),
             )
+            // Bottom dock bar with center scoop
+            .child(bottom_dock_bar(width))
     })
 }
 
@@ -261,16 +263,15 @@ fn stateful_icon_button(
     stateful::<ButtonState>()
         .initial(ButtonState::Idle)
         .on_state(move |ctx| {
-            let theme = ThemeState::get();
             let current_state = dropdown_state.get();
             let is_active = current_state.item == Some(item);
 
             // Background based on state
             let icon_color = match (ctx.state(), is_active) {
                 (ButtonState::Hovered, _) | (ButtonState::Pressed, _) | (_, true) => {
-                    theme.color(ColorToken::SecondaryActive)
+                    Color::WHITE
                 }
-                _ => theme.color(ColorToken::Secondary),
+                _ => Color::WHITE.with_alpha(0.8),
             };
 
             // Scale animation on press
@@ -452,4 +453,37 @@ fn dropdown_content(item: Option<MenuItem>) -> Div {
 
         None => div(),
     }
+}
+
+/// Bottom dock bar with Dynamic Island-style center scoop
+fn bottom_dock_bar(width: f32) -> impl ElementBuilder {
+    let dock_bg = Color::rgba(0.1, 0.1, 0.1, 0.95);
+    let icon_color = Color::rgba(1.0, 1.0, 1.0, 0.8);
+    let scoop_depth = 30.0;
+
+    // Container with bottom margin
+    div().w_full().flex_row().justify_center().child(
+        notch()
+            .center_scoop_top(scoop_depth * 2.0, scoop_depth)
+            .rounded_top(24.0)
+            .bg(dock_bg)
+            .w_fit()
+            .h(50.0 + scoop_depth)
+            // .shadow(Shadow { offset_x: 0.0, offset_y: 1.0, blur:3.0, spread: 3.0, color:Color::BLACK.with_alpha(0.5) }) // Needs shadow support
+            // Padding for scoop is automatically applied by the notch implementation
+            .child(
+                div()
+                    .w_full()
+                    .flex_row()
+                    .items_center()
+                    .justify_center()
+                    .gap(16.0)
+                    .p(6.0)
+                    .child(svg(CLOCK_SVG).square(ICON_SIZE).color(icon_color))
+                    .child(svg(BATTERY_SVG).square(ICON_SIZE).color(icon_color))
+                    .child(svg(WIFI_SVG).square(ICON_SIZE).color(icon_color))
+                    .child(svg(WEATHER_SVG).square(ICON_SIZE).color(icon_color))
+                    .child(svg(MUSIC_SVG).square(ICON_SIZE).color(icon_color)),
+            ),
+    )
 }

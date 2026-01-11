@@ -53,9 +53,7 @@
 
 use std::rc::Rc;
 
-use blinc_core::{
-    Brush, Color, CornerRadius, DrawContext, Gradient, Path, Point, Rect, Shadow, Size,
-};
+use blinc_core::{Brush, Color, CornerRadius, DrawContext, Gradient, Path, Rect, Shadow};
 use taffy::{prelude::*, Overflow};
 
 use crate::canvas::{CanvasBounds, CanvasRenderFn};
@@ -207,6 +205,17 @@ impl CornersConfig {
     }
 }
 
+/// Configuration for a centered scoop/notch on an edge
+///
+/// This creates an inward curve in the center of an edge, like Apple's Dynamic Island.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CenterScoop {
+    /// Width of the scoop
+    pub width: f32,
+    /// Depth of the scoop (how far it curves inward)
+    pub depth: f32,
+}
+
 // =============================================================================
 // Notch Element
 // =============================================================================
@@ -221,6 +230,10 @@ impl CornersConfig {
 pub struct Notch {
     // Corner configuration
     pub(crate) corners: CornersConfig,
+
+    // Center scoop configuration (for Dynamic Island-style centered notches)
+    pub(crate) top_center_scoop: Option<CenterScoop>,
+    pub(crate) bottom_center_scoop: Option<CenterScoop>,
 
     // Layout
     pub(crate) style: Style,
@@ -247,6 +260,8 @@ impl Notch {
     pub fn new() -> Self {
         Self {
             corners: CornersConfig::NONE,
+            top_center_scoop: None,
+            bottom_center_scoop: None,
             style: Style::default(),
             children: Vec::new(),
             background: None,
@@ -506,6 +521,42 @@ impl Notch {
     /// Add step notch to bottom-left corner
     pub fn step_bl(mut self, depth: f32) -> Self {
         self.corners.bottom_left = CornerConfig::step(depth);
+        self
+    }
+
+    // =========================================================================
+    // Center Scoops (Dynamic Island-style)
+    // =========================================================================
+
+    /// Add a center scoop on the top edge
+    ///
+    /// Creates an inward curve in the center of the top edge, like Apple's Dynamic Island.
+    /// The scoop curves INTO the shape (downward), not outward.
+    ///
+    /// ```text
+    ///     ╭─────────╮
+    ///     │ ╲_____╱ │  ← scoop cuts into top
+    ///     │         │
+    ///     ╰─────────╯
+    /// ```
+    pub fn center_scoop_top(mut self, width: f32, depth: f32) -> Self {
+        self.top_center_scoop = Some(CenterScoop { width, depth });
+        self
+    }
+
+    /// Add a center scoop on the bottom edge
+    ///
+    /// Creates an inward curve in the center of the bottom edge.
+    /// The scoop curves INTO the shape (upward), not outward.
+    ///
+    /// ```text
+    ///     ╭─────────╮
+    ///     │         │
+    ///     │ ╱─────╲ │  ← scoop cuts into bottom
+    ///     ╰─────────╯
+    /// ```
+    pub fn center_scoop_bottom(mut self, width: f32, depth: f32) -> Self {
+        self.bottom_center_scoop = Some(CenterScoop { width, depth });
         self
     }
 
@@ -1130,14 +1181,21 @@ impl Default for Notch {
 // Path Building for Complex Notchs
 // =============================================================================
 
-/// Build the path for a shape with configurable corners
+/// Build the path for a shape with configurable corners and center scoops
 ///
-/// This handles convex (standard rounding), concave curves, and step notches.
+/// This handles convex (standard rounding), concave curves, step notches,
+/// and center scoops (Dynamic Island-style centered indentations).
 /// The path is built clockwise starting from the top-left corner.
 ///
 /// For convex corners: the curve stays inside the bounds
 /// For concave corners: the curve bows outward, extending beyond the bounds
-fn build_shape_path(bounds: Rect, corners: &CornersConfig) -> Path {
+/// For center scoops: the curve bows inward, staying inside the bounds
+fn build_shape_path(
+    bounds: Rect,
+    corners: &CornersConfig,
+    top_center_scoop: Option<&CenterScoop>,
+    bottom_center_scoop: Option<&CenterScoop>,
+) -> Path {
     let w = bounds.width();
     let h = bounds.height();
     let x = bounds.x();
@@ -1169,13 +1227,55 @@ fn build_shape_path(bounds: Rect, corners: &CornersConfig) -> Path {
     // Start at the beginning of the top edge
     path = path.move_to(top_start_x, y);
 
-    // Top edge to top-right corner
+    // Top edge - with optional center scoop
     let top_end_x = match tr.style {
         CornerStyle::Concave => x + w + tr_r, // Extends right
         CornerStyle::Convex if tr_r > 0.0 => x + w - tr_r, // Inset
         _ => x + w,
     };
-    path = path.line_to(top_end_x, y);
+
+    // Draw top center scoop if present
+    // The scoop curves DOWN into the shape, creating a visible indent
+    if let Some(scoop) = top_center_scoop {
+        let center_x = x + w / 2.0;
+        let scoop_start_x = center_x - scoop.width / 2.0;
+        let scoop_end_x = center_x + scoop.width / 2.0;
+        let scoop_bottom_y = y + scoop.depth;
+
+        // Cubic bezier control point factor for circular arc approximation
+        // k = 4 * (sqrt(2) - 1) / 3 ≈ 0.5522847498
+        const K: f32 = 0.5522847498;
+        let rx = scoop.width / 2.0; // horizontal radius
+        let ry = scoop.depth; // vertical radius
+
+        // Line to scoop start
+        path = path.line_to(scoop_start_x, y);
+
+        // First quarter arc: from left edge to bottom center
+        path = path.cubic_to(
+            scoop_start_x,
+            y + K * ry, // control 1
+            center_x - K * rx,
+            scoop_bottom_y, // control 2
+            center_x,
+            scoop_bottom_y, // end at bottom center
+        );
+
+        // Second quarter arc: from bottom center to right edge
+        path = path.cubic_to(
+            center_x + K * rx,
+            scoop_bottom_y, // control 1
+            scoop_end_x,
+            y + K * ry, // control 2
+            scoop_end_x,
+            y, // end at right edge
+        );
+
+        // Line to top edge end
+        path = path.line_to(top_end_x, y);
+    } else {
+        path = path.line_to(top_end_x, y);
+    }
 
     // Top-right corner
     match tr.style {
@@ -1222,13 +1322,55 @@ fn build_shape_path(bounds: Rect, corners: &CornersConfig) -> Path {
         _ => {}
     }
 
-    // Bottom edge to bottom-left corner
+    // Bottom edge - with optional center scoop
     let bottom_end_x = match bl.style {
         CornerStyle::Concave => x - bl_r,              // Extends left
         CornerStyle::Convex if bl_r > 0.0 => x + bl_r, // Inset
         _ => x,
     };
-    path = path.line_to(bottom_end_x, y + h);
+
+    // Draw bottom center scoop if present
+    // Path is going from right to left on bottom edge
+    // The scoop curves UP into the shape, creating a visible indent
+    if let Some(scoop) = bottom_center_scoop {
+        let center_x = x + w / 2.0;
+        let scoop_start_x = center_x + scoop.width / 2.0; // Start from right side
+        let scoop_end_x = center_x - scoop.width / 2.0; // End at left side
+        let scoop_top_y = y + h - scoop.depth;
+
+        // Cubic bezier control point factor for circular arc approximation
+        const K: f32 = 0.5522847498;
+        let rx = scoop.width / 2.0;
+        let ry = scoop.depth;
+
+        // Line to scoop start (from right)
+        path = path.line_to(scoop_start_x, y + h);
+
+        // First quarter arc: from right edge to top center (going right to left)
+        path = path.cubic_to(
+            scoop_start_x,
+            y + h - K * ry, // control 1
+            center_x + K * rx,
+            scoop_top_y, // control 2
+            center_x,
+            scoop_top_y, // end at top center
+        );
+
+        // Second quarter arc: from top center to left edge
+        path = path.cubic_to(
+            center_x - K * rx,
+            scoop_top_y, // control 1
+            scoop_end_x,
+            y + h - K * ry, // control 2
+            scoop_end_x,
+            y + h, // end at left edge
+        );
+
+        // Line to bottom edge end
+        path = path.line_to(bottom_end_x, y + h);
+    } else {
+        path = path.line_to(bottom_end_x, y + h);
+    }
 
     // Bottom-left corner
     match bl.style {
@@ -1306,8 +1448,30 @@ impl std::fmt::Debug for NotchRenderData {
 
 impl ElementBuilder for Notch {
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        // Create the layout node
-        let node = tree.create_node(self.style.clone());
+        // Clone style and adjust padding for center scoops
+        // Scoops curve INWARD, so we need to reserve that space for children
+        let mut style = self.style.clone();
+
+        // Add top padding for top center scoop
+        if let Some(scoop) = &self.top_center_scoop {
+            let current_top = match style.padding.top {
+                LengthPercentage::Length(v) => v,
+                LengthPercentage::Percent(_) => 0.0, // Can't add to percentage
+            };
+            style.padding.top = LengthPercentage::Length(current_top + scoop.depth);
+        }
+
+        // Add bottom padding for bottom center scoop
+        if let Some(scoop) = &self.bottom_center_scoop {
+            let current_bottom = match style.padding.bottom {
+                LengthPercentage::Length(v) => v,
+                LengthPercentage::Percent(_) => 0.0, // Can't add to percentage
+            };
+            style.padding.bottom = LengthPercentage::Length(current_bottom + scoop.depth);
+        }
+
+        // Create the layout node with adjusted style
+        let node = tree.create_node(style);
 
         // Build and add children
         for child in &self.children {
@@ -1319,10 +1483,14 @@ impl ElementBuilder for Notch {
     }
 
     fn render_props(&self) -> RenderProps {
-        // If we have concave curves or step corners, we need custom canvas rendering
+        // If we have concave curves, step corners, OR center scoops, we need custom canvas rendering
         // Otherwise, we can use standard div rendering with CornerRadius
-        if self.corners.needs_custom_rendering() {
-            // For shapes with custom corners, we'll set background to None here
+        let has_center_scoop =
+            self.top_center_scoop.is_some() || self.bottom_center_scoop.is_some();
+        let needs_custom = self.corners.needs_custom_rendering() || has_center_scoop;
+
+        if needs_custom {
+            // For shapes with custom corners/scoops, we'll set background to None here
             // and render via canvas. The canvas data is passed separately.
             RenderProps {
                 background: None, // Rendered via canvas
@@ -1360,15 +1528,16 @@ impl ElementBuilder for Notch {
     }
 
     fn element_type_id(&self) -> ElementTypeId {
-        // If we have custom corners, use Canvas type for custom rendering
+        // If we have custom corners OR center scoops, use Canvas type for custom rendering
         // Otherwise, use Div for standard rendering
-        let needs_custom = self.corners.needs_custom_rendering();
-        let type_id = if needs_custom {
+        let has_center_scoop =
+            self.top_center_scoop.is_some() || self.bottom_center_scoop.is_some();
+        let needs_custom = self.corners.needs_custom_rendering() || has_center_scoop;
+        if needs_custom {
             ElementTypeId::Canvas
         } else {
             ElementTypeId::Div
-        };
-        type_id
+        }
     }
 
     fn layout_style(&self) -> Option<&taffy::Style> {
@@ -1376,13 +1545,17 @@ impl ElementBuilder for Notch {
     }
 
     fn canvas_render_info(&self) -> Option<CanvasRenderFn> {
-        // Only provide canvas render if we have custom corners
-        let needs_custom = self.corners.needs_custom_rendering();
+        // Only provide canvas render if we have custom corners or center scoops
+        let has_center_scoop =
+            self.top_center_scoop.is_some() || self.bottom_center_scoop.is_some();
+        let needs_custom = self.corners.needs_custom_rendering() || has_center_scoop;
         if !needs_custom {
             return None;
         }
 
         let corners = self.corners;
+        let top_center_scoop = self.top_center_scoop;
+        let bottom_center_scoop = self.bottom_center_scoop;
         let background = self.background.clone();
         let border_color = self.border_color;
         let border_width = self.border_width;
@@ -1411,18 +1584,20 @@ impl ElementBuilder for Notch {
                     } else {
                         0.0
                     };
-                let top_offset = if corners.top_left.is_concave() || corners.top_right.is_concave()
-                {
-                    tl_r.max(tr_r)
-                } else {
-                    0.0
-                };
+                let top_offset =
+                    if corners.top_left.is_concave() || corners.top_right.is_concave() {
+                        tl_r.max(tr_r)
+                    } else {
+                        0.0
+                    };
                 let bottom_offset =
                     if corners.bottom_left.is_concave() || corners.bottom_right.is_concave() {
                         bl_r.max(br_r)
                     } else {
                         0.0
                     };
+                // NOTE: Center scoops do NOT add to the rect offset like concave corners.
+                // The scoop curves INTO the shape (not outward), so the rect stays at bounds origin.
 
                 // Create the rect with offsets so concave curves stay within bounds
                 let rect = Rect::new(
@@ -1432,8 +1607,13 @@ impl ElementBuilder for Notch {
                     bounds.height - top_offset - bottom_offset,
                 );
 
-                // Build the path for any combination of corner types
-                let path = build_shape_path(rect, &corners);
+                // Build the path for any combination of corner types and center scoops
+                let path = build_shape_path(
+                    rect,
+                    &corners,
+                    top_center_scoop.as_ref(),
+                    bottom_center_scoop.as_ref(),
+                );
 
                 // Find a reasonable radius for shadow approximation
                 let shadow_radius = [
@@ -1449,10 +1629,10 @@ impl ElementBuilder for Notch {
                 .unwrap_or(0.0);
 
                 // Draw shadow first (behind the fill)
-                if let Some(ref shadow) = shadow {
+                if let Some(shadow) = shadow {
                     // For now, use bounding box shadow
                     // TODO: Path-based shadow
-                    ctx.draw_shadow(rect, shadow_radius.into(), shadow.clone());
+                    ctx.draw_shadow(rect, shadow_radius.into(), shadow);
                 }
 
                 // Fill the path (with opacity applied)
