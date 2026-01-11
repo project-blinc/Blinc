@@ -1,0 +1,13 @@
+[package]
+name = "blinc_recorder"
+version = "0.1.0"
+edition = "2021"
+description = "Recording and debugging infrastructure for Blinc applications"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+blinc_core = { path = "../blinc_core" }
+parking_lot = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]

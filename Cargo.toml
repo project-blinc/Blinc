@@ -11,6 +11,7 @@ members = [
     "crates/blinc_macros",
     "crates/blinc_paint",
     "crates/blinc_platform",
+    "crates/blinc_recorder",
     "crates/blinc_text",
     "crates/blinc_svg",
     "crates/blinc_theme",

@@ -256,6 +256,24 @@ pub type MotionStateCallback = Arc<dyn Fn(&str) -> MotionAnimationState + Send +
 /// Callback for canceling a motion's exit animation
 pub type MotionCancelExitCallback = Arc<dyn Fn(&str) + Send + Sync>;
 
+// =========================================================================
+// Recorder Callbacks (for blinc_recorder integration)
+// =========================================================================
+
+/// Type-erased recorded event for recorder callbacks
+/// This avoids circular dependencies by using a boxed Any type
+pub type RecordedEventAny = Box<dyn Any + Send>;
+
+/// Callback for recording events (mouse, keyboard, scroll, etc.)
+/// Events are passed as type-erased Any to avoid circular dependencies
+pub type RecorderEventCallback = Arc<dyn Fn(RecordedEventAny) + Send + Sync>;
+
+/// Type-erased tree snapshot for recorder callbacks
+pub type TreeSnapshotAny = Box<dyn Any + Send>;
+
+/// Callback for capturing tree snapshots after each frame
+pub type RecorderSnapshotCallback = Arc<dyn Fn(TreeSnapshotAny) + Send + Sync>;
+
 /// Type-erased element registry storage
 /// This allows blinc_core to store the registry without depending on blinc_layout
 pub type AnyElementRegistry = Arc<dyn Any + Send + Sync>;
@@ -298,6 +316,14 @@ pub struct BlincContextState {
     motion_state_callback: RwLock<Option<MotionStateCallback>>,
     /// Callback for canceling a motion's exit animation
     motion_cancel_exit_callback: RwLock<Option<MotionCancelExitCallback>>,
+
+    // =========================================================================
+    // Recorder Callbacks (for blinc_recorder integration)
+    // =========================================================================
+    /// Callback for recording events
+    recorder_event_callback: RwLock<Option<RecorderEventCallback>>,
+    /// Callback for capturing tree snapshots
+    recorder_snapshot_callback: RwLock<Option<RecorderSnapshotCallback>>,
 }
 
 impl BlincContextState {
@@ -321,6 +347,8 @@ impl BlincContextState {
             element_registry: RwLock::new(None),
             motion_state_callback: RwLock::new(None),
             motion_cancel_exit_callback: RwLock::new(None),
+            recorder_event_callback: RwLock::new(None),
+            recorder_snapshot_callback: RwLock::new(None),
         };
 
         if CONTEXT_STATE.set(state).is_err() {
@@ -349,6 +377,8 @@ impl BlincContextState {
             element_registry: RwLock::new(None),
             motion_state_callback: RwLock::new(None),
             motion_cancel_exit_callback: RwLock::new(None),
+            recorder_event_callback: RwLock::new(None),
+            recorder_snapshot_callback: RwLock::new(None),
         };
 
         if CONTEXT_STATE.set(state).is_err() {
@@ -714,6 +744,64 @@ impl BlincContextState {
         if let Some(ref cb) = *self.motion_cancel_exit_callback.read().unwrap() {
             cb(key);
         }
+    }
+
+    // =========================================================================
+    // Recorder Integration (for blinc_recorder)
+    // =========================================================================
+
+    /// Set the recorder event callback
+    ///
+    /// Called by `blinc_recorder` to capture user interaction events.
+    /// Events are passed as type-erased `RecordedEventAny` to avoid circular dependencies.
+    pub fn set_recorder_event_callback(&self, callback: RecorderEventCallback) {
+        *self.recorder_event_callback.write().unwrap() = Some(callback);
+    }
+
+    /// Clear the recorder event callback
+    pub fn clear_recorder_event_callback(&self) {
+        *self.recorder_event_callback.write().unwrap() = None;
+    }
+
+    /// Record an event if a recorder callback is set
+    ///
+    /// This is called by EventRouter and other event sources to record user interactions.
+    pub fn record_event(&self, event: RecordedEventAny) {
+        if let Some(ref cb) = *self.recorder_event_callback.read().unwrap() {
+            cb(event);
+        }
+    }
+
+    /// Check if event recording is enabled
+    pub fn is_recording_events(&self) -> bool {
+        self.recorder_event_callback.read().unwrap().is_some()
+    }
+
+    /// Set the recorder snapshot callback
+    ///
+    /// Called by `blinc_recorder` to capture tree snapshots after each frame.
+    /// Snapshots are passed as type-erased `TreeSnapshotAny` to avoid circular dependencies.
+    pub fn set_recorder_snapshot_callback(&self, callback: RecorderSnapshotCallback) {
+        *self.recorder_snapshot_callback.write().unwrap() = Some(callback);
+    }
+
+    /// Clear the recorder snapshot callback
+    pub fn clear_recorder_snapshot_callback(&self) {
+        *self.recorder_snapshot_callback.write().unwrap() = None;
+    }
+
+    /// Record a tree snapshot if a recorder callback is set
+    ///
+    /// This is called by RenderTree after each frame to capture the element tree state.
+    pub fn record_snapshot(&self, snapshot: TreeSnapshotAny) {
+        if let Some(ref cb) = *self.recorder_snapshot_callback.read().unwrap() {
+            cb(snapshot);
+        }
+    }
+
+    /// Check if snapshot recording is enabled
+    pub fn is_recording_snapshots(&self) -> bool {
+        self.recorder_snapshot_callback.read().unwrap().is_some()
     }
 }
 
