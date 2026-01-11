@@ -10,6 +10,8 @@ crate-type = ["lib"]
 
 [features]
 default = []
+# Enable recorder integration for debugging/testing. Disable for production builds.
+recorder = []
 
 [dependencies]
 blinc_core = { path = "../blinc_core" }

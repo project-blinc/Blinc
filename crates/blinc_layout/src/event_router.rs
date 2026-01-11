@@ -41,6 +41,9 @@ use crate::element::ElementBounds;
 use crate::renderer::RenderTree;
 use crate::tree::LayoutNodeId;
 
+#[cfg(feature = "recorder")]
+use crate::recorder_bridge::{self, RecorderEventData, RecorderMouseButton};
+
 /// Mouse button identifier (matches platform)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MouseButton {
@@ -289,20 +292,22 @@ impl EventRouter {
         node: Option<LayoutNodeId>,
         ancestors: Vec<LayoutNodeId>,
     ) {
+        let old_focused = self.focused;
+
         // Send BLUR to old focused element AND bubble to its ancestors
-        if let Some(old_focused) = self.focused {
-            if Some(old_focused) != node {
+        if let Some(old) = old_focused {
+            if Some(old) != node {
                 tracing::debug!(
                     "EventRouter: sending BLUR to old_focused {:?}, new focus will be {:?}",
-                    old_focused,
+                    old,
                     node
                 );
                 // Use the stored focused_ancestors for bubbling BLUR
                 let old_ancestors = std::mem::take(&mut self.focused_ancestors);
-                self.emit_event(old_focused, event_types::BLUR);
+                self.emit_event(old, event_types::BLUR);
                 // Bubble BLUR to ancestors (container elements with blur handlers)
                 for ancestor in old_ancestors {
-                    if ancestor != old_focused {
+                    if ancestor != old {
                         self.emit_event(ancestor, event_types::BLUR);
                     }
                 }
@@ -321,6 +326,15 @@ impl EventRouter {
             if self.focused != Some(new_focused) {
                 self.emit_event(new_focused, event_types::FOCUS);
             }
+        }
+
+        // Record focus change event if focus actually changed (only if recording is enabled)
+        #[cfg(feature = "recorder")]
+        if old_focused != node && recorder_bridge::is_recording() {
+            recorder_bridge::record_event(RecorderEventData::FocusChange {
+                from: old_focused.map(|n| format!("{:?}", n)),
+                to: node.map(|n| format!("{:?}", n)),
+            });
         }
 
         self.focused = node;
@@ -423,6 +437,16 @@ impl EventRouter {
         for node in left {
             self.emit_event(node, event_types::POINTER_LEAVE);
             events.push((node, event_types::POINTER_LEAVE));
+
+            // Record hover leave event (only if recording is enabled)
+            #[cfg(feature = "recorder")]
+            if recorder_bridge::is_recording() {
+                recorder_bridge::record_event(RecorderEventData::HoverLeave {
+                    element_id: format!("{:?}", node),
+                    x,
+                    y,
+                });
+            }
         }
 
         // Elements that are newly hovered -> POINTER_ENTER
@@ -430,12 +454,33 @@ impl EventRouter {
         for node in entered {
             self.emit_event(node, event_types::POINTER_ENTER);
             events.push((node, event_types::POINTER_ENTER));
+
+            // Record hover enter event (only if recording is enabled)
+            #[cfg(feature = "recorder")]
+            if recorder_bridge::is_recording() {
+                recorder_bridge::record_event(RecorderEventData::HoverEnter {
+                    element_id: format!("{:?}", node),
+                    x,
+                    y,
+                });
+            }
         }
 
         // All currently hovered elements get POINTER_MOVE
         for node in &current_hovered {
             self.emit_event(*node, event_types::POINTER_MOVE);
             events.push((*node, event_types::POINTER_MOVE));
+        }
+
+        // Record mouse move event (only if recording is enabled)
+        #[cfg(feature = "recorder")]
+        if recorder_bridge::is_recording() {
+            let hover_element = hits.last().map(|h| format!("{:?}", h.node));
+            recorder_bridge::record_event(RecorderEventData::MouseMove {
+                x,
+                y,
+                hover_element,
+            });
         }
 
         self.hovered = current_hovered;
@@ -541,6 +586,17 @@ impl EventRouter {
             // Store ancestor bounds for proper bounds lookup during event bubbling
             self.last_hit_ancestor_bounds = hit.ancestor_bounds.clone();
 
+            // Record mouse down event (only if recording is enabled)
+            #[cfg(feature = "recorder")]
+            if recorder_bridge::is_recording() {
+                recorder_bridge::record_event(RecorderEventData::MouseDown {
+                    x,
+                    y,
+                    button: RecorderMouseButton::from(_button),
+                    target_element: Some(format!("{:?}", hit.node)),
+                });
+            }
+
             // Set focus to the clicked element WITH its ancestors (for BLUR bubbling later)
             self.set_focus_with_ancestors(Some(hit.node), hit.ancestors.clone());
 
@@ -598,6 +654,27 @@ impl EventRouter {
             if was_dragging {
                 self.emit_event(target, event_types::DRAG_END);
                 events.push((target, event_types::DRAG_END));
+            }
+
+            // Record mouse up event (only if recording is enabled)
+            #[cfg(feature = "recorder")]
+            if recorder_bridge::is_recording() {
+                recorder_bridge::record_event(RecorderEventData::MouseUp {
+                    x,
+                    y,
+                    button: RecorderMouseButton::from(_button),
+                    target_element: Some(format!("{:?}", target)),
+                });
+
+                // If not dragging, also record a click event
+                if !was_dragging {
+                    recorder_bridge::record_event(RecorderEventData::Click {
+                        x,
+                        y,
+                        button: RecorderMouseButton::from(_button),
+                        target_element: Some(format!("{:?}", target)),
+                    });
+                }
             }
 
             // Emit to the target first
@@ -687,8 +764,17 @@ impl EventRouter {
     /// Handle key press
     ///
     /// Emits KEY_DOWN to the focused element.
-    pub fn on_key_down(&mut self, _key_code: u32) -> Option<(LayoutNodeId, u32)> {
+    pub fn on_key_down(&mut self, key_code: u32) -> Option<(LayoutNodeId, u32)> {
         if let Some(focused) = self.focused {
+            // Record key down event (only if recording is enabled)
+            #[cfg(feature = "recorder")]
+            if recorder_bridge::is_recording() {
+                recorder_bridge::record_event(RecorderEventData::KeyDown {
+                    key_code,
+                    focused_element: Some(format!("{:?}", focused)),
+                });
+            }
+
             self.emit_event(focused, event_types::KEY_DOWN);
             Some((focused, event_types::KEY_DOWN))
         } else {
@@ -699,8 +785,17 @@ impl EventRouter {
     /// Handle key release
     ///
     /// Emits KEY_UP to the focused element.
-    pub fn on_key_up(&mut self, _key_code: u32) -> Option<(LayoutNodeId, u32)> {
+    pub fn on_key_up(&mut self, key_code: u32) -> Option<(LayoutNodeId, u32)> {
         if let Some(focused) = self.focused {
+            // Record key up event (only if recording is enabled)
+            #[cfg(feature = "recorder")]
+            if recorder_bridge::is_recording() {
+                recorder_bridge::record_event(RecorderEventData::KeyUp {
+                    key_code,
+                    focused_element: Some(format!("{:?}", focused)),
+                });
+            }
+
             self.emit_event(focused, event_types::KEY_UP);
             Some((focused, event_types::KEY_UP))
         } else {
@@ -712,8 +807,17 @@ impl EventRouter {
     ///
     /// Emits TEXT_INPUT to the focused element.
     /// Returns the focused node if there is one.
-    pub fn on_text_input(&mut self, _char: char) -> Option<(LayoutNodeId, u32)> {
+    pub fn on_text_input(&mut self, ch: char) -> Option<(LayoutNodeId, u32)> {
         if let Some(focused) = self.focused {
+            // Record text input event (only if recording is enabled)
+            #[cfg(feature = "recorder")]
+            if recorder_bridge::is_recording() {
+                recorder_bridge::record_event(RecorderEventData::TextInput {
+                    text: ch.to_string(),
+                    focused_element: Some(format!("{:?}", focused)),
+                });
+            }
+
             self.emit_event(focused, event_types::TEXT_INPUT);
             Some((focused, event_types::TEXT_INPUT))
         } else {
@@ -745,6 +849,18 @@ impl EventRouter {
         let mut events = Vec::new();
 
         if let Some(hit) = self.hit_test(tree, self.mouse_x, self.mouse_y) {
+            // Record scroll event (only if recording is enabled)
+            #[cfg(feature = "recorder")]
+            if recorder_bridge::is_recording() {
+                recorder_bridge::record_event(RecorderEventData::Scroll {
+                    x: self.mouse_x,
+                    y: self.mouse_y,
+                    delta_x,
+                    delta_y,
+                    target_element: Some(format!("{:?}", hit.node)),
+                });
+            }
+
             // Emit to the hit node first
             self.emit_event(hit.node, event_types::SCROLL);
             events.push((hit.node, event_types::SCROLL));

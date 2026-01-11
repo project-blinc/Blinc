@@ -71,6 +71,10 @@ pub mod selector;
 // Global overlay state singleton
 pub mod overlay_state;
 
+// Recorder bridge for event capture (blinc_recorder integration)
+#[cfg(feature = "recorder")]
+pub mod recorder_bridge;
+
 // CSS subset parser for ElementStyle
 pub mod css_parser;
 
