@@ -311,256 +311,254 @@ impl TreeViewBuilder {
         let diff_removed = theme.color(ColorToken::Error);
         let diff_modified = theme.color(ColorToken::Warning);
 
-        let inner = Stateful::with_shared_state(container_state)
-            .deps(&all_signal_ids)
-            .on_state(move |_state: &(), container: &mut Div| {
-                let mut tree_container = div().flex_col().flex_shrink_0();
+        let inner =
+            Stateful::with_shared_state(container_state)
+                .deps(&all_signal_ids)
+                .on_state(move |_state: &(), container: &mut Div| {
+                    let mut tree_container = div().flex_col().flex_shrink_0();
 
-                // Build tree recursively
-                fn build_node(
-                    node: &TreeNodeConfig,
-                    depth: usize,
-                    indent_size: f32,
-                    show_guides: bool,
-                    expand_states: &[(String, State<bool>, SharedAnimatedValue)],
-                    selected: &State<Option<String>>,
-                    on_select: &Option<SelectCallback>,
-                    text_primary: Color,
-                    text_secondary: Color,
-                    text_tertiary: Color,
-                    _surface_hover: Color,
-                    primary: Color,
-                    radius: f32,
-                    diff_added: Color,
-                    diff_removed: Color,
-                    diff_modified: Color,
-                ) -> Div {
-                    let has_children = !node.children.is_empty();
-                    let indent = depth as f32 * indent_size;
+                    // Build tree recursively
+                    fn build_node(
+                        node: &TreeNodeConfig,
+                        depth: usize,
+                        indent_size: f32,
+                        show_guides: bool,
+                        expand_states: &[(String, State<bool>, SharedAnimatedValue)],
+                        selected: &State<Option<String>>,
+                        on_select: &Option<SelectCallback>,
+                        text_primary: Color,
+                        text_secondary: Color,
+                        text_tertiary: Color,
+                        _surface_hover: Color,
+                        primary: Color,
+                        radius: f32,
+                        diff_added: Color,
+                        diff_removed: Color,
+                        diff_modified: Color,
+                    ) -> Div {
+                        let has_children = !node.children.is_empty();
+                        let indent = depth as f32 * indent_size;
 
-                    // Find this node's expand state
-                    let expand_state = expand_states
-                        .iter()
-                        .find(|(k, _, _)| k == &node.key)
-                        .map(|(_, s, a)| (s.clone(), a.clone()));
+                        // Find this node's expand state
+                        let expand_state = expand_states
+                            .iter()
+                            .find(|(k, _, _)| k == &node.key)
+                            .map(|(_, s, a)| (s.clone(), a.clone()));
 
-                    let is_expanded = expand_state.as_ref().map(|(s, _)| s.get()).unwrap_or(false);
+                        let is_expanded =
+                            expand_state.as_ref().map(|(s, _)| s.get()).unwrap_or(false);
 
-                    let is_selected = selected.get().as_ref() == Some(&node.key);
+                        let is_selected = selected.get().as_ref() == Some(&node.key);
 
-                    // Diff-based coloring
-                    let label_color = match node.diff {
-                        TreeNodeDiff::None => {
-                            if is_selected {
-                                primary
-                            } else {
-                                text_primary
+                        // Diff-based coloring
+                        let label_color = match node.diff {
+                            TreeNodeDiff::None => {
+                                if is_selected {
+                                    primary
+                                } else {
+                                    text_primary
+                                }
                             }
-                        }
-                        TreeNodeDiff::Added => diff_added,
-                        TreeNodeDiff::Removed => diff_removed,
-                        TreeNodeDiff::Modified => diff_modified,
-                    };
-
-                    // Background for selected/hover
-                    let bg = if is_selected {
-                        primary.with_alpha(0.15)
-                    } else {
-                        Color::TRANSPARENT
-                    };
-
-                    // Build the node row
-                    let node_key = node.key.clone();
-                    let selected_for_click = selected.clone();
-                    let on_select_for_click = on_select.clone();
-
-                    // Expand/collapse handler
-                    let expand_state_for_row = expand_state.clone();
-
-                    let mut row = div()
-                        .flex_row()
-                        .items_center()
-                        .flex_shrink_0()
-                        .h(28.0)
-                        .pl(indent + 1.0)
-                        .pr(2.0)
-                        .rounded(radius)
-                        .bg(bg)
-                        .cursor(CursorStyle::Pointer)
-                        .on_click(move |_| {
-                            // Update selection
-                            selected_for_click.set(Some(node_key.clone()));
-
-                            // Call callback
-                            if let Some(cb) = &on_select_for_click {
-                                cb(&node_key);
-                            }
-
-                            // Also toggle expand if has children
-                            if let Some((state, anim)) = &expand_state_for_row {
-                                let new_expanded = !state.get();
-                                state.set(new_expanded);
-                                let target = if new_expanded { 1.0 } else { 0.0 };
-                                anim.lock().unwrap().set_target(target);
-                            }
-                        });
-
-                    // Expand/collapse chevron (if has children)
-                    if has_children {
-                        let chevron = if is_expanded {
-                            CHEVRON_DOWN_SVG
-                        } else {
-                            CHEVRON_RIGHT_SVG
+                            TreeNodeDiff::Added => diff_added,
+                            TreeNodeDiff::Removed => diff_removed,
+                            TreeNodeDiff::Modified => diff_modified,
                         };
 
-                        row = row.child(
-                            div()
-                                .w(16.0)
-                                .h(16.0)
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .mr(1.0)
-                                .flex_shrink_0()
-                                .child(svg(chevron).size(16.0, 16.0).color(text_secondary)),
-                        );
-                    } else {
-                        // Spacer for alignment (matches chevron container width)
-                        row = row.child(div().w(5.0).h(4.0).flex_shrink_0());
-                    }
+                        // Background for selected/hover
+                        let bg = if is_selected {
+                            primary.with_alpha(0.15)
+                        } else {
+                            Color::TRANSPARENT
+                        };
 
-                    // Diff indicator icon (+/-/~)
-                    match node.diff {
-                        TreeNodeDiff::Added => {
-                            row = row.child(
-                                div()
-                                    .mr(1.0)
-                                    .flex_shrink_0()
-                                    .child(text("+").size(13.0).color(diff_added).no_wrap()),
-                            );
-                        }
-                        TreeNodeDiff::Removed => {
-                            row = row.child(
-                                div()
-                                    .mr(1.0)
-                                    .flex_shrink_0()
-                                    .child(text("−").size(13.0).color(diff_removed).no_wrap()),
-                            );
-                        }
-                        TreeNodeDiff::Modified => {
-                            row = row.child(
-                                div()
-                                    .mr(1.0)
-                                    .flex_shrink_0()
-                                    .child(text("~").size(13.0).color(diff_modified).no_wrap()),
-                            );
-                        }
-                        TreeNodeDiff::None => {}
-                    }
+                        // Build the node row
+                        let node_key = node.key.clone();
+                        let selected_for_click = selected.clone();
+                        let on_select_for_click = on_select.clone();
 
-                    // Optional custom icon
-                    if let Some(icon_svg) = &node.icon {
-                        row = row.child(
-                            div()
-                                .w(3.5)
-                                .h(3.5)
-                                .mr(1.5)
-                                .flex_shrink_0()
-                                .child(svg(icon_svg).size(14.0, 14.0).color(text_secondary)),
-                        );
-                    }
+                        // Expand/collapse handler
+                        let expand_state_for_row = expand_state.clone();
 
-                    // Label
-                    row = row.child(
-                        text(&node.label)
-                            .size(13.0)
-                            .color(label_color)
-                            .no_wrap()
-                            .pointer_events_none(),
-                    );
-
-                    // Build node container with optional children
-                    let mut node_div = div().flex_col().flex_shrink_0().child(row);
-
-                    // Children (if expanded)
-                    if has_children && is_expanded {
-                        let anim_key = format!("tree-children-{}", node.key);
-
-                        let mut children_container = div()
-                            .flex_col()
+                        let mut row = div()
+                            .flex_row()
+                            .items_center()
                             .flex_shrink_0()
-                            .relative()
-                            .overflow_clip()
-                            .animate_bounds(
-                                blinc_layout::visual_animation::VisualAnimationConfig::height()
-                                    .with_key(&anim_key)
-                                    .clip_to_animated()
-                                    .gentle(),
-                            );
+                            .h(28.0)
+                            .pl(indent + 1.0)
+                            .pr(2.0)
+                            .rounded(radius)
+                            .bg(bg)
+                            .cursor(CursorStyle::Pointer)
+                            .on_click(move |_| {
+                                // Update selection
+                                selected_for_click.set(Some(node_key.clone()));
 
-                        // Optional guide line - positioned at center of this node's chevron
-                        if show_guides {
-                            children_container = children_container.child(
+                                // Call callback
+                                if let Some(cb) = &on_select_for_click {
+                                    cb(&node_key);
+                                }
+
+                                // Also toggle expand if has children
+                                if let Some((state, anim)) = &expand_state_for_row {
+                                    let new_expanded = !state.get();
+                                    state.set(new_expanded);
+                                    let target = if new_expanded { 1.0 } else { 0.0 };
+                                    anim.lock().unwrap().set_target(target);
+                                }
+                            });
+
+                        // Expand/collapse chevron (if has children)
+                        if has_children {
+                            let chevron = if is_expanded {
+                                CHEVRON_DOWN_SVG
+                            } else {
+                                CHEVRON_RIGHT_SVG
+                            };
+
+                            row = row.child(
                                 div()
-                                    .absolute()
-                                    .left((indent * 4.0) + 12.0)
-                                    .top(0.0)
-                                    .bottom(0.0)
-                                    .w(1.0)
-                                    .bg(text_tertiary.with_alpha(0.5)),
+                                    .w(16.0)
+                                    .h(16.0)
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .mr(1.0)
+                                    .flex_shrink_0()
+                                    .child(svg(chevron).size(16.0, 16.0).color(text_secondary)),
                             );
+                        } else {
+                            // Spacer for alignment (matches chevron container width)
+                            row = row.child(div().w(5.0).h(4.0).flex_shrink_0());
                         }
 
-                        for child in &node.children {
-                            children_container = children_container.child(build_node(
-                                child,
-                                depth + 1,
-                                indent_size,
-                                show_guides,
-                                expand_states,
-                                selected,
-                                on_select,
-                                text_primary,
-                                text_secondary,
-                                text_tertiary,
-                                _surface_hover,
-                                primary,
-                                radius,
-                                diff_added,
-                                diff_removed,
-                                diff_modified,
-                            ));
+                        // Diff indicator icon (+/-/~)
+                        match node.diff {
+                            TreeNodeDiff::Added => {
+                                row = row.child(
+                                    div()
+                                        .mr(1.0)
+                                        .flex_shrink_0()
+                                        .child(text("+").size(13.0).color(diff_added).no_wrap()),
+                                );
+                            }
+                            TreeNodeDiff::Removed => {
+                                row = row.child(
+                                    div()
+                                        .mr(1.0)
+                                        .flex_shrink_0()
+                                        .child(text("−").size(13.0).color(diff_removed).no_wrap()),
+                                );
+                            }
+                            TreeNodeDiff::Modified => {
+                                row =
+                                    row.child(div().mr(1.0).flex_shrink_0().child(
+                                        text("~").size(13.0).color(diff_modified).no_wrap(),
+                                    ));
+                            }
+                            TreeNodeDiff::None => {}
                         }
 
-                        node_div = node_div.child(children_container);
+                        // Optional custom icon
+                        if let Some(icon_svg) = &node.icon {
+                            row =
+                                row.child(
+                                    div().w(3.5).h(3.5).mr(1.5).flex_shrink_0().child(
+                                        svg(icon_svg).size(14.0, 14.0).color(text_secondary),
+                                    ),
+                                );
+                        }
+
+                        // Label
+                        row = row.child(
+                            text(&node.label)
+                                .size(13.0)
+                                .color(label_color)
+                                .no_wrap()
+                                .pointer_events_none(),
+                        );
+
+                        // Build node container with optional children
+                        let mut node_div = div().flex_col().flex_shrink_0().child(row);
+
+                        // Children (if expanded)
+                        if has_children && is_expanded {
+                            let anim_key = format!("tree-children-{}", node.key);
+
+                            let mut children_container = div()
+                                .flex_col()
+                                .flex_shrink_0()
+                                .relative()
+                                .overflow_clip()
+                                .animate_bounds(
+                                    blinc_layout::visual_animation::VisualAnimationConfig::height()
+                                        .with_key(&anim_key)
+                                        .clip_to_animated()
+                                        .gentle(),
+                                );
+
+                            // Optional guide line - positioned at center of this node's chevron
+                            if show_guides {
+                                children_container = children_container.child(
+                                    div()
+                                        .absolute()
+                                        .left((indent * 4.0) + 12.0)
+                                        .top(0.0)
+                                        .bottom(0.0)
+                                        .w(1.0)
+                                        .bg(text_tertiary.with_alpha(0.5)),
+                                );
+                            }
+
+                            for child in &node.children {
+                                children_container = children_container.child(build_node(
+                                    child,
+                                    depth + 1,
+                                    indent_size,
+                                    show_guides,
+                                    expand_states,
+                                    selected,
+                                    on_select,
+                                    text_primary,
+                                    text_secondary,
+                                    text_tertiary,
+                                    _surface_hover,
+                                    primary,
+                                    radius,
+                                    diff_added,
+                                    diff_removed,
+                                    diff_modified,
+                                ));
+                            }
+
+                            node_div = node_div.child(children_container);
+                        }
+
+                        node_div
                     }
 
-                    node_div
-                }
+                    for node in &nodes {
+                        tree_container = tree_container.child(build_node(
+                            node,
+                            0,
+                            indent_size,
+                            show_guides,
+                            &expand_states,
+                            &selected,
+                            &on_select,
+                            text_primary,
+                            text_secondary,
+                            text_tertiary,
+                            surface_hover,
+                            primary,
+                            radius,
+                            diff_added,
+                            diff_removed,
+                            diff_modified,
+                        ));
+                    }
 
-                for node in &nodes {
-                    tree_container = tree_container.child(build_node(
-                        node,
-                        0,
-                        indent_size,
-                        show_guides,
-                        &expand_states,
-                        &selected,
-                        &on_select,
-                        text_primary,
-                        text_secondary,
-                        text_tertiary,
-                        surface_hover,
-                        primary,
-                        radius,
-                        diff_added,
-                        diff_removed,
-                        diff_modified,
-                    ));
-                }
-
-                container.merge(tree_container);
-            });
+                    container.merge(tree_container);
+                });
 
         TreeView { inner }
     }
