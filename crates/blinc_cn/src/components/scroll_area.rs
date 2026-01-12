@@ -162,6 +162,12 @@ impl BuiltScrollArea {
         let viewport_size =
             ctx.use_state_keyed(&format!("{}_viewport_size", instance_key), || 400.0f32);
 
+        // State for thumb dragging
+        let is_dragging = ctx.use_state_keyed(&format!("{}_dragging", instance_key), || false);
+        let drag_start_y = ctx.use_state_keyed(&format!("{}_drag_start_y", instance_key), || 0.0f32);
+        let drag_start_scroll =
+            ctx.use_state_keyed(&format!("{}_drag_start_scroll", instance_key), || 0.0f32);
+
         // Create opacity animation for auto-dismiss (persisted via context)
         let opacity_anim: SharedAnimatedValue = Arc::new(Mutex::new(AnimatedValue::new(
             scheduler,
@@ -221,7 +227,17 @@ impl BuiltScrollArea {
             let max_thumb_travel = viewport - thumb_height - 8.0;
             let thumb_offset = scroll_progress * max_thumb_travel + 4.0;
 
-            // Build scrollbar thumb
+            // Clone states for drag handlers
+            let scroll_pos_for_down = scroll_position.clone();
+            let drag_start_y_for_down = drag_start_y.clone();
+            let drag_start_scroll_for_down = drag_start_scroll.clone();
+            let is_dragging_for_drag = is_dragging.clone();
+            let drag_start_y_for_drag = drag_start_y.clone();
+            let drag_start_scroll_for_drag = drag_start_scroll.clone();
+            let scroll_pos_for_drag = scroll_position.clone();
+            let is_dragging_for_end = is_dragging.clone();
+
+            // Build scrollbar thumb with drag handlers
             let thumb = div()
                 .absolute()
                 .right(2.0)
@@ -229,7 +245,32 @@ impl BuiltScrollArea {
                 .w(bar_width)
                 .h(thumb_height)
                 .rounded(bar_width / 2.0)
-                .bg(thumb_color);
+                .bg(thumb_color)
+                .cursor(CursorStyle::Grab)
+                .on_mouse_down(move |event| {
+                    drag_start_y_for_down.set(event.mouse_y);
+                    drag_start_scroll_for_down.set(scroll_pos_for_down.get());
+                })
+                .on_drag(move |event| {
+                    is_dragging_for_drag.set(true);
+                    let start_y = drag_start_y_for_drag.get();
+                    let delta_y = event.mouse_y - start_y;
+
+                    // Convert thumb drag to scroll position
+                    // thumb_delta / max_thumb_travel = scroll_delta / scroll_range
+                    let scroll_delta = if max_thumb_travel > 0.0 {
+                        (delta_y / max_thumb_travel) * scroll_range
+                    } else {
+                        0.0
+                    };
+
+                    let start_scroll = drag_start_scroll_for_drag.get();
+                    let new_scroll = (start_scroll - scroll_delta).clamp(-scroll_range, 0.0);
+                    scroll_pos_for_drag.set(new_scroll);
+                })
+                .on_drag_end(move |_| {
+                    is_dragging_for_end.set(false);
+                });
 
             // Build scrollbar track
             let track = div()
@@ -275,6 +316,12 @@ impl BuiltScrollArea {
             let is_scrolling_for_render = is_scrolling.clone();
             let opacity_anim_for_render = opacity_anim.clone();
 
+            // Clone drag states for the closure
+            let is_dragging_for_render = is_dragging.clone();
+            let drag_start_y_for_render = drag_start_y.clone();
+            let drag_start_scroll_for_render = drag_start_scroll.clone();
+            let scroll_position_for_drag = scroll_position.clone();
+
             let inner = stateful_with_key::<NoState>(&stateful_key)
                 .deps([
                     is_hovered_for_deps.signal_id(),
@@ -312,7 +359,17 @@ impl BuiltScrollArea {
                     let max_thumb_travel = viewport - thumb_height - 8.0;
                     let thumb_offset = scroll_progress * max_thumb_travel + 4.0;
 
-                    // Build scrollbar thumb
+                    // Clone drag states for thumb handlers
+                    let scroll_pos_for_down = scroll_position_for_drag.clone();
+                    let drag_start_y_for_down = drag_start_y_for_render.clone();
+                    let drag_start_scroll_for_down = drag_start_scroll_for_render.clone();
+                    let is_dragging_for_drag = is_dragging_for_render.clone();
+                    let drag_start_y_for_drag = drag_start_y_for_render.clone();
+                    let drag_start_scroll_for_drag = drag_start_scroll_for_render.clone();
+                    let scroll_pos_for_drag = scroll_position_for_drag.clone();
+                    let is_dragging_for_end = is_dragging_for_render.clone();
+
+                    // Build scrollbar thumb with drag handlers
                     let thumb = div()
                         .absolute()
                         .right(2.0)
@@ -320,7 +377,31 @@ impl BuiltScrollArea {
                         .w(bar_width)
                         .h(thumb_height)
                         .rounded(bar_width / 2.0)
-                        .bg(thumb_color);
+                        .bg(thumb_color)
+                        .cursor(CursorStyle::Grab)
+                        .on_mouse_down(move |event| {
+                            drag_start_y_for_down.set(event.mouse_y);
+                            drag_start_scroll_for_down.set(scroll_pos_for_down.get());
+                        })
+                        .on_drag(move |event| {
+                            is_dragging_for_drag.set(true);
+                            let start_y = drag_start_y_for_drag.get();
+                            let delta_y = event.mouse_y - start_y;
+
+                            // Convert thumb drag to scroll position
+                            let scroll_delta = if max_thumb_travel > 0.0 {
+                                (delta_y / max_thumb_travel) * scroll_range
+                            } else {
+                                0.0
+                            };
+
+                            let start_scroll = drag_start_scroll_for_drag.get();
+                            let new_scroll = (start_scroll - scroll_delta).clamp(-scroll_range, 0.0);
+                            scroll_pos_for_drag.set(new_scroll);
+                        })
+                        .on_drag_end(move |_| {
+                            is_dragging_for_end.set(false);
+                        });
 
                     // Build scrollbar track
                     let track = div()
