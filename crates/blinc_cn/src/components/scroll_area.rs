@@ -46,6 +46,7 @@ use blinc_core::{BlincContextState, Color};
 use blinc_layout::element::RenderProps;
 use blinc_layout::motion::motion;
 use blinc_layout::prelude::*;
+use blinc_layout::stateful::{stateful_with_key, NoState};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::scroll::{scroll, ScrollDirection};
 use blinc_layout::InstanceKey;
@@ -129,7 +130,7 @@ impl Default for ScrollAreaConfig {
 
 /// Built scroll area with inner element
 struct BuiltScrollArea {
-    inner: Div,
+    inner: Box<dyn ElementBuilder>,
 }
 
 impl BuiltScrollArea {
@@ -161,44 +162,16 @@ impl BuiltScrollArea {
         let viewport_size =
             ctx.use_state_keyed(&format!("{}_viewport_size", instance_key), || 400.0f32);
 
-        // Create opacity animation for auto-dismiss
+        // Create opacity animation for auto-dismiss (persisted via context)
         let opacity_anim: SharedAnimatedValue = Arc::new(Mutex::new(AnimatedValue::new(
             scheduler,
-            0.0,
+            if config.visibility == ScrollbarVisibility::Always {
+                1.0
+            } else {
+                0.0
+            },
             SpringConfig::gentle(),
         )));
-
-        // Determine if scrollbar should be visible
-        let should_show = match config.visibility {
-            ScrollbarVisibility::Always => true,
-            ScrollbarVisibility::Hover => is_hovered.get(),
-            ScrollbarVisibility::Auto => is_scrolling.get() || is_hovered.get(),
-            ScrollbarVisibility::Never => false,
-        };
-
-        // Update opacity animation target
-        {
-            let mut anim = opacity_anim.lock().unwrap();
-            anim.set_target(if should_show { 1.0 } else { 0.0 });
-        }
-
-        // Calculate thumb size and position
-        // Thumb height is proportional to viewport/content ratio
-        let viewport = viewport_size.get();
-        let content = content_size.get().max(viewport); // Prevent division by zero
-        let scroll_ratio = viewport / content;
-        let thumb_height = (scroll_ratio * viewport).max(30.0).min(viewport - 8.0);
-
-        // Thumb position based on scroll offset
-        let scroll_range = content - viewport;
-        let scroll_offset = scroll_position.get().abs();
-        let scroll_progress = if scroll_range > 0.0 {
-            (scroll_offset / scroll_range).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
-        let max_thumb_travel = viewport - thumb_height - 8.0; // 4px padding top and bottom
-        let thumb_offset = scroll_progress * max_thumb_travel + 4.0;
 
         // Get viewport dimensions
         let viewport_width = config.width.unwrap_or(300.0);
@@ -223,67 +196,185 @@ impl BuiltScrollArea {
         });
 
         // Add content if present - note: content is added via .child() on the builder
-        // The scroll container will receive content through the child method
         let _ = &config.content; // Acknowledge content field
-
-        // Build scrollbar thumb
-        let thumb = div()
-            .absolute()
-            .right(2.0)
-            .top(thumb_offset)
-            .w(bar_width)
-            .h(thumb_height)
-            .rounded(bar_width / 2.0)
-            .bg(thumb_color);
-
-        // Build scrollbar track
-        let track = div()
-            .absolute()
-            .right(0.0)
-            .top(0.0)
-            .bottom(0.0)
-            .w(bar_width + 4.0)
-            .bg(track_color)
-            .rounded(bar_width / 2.0)
-            .child(thumb);
-
-        // Wrap track with opacity animation
-        let animated_track = motion().opacity(opacity_anim).child(track);
 
         // Clone states for hover handlers
         let is_hovered_enter = is_hovered.clone();
         let is_hovered_leave = is_hovered.clone();
 
-        // Build the final container
         let visibility = config.visibility;
 
-        let mut container = div()
-            .w(viewport_width)
-            .h(viewport_height)
-            .relative()
-            .overflow_clip()
-            .on_hover_enter(move |_| {
-                is_hovered_enter.set(true);
-            })
-            .on_hover_leave(move |_| {
-                is_hovered_leave.set(false);
-            });
+        // For Always/Never modes, no need for reactive updates
+        if visibility == ScrollbarVisibility::Always || visibility == ScrollbarVisibility::Never {
+            // Calculate thumb size and position (static)
+            let viewport = viewport_size.get();
+            let content = content_size.get().max(viewport);
+            let scroll_ratio = viewport / content;
+            let thumb_height = (scroll_ratio * viewport).max(30.0).min(viewport - 8.0);
+            let scroll_range = content - viewport;
+            let scroll_offset = scroll_position.get().abs();
+            let scroll_progress = if scroll_range > 0.0 {
+                (scroll_offset / scroll_range).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let max_thumb_travel = viewport - thumb_height - 8.0;
+            let thumb_offset = scroll_progress * max_thumb_travel + 4.0;
 
-        // Add scroll container
-        container = container.child(scroll_container);
+            // Build scrollbar thumb
+            let thumb = div()
+                .absolute()
+                .right(2.0)
+                .top(thumb_offset)
+                .w(bar_width)
+                .h(thumb_height)
+                .rounded(bar_width / 2.0)
+                .bg(thumb_color);
 
-        // Add scrollbar overlay if not hidden
-        if visibility != ScrollbarVisibility::Never {
-            container = container.child(animated_track);
+            // Build scrollbar track
+            let track = div()
+                .absolute()
+                .right(0.0)
+                .top(0.0)
+                .bottom(0.0)
+                .w(bar_width + 4.0)
+                .bg(track_color)
+                .rounded(bar_width / 2.0)
+                .child(thumb);
+
+            let mut container = div()
+                .w(viewport_width)
+                .h(viewport_height)
+                .relative()
+                .overflow_clip()
+                .child(scroll_container);
+
+            if visibility == ScrollbarVisibility::Always {
+                container = container.child(track);
+            }
+
+            Self {
+                inner: Box::new(container),
+            }
+        } else {
+            // For Hover/Auto modes, use stateful to react to state changes
+            let stateful_key = format!("{}_stateful", instance_key);
+
+            // Extract values from config BEFORE the closure (to avoid capturing non-Send types)
+            let direction = config.direction;
+            let bounce = config.bounce;
+
+            // Clone everything needed for the render closure
+            let is_hovered_for_deps = is_hovered.clone();
+            let is_scrolling_for_deps = is_scrolling.clone();
+            let scroll_position_for_deps = scroll_position.clone();
+            let viewport_size_for_render = viewport_size.clone();
+            let content_size_for_render = content_size.clone();
+            let scroll_position_for_render = scroll_position.clone();
+            let is_hovered_for_render = is_hovered.clone();
+            let is_scrolling_for_render = is_scrolling.clone();
+            let opacity_anim_for_render = opacity_anim.clone();
+
+            let inner = stateful_with_key::<NoState>(&stateful_key)
+                .deps([
+                    is_hovered_for_deps.signal_id(),
+                    is_scrolling_for_deps.signal_id(),
+                    scroll_position_for_deps.signal_id(),
+                ])
+                .on_state(move |_| {
+                    // Determine if scrollbar should be visible
+                    let should_show = match visibility {
+                        ScrollbarVisibility::Hover => is_hovered_for_render.get(),
+                        ScrollbarVisibility::Auto => {
+                            is_scrolling_for_render.get() || is_hovered_for_render.get()
+                        }
+                        _ => false,
+                    };
+
+                    // Update opacity animation target
+                    {
+                        let mut anim = opacity_anim_for_render.lock().unwrap();
+                        anim.set_target(if should_show { 1.0 } else { 0.0 });
+                    }
+
+                    // Calculate thumb size and position
+                    let viewport = viewport_size_for_render.get();
+                    let content = content_size_for_render.get().max(viewport);
+                    let scroll_ratio = viewport / content;
+                    let thumb_height = (scroll_ratio * viewport).max(30.0).min(viewport - 8.0);
+                    let scroll_range = content - viewport;
+                    let scroll_offset = scroll_position_for_render.get().abs();
+                    let scroll_progress = if scroll_range > 0.0 {
+                        (scroll_offset / scroll_range).clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    };
+                    let max_thumb_travel = viewport - thumb_height - 8.0;
+                    let thumb_offset = scroll_progress * max_thumb_travel + 4.0;
+
+                    // Build scrollbar thumb
+                    let thumb = div()
+                        .absolute()
+                        .right(2.0)
+                        .top(thumb_offset)
+                        .w(bar_width)
+                        .h(thumb_height)
+                        .rounded(bar_width / 2.0)
+                        .bg(thumb_color);
+
+                    // Build scrollbar track
+                    let track = div()
+                        .absolute()
+                        .right(0.0)
+                        .top(0.0)
+                        .bottom(0.0)
+                        .w(bar_width + 4.0)
+                        .bg(track_color)
+                        .rounded(bar_width / 2.0)
+                        .child(thumb);
+
+                    // Wrap track with opacity animation
+                    let animated_track =
+                        motion().opacity(opacity_anim_for_render.clone()).child(track);
+
+                    // Build container with scroll and animated scrollbar
+                    div()
+                        .w(viewport_width)
+                        .h(viewport_height)
+                        .relative()
+                        .overflow_clip()
+                        .on_hover_enter({
+                            let is_hovered = is_hovered_enter.clone();
+                            move |_| {
+                                is_hovered.set(true);
+                            }
+                        })
+                        .on_hover_leave({
+                            let is_hovered = is_hovered_leave.clone();
+                            move |_| {
+                                is_hovered.set(false);
+                            }
+                        })
+                        .child(
+                            scroll()
+                                .w(viewport_width)
+                                .h(viewport_height)
+                                .direction(direction)
+                                .bounce(bounce),
+                        )
+                        .child(animated_track)
+                });
+
+            Self {
+                inner: Box::new(inner),
+            }
         }
-
-        Self { inner: container }
     }
 }
 
 /// Scroll Area component with customizable scrollbar
 pub struct ScrollArea {
-    inner: Div,
+    inner: Box<dyn ElementBuilder>,
 }
 
 impl ElementBuilder for ScrollArea {
@@ -321,7 +412,9 @@ impl ScrollAreaBuilder {
     fn get_or_build(&self) -> &ScrollArea {
         self.built.get_or_init(|| {
             let built = BuiltScrollArea::from_config(&self.config, &self.key);
-            ScrollArea { inner: built.inner }
+            ScrollArea {
+                inner: built.inner,
+            }
         })
     }
 
@@ -412,7 +505,9 @@ impl ScrollAreaBuilder {
     /// Build the final ScrollArea component
     pub fn build_final(self) -> ScrollArea {
         let built = BuiltScrollArea::from_config(&self.config, &self.key);
-        ScrollArea { inner: built.inner }
+        ScrollArea {
+            inner: built.inner,
+        }
     }
 }
 
