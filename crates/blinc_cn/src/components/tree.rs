@@ -171,7 +171,7 @@ impl TreeViewBuilder {
             nodes: Vec::new(),
             selected_key: None,
             on_select: None,
-            indent_size: 16.0,
+            indent_size: 4.0,
             show_guides: false,
             built: OnceCell::new(),
         }
@@ -382,8 +382,8 @@ impl TreeViewBuilder {
                         .items_center()
                         .flex_shrink_0()
                         .h(28.0)
-                        .pl(indent + 4.0)
-                        .pr(8.0)
+                        .pl(indent + 1.0)
+                        .pr(2.0)
                         .rounded(radius)
                         .bg(bg)
                         .cursor(CursorStyle::Pointer)
@@ -420,7 +420,7 @@ impl TreeViewBuilder {
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .mr(4.0)
+                                .mr(1.0)
                                 .flex_shrink_0()
                                 .child(svg(chevron).size(12.0, 12.0).color(text_secondary)),
                         );
@@ -435,7 +435,7 @@ impl TreeViewBuilder {
                             div()
                                 .w(14.0)
                                 .h(14.0)
-                                .mr(6.0)
+                                .mr(1.5)
                                 .flex_shrink_0()
                                 .child(svg(icon_svg).size(14.0, 14.0).color(text_secondary)),
                         );
