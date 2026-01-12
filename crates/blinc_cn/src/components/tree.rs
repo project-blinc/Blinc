@@ -307,9 +307,9 @@ impl TreeViewBuilder {
         let radius = theme.radius(RadiusToken::Sm);
 
         // Diff colors
-        let diff_added = Color::from_hex(0x22C55E);
-        let diff_removed = Color::from_hex(0xEF4444);
-        let diff_modified = Color::from_hex(0xFBBF24);
+        let diff_added = theme.color(ColorToken::Success);
+        let diff_removed = theme.color(ColorToken::Error);
+        let diff_modified = theme.color(ColorToken::Warning);
 
         let inner = Stateful::with_shared_state(container_state)
             .deps(&all_signal_ids)
@@ -415,14 +415,14 @@ impl TreeViewBuilder {
 
                         row = row.child(
                             div()
-                                .w(4.0)
-                                .h(4.0)
+                                .w(16.0)
+                                .h(16.0)
                                 .flex()
                                 .items_center()
                                 .justify_center()
                                 .mr(1.0)
                                 .flex_shrink_0()
-                                .child(svg(chevron).size(12.0, 12.0).color(text_secondary)),
+                                .child(svg(chevron).size(16.0, 16.0).color(text_secondary)),
                         );
                     } else {
                         // Spacer for alignment (matches chevron container width)
@@ -486,25 +486,28 @@ impl TreeViewBuilder {
                     if has_children && is_expanded {
                         let anim_key = format!("tree-children-{}", node.key);
 
-                        let mut children_container =
-                            div().flex_col().flex_shrink_0().overflow_clip().animate_bounds(
+                        let mut children_container = div()
+                            .flex_col()
+                            .flex_shrink_0()
+                            .relative()
+                            .overflow_clip()
+                            .animate_bounds(
                                 blinc_layout::visual_animation::VisualAnimationConfig::height()
                                     .with_key(&anim_key)
                                     .clip_to_animated()
                                     .gentle(),
                             );
 
-                        // Optional guide line - positioned at center of parent's chevron
-                        // Chevron starts at pl(indent + 1.0) and is 4 units wide (16px), center at +2
+                        // Optional guide line - positioned at center of this node's chevron
                         if show_guides {
                             children_container = children_container.child(
                                 div()
                                     .absolute()
-                                    .left(indent + 3.0)
+                                    .left((indent * 4.0) + 12.0)
                                     .top(0.0)
                                     .bottom(0.0)
-                                    .w(0.25)
-                                    .bg(text_tertiary.with_alpha(0.3)),
+                                    .w(1.0)
+                                    .bg(text_tertiary.with_alpha(0.5)),
                             );
                         }
 

@@ -2826,7 +2826,7 @@ fn tree_view_section() -> impl ElementBuilder {
                             .h_full()
                             .both_directions()
                             .w(250.0)
-                            .p(8.0)
+                            .p(4.0)
                             .bg(theme.color(ColorToken::Surface))
                             .border(1.0, theme.color(ColorToken::Border))
                             .rounded(8.0)
@@ -2850,46 +2850,46 @@ fn tree_view_section() -> impl ElementBuilder {
             )
             .child(
                 // Diff tree (for debugger)
-                scroll().w_full().h_full().both_directions().child(
-                    div()
-                        .flex_col()
-                        .gap(8.0)
-                        .child(
-                            text("Element Tree with Diff")
-                                .size(12.0)
-                                .color(text_secondary),
-                        )
-                        .child(
-                            div()
-                                .w(250.0)
-                                .p(8.0)
-                                .bg(theme.color(ColorToken::Surface))
-                                .border(1.0, theme.color(ColorToken::Border))
-                                .rounded(8.0)
-                                .child(
-                                    cn::tree_view()
-                                        .node("root", "Window", |n| {
-                                            n.expanded().child("container", "Container", |n| {
-                                                n.expanded()
-                                                    .child("header", "Header", |n| n)
-                                                    .child("content", "Content", |n| {
-                                                        n.expanded()
-                                                            .child("button", "Button", |n| {
-                                                                n.diff(TreeNodeDiff::Modified)
-                                                            })
-                                                            .child("new_div", "NewDiv", |n| {
-                                                                n.diff(TreeNodeDiff::Added)
-                                                            })
-                                                    })
-                                                    .child("old_footer", "OldFooter", |n| {
-                                                        n.diff(TreeNodeDiff::Removed)
-                                                    })
-                                            })
+                div()
+                    .flex_col()
+                    .gap(8.0)
+                    .child(
+                        text("Element Tree with Diff")
+                            .size(12.0)
+                            .color(text_secondary),
+                    )
+                    .child(
+                        scroll()
+                            .h_full()
+                            .both_directions()
+                            .w(250.0)
+                            .p(4.0)
+                            .bg(theme.color(ColorToken::Surface))
+                            .border(1.0, theme.color(ColorToken::Border))
+                            .rounded(8.0)
+                            .child(
+                                cn::tree_view()
+                                    .node("root", "Window", |n| {
+                                        n.expanded().child("container", "Container", |n| {
+                                            n.expanded()
+                                                .child("header", "Header", |n| n)
+                                                .child("content", "Content", |n| {
+                                                    n.expanded()
+                                                        .child("button", "Button", |n| {
+                                                            n.diff(TreeNodeDiff::Modified)
+                                                        })
+                                                        .child("new_div", "NewDiv", |n| {
+                                                            n.diff(TreeNodeDiff::Added)
+                                                        })
+                                                })
+                                                .child("old_footer", "OldFooter", |n| {
+                                                    n.diff(TreeNodeDiff::Removed)
+                                                })
                                         })
-                                        .with_guides(),
-                                ),
-                        ),
-                ),
+                                    })
+                                    .with_guides(),
+                            ),
+                    ),
             ),
     )
 }
