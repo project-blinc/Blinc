@@ -314,7 +314,7 @@ impl TreeViewBuilder {
         let inner = Stateful::with_shared_state(container_state)
             .deps(&all_signal_ids)
             .on_state(move |_state: &(), container: &mut Div| {
-                let mut tree_container = div().flex_col().w_full();
+                let mut tree_container = div().flex_col().w_full().flex_shrink_0();
 
                 // Build tree recursively
                 fn build_node(
@@ -381,6 +381,7 @@ impl TreeViewBuilder {
                         .flex_row()
                         .items_center()
                         .w_full()
+                        .flex_shrink_0()
                         .h(28.0)
                         .pl(indent + 4.0)
                         .pr(8.0)
@@ -417,14 +418,16 @@ impl TreeViewBuilder {
                             div()
                                 .w(16.0)
                                 .h(16.0)
+                                .flex()
                                 .items_center()
                                 .justify_center()
-                                .mr(1.0)
+                                .mr(4.0)
+                                .flex_shrink_0()
                                 .child(svg(chevron).size(12.0, 12.0).color(text_secondary)),
                         );
                     } else {
                         // Spacer for alignment
-                        row = row.child(div().w(20.0).h(16.0));
+                        row = row.child(div().w(20.0).h(16.0).flex_shrink_0());
                     }
 
                     // Optional custom icon
@@ -433,7 +436,8 @@ impl TreeViewBuilder {
                             div()
                                 .w(14.0)
                                 .h(14.0)
-                                .mr(1.5)
+                                .mr(6.0)
+                                .flex_shrink_0()
                                 .child(svg(icon_svg).size(14.0, 14.0).color(text_secondary)),
                         );
                     }
@@ -443,18 +447,19 @@ impl TreeViewBuilder {
                         text(&node.label)
                             .size(13.0)
                             .color(label_color)
+                            .no_wrap()
                             .pointer_events_none(),
                     );
 
                     // Build node container with optional children
-                    let mut node_div = div().flex_col().w_full().child(row);
+                    let mut node_div = div().flex_col().w_full().flex_shrink_0().child(row);
 
                     // Children (if expanded)
                     if has_children && is_expanded {
                         let anim_key = format!("tree-children-{}", node.key);
 
                         let mut children_container =
-                            div().flex_col().w_full().overflow_clip().animate_bounds(
+                            div().flex_col().w_full().flex_shrink_0().overflow_clip().animate_bounds(
                                 blinc_layout::visual_animation::VisualAnimationConfig::height()
                                     .with_key(&anim_key)
                                     .clip_to_animated()
