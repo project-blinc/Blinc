@@ -91,6 +91,11 @@ pub mod cn {
     };
     pub use crate::components::tooltip::tooltip;
     pub use crate::components::tree::tree_view;
+    // Typography helpers (label excluded - use cn::label component instead)
+    pub use crate::components::typography::{
+        b, caption, chained_text, h1, h2, h3, h4, h5, h6, heading, inline_code, muted, p, small,
+        span, strong,
+    };
 }
 
 /// Prelude for convenient imports
@@ -188,6 +193,11 @@ pub mod prelude {
     };
     pub use crate::components::tree::{
         tree_view, TreeNodeConfig, TreeNodeDiff, TreeView, TreeViewBuilder,
+    };
+    // Typography helpers (label excluded - use Label component instead)
+    pub use crate::components::typography::{
+        b, caption, chained_text, h1, h2, h3, h4, h5, h6, heading, inline_code, muted, p, small,
+        span, strong,
     };
     pub use blinc_layout::stateful::ButtonState;
     // Re-export State for checkbox/switch/radio usage

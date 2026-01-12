@@ -45,6 +45,7 @@ pub mod textarea;
 pub mod toast;
 pub mod tooltip;
 pub mod tree;
+pub mod typography;
 pub mod resizable;
 
 // Re-export all components
@@ -114,4 +115,9 @@ pub use tree::{tree_view, TreeNodeConfig, TreeNodeDiff, TreeView, TreeViewBuilde
 pub use resizable::{
     resizable_group, resizable_panel, ResizableGroup, ResizableGroupBuilder, ResizablePanelBuilder,
     ResizeDirection,
+};
+// Typography helpers (label excluded - use Label component instead)
+pub use typography::{
+    b, caption, chained_text, h1, h2, h3, h4, h5, h6, heading, inline_code, muted, p, small, span,
+    strong,
 };

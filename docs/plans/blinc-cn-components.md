@@ -115,10 +115,10 @@ Layout helpers.
 
 Text components.
 
-| Component | Primitives Used | Status |
-|-----------|-----------------|--------|
-| **Typography** | text, rich_text | Planned |
-| **Kbd** | div, text | ✅ Done |
+| Component      | Primitives Used | Status  |
+|----------------|-----------------|---------|
+| **Typography** | text, rich_text | ✅ Done |
+| **Kbd**        | div, text       | ✅ Done |
 
 ### 9. Icons (Priority: High)
 
@@ -126,7 +126,7 @@ Icon system with Lucide icons. See [blinc-icons-implementation.md](./blinc-icons
 
 | Component | Primitives Used | Status  |
 |-----------|-----------------|---------|
-| **Icon**  | svg             | Planned |
+| **Icon**  | svg             | ✅ Done |
 
 ## Icon System
 
