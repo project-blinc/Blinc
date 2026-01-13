@@ -39,8 +39,8 @@ use blinc_platform_android::AndroidAssetLoader;
 use crate::app::BlincApp;
 use crate::error::{BlincError, Result};
 use crate::windowed::{
-    RefDirtyFlag, SharedAnimationScheduler, SharedElementRegistry, SharedReadyCallbacks,
-    SharedReactiveGraph, WindowedContext,
+    RefDirtyFlag, SharedAnimationScheduler, SharedElementRegistry, SharedReactiveGraph,
+    SharedReadyCallbacks, WindowedContext,
 };
 
 /// Android application runner
@@ -288,9 +288,8 @@ impl AndroidApp {
                                             .set_viewport_size(logical_width, logical_height);
 
                                         // Initialize render state
-                                        let mut rs = blinc_layout::RenderState::new(Arc::clone(
-                                            &animations,
-                                        ));
+                                        let mut rs =
+                                            blinc_layout::RenderState::new(Arc::clone(&animations));
                                         rs.set_shared_motion_states(Arc::clone(
                                             &shared_motion_states,
                                         ));
@@ -323,8 +322,11 @@ impl AndroidApp {
                                 let height = window.height() as u32;
                                 tracing::info!("Window resized: {}x{}", width, height);
 
-                                if let (Some(ref app_instance), Some(ref surf), Some(ref mut config)) =
-                                    (&blinc_app, &surface, &mut surface_config)
+                                if let (
+                                    Some(ref app_instance),
+                                    Some(ref surf),
+                                    Some(ref mut config),
+                                ) = (&blinc_app, &surface, &mut surface_config)
                                 {
                                     if width > 0 && height > 0 {
                                         config.width = width;
@@ -333,8 +335,7 @@ impl AndroidApp {
 
                                         if let Some(ref mut windowed_ctx) = ctx {
                                             let scale_factor = windowed_ctx.scale_factor;
-                                            windowed_ctx.width =
-                                                width as f32 / scale_factor as f32;
+                                            windowed_ctx.width = width as f32 / scale_factor as f32;
                                             windowed_ctx.height =
                                                 height as f32 / scale_factor as f32;
 
@@ -440,7 +441,8 @@ impl AndroidApp {
                     let element = ui_builder(windowed_ctx);
 
                     // Create or update render tree
-                    let tree = render_tree.get_or_insert_with(|| RenderTree::from_element(&element));
+                    let tree =
+                        render_tree.get_or_insert_with(|| RenderTree::from_element(&element));
                     tree.rebuild(&element);
                     tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
 
@@ -549,8 +551,13 @@ impl AndroidApp {
         text_ctx.preload_fonts(&["Roboto", "Noto Sans", "Droid Sans"]);
         text_ctx.preload_generic_styles(blinc_gpu::GenericFont::SansSerif, &[400, 700], false);
 
-        let ctx =
-            crate::context::RenderContext::new(renderer, text_ctx, device, queue, config.sample_count);
+        let ctx = crate::context::RenderContext::new(
+            renderer,
+            text_ctx,
+            device,
+            queue,
+            config.sample_count,
+        );
         let app = BlincApp::from_context(ctx, config);
 
         Ok((app, surface))

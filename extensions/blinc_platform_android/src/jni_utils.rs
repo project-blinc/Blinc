@@ -62,7 +62,12 @@ fn get_density_from_activity(
 ) -> Result<f64, jni::errors::Error> {
     // Get Resources: activity.getResources()
     let resources = env
-        .call_method(activity, "getResources", "()Landroid/content/res/Resources;", &[])?
+        .call_method(
+            activity,
+            "getResources",
+            "()Landroid/content/res/Resources;",
+            &[],
+        )?
         .l()?;
 
     // Get DisplayMetrics: resources.getDisplayMetrics()
@@ -123,7 +128,12 @@ fn get_dpi_from_activity(
     activity: &jni::objects::JObject,
 ) -> Result<i32, jni::errors::Error> {
     let resources = env
-        .call_method(activity, "getResources", "()Landroid/content/res/Resources;", &[])?
+        .call_method(
+            activity,
+            "getResources",
+            "()Landroid/content/res/Resources;",
+            &[],
+        )?
         .l()?;
 
     let display_metrics = env
@@ -182,7 +192,12 @@ fn check_dark_mode(
 ) -> Result<bool, jni::errors::Error> {
     // Get Resources
     let resources = env
-        .call_method(activity, "getResources", "()Landroid/content/res/Resources;", &[])?
+        .call_method(
+            activity,
+            "getResources",
+            "()Landroid/content/res/Resources;",
+            &[],
+        )?
         .l()?;
 
     // Get Configuration: resources.getConfiguration()

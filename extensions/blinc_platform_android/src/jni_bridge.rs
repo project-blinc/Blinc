@@ -100,7 +100,12 @@ struct BlincHandle {
 
 #[cfg(target_os = "android")]
 impl BlincHandle {
-    fn new(width: u32, height: u32, scale_factor: f64, native_window_ptr: *mut std::ffi::c_void) -> Self {
+    fn new(
+        width: u32,
+        height: u32,
+        scale_factor: f64,
+        native_window_ptr: *mut std::ffi::c_void,
+    ) -> Self {
         Self {
             width,
             height,
@@ -386,7 +391,10 @@ fn get_native_window_from_surface(
 
     // Get the native window using NDK function
     let native_window = unsafe {
-        ANativeWindow_fromSurface(env.get_raw() as *mut std::ffi::c_void, surface_ptr as *mut _)
+        ANativeWindow_fromSurface(
+            env.get_raw() as *mut std::ffi::c_void,
+            surface_ptr as *mut _,
+        )
     };
 
     if native_window.is_null() {
