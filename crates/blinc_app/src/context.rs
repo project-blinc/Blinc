@@ -128,6 +128,8 @@ struct ImageElement {
     placeholder_type: u8,
     /// Placeholder color [r, g, b, a]
     placeholder_color: [f32; 4],
+    /// Z-layer index for interleaved rendering with primitives
+    z_index: u32,
 }
 
 /// SVG element data for rendering
@@ -1701,6 +1703,7 @@ impl RenderContext {
                         loading_strategy: image_data.loading_strategy,
                         placeholder_type: image_data.placeholder_type,
                         placeholder_color: image_data.placeholder_color,
+                        z_index: *z_layer,
                     });
                 }
                 // Canvas elements are rendered inline during tree traversal (in render_layer)
@@ -2222,6 +2225,15 @@ impl RenderContext {
 
             if max_layer > 0 && !has_layer_effects {
                 // Interleaved z-layer rendering for proper Stack z-ordering
+                // Group images by z_index for interleaved rendering
+                let mut images_by_layer: std::collections::BTreeMap<u32, Vec<&ImageElement>> =
+                    std::collections::BTreeMap::new();
+                for img in &images {
+                    images_by_layer.entry(img.z_index).or_default().push(img);
+                }
+                let max_image_z = images_by_layer.keys().cloned().max().unwrap_or(0);
+                let max_layer = max_layer.max(max_image_z);
+
                 // First pass: render z_layer=0 primitives with clear
                 let z0_primitives = batch.primitives_for_layer(0);
                 // Create a temporary batch for z=0 (include paths - they don't have z-layer support)
@@ -2237,15 +2249,12 @@ impl RenderContext {
                         .render_paths_overlay_msaa(target, &z0_batch, self.sample_count);
                 }
 
-                // Render z=0 text and decorations
-                if let Some(glyphs) = glyphs_by_layer.get(&0) {
-                    if !glyphs.is_empty() {
-                        self.render_text(target, glyphs);
-                    }
+                // Render z=0 images
+                if let Some(z0_images) = images_by_layer.get(&0) {
+                    self.render_images_ref(target, z0_images);
                 }
-                self.render_text_decorations_for_layer(target, &decorations_by_layer, 0);
 
-                // Render subsequent layers interleaved
+                // Render subsequent layers interleaved (primitives and images)
                 for z in 1..=max_layer {
                     // Render primitives for this layer
                     let layer_primitives = batch.primitives_for_layer(z);
@@ -2254,15 +2263,10 @@ impl RenderContext {
                             .render_primitives_overlay(target, &layer_primitives);
                     }
 
-                    // Render text for this layer
-                    if let Some(glyphs) = glyphs_by_layer.get(&z) {
-                        if !glyphs.is_empty() {
-                            self.render_text(target, glyphs);
-                        }
+                    // Render images for this layer
+                    if let Some(layer_images) = images_by_layer.get(&z) {
+                        self.render_images_ref(target, layer_images);
                     }
-
-                    // Render text decorations for this layer
-                    self.render_text_decorations_for_layer(target, &decorations_by_layer, z);
                 }
 
                 // Render SVGs as rasterized images for high-quality anti-aliasing
@@ -2270,8 +2274,21 @@ impl RenderContext {
                     self.render_rasterized_svgs(target, &svgs, scale_factor);
                 }
 
-                // Images render on top (existing behavior)
-                self.render_images(target, &images, width as f32, height as f32);
+                // Render foreground primitives on top (for .foreground() elements)
+                if !batch.foreground_primitives.is_empty() {
+                    self.renderer
+                        .render_primitives_overlay(target, &batch.foreground_primitives);
+                }
+
+                // Render text on top (all z-layers)
+                for z in 0..=max_layer {
+                    if let Some(glyphs) = glyphs_by_layer.get(&z) {
+                        if !glyphs.is_empty() {
+                            self.render_text(target, glyphs);
+                        }
+                    }
+                    self.render_text_decorations_for_layer(target, &decorations_by_layer, z);
+                }
             } else {
                 // No z-layers, use original fast path
                 self.renderer
@@ -2284,6 +2301,12 @@ impl RenderContext {
                 }
 
                 self.render_images(target, &images, width as f32, height as f32);
+
+                // Render foreground primitives on top of images (for .foreground() elements)
+                if !batch.foreground_primitives.is_empty() {
+                    self.renderer
+                        .render_primitives_overlay(target, &batch.foreground_primitives);
+                }
 
                 // Render SVGs as rasterized images for high-quality anti-aliasing
                 if !svgs.is_empty() {
@@ -2483,6 +2506,12 @@ impl RenderContext {
 
         // Images render on top
         self.render_images(target, &images, width as f32, height as f32);
+
+        // Render foreground primitives on top of images (for .foreground() elements)
+        if !batch.foreground_primitives.is_empty() {
+            self.renderer
+                .render_primitives_overlay(target, &batch.foreground_primitives);
+        }
 
         // Poll the device to free completed command buffers
         self.renderer.poll();

@@ -268,13 +268,12 @@ impl BuiltAvatar {
             let border_color = theme.color(ColorToken::Background);
 
             // Status indicator positioned at bottom-right of the circular avatar
-            // // Use foreground() to ensure it renders AFTER background-layer images
             let status_indicator = div()
                 .w(status_size)
                 .h(status_size)
                 .rounded_full()
                 .bg(status_color)
-                // .border(2.0, border_color)
+                // .border(1.0, border_color)
                 .shadow_sm()
                 .absolute()
                 .bottom(status_offset)

@@ -58,24 +58,113 @@ fn build_ui(_ctx: &WindowedContext) -> impl ElementBuilder {
                 .flex_row()
                 .gap(16.0)
                 .child(test_case_5(image_path))
-                .child(test_case_6(image_path)),
+                .child(test_case_6(image_path))
+                .child(test_border_no_image()),
+        )
+}
+
+/// Test: Border without image - verify border works in general
+fn test_border_no_image() -> impl ElementBuilder {
+    div()
+        .flex_col()
+        .gap(4.0)
+        .child(text("7: Border test (small circles)").size(14.0).color(Color::WHITE))
+        .child(
+            div()
+                .flex_row()
+                .gap(8.0)
+                .items_end()
+                // Tiny 6px circle - like avatar status indicator
+                // Normal (no foreground)
+                .child(
+                    div()
+                        .w(6.0)
+                        .h(6.0)
+                        .bg(Color::GREEN)
+                        .border(1.0, Color::WHITE)
+                        .rounded(3.0),
+                )
+                // Tiny 6px - .foreground()
+                .child(
+                    div()
+                        .w(6.0)
+                        .h(6.0)
+                        .bg(Color::GREEN)
+                        .border(1.0, Color::WHITE)
+                        .rounded(3.0)
+                        .foreground(),
+                )
+                // 10px circle - medium size
+                .child(
+                    div()
+                        .w(10.0)
+                        .h(10.0)
+                        .bg(Color::GREEN)
+                        .border(1.0, Color::WHITE)
+                        .rounded(5.0),
+                )
+                // 10px - .foreground()
+                .child(
+                    div()
+                        .w(10.0)
+                        .h(10.0)
+                        .bg(Color::GREEN)
+                        .border(1.0, Color::WHITE)
+                        .rounded(5.0)
+                        .foreground(),
+                )
+                // 30px circle - larger
+                .child(
+                    div()
+                        .w(30.0)
+                        .h(30.0)
+                        .bg(Color::GREEN)
+                        .border(2.0, Color::WHITE)
+                        .rounded(15.0),
+                )
+                // 30px - .foreground()
+                .child(
+                    div()
+                        .w(30.0)
+                        .h(30.0)
+                        .bg(Color::GREEN)
+                        .border(2.0, Color::WHITE)
+                        .rounded(15.0)
+                        .foreground(),
+                ),
+        )
+        .child(
+            text("Pairs: 6px, 10px, 30px - normal vs .foreground()")
+                .size(11.0)
+                .color(Color::rgba(1.0, 1.0, 1.0, 0.6)),
         )
 }
 
 /// Test 1: Image with border on parent container
+/// Parent is larger than image to leave room for border
 fn test_case_1(src: &str) -> impl ElementBuilder {
     div()
         .flex_col()
         .gap(4.0)
         .child(text("1: Border on parent").size(14.0).color(Color::WHITE))
         .child(
+            // Parent 108x108 = 100x100 image + 4px border on each side
             div()
-                .w(100.0)
-                .h(100.0)
+                .w(108.0)
+                .h(108.0)
                 .border(4.0, Color::RED)
-                .rounded(8.0)
+                .rounded(12.0)
                 .overflow_clip()
-                .child(img(src).size(100.0, 100.0).cover()),
+                .relative()
+                .child(
+                    img(src)
+                        .size(100.0, 100.0)
+                        .cover()
+                        .rounded(8.0)
+                        // .absolute()
+                        // .left(4.0)
+                        // .top(4.0),
+                ),
         )
         .child(
             text("Border should be visible around image")
@@ -114,12 +203,12 @@ fn test_case_2(src: &str) -> impl ElementBuilder {
         )
 }
 
-/// Test 3: Image with sibling overlay div using foreground layer
+/// Test 3: Image with sibling overlay div using foreground layer + border
 fn test_case_3(src: &str) -> impl ElementBuilder {
     div()
         .flex_col()
         .gap(4.0)
-        .child(text("3: Overlay with .foreground()").size(14.0).color(Color::WHITE))
+        .child(text("3: .foreground() + border").size(14.0).color(Color::WHITE))
         .child(
             div()
                 .w(100.0)
@@ -130,7 +219,8 @@ fn test_case_3(src: &str) -> impl ElementBuilder {
                     div()
                         .w(30.0)
                         .h(30.0)
-                        .bg(Color::BLUE)
+                        .bg(Color::GREEN)
+                        .border(2.0, Color::WHITE)
                         .rounded(15.0)
                         .absolute()
                         .bottom(4.0)
@@ -139,7 +229,7 @@ fn test_case_3(src: &str) -> impl ElementBuilder {
                 ),
         )
         .child(
-            text("Blue circle (.foreground) should be ON TOP")
+            text("Green circle + white border, on TOP")
                 .size(11.0)
                 .color(Color::rgba(1.0, 1.0, 1.0, 0.6)),
         )
