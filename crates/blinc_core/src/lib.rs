@@ -39,6 +39,7 @@ pub mod draw;
 pub mod events;
 pub mod fsm;
 pub mod layer;
+pub mod native_bridge;
 pub mod reactive;
 pub mod runtime;
 pub mod store;
@@ -84,4 +85,10 @@ pub use context_state::{
 pub use store::{
     clear_all_stores, create_store, create_store_with, get_store_state, kv_delete, kv_get, kv_set,
     remove_store, set_store_state, update_store_state, KVStore, Store, SubscriptionHandle,
+};
+
+// Re-export native bridge types
+pub use native_bridge::{
+    native_call, native_register, set_platform_adapter, FromNativeValue, IntoNativeArgs,
+    NativeBridgeError, NativeBridgeState, NativeHandler, NativeResult, NativeValue, PlatformAdapter,
 };

@@ -36,6 +36,7 @@ pub mod app;
 pub mod assets;
 pub mod event_loop;
 pub mod input;
+pub mod native_bridge;
 pub mod window;
 
 // Re-export public types
@@ -45,6 +46,9 @@ pub use app::{
 pub use assets::IOSAssetLoader;
 pub use event_loop::{IOSEventLoop, IOSWakeProxy};
 pub use input::{convert_touch, convert_touches, Gesture, GestureDetector, Touch, TouchPhase};
+pub use native_bridge::{
+    blinc_native_bridge_is_ready, blinc_set_native_call_fn, IOSNativeBridgeAdapter,
+};
 pub use window::IOSWindow;
 
 // iOS-specific entry point

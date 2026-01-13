@@ -34,12 +34,17 @@ pub mod event_loop;
 pub mod input;
 pub mod jni_bridge;
 pub mod jni_utils;
+pub mod native_bridge;
 pub mod window;
 
 pub use assets::AndroidAssetLoader;
 pub use event_loop::{AndroidEventLoop, AndroidWakeProxy};
 pub use jni_utils::{get_display_density, get_display_dpi, is_dark_mode};
 pub use window::AndroidWindow;
+
+// Re-export native bridge types
+#[cfg(target_os = "android")]
+pub use native_bridge::{init_android_native_bridge, AndroidNativeBridgeAdapter};
 
 use blinc_platform::{Platform, PlatformError};
 

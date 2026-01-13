@@ -1,0 +1,176 @@
+// Blinc Native Bridge IDL
+//
+// Interface Definition Language for Rust ↔ Native platform calls.
+// This file defines the contract between Rust and native code (Kotlin/Swift).
+//
+// Type Mapping:
+// -------------
+// | IDL Type  | Rust       | Kotlin    | Swift     |
+// |-----------|------------|-----------|-----------|
+// | Void      | ()         | Unit      | Void      |
+// | Bool      | bool       | Boolean   | Bool      |
+// | Int32     | i32        | Int       | Int32     |
+// | Int64     | i64        | Long      | Int64     |
+// | Float32   | f32        | Float     | Float     |
+// | Float64   | f64        | Double    | Double    |
+// | String    | String     | String    | String    |
+// | Bytes     | Vec<u8>    | ByteArray | Data      |
+//
+// Usage:
+// ------
+// Native side implements handlers and registers them at app init.
+// Rust calls via: native_call::<ReturnType, Args>("namespace", "name", args)
+
+// =============================================================================
+// Device Information
+// =============================================================================
+
+namespace device {
+    /// Get battery level as percentage (0-100)
+    fn get_battery_level() -> String;
+
+    /// Get device model name (e.g., "iPhone 15 Pro", "Pixel 8")
+    fn get_model() -> String;
+
+    /// Get OS version string (e.g., "17.4", "14")
+    fn get_os_version() -> String;
+
+    /// Check if device is in low power / battery saver mode
+    fn is_low_power_mode() -> Bool;
+
+    /// Check if device has notch or dynamic island
+    fn has_notch() -> Bool;
+
+    /// Get device locale (e.g., "en_US", "ja_JP")
+    fn get_locale() -> String;
+
+    /// Get device timezone identifier (e.g., "America/Los_Angeles")
+    fn get_timezone() -> String;
+}
+
+// =============================================================================
+// Haptic Feedback
+// =============================================================================
+
+namespace haptics {
+    /// Trigger haptic vibration for given duration in milliseconds
+    fn vibrate(duration_ms: Int32) -> Void;
+
+    /// Play impact haptic feedback
+    /// style: 0=light, 1=medium, 2=heavy
+    fn impact(style: Int32) -> Void;
+
+    /// Play selection haptic feedback (light tap)
+    fn selection() -> Void;
+
+    /// Play success haptic feedback
+    fn success() -> Void;
+
+    /// Play warning haptic feedback
+    fn warning() -> Void;
+
+    /// Play error haptic feedback
+    fn error() -> Void;
+}
+
+// =============================================================================
+// Clipboard
+// =============================================================================
+
+namespace clipboard {
+    /// Copy text to system clipboard
+    fn copy(text: String) -> Void;
+
+    /// Paste text from clipboard (empty string if empty)
+    fn paste() -> String;
+
+    /// Check if clipboard has text content
+    fn has_content() -> Bool;
+
+    /// Clear clipboard contents
+    fn clear() -> Void;
+}
+
+// =============================================================================
+// Secure Storage (Keychain / EncryptedSharedPreferences)
+// =============================================================================
+
+namespace storage {
+    /// Get a value from secure storage
+    /// Returns empty string if key doesn't exist
+    fn get(key: String) -> String;
+
+    /// Set a value in secure storage
+    /// Returns true if successful
+    fn set(key: String, value: String) -> Bool;
+
+    /// Delete a value from secure storage
+    /// Returns true if key existed and was deleted
+    fn delete(key: String) -> Bool;
+
+    /// Check if a key exists in secure storage
+    fn exists(key: String) -> Bool;
+}
+
+// =============================================================================
+// App Lifecycle
+// =============================================================================
+
+namespace app {
+    /// Get app version string from Info.plist / build.gradle
+    fn get_version() -> String;
+
+    /// Get app build number
+    fn get_build_number() -> String;
+
+    /// Get app bundle/package identifier
+    fn get_bundle_id() -> String;
+
+    /// Open URL in system browser
+    fn open_url(url: String) -> Bool;
+
+    /// Share text via system share sheet
+    fn share_text(text: String) -> Void;
+}
+
+// =============================================================================
+// Permissions
+// =============================================================================
+
+namespace permissions {
+    /// Check if camera permission is granted
+    fn has_camera() -> Bool;
+
+    /// Check if microphone permission is granted
+    fn has_microphone() -> Bool;
+
+    /// Check if photo library permission is granted
+    fn has_photos() -> Bool;
+
+    /// Check if location permission is granted
+    fn has_location() -> Bool;
+
+    /// Check if notification permission is granted
+    fn has_notifications() -> Bool;
+
+    /// Request camera permission (returns true if granted)
+    fn request_camera() -> Bool;
+
+    /// Request microphone permission (returns true if granted)
+    fn request_microphone() -> Bool;
+}
+
+// =============================================================================
+// Analytics / Logging
+// =============================================================================
+
+namespace analytics {
+    /// Log an analytics event
+    fn log_event(name: String, params_json: String) -> Void;
+
+    /// Set user property for analytics
+    fn set_user_property(name: String, value: String) -> Void;
+
+    /// Set user ID for analytics
+    fn set_user_id(user_id: String) -> Void;
+}
