@@ -3,14 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.android") version "1.9.22" apply false
 }
 
-tasks.register("buildRust") {
+tasks.register<Exec>("buildRust") {
     description = "Build Rust library for Android"
     group = "rust"
-
-    doLast {
-        exec {
-            workingDir = file("../..")
-            commandLine("cargo", "ndk", "-t", "arm64-v8a", "build", "--lib")
-        }
-    }
+    workingDir = file("../..")
+    commandLine("cargo", "ndk", "-t", "arm64-v8a", "-o", "platforms/android/app/src/main/jniLibs", "build", "--release")
 }

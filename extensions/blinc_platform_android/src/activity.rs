@@ -164,7 +164,10 @@ impl Default for BlincAndroidApp {
 /// Android main entry point
 ///
 /// This is called by the android-activity crate when the app starts.
-#[cfg(target_os = "android")]
+/// This is only enabled when the "default-activity" feature is enabled.
+/// Applications should typically provide their own android_main and use
+/// blinc_app::AndroidApp::run() instead.
+#[cfg(all(target_os = "android", feature = "default-activity"))]
 #[no_mangle]
 pub fn android_main(app: AndroidApp) {
     // Initialize Android logging

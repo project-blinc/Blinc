@@ -24,7 +24,7 @@ use std::sync::{
     Arc, Mutex,
 };
 
-use android_activity::{AndroidApp as NdkAndroidApp, MainEvent, PollEvent};
+use android_activity::{AndroidApp as NdkAndroidApp, InputStatus, MainEvent, PollEvent};
 use android_activity::input::{InputEvent as AndroidInputEvent, MotionAction};
 use ndk::native_window::NativeWindow;
 
@@ -53,26 +53,26 @@ pub struct AndroidApp;
 
 impl AndroidApp {
     /// Initialize the Android asset loader
-    fn init_asset_loader(app: &NdkAndroidApp) {
-        if let Some(asset_manager) = app.asset_manager() {
-            let loader = AndroidAssetLoader::new(asset_manager);
-            let _ = set_global_asset_loader(Box::new(loader));
-        }
+    fn init_asset_loader(app: NdkAndroidApp) {
+        let loader = AndroidAssetLoader::new(app);
+        let _ = set_global_asset_loader(Box::new(loader));
     }
 
     /// Initialize the theme system
     fn init_theme() {
-        use blinc_theme::{platform::detect_system_color_scheme, ThemeBundle, ThemeState};
+        use blinc_theme::{
+            detect_system_color_scheme, platform_theme_bundle, set_redraw_callback, ThemeState,
+        };
 
         // Only initialize if not already initialized
         if ThemeState::try_get().is_none() {
-            let bundle = ThemeBundle::default();
+            let bundle = platform_theme_bundle();
             let scheme = detect_system_color_scheme();
             ThemeState::init(bundle, scheme);
         }
 
         // Set up the redraw callback
-        blinc_theme::set_redraw_callback(|| {
+        set_redraw_callback(|| {
             tracing::debug!("Theme changed - requesting full rebuild");
             blinc_layout::widgets::request_full_rebuild();
         });
@@ -118,7 +118,7 @@ impl AndroidApp {
         tracing::info!("AndroidApp::run starting");
 
         // Initialize the asset loader
-        Self::init_asset_loader(&app);
+        Self::init_asset_loader(app.clone());
 
         // Initialize the text measurer
         crate::text_measurer::init_text_measurer();
@@ -416,96 +416,90 @@ impl AndroidApp {
 
                 // Process all pending input events
                 if let Ok(mut input_iter) = app.input_events_iter() {
-                    loop {
-                        // Handle input events - extract action and pointer data
-                        let event_data = input_iter.next(|event| {
-                            match event {
-                                AndroidInputEvent::MotionEvent(motion_event) => {
-                                    let action = motion_event.action();
-                                    let pointer_count = motion_event.pointer_count();
-                                    let action_index = motion_event.pointer_index();
+                    // Handle input events using android-activity 0.6 API
+                    // The callback returns InputStatus and next() returns bool
+                    while input_iter.next(|event| {
+                        match event {
+                            AndroidInputEvent::MotionEvent(motion_event) => {
+                                let action = motion_event.action();
+                                let pointer_count = motion_event.pointer_count();
+                                let action_index = motion_event.pointer_index();
 
-                                    if pointer_count > 0 {
-                                        // For PointerDown/PointerUp, get the action pointer
-                                        // For other events, get the primary pointer
-                                        let pointer_idx = match action {
-                                            MotionAction::PointerDown | MotionAction::PointerUp => {
-                                                action_index
-                                            }
-                                            _ => 0,
-                                        };
+                                if pointer_count > 0 {
+                                    // For PointerDown/PointerUp, get the action pointer
+                                    // For other events, get the primary pointer
+                                    let pointer_idx = match action {
+                                        MotionAction::PointerDown | MotionAction::PointerUp => {
+                                            action_index
+                                        }
+                                        _ => 0,
+                                    };
 
-                                        let pointer = motion_event.pointer_at_index(pointer_idx);
-                                        let lx = pointer.x() / scale;
-                                        let ly = pointer.y() / scale;
+                                    let pointer = motion_event.pointer_at_index(pointer_idx);
+                                    let lx = pointer.x() / scale;
+                                    let ly = pointer.y() / scale;
 
-                                        Some((action, lx, ly))
-                                    } else {
-                                        None
+                                    match action {
+                                        MotionAction::Down => {
+                                            tracing::debug!(
+                                                "Touch DOWN at logical ({:.1}, {:.1})",
+                                                lx, ly
+                                            );
+                                            windowed_ctx
+                                                .event_router
+                                                .on_mouse_down(tree, lx, ly, MouseButton::Left);
+                                            needs_rebuild = true;
+                                        }
+                                        MotionAction::Move => {
+                                            windowed_ctx.event_router.on_mouse_move(tree, lx, ly);
+                                            needs_rebuild = true;
+                                        }
+                                        MotionAction::Up => {
+                                            tracing::debug!(
+                                                "Touch UP at logical ({:.1}, {:.1})",
+                                                lx, ly
+                                            );
+                                            windowed_ctx
+                                                .event_router
+                                                .on_mouse_up(tree, lx, ly, MouseButton::Left);
+                                            needs_rebuild = true;
+                                        }
+                                        MotionAction::Cancel => {
+                                            tracing::debug!("Touch CANCEL");
+                                            windowed_ctx.event_router.on_mouse_leave();
+                                            needs_rebuild = true;
+                                        }
+                                        MotionAction::PointerDown => {
+                                            tracing::debug!(
+                                                "Multi-touch DOWN at logical ({:.1}, {:.1})",
+                                                lx, ly
+                                            );
+                                            windowed_ctx
+                                                .event_router
+                                                .on_mouse_down(tree, lx, ly, MouseButton::Left);
+                                            needs_rebuild = true;
+                                        }
+                                        MotionAction::PointerUp => {
+                                            tracing::debug!(
+                                                "Multi-touch UP at logical ({:.1}, {:.1})",
+                                                lx, ly
+                                            );
+                                            windowed_ctx
+                                                .event_router
+                                                .on_mouse_up(tree, lx, ly, MouseButton::Left);
+                                            needs_rebuild = true;
+                                        }
+                                        _ => {}
                                     }
-                                }
-                                _ => None,
-                            }
-                        });
-
-                        match event_data {
-                            Some(Some((action, lx, ly))) => {
-                                match action {
-                                    MotionAction::Down => {
-                                        tracing::debug!(
-                                            "Touch DOWN at logical ({:.1}, {:.1})",
-                                            lx, ly
-                                        );
-                                        windowed_ctx
-                                            .event_router
-                                            .on_mouse_down(tree, lx, ly, MouseButton::Left);
-                                        needs_rebuild = true;
-                                    }
-                                    MotionAction::Move => {
-                                        windowed_ctx.event_router.on_mouse_move(tree, lx, ly);
-                                        needs_rebuild = true;
-                                    }
-                                    MotionAction::Up => {
-                                        tracing::debug!(
-                                            "Touch UP at logical ({:.1}, {:.1})",
-                                            lx, ly
-                                        );
-                                        windowed_ctx
-                                            .event_router
-                                            .on_mouse_up(tree, lx, ly, MouseButton::Left);
-                                        needs_rebuild = true;
-                                    }
-                                    MotionAction::Cancel => {
-                                        tracing::debug!("Touch CANCEL");
-                                        windowed_ctx.event_router.on_mouse_leave();
-                                        needs_rebuild = true;
-                                    }
-                                    MotionAction::PointerDown => {
-                                        tracing::debug!(
-                                            "Multi-touch DOWN at logical ({:.1}, {:.1})",
-                                            lx, ly
-                                        );
-                                        windowed_ctx
-                                            .event_router
-                                            .on_mouse_down(tree, lx, ly, MouseButton::Left);
-                                        needs_rebuild = true;
-                                    }
-                                    MotionAction::PointerUp => {
-                                        tracing::debug!(
-                                            "Multi-touch UP at logical ({:.1}, {:.1})",
-                                            lx, ly
-                                        );
-                                        windowed_ctx
-                                            .event_router
-                                            .on_mouse_up(tree, lx, ly, MouseButton::Left);
-                                        needs_rebuild = true;
-                                    }
-                                    _ => {}
+                                    InputStatus::Handled
+                                } else {
+                                    InputStatus::Unhandled
                                 }
                             }
-                            Some(None) => {}
-                            None => break,
+                            _ => InputStatus::Unhandled,
                         }
+                    }) {
+                        // Event was processed, continue loop
                     }
                 }
             }
@@ -545,10 +539,17 @@ impl AndroidApp {
                     // Build UI
                     let element = ui_builder(windowed_ctx);
 
-                    // Create or update render tree
-                    let tree =
-                        render_tree.get_or_insert_with(|| RenderTree::from_element(&element));
-                    tree.rebuild(&element);
+                    // Create render tree (full rebuild each frame for simplicity)
+                    let tree = render_tree.get_or_insert_with(|| {
+                        let mut t = RenderTree::from_element(&element);
+                        t.set_scale_factor(windowed_ctx.scale_factor as f32);
+                        t
+                    });
+
+                    // For now, always rebuild the tree fully
+                    // TODO: implement incremental update like desktop
+                    *tree = RenderTree::from_element(&element);
+                    tree.set_scale_factor(windowed_ctx.scale_factor as f32);
                     tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
 
                     // Render
@@ -615,15 +616,27 @@ impl AndroidApp {
         };
 
         // Create instance with Vulkan backend
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
             ..Default::default()
         });
 
-        // Create surface from native window
+        // Create surface from native window using raw handles
         // Safety: The native window handle is valid for the lifetime of the window
-        let surface_target = wgpu::SurfaceTargetUnsafe::from_window(window)
-            .map_err(|e| BlincError::GpuInit(format!("Failed to get window handle: {}", e)))?;
+        use raw_window_handle::{AndroidDisplayHandle, AndroidNdkWindowHandle, RawDisplayHandle, RawWindowHandle};
+        use std::ptr::NonNull;
+
+        let raw_window = NonNull::new(window.ptr().as_ptr() as *mut std::ffi::c_void)
+            .ok_or_else(|| BlincError::GpuInit("Invalid native window pointer".to_string()))?;
+
+        let window_handle = AndroidNdkWindowHandle::new(raw_window);
+        let display_handle = AndroidDisplayHandle::new();
+
+        let surface_target = wgpu::SurfaceTargetUnsafe::RawHandle {
+            raw_display_handle: RawDisplayHandle::Android(display_handle),
+            raw_window_handle: RawWindowHandle::AndroidNdk(window_handle),
+        };
+
         let surface = unsafe {
             instance
                 .create_surface_unsafe(surface_target)

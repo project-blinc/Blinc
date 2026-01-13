@@ -113,8 +113,8 @@ impl AndroidPlatform {
     }
 }
 
-// Android-specific entry point
-#[cfg(target_os = "android")]
+// Android-specific entry point (only with default-activity feature)
+#[cfg(all(target_os = "android", feature = "default-activity"))]
 pub use activity::android_main;
 
 /// Input conversion utilities

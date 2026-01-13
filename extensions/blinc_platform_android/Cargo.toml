@@ -12,6 +12,8 @@ crate-type = ["lib", "cdylib", "staticlib"]
 default = ["gpu"]
 gpu = []
 zrtl-plugin = []
+# Enable the default android_main entry point (not recommended for custom apps)
+default-activity = []
 
 [dependencies]
 # Core dependencies (always available)
