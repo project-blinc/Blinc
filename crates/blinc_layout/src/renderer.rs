@@ -4540,7 +4540,9 @@ impl RenderTree {
 
         // Draw borders
         // Individual border sides take precedence over uniform border
-        if render_node.props.border_sides.has_any() {
+        // Also check uniform border_width for .border(width, color) API
+        let has_border = render_node.props.border_sides.has_any() || render_node.props.border_width > 0.0;
+        if has_border {
             let sides = &render_node.props.border_sides;
 
             // Fall back to uniform border width and color when per-side is not set
@@ -5183,7 +5185,9 @@ impl RenderTree {
 
             // Draw borders
             // Individual border sides take precedence over uniform border
-            if render_node.props.border_sides.has_any() {
+            // Also check uniform border_width for .border(width, color) API
+            let has_border = render_node.props.border_sides.has_any() || render_node.props.border_width > 0.0;
+            if has_border {
                 let sides = &render_node.props.border_sides;
 
                 // Helper to apply motion opacity (only when not using opacity layer)
@@ -5698,8 +5702,12 @@ impl RenderTree {
             }
 
             // Draw borders
-            if render_node.props.border_sides.has_any() {
+            // Also check uniform border_width for .border(width, color) API
+            let has_border = render_node.props.border_sides.has_any() || render_node.props.border_width > 0.0;
+            if has_border {
                 let sides = &render_node.props.border_sides;
+                let uniform_width = render_node.props.border_width;
+                let uniform_color = render_node.props.border_color.unwrap_or(Color::TRANSPARENT);
 
                 // Clip to rounded rect if there's a border radius
                 let has_radius = radius.top_left > 0.0
@@ -5710,64 +5718,56 @@ impl RenderTree {
                     ctx.push_clip(ClipShape::rounded_rect(rect, radius));
                 }
 
-                if let Some(ref border) = sides.left {
-                    if border.is_visible() {
-                        let border_rect = Rect::new(0.0, 0.0, border.width, rect.height());
-                        ctx.fill_rect(
-                            border_rect,
-                            CornerRadius::default(),
-                            Brush::Solid(border.color),
-                        );
-                    }
+                let left_border = sides.left.as_ref().map(|b| (b.width, b.color)).unwrap_or((uniform_width, uniform_color));
+                let right_border = sides.right.as_ref().map(|b| (b.width, b.color)).unwrap_or((uniform_width, uniform_color));
+                let top_border = sides.top.as_ref().map(|b| (b.width, b.color)).unwrap_or((uniform_width, uniform_color));
+                let bottom_border = sides.bottom.as_ref().map(|b| (b.width, b.color)).unwrap_or((uniform_width, uniform_color));
+
+                if left_border.0 > 0.0 {
+                    let border_rect = Rect::new(0.0, 0.0, left_border.0, rect.height());
+                    ctx.fill_rect(
+                        border_rect,
+                        CornerRadius::default(),
+                        Brush::Solid(left_border.1),
+                    );
                 }
-                if let Some(ref border) = sides.right {
-                    if border.is_visible() {
-                        let border_rect = Rect::new(
-                            rect.width() - border.width,
-                            0.0,
-                            border.width,
-                            rect.height(),
-                        );
-                        ctx.fill_rect(
-                            border_rect,
-                            CornerRadius::default(),
-                            Brush::Solid(border.color),
-                        );
-                    }
+                if right_border.0 > 0.0 {
+                    let border_rect = Rect::new(
+                        rect.width() - right_border.0,
+                        0.0,
+                        right_border.0,
+                        rect.height(),
+                    );
+                    ctx.fill_rect(
+                        border_rect,
+                        CornerRadius::default(),
+                        Brush::Solid(right_border.1),
+                    );
                 }
-                if let Some(ref border) = sides.top {
-                    if border.is_visible() {
-                        let border_rect = Rect::new(0.0, 0.0, rect.width(), border.width);
-                        ctx.fill_rect(
-                            border_rect,
-                            CornerRadius::default(),
-                            Brush::Solid(border.color),
-                        );
-                    }
+                if top_border.0 > 0.0 {
+                    let border_rect = Rect::new(0.0, 0.0, rect.width(), top_border.0);
+                    ctx.fill_rect(
+                        border_rect,
+                        CornerRadius::default(),
+                        Brush::Solid(top_border.1),
+                    );
                 }
-                if let Some(ref border) = sides.bottom {
-                    if border.is_visible() {
-                        let border_rect = Rect::new(
-                            0.0,
-                            rect.height() - border.width,
-                            rect.width(),
-                            border.width,
-                        );
-                        ctx.fill_rect(
-                            border_rect,
-                            CornerRadius::default(),
-                            Brush::Solid(border.color),
-                        );
-                    }
+                if bottom_border.0 > 0.0 {
+                    let border_rect = Rect::new(
+                        0.0,
+                        rect.height() - bottom_border.0,
+                        rect.width(),
+                        bottom_border.0,
+                    );
+                    ctx.fill_rect(
+                        border_rect,
+                        CornerRadius::default(),
+                        Brush::Solid(bottom_border.1),
+                    );
                 }
 
                 if has_radius {
                     ctx.pop_clip();
-                }
-            } else if render_node.props.border_width > 0.0 {
-                if let Some(ref border_color) = render_node.props.border_color {
-                    let stroke = Stroke::new(render_node.props.border_width);
-                    ctx.stroke_rect(rect, radius, &stroke, Brush::Solid(*border_color));
                 }
             }
 

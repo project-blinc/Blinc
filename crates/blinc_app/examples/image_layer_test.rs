@@ -140,45 +140,32 @@ fn test_border_no_image() -> impl ElementBuilder {
         )
 }
 
-/// Test 1: Image with border on parent container
-/// Parent is larger than image to leave room for border
+/// Test 1: Image with border directly on img()
 fn test_case_1(src: &str) -> impl ElementBuilder {
     div()
         .flex_col()
         .gap(4.0)
-        .child(text("1: Border on parent").size(14.0).color(Color::WHITE))
+        .child(text("1: Border on img()").size(14.0).color(Color::WHITE))
         .child(
-            // Parent 108x108 = 100x100 image + 4px border on each side
-            div()
-                .w(108.0)
-                .h(108.0)
-                .border(4.0, Color::RED)
+            img(src)
+                .size(100.0, 100.0)
+                .cover()
                 .rounded(12.0)
-                .overflow_clip()
-                .relative()
-                .child(
-                    img(src)
-                        .size(100.0, 100.0)
-                        .cover()
-                        .rounded(8.0)
-                        // .absolute()
-                        // .left(4.0)
-                        // .top(4.0),
-                ),
+                .border(4.0, Color::RED),
         )
         .child(
-            text("Border should be visible around image")
+            text("Red border directly on image")
                 .size(11.0)
                 .color(Color::rgba(1.0, 1.0, 1.0, 0.6)),
         )
 }
 
-/// Test 2: Image with sibling overlay div (after image)
+/// Test 2: Image with sibling overlay using .foreground()
 fn test_case_2(src: &str) -> impl ElementBuilder {
     div()
         .flex_col()
         .gap(4.0)
-        .child(text("2: Sibling overlay after").size(14.0).color(Color::WHITE))
+        .child(text("2: Sibling + .foreground()").size(14.0).color(Color::WHITE))
         .child(
             div()
                 .w(100.0)
@@ -193,11 +180,12 @@ fn test_case_2(src: &str) -> impl ElementBuilder {
                         .rounded(15.0)
                         .absolute()
                         .bottom(4.0)
-                        .right(4.0),
+                        .right(4.0)
+                        .foreground(), // Required for sibling overlay on images
                 ),
         )
         .child(
-            text("Green circle should be ON TOP of image")
+            text("Green circle ON TOP (uses .foreground())")
                 .size(11.0)
                 .color(Color::rgba(1.0, 1.0, 1.0, 0.6)),
         )

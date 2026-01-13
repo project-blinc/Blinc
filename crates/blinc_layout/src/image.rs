@@ -225,6 +225,10 @@ pub struct Image {
     placeholder: Placeholder,
     /// Fade-in duration when image loads (for lazy loading)
     fade_duration: Duration,
+    /// Border width
+    border_width: f32,
+    /// Border color
+    border_color: Option<Color>,
 }
 
 impl Image {
@@ -258,6 +262,8 @@ impl Image {
             loading: LoadingStrategy::default(),
             placeholder: Placeholder::default(),
             fade_duration: Duration::from_millis(200),
+            border_width: 0.0,
+            border_color: None,
         }
     }
 
@@ -424,6 +430,13 @@ impl Image {
     /// Make fully circular (radius = min(width, height) / 2)
     pub fn circular(mut self) -> Self {
         self.border_radius = self.width.min(self.height) / 2.0;
+        self
+    }
+
+    /// Set border width and color
+    pub fn border(mut self, width: f32, color: Color) -> Self {
+        self.border_width = width;
+        self.border_color = Some(color);
         self
     }
 
@@ -763,8 +776,8 @@ impl ElementBuilder for Image {
         RenderProps {
             background: None,
             border_radius: blinc_core::CornerRadius::uniform(self.border_radius),
-            border_color: None,
-            border_width: 0.0,
+            border_color: self.border_color,
+            border_width: self.border_width,
             border_sides: Default::default(),
             layer: self.render_layer,
             material: None,
