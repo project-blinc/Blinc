@@ -71,8 +71,7 @@ pub const ALIGN_HORIZONTAL_JUSTIFY_END: &str = r#"<rect x="2" y="5" width="6" he
 pub const ALIGN_HORIZONTAL_JUSTIFY_START: &str = r#"<rect x="6" y="5" width="6" height="14" rx="2"/><rect x="16" y="7" width="6" height="10" rx="2"/><path d="M2 2v20"/>"#;
 
 /// align horizontal space around
-pub const ALIGN_HORIZONTAL_SPACE_AROUND: &str =
-    r#"<rect x="9" y="7" width="6" height="10" rx="2"/><path d="M4 22V2"/><path d="M20 22V2"/>"#;
+pub const ALIGN_HORIZONTAL_SPACE_AROUND: &str = r#"<rect x="9" y="7" width="6" height="10" rx="2"/><path d="M4 22V2"/><path d="M20 22V2"/>"#;
 
 /// align horizontal space between
 pub const ALIGN_HORIZONTAL_SPACE_BETWEEN: &str = r#"<rect x="3" y="5" width="6" height="14" rx="2"/><rect x="15" y="7" width="6" height="10" rx="2"/><path d="M3 2v20"/><path d="M21 2v20"/>"#;
@@ -102,8 +101,7 @@ pub const ALIGN_VERTICAL_JUSTIFY_END: &str = r#"<rect x="5" y="12" width="14" he
 pub const ALIGN_VERTICAL_JUSTIFY_START: &str = r#"<rect x="5" y="16" width="14" height="6" rx="2"/><rect x="7" y="6" width="10" height="6" rx="2"/><path d="M2 2h20"/>"#;
 
 /// align vertical space around
-pub const ALIGN_VERTICAL_SPACE_AROUND: &str =
-    r#"<rect x="7" y="9" width="10" height="6" rx="2"/><path d="M22 20H2"/><path d="M22 4H2"/>"#;
+pub const ALIGN_VERTICAL_SPACE_AROUND: &str = r#"<rect x="7" y="9" width="10" height="6" rx="2"/><path d="M22 20H2"/><path d="M22 4H2"/>"#;
 
 /// align vertical space between
 pub const ALIGN_VERTICAL_SPACE_BETWEEN: &str = r#"<rect x="5" y="15" width="14" height="6" rx="2"/><rect x="7" y="3" width="10" height="6" rx="2"/><path d="M2 21h20"/><path d="M2 3h20"/>"#;
@@ -127,8 +125,7 @@ pub const ANCHOR: &str = r#"<path d="M12 6v16"/><path d="m19 13 2-1a9 9 0 0 1-18
 pub const ANGRY: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><path d="M7.5 8 10 9"/><path d="m14 9 2.5-1"/><path d="M9 10h.01"/><path d="M15 10h.01"/>"#;
 
 /// annoyed
-pub const ANNOYED: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="M8 15h8"/><path d="M8 9h2"/><path d="M14 9h2"/>"#;
+pub const ANNOYED: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M8 15h8"/><path d="M8 9h2"/><path d="M14 9h2"/>"#;
 
 /// antenna
 pub const ANTENNA: &str = r#"<path d="M2 12 7 2"/><path d="m7 12 5-10"/><path d="m12 12 5-10"/><path d="m17 12 5-10"/><path d="M4.5 7h15"/><path d="M12 16v6"/>"#;
@@ -200,8 +197,7 @@ pub const ARROW_DOWN_1_0: &str = r#"<path d="m3 16 4 4 4-4"/><path d="M7 20V4"/>
 pub const ARROW_DOWN_A_Z: &str = r#"<path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M20 8h-5"/><path d="M15 10V6.5a2.5 2.5 0 0 1 5 0V10"/><path d="M15 14h5l-5 6h5"/>"#;
 
 /// arrow down from line
-pub const ARROW_DOWN_FROM_LINE: &str =
-    r#"<path d="M19 3H5"/><path d="M12 21V7"/><path d="m6 15 6 6 6-6"/>"#;
+pub const ARROW_DOWN_FROM_LINE: &str = r#"<path d="M19 3H5"/><path d="M12 21V7"/><path d="m6 15 6 6 6-6"/>"#;
 
 /// arrow down left
 pub const ARROW_DOWN_LEFT: &str = r#"<path d="M17 7 7 17"/><path d="M17 17H7V7"/>"#;
@@ -213,16 +209,13 @@ pub const ARROW_DOWN_NARROW_WIDE: &str = r#"<path d="m3 16 4 4 4-4"/><path d="M7
 pub const ARROW_DOWN_RIGHT: &str = r#"<path d="m7 7 10 10"/><path d="M17 7v10H7"/>"#;
 
 /// arrow down to dot
-pub const ARROW_DOWN_TO_DOT: &str =
-    r#"<path d="M12 2v14"/><path d="m19 9-7 7-7-7"/><circle cx="12" cy="21" r="1"/>"#;
+pub const ARROW_DOWN_TO_DOT: &str = r#"<path d="M12 2v14"/><path d="m19 9-7 7-7-7"/><circle cx="12" cy="21" r="1"/>"#;
 
 /// arrow down to line
-pub const ARROW_DOWN_TO_LINE: &str =
-    r#"<path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/>"#;
+pub const ARROW_DOWN_TO_LINE: &str = r#"<path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/>"#;
 
 /// arrow down up
-pub const ARROW_DOWN_UP: &str =
-    r#"<path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/>"#;
+pub const ARROW_DOWN_UP: &str = r#"<path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="m21 8-4-4-4 4"/><path d="M17 4v16"/>"#;
 
 /// arrow down wide narrow
 pub const ARROW_DOWN_WIDE_NARROW: &str = r#"<path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M11 4h10"/><path d="M11 8h7"/><path d="M11 12h4"/>"#;
@@ -234,31 +227,25 @@ pub const ARROW_DOWN_Z_A: &str = r#"<path d="m3 16 4 4 4-4"/><path d="M7 4v16"/>
 pub const ARROW_LEFT: &str = r#"<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>"#;
 
 /// arrow left from line
-pub const ARROW_LEFT_FROM_LINE: &str =
-    r#"<path d="m9 6-6 6 6 6"/><path d="M3 12h14"/><path d="M21 19V5"/>"#;
+pub const ARROW_LEFT_FROM_LINE: &str = r#"<path d="m9 6-6 6 6 6"/><path d="M3 12h14"/><path d="M21 19V5"/>"#;
 
 /// arrow left right
-pub const ARROW_LEFT_RIGHT: &str =
-    r#"<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>"#;
+pub const ARROW_LEFT_RIGHT: &str = r#"<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>"#;
 
 /// arrow left to line
-pub const ARROW_LEFT_TO_LINE: &str =
-    r#"<path d="M3 19V5"/><path d="m13 6-6 6 6 6"/><path d="M7 12h14"/>"#;
+pub const ARROW_LEFT_TO_LINE: &str = r#"<path d="M3 19V5"/><path d="m13 6-6 6 6 6"/><path d="M7 12h14"/>"#;
 
 /// arrow right
 pub const ARROW_RIGHT: &str = r#"<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>"#;
 
 /// arrow right from line
-pub const ARROW_RIGHT_FROM_LINE: &str =
-    r#"<path d="M3 5v14"/><path d="M21 12H7"/><path d="m15 18 6-6-6-6"/>"#;
+pub const ARROW_RIGHT_FROM_LINE: &str = r#"<path d="M3 5v14"/><path d="M21 12H7"/><path d="m15 18 6-6-6-6"/>"#;
 
 /// arrow right left
-pub const ARROW_RIGHT_LEFT: &str =
-    r#"<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>"#;
+pub const ARROW_RIGHT_LEFT: &str = r#"<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>"#;
 
 /// arrow right to line
-pub const ARROW_RIGHT_TO_LINE: &str =
-    r#"<path d="M17 12H3"/><path d="m11 18 6-6-6-6"/><path d="M21 5v14"/>"#;
+pub const ARROW_RIGHT_TO_LINE: &str = r#"<path d="M17 12H3"/><path d="m11 18 6-6-6-6"/><path d="M21 5v14"/>"#;
 
 /// arrow up
 pub const ARROW_UP: &str = r#"<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>"#;
@@ -273,16 +260,13 @@ pub const ARROW_UP_1_0: &str = r#"<path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><pa
 pub const ARROW_UP_A_Z: &str = r#"<path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="M20 8h-5"/><path d="M15 10V6.5a2.5 2.5 0 0 1 5 0V10"/><path d="M15 14h5l-5 6h5"/>"#;
 
 /// arrow up down
-pub const ARROW_UP_DOWN: &str =
-    r#"<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>"#;
+pub const ARROW_UP_DOWN: &str = r#"<path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/>"#;
 
 /// arrow up from dot
-pub const ARROW_UP_FROM_DOT: &str =
-    r#"<path d="m5 9 7-7 7 7"/><path d="M12 16V2"/><circle cx="12" cy="21" r="1"/>"#;
+pub const ARROW_UP_FROM_DOT: &str = r#"<path d="m5 9 7-7 7 7"/><path d="M12 16V2"/><circle cx="12" cy="21" r="1"/>"#;
 
 /// arrow up from line
-pub const ARROW_UP_FROM_LINE: &str =
-    r#"<path d="m18 9-6-6-6 6"/><path d="M12 3v14"/><path d="M5 21h14"/>"#;
+pub const ARROW_UP_FROM_LINE: &str = r#"<path d="m18 9-6-6-6 6"/><path d="M12 3v14"/><path d="M5 21h14"/>"#;
 
 /// arrow up left
 pub const ARROW_UP_LEFT: &str = r#"<path d="M7 17V7h10"/><path d="M17 17 7 7"/>"#;
@@ -294,8 +278,7 @@ pub const ARROW_UP_NARROW_WIDE: &str = r#"<path d="m3 8 4-4 4 4"/><path d="M7 4v
 pub const ARROW_UP_RIGHT: &str = r#"<path d="M7 7h10v10"/><path d="M7 17 17 7"/>"#;
 
 /// arrow up to line
-pub const ARROW_UP_TO_LINE: &str =
-    r#"<path d="M5 3h14"/><path d="m18 13-6-6-6 6"/><path d="M12 7v14"/>"#;
+pub const ARROW_UP_TO_LINE: &str = r#"<path d="M5 3h14"/><path d="m18 13-6-6-6 6"/><path d="M12 7v14"/>"#;
 
 /// arrow up wide narrow
 pub const ARROW_UP_WIDE_NARROW: &str = r#"<path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="M11 12h10"/><path d="M11 16h7"/><path d="M11 20h4"/>"#;
@@ -304,15 +287,13 @@ pub const ARROW_UP_WIDE_NARROW: &str = r#"<path d="m3 8 4-4 4 4"/><path d="M7 4v
 pub const ARROW_UP_Z_A: &str = r#"<path d="m3 8 4-4 4 4"/><path d="M7 4v16"/><path d="M15 4h5l-5 6h5"/><path d="M15 20v-3.5a2.5 2.5 0 0 1 5 0V20"/><path d="M20 18h-5"/>"#;
 
 /// asterisk
-pub const ASTERISK: &str =
-    r#"<path d="M12 6v12"/><path d="M17.196 9 6.804 15"/><path d="m6.804 9 10.392 6"/>"#;
+pub const ASTERISK: &str = r#"<path d="M12 6v12"/><path d="M17.196 9 6.804 15"/><path d="m6.804 9 10.392 6"/>"#;
 
 /// atom
 pub const ATOM: &str = r#"<circle cx="12" cy="12" r="1"/><path d="M20.2 20.2c2.04-2.03.02-7.36-4.5-11.9-4.54-4.52-9.87-6.54-11.9-4.5-2.04 2.03-.02 7.36 4.5 11.9 4.54 4.52 9.87 6.54 11.9 4.5Z"/><path d="M15.7 15.7c4.52-4.54 6.54-9.87 4.5-11.9-2.03-2.04-7.36-.02-11.9 4.5-4.52 4.54-6.54 9.87-4.5 11.9 2.03 2.04 7.36.02 11.9-4.5Z"/>"#;
 
 /// at sign
-pub const AT_SIGN: &str =
-    r#"<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>"#;
+pub const AT_SIGN: &str = r#"<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>"#;
 
 /// audio lines
 pub const AUDIO_LINES: &str = r#"<path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/>"#;
@@ -438,8 +419,7 @@ pub const BASELINE: &str = r#"<path d="M4 20h16"/><path d="m6 16 6-12 6 12"/><pa
 pub const BATH: &str = r#"<path d="M10 4 8 6"/><path d="M17 19v2"/><path d="M2 12h20"/><path d="M7 19v2"/><path d="M9 5 7.621 3.621A2.121 2.121 0 0 0 4 5v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/>"#;
 
 /// battery
-pub const BATTERY: &str =
-    r#"<path d="M 22 14 L 22 10"/><rect x="2" y="6" width="16" height="12" rx="2"/>"#;
+pub const BATTERY: &str = r#"<path d="M 22 14 L 22 10"/><rect x="2" y="6" width="16" height="12" rx="2"/>"#;
 
 /// battery charging
 pub const BATTERY_CHARGING: &str = r#"<path d="m11 7-3 5h4l-3 5"/><path d="M14.856 6H16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.935"/><path d="M22 14v-4"/><path d="M5.14 18H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2.936"/>"#;
@@ -448,8 +428,7 @@ pub const BATTERY_CHARGING: &str = r#"<path d="m11 7-3 5h4l-3 5"/><path d="M14.8
 pub const BATTERY_FULL: &str = r#"<path d="M10 10v4"/><path d="M14 10v4"/><path d="M22 14v-4"/><path d="M6 10v4"/><rect x="2" y="6" width="16" height="12" rx="2"/>"#;
 
 /// battery low
-pub const BATTERY_LOW: &str =
-    r#"<path d="M22 14v-4"/><path d="M6 14v-4"/><rect x="2" y="6" width="16" height="12" rx="2"/>"#;
+pub const BATTERY_LOW: &str = r#"<path d="M22 14v-4"/><path d="M6 14v-4"/><rect x="2" y="6" width="16" height="12" rx="2"/>"#;
 
 /// battery medium
 pub const BATTERY_MEDIUM: &str = r#"<path d="M10 14v-4"/><path d="M22 14v-4"/><path d="M6 14v-4"/><rect x="2" y="6" width="16" height="12" rx="2"/>"#;
@@ -560,15 +539,13 @@ pub const BLUETOOTH: &str = r#"<path d="m7 7 10 10-5 5V2l5 5L7 17"/>"#;
 pub const BLUETOOTH_CONNECTED: &str = r#"<path d="m7 7 10 10-5 5V2l5 5L7 17"/><line x1="18" y1="12" x2="21" y2="12"/><line x1="3" y1="12" x2="6" y2="12"/>"#;
 
 /// bluetooth off
-pub const BLUETOOTH_OFF: &str =
-    r#"<path d="m17 17-5 5V12l-5 5"/><path d="m2 2 20 20"/><path d="M14.5 9.5 17 7l-5-5v4.5"/>"#;
+pub const BLUETOOTH_OFF: &str = r#"<path d="m17 17-5 5V12l-5 5"/><path d="m2 2 20 20"/><path d="M14.5 9.5 17 7l-5-5v4.5"/>"#;
 
 /// bluetooth searching
 pub const BLUETOOTH_SEARCHING: &str = r#"<path d="m7 7 10 10-5 5V2l5 5L7 17"/><path d="M20.83 14.83a4 4 0 0 0 0-5.66"/><path d="M18 12h.01"/>"#;
 
 /// bold
-pub const BOLD: &str =
-    r#"<path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/>"#;
+pub const BOLD: &str = r#"<path d="M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8"/>"#;
 
 /// bolt
 pub const BOLT: &str = r#"<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><circle cx="12" cy="12" r="4"/>"#;
@@ -586,8 +563,7 @@ pub const BOOK: &str = r#"<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 
 pub const BOOKMARK: &str = r#"<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>"#;
 
 /// bookmark check
-pub const BOOKMARK_CHECK: &str =
-    r#"<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z"/><path d="m9 10 2 2 4-4"/>"#;
+pub const BOOKMARK_CHECK: &str = r#"<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z"/><path d="m9 10 2 2 4-4"/>"#;
 
 /// bookmark minus
 pub const BOOKMARK_MINUS: &str = r#"<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/><line x1="15" y1="10" x2="9" y2="10"/>"#;
@@ -962,23 +938,19 @@ pub const CHART_LINE: &str = r#"<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19
 pub const CHART_NETWORK: &str = r#"<path d="m13.11 7.664 1.78 2.672"/><path d="m14.162 12.788-3.324 1.424"/><path d="m20 4-6.06 1.515"/><path d="M3 3v16a2 2 0 0 0 2 2h16"/><circle cx="12" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="9" cy="15" r="2"/>"#;
 
 /// chart no axes column
-pub const CHART_NO_AXES_COLUMN: &str =
-    r#"<path d="M5 21v-6"/><path d="M12 21V3"/><path d="M19 21V9"/>"#;
+pub const CHART_NO_AXES_COLUMN: &str = r#"<path d="M5 21v-6"/><path d="M12 21V3"/><path d="M19 21V9"/>"#;
 
 /// chart no axes column decreasing
-pub const CHART_NO_AXES_COLUMN_DECREASING: &str =
-    r#"<path d="M5 21V3"/><path d="M12 21V9"/><path d="M19 21v-6"/>"#;
+pub const CHART_NO_AXES_COLUMN_DECREASING: &str = r#"<path d="M5 21V3"/><path d="M12 21V9"/><path d="M19 21v-6"/>"#;
 
 /// chart no axes column increasing
-pub const CHART_NO_AXES_COLUMN_INCREASING: &str =
-    r#"<path d="M5 21v-6"/><path d="M12 21V9"/><path d="M19 21V3"/>"#;
+pub const CHART_NO_AXES_COLUMN_INCREASING: &str = r#"<path d="M5 21v-6"/><path d="M12 21V9"/><path d="M19 21V3"/>"#;
 
 /// chart no axes combined
 pub const CHART_NO_AXES_COMBINED: &str = r#"<path d="M12 16v5"/><path d="M16 14v7"/><path d="M20 10v11"/><path d="m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15"/><path d="M4 18v3"/><path d="M8 14v7"/>"#;
 
 /// chart no axes gantt
-pub const CHART_NO_AXES_GANTT: &str =
-    r#"<path d="M6 5h12"/><path d="M4 12h10"/><path d="M12 19h8"/>"#;
+pub const CHART_NO_AXES_GANTT: &str = r#"<path d="M6 5h12"/><path d="M4 12h10"/><path d="M12 19h8"/>"#;
 
 /// chart pie
 pub const CHART_PIE: &str = r#"<path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z"/><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/>"#;
@@ -996,8 +968,7 @@ pub const CHECK: &str = r#"<path d="M20 6 9 17l-5-5"/>"#;
 pub const CHECK_CHECK: &str = r#"<path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/>"#;
 
 /// check line
-pub const CHECK_LINE: &str =
-    r#"<path d="M20 4L9 15"/><path d="M21 19L3 19"/><path d="M9 15L4 10"/>"#;
+pub const CHECK_LINE: &str = r#"<path d="M20 4L9 15"/><path d="M21 19L3 19"/><path d="M9 15L4 10"/>"#;
 
 /// chef hat
 pub const CHEF_HAT: &str = r#"<path d="M17 21a1 1 0 0 0 1-1v-5.35c0-.457.316-.844.727-1.041a4 4 0 0 0-2.134-7.589 5 5 0 0 0-9.186 0 4 4 0 0 0-2.134 7.588c.411.198.727.585.727 1.041V20a1 1 0 0 0 1 1Z"/><path d="M6 17h12"/>"#;
@@ -1087,55 +1058,43 @@ pub const CIRCLE: &str = r#"<circle cx="12" cy="12" r="10"/>"#;
 pub const CIRCLE_ALERT: &str = r#"<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>"#;
 
 /// circle arrow down
-pub const CIRCLE_ARROW_DOWN: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="m8 12 4 4 4-4"/>"#;
+pub const CIRCLE_ARROW_DOWN: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="m8 12 4 4 4-4"/>"#;
 
 /// circle arrow left
-pub const CIRCLE_ARROW_LEFT: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="m12 8-4 4 4 4"/><path d="M16 12H8"/>"#;
+pub const CIRCLE_ARROW_LEFT: &str = r#"<circle cx="12" cy="12" r="10"/><path d="m12 8-4 4 4 4"/><path d="M16 12H8"/>"#;
 
 /// circle arrow out down left
-pub const CIRCLE_ARROW_OUT_DOWN_LEFT: &str =
-    r#"<path d="M2 12a10 10 0 1 1 10 10"/><path d="m2 22 10-10"/><path d="M8 22H2v-6"/>"#;
+pub const CIRCLE_ARROW_OUT_DOWN_LEFT: &str = r#"<path d="M2 12a10 10 0 1 1 10 10"/><path d="m2 22 10-10"/><path d="M8 22H2v-6"/>"#;
 
 /// circle arrow out down right
-pub const CIRCLE_ARROW_OUT_DOWN_RIGHT: &str =
-    r#"<path d="M12 22a10 10 0 1 1 10-10"/><path d="M22 22 12 12"/><path d="M22 16v6h-6"/>"#;
+pub const CIRCLE_ARROW_OUT_DOWN_RIGHT: &str = r#"<path d="M12 22a10 10 0 1 1 10-10"/><path d="M22 22 12 12"/><path d="M22 16v6h-6"/>"#;
 
 /// circle arrow out up left
-pub const CIRCLE_ARROW_OUT_UP_LEFT: &str =
-    r#"<path d="M2 8V2h6"/><path d="m2 2 10 10"/><path d="M12 2A10 10 0 1 1 2 12"/>"#;
+pub const CIRCLE_ARROW_OUT_UP_LEFT: &str = r#"<path d="M2 8V2h6"/><path d="m2 2 10 10"/><path d="M12 2A10 10 0 1 1 2 12"/>"#;
 
 /// circle arrow out up right
-pub const CIRCLE_ARROW_OUT_UP_RIGHT: &str =
-    r#"<path d="M22 12A10 10 0 1 1 12 2"/><path d="M22 2 12 12"/><path d="M16 2h6v6"/>"#;
+pub const CIRCLE_ARROW_OUT_UP_RIGHT: &str = r#"<path d="M22 12A10 10 0 1 1 12 2"/><path d="M22 2 12 12"/><path d="M16 2h6v6"/>"#;
 
 /// circle arrow right
-pub const CIRCLE_ARROW_RIGHT: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="m12 16 4-4-4-4"/><path d="M8 12h8"/>"#;
+pub const CIRCLE_ARROW_RIGHT: &str = r#"<circle cx="12" cy="12" r="10"/><path d="m12 16 4-4-4-4"/><path d="M8 12h8"/>"#;
 
 /// circle arrow up
-pub const CIRCLE_ARROW_UP: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/>"#;
+pub const CIRCLE_ARROW_UP: &str = r#"<circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/>"#;
 
 /// circle check
 pub const CIRCLE_CHECK: &str = r#"<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>"#;
 
 /// circle check big
-pub const CIRCLE_CHECK_BIG: &str =
-    r#"<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>"#;
+pub const CIRCLE_CHECK_BIG: &str = r#"<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>"#;
 
 /// circle chevron down
-pub const CIRCLE_CHEVRON_DOWN: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="m16 10-4 4-4-4"/>"#;
+pub const CIRCLE_CHEVRON_DOWN: &str = r#"<circle cx="12" cy="12" r="10"/><path d="m16 10-4 4-4-4"/>"#;
 
 /// circle chevron left
-pub const CIRCLE_CHEVRON_LEFT: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="m14 16-4-4 4-4"/>"#;
+pub const CIRCLE_CHEVRON_LEFT: &str = r#"<circle cx="12" cy="12" r="10"/><path d="m14 16-4-4 4-4"/>"#;
 
 /// circle chevron right
-pub const CIRCLE_CHEVRON_RIGHT: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="m10 8 4 4-4 4"/>"#;
+pub const CIRCLE_CHEVRON_RIGHT: &str = r#"<circle cx="12" cy="12" r="10"/><path d="m10 8 4 4-4 4"/>"#;
 
 /// circle chevron up
 pub const CIRCLE_CHEVRON_UP: &str = r#"<circle cx="12" cy="12" r="10"/><path d="m8 14 4-4 4 4"/>"#;
@@ -1159,8 +1118,7 @@ pub const CIRCLE_DOT_DASHED: &str = r#"<path d="M10.1 2.18a9.93 9.93 0 0 1 3.8 0
 pub const CIRCLE_ELLIPSIS: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M17 12h.01"/><path d="M12 12h.01"/><path d="M7 12h.01"/>"#;
 
 /// circle equal
-pub const CIRCLE_EQUAL: &str =
-    r#"<path d="M7 10h10"/><path d="M7 14h10"/><circle cx="12" cy="12" r="10"/>"#;
+pub const CIRCLE_EQUAL: &str = r#"<path d="M7 10h10"/><path d="M7 14h10"/><circle cx="12" cy="12" r="10"/>"#;
 
 /// circle fading arrow up
 pub const CIRCLE_FADING_ARROW_UP: &str = r#"<path d="M12 2a10 10 0 0 1 7.38 16.75"/><path d="m16 12-4-4-4 4"/><path d="M12 16V8"/><path d="M2.5 8.875a10 10 0 0 0-.5 3"/><path d="M2.83 16a10 10 0 0 0 2.43 3.4"/><path d="M4.636 5.235a10 10 0 0 1 .891-.857"/><path d="M8.644 21.42a10 10 0 0 0 7.631-.38"/>"#;
@@ -1178,8 +1136,7 @@ pub const CIRCLE_MINUS: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M8 12
 pub const CIRCLE_OFF: &str = r#"<path d="m2 2 20 20"/><path d="M8.35 2.69A10 10 0 0 1 21.3 15.65"/><path d="M19.08 19.08A10 10 0 1 1 4.92 4.92"/>"#;
 
 /// circle parking
-pub const CIRCLE_PARKING: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/>"#;
+pub const CIRCLE_PARKING: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/>"#;
 
 /// circle parking off
 pub const CIRCLE_PARKING_OFF: &str = r#"<path d="M12.656 7H13a3 3 0 0 1 2.984 3.307"/><path d="M13 13H9"/><path d="M19.071 19.071A1 1 0 0 1 4.93 4.93"/><path d="m2 2 20 20"/><path d="M8.357 2.687a10 10 0 0 1 12.956 12.956"/><path d="M9 17V9"/>"#;
@@ -1197,8 +1154,7 @@ pub const CIRCLE_PILE: &str = r#"<circle cx="12" cy="19" r="2"/><circle cx="12" 
 pub const CIRCLE_PLAY: &str = r#"<path d="M9 9.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997A1 1 0 0 1 9 14.996z"/><circle cx="12" cy="12" r="10"/>"#;
 
 /// circle plus
-pub const CIRCLE_PLUS: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>"#;
+pub const CIRCLE_PLUS: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>"#;
 
 /// circle pound sterling
 pub const CIRCLE_POUND_STERLING: &str = r#"<path d="M10 16V9.5a1 1 0 0 1 5 0"/><path d="M8 12h4"/><path d="M8 16h7"/><circle cx="12" cy="12" r="10"/>"#;
@@ -1210,8 +1166,7 @@ pub const CIRCLE_POWER: &str = r#"<path d="M12 7v4"/><path d="M7.998 9.003a5 5 0
 pub const CIRCLE_QUESTION_MARK: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>"#;
 
 /// circle slash
-pub const CIRCLE_SLASH: &str =
-    r#"<circle cx="12" cy="12" r="10"/><line x1="9" y1="15" x2="15" y2="9"/>"#;
+pub const CIRCLE_SLASH: &str = r#"<circle cx="12" cy="12" r="10"/><line x1="9" y1="15" x2="15" y2="9"/>"#;
 
 /// circle slash 2
 pub const CIRCLE_SLASH_2: &str = r#"<path d="M22 2 2 22"/><circle cx="12" cy="12" r="10"/>"#;
@@ -1223,8 +1178,7 @@ pub const CIRCLE_SMALL: &str = r#"<circle cx="12" cy="12" r="6"/>"#;
 pub const CIRCLE_STAR: &str = r#"<path d="M11.051 7.616a1 1 0 0 1 1.909.024l.737 1.452a1 1 0 0 0 .737.535l1.634.256a1 1 0 0 1 .588 1.806l-1.172 1.168a1 1 0 0 0-.282.866l.259 1.613a1 1 0 0 1-1.541 1.134l-1.465-.75a1 1 0 0 0-.912 0l-1.465.75a1 1 0 0 1-1.539-1.133l.258-1.613a1 1 0 0 0-.282-.867l-1.156-1.152a1 1 0 0 1 .572-1.822l1.633-.256a1 1 0 0 0 .737-.535z"/><circle cx="12" cy="12" r="10"/>"#;
 
 /// circle stop
-pub const CIRCLE_STOP: &str =
-    r#"<circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6" rx="1"/>"#;
+pub const CIRCLE_STOP: &str = r#"<circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6" rx="1"/>"#;
 
 /// circle user
 pub const CIRCLE_USER: &str = r#"<circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/>"#;
@@ -1233,8 +1187,7 @@ pub const CIRCLE_USER: &str = r#"<circle cx="12" cy="12" r="10"/><circle cx="12"
 pub const CIRCLE_USER_ROUND: &str = r#"<path d="M18 20a6 6 0 0 0-12 0"/><circle cx="12" cy="10" r="4"/><circle cx="12" cy="12" r="10"/>"#;
 
 /// circle x
-pub const CIRCLE_X: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>"#;
+pub const CIRCLE_X: &str = r#"<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>"#;
 
 /// circuit board
 pub const CIRCUIT_BOARD: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M11 9h4a2 2 0 0 0 2-2V3"/><circle cx="9" cy="9" r="2"/><path d="M7 21v-4a2 2 0 0 1 2-2h4"/><circle cx="15" cy="15" r="2"/>"#;
@@ -1420,8 +1373,7 @@ pub const CODEPEN: &str = r#"<polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2
 pub const CODESANDBOX: &str = r#"<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="7.5 4.21 12 6.81 16.5 4.21"/><polyline points="7.5 19.79 7.5 14.6 3 12"/><polyline points="21 12 16.5 14.6 16.5 19.79"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>"#;
 
 /// code xml
-pub const CODE_XML: &str =
-    r#"<path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/>"#;
+pub const CODE_XML: &str = r#"<path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/>"#;
 
 /// coffee
 pub const COFFEE: &str = r#"<path d="M10 2v2"/><path d="M14 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/><path d="M6 2v2"/>"#;
@@ -1433,12 +1385,10 @@ pub const COG: &str = r#"<path d="M11 10.27 7 3.34"/><path d="m11 13.73-4 6.93"/
 pub const COINS: &str = r#"<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>"#;
 
 /// columns 2
-pub const COLUMNS_2: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>"#;
+pub const COLUMNS_2: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18"/>"#;
 
 /// columns 3
-pub const COLUMNS_3: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/>"#;
+pub const COLUMNS_3: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/>"#;
 
 /// columns 3 cog
 pub const COLUMNS_3_COG: &str = r#"<path d="M10.5 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5.5"/><path d="m14.3 19.6 1-.4"/><path d="M15 3v7.5"/><path d="m15.2 16.9-.9-.3"/><path d="m16.6 21.7.3-.9"/><path d="m16.8 15.3-.4-1"/><path d="m19.1 15.2.3-.9"/><path d="m19.6 21.7-.4-1"/><path d="m20.7 16.8 1-.4"/><path d="m21.7 19.4-.9-.3"/><path d="M9 3v18"/><circle cx="18" cy="18" r="3"/>"#;
@@ -1450,8 +1400,7 @@ pub const COLUMNS_4: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/>
 pub const COMBINE: &str = r#"<path d="M14 3a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1"/><path d="M19 3a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1"/><path d="m7 15 3 3"/><path d="m7 21 3-3H5a2 2 0 0 1-2-2v-2"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="3" width="7" height="7" rx="1"/>"#;
 
 /// command
-pub const COMMAND: &str =
-    r#"<path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/>"#;
+pub const COMMAND: &str = r#"<path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/>"#;
 
 /// compass
 pub const COMPASS: &str = r#"<path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"/><circle cx="12" cy="12" r="10"/>"#;
@@ -1481,8 +1430,7 @@ pub const CONTACT_ROUND: &str = r#"<path d="M16 2v2"/><path d="M17.915 22a6 6 0 
 pub const CONTAINER: &str = r#"<path d="M22 7.7c0-.6-.4-1.2-.8-1.5l-6.3-3.9a1.72 1.72 0 0 0-1.7 0l-10.3 6c-.5.2-.9.8-.9 1.4v6.6c0 .5.4 1.2.8 1.5l6.3 3.9a1.72 1.72 0 0 0 1.7 0l10.3-6c.5-.3.9-1 .9-1.5Z"/><path d="M10 21.9V14L2.1 9.1"/><path d="m10 14 11.9-6.9"/><path d="M14 19.8v-8.1"/><path d="M18 17.5V9.4"/>"#;
 
 /// contrast
-pub const CONTRAST: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12v12z"/>"#;
+pub const CONTRAST: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12v12z"/>"#;
 
 /// cookie
 pub const COOKIE: &str = r#"<path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"/><path d="M8.5 8.5v.01"/><path d="M16 15.5v.01"/><path d="M12 12v.01"/><path d="M11 17v.01"/><path d="M7 14v.01"/>"#;
@@ -1494,12 +1442,10 @@ pub const COOKING_POT: &str = r#"<path d="M2 12h20"/><path d="M20 12v8a2 2 0 0 1
 pub const COPY: &str = r#"<rect x="8" y="8" width="14" height="14" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>"#;
 
 /// copyleft
-pub const COPYLEFT: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="M9.17 14.83a4 4 0 1 0 0-5.66"/>"#;
+pub const COPYLEFT: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M9.17 14.83a4 4 0 1 0 0-5.66"/>"#;
 
 /// copyright
-pub const COPYRIGHT: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="M14.83 14.83a4 4 0 1 1 0-5.66"/>"#;
+pub const COPYRIGHT: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M14.83 14.83a4 4 0 1 1 0-5.66"/>"#;
 
 /// copy check
 pub const COPY_CHECK: &str = r#"<path d="m12 15 2 2 4-4"/><rect x="8" y="8" width="14" height="14" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>"#;
@@ -1517,35 +1463,28 @@ pub const COPY_SLASH: &str = r#"<line x1="12" y1="18" x2="18" y2="12"/><rect x="
 pub const COPY_X: &str = r#"<line x1="12" y1="12" x2="18" y2="18"/><line x1="12" y1="18" x2="18" y2="12"/><rect x="8" y="8" width="14" height="14" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>"#;
 
 /// corner down left
-pub const CORNER_DOWN_LEFT: &str =
-    r#"<path d="M20 4v7a4 4 0 0 1-4 4H4"/><path d="m9 10-5 5 5 5"/>"#;
+pub const CORNER_DOWN_LEFT: &str = r#"<path d="M20 4v7a4 4 0 0 1-4 4H4"/><path d="m9 10-5 5 5 5"/>"#;
 
 /// corner down right
-pub const CORNER_DOWN_RIGHT: &str =
-    r#"<path d="m15 10 5 5-5 5"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>"#;
+pub const CORNER_DOWN_RIGHT: &str = r#"<path d="m15 10 5 5-5 5"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>"#;
 
 /// corner left down
-pub const CORNER_LEFT_DOWN: &str =
-    r#"<path d="m14 15-5 5-5-5"/><path d="M20 4h-7a4 4 0 0 0-4 4v12"/>"#;
+pub const CORNER_LEFT_DOWN: &str = r#"<path d="m14 15-5 5-5-5"/><path d="M20 4h-7a4 4 0 0 0-4 4v12"/>"#;
 
 /// corner left up
-pub const CORNER_LEFT_UP: &str =
-    r#"<path d="M14 9 9 4 4 9"/><path d="M20 20h-7a4 4 0 0 1-4-4V4"/>"#;
+pub const CORNER_LEFT_UP: &str = r#"<path d="M14 9 9 4 4 9"/><path d="M20 20h-7a4 4 0 0 1-4-4V4"/>"#;
 
 /// corner right down
-pub const CORNER_RIGHT_DOWN: &str =
-    r#"<path d="m10 15 5 5 5-5"/><path d="M4 4h7a4 4 0 0 1 4 4v12"/>"#;
+pub const CORNER_RIGHT_DOWN: &str = r#"<path d="m10 15 5 5 5-5"/><path d="M4 4h7a4 4 0 0 1 4 4v12"/>"#;
 
 /// corner right up
 pub const CORNER_RIGHT_UP: &str = r#"<path d="m10 9 5-5 5 5"/><path d="M4 20h7a4 4 0 0 0 4-4V4"/>"#;
 
 /// corner up left
-pub const CORNER_UP_LEFT: &str =
-    r#"<path d="M20 20v-7a4 4 0 0 0-4-4H4"/><path d="M9 14 4 9l5-5"/>"#;
+pub const CORNER_UP_LEFT: &str = r#"<path d="M20 20v-7a4 4 0 0 0-4-4H4"/><path d="M9 14 4 9l5-5"/>"#;
 
 /// corner up right
-pub const CORNER_UP_RIGHT: &str =
-    r#"<path d="m15 14 5-5-5-5"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/>"#;
+pub const CORNER_UP_RIGHT: &str = r#"<path d="m15 14 5-5-5-5"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/>"#;
 
 /// cpu
 pub const CPU: &str = r#"<path d="M12 20v2"/><path d="M12 2v2"/><path d="M17 20v2"/><path d="M17 2v2"/><path d="M2 12h2"/><path d="M2 17h2"/><path d="M2 7h2"/><path d="M20 12h2"/><path d="M20 17h2"/><path d="M20 7h2"/><path d="M7 20v2"/><path d="M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/>"#;
@@ -1554,15 +1493,13 @@ pub const CPU: &str = r#"<path d="M12 20v2"/><path d="M12 2v2"/><path d="M17 20v
 pub const CREATIVE_COMMONS: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M10 9.3a2.8 2.8 0 0 0-3.5 1 3.1 3.1 0 0 0 0 3.4 2.7 2.7 0 0 0 3.5 1"/><path d="M17 9.3a2.8 2.8 0 0 0-3.5 1 3.1 3.1 0 0 0 0 3.4 2.7 2.7 0 0 0 3.5 1"/>"#;
 
 /// credit card
-pub const CREDIT_CARD: &str =
-    r#"<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>"#;
+pub const CREDIT_CARD: &str = r#"<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>"#;
 
 /// croissant
 pub const CROISSANT: &str = r#"<path d="M10.2 18H4.774a1.5 1.5 0 0 1-1.352-.97 11 11 0 0 1 .132-6.487"/><path d="M18 10.2V4.774a1.5 1.5 0 0 0-.97-1.352 11 11 0 0 0-6.486.132"/><path d="M18 5a4 3 0 0 1 4 3 2 2 0 0 1-2 2 10 10 0 0 0-5.139 1.42"/><path d="M5 18a3 4 0 0 0 3 4 2 2 0 0 0 2-2 10 10 0 0 1 1.42-5.14"/><path d="M8.709 2.554a10 10 0 0 0-6.155 6.155 1.5 1.5 0 0 0 .676 1.626l9.807 5.42a2 2 0 0 0 2.718-2.718l-5.42-9.807a1.5 1.5 0 0 0-1.626-.676"/>"#;
 
 /// crop
-pub const CROP: &str =
-    r#"<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>"#;
+pub const CROP: &str = r#"<path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/>"#;
 
 /// cross
 pub const CROSS: &str = r#"<path d="M4 9a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h4a1 1 0 0 1 1 1v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a1 1 0 0 1 1-1h4a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-4a1 1 0 0 1-1-1V4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4a1 1 0 0 1-1 1z"/>"#;
@@ -1583,8 +1520,7 @@ pub const CUP_SODA: &str = r#"<path d="m6 8 1.75 12.28a2 2 0 0 0 2 1.72h4.54a2 2
 pub const CURRENCY: &str = r#"<circle cx="12" cy="12" r="8"/><line x1="3" y1="3" x2="6" y2="6"/><line x1="21" y1="3" x2="18" y2="6"/><line x1="3" y1="21" x2="6" y2="18"/><line x1="21" y1="21" x2="18" y2="18"/>"#;
 
 /// cylinder
-pub const CYLINDER: &str =
-    r#"<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/>"#;
+pub const CYLINDER: &str = r#"<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/>"#;
 
 /// dam
 pub const DAM: &str = r#"<path d="M11 11.31c1.17.56 1.54 1.69 3.5 1.69 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M11.75 18c.35.5 1.45 1 2.75 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><path d="M2 6h4"/><path d="M7 3a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1L10 4a1 1 0 0 0-1-1z"/>"#;
@@ -1629,8 +1565,7 @@ pub const DIAMOND_PLUS: &str = r#"<path d="M12 8v8"/><path d="M2.7 10.3a2.41 2.4
 pub const DICES: &str = r#"<rect x="2" y="10" width="12" height="12" rx="2" ry="2"/><path d="m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6"/><path d="M6 18h.01"/><path d="M10 14h.01"/><path d="M15 6h.01"/><path d="M18 9h.01"/>"#;
 
 /// dice 1
-pub const DICE_1: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M12 12h.01"/>"#;
+pub const DICE_1: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M12 12h.01"/>"#;
 
 /// dice 2
 pub const DICE_2: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M15 9h.01"/><path d="M9 15h.01"/>"#;
@@ -1654,8 +1589,7 @@ pub const DIFF: &str = r#"<path d="M12 3v14"/><path d="M5 10h14"/><path d="M5 21
 pub const DISC: &str = r#"<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="2"/>"#;
 
 /// disc 2
-pub const DISC_2: &str =
-    r#"<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="M12 12h.01"/>"#;
+pub const DISC_2: &str = r#"<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><path d="M12 12h.01"/>"#;
 
 /// disc 3
 pub const DISC_3: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M6 12c0-1.7.7-3.2 1.8-4.2"/><circle cx="12" cy="12" r="2"/><path d="M18 12c0 1.7-.7 3.2-1.8 4.2"/>"#;
@@ -1673,8 +1607,7 @@ pub const DNA: &str = r#"<path d="m10 16 1.5 1.5"/><path d="m14 8-1.5-1.5"/><pat
 pub const DNA_OFF: &str = r#"<path d="M15 2c-1.35 1.5-2.092 3-2.5 4.5L14 8"/><path d="m17 6-2.891-2.891"/><path d="M2 15c3.333-3 6.667-3 10-3"/><path d="m2 2 20 20"/><path d="m20 9 .891.891"/><path d="M22 9c-1.5 1.35-3 2.092-4.5 2.5l-1-1"/><path d="M3.109 14.109 4 15"/><path d="m6.5 12.5 1 1"/><path d="m7 18 2.891 2.891"/><path d="M9 22c1.35-1.5 2.092-3 2.5-4.5L10 16"/>"#;
 
 /// dock
-pub const DOCK: &str =
-    r#"<path d="M2 8h20"/><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 16h12"/>"#;
+pub const DOCK: &str = r#"<path d="M2 8h20"/><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 16h12"/>"#;
 
 /// dog
 pub const DOG: &str = r#"<path d="M11.25 16.25h1.5L12 17z"/><path d="M16 14v.5"/><path d="M4.42 11.247A13.152 13.152 0 0 0 4 14.556C4 18.728 7.582 21 12 21s8-2.272 8-6.444a11.702 11.702 0 0 0-.493-3.309"/><path d="M8 14v.5"/><path d="M8.5 8.5c-.384 1.05-1.083 2.028-2.344 2.5-1.931.722-3.576-.297-3.656-1-.113-.994 1.177-6.53 4-7 1.923-.321 3.651.845 3.651 2.235A7.497 7.497 0 0 1 14 5.277c0-1.39 1.844-2.598 3.767-2.277 2.823.47 4.113 6.006 4 7-.08.703-1.725 1.722-3.656 1-1.261-.472-1.855-1.45-2.239-2.5"/>"#;
@@ -1764,8 +1697,7 @@ pub const ELLIPSIS: &str = r#"<circle cx="12" cy="12" r="1"/><circle cx="19" cy=
 pub const ELLIPSIS_VERTICAL: &str = r#"<circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>"#;
 
 /// equal
-pub const EQUAL: &str =
-    r#"<line x1="5" y1="9" x2="19" y2="9"/><line x1="5" y1="15" x2="19" y2="15"/>"#;
+pub const EQUAL: &str = r#"<line x1="5" y1="9" x2="19" y2="9"/><line x1="5" y1="15" x2="19" y2="15"/>"#;
 
 /// equal approximately
 pub const EQUAL_APPROXIMATELY: &str = r#"<path d="M5 15a6.5 6.5 0 0 1 7 0 6.5 6.5 0 0 0 7 0"/><path d="M5 9a6.5 6.5 0 0 1 7 0 6.5 6.5 0 0 0 7 0"/>"#;
@@ -1801,8 +1733,7 @@ pub const EYE_CLOSED: &str = r#"<path d="m15 18-.722-3.25"/><path d="M2 8a10.645
 pub const EYE_OFF: &str = r#"<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>"#;
 
 /// facebook
-pub const FACEBOOK: &str =
-    r#"<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>"#;
+pub const FACEBOOK: &str = r#"<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>"#;
 
 /// factory
 pub const FACTORY: &str = r#"<path d="M12 16h.01"/><path d="M16 16h.01"/><path d="M3 19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5a.5.5 0 0 0-.769-.422l-4.462 2.844A.5.5 0 0 1 15 10.5v-2a.5.5 0 0 0-.769-.422L9.77 10.922A.5.5 0 0 1 9 10.5V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z"/><path d="M8 16h.01"/>"#;
@@ -2021,12 +1952,10 @@ pub const FLAG: &str = r#"<path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2
 pub const FLAG_OFF: &str = r#"<path d="M16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"/><path d="m2 2 20 20"/><path d="M4 22V4"/><path d="M7.656 2H8c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10.347"/>"#;
 
 /// flag triangle left
-pub const FLAG_TRIANGLE_LEFT: &str =
-    r#"<path d="M18 22V2.8a.8.8 0 0 0-1.17-.71L5.45 7.78a.8.8 0 0 0 0 1.44L18 15.5"/>"#;
+pub const FLAG_TRIANGLE_LEFT: &str = r#"<path d="M18 22V2.8a.8.8 0 0 0-1.17-.71L5.45 7.78a.8.8 0 0 0 0 1.44L18 15.5"/>"#;
 
 /// flag triangle right
-pub const FLAG_TRIANGLE_RIGHT: &str =
-    r#"<path d="M6 22V2.8a.8.8 0 0 1 1.17-.71l11.38 5.69a.8.8 0 0 1 0 1.44L6 15.5"/>"#;
+pub const FLAG_TRIANGLE_RIGHT: &str = r#"<path d="M6 22V2.8a.8.8 0 0 1 1.17-.71l11.38 5.69a.8.8 0 0 1 0 1.44L6 15.5"/>"#;
 
 /// flame
 pub const FLAME: &str = r#"<path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4"/>"#;
@@ -2047,8 +1976,7 @@ pub const FLASK_CONICAL: &str = r#"<path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08
 pub const FLASK_CONICAL_OFF: &str = r#"<path d="M10 2v2.343"/><path d="M14 2v6.343"/><path d="m2 2 20 20"/><path d="M20 20a2 2 0 0 1-2 2H6a2 2 0 0 1-1.755-2.96l5.227-9.563"/><path d="M6.453 15H15"/><path d="M8.5 2h7"/>"#;
 
 /// flask round
-pub const FLASK_ROUND: &str =
-    r#"<path d="M10 2v6.292a7 7 0 1 0 4 0V2"/><path d="M5 15h14"/><path d="M8.5 2h7"/>"#;
+pub const FLASK_ROUND: &str = r#"<path d="M10 2v6.292a7 7 0 1 0 4 0V2"/><path d="M5 15h14"/><path d="M8.5 2h7"/>"#;
 
 /// flip horizontal
 pub const FLIP_HORIZONTAL: &str = r#"<path d="M8 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h3"/><path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3"/><path d="M12 20v2"/><path d="M12 14v2"/><path d="M12 8v2"/><path d="M12 2v2"/>"#;
@@ -2207,23 +2135,19 @@ pub const FUNNEL_PLUS: &str = r#"<path d="M13.354 3H3a1 1 0 0 0-.742 1.67l7.225 
 pub const FUNNEL_X: &str = r#"<path d="M12.531 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14v6a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341l.427-.473"/><path d="m16.5 3.5 5 5"/><path d="m21.5 3.5-5 5"/>"#;
 
 /// gallery horizontal
-pub const GALLERY_HORIZONTAL: &str =
-    r#"<path d="M2 3v18"/><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M22 3v18"/>"#;
+pub const GALLERY_HORIZONTAL: &str = r#"<path d="M2 3v18"/><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M22 3v18"/>"#;
 
 /// gallery horizontal end
-pub const GALLERY_HORIZONTAL_END: &str =
-    r#"<path d="M2 7v10"/><path d="M6 5v14"/><rect x="10" y="3" width="12" height="18" rx="2"/>"#;
+pub const GALLERY_HORIZONTAL_END: &str = r#"<path d="M2 7v10"/><path d="M6 5v14"/><rect x="10" y="3" width="12" height="18" rx="2"/>"#;
 
 /// gallery thumbnails
 pub const GALLERY_THUMBNAILS: &str = r#"<rect x="3" y="3" width="18" height="14" rx="2"/><path d="M4 21h1"/><path d="M9 21h1"/><path d="M14 21h1"/><path d="M19 21h1"/>"#;
 
 /// gallery vertical
-pub const GALLERY_VERTICAL: &str =
-    r#"<path d="M3 2h18"/><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 22h18"/>"#;
+pub const GALLERY_VERTICAL: &str = r#"<path d="M3 2h18"/><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 22h18"/>"#;
 
 /// gallery vertical end
-pub const GALLERY_VERTICAL_END: &str =
-    r#"<path d="M7 2h10"/><path d="M5 6h14"/><rect x="3" y="10" width="18" height="12" rx="2"/>"#;
+pub const GALLERY_VERTICAL_END: &str = r#"<path d="M7 2h10"/><path d="M5 6h14"/><rect x="3" y="10" width="18" height="12" rx="2"/>"#;
 
 /// gamepad
 pub const GAMEPAD: &str = r#"<line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><line x1="15" y1="13" x2="15.01" y2="13"/><line x1="18" y1="11" x2="18.01" y2="11"/><rect x="2" y="6" width="20" height="12" rx="2"/>"#;
@@ -2271,8 +2195,7 @@ pub const GIT_BRANCH_PLUS: &str = r#"<path d="M6 3v12"/><path d="M18 9a3 3 0 1 0
 pub const GIT_COMMIT_HORIZONTAL: &str = r#"<circle cx="12" cy="12" r="3"/><line x1="3" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="21" y2="12"/>"#;
 
 /// git commit vertical
-pub const GIT_COMMIT_VERTICAL: &str =
-    r#"<path d="M12 3v6"/><circle cx="12" cy="12" r="3"/><path d="M12 15v6"/>"#;
+pub const GIT_COMMIT_VERTICAL: &str = r#"<path d="M12 3v6"/><circle cx="12" cy="12" r="3"/><path d="M12 15v6"/>"#;
 
 /// git compare
 pub const GIT_COMPARE: &str = r#"<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/>"#;
@@ -2332,8 +2255,7 @@ pub const GRADUATION_CAP: &str = r#"<path d="M21.42 10.922a1 1 0 0 0-.019-1.838L
 pub const GRAPE: &str = r#"<path d="M22 5V2l-5.89 5.89"/><circle cx="16.6" cy="15.89" r="3"/><circle cx="8.11" cy="7.4" r="3"/><circle cx="12.35" cy="11.65" r="3"/><circle cx="13.91" cy="5.85" r="3"/><circle cx="18.15" cy="10.09" r="3"/><circle cx="6.56" cy="13.2" r="3"/><circle cx="10.8" cy="17.44" r="3"/><circle cx="5" cy="19" r="3"/>"#;
 
 /// grid 2x2
-pub const GRID_2X2: &str =
-    r#"<path d="M12 3v18"/><path d="M3 12h18"/><rect x="3" y="3" width="18" height="18" rx="2"/>"#;
+pub const GRID_2X2: &str = r#"<path d="M12 3v18"/><path d="M3 12h18"/><rect x="3" y="3" width="18" height="18" rx="2"/>"#;
 
 /// grid 2x2 check
 pub const GRID_2X2_CHECK: &str = r#"<path d="M12 3v17a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1H3"/><path d="m16 19 2 2 4-4"/>"#;
@@ -2435,8 +2357,7 @@ pub const HDMI_PORT: &str = r#"<path d="M22 9a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v4a1 
 pub const HEADING: &str = r#"<path d="M6 12h12"/><path d="M6 20V4"/><path d="M18 20V4"/>"#;
 
 /// heading 1
-pub const HEADING_1: &str =
-    r#"<path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="m17 12 3-2v8"/>"#;
+pub const HEADING_1: &str = r#"<path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="m17 12 3-2v8"/>"#;
 
 /// heading 2
 pub const HEADING_2: &str = r#"<path d="M4 12h8"/><path d="M4 18V6"/><path d="M12 18V6"/><path d="M21 18h-4c0-4 4-3 4-6 0-1.5-2-2.5-4-1"/>"#;
@@ -2577,12 +2498,10 @@ pub const INBOX: &str = r#"<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/
 pub const INDIAN_RUPEE: &str = r#"<path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/>"#;
 
 /// infinity
-pub const INFINITY: &str =
-    r#"<path d="M6 16c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8"/>"#;
+pub const INFINITY: &str = r#"<path d="M6 16c5 0 7-8 12-8a4 4 0 0 1 0 8c-5 0-7-8-12-8a4 4 0 1 0 0 8"/>"#;
 
 /// info
-pub const INFO: &str =
-    r#"<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>"#;
+pub const INFO: &str = r#"<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>"#;
 
 /// inspection panel
 pub const INSPECTION_PANEL: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h.01"/><path d="M17 7h.01"/><path d="M7 17h.01"/><path d="M17 17h.01"/>"#;
@@ -2600,8 +2519,7 @@ pub const ITERATION_CCW: &str = r#"<path d="m16 14 4 4-4 4"/><path d="M20 10a8 8
 pub const ITERATION_CW: &str = r#"<path d="M4 10a8 8 0 1 1 8 8H4"/><path d="m8 22-4-4 4-4"/>"#;
 
 /// japanese yen
-pub const JAPANESE_YEN: &str =
-    r#"<path d="M12 9.5V21m0-11.5L6 3m6 6.5L18 3"/><path d="M6 15h12"/><path d="M6 11h12"/>"#;
+pub const JAPANESE_YEN: &str = r#"<path d="M12 9.5V21m0-11.5L6 3m6 6.5L18 3"/><path d="M6 15h12"/><path d="M6 11h12"/>"#;
 
 /// joystick
 pub const JOYSTICK: &str = r#"<path d="M21 17a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2Z"/><path d="M6 15v-2"/><path d="M12 15V9"/><circle cx="12" cy="6" r="3"/>"#;
@@ -2712,8 +2630,7 @@ pub const LEAFY_GREEN: &str = r#"<path d="M2 22c1.25-.987 2.27-1.975 3.9-2.2a5.5
 pub const LECTERN: &str = r#"<path d="M16 12h3a2 2 0 0 0 1.902-1.38l1.056-3.333A1 1 0 0 0 21 6H3a1 1 0 0 0-.958 1.287l1.056 3.334A2 2 0 0 0 5 12h3"/><path d="M18 6V3a1 1 0 0 0-1-1h-3"/><rect x="8" y="10" width="8" height="12" rx="1"/>"#;
 
 /// library
-pub const LIBRARY: &str =
-    r#"<path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/>"#;
+pub const LIBRARY: &str = r#"<path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/>"#;
 
 /// library big
 pub const LIBRARY_BIG: &str = r#"<rect x="3" y="3" width="8" height="18" rx="1"/><path d="M7 3v18"/><path d="M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z"/>"#;
@@ -2749,8 +2666,7 @@ pub const LINK_2_OFF: &str = r#"<path d="M9 17H7A5 5 0 0 1 7 7"/><path d="M15 7h
 pub const LIST: &str = r#"<path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/>"#;
 
 /// list check
-pub const LIST_CHECK: &str =
-    r#"<path d="M16 5H3"/><path d="M16 12H3"/><path d="M11 19H3"/><path d="m15 18 2 2 4-4"/>"#;
+pub const LIST_CHECK: &str = r#"<path d="M16 5H3"/><path d="M16 12H3"/><path d="M11 19H3"/><path d="m15 18 2 2 4-4"/>"#;
 
 /// list checks
 pub const LIST_CHECKS: &str = r#"<path d="M13 5h8"/><path d="M13 12h8"/><path d="M13 19h8"/><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/>"#;
@@ -2774,16 +2690,13 @@ pub const LIST_FILTER: &str = r#"<path d="M2 5h20"/><path d="M6 12h12"/><path d=
 pub const LIST_FILTER_PLUS: &str = r#"<path d="M12 5H2"/><path d="M6 12h12"/><path d="M9 19h6"/><path d="M16 5h6"/><path d="M19 8V2"/>"#;
 
 /// list indent decrease
-pub const LIST_INDENT_DECREASE: &str =
-    r#"<path d="M21 5H11"/><path d="M21 12H11"/><path d="M21 19H11"/><path d="m7 8-4 4 4 4"/>"#;
+pub const LIST_INDENT_DECREASE: &str = r#"<path d="M21 5H11"/><path d="M21 12H11"/><path d="M21 19H11"/><path d="m7 8-4 4 4 4"/>"#;
 
 /// list indent increase
-pub const LIST_INDENT_INCREASE: &str =
-    r#"<path d="M21 5H11"/><path d="M21 12H11"/><path d="M21 19H11"/><path d="m3 8 4 4-4 4"/>"#;
+pub const LIST_INDENT_INCREASE: &str = r#"<path d="M21 5H11"/><path d="M21 12H11"/><path d="M21 19H11"/><path d="m3 8 4 4-4 4"/>"#;
 
 /// list minus
-pub const LIST_MINUS: &str =
-    r#"<path d="M16 5H3"/><path d="M11 12H3"/><path d="M16 19H3"/><path d="M21 12h-6"/>"#;
+pub const LIST_MINUS: &str = r#"<path d="M16 5H3"/><path d="M11 12H3"/><path d="M16 19H3"/><path d="M21 12h-6"/>"#;
 
 /// list music
 pub const LIST_MUSIC: &str = r#"<path d="M16 5H3"/><path d="M11 12H3"/><path d="M11 19H3"/><path d="M21 16V5"/><circle cx="18" cy="16" r="3"/>"#;
@@ -2942,8 +2855,7 @@ pub const MAP_PIN_X_INSIDE: &str = r#"<path d="M20 10c0 4.993-5.539 10.193-7.399
 pub const MAP_PLUS: &str = r#"<path d="m11 19-1.106-.552a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0l4.212 2.106a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619V12"/><path d="M15 5.764V12"/><path d="M18 15v6"/><path d="M21 18h-6"/><path d="M9 3.236v15"/>"#;
 
 /// mars
-pub const MARS: &str =
-    r#"<path d="M16 3h5v5"/><path d="m21 3-6.75 6.75"/><circle cx="10" cy="14" r="6"/>"#;
+pub const MARS: &str = r#"<path d="M16 3h5v5"/><path d="m21 3-6.75 6.75"/><circle cx="10" cy="14" r="6"/>"#;
 
 /// mars stroke
 pub const MARS_STROKE: &str = r#"<path d="m14 6 4 4"/><path d="M17 3h4v4"/><path d="m21 3-7.75 7.75"/><circle cx="9" cy="15" r="6"/>"#;
@@ -2955,8 +2867,7 @@ pub const MARTINI: &str = r#"<path d="M8 22h8"/><path d="M12 11v11"/><path d="m1
 pub const MAXIMIZE: &str = r#"<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>"#;
 
 /// maximize 2
-pub const MAXIMIZE_2: &str =
-    r#"<path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/>"#;
+pub const MAXIMIZE_2: &str = r#"<path d="M15 3h6v6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/><path d="M9 21H3v-6"/>"#;
 
 /// medal
 pub const MEDAL: &str = r#"<path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/><path d="M11 12 5.12 2.2"/><path d="m13 12 5.88-9.8"/><path d="M8 7h8"/><circle cx="12" cy="17" r="5"/><path d="M12 18v-2h-.5"/>"#;
@@ -3094,8 +3005,7 @@ pub const MILK_OFF: &str = r#"<path d="M8 2h8"/><path d="M9 2v1.343M15 2v2.789a4
 pub const MINIMIZE: &str = r#"<path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/>"#;
 
 /// minimize 2
-pub const MINIMIZE_2: &str =
-    r#"<path d="m14 10 7-7"/><path d="M20 10h-6V4"/><path d="m3 21 7-7"/><path d="M4 14h6v6"/>"#;
+pub const MINIMIZE_2: &str = r#"<path d="m14 10 7-7"/><path d="M20 10h-6V4"/><path d="m3 21 7-7"/><path d="M4 14h6v6"/>"#;
 
 /// minus
 pub const MINUS: &str = r#"<path d="M5 12h14"/>"#;
@@ -3185,12 +3095,10 @@ pub const MOVE: &str = r#"<path d="M12 2v20"/><path d="m15 19-3 3-3-3"/><path d=
 pub const MOVE_3D: &str = r#"<path d="M5 3v16h16"/><path d="m5 19 6-6"/><path d="m2 6 3-3 3 3"/><path d="m18 16 3 3-3 3"/>"#;
 
 /// move diagonal
-pub const MOVE_DIAGONAL: &str =
-    r#"<path d="M11 19H5v-6"/><path d="M13 5h6v6"/><path d="M19 5 5 19"/>"#;
+pub const MOVE_DIAGONAL: &str = r#"<path d="M11 19H5v-6"/><path d="M13 5h6v6"/><path d="M19 5 5 19"/>"#;
 
 /// move diagonal 2
-pub const MOVE_DIAGONAL_2: &str =
-    r#"<path d="M19 13v6h-6"/><path d="M5 11V5h6"/><path d="m5 5 14 14"/>"#;
+pub const MOVE_DIAGONAL_2: &str = r#"<path d="M19 13v6h-6"/><path d="M5 11V5h6"/><path d="m5 5 14 14"/>"#;
 
 /// move down
 pub const MOVE_DOWN: &str = r#"<path d="M8 18L12 22L16 18"/><path d="M12 2V22"/>"#;
@@ -3202,8 +3110,7 @@ pub const MOVE_DOWN_LEFT: &str = r#"<path d="M11 19H5V13"/><path d="M19 5L5 19"/
 pub const MOVE_DOWN_RIGHT: &str = r#"<path d="M19 13V19H13"/><path d="M5 5L19 19"/>"#;
 
 /// move horizontal
-pub const MOVE_HORIZONTAL: &str =
-    r#"<path d="m18 8 4 4-4 4"/><path d="M2 12h20"/><path d="m6 8-4 4 4 4"/>"#;
+pub const MOVE_HORIZONTAL: &str = r#"<path d="m18 8 4 4-4 4"/><path d="M2 12h20"/><path d="m6 8-4 4 4 4"/>"#;
 
 /// move left
 pub const MOVE_LEFT: &str = r#"<path d="M6 8L2 12L6 16"/><path d="M2 12H22"/>"#;
@@ -3221,12 +3128,10 @@ pub const MOVE_UP_LEFT: &str = r#"<path d="M5 11V5H11"/><path d="M5 5L19 19"/>"#
 pub const MOVE_UP_RIGHT: &str = r#"<path d="M13 5H19V11"/><path d="M19 5L5 19"/>"#;
 
 /// move vertical
-pub const MOVE_VERTICAL: &str =
-    r#"<path d="M12 2v20"/><path d="m8 18 4 4 4-4"/><path d="m8 6 4-4 4 4"/>"#;
+pub const MOVE_VERTICAL: &str = r#"<path d="M12 2v20"/><path d="m8 18 4 4 4-4"/><path d="m8 6 4-4 4 4"/>"#;
 
 /// music
-pub const MUSIC: &str =
-    r#"<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>"#;
+pub const MUSIC: &str = r#"<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>"#;
 
 /// music 2
 pub const MUSIC_2: &str = r#"<circle cx="8" cy="18" r="4"/><path d="M12 18V2l7 4"/>"#;
@@ -3355,20 +3260,16 @@ pub const PALETTE: &str = r#"<path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 
 pub const PANDA: &str = r#"<path d="M11.25 17.25h1.5L12 18z"/><path d="m15 12 2 2"/><path d="M18 6.5a.5.5 0 0 0-.5-.5"/><path d="M20.69 9.67a4.5 4.5 0 1 0-7.04-5.5 8.35 8.35 0 0 0-3.3 0 4.5 4.5 0 1 0-7.04 5.5C2.49 11.2 2 12.88 2 14.5 2 19.47 6.48 22 12 22s10-2.53 10-7.5c0-1.62-.48-3.3-1.3-4.83"/><path d="M6 6.5a.495.495 0 0 1 .5-.5"/><path d="m9 12-2 2"/>"#;
 
 /// panels left bottom
-pub const PANELS_LEFT_BOTTOM: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M9 15h12"/>"#;
+pub const PANELS_LEFT_BOTTOM: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M9 15h12"/>"#;
 
 /// panels right bottom
-pub const PANELS_RIGHT_BOTTOM: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h12"/><path d="M15 3v18"/>"#;
+pub const PANELS_RIGHT_BOTTOM: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h12"/><path d="M15 3v18"/>"#;
 
 /// panels top left
-pub const PANELS_TOP_LEFT: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>"#;
+pub const PANELS_TOP_LEFT: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>"#;
 
 /// panel bottom
-pub const PANEL_BOTTOM: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h18"/>"#;
+pub const PANEL_BOTTOM: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h18"/>"#;
 
 /// panel bottom close
 pub const PANEL_BOTTOM_CLOSE: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h18"/><path d="m15 8-3 3-3-3"/>"#;
@@ -3380,8 +3281,7 @@ pub const PANEL_BOTTOM_DASHED: &str = r#"<rect x="3" y="3" width="18" height="18
 pub const PANEL_BOTTOM_OPEN: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h18"/><path d="m9 10 3-3 3 3"/>"#;
 
 /// panel left
-pub const PANEL_LEFT: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>"#;
+pub const PANEL_LEFT: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>"#;
 
 /// panel left close
 pub const PANEL_LEFT_CLOSE: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/>"#;
@@ -3396,8 +3296,7 @@ pub const PANEL_LEFT_OPEN: &str = r#"<rect x="3" y="3" width="18" height="18" rx
 pub const PANEL_LEFT_RIGHT_DASHED: &str = r#"<path d="M15 10V9"/><path d="M15 15v-1"/><path d="M15 21v-2"/><path d="M15 5V3"/><path d="M9 10V9"/><path d="M9 15v-1"/><path d="M9 21v-2"/><path d="M9 5V3"/><rect x="3" y="3" width="18" height="18" rx="2"/>"#;
 
 /// panel right
-pub const PANEL_RIGHT: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>"#;
+pub const PANEL_RIGHT: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>"#;
 
 /// panel right close
 pub const PANEL_RIGHT_CLOSE: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/>"#;
@@ -3409,8 +3308,7 @@ pub const PANEL_RIGHT_DASHED: &str = r#"<rect x="3" y="3" width="18" height="18"
 pub const PANEL_RIGHT_OPEN: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/><path d="m10 15-3-3 3-3"/>"#;
 
 /// panel top
-pub const PANEL_TOP: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>"#;
+pub const PANEL_TOP: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>"#;
 
 /// panel top bottom dashed
 pub const PANEL_TOP_BOTTOM_DASHED: &str = r#"<path d="M14 15h1"/><path d="M14 9h1"/><path d="M19 15h2"/><path d="M19 9h2"/><path d="M3 15h2"/><path d="M3 9h2"/><path d="M9 15h1"/><path d="M9 9h1"/><rect x="3" y="3" width="18" height="18" rx="2"/>"#;
@@ -3428,8 +3326,7 @@ pub const PANEL_TOP_OPEN: &str = r#"<rect x="3" y="3" width="18" height="18" rx=
 pub const PAPERCLIP: &str = r#"<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/>"#;
 
 /// parentheses
-pub const PARENTHESES: &str =
-    r#"<path d="M8 21s-4-3-4-9 4-9 4-9"/><path d="M16 3s4 3 4 9-4 9-4 9"/>"#;
+pub const PARENTHESES: &str = r#"<path d="M8 21s-4-3-4-9 4-9 4-9"/><path d="M16 3s4 3 4 9-4 9-4 9"/>"#;
 
 /// parking meter
 pub const PARKING_METER: &str = r#"<path d="M11 15h2"/><path d="M12 12v3"/><path d="M12 19v3"/><path d="M15.282 19a1 1 0 0 0 .948-.68l2.37-6.988a7 7 0 1 0-13.2 0l2.37 6.988a1 1 0 0 0 .948.68z"/><path d="M9 9a3 3 0 1 1 6 0"/>"#;
@@ -3522,8 +3419,7 @@ pub const PICTURE_IN_PICTURE_2: &str = r#"<path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0
 pub const PIGGY_BANK: &str = r#"<path d="M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.16 3.16 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z"/><path d="M16 10h.01"/><path d="M2 8v1a2 2 0 0 0 2 2h1"/>"#;
 
 /// pilcrow
-pub const PILCROW: &str =
-    r#"<path d="M13 4v16"/><path d="M17 4v16"/><path d="M19 4H9.5a4.5 4.5 0 0 0 0 9H13"/>"#;
+pub const PILCROW: &str = r#"<path d="M13 4v16"/><path d="M17 4v16"/><path d="M19 4H9.5a4.5 4.5 0 0 0 0 9H13"/>"#;
 
 /// pilcrow left
 pub const PILCROW_LEFT: &str = r#"<path d="M14 3v11"/><path d="M14 9h-3a3 3 0 0 1 0-6h9"/><path d="M18 3v11"/><path d="M22 18H2l4-4"/><path d="m6 22-4-4"/>"#;
@@ -3574,8 +3470,7 @@ pub const PLUG_ZAP: &str = r#"<path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-
 pub const PLUS: &str = r#"<path d="M5 12h14"/><path d="M12 5v14"/>"#;
 
 /// pocket
-pub const POCKET: &str =
-    r#"<path d="M20 3a2 2 0 0 1 2 2v6a1 1 0 0 1-20 0V5a2 2 0 0 1 2-2z"/><path d="m8 10 4 4 4-4"/>"#;
+pub const POCKET: &str = r#"<path d="M20 3a2 2 0 0 1 2 2v6a1 1 0 0 1-20 0V5a2 2 0 0 1 2-2z"/><path d="m8 10 4 4 4-4"/>"#;
 
 /// pocket knife
 pub const POCKET_KNIFE: &str = r#"<path d="M3 2v1c0 1 2 1 2 2S3 6 3 7s2 1 2 2-2 1-2 2 2 1 2 2"/><path d="M18 6h.01"/><path d="M6 18h.01"/><path d="M20.83 8.83a4 4 0 0 0-5.66-5.66l-12 12a4 4 0 1 0 5.66 5.66Z"/><path d="M18 11.66V22a4 4 0 0 0 4-4V6"/>"#;
@@ -3656,8 +3551,7 @@ pub const RADIO_TOWER: &str = r#"<path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path
 pub const RADIUS: &str = r#"<path d="M20.34 17.52a10 10 0 1 0-2.82 2.82"/><circle cx="19" cy="19" r="2"/><path d="m13.41 13.41 4.18 4.18"/><circle cx="12" cy="12" r="2"/>"#;
 
 /// rail symbol
-pub const RAIL_SYMBOL: &str =
-    r#"<path d="M5 15h14"/><path d="M5 9h14"/><path d="m14 20-5-5 6-6-5-5"/>"#;
+pub const RAIL_SYMBOL: &str = r#"<path d="M5 15h14"/><path d="M5 9h14"/><path d="m14 20-5-5 6-6-5-5"/>"#;
 
 /// rainbow
 pub const RAINBOW: &str = r#"<path d="M22 17a10 10 0 0 0-20 0"/><path d="M6 17a6 6 0 0 1 12 0"/><path d="M10 17a2 2 0 0 1 4 0"/>"#;
@@ -3699,8 +3593,7 @@ pub const RECEIPT_TEXT: &str = r#"<path d="M13 16H8"/><path d="M14 8H8"/><path d
 pub const RECEIPT_TURKISH_LIRA: &str = r#"<path d="M10 6.5v11a5.5 5.5 0 0 0 5.5-5.5"/><path d="m14 8-6 3"/><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/>"#;
 
 /// rectangle circle
-pub const RECTANGLE_CIRCLE: &str =
-    r#"<path d="M14 4v16H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><circle cx="14" cy="12" r="8"/>"#;
+pub const RECTANGLE_CIRCLE: &str = r#"<path d="M14 4v16H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><circle cx="14" cy="12" r="8"/>"#;
 
 /// rectangle ellipsis
 pub const RECTANGLE_ELLIPSIS: &str = r#"<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M12 12h.01"/><path d="M17 12h.01"/><path d="M7 12h.01"/>"#;
@@ -3718,8 +3611,7 @@ pub const RECTANGLE_VERTICAL: &str = r#"<rect x="6" y="2" width="12" height="20"
 pub const RECYCLE: &str = r#"<path d="M7 19H4.815a1.83 1.83 0 0 1-1.57-.881 1.785 1.785 0 0 1-.004-1.784L7.196 9.5"/><path d="M11 19h8.203a1.83 1.83 0 0 0 1.556-.89 1.784 1.784 0 0 0 0-1.775l-1.226-2.12"/><path d="m14 16-3 3 3 3"/><path d="M8.293 13.596 7.196 9.5 3.1 10.598"/><path d="m9.344 5.811 1.093-1.892A1.83 1.83 0 0 1 11.985 3a1.784 1.784 0 0 1 1.546.888l3.943 6.843"/><path d="m13.378 9.633 4.096 1.098 1.097-4.096"/>"#;
 
 /// redo
-pub const REDO: &str =
-    r#"<path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>"#;
+pub const REDO: &str = r#"<path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>"#;
 
 /// redo 2
 pub const REDO_2: &str = r#"<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/>"#;
@@ -3767,8 +3659,7 @@ pub const REPLACE_ALL: &str = r#"<path d="M14 14a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1"/
 pub const REPLY: &str = r#"<path d="M20 18v-2a4 4 0 0 0-4-4H4"/><path d="m9 17-5-5 5-5"/>"#;
 
 /// reply all
-pub const REPLY_ALL: &str =
-    r#"<path d="m12 17-5-5 5-5"/><path d="M22 18v-2a4 4 0 0 0-4-4H7"/><path d="m7 17-5-5 5-5"/>"#;
+pub const REPLY_ALL: &str = r#"<path d="m12 17-5-5 5-5"/><path d="M22 18v-2a4 4 0 0 0-4-4H7"/><path d="m7 17-5-5 5-5"/>"#;
 
 /// rewind
 pub const REWIND: &str = r#"<path d="M12 6a2 2 0 0 0-3.414-1.414l-6 6a2 2 0 0 0 0 2.828l6 6A2 2 0 0 0 12 18z"/><path d="M22 6a2 2 0 0 0-3.414-1.414l-6 6a2 2 0 0 0 0 2.828l6 6A2 2 0 0 0 22 18z"/>"#;
@@ -3792,8 +3683,7 @@ pub const ROSE: &str = r#"<path d="M17 10h-1a4 4 0 1 1 4-4v.534"/><path d="M17 6
 pub const ROTATE_3D: &str = r#"<path d="M16.466 7.5C15.643 4.237 13.952 2 12 2 9.239 2 7 6.477 7 12s2.239 10 5 10c.342 0 .677-.069 1-.2"/><path d="m15.194 13.707 3.814 1.86-1.86 3.814"/><path d="M19 15.57c-1.804.885-4.274 1.43-7 1.43-5.523 0-10-2.239-10-5s4.477-5 10-5c4.838 0 8.873 1.718 9.8 4"/>"#;
 
 /// rotate ccw
-pub const ROTATE_CCW: &str =
-    r#"<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>"#;
+pub const ROTATE_CCW: &str = r#"<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>"#;
 
 /// rotate ccw key
 pub const ROTATE_CCW_KEY: &str = r#"<path d="m14.5 9.5 1 1"/><path d="m15.5 8.5-4 4"/><path d="M3 12a9 9 0 1 0 9-9 9.74 9.74 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><circle cx="10" cy="14" r="2"/>"#;
@@ -3802,8 +3692,7 @@ pub const ROTATE_CCW_KEY: &str = r#"<path d="m14.5 9.5 1 1"/><path d="m15.5 8.5-
 pub const ROTATE_CCW_SQUARE: &str = r#"<path d="M20 9V7a2 2 0 0 0-2-2h-6"/><path d="m15 2-3 3 3 3"/><path d="M20 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/>"#;
 
 /// rotate cw
-pub const ROTATE_CW: &str =
-    r#"<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>"#;
+pub const ROTATE_CW: &str = r#"<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>"#;
 
 /// rotate cw square
 pub const ROTATE_CW_SQUARE: &str = r#"<path d="M12 5H6a2 2 0 0 0-2 2v3"/><path d="m9 8 3-3-3-3"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>"#;
@@ -3821,8 +3710,7 @@ pub const ROUTE_OFF: &str = r#"<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5c
 pub const ROWS_2: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h18"/>"#;
 
 /// rows 3
-pub const ROWS_3: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M21 9H3"/><path d="M21 15H3"/>"#;
+pub const ROWS_3: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M21 9H3"/><path d="M21 15H3"/>"#;
 
 /// rows 4
 pub const ROWS_4: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M21 7.5H3"/><path d="M21 12H3"/><path d="M21 16.5H3"/>"#;
@@ -3933,15 +3821,13 @@ pub const SEARCH: &str = r#"<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" 
 pub const SEARCH_ALERT: &str = r#"<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M11 7v4"/><path d="M11 15h.01"/>"#;
 
 /// search check
-pub const SEARCH_CHECK: &str =
-    r#"<path d="m8 11 2 2 4-4"/><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>"#;
+pub const SEARCH_CHECK: &str = r#"<path d="m8 11 2 2 4-4"/><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>"#;
 
 /// search code
 pub const SEARCH_CODE: &str = r#"<path d="m13 13.5 2-2.5-2-2.5"/><path d="m21 21-4.3-4.3"/><path d="M9 8.5 7 11l2 2.5"/><circle cx="11" cy="11" r="8"/>"#;
 
 /// search slash
-pub const SEARCH_SLASH: &str =
-    r#"<path d="m13.5 8.5-5 5"/><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>"#;
+pub const SEARCH_SLASH: &str = r#"<path d="m13.5 8.5-5 5"/><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>"#;
 
 /// search x
 pub const SEARCH_X: &str = r#"<path d="m13.5 8.5-5 5"/><path d="m8.5 8.5 5 5"/><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>"#;
@@ -3959,12 +3845,10 @@ pub const SEND_HORIZONTAL: &str = r#"<path d="M3.714 3.048a.498.498 0 0 0-.683.6
 pub const SEND_TO_BACK: &str = r#"<rect x="14" y="14" width="8" height="8" rx="2"/><rect x="2" y="2" width="8" height="8" rx="2"/><path d="M7 14v1a2 2 0 0 0 2 2h1"/><path d="M14 7h1a2 2 0 0 1 2 2v1"/>"#;
 
 /// separator horizontal
-pub const SEPARATOR_HORIZONTAL: &str =
-    r#"<path d="m16 16-4 4-4-4"/><path d="M3 12h18"/><path d="m8 8 4-4 4 4"/>"#;
+pub const SEPARATOR_HORIZONTAL: &str = r#"<path d="m16 16-4 4-4-4"/><path d="M3 12h18"/><path d="m8 8 4-4 4 4"/>"#;
 
 /// separator vertical
-pub const SEPARATOR_VERTICAL: &str =
-    r#"<path d="M12 3v18"/><path d="m16 16 4-4-4-4"/><path d="m8 8-4 4 4 4"/>"#;
+pub const SEPARATOR_VERTICAL: &str = r#"<path d="M12 3v18"/><path d="m16 16 4-4-4-4"/><path d="m8 8-4 4 4 4"/>"#;
 
 /// server
 pub const SERVER: &str = r#"<rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>"#;
@@ -4081,8 +3965,7 @@ pub const SIGMA: &str = r#"<path d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.
 pub const SIGNAL: &str = r#"<path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V8"/><path d="M22 4v16"/>"#;
 
 /// signal high
-pub const SIGNAL_HIGH: &str =
-    r#"<path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V8"/>"#;
+pub const SIGNAL_HIGH: &str = r#"<path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V8"/>"#;
 
 /// signal low
 pub const SIGNAL_LOW: &str = r#"<path d="M2 20h.01"/><path d="M7 20v-4"/>"#;
@@ -4130,8 +4013,7 @@ pub const SLIDERS_HORIZONTAL: &str = r#"<path d="M10 5H3"/><path d="M12 19H3"/><
 pub const SLIDERS_VERTICAL: &str = r#"<path d="M10 8h4"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M17 16h4"/><path d="M19 12V3"/><path d="M19 21v-5"/><path d="M3 14h4"/><path d="M5 10V3"/><path d="M5 21v-7"/>"#;
 
 /// smartphone
-pub const SMARTPHONE: &str =
-    r#"<rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><path d="M12 18h.01"/>"#;
+pub const SMARTPHONE: &str = r#"<rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><path d="M12 18h.01"/>"#;
 
 /// smartphone charging
 pub const SMARTPHONE_CHARGING: &str = r#"<rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><path d="M12.667 8 10 12h4l-2.667 4"/>"#;
@@ -4182,8 +4064,7 @@ pub const SPEAKER: &str = r#"<rect x="4" y="2" width="16" height="20" rx="2"/><p
 pub const SPEECH: &str = r#"<path d="M8.8 20v-4.1l1.9.2a2.3 2.3 0 0 0 2.164-2.1V8.3A5.37 5.37 0 0 0 2 8.25c0 2.8.656 3.054 1 4.55a5.77 5.77 0 0 1 .029 2.758L2 20"/><path d="M19.8 17.8a7.5 7.5 0 0 0 .003-10.603"/><path d="M17 15a3.5 3.5 0 0 0-.025-4.975"/>"#;
 
 /// spell check
-pub const SPELL_CHECK: &str =
-    r#"<path d="m6 16 6-12 6 12"/><path d="M8 12h8"/><path d="m16 20 2 2 4-4"/>"#;
+pub const SPELL_CHECK: &str = r#"<path d="m6 16 6-12 6 12"/><path d="M8 12h8"/><path d="m16 20 2 2 4-4"/>"#;
 
 /// spell check 2
 pub const SPELL_CHECK_2: &str = r#"<path d="m6 16 6-12 6 12"/><path d="M8 12h8"/><path d="M4 21c1.1 0 1.1-1 2.3-1s1.1 1 2.3 1c1.1 0 1.1-1 2.3-1 1.1 0 1.1 1 2.3 1 1.1 0 1.1-1 2.3-1 1.1 0 1.1 1 2.3 1 1.1 0 1.1-1 2.3-1"/>"#;
@@ -4225,8 +4106,7 @@ pub const SQUARES_SUBTRACT: &str = r#"<path d="M10 22a2 2 0 0 1-2-2"/><path d="M
 pub const SQUARES_UNITE: &str = r#"<path d="M4 16a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3a1 1 0 0 0 1 1h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-3a1 1 0 0 0-1-1z"/>"#;
 
 /// square activity
-pub const SQUARE_ACTIVITY: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M17 12h-2l-2 5-2-10-2 5H7"/>"#;
+pub const SQUARE_ACTIVITY: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M17 12h-2l-2 5-2-10-2 5H7"/>"#;
 
 /// square arrow down
 pub const SQUARE_ARROW_DOWN: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8"/><path d="m8 12 4 4 4-4"/>"#;
@@ -4235,8 +4115,7 @@ pub const SQUARE_ARROW_DOWN: &str = r#"<rect x="3" y="3" width="18" height="18" 
 pub const SQUARE_ARROW_DOWN_LEFT: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m16 8-8 8"/><path d="M16 16H8V8"/>"#;
 
 /// square arrow down right
-pub const SQUARE_ARROW_DOWN_RIGHT: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m8 8 8 8"/><path d="M16 8v8H8"/>"#;
+pub const SQUARE_ARROW_DOWN_RIGHT: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m8 8 8 8"/><path d="M16 8v8H8"/>"#;
 
 /// square arrow left
 pub const SQUARE_ARROW_LEFT: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m12 8-4 4 4 4"/><path d="M16 12H8"/>"#;
@@ -4263,8 +4142,7 @@ pub const SQUARE_ARROW_UP: &str = r#"<rect x="3" y="3" width="18" height="18" rx
 pub const SQUARE_ARROW_UP_LEFT: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 16V8h8"/><path d="M16 16 8 8"/>"#;
 
 /// square arrow up right
-pub const SQUARE_ARROW_UP_RIGHT: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8h8v8"/><path d="m8 16 8-8"/>"#;
+pub const SQUARE_ARROW_UP_RIGHT: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 8h8v8"/><path d="m8 16 8-8"/>"#;
 
 /// square asterisk
 pub const SQUARE_ASTERISK: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8"/><path d="m8.5 14 7-4"/><path d="m8.5 10 7 4"/>"#;
@@ -4276,27 +4154,22 @@ pub const SQUARE_BOTTOM_DASHED_SCISSORS: &str = r#"<line x1="5" y1="3" x2="19" y
 pub const SQUARE_CHART_GANTT: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 8h7"/><path d="M8 12h6"/><path d="M11 16h5"/>"#;
 
 /// square check
-pub const SQUARE_CHECK: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 12 2 2 4-4"/>"#;
+pub const SQUARE_CHECK: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m9 12 2 2 4-4"/>"#;
 
 /// square check big
 pub const SQUARE_CHECK_BIG: &str = r#"<path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344"/><path d="m9 11 3 3L22 4"/>"#;
 
 /// square chevron down
-pub const SQUARE_CHEVRON_DOWN: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m16 10-4 4-4-4"/>"#;
+pub const SQUARE_CHEVRON_DOWN: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m16 10-4 4-4-4"/>"#;
 
 /// square chevron left
-pub const SQUARE_CHEVRON_LEFT: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m14 16-4-4 4-4"/>"#;
+pub const SQUARE_CHEVRON_LEFT: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m14 16-4-4 4-4"/>"#;
 
 /// square chevron right
-pub const SQUARE_CHEVRON_RIGHT: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m10 8 4 4-4 4"/>"#;
+pub const SQUARE_CHEVRON_RIGHT: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m10 8 4 4-4 4"/>"#;
 
 /// square chevron up
-pub const SQUARE_CHEVRON_UP: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m8 14 4-4 4 4"/>"#;
+pub const SQUARE_CHEVRON_UP: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="m8 14 4-4 4 4"/>"#;
 
 /// square code
 pub const SQUARE_CODE: &str = r#"<path d="m10 9-3 3 3 3"/><path d="m14 15 3-3-3-3"/><rect x="3" y="3" width="18" height="18" rx="2"/>"#;
@@ -4323,12 +4196,10 @@ pub const SQUARE_DASHED_TOP_SOLID: &str = r#"<path d="M14 21h1"/><path d="M21 14
 pub const SQUARE_DIVIDE: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/>"#;
 
 /// square dot
-pub const SQUARE_DOT: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="1"/>"#;
+pub const SQUARE_DOT: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="1"/>"#;
 
 /// square equal
-pub const SQUARE_EQUAL: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 10h10"/><path d="M7 14h10"/>"#;
+pub const SQUARE_EQUAL: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 10h10"/><path d="M7 14h10"/>"#;
 
 /// square function
 pub const SQUARE_FUNCTION: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3"/><path d="M9 11.2h5.7"/>"#;
@@ -4346,15 +4217,13 @@ pub const SQUARE_M: &str = r#"<path d="M8 16V8.5a.5.5 0 0 1 .9-.3l2.7 3.599a.5.5
 pub const SQUARE_MENU: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 8h10"/><path d="M7 12h10"/><path d="M7 16h10"/>"#;
 
 /// square minus
-pub const SQUARE_MINUS: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8"/>"#;
+pub const SQUARE_MINUS: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8"/>"#;
 
 /// square mouse pointer
 pub const SQUARE_MOUSE_POINTER: &str = r#"<path d="M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z"/><path d="M21 11V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6"/>"#;
 
 /// square parking
-pub const SQUARE_PARKING: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/>"#;
+pub const SQUARE_PARKING: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/>"#;
 
 /// square parking off
 pub const SQUARE_PARKING_OFF: &str = r#"<path d="M3.6 3.6A2 2 0 0 1 5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-.59 1.41"/><path d="M3 8.7V19a2 2 0 0 0 2 2h10.3"/><path d="m2 2 20 20"/><path d="M13 13a3 3 0 1 0 0-6H9v2"/><path d="M9 17v-2.3"/>"#;
@@ -4378,15 +4247,13 @@ pub const SQUARE_PILCROW: &str = r#"<rect x="3" y="3" width="18" height="18" rx=
 pub const SQUARE_PLAY: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997A1 1 0 0 1 9 14.996z"/>"#;
 
 /// square plus
-pub const SQUARE_PLUS: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8"/><path d="M12 8v8"/>"#;
+pub const SQUARE_PLUS: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8"/><path d="M12 8v8"/>"#;
 
 /// square power
 pub const SQUARE_POWER: &str = r#"<path d="M12 7v4"/><path d="M7.998 9.003a5 5 0 1 0 8-.005"/><rect x="3" y="3" width="18" height="18" rx="2"/>"#;
 
 /// square radical
-pub const SQUARE_RADICAL: &str =
-    r#"<path d="M7 12h2l2 5 2-10h4"/><rect x="3" y="3" width="18" height="18" rx="2"/>"#;
+pub const SQUARE_RADICAL: &str = r#"<path d="M7 12h2l2 5 2-10h4"/><rect x="3" y="3" width="18" height="18" rx="2"/>"#;
 
 /// square round corner
 pub const SQUARE_ROUND_CORNER: &str = r#"<path d="M21 11a8 8 0 0 0-8-8"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>"#;
@@ -4395,12 +4262,10 @@ pub const SQUARE_ROUND_CORNER: &str = r#"<path d="M21 11a8 8 0 0 0-8-8"/><path d
 pub const SQUARE_SCISSORS: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><line x1="9.56066" y1="9.56066" x2="12" y2="12"/><line x1="17" y1="17" x2="14.82" y2="14.82"/><circle cx="8.5" cy="15.5" r="1.5"/><line x1="9.56066" y1="14.43934" x2="17" y2="7"/>"#;
 
 /// square sigma
-pub const SQUARE_SIGMA: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M16 8.9V7H8l4 5-4 5h8v-1.9"/>"#;
+pub const SQUARE_SIGMA: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M16 8.9V7H8l4 5-4 5h8v-1.9"/>"#;
 
 /// square slash
-pub const SQUARE_SLASH: &str =
-    r#"<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="15" x2="15" y2="9"/>"#;
+pub const SQUARE_SLASH: &str = r#"<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="15" x2="15" y2="9"/>"#;
 
 /// square split horizontal
 pub const SQUARE_SPLIT_HORIZONTAL: &str = r#"<path d="M8 19H5c-1 0-2-1-2-2V7c0-1 1-2 2-2h3"/><path d="M16 5h3c1 0 2 1 2 2v10c0 1-1 2-2 2h-3"/><line x1="12" y1="4" x2="12" y2="20"/>"#;
@@ -4577,8 +4442,7 @@ pub const TALLY_2: &str = r#"<path d="M4 4v16"/><path d="M9 4v16"/>"#;
 pub const TALLY_3: &str = r#"<path d="M4 4v16"/><path d="M9 4v16"/><path d="M14 4v16"/>"#;
 
 /// tally 4
-pub const TALLY_4: &str =
-    r#"<path d="M4 4v16"/><path d="M9 4v16"/><path d="M14 4v16"/><path d="M19 4v16"/>"#;
+pub const TALLY_4: &str = r#"<path d="M4 4v16"/><path d="M9 4v16"/><path d="M14 4v16"/><path d="M19 4v16"/>"#;
 
 /// tally 5
 pub const TALLY_5: &str = r#"<path d="M4 4v16"/><path d="M9 4v16"/><path d="M14 4v16"/><path d="M19 4v16"/><path d="M22 6 2 18"/>"#;
@@ -4611,15 +4475,13 @@ pub const TEST_TUBES: &str = r#"<path d="M9 2v17.5A2.5 2.5 0 0 1 6.5 22A2.5 2.5 
 pub const TEST_TUBE_DIAGONAL: &str = r#"<path d="M21 7 6.82 21.18a2.83 2.83 0 0 1-3.99-.01a2.83 2.83 0 0 1 0-4L17 3"/><path d="m16 2 6 6"/><path d="M12 16H4"/>"#;
 
 /// text align center
-pub const TEXT_ALIGN_CENTER: &str =
-    r#"<path d="M21 5H3"/><path d="M17 12H7"/><path d="M19 19H5"/>"#;
+pub const TEXT_ALIGN_CENTER: &str = r#"<path d="M21 5H3"/><path d="M17 12H7"/><path d="M19 19H5"/>"#;
 
 /// text align end
 pub const TEXT_ALIGN_END: &str = r#"<path d="M21 5H3"/><path d="M21 12H9"/><path d="M21 19H7"/>"#;
 
 /// text align justify
-pub const TEXT_ALIGN_JUSTIFY: &str =
-    r#"<path d="M3 5h18"/><path d="M3 12h18"/><path d="M3 19h18"/>"#;
+pub const TEXT_ALIGN_JUSTIFY: &str = r#"<path d="M3 5h18"/><path d="M3 12h18"/><path d="M3 19h18"/>"#;
 
 /// text align start
 pub const TEXT_ALIGN_START: &str = r#"<path d="M21 5H3"/><path d="M15 12H3"/><path d="M17 19H3"/>"#;
@@ -4634,8 +4496,7 @@ pub const TEXT_CURSOR_INPUT: &str = r#"<path d="M12 20h-1a2 2 0 0 1-2-2 2 2 0 0 
 pub const TEXT_INITIAL: &str = r#"<path d="M15 5h6"/><path d="M15 12h6"/><path d="M3 19h18"/><path d="m3 12 3.553-7.724a.5.5 0 0 1 .894 0L11 12"/><path d="M3.92 10h6.16"/>"#;
 
 /// text quote
-pub const TEXT_QUOTE: &str =
-    r#"<path d="M17 5H3"/><path d="M21 12H8"/><path d="M21 19H8"/><path d="M3 12v7"/>"#;
+pub const TEXT_QUOTE: &str = r#"<path d="M17 5H3"/><path d="M21 12H8"/><path d="M21 19H8"/><path d="M3 12v7"/>"#;
 
 /// text search
 pub const TEXT_SEARCH: &str = r#"<path d="M21 5H3"/><path d="M10 12H3"/><path d="M10 19H3"/><circle cx="17" cy="15" r="3"/><path d="m21 19-1.9-1.9"/>"#;
@@ -4701,12 +4562,10 @@ pub const TIMER_OFF: &str = r#"<path d="M10 2h4"/><path d="M4.6 11a8 8 0 0 0 1.7
 pub const TIMER_RESET: &str = r#"<path d="M10 2h4"/><path d="M12 14v-4"/><path d="M4 13a8 8 0 0 1 8-7 8 8 0 1 1-5.3 14L4 17.6"/><path d="M9 17H4v5"/>"#;
 
 /// toggle left
-pub const TOGGLE_LEFT: &str =
-    r#"<circle cx="9" cy="12" r="3"/><rect x="2" y="5" width="20" height="14" rx="7"/>"#;
+pub const TOGGLE_LEFT: &str = r#"<circle cx="9" cy="12" r="3"/><rect x="2" y="5" width="20" height="14" rx="7"/>"#;
 
 /// toggle right
-pub const TOGGLE_RIGHT: &str =
-    r#"<circle cx="15" cy="12" r="3"/><rect x="2" y="5" width="20" height="14" rx="7"/>"#;
+pub const TOGGLE_RIGHT: &str = r#"<circle cx="15" cy="12" r="3"/><rect x="2" y="5" width="20" height="14" rx="7"/>"#;
 
 /// toilet
 pub const TOILET: &str = r#"<path d="M7 12h13a1 1 0 0 1 1 1 5 5 0 0 1-5 5h-.598a.5.5 0 0 0-.424.765l1.544 2.47a.5.5 0 0 1-.424.765H5.402a.5.5 0 0 1-.424-.765L7 18"/><path d="M8 18a5 5 0 0 1-5-5V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8"/>"#;
@@ -4721,12 +4580,10 @@ pub const TOOL_CASE: &str = r#"<path d="M10 15h4"/><path d="m14.817 10.995-.971-
 pub const TORNADO: &str = r#"<path d="M21 4H3"/><path d="M18 8H6"/><path d="M19 12H9"/><path d="M16 16h-6"/><path d="M11 20H9"/>"#;
 
 /// torus
-pub const TORUS: &str =
-    r#"<ellipse cx="12" cy="11" rx="3" ry="2"/><ellipse cx="12" cy="12.5" rx="10" ry="8.5"/>"#;
+pub const TORUS: &str = r#"<ellipse cx="12" cy="11" rx="3" ry="2"/><ellipse cx="12" cy="12.5" rx="10" ry="8.5"/>"#;
 
 /// touchpad
-pub const TOUCHPAD: &str =
-    r#"<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 14h20"/><path d="M12 20v-6"/>"#;
+pub const TOUCHPAD: &str = r#"<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 14h20"/><path d="M12 20v-6"/>"#;
 
 /// touchpad off
 pub const TOUCHPAD_OFF: &str = r#"<path d="M12 20v-6"/><path d="M19.656 14H22"/><path d="M2 14h12"/><path d="m2 2 20 20"/><path d="M20 20H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2"/><path d="M9.656 4H20a2 2 0 0 1 2 2v10.344"/>"#;
@@ -4789,8 +4646,7 @@ pub const TRENDING_UP: &str = r#"<path d="M16 7h6v6"/><path d="m22 7-8.5 8.5-5-5
 pub const TRENDING_UP_DOWN: &str = r#"<path d="M14.828 14.828 21 21"/><path d="M21 16v5h-5"/><path d="m21 3-9 9-4-4-6 6"/><path d="M21 8V3h-5"/>"#;
 
 /// triangle
-pub const TRIANGLE: &str =
-    r#"<path d="M13.73 4a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>"#;
+pub const TRIANGLE: &str = r#"<path d="M13.73 4a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>"#;
 
 /// triangle alert
 pub const TRIANGLE_ALERT: &str = r#"<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>"#;
@@ -4799,8 +4655,7 @@ pub const TRIANGLE_ALERT: &str = r#"<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 
 pub const TRIANGLE_DASHED: &str = r#"<path d="M10.17 4.193a2 2 0 0 1 3.666.013"/><path d="M14 21h2"/><path d="m15.874 7.743 1 1.732"/><path d="m18.849 12.952 1 1.732"/><path d="M21.824 18.18a2 2 0 0 1-1.835 2.824"/><path d="M4.024 21a2 2 0 0 1-1.839-2.839"/><path d="m5.136 12.952-1 1.732"/><path d="M8 21h2"/><path d="m8.102 7.743-1 1.732"/>"#;
 
 /// triangle right
-pub const TRIANGLE_RIGHT: &str =
-    r#"<path d="M22 18a2 2 0 0 1-2 2H3c-1.1 0-1.3-.6-.4-1.3L20.4 4.3c.9-.7 1.6-.4 1.6.7Z"/>"#;
+pub const TRIANGLE_RIGHT: &str = r#"<path d="M22 18a2 2 0 0 1-2 2H3c-1.1 0-1.3-.6-.4-1.3L20.4 4.3c.9-.7 1.6-.4 1.6.7Z"/>"#;
 
 /// trophy
 pub const TROPHY: &str = r#"<path d="M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978"/><path d="M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978"/><path d="M18 9h1.5a1 1 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z"/><path d="M6 9H4.5a1 1 0 0 1 0-5H6"/>"#;
@@ -4812,8 +4667,7 @@ pub const TRUCK: &str = r#"<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 
 pub const TRUCK_ELECTRIC: &str = r#"<path d="M14 19V7a2 2 0 0 0-2-2H9"/><path d="M15 19H9"/><path d="M19 19h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62L18.3 9.38a1 1 0 0 0-.78-.38H14"/><path d="M2 13v5a1 1 0 0 0 1 1h2"/><path d="M4 3 2.15 5.15a.495.495 0 0 0 .35.86h2.15a.47.47 0 0 1 .35.86L3 9.02"/><circle cx="17" cy="19" r="2"/><circle cx="7" cy="19" r="2"/>"#;
 
 /// turkish lira
-pub const TURKISH_LIRA: &str =
-    r#"<path d="M15 4 5 9"/><path d="m15 8.5-10 5"/><path d="M18 12a9 9 0 0 1-9 9V3"/>"#;
+pub const TURKISH_LIRA: &str = r#"<path d="M15 4 5 9"/><path d="m15 8.5-10 5"/><path d="M18 12a9 9 0 0 1-9 9V3"/>"#;
 
 /// turntable
 pub const TURNTABLE: &str = r#"<path d="M10 12.01h.01"/><path d="M18 8v4a8 8 0 0 1-1.07 4"/><circle cx="10" cy="12" r="4"/><rect x="2" y="4" width="20" height="16" rx="2"/>"#;
@@ -4822,12 +4676,10 @@ pub const TURNTABLE: &str = r#"<path d="M10 12.01h.01"/><path d="M18 8v4a8 8 0 0
 pub const TURTLE: &str = r#"<path d="m12 10 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a8 8 0 1 0-16 0v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3l2-4h4Z"/><path d="M4.82 7.9 8 10"/><path d="M15.18 7.9 12 10"/><path d="M16.93 10H20a2 2 0 0 1 0 4H2"/>"#;
 
 /// tv
-pub const TV: &str =
-    r#"<path d="m17 2-5 5-5-5"/><rect x="2" y="7" width="20" height="15" rx="2"/>"#;
+pub const TV: &str = r#"<path d="m17 2-5 5-5-5"/><rect x="2" y="7" width="20" height="15" rx="2"/>"#;
 
 /// tv minimal
-pub const TV_MINIMAL: &str =
-    r#"<path d="M7 21h10"/><rect x="2" y="3" width="20" height="14" rx="2"/>"#;
+pub const TV_MINIMAL: &str = r#"<path d="M7 21h10"/><rect x="2" y="3" width="20" height="14" rx="2"/>"#;
 
 /// tv minimal play
 pub const TV_MINIMAL_PLAY: &str = r#"<path d="M15.033 9.44a.647.647 0 0 1 0 1.12l-4.065 2.352a.645.645 0 0 1-.968-.56V7.648a.645.645 0 0 1 .967-.56z"/><path d="M7 21h10"/><rect x="2" y="3" width="20" height="14" rx="2"/>"#;
@@ -4839,8 +4691,7 @@ pub const TWITCH: &str = r#"<path d="M21 2H3v16h5v4l4-4h5l4-4V2zm-10 9V7m5 4V7"/
 pub const TWITTER: &str = r#"<path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/>"#;
 
 /// type
-pub const TYPE: &str =
-    r#"<path d="M12 4v16"/><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/>"#;
+pub const TYPE: &str = r#"<path d="M12 4v16"/><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/>"#;
 
 /// type outline
 pub const TYPE_OUTLINE: &str = r#"<path d="M14 16.5a.5.5 0 0 0 .5.5h.5a2 2 0 0 1 0 4H9a2 2 0 0 1 0-4h.5a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5V8a2 2 0 0 1-4 0V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v3a2 2 0 0 1-4 0v-.5a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5Z"/>"#;
@@ -4852,12 +4703,10 @@ pub const UMBRELLA: &str = r#"<path d="M12 13v7a2 2 0 0 0 4 0"/><path d="M12 2v2
 pub const UMBRELLA_OFF: &str = r#"<path d="M12 13v7a2 2 0 0 0 4 0"/><path d="M12 2v2"/><path d="M18.656 13h2.336a1 1 0 0 0 .97-1.274 10.284 10.284 0 0 0-12.07-7.51"/><path d="m2 2 20 20"/><path d="M5.961 5.957a10.28 10.28 0 0 0-3.922 5.769A1 1 0 0 0 3 13h10"/>"#;
 
 /// underline
-pub const UNDERLINE: &str =
-    r#"<path d="M6 4v6a6 6 0 0 0 12 0V4"/><line x1="4" y1="20" x2="20" y2="20"/>"#;
+pub const UNDERLINE: &str = r#"<path d="M6 4v6a6 6 0 0 0 12 0V4"/><line x1="4" y1="20" x2="20" y2="20"/>"#;
 
 /// undo
-pub const UNDO: &str =
-    r#"<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>"#;
+pub const UNDO: &str = r#"<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>"#;
 
 /// undo 2
 pub const UNDO_2: &str = r#"<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>"#;
@@ -4893,8 +4742,7 @@ pub const UPLOAD: &str = r#"<path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d
 pub const USB: &str = r#"<circle cx="10" cy="7" r="1"/><circle cx="4" cy="20" r="1"/><path d="M4.7 19.3 19 5"/><path d="m21 3-3 1 2 2Z"/><path d="M9.26 7.68 5 12l2 5"/><path d="m10 14 5 2 3.5-3.5"/><path d="m18 12 1-1 1 1-1 1Z"/>"#;
 
 /// user
-pub const USER: &str =
-    r#"<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>"#;
+pub const USER: &str = r#"<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>"#;
 
 /// users
 pub const USERS: &str = r#"<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><path d="M16 3.128a4 4 0 0 1 0 7.744"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/>"#;
@@ -4930,8 +4778,7 @@ pub const USER_ROUND_CHECK: &str = r#"<path d="M2 21a8 8 0 0 1 13.292-6"/><circl
 pub const USER_ROUND_COG: &str = r#"<path d="m14.305 19.53.923-.382"/><path d="m15.228 16.852-.923-.383"/><path d="m16.852 15.228-.383-.923"/><path d="m16.852 20.772-.383.924"/><path d="m19.148 15.228.383-.923"/><path d="m19.53 21.696-.382-.924"/><path d="M2 21a8 8 0 0 1 10.434-7.62"/><path d="m20.772 16.852.924-.383"/><path d="m20.772 19.148.924.383"/><circle cx="10" cy="8" r="5"/><circle cx="18" cy="18" r="3"/>"#;
 
 /// user round minus
-pub const USER_ROUND_MINUS: &str =
-    r#"<path d="M2 21a8 8 0 0 1 13.292-6"/><circle cx="10" cy="8" r="5"/><path d="M22 19h-6"/>"#;
+pub const USER_ROUND_MINUS: &str = r#"<path d="M2 21a8 8 0 0 1 13.292-6"/><circle cx="10" cy="8" r="5"/><path d="M22 19h-6"/>"#;
 
 /// user round pen
 pub const USER_ROUND_PEN: &str = r#"<path d="M2 21a8 8 0 0 1 10.821-7.487"/><path d="M21.378 16.626a1 1 0 0 0-3.004-3.004l-4.01 4.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/><circle cx="10" cy="8" r="5"/>"#;
@@ -5157,3 +5004,4 @@ pub const ZOOM_IN: &str = r#"<circle cx="11" cy="11" r="8"/><line x1="21" y1="21
 
 /// zoom out
 pub const ZOOM_OUT: &str = r#"<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/>"#;
+
