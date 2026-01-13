@@ -11,22 +11,101 @@ use blinc_platform::{
 use android_activity::{AndroidApp, MainEvent, PollEvent};
 
 #[cfg(target_os = "android")]
+use ndk::looper::ForeignLooper;
+
+#[cfg(target_os = "android")]
+use std::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(target_os = "android")]
+use std::sync::Arc;
+
+#[cfg(target_os = "android")]
 use std::time::Duration;
 
 #[cfg(target_os = "android")]
 use tracing::{debug, info, warn};
 
+/// Proxy for waking up the event loop from another thread
+///
+/// Use this to request a redraw from a background animation thread.
+/// Call `wake()` to send a wake-up signal to the event loop.
+#[cfg(target_os = "android")]
+#[derive(Clone)]
+pub struct AndroidWakeProxy {
+    /// The looper to wake
+    looper: ForeignLooper,
+    /// Flag indicating a wake was requested
+    wake_requested: Arc<AtomicBool>,
+}
+
+#[cfg(target_os = "android")]
+impl AndroidWakeProxy {
+    /// Create a new wake proxy for the current thread's looper
+    pub fn new() -> Option<Self> {
+        ForeignLooper::for_thread().map(|looper| Self {
+            looper,
+            wake_requested: Arc::new(AtomicBool::new(false)),
+        })
+    }
+
+    /// Wake up the event loop, causing it to process events and potentially redraw
+    pub fn wake(&self) {
+        self.wake_requested.store(true, Ordering::SeqCst);
+        self.looper.wake();
+    }
+
+    /// Check if a wake was requested and clear the flag
+    pub fn take_wake_request(&self) -> bool {
+        self.wake_requested.swap(false, Ordering::SeqCst)
+    }
+}
+
+/// Placeholder for non-Android builds
+#[cfg(not(target_os = "android"))]
+#[derive(Clone)]
+pub struct AndroidWakeProxy;
+
+#[cfg(not(target_os = "android"))]
+impl AndroidWakeProxy {
+    /// Create a placeholder wake proxy
+    pub fn new() -> Option<Self> {
+        None
+    }
+
+    /// No-op wake for non-Android
+    pub fn wake(&self) {}
+
+    /// Always returns false on non-Android
+    pub fn take_wake_request(&self) -> bool {
+        false
+    }
+}
+
 /// Android event loop wrapping android-activity's polling
 #[cfg(target_os = "android")]
 pub struct AndroidEventLoop {
     app: AndroidApp,
+    wake_proxy: Option<AndroidWakeProxy>,
 }
 
 #[cfg(target_os = "android")]
 impl AndroidEventLoop {
     /// Create a new Android event loop
     pub fn new(app: AndroidApp) -> Self {
-        Self { app }
+        // Create wake proxy - this captures the current thread's looper
+        let wake_proxy = AndroidWakeProxy::new();
+        if wake_proxy.is_none() {
+            warn!("Failed to create AndroidWakeProxy - animations may not wake event loop");
+        }
+        Self { app, wake_proxy }
+    }
+
+    /// Get a wake proxy that can be used to wake up the event loop from another thread
+    ///
+    /// This is useful for animation threads that need to request redraws.
+    /// Returns None if the looper couldn't be obtained (shouldn't happen in normal operation).
+    pub fn wake_proxy(&self) -> Option<AndroidWakeProxy> {
+        self.wake_proxy.clone()
     }
 }
 
@@ -146,9 +225,16 @@ impl EventLoop for AndroidEventLoop {
                     _ => {}
                 });
 
-            // Frame tick when we have a focused window
+            // Check if animation thread requested a wake
+            let wake_requested = self
+                .wake_proxy
+                .as_ref()
+                .map(|p| p.take_wake_request())
+                .unwrap_or(false);
+
+            // Frame tick when we have a focused window or a wake was requested
             if let Some(ref win) = window {
-                if win.is_focused() {
+                if win.is_focused() || wake_requested {
                     let flow = handler(Event::Frame, win);
                     if flow == ControlFlow::Exit {
                         should_exit = true;

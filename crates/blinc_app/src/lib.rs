@@ -77,11 +77,22 @@ pub fn system_font_paths() -> &'static [&'static str] {
             "/system/fonts/DroidSans.ttf",
         ]
     }
+    #[cfg(target_os = "ios")]
+    {
+        &[
+            "/System/Library/Fonts/SFNSText.ttf",
+            "/System/Library/Fonts/SFNSDisplay.ttf",
+            "/System/Library/Fonts/SFNS.ttf",
+            "/System/Library/Fonts/Core/AppleSystemUIFont.ttf",
+            "/System/Library/Fonts/Core/Helvetica.ttc",
+        ]
+    }
     #[cfg(not(any(
         target_os = "macos",
         target_os = "linux",
         target_os = "windows",
-        target_os = "android"
+        target_os = "android",
+        target_os = "ios"
     )))]
     {
         &[]
@@ -93,13 +104,20 @@ mod context;
 mod error;
 mod text_measurer;
 
-// Windowed module is compiled for both desktop (windowed feature) and Android
-// since WindowedContext and shared types are used by both platforms
-#[cfg(any(feature = "windowed", all(feature = "android", target_os = "android")))]
+// Windowed module is compiled for desktop (windowed feature), Android, and iOS
+// since WindowedContext and shared types are used by all platforms
+#[cfg(any(
+    feature = "windowed",
+    all(feature = "android", target_os = "android"),
+    all(feature = "ios", target_os = "ios")
+))]
 pub mod windowed;
 
 #[cfg(all(feature = "android", target_os = "android"))]
 pub mod android;
+
+#[cfg(all(feature = "ios", target_os = "ios"))]
+pub mod ios;
 
 #[cfg(test)]
 mod tests;

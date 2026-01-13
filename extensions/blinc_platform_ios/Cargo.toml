@@ -16,9 +16,11 @@ zrtl-plugin = []
 # Core dependencies (always available)
 blinc_core = { path = "../../crates/blinc_core" }
 blinc_animation = { path = "../../crates/blinc_animation" }
+blinc_platform = { path = "../../crates/blinc_platform" }
 
 # Logging
 tracing.workspace = true
+tracing-subscriber = { workspace = true, optional = true }
 
 # iOS-specific dependencies (only when targeting iOS)
 [target.'cfg(target_os = "ios")'.dependencies]

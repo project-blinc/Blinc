@@ -34,7 +34,7 @@ use blinc_layout::overlay_state::OverlayContext;
 use blinc_layout::prelude::*;
 use blinc_layout::widgets::overlay::{overlay_manager, OverlayManager};
 use blinc_platform::assets::set_global_asset_loader;
-use blinc_platform_android::AndroidAssetLoader;
+use blinc_platform_android::{AndroidAssetLoader, AndroidWakeProxy};
 
 use crate::app::BlincApp;
 use crate::error::{BlincError, Result};
@@ -145,8 +145,16 @@ impl AndroidApp {
 
         // Animation scheduler
         let mut scheduler = AnimationScheduler::new();
-        // Note: On Android, we can't use WakeProxy like desktop
-        // Instead, we rely on the 16ms polling interval
+
+        // Set up wake proxy for Android - this allows the animation thread to wake the event loop
+        // The ForeignLooper is obtained from the current thread (the main event loop thread)
+        if let Some(wake_proxy) = AndroidWakeProxy::new() {
+            tracing::info!("Android WakeProxy enabled for animations");
+            scheduler.set_wake_callback(move || wake_proxy.wake());
+        } else {
+            tracing::warn!("Failed to create Android WakeProxy - using polling fallback");
+        }
+
         scheduler.start_background();
         let animations: SharedAnimationScheduler = Arc::new(Mutex::new(scheduler));
 

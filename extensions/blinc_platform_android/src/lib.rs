@@ -37,7 +37,7 @@ pub mod jni_utils;
 pub mod window;
 
 pub use assets::AndroidAssetLoader;
-pub use event_loop::AndroidEventLoop;
+pub use event_loop::{AndroidEventLoop, AndroidWakeProxy};
 pub use jni_utils::{get_display_density, get_display_dpi, is_dark_mode};
 pub use window::AndroidWindow;
 

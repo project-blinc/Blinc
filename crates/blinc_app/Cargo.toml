@@ -49,6 +49,9 @@ ndk = { workspace = true, optional = true }
 jni = { workspace = true, optional = true }
 android_logger = { version = "0.14", optional = true }
 
+[target.'cfg(target_os = "ios")'.dependencies]
+blinc_platform_ios = { path = "../../extensions/blinc_platform_ios", optional = true }
+
 [dev-dependencies]
 image.workspace = true
 tracing-subscriber.workspace = true
@@ -58,3 +61,4 @@ blinc_cn = { path = "../blinc_cn" }
 default = ["windowed"]
 windowed = ["winit", "blinc_platform_desktop"]
 android = ["blinc_platform_android", "android-activity", "ndk", "jni", "android_logger"]
+ios = ["blinc_platform_ios"]
