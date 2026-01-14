@@ -78,9 +78,21 @@ use blinc_core::native_bridge::{
 pub type IOSNativeCallFn =
     extern "C" fn(ns: *const c_char, name: *const c_char, args_json: *const c_char) -> *mut c_char;
 
-/// External declaration for freeing strings allocated by Swift
-extern "C" {
-    fn blinc_free_string(ptr: *mut c_char);
+/// Free a string allocated by Swift (via strdup)
+///
+/// This is the Rust-side implementation. When Swift is linked,
+/// Swift's `blinc_free_string` takes precedence. When building
+/// without Swift (e.g., for testing), this provides a fallback
+/// that uses libc free.
+#[no_mangle]
+pub extern "C" fn blinc_free_string(ptr: *mut c_char) {
+    if !ptr.is_null() {
+        // Safety: The pointer was allocated by strdup in Swift or C,
+        // which uses malloc. We free it with libc free.
+        unsafe {
+            libc::free(ptr as *mut libc::c_void);
+        }
+    }
 }
 
 /// iOS platform adapter using C FFI to call Swift handlers
@@ -157,8 +169,10 @@ impl PlatformAdapter for IOSNativeBridgeAdapter {
         let result_cstr = unsafe { CStr::from_ptr(result_ptr) };
         let result_str = result_cstr.to_string_lossy().into_owned();
 
-        // Free the Swift-allocated string
-        unsafe { blinc_free_string(result_ptr) };
+        // Free the string (allocated by Swift's strdup or C malloc)
+        if !result_ptr.is_null() {
+            unsafe { libc::free(result_ptr as *mut libc::c_void) };
+        }
 
         // Parse the JSON result
         parse_native_result_json(&result_str)

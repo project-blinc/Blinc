@@ -73,7 +73,30 @@ const KNOWN_FONT_PATHS: &[&str] = &[
     "/system/fonts/NotoSansCJK-Regular.ttc",
 ];
 
-#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
+#[cfg(target_os = "ios")]
+const KNOWN_FONT_PATHS: &[&str] = &[
+    // iOS system fonts - Core directory (most reliable)
+    "/System/Library/Fonts/Core/SFUI.ttf",           // SF UI (system font)
+    "/System/Library/Fonts/Core/SFUIMono.ttf",       // SF Mono
+    "/System/Library/Fonts/Core/SFUIItalic.ttf",     // SF Italic
+    "/System/Library/Fonts/Core/Helvetica.ttc",      // Helvetica
+    "/System/Library/Fonts/Core/HelveticaNeue.ttc",  // Helvetica Neue
+    "/System/Library/Fonts/Core/Avenir.ttc",         // Avenir
+    "/System/Library/Fonts/Core/AvenirNext.ttc",     // Avenir Next
+    "/System/Library/Fonts/Core/Courier.ttc",        // Courier
+    "/System/Library/Fonts/Core/CourierNew.ttf",     // Courier New
+    // CoreUI fonts
+    "/System/Library/Fonts/CoreUI/Menlo.ttc",        // Menlo (monospace)
+    "/System/Library/Fonts/CoreUI/SFUIRounded.ttf",  // SF Rounded
+    // CoreAddition fonts
+    "/System/Library/Fonts/CoreAddition/Georgia.ttf",
+    "/System/Library/Fonts/CoreAddition/Arial.ttf",
+    "/System/Library/Fonts/CoreAddition/ArialBold.ttf",
+    "/System/Library/Fonts/CoreAddition/Verdana.ttf",
+    "/System/Library/Fonts/CoreAddition/TimesNewRomanPS.ttf",
+];
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android", target_os = "ios")))]
 const KNOWN_FONT_PATHS: &[&str] = &[
     // Linux common paths
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -135,6 +158,23 @@ impl FontRegistry {
         // Note: We don't preload generic fonts here anymore.
         // They'll be loaded on first use. This avoids triggering a full
         // system font scan at startup.
+    }
+
+    /// Load a font from raw data (e.g., embedded or bundled fonts)
+    ///
+    /// This is useful for loading fonts that aren't in the standard system paths,
+    /// such as app-bundled fonts or fonts loaded via CoreText on iOS.
+    ///
+    /// Returns the number of font faces loaded from the data.
+    pub fn load_font_data(&mut self, data: Vec<u8>) -> usize {
+        let before = self.db.faces().count();
+        self.db.load_font_data(data);
+        let after = self.db.faces().count();
+        let loaded = after - before;
+        if loaded > 0 {
+            tracing::debug!("Loaded {} font faces from data", loaded);
+        }
+        loaded
     }
 
     /// Ensure all system fonts are loaded (lazy initialization)

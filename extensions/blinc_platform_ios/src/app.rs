@@ -7,6 +7,8 @@ use crate::window::IOSWindow;
 use blinc_platform::{Platform, PlatformError};
 
 #[cfg(target_os = "ios")]
+use objc2_foundation::MainThreadMarker;
+#[cfg(target_os = "ios")]
 use objc2_ui_kit::UIScreen;
 
 #[cfg(target_os = "ios")]
@@ -25,10 +27,11 @@ pub struct IOSPlatform {
 impl IOSPlatform {
     /// Get the main screen's scale factor
     fn get_screen_scale() -> f64 {
-        unsafe {
-            let screen = UIScreen::mainScreen();
-            screen.scale() as f64
-        }
+        // On iOS, UIScreen::mainScreen() requires MainThreadMarker
+        // We assume this is called from the main thread
+        let mtm = MainThreadMarker::new().expect("Must be called from main thread");
+        let screen = UIScreen::mainScreen(mtm);
+        screen.scale() as f64
     }
 }
 
@@ -82,11 +85,6 @@ impl Platform for IOSPlatform {
 /// with the iOS lifecycle.
 #[cfg(target_os = "ios")]
 pub fn ios_main() {
-    // Initialize logging
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .init();
-
     info!("iOS main entry point called");
 
     // Note: The actual application lifecycle is managed by UIApplicationDelegate
@@ -122,13 +120,9 @@ pub fn get_display_scale() -> f64 {
 /// Check if the system is in dark mode
 #[cfg(target_os = "ios")]
 pub fn is_dark_mode() -> bool {
-    unsafe {
-        let screen = UIScreen::mainScreen();
-        // Check the traitCollection for dark mode
-        // UIUserInterfaceStyle: 0 = unspecified, 1 = light, 2 = dark
-        let trait_collection = screen.traitCollection();
-        trait_collection.userInterfaceStyle().0 == 2 // UIUserInterfaceStyleDark
-    }
+    // TODO: Implement proper dark mode detection using UITraitCollection
+    // For now, default to light mode
+    false
 }
 
 /// Placeholder for non-iOS builds
@@ -155,12 +149,30 @@ pub fn get_safe_area_insets() -> (f32, f32, f32, f32) {
 }
 
 /// iOS system font paths
+///
+/// These are the common font locations on iOS. Note that different iOS versions
+/// and simulator vs device may have fonts at different paths. The fonts in the
+/// Core directory are the most reliable across different iOS versions.
 pub fn system_font_paths() -> &'static [&'static str] {
     &[
-        "/System/Library/Fonts/SFNSText.ttf",
-        "/System/Library/Fonts/SFNSDisplay.ttf",
-        "/System/Library/Fonts/SFNS.ttf",
-        "/System/Library/Fonts/Core/AppleSystemUIFont.ttf",
-        "/System/Library/Fonts/Core/Helvetica.ttc",
+        // iOS system fonts - Core directory (most reliable)
+        "/System/Library/Fonts/Core/SFUI.ttf",           // SF UI (system font)
+        "/System/Library/Fonts/Core/SFUIMono.ttf",       // SF Mono
+        "/System/Library/Fonts/Core/SFUIItalic.ttf",     // SF Italic
+        "/System/Library/Fonts/Core/Helvetica.ttc",      // Helvetica
+        "/System/Library/Fonts/Core/HelveticaNeue.ttc",  // Helvetica Neue
+        "/System/Library/Fonts/Core/Avenir.ttc",         // Avenir
+        "/System/Library/Fonts/Core/AvenirNext.ttc",     // Avenir Next
+        "/System/Library/Fonts/Core/Courier.ttc",        // Courier
+        "/System/Library/Fonts/Core/CourierNew.ttf",     // Courier New
+        // CoreUI fonts
+        "/System/Library/Fonts/CoreUI/Menlo.ttc",        // Menlo (monospace)
+        "/System/Library/Fonts/CoreUI/SFUIRounded.ttf",  // SF Rounded
+        // CoreAddition fonts
+        "/System/Library/Fonts/CoreAddition/Georgia.ttf",
+        "/System/Library/Fonts/CoreAddition/Arial.ttf",
+        "/System/Library/Fonts/CoreAddition/ArialBold.ttf",
+        "/System/Library/Fonts/CoreAddition/Verdana.ttf",
+        "/System/Library/Fonts/CoreAddition/TimesNewRomanPS.ttf",
     ]
 }

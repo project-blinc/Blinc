@@ -1840,11 +1840,18 @@ kotlin.code.style=official
 }
 
 fn create_rust_ios_files(path: &Path, name: &str, package_name: &str, org: &str) -> Result<()> {
-    let ios_path = path.join("platforms/ios/BlincApp");
+    let ios_path = path.join("platforms/ios");
+    let app_path = ios_path.join("BlincApp");
+    let xcodeproj = ios_path.join("BlincApp.xcodeproj");
+
+    fs::create_dir_all(&app_path)?;
+    fs::create_dir_all(&xcodeproj)?;
+    fs::create_dir_all(ios_path.join("libs/device"))?;
+    fs::create_dir_all(ios_path.join("libs/simulator"))?;
 
     // AppDelegate.swift
     fs::write(
-        ios_path.join("AppDelegate.swift"),
+        app_path.join("AppDelegate.swift"),
         r#"import UIKit
 
 @main
@@ -1864,57 +1871,299 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 "#,
     )?;
 
-    // BlincViewController.swift
+    // BlincMetalView.swift
     fs::write(
-        ios_path.join("BlincViewController.swift"),
+        app_path.join("BlincMetalView.swift"),
         r#"import UIKit
-import MetalKit
+import Metal
+import QuartzCore
 
-class BlincViewController: UIViewController {
-    private var displayLink: CADisplayLink?
+class BlincMetalView: UIView {
+    private(set) var metalDevice: MTLDevice?
+    private(set) var commandQueue: MTLCommandQueue?
 
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .black
-        // TODO: Initialize Blinc render context
+    var metalLayer: CAMetalLayer { return layer as! CAMetalLayer }
+    var preferredFramesPerSecond: Int = 60
+
+    override class var layerClass: AnyClass { return CAMetalLayer.self }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        commonInit()
     }
 
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        // TODO: Route to Blinc
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonInit()
     }
 
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        // TODO: Route to Blinc
+    private func commonInit() {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            print("Error: Metal is not supported on this device")
+            return
+        }
+        metalDevice = device
+        commandQueue = device.makeCommandQueue()
+        metalLayer.device = device
+        metalLayer.pixelFormat = .bgra8Unorm
+        metalLayer.framebufferOnly = true
+        metalLayer.contentsScale = UIScreen.main.scale
+        if #available(iOS 10.3, *) { metalLayer.displaySyncEnabled = true }
+        isOpaque = true
+        backgroundColor = .black
     }
 
-    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        // TODO: Route to Blinc
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let scale = UIScreen.main.scale
+        let drawableSize = CGSize(width: bounds.width * scale, height: bounds.height * scale)
+        if metalLayer.drawableSize != drawableSize { metalLayer.drawableSize = drawableSize }
     }
+
+    func nextDrawable() -> CAMetalDrawable? { return metalLayer.nextDrawable() }
+    var drawableSize: CGSize { return metalLayer.drawableSize }
+    var pixelFormat: MTLPixelFormat { return metalLayer.pixelFormat }
 }
 "#,
     )?;
 
+    // BlincViewController.swift
+    fs::write(
+        app_path.join("BlincViewController.swift"),
+        r#"import UIKit
+import MetalKit
+
+class BlincViewController: UIViewController {
+    private var metalView: BlincMetalView!
+    private var displayLink: CADisplayLink?
+    private var renderContext: OpaquePointer?
+    private var gpuRenderer: OpaquePointer?
+    private var isVisible = false
+    private var touchIds: [ObjectIdentifier: UInt64] = [:]
+    private var nextTouchId: UInt64 = 1
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        metalView = BlincMetalView(frame: view.bounds)
+        metalView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(metalView)
+        initializeBlinc()
+        setupDisplayLink()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        isVisible = true
+        displayLink?.isPaused = false
+        if let ctx = renderContext { blinc_set_focused(ctx, true) }
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        isVisible = false
+        displayLink?.isPaused = true
+        if let ctx = renderContext { blinc_set_focused(ctx, false) }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        let scale = UIScreen.main.scale
+        let width = UInt32(view.bounds.width * scale)
+        let height = UInt32(view.bounds.height * scale)
+        if let ctx = renderContext { blinc_update_size(ctx, width, height, Double(scale)) }
+        if let gpu = gpuRenderer { blinc_gpu_resize(gpu, width, height) }
+    }
+
+    deinit {
+        displayLink?.invalidate()
+        if let gpu = gpuRenderer { blinc_destroy_gpu(gpu) }
+        if let ctx = renderContext { blinc_destroy_context(ctx) }
+    }
+
+    private func initializeBlinc() {
+        let scale = UIScreen.main.scale
+        let width = UInt32(view.bounds.width * scale)
+        let height = UInt32(view.bounds.height * scale)
+        guard let ctx = blinc_create_context(width, height, Double(scale)) else {
+            print("Error: Failed to create Blinc render context")
+            return
+        }
+        renderContext = ctx
+        let metalLayer = metalView.metalLayer
+        guard let gpu = blinc_init_gpu(ctx, Unmanaged.passUnretained(metalLayer).toOpaque(), width, height) else {
+            print("Error: Failed to initialize Blinc GPU renderer")
+            return
+        }
+        gpuRenderer = gpu
+        print("Blinc initialized: \(width)x\(height) @ \(scale)x")
+    }
+
+    private func setupDisplayLink() {
+        displayLink = CADisplayLink(target: self, selector: #selector(displayLinkFired))
+        if #available(iOS 15.0, *) {
+            displayLink?.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
+        } else {
+            displayLink?.preferredFramesPerSecond = 60
+        }
+        displayLink?.add(to: .main, forMode: .common)
+    }
+
+    @objc private func displayLinkFired() {
+        guard isVisible, let ctx = renderContext, let gpu = gpuRenderer else { return }
+        guard blinc_needs_render(ctx) else { return }
+        blinc_build_frame(ctx)
+        _ = blinc_render_frame(gpu)
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let ctx = renderContext else { return }
+        for touch in touches {
+            let point = touch.location(in: view)
+            blinc_handle_touch(ctx, getTouchId(for: touch), Float(point.x), Float(point.y), 0)
+        }
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let ctx = renderContext else { return }
+        for touch in touches {
+            let point = touch.location(in: view)
+            blinc_handle_touch(ctx, getTouchId(for: touch), Float(point.x), Float(point.y), 1)
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let ctx = renderContext else { return }
+        for touch in touches {
+            let point = touch.location(in: view)
+            blinc_handle_touch(ctx, getTouchId(for: touch), Float(point.x), Float(point.y), 2)
+            removeTouchId(for: touch)
+        }
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let ctx = renderContext else { return }
+        for touch in touches {
+            blinc_handle_touch(ctx, getTouchId(for: touch), Float(touch.location(in: view).x), Float(touch.location(in: view).y), 3)
+            removeTouchId(for: touch)
+        }
+    }
+
+    private func getTouchId(for touch: UITouch) -> UInt64 {
+        let id = ObjectIdentifier(touch)
+        if let existing = touchIds[id] { return existing }
+        let newId = nextTouchId
+        nextTouchId += 1
+        touchIds[id] = newId
+        return newId
+    }
+
+    private func removeTouchId(for touch: UITouch) { touchIds.removeValue(forKey: ObjectIdentifier(touch)) }
+    override var prefersStatusBarHidden: Bool { return true }
+    override var preferredStatusBarStyle: UIStatusBarStyle { return .lightContent }
+    override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { return .all }
+}
+"#,
+    )?;
+
+    // Blinc-Bridging-Header.h
+    fs::write(
+        app_path.join("Blinc-Bridging-Header.h"),
+        format!(
+            r#"// Blinc-Bridging-Header.h - Rust FFI declarations for {name}
+
+#ifndef Blinc_Bridging_Header_h
+#define Blinc_Bridging_Header_h
+
+#include <stdint.h>
+#include <stdbool.h>
+
+typedef struct IOSRenderContext IOSRenderContext;
+typedef struct WindowedContext WindowedContext;
+typedef struct IOSGpuRenderer IOSGpuRenderer;
+typedef void (*UIBuilderFn)(WindowedContext* ctx);
+
+// Context Lifecycle
+IOSRenderContext* blinc_create_context(uint32_t width, uint32_t height, double scale_factor);
+void blinc_destroy_context(IOSRenderContext* ctx);
+
+// Rendering
+bool blinc_needs_render(IOSRenderContext* ctx);
+void blinc_set_ui_builder(UIBuilderFn builder);
+void blinc_build_frame(IOSRenderContext* ctx);
+bool blinc_tick_animations(IOSRenderContext* ctx);
+
+// Window Size
+void blinc_update_size(IOSRenderContext* ctx, uint32_t width, uint32_t height, double scale_factor);
+float blinc_get_width(IOSRenderContext* ctx);
+float blinc_get_height(IOSRenderContext* ctx);
+uint32_t blinc_get_physical_width(IOSRenderContext* ctx);
+uint32_t blinc_get_physical_height(IOSRenderContext* ctx);
+double blinc_get_scale_factor(IOSRenderContext* ctx);
+
+// Input Events
+void blinc_handle_touch(IOSRenderContext* ctx, uint64_t touch_id, float x, float y, int32_t phase);
+void blinc_set_focused(IOSRenderContext* ctx, bool focused);
+
+// State Management
+void blinc_mark_dirty(IOSRenderContext* ctx);
+void blinc_clear_dirty(IOSRenderContext* ctx);
+WindowedContext* blinc_get_windowed_context(IOSRenderContext* ctx);
+
+// GPU Rendering
+IOSGpuRenderer* blinc_init_gpu(IOSRenderContext* ctx, void* metal_layer, uint32_t width, uint32_t height);
+void blinc_gpu_resize(IOSGpuRenderer* gpu, uint32_t width, uint32_t height);
+bool blinc_render_frame(IOSGpuRenderer* gpu);
+void blinc_destroy_gpu(IOSGpuRenderer* gpu);
+
+#endif
+"#
+        ),
+    )?;
+
     // Info.plist
     fs::write(
-        ios_path.join("Info.plist"),
+        app_path.join("Info.plist"),
         format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>$(DEVELOPMENT_LANGUAGE)</string>
+    <key>CFBundleDisplayName</key>
     <string>{name}</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
-    <string>{org}.{package_name}</string>
-    <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>$(MARKETING_VERSION)</string>
+    <key>CFBundleVersion</key>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>UILaunchScreen</key>
+    <dict/>
     <key>UIRequiredDeviceCapabilities</key>
     <array>
         <string>metal</string>
+        <string>arm64</string>
+    </array>
+    <key>UIRequiresFullScreen</key>
+    <true/>
+    <key>UIStatusBarHidden</key>
+    <true/>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
 </dict>
 </plist>
@@ -1922,26 +2171,355 @@ class BlincViewController: UIViewController {
         ),
     )?;
 
+    // project.pbxproj - Xcode project file
+    fs::write(
+        xcodeproj.join("project.pbxproj"),
+        format!(
+            r#"// !$*UTF8*$!
+{{
+	archiveVersion = 1;
+	classes = {{}};
+	objectVersion = 56;
+	objects = {{
+
+/* Begin PBXBuildFile section */
+		A1000001 /* AppDelegate.swift in Sources */ = {{isa = PBXBuildFile; fileRef = A2000001; }};
+		A1000002 /* BlincViewController.swift in Sources */ = {{isa = PBXBuildFile; fileRef = A2000002; }};
+		A1000003 /* BlincMetalView.swift in Sources */ = {{isa = PBXBuildFile; fileRef = A2000003; }};
+		A1000004 /* lib{package_name}.a in Frameworks */ = {{isa = PBXBuildFile; fileRef = A2000004; }};
+		A1000005 /* Metal.framework in Frameworks */ = {{isa = PBXBuildFile; fileRef = A2000005; }};
+		A1000006 /* MetalKit.framework in Frameworks */ = {{isa = PBXBuildFile; fileRef = A2000006; }};
+		A1000007 /* QuartzCore.framework in Frameworks */ = {{isa = PBXBuildFile; fileRef = A2000007; }};
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A2000001 /* AppDelegate.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; }};
+		A2000002 /* BlincViewController.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlincViewController.swift; sourceTree = "<group>"; }};
+		A2000003 /* BlincMetalView.swift */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlincMetalView.swift; sourceTree = "<group>"; }};
+		A2000004 /* lib{package_name}.a */ = {{isa = PBXFileReference; lastKnownFileType = archive.ar; name = "lib{package_name}.a"; path = "libs/simulator/lib{package_name}.a"; sourceTree = "<group>"; }};
+		A2000005 /* Metal.framework */ = {{isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; }};
+		A2000006 /* MetalKit.framework */ = {{isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; }};
+		A2000007 /* QuartzCore.framework */ = {{isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; }};
+		A2000008 /* Info.plist */ = {{isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; }};
+		A2000009 /* Blinc-Bridging-Header.h */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Blinc-Bridging-Header.h"; sourceTree = "<group>"; }};
+		A3000001 /* BlincApp.app */ = {{isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BlincApp.app; sourceTree = BUILT_PRODUCTS_DIR; }};
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A4000001 /* Frameworks */ = {{
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (A1000004, A1000005, A1000006, A1000007);
+			runOnlyForDeploymentPostprocessing = 0;
+		}};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A5000001 = {{
+			isa = PBXGroup;
+			children = (A5000002, A5000003, A5000004);
+			sourceTree = "<group>";
+		}};
+		A5000002 /* BlincApp */ = {{
+			isa = PBXGroup;
+			children = (A2000001, A2000002, A2000003, A2000008, A2000009);
+			path = BlincApp;
+			sourceTree = "<group>";
+		}};
+		A5000003 /* Frameworks */ = {{
+			isa = PBXGroup;
+			children = (A2000004, A2000005, A2000006, A2000007);
+			name = Frameworks;
+			sourceTree = "<group>";
+		}};
+		A5000004 /* Products */ = {{
+			isa = PBXGroup;
+			children = (A3000001);
+			name = Products;
+			sourceTree = "<group>";
+		}};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A6000001 /* BlincApp */ = {{
+			isa = PBXNativeTarget;
+			buildConfigurationList = A8000001;
+			buildPhases = (A6000002, A4000001);
+			buildRules = ();
+			dependencies = ();
+			name = BlincApp;
+			productName = BlincApp;
+			productReference = A3000001;
+			productType = "com.apple.product-type.application";
+		}};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A7000001 /* Project object */ = {{
+			isa = PBXProject;
+			attributes = {{
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+			}};
+			buildConfigurationList = A8000002;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base);
+			mainGroup = A5000001;
+			productRefGroup = A5000004;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (A6000001);
+		}};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A6000002 /* Sources */ = {{
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (A1000001, A1000002, A1000003);
+			runOnlyForDeploymentPostprocessing = 0;
+		}};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A9000001 /* Debug */ = {{
+			isa = XCBuildConfiguration;
+			buildSettings = {{
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = BlincApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
+				LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(PROJECT_DIR)/libs/simulator");
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = ("-l{package_name}");
+				PRODUCT_BUNDLE_IDENTIFIER = "{org}.{package_name}";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SWIFT_OBJC_BRIDGING_HEADER = "BlincApp/Blinc-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			}};
+			name = Debug;
+		}};
+		A9000002 /* Release */ = {{
+			isa = XCBuildConfiguration;
+			buildSettings = {{
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = BlincApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks");
+				LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(PROJECT_DIR)/libs/device");
+				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = ("-l{package_name}");
+				PRODUCT_BUNDLE_IDENTIFIER = "{org}.{package_name}";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SWIFT_OBJC_BRIDGING_HEADER = "BlincApp/Blinc-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			}};
+			name = Release;
+		}};
+		A9000003 /* Debug */ = {{
+			isa = XCBuildConfiguration;
+			buildSettings = {{
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			}};
+			name = Debug;
+		}};
+		A9000004 /* Release */ = {{
+			isa = XCBuildConfiguration;
+			buildSettings = {{
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			}};
+			name = Release;
+		}};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A8000001 /* Build configuration list for PBXNativeTarget "BlincApp" */ = {{
+			isa = XCConfigurationList;
+			buildConfigurations = (A9000001, A9000002);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		}};
+		A8000002 /* Build configuration list for PBXProject "BlincApp" */ = {{
+			isa = XCConfigurationList;
+			buildConfigurations = (A9000003, A9000004);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		}};
+/* End XCConfigurationList section */
+
+	}};
+	rootObject = A7000001;
+}}
+"#
+        ),
+    )?;
+
+    // build-ios.sh
+    fs::write(
+        ios_path.join("build-ios.sh"),
+        format!(
+            r#"#!/bin/bash
+# Build script for {name} iOS
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
+cd "$SCRIPT_DIR/../.."
+
+LIB_NAME="lib{package_name}.a"
+TARGET_ARM64="aarch64-apple-ios"
+TARGET_SIM_ARM64="aarch64-apple-ios-sim"
+
+BUILD_MODE="${{1:-debug}}"
+CARGO_FLAGS=""
+TARGET_DIR="debug"
+
+if [ "$BUILD_MODE" = "release" ]; then
+    CARGO_FLAGS="--release"
+    TARGET_DIR="release"
+    echo "Building in RELEASE mode..."
+else
+    echo "Building in DEBUG mode..."
+fi
+
+# Ensure iOS targets are installed
+if ! rustup target list --installed | grep -q "$TARGET_ARM64"; then
+    rustup target add "$TARGET_ARM64"
+fi
+if ! rustup target list --installed | grep -q "$TARGET_SIM_ARM64"; then
+    rustup target add "$TARGET_SIM_ARM64"
+fi
+
+# Build for device and simulator
+echo "Building for device ($TARGET_ARM64)..."
+cargo build --features ios $CARGO_FLAGS --target "$TARGET_ARM64"
+
+echo "Building for simulator ($TARGET_SIM_ARM64)..."
+cargo build --features ios $CARGO_FLAGS --target "$TARGET_SIM_ARM64"
+
+# Copy libraries
+LIBS_DIR="$SCRIPT_DIR/libs"
+mkdir -p "$LIBS_DIR/device" "$LIBS_DIR/simulator"
+cp "target/$TARGET_ARM64/$TARGET_DIR/$LIB_NAME" "$LIBS_DIR/device/"
+cp "target/$TARGET_SIM_ARM64/$TARGET_DIR/$LIB_NAME" "$LIBS_DIR/simulator/"
+
+echo ""
+echo "Build complete! Libraries at:"
+echo "  Device:    $LIBS_DIR/device/$LIB_NAME"
+echo "  Simulator: $LIBS_DIR/simulator/$LIB_NAME"
+echo ""
+echo "Open BlincApp.xcodeproj in Xcode to build and run."
+"#
+        ),
+    )?;
+
     // README
     fs::write(
-        path.join("platforms/ios/README.md"),
+        ios_path.join("README.md"),
         format!(
             r#"# {name} - iOS
 
 ## Building
 
-```bash
-# Build Rust static library
-cargo lipo --release
+1. Build the Rust library:
 
-# Then open Xcode and add the library
+```bash
+cd platforms/ios
+./build-ios.sh        # Debug build
+./build-ios.sh release  # Release build
 ```
+
+2. Open in Xcode:
+
+```bash
+open BlincApp.xcodeproj
+```
+
+3. Select target and run (Cmd+R)
 
 ## Requirements
 
 - Xcode 15+
-- Rust iOS targets: `rustup target add aarch64-apple-ios`
-- cargo-lipo: `cargo install cargo-lipo`
+- iOS 15+ deployment target
+- Rust iOS targets: `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`
 "#
         ),
     )?;

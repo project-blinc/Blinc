@@ -31,7 +31,9 @@ fn counter_button(label: &str, count: State<i32>, delta: i32) -> impl ElementBui
                 .child(text(&label).size(24.0).color(Color::WHITE))
         })
         .on_click(move |_| {
-            count.set(count.get() + delta);
+            // Use set_rebuild to trigger a full UI rebuild when state changes
+            // This ensures iOS re-renders (incremental updates require Stateful pattern)
+            count.set_rebuild(count.get() + delta);
         })
 }
 
@@ -60,7 +62,7 @@ fn app_ui(ctx: &mut WindowedContext) -> impl ElementBuilder {
         .items_center()
         .justify_center()
         .gap(20.0)
-        .child(text("Blinc Mobile Example").size(32.0).color(Color::WHITE))
+        .child(text("Blinc Mobile Example").size(32.0).color(Color::WHITE).no_wrap())
         .child(counter_display(count.clone()))
         .child(
             div()
@@ -124,3 +126,25 @@ fn main() {}
 
 #[cfg(target_os = "ios")]
 fn main() {}
+
+/// iOS initialization function - called from Swift during app launch
+///
+/// This registers the Rust UI builder so that each frame can build the UI.
+/// Must be called before blinc_create_context.
+#[cfg(target_os = "ios")]
+#[no_mangle]
+pub extern "C" fn ios_app_init() {
+    // Initialize tracing to stderr (will show in Xcode console)
+    use std::io::Write;
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_writer(std::io::stderr)
+        .try_init();
+
+    eprintln!("[Blinc] ios_app_init called - registering UI builder");
+
+    // Register our UI builder
+    blinc_app::ios::register_rust_ui_builder(|ctx| app_ui(ctx));
+
+    eprintln!("[Blinc] UI builder registered");
+}

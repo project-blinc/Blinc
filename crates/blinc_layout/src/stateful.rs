@@ -293,6 +293,12 @@ pub fn take_needs_redraw() -> bool {
     NEEDS_REDRAW.swap(false, Ordering::SeqCst)
 }
 
+/// Peek at the redraw flag without clearing it
+/// Used by iOS needs_render() to check if stateful updates are pending
+pub fn peek_needs_redraw() -> bool {
+    NEEDS_REDRAW.load(Ordering::SeqCst)
+}
+
 // =========================================================================
 // Pending Prop Updates Queue
 // =========================================================================

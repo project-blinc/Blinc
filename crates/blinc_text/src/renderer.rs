@@ -169,6 +169,15 @@ impl TextRenderer {
         Ok(())
     }
 
+    /// Load font data into the registry (used by the rendering system)
+    ///
+    /// This adds fonts to the registry where they can be found by name
+    /// during text rendering. Returns the number of font faces loaded.
+    pub fn load_font_data_to_registry(&mut self, data: Vec<u8>) -> usize {
+        let mut registry = self.font_registry.lock().unwrap();
+        registry.load_font_data(data)
+    }
+
     /// Get the glyph atlas (grayscale)
     pub fn atlas(&self) -> &GlyphAtlas {
         &self.atlas

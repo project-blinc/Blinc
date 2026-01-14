@@ -140,6 +140,17 @@ impl TextRenderingContext {
         self.renderer.load_default_font_data(data)
     }
 
+    /// Load font data into the registry (for use by the rendering system)
+    ///
+    /// This adds fonts to the registry where they can be found by name
+    /// during text rendering. Returns the number of font faces loaded.
+    ///
+    /// Use this instead of `load_font_data` when you want fonts to be
+    /// available for regular text rendering (not just as a default fallback).
+    pub fn load_font_data_to_registry(&mut self, data: Vec<u8>) -> usize {
+        self.renderer.load_font_data_to_registry(data)
+    }
+
     /// Set the default font
     pub fn set_font(&mut self, font: blinc_text::FontFace) {
         self.renderer.set_default_font(font);

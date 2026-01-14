@@ -17,26 +17,27 @@ path = "src/main.rs"
 required-features = ["desktop"]
 
 [dependencies]
-blinc_core = { path = "/Users/amaterasu/Vibranium/Blinc/crates/blinc_core" }
-blinc_layout = { path = "/Users/amaterasu/Vibranium/Blinc/crates/blinc_layout" }
+blinc_core = { path = "../../crates/blinc_core" }
+blinc_layout = { path = "../../crates/blinc_layout" }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
-blinc_app = { path = "/Users/amaterasu/Vibranium/Blinc/crates/blinc_app" }
+blinc_app = { path = "../../crates/blinc_app" }
 
 [target.'cfg(target_os = "android")'.dependencies]
-blinc_app = { path = "/Users/amaterasu/Vibranium/Blinc/crates/blinc_app", features = ["android"] }
-blinc_platform_android = { path = "/Users/amaterasu/Vibranium/Blinc/extensions/blinc_platform_android" }
+blinc_app = { path = "../../crates/blinc_app", features = ["android"] }
+blinc_platform_android = { path = "../../extensions/blinc_platform_android" }
 android-activity = { version = "0.6", features = ["native-activity"] }
 log = "0.4"
 android_logger = "0.14"
 
 [target.'cfg(target_os = "ios")'.dependencies]
-blinc_platform_ios = { path = "/Users/amaterasu/Vibranium/Blinc/extensions/blinc_platform_ios" }
+blinc_app = { path = "../../crates/blinc_app", features = ["ios"] }
+blinc_platform_ios = { path = "../../extensions/blinc_platform_ios" }
 
 [target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
-blinc_platform_desktop = { path = "/Users/amaterasu/Vibranium/Blinc/extensions/blinc_platform_desktop" }
+blinc_platform_desktop = { path = "../../extensions/blinc_platform_desktop" }
 
 [features]
 default = ["desktop"]

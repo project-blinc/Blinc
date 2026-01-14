@@ -24,4 +24,4 @@ enabled = true
 platform_dir = "platforms/ios"
 
 [build]
-blinc_path = "/Users/amaterasu/Vibranium/Blinc"
+blinc_path = "../.."

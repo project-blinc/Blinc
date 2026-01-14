@@ -195,6 +195,14 @@ impl RenderContext {
         }
     }
 
+    /// Load font data into the text rendering registry
+    ///
+    /// This adds fonts that will be available for text rendering.
+    /// Returns the number of font faces loaded.
+    pub fn load_font_data_to_registry(&mut self, data: Vec<u8>) -> usize {
+        self.text_ctx.load_font_data_to_registry(data)
+    }
+
     /// Render a layout tree to a texture view
     ///
     /// Handles everything automatically - glass, text, SVG, MSAA.

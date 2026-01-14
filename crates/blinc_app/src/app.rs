@@ -277,6 +277,17 @@ impl BlincApp {
         self.ctx.font_registry()
     }
 
+    /// Load font data into the text rendering registry
+    ///
+    /// This adds fonts that will be available for text rendering.
+    /// Returns the number of font faces loaded.
+    ///
+    /// Use this to load bundled fonts on platforms (like iOS) where
+    /// system fonts aren't directly accessible via file paths.
+    pub fn load_font_data_to_registry(&mut self, data: Vec<u8>) -> usize {
+        self.ctx.load_font_data_to_registry(data)
+    }
+
     /// Create a new Blinc application with a window surface
     ///
     /// This creates a GPU renderer optimized for the given window and returns

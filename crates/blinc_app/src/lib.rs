@@ -79,12 +79,14 @@ pub fn system_font_paths() -> &'static [&'static str] {
     }
     #[cfg(target_os = "ios")]
     {
+        // iOS system fonts - Core directory is most reliable
         &[
-            "/System/Library/Fonts/SFNSText.ttf",
-            "/System/Library/Fonts/SFNSDisplay.ttf",
-            "/System/Library/Fonts/SFNS.ttf",
-            "/System/Library/Fonts/Core/AppleSystemUIFont.ttf",
-            "/System/Library/Fonts/Core/Helvetica.ttc",
+            "/System/Library/Fonts/Core/SFUI.ttf",          // SF UI (system font)
+            "/System/Library/Fonts/Core/SFUIMono.ttf",      // SF Mono
+            "/System/Library/Fonts/Core/Helvetica.ttc",     // Helvetica
+            "/System/Library/Fonts/Core/HelveticaNeue.ttc", // Helvetica Neue
+            "/System/Library/Fonts/Core/Avenir.ttc",        // Avenir
+            "/System/Library/Fonts/CoreUI/Menlo.ttc",       // Menlo (monospace)
         ]
     }
     #[cfg(not(any(

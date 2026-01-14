@@ -8,9 +8,6 @@ use blinc_platform::{Cursor, Window};
 use objc2::rc::Retained;
 
 #[cfg(target_os = "ios")]
-use objc2_metal::MTLDevice;
-
-#[cfg(target_os = "ios")]
 use objc2_ui_kit::UIWindow;
 
 #[cfg(target_os = "ios")]

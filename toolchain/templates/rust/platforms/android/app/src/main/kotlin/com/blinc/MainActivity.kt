@@ -10,7 +10,6 @@ import android.os.Bundle
  * The actual UI is rendered by Blinc via the native library.
  */
 class MainActivity : NativeActivity() {
-
     companion object {
         init {
             // Load the Rust library
@@ -20,19 +19,5 @@ class MainActivity : NativeActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Initialize the native bridge for Rust-to-Kotlin calls
-        BlincNativeBridge.init(this)
-        BlincNativeBridge.registerDefaults(this)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // Native activity handles resume
-    }
-
-    override fun onPause() {
-        super.onPause()
-        // Native activity handles pause
     }
 }

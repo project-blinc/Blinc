@@ -81,9 +81,9 @@ pub struct WindowedContext {
     /// Current scale factor (physical / logical)
     pub scale_factor: f64,
     /// Physical window width (for internal use)
-    physical_width: f32,
+    pub(crate) physical_width: f32,
     /// Physical window height (for internal use)
-    physical_height: f32,
+    pub(crate) physical_height: f32,
     /// Whether the window is focused
     pub focused: bool,
     /// Number of completed UI rebuilds (0 = first build in progress)

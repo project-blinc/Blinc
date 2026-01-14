@@ -7,6 +7,11 @@ repository.workspace = true
 rust-version.workspace = true
 description = "Blinc application framework with clean layout and rendering API"
 
+[lib]
+# rlib: Rust library for normal use
+# staticlib: C static library for iOS/Android linking
+crate-type = ["rlib", "staticlib"]
+
 [dependencies]
 blinc_core = { path = "../blinc_core" }
 blinc_layout = { path = "../blinc_layout" }
