@@ -53,6 +53,7 @@ logs/
 .env
 .env.local
 .env.*.local
+.env.cargo
 
 # Testing
 coverage/

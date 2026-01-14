@@ -1,9 +1,13 @@
 [package]
 name = "blinc_macros"
+description = "Procedural macros for Blinc UI framework"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+rust-version.workspace = true
+keywords = ["ui", "gui", "macros", "blinc"]
+categories = ["gui", "development-tools::procedural-macro-helpers"]
 
 [lib]
 proc-macro = true

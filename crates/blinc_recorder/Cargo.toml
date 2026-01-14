@@ -1,9 +1,11 @@
 [package]
 name = "blinc_recorder"
-version = "0.1.0"
-edition = "2021"
 description = "Recording and debugging infrastructure for Blinc applications"
-license = "MIT OR Apache-2.0"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [features]
 default = []

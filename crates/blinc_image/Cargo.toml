@@ -1,9 +1,13 @@
 [package]
 name = "blinc_image"
-version = "0.1.0"
-edition = "2021"
 description = "Image loading and rendering for Blinc UI"
-license = "Apache-2.0"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+keywords = ["ui", "gui", "image", "blinc"]
+categories = ["gui", "multimedia::images"]
 
 [dependencies]
 # Image decoding

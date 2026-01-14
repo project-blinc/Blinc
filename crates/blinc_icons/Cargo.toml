@@ -1,9 +1,13 @@
 [package]
 name = "blinc_icons"
-version = "0.1.0"
-edition = "2021"
 description = "Lucide icon library for Blinc UI framework"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+keywords = ["ui", "gui", "icons", "lucide", "blinc"]
+categories = ["gui"]
 build = "build.rs"
 
 [build-dependencies]

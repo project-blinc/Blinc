@@ -1,5 +1,10 @@
 # blinc_gpu
 
+> **Part of the [Blinc UI Framework](https://project-blinc.github.io/Blinc)**
+>
+> This crate is a component of Blinc, a GPU-accelerated UI framework for Rust.
+> For full documentation and guides, visit the [Blinc documentation](https://project-blinc.github.io/Blinc).
+
 GPU renderer for Blinc UI using [wgpu](https://wgpu.rs/) with SDF-based rendering.
 
 ## Overview

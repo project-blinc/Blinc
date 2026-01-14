@@ -4,6 +4,10 @@ description = "Blinc core runtime - reactive signals, state machines, and event 
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+keywords = ["ui", "gui", "reactive", "signals", "blinc"]
+categories = ["gui"]
 
 [lib]
 crate-type = ["lib"]

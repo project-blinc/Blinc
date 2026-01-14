@@ -1,8 +1,11 @@
 [package]
 name = "blinc_debugger"
-version = "0.1.0"
-edition = "2021"
 description = "Visual debugger app for Blinc UI recordings"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [[bin]]
 name = "blinc-debugger"

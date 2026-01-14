@@ -1,5 +1,10 @@
 # blinc_cn
 
+> **Part of the [Blinc UI Framework](https://project-blinc.github.io/Blinc)**
+>
+> This crate is a component of Blinc, a GPU-accelerated UI framework for Rust.
+> For full documentation and guides, visit the [Blinc documentation](https://project-blinc.github.io/Blinc).
+
 Component library for Blinc UI - shadcn/ui-style themed components.
 
 ## Overview

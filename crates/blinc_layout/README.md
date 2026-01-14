@@ -1,5 +1,10 @@
 # blinc_layout
 
+> **Part of the [Blinc UI Framework](https://project-blinc.github.io/Blinc)**
+>
+> This crate is a component of Blinc, a GPU-accelerated UI framework for Rust.
+> For full documentation and guides, visit the [Blinc documentation](https://project-blinc.github.io/Blinc).
+
 Flexbox layout engine for Blinc UI, powered by [Taffy](https://github.com/DioxusLabs/taffy).
 
 ## Overview

@@ -1,5 +1,10 @@
 # blinc_theme
 
+> **Part of the [Blinc UI Framework](https://project-blinc.github.io/Blinc)**
+>
+> This crate is a component of Blinc, a GPU-accelerated UI framework for Rust.
+> For full documentation and guides, visit the [Blinc documentation](https://project-blinc.github.io/Blinc).
+
 Theme system for Blinc UI with design tokens and platform-native themes.
 
 ## Overview
