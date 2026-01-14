@@ -28,10 +28,10 @@ Blinc supports building native mobile applications for both Android and iOS plat
 
 ## Supported Platforms
 
-| Platform | Backend | Min Version | Status |
-|----------|---------|-------------|--------|
+| Platform | Backend | Min Version  | Status |
+|----------|---------|--------------|--------|
 | Android  | Vulkan  | API 24 (7.0) | Stable |
-| iOS      | Metal   | iOS 15+     | Stable |
+| iOS      | Metal   | iOS 15+      | Stable |
 
 ## Project Structure
 
@@ -74,22 +74,32 @@ cd my-app
 use blinc_app::prelude::*;
 
 fn app(ctx: &mut WindowedContext) -> impl ElementBuilder {
-    let count = ctx.use_signal(|| 0);
-
     div()
         .width(ctx.width)
         .height(ctx.height)
         .bg(0x1a1a2e)
         .justify_center()
         .align_center()
-        .child(
-            button("Tap me!")
-                .on_click(move |_| count.set_rebuild(count.get() + 1))
-        )
-        .child(
-            text(format!("Count: {}", count.get()))
-                .color(0xffffff)
-        )
+        .child(counter(1))
+}
+
+fn counter(delta: i32) -> impl ElementBuilder {
+    // Stateful elements update incrementally without rebuilding the whole UI
+    stateful(move |state: &mut i32| {
+        let count = *state;
+
+        div()
+            .gap(16.0)
+            .align_center()
+            .child(
+                button("Tap me!")
+                    .on_click(move |s: &mut i32| *s += delta)
+            )
+            .child(
+                text(format!("Count: {}", count))
+                    .color(0xffffff)
+            )
+    })
 }
 ```
 
