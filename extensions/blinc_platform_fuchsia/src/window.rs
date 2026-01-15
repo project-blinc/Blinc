@@ -2,7 +2,7 @@
 //!
 //! Wraps a Scenic View for window management.
 
-use blinc_platform::{Cursor, PlatformError, Window};
+use blinc_platform::{Cursor, Window};
 
 /// Fuchsia window backed by a Scenic View
 pub struct FuchsiaWindow {

@@ -22,6 +22,9 @@ blinc_core = { path = "../../crates/blinc_core", version = "0.1.1" }
 blinc_animation = { path = "../../crates/blinc_animation", version = "0.1.1" }
 blinc_platform = { path = "../../crates/blinc_platform", version = "0.1.1" }
 
+# GPU types for wgpu configuration (version-matched to workspace wgpu)
+wgpu-types = "23.0"
+
 # Logging
 tracing.workspace = true
 

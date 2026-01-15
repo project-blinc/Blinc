@@ -10,6 +10,7 @@ use crate::window::FuchsiaWindow;
 /// Fuchsia platform using Scenic compositor
 pub struct FuchsiaPlatform {
     /// Display scale factor
+    #[allow(dead_code)] // Used in #[cfg(target_os = "fuchsia")]
     scale_factor: f64,
 }
 
