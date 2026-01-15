@@ -1,0 +1,41 @@
+[package]
+name = "blinc_fuchsia_bindings"
+description = "Auto-generated Fuchsia FIDL bindings for Blinc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/blinc_fuchsia_bindings"
+rust-version.workspace = true
+keywords = ["fuchsia", "fidl", "bindings", "blinc"]
+categories = ["api-bindings"]
+
+[lib]
+crate-type = ["lib"]
+
+[features]
+default = []
+
+# The actual FIDL bindings require these crates which are only available
+# when building within the Fuchsia tree. On other platforms, this crate
+# provides type stubs.
+
+[dependencies]
+# These are required by the generated FIDL bindings
+# They're only available when building for Fuchsia via `fx build`
+
+# Common dependencies (available on all platforms)
+bitflags = "2"
+futures = "0.3"
+tracing.workspace = true
+
+# Fuchsia-specific dependencies (provided by Fuchsia build system)
+# When building outside Fuchsia, the code is gated with #[cfg(target_os = "fuchsia")]
+#
+# The following crates are provided by the Fuchsia SDK during `fx build`:
+# - fidl
+# - fuchsia-zircon (as fuchsia_zircon)
+# - fuchsia-zircon-status (as fuchsia_zircon_status)
+# - fuchsia-async
+#
+# To regenerate bindings: ./scripts/generate-fuchsia-fidl.sh

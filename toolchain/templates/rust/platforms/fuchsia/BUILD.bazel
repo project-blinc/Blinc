@@ -1,0 +1,100 @@
+# Copyright 2024 The Blinc Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license.
+#
+# BUILD.bazel - Bazel build file for Blinc Fuchsia applications
+#
+# This file is for building Blinc apps using the Fuchsia SDK Bazel workflow.
+# Use this when working with the sdk-samples repository approach.
+#
+# Prerequisites:
+#   1. Run ./scripts/setup-fuchsia-all.sh
+#   2. Copy this to your app directory within sdk-samples
+#   3. Build with: tools/bazel build //path/to:your_app_pkg
+#
+# For the traditional `fx build` workflow, use BUILD.gn instead.
+
+load(
+    "@fuchsia_sdk//fuchsia:defs.bzl",
+    "fuchsia_cc_binary",
+    "fuchsia_component",
+    "fuchsia_component_manifest",
+    "fuchsia_package",
+)
+
+# If using Rust with Bazel, you'll need rules_rust + Fuchsia toolchain.
+# The Fuchsia SDK samples primarily use C++, but Rust is supported.
+#
+# For pure Rust builds targeting Fuchsia:
+#   cargo build --target x86_64-unknown-fuchsia
+#
+# Then package the binary manually or use this template with rules_rust.
+
+# Package name - update this
+package(default_visibility = ["//visibility:public"])
+
+# Component manifest
+fuchsia_component_manifest(
+    name = "manifest",
+    src = "meta/blinc_app.cml",
+    includes = [
+        "@fuchsia_sdk//pkg/syslog:client",
+    ],
+)
+
+# For C++ wrapper or FFI bridge (if needed)
+# Uncomment if you have a C++ entry point that calls into Rust
+#
+# fuchsia_cc_binary(
+#     name = "blinc_app_bin",
+#     srcs = ["src/main.cc"],
+#     deps = [
+#         "@fuchsia_sdk//pkg/async-cpp",
+#         "@fuchsia_sdk//pkg/async-loop-cpp",
+#         "@fuchsia_sdk//pkg/component_incoming_cpp",
+#         "@fuchsia_sdk//pkg/syslog",
+#         "@fuchsia_sdk//fidl/fuchsia.ui.app:fuchsia.ui.app_cpp",
+#         "@fuchsia_sdk//fidl/fuchsia.ui.composition:fuchsia.ui.composition_cpp",
+#         "@fuchsia_sdk//fidl/fuchsia.ui.pointer:fuchsia.ui.pointer_cpp",
+#     ],
+# )
+
+# Component definition
+fuchsia_component(
+    name = "component",
+    manifest = ":manifest",
+    # Binary comes from cargo build, added via fuchsia_package resources
+    # deps = [":blinc_app_bin"],  # Uncomment if using cc_binary above
+)
+
+# Package the component
+fuchsia_package(
+    name = "pkg",
+    package_name = "blinc_app",
+    components = [":component"],
+    # Include the pre-built Rust binary
+    resources = [
+        # Path to cargo-built binary - update after cargo build
+        # "//path/to/target/x86_64-unknown-fuchsia/release/blinc_app:bin/blinc_app",
+    ],
+)
+
+# Alternative: Pure Rust workflow
+#
+# For Rust-only apps, the recommended workflow is:
+#
+# 1. Build with cargo:
+#    cargo build --target x86_64-unknown-fuchsia --release
+#
+# 2. Create package manually with ffx:
+#    ffx package build \
+#      --published-name blinc_app \
+#      --api-level HEAD \
+#      target/x86_64-unknown-fuchsia/release/blinc_app \
+#      meta/blinc_app.cml
+#
+# 3. Publish to repository:
+#    ffx repository server start
+#    ffx repository publish
+#
+# 4. Run:
+#    ffx component run fuchsia-pkg://fuchsia.com/blinc_app#meta/blinc_app.cm

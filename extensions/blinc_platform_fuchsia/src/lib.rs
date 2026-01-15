@@ -22,6 +22,7 @@
 //! - [`event_loop`] - Event handling and frame scheduling
 //! - [`input`] - Touch, mouse, and keyboard input
 //! - [`scenic`] - Scenic compositor integration types
+//! - [`flatland`] - Flatland 2D compositor session management
 //! - [`gpu`] - GPU/Vulkan integration helpers
 //! - [`assets`] - Asset loading from package namespace
 //!
@@ -72,22 +73,44 @@
 pub mod app;
 pub mod assets;
 pub mod event_loop;
+pub mod flatland;
 pub mod gpu;
 pub mod input;
 pub mod scenic;
+pub mod view_provider;
 pub mod window;
 
 // Re-export public types
 pub use app::FuchsiaPlatform;
 pub use assets::FuchsiaAssetLoader;
-pub use event_loop::{FuchsiaEventLoop, FuchsiaWakeProxy};
-pub use gpu::{FuchsiaSurfaceHandle, GpuConfig, GpuInfo, PresentMode};
+pub use event_loop::{
+    AsyncEventLoop, EventLoopConfig, FrameScheduledEventLoop, FrameSchedulingState,
+    FuchsiaEvent, FuchsiaEventLoop, FuchsiaEventSources, FuchsiaWakeProxy, InputSources,
+    TouchResponse, WakeEvent,
+};
+pub use flatland::{
+    BufferCollection, BufferFormat, ContentId, FlatlandAllocator, FlatlandError, FlatlandSession,
+    HitRegion, ImageProperties, PresentArgs, SolidColor, Transform2D, TransformId,
+};
+pub use gpu::{
+    create_fuchsia_gpu, AcquiredBuffer, FuchsiaGpu, FuchsiaSurfaceHandle, GpuConfig, GpuInfo,
+    ImagePipeClient, ImagePipeError, PresentMode, PresentResult, VulkanSurface,
+};
 pub use input::{
-    convert_key, convert_mouse, convert_touch, FuchsiaMouseButton, KeyEvent, KeyModifiers,
-    KeyState, Mouse, MousePhase, Touch, TouchPhase,
+    convert_key, convert_mouse, convert_touch, FocusWatcher, FuchsiaMouseButton, InputState,
+    InteractionId, KeyEvent, KeyModifiers, KeyState, KeyboardListenerState, Mouse,
+    MouseInteraction, MousePhase, MouseSourceState, PointerState, Touch, TouchInteraction,
+    TouchPhase, TouchResponseType, TouchSourceState,
 };
 pub use scenic::{DisplayInfo, FocusState, FrameInfo, ScenicView, ViewProperties, ViewState};
+pub use view_provider::{
+    CreateView2Args, LayoutInfo, ParentViewportWatcher, ViewCreationToken, ViewEvent, ViewIdentity,
+    ViewInset, ViewProvider, ViewProviderError, ViewRef,
+};
 pub use window::FuchsiaWindow;
+
+// Re-export Zircon types for platform consumers
+pub use blinc_fuchsia_zircon as zircon;
 
 // Convenience constructor for non-Fuchsia builds
 #[cfg(not(target_os = "fuchsia"))]

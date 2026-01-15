@@ -21,6 +21,13 @@ use blinc_platform::{
     MouseEvent, ScrollPhase, TouchEvent,
 };
 
+#[cfg(target_os = "fuchsia")]
+use fidl_fuchsia_ui_pointer::{
+    EventPhase, MouseEvent as FidlMouseEvent, TouchEvent as FidlTouchEvent,
+};
+#[cfg(target_os = "fuchsia")]
+use fidl_fuchsia_ui_input3::{KeyEvent as FidlKeyEvent, KeyEventType, Modifiers as FidlModifiers};
+
 // ============================================================================
 // Touch Input
 // ============================================================================
@@ -102,17 +109,114 @@ pub fn convert_touch(touch: &Touch) -> InputEvent {
 }
 
 /// Convert fuchsia.ui.pointer.TouchEvent to Blinc Touch
-///
-/// Note: This function would be implemented when building with Fuchsia SDK
 #[cfg(target_os = "fuchsia")]
 pub fn from_fuchsia_touch_event(
-    _event: (), // fidl_fuchsia_ui_pointer::TouchEvent
-    _scale_factor: f64,
-) -> Vec<Touch> {
-    // TODO: Implement conversion from fidl_fuchsia_ui_pointer::TouchEvent
-    // - Extract pointer_id, position, phase
-    // - Convert coordinates using scale_factor
-    vec![]
+    event: &FidlTouchEvent,
+    scale_factor: f64,
+) -> Option<Touch> {
+    let pointer_sample = event.pointer_sample.as_ref()?;
+
+    // Get phase
+    let phase = match pointer_sample.phase? {
+        EventPhase::Add => TouchPhase::Began,
+        EventPhase::Change => TouchPhase::Moved,
+        EventPhase::Remove => TouchPhase::Ended,
+        EventPhase::Cancel => TouchPhase::Cancelled,
+    };
+
+    // Get position in viewport coordinates
+    let position = pointer_sample.position_in_viewport.as_ref()?;
+    let x = position[0] as f32 / scale_factor as f32;
+    let y = position[1] as f32 / scale_factor as f32;
+
+    // Get pointer ID from interaction ID
+    let pointer_id = event.interaction_id.as_ref()
+        .map(|id| id.pointer_id as u64)
+        .unwrap_or(0);
+
+    Some(Touch::new(pointer_id, x, y, phase))
+}
+
+/// Convert fuchsia.ui.pointer.MouseEvent to MouseInteraction
+#[cfg(target_os = "fuchsia")]
+pub fn from_fuchsia_mouse_event(
+    event: &FidlMouseEvent,
+    scale_factor: f64,
+) -> Option<MouseInteraction> {
+    let pointer_sample = event.pointer_sample.as_ref()?;
+
+    // Get position
+    let position = pointer_sample.position_in_viewport.as_ref()?;
+    let x = position[0] as f32 / scale_factor as f32;
+    let y = position[1] as f32 / scale_factor as f32;
+
+    // Get device ID
+    let device_id = event.device_info.as_ref()
+        .and_then(|info| info.id)
+        .unwrap_or(0);
+
+    // Get button states
+    let pressed_buttons = pointer_sample.pressed_buttons.as_ref()
+        .map(|btns| btns.iter().fold(0u32, |acc, &b| acc | (1 << b)))
+        .unwrap_or(0);
+
+    // TODO: Track button state changes for newly_pressed/newly_released
+
+    // Get scroll
+    let scroll_v = pointer_sample.scroll_v.map(|v| (0.0, v as f64));
+
+    Some(MouseInteraction {
+        device_id,
+        position: (x, y),
+        pressed_buttons,
+        newly_pressed: 0,
+        newly_released: 0,
+        scroll: None,
+        scroll_v,
+        timestamp_ns: event.timestamp.unwrap_or(0),
+    })
+}
+
+/// Convert fuchsia.ui.input3.KeyEvent to KeyEvent
+#[cfg(target_os = "fuchsia")]
+pub fn from_fuchsia_key_event(event: &FidlKeyEvent) -> Option<KeyEvent> {
+    let key = event.key.map(|k| k as u32)?;
+
+    let state = match event.type_? {
+        KeyEventType::Pressed => KeyState::Pressed,
+        KeyEventType::Released => KeyState::Released,
+        KeyEventType::Sync => KeyState::Pressed, // Sync = key was pressed before focus
+        KeyEventType::Cancel => KeyState::Released, // Cancel = release due to focus loss
+    };
+
+    // Convert modifiers
+    let mods = event.modifiers.map(convert_fuchsia_modifiers).unwrap_or_default();
+
+    // Get character from key_meaning
+    let character = event.key_meaning.as_ref().and_then(|meaning| {
+        match meaning {
+            fidl_fuchsia_ui_input3::KeyMeaning::Codepoint(cp) => char::from_u32(*cp),
+            _ => None,
+        }
+    });
+
+    Some(match state {
+        KeyState::Pressed => KeyEvent::pressed(key, mods, character),
+        KeyState::Released => KeyEvent::released(key, mods),
+    })
+}
+
+/// Convert Fuchsia modifiers to our KeyModifiers
+#[cfg(target_os = "fuchsia")]
+fn convert_fuchsia_modifiers(mods: FidlModifiers) -> KeyModifiers {
+    KeyModifiers {
+        shift: mods.contains(FidlModifiers::SHIFT),
+        ctrl: mods.contains(FidlModifiers::CTRL),
+        alt: mods.contains(FidlModifiers::ALT),
+        meta: mods.contains(FidlModifiers::META),
+        caps_lock: mods.contains(FidlModifiers::CAPS_LOCK),
+        num_lock: mods.contains(FidlModifiers::NUM_LOCK),
+    }
 }
 
 // ============================================================================
@@ -120,24 +224,37 @@ pub fn from_fuchsia_touch_event(
 // ============================================================================
 
 /// Mouse button from fuchsia.ui.pointer
+///
+/// Wraps the button ID from Fuchsia (0 = primary, 1 = secondary, 2 = tertiary)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FuchsiaMouseButton {
-    /// Primary (left) button
-    Primary,
-    /// Secondary (right) button
-    Secondary,
-    /// Tertiary (middle) button
-    Tertiary,
-}
+pub struct FuchsiaMouseButton(pub u8);
 
 impl FuchsiaMouseButton {
+    /// Primary (left) button
+    pub const PRIMARY: Self = Self(0);
+    /// Secondary (right) button
+    pub const SECONDARY: Self = Self(1);
+    /// Tertiary (middle) button
+    pub const TERTIARY: Self = Self(2);
+
     /// Convert to Blinc MouseButton
     pub fn to_blinc(self) -> MouseButton {
-        match self {
-            Self::Primary => MouseButton::Left,
-            Self::Secondary => MouseButton::Right,
-            Self::Tertiary => MouseButton::Middle,
+        match self.0 {
+            0 => MouseButton::Left,
+            1 => MouseButton::Right,
+            2 => MouseButton::Middle,
+            _ => MouseButton::Other(self.0 as u16),
         }
+    }
+
+    /// Check if this is the primary button
+    pub fn is_primary(&self) -> bool {
+        self.0 == 0
+    }
+
+    /// Check if this is the secondary button
+    pub fn is_secondary(&self) -> bool {
+        self.0 == 1
     }
 }
 
@@ -216,6 +333,11 @@ impl Mouse {
             button: None,
             scroll_delta: (delta_x, delta_y),
         }
+    }
+
+    /// Get the button if present
+    pub fn get_button(&self) -> Option<MouseButton> {
+        self.button.map(|b| b.to_blinc())
     }
 }
 
@@ -525,4 +647,583 @@ pub mod key_codes {
     pub const KEY_RIGHT_SHIFT: u32 = 0x000700E5;
     pub const KEY_RIGHT_ALT: u32 = 0x000700E6;
     pub const KEY_RIGHT_META: u32 = 0x000700E7;
+}
+
+// ============================================================================
+// Pointer Protocol Types (fuchsia.ui.pointer)
+// ============================================================================
+
+/// Pointer interaction ID (unique per touch/mouse interaction)
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct InteractionId {
+    /// Device ID
+    pub device_id: u32,
+    /// Pointer ID within device
+    pub pointer_id: u32,
+    /// Interaction ID (sequence number)
+    pub interaction_id: u32,
+}
+
+impl InteractionId {
+    /// Create a new interaction ID
+    pub fn new(device_id: u32, pointer_id: u32, interaction_id: u32) -> Self {
+        Self {
+            device_id,
+            pointer_id,
+            interaction_id,
+        }
+    }
+}
+
+/// Pointer event status (for responding to TouchSource.Watch)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TouchResponseType {
+    /// App wants to receive events for this interaction
+    Yes,
+    /// App doesn't want this interaction
+    No,
+    /// App will decide based on gesture
+    Maybe,
+    /// App is holding decision (for gesture disambiguation)
+    Hold,
+}
+
+/// Touch interaction from fuchsia.ui.pointer.TouchSource
+#[derive(Clone, Debug)]
+pub struct TouchInteraction {
+    /// Interaction ID
+    pub id: InteractionId,
+    /// Touch phase
+    pub phase: TouchPhase,
+    /// X position in view-local logical pixels
+    pub x: f32,
+    /// Y position in view-local logical pixels
+    pub y: f32,
+    /// Force/pressure (if available)
+    pub force: Option<f32>,
+}
+
+impl Default for TouchInteraction {
+    fn default() -> Self {
+        Self {
+            id: InteractionId::default(),
+            phase: TouchPhase::Cancelled,
+            x: 0.0,
+            y: 0.0,
+            force: None,
+        }
+    }
+}
+
+impl TouchInteraction {
+    /// Create a new touch interaction
+    pub fn new(id: InteractionId, phase: TouchPhase, x: f32, y: f32) -> Self {
+        Self { id, phase, x, y, force: None }
+    }
+
+    /// Get position as tuple
+    pub fn position(&self) -> (f32, f32) {
+        (self.x, self.y)
+    }
+
+    /// Convert to Blinc Touch
+    pub fn to_touch(&self) -> Touch {
+        Touch::new(
+            self.id.pointer_id as u64,
+            self.x,
+            self.y,
+            self.phase,
+        )
+    }
+}
+
+/// Mouse interaction from fuchsia.ui.pointer.MouseSource
+#[derive(Clone, Debug)]
+pub struct MouseInteraction {
+    /// Mouse phase
+    pub phase: MousePhase,
+    /// X position in view-local logical pixels
+    pub x: f32,
+    /// Y position in view-local logical pixels
+    pub y: f32,
+    /// Currently pressed buttons
+    pub buttons: Vec<FuchsiaMouseButton>,
+    /// Scroll delta (dx, dy)
+    pub scroll_delta: Option<(f32, f32)>,
+}
+
+impl Default for MouseInteraction {
+    fn default() -> Self {
+        Self {
+            phase: MousePhase::Move,
+            x: 0.0,
+            y: 0.0,
+            buttons: vec![],
+            scroll_delta: None,
+        }
+    }
+}
+
+impl MouseInteraction {
+    /// Create a new mouse interaction
+    pub fn new(phase: MousePhase, x: f32, y: f32) -> Self {
+        Self { phase, x, y, buttons: vec![], scroll_delta: None }
+    }
+
+    /// Get position as tuple
+    pub fn position(&self) -> (f32, f32) {
+        (self.x, self.y)
+    }
+
+    /// Check if primary button is pressed
+    pub fn is_primary_pressed(&self) -> bool {
+        self.buttons.iter().any(|b| b.is_primary())
+    }
+
+    /// Check if secondary button is pressed
+    pub fn is_secondary_pressed(&self) -> bool {
+        self.buttons.iter().any(|b| b.is_secondary())
+    }
+
+    /// Convert to Blinc Mouse event
+    pub fn to_mouse(&self) -> Mouse {
+        let button = self.buttons.first().copied();
+
+        match self.phase {
+            MousePhase::Enter => Mouse {
+                x: self.x,
+                y: self.y,
+                phase: MousePhase::Enter,
+                button: None,
+                scroll_delta: (0.0, 0.0),
+            },
+            MousePhase::Leave => Mouse {
+                x: self.x,
+                y: self.y,
+                phase: MousePhase::Leave,
+                button: None,
+                scroll_delta: (0.0, 0.0),
+            },
+            MousePhase::Move => Mouse::move_event(self.x, self.y),
+            MousePhase::Down => Mouse {
+                x: self.x,
+                y: self.y,
+                phase: MousePhase::Down,
+                button,
+                scroll_delta: (0.0, 0.0),
+            },
+            MousePhase::Up => Mouse {
+                x: self.x,
+                y: self.y,
+                phase: MousePhase::Up,
+                button,
+                scroll_delta: (0.0, 0.0),
+            },
+            MousePhase::Scroll => Mouse {
+                x: self.x,
+                y: self.y,
+                phase: MousePhase::Scroll,
+                button: None,
+                scroll_delta: self.scroll_delta.unwrap_or((0.0, 0.0)),
+            },
+        }
+    }
+}
+
+/// Keyboard listener for fuchsia.ui.input3.Keyboard
+#[derive(Clone, Debug)]
+pub struct KeyboardListenerRequest {
+    /// Key that was pressed/released
+    pub key: u32,
+    /// Key event type
+    pub event_type: KeyState,
+    /// Current modifiers
+    pub modifiers: KeyModifiers,
+    /// Semantic meaning (character produced)
+    pub meaning: Option<KeyMeaning>,
+    /// Timestamp in nanoseconds
+    pub timestamp_ns: i64,
+}
+
+/// Semantic key meaning from fuchsia.ui.input3
+#[derive(Clone, Debug)]
+pub enum KeyMeaning {
+    /// Character produced
+    Codepoint(u32),
+    /// Non-printing key meaning
+    NonPrintable(NonPrintableKey),
+}
+
+/// Non-printable key meanings
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NonPrintableKey {
+    Enter,
+    Tab,
+    Backspace,
+    Delete,
+    Escape,
+    Insert,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+impl KeyboardListenerRequest {
+    /// Convert to Blinc KeyEvent
+    pub fn to_key_event(&self) -> KeyEvent {
+        let character = match &self.meaning {
+            Some(KeyMeaning::Codepoint(cp)) => char::from_u32(*cp),
+            _ => None,
+        };
+
+        match self.event_type {
+            KeyState::Pressed => KeyEvent::pressed(self.key, self.modifiers, character),
+            KeyState::Released => KeyEvent::released(self.key, self.modifiers),
+        }
+    }
+}
+
+// ============================================================================
+// Pointer Source Management
+// ============================================================================
+
+/// Touch source state manager
+///
+/// Manages the fuchsia.ui.pointer.TouchSource protocol state.
+/// Handles the hanging-get Watch pattern and response tracking.
+pub struct TouchSourceState {
+    /// Active interactions (pending response)
+    active_interactions: std::collections::HashMap<InteractionId, TouchResponseType>,
+    /// Whether we've connected to the touch source
+    connected: bool,
+}
+
+impl TouchSourceState {
+    /// Create new touch source state
+    pub fn new() -> Self {
+        Self {
+            active_interactions: std::collections::HashMap::new(),
+            connected: false,
+        }
+    }
+
+    /// Mark as connected
+    pub fn set_connected(&mut self, connected: bool) {
+        self.connected = connected;
+    }
+
+    /// Check if connected
+    pub fn is_connected(&self) -> bool {
+        self.connected
+    }
+
+    /// Process a touch event and return the response
+    ///
+    /// For gesture disambiguation, we may need to hold our response
+    /// until we know if this is a scroll vs tap.
+    pub fn process_touch(&mut self, interaction: &TouchInteraction) -> TouchResponseType {
+        match interaction.phase {
+            TouchPhase::Began => {
+                // New interaction - accept by default
+                self.active_interactions
+                    .insert(interaction.id, TouchResponseType::Yes);
+                TouchResponseType::Yes
+            }
+            TouchPhase::Moved | TouchPhase::Ended | TouchPhase::Cancelled => {
+                // Continue with existing decision
+                self.active_interactions
+                    .get(&interaction.id)
+                    .copied()
+                    .unwrap_or(TouchResponseType::Yes)
+            }
+        }
+    }
+
+    /// Set response for an interaction (for gesture disambiguation)
+    pub fn set_response(&mut self, id: InteractionId, response: TouchResponseType) {
+        self.active_interactions.insert(id, response);
+    }
+
+    /// Clear completed interaction
+    pub fn clear_interaction(&mut self, id: &InteractionId) {
+        self.active_interactions.remove(id);
+    }
+
+    /// Get all pending responses for Watch call
+    pub fn pending_responses(&self) -> Vec<(InteractionId, TouchResponseType)> {
+        self.active_interactions
+            .iter()
+            .map(|(id, resp)| (*id, *resp))
+            .collect()
+    }
+}
+
+impl Default for TouchSourceState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Mouse source state manager
+///
+/// Manages the fuchsia.ui.pointer.MouseSource protocol state.
+pub struct MouseSourceState {
+    /// Last known position
+    last_position: Option<(f32, f32)>,
+    /// Currently pressed buttons (bitfield)
+    pressed_buttons: u32,
+    /// Whether we've connected to the mouse source
+    connected: bool,
+}
+
+impl MouseSourceState {
+    /// Create new mouse source state
+    pub fn new() -> Self {
+        Self {
+            last_position: None,
+            pressed_buttons: 0,
+            connected: false,
+        }
+    }
+
+    /// Mark as connected
+    pub fn set_connected(&mut self, connected: bool) {
+        self.connected = connected;
+    }
+
+    /// Check if connected
+    pub fn is_connected(&self) -> bool {
+        self.connected
+    }
+
+    /// Update state from mouse interaction
+    pub fn update(&mut self, interaction: &MouseInteraction) {
+        self.last_position = Some(interaction.position());
+        // Convert buttons to bitfield
+        self.pressed_buttons = interaction.buttons.iter().fold(0u32, |acc, b| acc | (1 << b.0));
+    }
+
+    /// Get last known position
+    pub fn position(&self) -> Option<(f32, f32)> {
+        self.last_position
+    }
+
+    /// Check if any button is pressed
+    pub fn any_button_pressed(&self) -> bool {
+        self.pressed_buttons != 0
+    }
+
+    /// Check if primary button is pressed
+    pub fn is_primary_pressed(&self) -> bool {
+        self.pressed_buttons & 0x01 != 0
+    }
+}
+
+impl Default for MouseSourceState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Combined pointer state manager
+///
+/// Manages both touch and mouse input sources.
+pub struct PointerState {
+    /// Touch source state
+    pub touch: TouchSourceState,
+    /// Mouse source state
+    pub mouse: MouseSourceState,
+}
+
+impl PointerState {
+    /// Create new pointer state
+    pub fn new() -> Self {
+        Self {
+            touch: TouchSourceState::new(),
+            mouse: MouseSourceState::new(),
+        }
+    }
+
+    /// Check if any pointer source is connected
+    pub fn any_connected(&self) -> bool {
+        self.touch.is_connected() || self.mouse.is_connected()
+    }
+}
+
+impl Default for PointerState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ============================================================================
+// Focus State Management
+// ============================================================================
+
+/// Focus state manager for fuchsia.ui.views.ViewRefFocused
+///
+/// Tracks focus changes via the hanging-get Watch pattern.
+pub struct FocusWatcher {
+    /// Current focus state
+    focused: bool,
+    /// Whether we've received initial focus state
+    has_state: bool,
+}
+
+impl FocusWatcher {
+    /// Create new focus watcher
+    pub fn new() -> Self {
+        Self {
+            focused: false,
+            has_state: false,
+        }
+    }
+
+    /// Update focus state
+    ///
+    /// Returns true if focus changed.
+    pub fn update(&mut self, focused: bool) -> bool {
+        let changed = self.focused != focused;
+        self.focused = focused;
+        self.has_state = true;
+        changed
+    }
+
+    /// Check if view is focused
+    pub fn is_focused(&self) -> bool {
+        self.focused
+    }
+
+    /// Check if we've received initial state
+    pub fn has_state(&self) -> bool {
+        self.has_state
+    }
+}
+
+impl Default for FocusWatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ============================================================================
+// Keyboard Listener State
+// ============================================================================
+
+/// Keyboard listener state for fuchsia.ui.input3.Keyboard
+///
+/// Manages keyboard input via SetListener protocol.
+pub struct KeyboardListenerState {
+    /// Currently held keys (for key repeat detection)
+    held_keys: std::collections::HashSet<u32>,
+    /// Current modifier state
+    modifiers: KeyModifiers,
+    /// Whether listener is registered
+    registered: bool,
+}
+
+impl KeyboardListenerState {
+    /// Create new keyboard listener state
+    pub fn new() -> Self {
+        Self {
+            held_keys: std::collections::HashSet::new(),
+            modifiers: KeyModifiers::default(),
+            registered: false,
+        }
+    }
+
+    /// Mark as registered
+    pub fn set_registered(&mut self, registered: bool) {
+        self.registered = registered;
+    }
+
+    /// Check if registered
+    pub fn is_registered(&self) -> bool {
+        self.registered
+    }
+
+    /// Process a key event
+    ///
+    /// Returns true if this is a new key press (not repeat).
+    pub fn process_key(&mut self, request: &KeyboardListenerRequest) -> bool {
+        // Update modifiers
+        self.modifiers = request.modifiers;
+
+        match request.event_type {
+            KeyState::Pressed => {
+                // Check if this is a new press or repeat
+                let is_new = !self.held_keys.contains(&request.key);
+                self.held_keys.insert(request.key);
+                is_new
+            }
+            KeyState::Released => {
+                self.held_keys.remove(&request.key);
+                true // Releases are always processed
+            }
+        }
+    }
+
+    /// Check if a key is currently held
+    pub fn is_key_held(&self, key: u32) -> bool {
+        self.held_keys.contains(&key)
+    }
+
+    /// Get current modifiers
+    pub fn modifiers(&self) -> KeyModifiers {
+        self.modifiers
+    }
+
+    /// Clear all held keys (e.g., on focus loss)
+    pub fn clear_held_keys(&mut self) {
+        self.held_keys.clear();
+    }
+}
+
+impl Default for KeyboardListenerState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Combined input state for all Fuchsia input sources
+pub struct InputState {
+    /// Pointer (touch/mouse) state
+    pub pointer: PointerState,
+    /// Focus state
+    pub focus: FocusWatcher,
+    /// Keyboard state
+    pub keyboard: KeyboardListenerState,
+}
+
+impl InputState {
+    /// Create new input state
+    pub fn new() -> Self {
+        Self {
+            pointer: PointerState::new(),
+            focus: FocusWatcher::new(),
+            keyboard: KeyboardListenerState::new(),
+        }
+    }
+
+    /// Handle focus loss - clears keyboard held keys
+    pub fn on_focus_lost(&mut self) {
+        self.focus.update(false);
+        self.keyboard.clear_held_keys();
+    }
+
+    /// Handle focus gain
+    pub fn on_focus_gained(&mut self) {
+        self.focus.update(true);
+    }
+}
+
+impl Default for InputState {
+    fn default() -> Self {
+        Self::new()
+    }
 }

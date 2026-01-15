@@ -1,0 +1,21 @@
+[package]
+name = "blinc_fidl"
+description = "FIDL wire format encoding/decoding for Blinc Fuchsia SDK"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/blinc_fidl"
+rust-version.workspace = true
+keywords = ["fuchsia", "fidl", "ipc", "blinc"]
+categories = ["encoding", "os::fuchsia-api-bindings"]
+
+[lib]
+crate-type = ["lib"]
+
+[features]
+default = []
+
+[dependencies]
+blinc_fuchsia_zircon = { path = "../blinc_fuchsia_zircon", version = "0.1.1" }
+bitflags = "2"

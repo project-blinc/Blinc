@@ -1,0 +1,53 @@
+// Fuchsia component manifest for Blinc applications
+//
+// This manifest defines the component's capabilities, dependencies, and
+// configuration for running on Fuchsia OS.
+//
+// Reference: https://fuchsia.dev/fuchsia-src/concepts/components/v2/component_manifests
+
+{
+    include: [
+        // Logging to syslog
+        "syslog/client.shard.cml",
+    ],
+    program: {
+        runner: "elf",
+        // Binary name - update to match your app
+        binary: "bin/{{project_name}}",
+    },
+    capabilities: [
+        // ViewProvider is required for GUI applications
+        { protocol: "fuchsia.ui.app.ViewProvider" },
+    ],
+    use: [
+        // Flatland compositor - required for rendering
+        { protocol: "fuchsia.ui.composition.Flatland" },
+        { protocol: "fuchsia.ui.composition.Allocator" },
+
+        // Input protocols
+        { protocol: "fuchsia.ui.pointer.TouchSource" },
+        { protocol: "fuchsia.ui.pointer.MouseSource" },
+        { protocol: "fuchsia.ui.input3.Keyboard" },
+
+        // Vulkan for GPU rendering
+        { protocol: "fuchsia.vulkan.loader.Loader" },
+
+        // Sysmem for GPU buffer allocation
+        { protocol: "fuchsia.sysmem2.Allocator" },
+
+        // Optional: File system access for assets
+        {
+            directory: "pkg",
+            from: "framework",
+            rights: ["r*"],
+            path: "/pkg",
+        },
+    ],
+    expose: [
+        // Expose ViewProvider to parent (required for GUI apps)
+        {
+            protocol: "fuchsia.ui.app.ViewProvider",
+            from: "self",
+        },
+    ],
+}

@@ -29,13 +29,38 @@ wgpu-types = "23.0"
 tracing.workspace = true
 
 # Fuchsia-specific dependencies (only when targeting Fuchsia)
-# Note: These will be available when building with the Fuchsia SDK
-# [target.'cfg(target_os = "fuchsia")'.dependencies]
-# fuchsia-async = "0.1"
-# fuchsia-component = "0.1"
-# fidl = "0.1"
-# fidl_fuchsia_ui_scenic = "0.1"
-# fidl_fuchsia_ui_views = "0.1"
-# fidl_fuchsia_ui_input = "0.1"
-# fidl_fuchsia_ui_pointer = "0.1"
-# blinc_gpu = { path = "../../crates/blinc_gpu", version = "0.1.1", default-features = false, features = ["vulkan"] }
+# IMPORTANT: These crates are NOT available on crates.io. They are provided by
+# the Fuchsia SDK's internal package system and resolve during `fx build`.
+#
+# When building this crate as part of a Fuchsia component:
+# 1. Use `fx set` to configure your Fuchsia build
+# 2. Add this crate to your BUILD.gn
+# 3. Run `fx build`
+#
+# The Fuchsia build system will provide these dependencies:
+# - fuchsia-async
+# - fuchsia-component
+# - fuchsia-zircon (as fuchsia_zircon)
+# - fidl
+# - fidl_fuchsia_ui_app
+# - fidl_fuchsia_ui_composition
+# - fidl_fuchsia_ui_views
+# - fidl_fuchsia_ui_input3
+# - fidl_fuchsia_ui_pointer
+# - fidl_fuchsia_sysmem2
+# - fidl_fuchsia_images2
+# - fidl_fuchsia_math
+# - futures
+#
+# For development on non-Fuchsia hosts, the #[cfg(target_os = "fuchsia")] blocks
+# in the source code ensure the crate compiles without these dependencies.
+
+# Futures for async (used on both platforms for types)
+futures = "0.3"
+
+# Our standalone Zircon bindings (works on all platforms, stubs on non-Fuchsia)
+blinc_fuchsia_zircon = { path = "../blinc_fuchsia_zircon", version = "0.1.1" }
+
+# GPU support - enabled when building for Fuchsia
+[target.'cfg(target_os = "fuchsia")'.dependencies]
+blinc_gpu = { path = "../../crates/blinc_gpu", version = "0.1.1", default-features = false, features = ["vulkan"] }

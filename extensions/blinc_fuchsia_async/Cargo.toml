@@ -1,0 +1,22 @@
+[package]
+name = "blinc_fuchsia_async"
+description = "Async runtime for Fuchsia using Zircon ports"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/blinc_fuchsia_async"
+rust-version.workspace = true
+keywords = ["fuchsia", "async", "executor", "blinc"]
+categories = ["asynchronous", "os::fuchsia-api-bindings"]
+
+[lib]
+crate-type = ["lib"]
+
+[features]
+default = []
+
+[dependencies]
+blinc_fuchsia_zircon = { path = "../blinc_fuchsia_zircon", version = "0.1.1" }
+futures = "0.3"
+pin-project-lite = "0.2"

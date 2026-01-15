@@ -58,12 +58,18 @@ impl Default for FocusState {
 /// Scenic view properties received from the parent
 ///
 /// Contains the layout bounds and other properties assigned by the parent.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ViewProperties {
     /// Logical width of the view in DIP
     pub width: f32,
     /// Logical height of the view in DIP
     pub height: f32,
+    /// Device pixel ratio (scale factor)
+    pub scale_factor: f64,
+    /// Whether the view is focused
+    pub focused: bool,
+    /// Insets as (top, right, bottom, left)
+    pub insets: (f32, f32, f32, f32),
     /// Inset from the left edge (for safe areas)
     pub inset_left: f32,
     /// Inset from the top edge (for safe areas)
@@ -72,6 +78,22 @@ pub struct ViewProperties {
     pub inset_right: f32,
     /// Inset from the bottom edge (for safe areas)
     pub inset_bottom: f32,
+}
+
+impl Default for ViewProperties {
+    fn default() -> Self {
+        Self {
+            width: 1920.0,
+            height: 1080.0,
+            scale_factor: 1.0,
+            focused: false,
+            insets: (0.0, 0.0, 0.0, 0.0),
+            inset_left: 0.0,
+            inset_top: 0.0,
+            inset_right: 0.0,
+            inset_bottom: 0.0,
+        }
+    }
 }
 
 impl ViewProperties {
@@ -84,6 +106,26 @@ impl ViewProperties {
         }
     }
 
+    /// Create view properties with dimensions and scale factor
+    pub fn with_scale(width: f32, height: f32, scale_factor: f64) -> Self {
+        Self {
+            width,
+            height,
+            scale_factor,
+            ..Default::default()
+        }
+    }
+
+    /// Get physical width (logical * scale_factor)
+    pub fn physical_width(&self) -> u32 {
+        (self.width * self.scale_factor as f32) as u32
+    }
+
+    /// Get physical height (logical * scale_factor)
+    pub fn physical_height(&self) -> u32 {
+        (self.height * self.scale_factor as f32) as u32
+    }
+
     /// Get the usable (safe) width
     pub fn safe_width(&self) -> f32 {
         self.width - self.inset_left - self.inset_right
@@ -92,6 +134,15 @@ impl ViewProperties {
     /// Get the usable (safe) height
     pub fn safe_height(&self) -> f32 {
         self.height - self.inset_top - self.inset_bottom
+    }
+
+    /// Set insets from tuple
+    pub fn set_insets(&mut self, insets: (f32, f32, f32, f32)) {
+        self.insets = insets;
+        self.inset_top = insets.0;
+        self.inset_right = insets.1;
+        self.inset_bottom = insets.2;
+        self.inset_left = insets.3;
     }
 }
 
@@ -330,24 +381,124 @@ pub mod manifest {
 
     /// Generate a basic component manifest for a Blinc app
     pub fn generate_manifest(binary_name: &str) -> String {
-        format!(
-            r#"{{
+        ManifestBuilder::new(binary_name).build()
+    }
+
+    /// Builder for Fuchsia component manifests
+    pub struct ManifestBuilder {
+        /// Binary name
+        binary_name: String,
+        /// Include touch input
+        touch: bool,
+        /// Include mouse input
+        mouse: bool,
+        /// Include keyboard input
+        keyboard: bool,
+        /// Include audio
+        audio: bool,
+        /// Include accessibility
+        accessibility: bool,
+        /// Additional protocols to use
+        extra_protocols: Vec<String>,
+    }
+
+    impl ManifestBuilder {
+        /// Create a new manifest builder
+        pub fn new(binary_name: &str) -> Self {
+            Self {
+                binary_name: binary_name.to_string(),
+                touch: true,
+                mouse: true,
+                keyboard: true,
+                audio: false,
+                accessibility: false,
+                extra_protocols: vec![],
+            }
+        }
+
+        /// Include touch input (default: true)
+        pub fn with_touch(mut self, enabled: bool) -> Self {
+            self.touch = enabled;
+            self
+        }
+
+        /// Include mouse input (default: true)
+        pub fn with_mouse(mut self, enabled: bool) -> Self {
+            self.mouse = enabled;
+            self
+        }
+
+        /// Include keyboard input (default: true)
+        pub fn with_keyboard(mut self, enabled: bool) -> Self {
+            self.keyboard = enabled;
+            self
+        }
+
+        /// Include audio playback
+        pub fn with_audio(mut self, enabled: bool) -> Self {
+            self.audio = enabled;
+            self
+        }
+
+        /// Include accessibility support
+        pub fn with_accessibility(mut self, enabled: bool) -> Self {
+            self.accessibility = enabled;
+            self
+        }
+
+        /// Add a custom protocol
+        pub fn with_protocol(mut self, protocol: &str) -> Self {
+            self.extra_protocols.push(protocol.to_string());
+            self
+        }
+
+        /// Build the manifest string
+        pub fn build(&self) -> String {
+            let mut use_protocols = vec![
+                "fuchsia.ui.composition.Flatland".to_string(),
+                "fuchsia.ui.composition.Allocator".to_string(),
+                "fuchsia.vulkan.loader.Loader".to_string(),
+                "fuchsia.sysmem2.Allocator".to_string(),
+            ];
+
+            if self.touch {
+                use_protocols.push("fuchsia.ui.pointer.TouchSource".to_string());
+            }
+            if self.mouse {
+                use_protocols.push("fuchsia.ui.pointer.MouseSource".to_string());
+            }
+            if self.keyboard {
+                use_protocols.push("fuchsia.ui.input3.Keyboard".to_string());
+            }
+            if self.audio {
+                use_protocols.push("fuchsia.media.AudioRenderer".to_string());
+            }
+            if self.accessibility {
+                use_protocols.push("fuchsia.accessibility.semantics.SemanticsManager".to_string());
+            }
+
+            use_protocols.extend(self.extra_protocols.iter().cloned());
+
+            let use_lines: String = use_protocols
+                .iter()
+                .map(|p| format!("        {{ protocol: \"{}\" }},", p))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            format!(
+                r#"{{
     include: [
         "syslog/client.shard.cml",
     ],
     program: {{
         runner: "elf",
-        binary: "bin/{binary_name}",
+        binary: "bin/{}",
     }},
     capabilities: [
         {{ protocol: "fuchsia.ui.app.ViewProvider" }},
     ],
     use: [
-        {{ protocol: "fuchsia.ui.composition.Flatland" }},
-        {{ protocol: "fuchsia.ui.input3.Keyboard" }},
-        {{ protocol: "fuchsia.ui.pointer.TouchSource" }},
-        {{ protocol: "fuchsia.ui.pointer.MouseSource" }},
-        {{ protocol: "fuchsia.vulkan.loader.Loader" }},
+{}
     ],
     expose: [
         {{
@@ -355,7 +506,37 @@ pub mod manifest {
             from: "self",
         }},
     ],
-}}"#
-        )
+}}"#,
+                self.binary_name, use_lines
+            )
+        }
+    }
+
+    impl Default for ManifestBuilder {
+        fn default() -> Self {
+            Self::new("blinc_app")
+        }
+    }
+
+    /// Validate a component manifest
+    ///
+    /// Checks that required capabilities are present.
+    pub fn validate_manifest(manifest: &str) -> Result<(), &'static str> {
+        // Check for ViewProvider capability
+        if !manifest.contains("fuchsia.ui.app.ViewProvider") {
+            return Err("Missing required ViewProvider capability");
+        }
+
+        // Check for Flatland
+        if !manifest.contains("fuchsia.ui.composition.Flatland") {
+            return Err("Missing required Flatland protocol");
+        }
+
+        // Check for Vulkan
+        if !manifest.contains("fuchsia.vulkan.loader.Loader") {
+            return Err("Missing required Vulkan loader protocol");
+        }
+
+        Ok(())
     }
 }

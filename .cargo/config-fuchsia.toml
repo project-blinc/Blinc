@@ -1,0 +1,42 @@
+# Fuchsia Cross-Compilation Config
+#
+# This is a REFERENCE config - actual Fuchsia builds should use `fx build`.
+#
+# The FIDL crates (fidl_fuchsia_*, fuchsia-async, etc.) are NOT on crates.io.
+# They're provided by the Fuchsia SDK during `fx build`.
+#
+# For development:
+#   - Code compiles on macOS/Linux because FIDL code is gated with #[cfg(target_os = "fuchsia")]
+#   - Build with: cargo check -p blinc_platform_fuchsia
+#
+# For actual Fuchsia deployment:
+#   1. Clone Fuchsia source: https://fuchsia.dev/fuchsia-src/get-started/get_fuchsia_source
+#   2. Add your app to the Fuchsia tree
+#   3. Run: fx set core.x64 --with //path/to/your_app
+#   4. Run: fx build
+#
+# The fx build system will:
+#   - Provide all FIDL crate dependencies
+#   - Use the correct sysroot and linker
+#   - Package your component correctly
+
+[target.x86_64-unknown-fuchsia]
+# Linker config (requires FUCHSIA_SYSROOT environment variable)
+# linker = "clang"
+# rustflags = [
+#     "-C", "link-arg=--target=x86_64-unknown-fuchsia",
+#     "-C", "link-arg=--sysroot=$FUCHSIA_SYSROOT/arch/x64/sysroot",
+# ]
+
+[target.aarch64-unknown-fuchsia]
+# linker = "clang"
+# rustflags = [
+#     "-C", "link-arg=--target=aarch64-unknown-fuchsia",
+#     "-C", "link-arg=--sysroot=$FUCHSIA_SYSROOT/arch/arm64/sysroot",
+# ]
+
+# Environment variables to set (example):
+#   export FUCHSIA_SYSROOT="$HOME/.fuchsia/sdk/arch"
+#
+# Or find dynamically:
+#   export FUCHSIA_SYSROOT=$(find /private/var/tmp/_bazel_$USER -name "fuchsia_sdk" -type d 2>/dev/null | head -1)

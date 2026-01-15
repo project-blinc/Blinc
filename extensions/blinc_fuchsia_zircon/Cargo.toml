@@ -1,0 +1,24 @@
+[package]
+name = "blinc_fuchsia_zircon"
+description = "Standalone Zircon kernel bindings for Blinc Fuchsia SDK"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/blinc_fuchsia_zircon"
+rust-version.workspace = true
+keywords = ["fuchsia", "zircon", "kernel", "blinc"]
+categories = ["os::fuchsia-api-bindings"]
+links = "zircon"
+
+[lib]
+crate-type = ["lib"]
+
+[features]
+default = []
+
+[dependencies]
+bitflags = "2"
+
+# On Fuchsia, we link against libzircon.so from the sysroot
+# On other platforms, types compile but operations return ERR_NOT_SUPPORTED

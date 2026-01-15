@@ -1,0 +1,89 @@
+# Copyright 2024 The Blinc Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license.
+#
+# BUILD.gn - Fuchsia build file for Blinc applications
+#
+# This file integrates Rust Blinc applications into the Fuchsia build system.
+# It defines how to compile the Rust code and package it as a Fuchsia component.
+#
+# Prerequisites:
+#   1. Fuchsia SDK installed (./scripts/setup-fuchsia-sdk.sh)
+#   2. This directory added to Fuchsia's BUILD.gn
+#   3. Rust toolchain with Fuchsia targets
+#
+# Usage:
+#   1. Copy this template to your Fuchsia source tree
+#   2. Update {{project_name}} placeholders
+#   3. Run: fx set core.x64 --with //path/to/{{project_name}}
+#   4. Run: fx build
+#
+# Variables to customize:
+#   - project_name: Your application name
+#   - rust_crate_path: Path to your Rust crate root
+
+import("//build/components.gni")
+import("//build/rust/rustc_binary.gni")
+
+# Application name - update this
+project_name = "blinc_app"
+
+# Build the Rust binary
+rustc_binary("${project_name}_bin") {
+  name = project_name
+  edition = "2021"
+
+  # Source files
+  sources = [ "src/main.rs" ]
+
+  # Dependencies - Fuchsia SDK provides these
+  deps = [
+    "//src/lib/fidl/rust/fidl",
+    "//src/lib/fuchsia-async",
+    "//src/lib/fuchsia-component",
+    "//src/lib/ui/fuchsia-scenic",
+    "//src/lib/zircon/rust:fuchsia-zircon",
+    "//third_party/rust_crates:futures",
+    "//third_party/rust_crates:tracing",
+  ]
+
+  # Fuchsia-specific config
+  configs += [ "//build/config/fuchsia:werror" ]
+
+  # Enable Vulkan for GPU rendering
+  features = [ "vulkan" ]
+}
+
+# Package the component
+fuchsia_component("${project_name}_component") {
+  component_name = project_name
+  manifest = "meta/${project_name}.cml"
+  deps = [ ":${project_name}_bin" ]
+}
+
+# Create the package
+fuchsia_package("${project_name}_pkg") {
+  package_name = project_name
+  deps = [ ":${project_name}_component" ]
+}
+
+# Test target (optional)
+# rustc_test("${project_name}_test") {
+#   name = "${project_name}_test"
+#   edition = "2021"
+#   sources = [ "src/main.rs" ]
+#   deps = [
+#     ":${project_name}_bin",
+#     "//src/lib/fuchsia",
+#   ]
+# }
+#
+# fuchsia_unittest_package("${project_name}_tests") {
+#   deps = [ ":${project_name}_test" ]
+# }
+
+# Group target for convenience
+group(project_name) {
+  deps = [
+    ":${project_name}_pkg",
+  ]
+}
