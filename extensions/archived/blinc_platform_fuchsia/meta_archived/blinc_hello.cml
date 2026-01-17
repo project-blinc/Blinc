@@ -1,0 +1,66 @@
+// Blinc Hello World component manifest for Fuchsia
+//
+// This manifest defines the capabilities needed by a Blinc GUI application.
+{
+    include: [
+        "syslog/client.shard.cml",
+    ],
+
+    program: {
+        runner: "elf",
+        binary: "bin/blinc_hello",
+    },
+
+    capabilities: [
+        {
+            protocol: "fuchsia.ui.app.ViewProvider",
+        },
+    ],
+
+    use: [
+        // Compositor (Flatland)
+        {
+            protocol: "fuchsia.ui.composition.Flatland",
+        },
+        {
+            protocol: "fuchsia.ui.composition.Allocator",
+        },
+
+        // Input
+        {
+            protocol: "fuchsia.ui.pointer.TouchSource",
+            availability: "optional",
+        },
+        {
+            protocol: "fuchsia.ui.pointer.MouseSource",
+            availability: "optional",
+        },
+        {
+            protocol: "fuchsia.ui.input3.Keyboard",
+        },
+
+        // GPU / Vulkan
+        {
+            protocol: "fuchsia.vulkan.loader.Loader",
+        },
+        {
+            protocol: "fuchsia.sysmem2.Allocator",
+        },
+
+        // System
+        {
+            protocol: "fuchsia.logger.LogSink",
+        },
+        {
+            protocol: "fuchsia.tracing.provider.Registry",
+            availability: "optional",
+        },
+    ],
+
+    expose: [
+        {
+            protocol: "fuchsia.ui.app.ViewProvider",
+            from: "self",
+        },
+    ],
+}

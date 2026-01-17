@@ -23,12 +23,7 @@ members = [
     "extensions/blinc_platform_desktop",
     "extensions/blinc_platform_android",
     "extensions/blinc_platform_ios",
-    "extensions/blinc_platform_fuchsia",
     "extensions/blinc_platform_harmony",
-    "extensions/blinc_fuchsia_bindings",
-    "extensions/blinc_fuchsia_zircon",
-    "extensions/blinc_fidl",
-    "extensions/blinc_fuchsia_async",
 ]
 
 # Platform-specific crates are included but have target-gated dependencies

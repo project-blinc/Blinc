@@ -21,3 +21,4 @@ Cargo.lock
 
 # OS
 .DS_Store
+.env

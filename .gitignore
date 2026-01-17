@@ -68,4 +68,4 @@ coverage/
 docs/plan/
 
 test_output/
-test_references/
+test_references/vendor/

@@ -33,7 +33,12 @@ android_logger = "0.14"
 blinc_app = { path = "../../crates/blinc_app", default-features = false, features = ["ios"] }
 blinc_platform_ios = { path = "../../extensions/blinc_platform_ios" }
 
-[target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
+# HarmonyOS/OpenHarmony (target_env = "ohos", target_os = "linux")
+[target.'cfg(target_env = "ohos")'.dependencies]
+blinc_app = { path = "../../crates/blinc_app", default-features = false, features = ["harmony"] }
+blinc_platform_harmony = { path = "../../extensions/blinc_platform_harmony" }
+
+[target.'cfg(all(any(target_os = "windows", target_os = "macos", target_os = "linux"), not(target_env = "ohos")))'.dependencies]
 blinc_app = { path = "../../crates/blinc_app" }
 blinc_platform_desktop = { path = "../../extensions/blinc_platform_desktop" }
 
@@ -42,6 +47,7 @@ default = ["desktop"]
 desktop = []
 android = []
 ios = []
+harmony = []
 
 [profile.release]
 lto = "fat"

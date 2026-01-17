@@ -58,7 +58,8 @@ pub fn system_font_paths() -> &'static [&'static str] {
             "/System/Library/Fonts/Helvetica.ttc", // Fallback
         ]
     }
-    #[cfg(target_os = "linux")]
+    // Linux (but not OHOS which also reports target_os = "linux")
+    #[cfg(all(target_os = "linux", not(target_env = "ohos")))]
     {
         &[
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -97,13 +98,23 @@ pub fn system_font_paths() -> &'static [&'static str] {
             "/system/fonts/Roboto-Regular.ttf",
         ]
     }
+    #[cfg(target_env = "ohos")]
+    {
+        // HarmonyOS/OpenHarmony system fonts
+        &[
+            "/system/fonts/HarmonyOS_Sans_SC_Regular.ttf",
+            "/system/fonts/Roboto-Regular.ttf",
+            "/system/fonts/NotoSansCJK-Regular.ttc",
+        ]
+    }
     #[cfg(not(any(
         target_os = "macos",
         target_os = "linux",
         target_os = "windows",
         target_os = "android",
         target_os = "ios",
-        target_os = "fuchsia"
+        target_os = "fuchsia",
+        target_env = "ohos"
     )))]
     {
         &[]
@@ -115,13 +126,14 @@ mod context;
 mod error;
 mod text_measurer;
 
-// Windowed module is compiled for desktop (windowed feature), Android, iOS, and Fuchsia
+// Windowed module is compiled for desktop (windowed feature), Android, iOS, Fuchsia, and HarmonyOS
 // since WindowedContext and shared types are used by all platforms
 #[cfg(any(
     feature = "windowed",
     all(feature = "android", target_os = "android"),
     all(feature = "ios", target_os = "ios"),
-    all(feature = "fuchsia", target_os = "fuchsia")
+    all(feature = "fuchsia", target_os = "fuchsia"),
+    all(feature = "harmony", target_env = "ohos")
 ))]
 pub mod windowed;
 

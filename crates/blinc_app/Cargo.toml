@@ -62,9 +62,6 @@ tracing-subscriber = { workspace = true, optional = true }
 [target.'cfg(target_os = "ios")'.dependencies]
 blinc_platform_ios = { path = "../../extensions/blinc_platform_ios", version = "0.1.1", optional = true }
 
-[target.'cfg(target_os = "fuchsia")'.dependencies]
-blinc_platform_fuchsia = { path = "../../extensions/blinc_platform_fuchsia", version = "0.1.1", optional = true }
-tracing-subscriber = { workspace = true, optional = true }
 
 # HarmonyOS uses "ohos" as target_os
 # [target.'cfg(target_os = "ohos")'.dependencies]
@@ -80,5 +77,4 @@ default = ["windowed"]
 windowed = ["winit", "blinc_platform_desktop", "blinc_gpu/desktop"]
 android = ["blinc_platform_android", "android-activity", "ndk", "jni", "android_logger", "log", "tracing-android", "tracing-subscriber", "blinc_gpu/android"]
 ios = ["blinc_platform_ios", "blinc_gpu/ios"]
-fuchsia = ["blinc_platform_fuchsia", "blinc_gpu/fuchsia", "tracing-subscriber"]
 harmony = ["blinc_gpu/harmony"]  # blinc_platform_harmony when target is available

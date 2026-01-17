@@ -82,7 +82,7 @@ fn app_ui(ctx: &mut WindowedContext) -> impl ElementBuilder {
 // Desktop Entry Point
 // =============================================================================
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "android", target_os = "ios", target_env = "ohos")))]
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -152,4 +152,31 @@ pub extern "C" fn ios_app_init() {
     blinc_app::ios::register_rust_ui_builder(|ctx| app_ui(ctx));
 
     eprintln!("[Blinc] UI builder registered");
+}
+
+// =============================================================================
+// HarmonyOS Entry Point
+// =============================================================================
+
+#[cfg(target_env = "ohos")]
+fn main() {
+    // HarmonyOS uses N-API callbacks from XComponent
+    // The actual initialization happens via napi_register_module
+    // This main() is a placeholder for the cdylib entry
+}
+
+/// N-API module export for HarmonyOS
+/// Called when the native module is loaded by ArkTS
+#[cfg(target_env = "ohos")]
+#[no_mangle]
+pub extern "C" fn napi_register_module() {
+    // Initialize tracing
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .try_init();
+
+    tracing::info!("Blinc HarmonyOS module registered");
+
+    // TODO: Register N-API functions for XComponent callbacks
+    // blinc_platform_harmony::napi_bridge::register_module()
 }

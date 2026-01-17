@@ -1,0 +1,15 @@
+# HarmonyOS (OpenHarmony) cross-compilation configuration
+#
+# Set OHOS_NDK_HOME to your OpenHarmony SDK native directory:
+#   export OHOS_NDK_HOME="$HOME/Library/OpenHarmony/Sdk/12/native"
+# Or for DevEco Studio bundled SDK:
+#   export OHOS_NDK_HOME="/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/native"
+
+[target.aarch64-unknown-linux-ohos]
+linker = "aarch64-unknown-linux-ohos-clang"
+
+[target.x86_64-unknown-linux-ohos]
+linker = "x86_64-unknown-linux-ohos-clang"
+
+[target.armv7-unknown-linux-ohos]
+linker = "armv7-unknown-linux-ohos-clang"
