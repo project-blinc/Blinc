@@ -334,7 +334,8 @@ fn animation_section(ctx: &WindowedContext) -> Div {
         .child(
             text("Canvas elements with multi-property keyframe animations")
                 .size(16.0)
-                .color(Color::rgba(0.6, 0.6, 0.7, 1.0)).align(TextAlign::Center),
+                .color(Color::rgba(0.6, 0.6, 0.7, 1.0))
+                .align(TextAlign::Center),
         )
         .child(
             div()
@@ -368,11 +369,14 @@ fn section_card(title: &str) -> Div {
         .rounded(16.0)
         .items_center()
         .child(
-            div().items_center().child(text(title)
-                .size(24.0)
-                .align(TextAlign::Center)
-                .weight(FontWeight::Bold)
-                .color(Color::WHITE).no_wrap()),
+            div().items_center().child(
+                text(title)
+                    .size(24.0)
+                    .align(TextAlign::Center)
+                    .weight(FontWeight::Bold)
+                    .color(Color::WHITE)
+                    .no_wrap(),
+            ),
         )
 }
 
@@ -402,37 +406,34 @@ fn app_ui(ctx: &mut WindowedContext) -> impl ElementBuilder {
         .h(ctx.height)
         .bg(Color::rgba(0.08, 0.08, 0.12, 1.0))
         .child(
-            scroll()
-                .w(ctx.width)
-                .h(ctx.height)
-                .child(
-                    div()
-                        .w_full()
-                        .flex_col()
-                        .items_center()
-                        .gap(4.0)
-                        .px(8.0)
-                        .py(15.0)
-                        // Header
-                        .child(
-                            text("Blinc Mobile Example")
-                                .align(TextAlign::Center)
-                                .size(28.0)
-                                .weight(FontWeight::Bold)
-                                .color(Color::WHITE),
-                        )
-                        .child(
-                            text("Scroll down for more demos")
-                                .size(14.0)
-                                .color(Color::rgba(0.5, 0.5, 0.6, 1.0)),
-                        )
-                        // Counter section
-                        .child(counter_section(ctx))
-                        // Animation section
-                        .child(animation_section(ctx))
-                        // Footer spacer
-                        .child(div().h(20.0)),
-                ),
+            scroll().w(ctx.width).h(ctx.height).child(
+                div()
+                    .w_full()
+                    .flex_col()
+                    .items_center()
+                    .gap(4.0)
+                    .px(8.0)
+                    .py(15.0)
+                    // Header
+                    .child(
+                        text("Blinc Mobile Example")
+                            .align(TextAlign::Center)
+                            .size(28.0)
+                            .weight(FontWeight::Bold)
+                            .color(Color::WHITE),
+                    )
+                    .child(
+                        text("Scroll down for more demos")
+                            .size(14.0)
+                            .color(Color::rgba(0.5, 0.5, 0.6, 1.0)),
+                    )
+                    // Counter section
+                    .child(counter_section(ctx))
+                    // Animation section
+                    .child(animation_section(ctx))
+                    // Footer spacer
+                    .child(div().h(20.0)),
+            ),
         )
 }
 
