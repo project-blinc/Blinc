@@ -15,10 +15,11 @@ fi
 WAIT_TIME=610  # 10 minutes + buffer
 
 # Publish order (respects dependency graph)
+# Note: blinc_core has blinc_animation as dev-dep only, so core goes first
 PHASE1=(blinc_macros blinc_platform blinc_icons blinc_core)
 PHASE2=(blinc_animation blinc_paint blinc_svg blinc_text)
-PHASE3=(blinc_theme blinc_image blinc_layout)
-PHASE4=(blinc_gpu blinc_cn)
+PHASE3=(blinc_theme blinc_image blinc_gpu)
+PHASE4=(blinc_layout blinc_cn)
 PHASE5=(blinc_platform_desktop blinc_platform_android blinc_platform_ios)
 PHASE6=(blinc_app)
 PHASE7=(blinc_cli)
