@@ -8,6 +8,7 @@
 //! - **Keyframe Animations**: Timed sequences with easing functions
 //! - **Multi-Property Keyframes**: Animate multiple properties simultaneously
 //! - **Timelines**: Orchestrate multiple animations with offsets
+//! - **Typed Animations**: Generic animations for Vec3, Color, and custom types
 //! - **Interruptible**: Animations inherit velocity when interrupted
 //! - **Animation Presets**: Common entry/exit animations
 //! - **AnimationContext**: Platform-agnostic animation management trait
@@ -19,6 +20,7 @@ pub mod presets;
 pub mod scheduler;
 pub mod spring;
 pub mod timeline;
+pub mod values;
 
 pub use context::{
     AnimationContext, AnimationContextExt, SharedAnimatedTimeline, SharedAnimatedValue,
@@ -36,3 +38,7 @@ pub use scheduler::{
 };
 pub use spring::{Spring, SpringConfig};
 pub use timeline::{StaggerBuilder, Timeline, TimelineEntryId};
+pub use values::{
+    ColorAnimation, ColorKeyframe, FloatAnimation, FloatKeyframe, Interpolate,
+    SphericalInterpolate, TypedKeyframe, TypedKeyframeAnimation, Vec3Animation, Vec3Keyframe,
+};

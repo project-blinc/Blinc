@@ -19,6 +19,7 @@ members = [
     "crates/blinc_icons",
     "crates/blinc_debugger",
     "crates/blinc_runtime",
+    "crates/blinc_3d",
     "crates/blinc_test_suite",
     "extensions/blinc_platform_desktop",
     "extensions/blinc_platform_android",
