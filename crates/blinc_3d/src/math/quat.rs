@@ -35,6 +35,11 @@ impl Quat {
         Self { x, y, z, w }
     }
 
+    /// Create from components (xyzw order, commonly used in glTF)
+    pub fn from_xyzw(x: f32, y: f32, z: f32, w: f32) -> Self {
+        Self { x, y, z, w }
+    }
+
     /// Create from Euler angles (in radians)
     ///
     /// Order: XYZ (roll, pitch, yaw)
@@ -48,6 +53,22 @@ impl Quat {
             y: cx * sy * cz + sx * cy * sz,
             z: cx * cy * sz - sx * sy * cz,
             w: cx * cy * cz + sx * sy * sz,
+        }
+    }
+
+    /// Create from Euler angles with YXZ order (common for cameras)
+    ///
+    /// This applies rotations in the order: Y (yaw), X (pitch), Z (roll)
+    pub fn from_euler_yxz(yaw: f32, pitch: f32, roll: f32) -> Self {
+        let (sy, cy) = (yaw * 0.5).sin_cos();
+        let (sx, cx) = (pitch * 0.5).sin_cos();
+        let (sz, cz) = (roll * 0.5).sin_cos();
+
+        Self {
+            x: cy * sx * cz + sy * cx * sz,
+            y: sy * cx * cz - cy * sx * sz,
+            z: cy * cx * sz - sy * sx * cz,
+            w: cy * cx * cz + sy * sx * sz,
         }
     }
 
@@ -72,6 +93,11 @@ impl Quat {
 
     /// Create rotation to look at target from position
     pub fn look_at(forward: Vec3, up: Vec3) -> Self {
+        Self::look_rotation(forward, up)
+    }
+
+    /// Create rotation from forward and up vectors (alias for look_at)
+    pub fn look_rotation(forward: Vec3, up: Vec3) -> Self {
         let f = Self::normalize_vec3(forward);
         let r = Self::normalize_vec3(Self::cross(up, f));
         let u = Self::cross(f, r);
@@ -156,6 +182,11 @@ impl Quat {
             z: self.w * other.z + self.x * other.y - self.y * other.x + self.z * other.w,
             w: self.w * other.w - self.x * other.x - self.y * other.y - self.z * other.z,
         }
+    }
+
+    /// Multiply two quaternions (alias for mul)
+    pub fn multiply(&self, other: Self) -> Self {
+        self.mul(&other)
     }
 
     /// Rotate a vector by this quaternion

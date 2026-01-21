@@ -57,3 +57,31 @@ pub use blinc_animation::{Spring, SpringConfig};
 
 // Re-export FSM types
 pub use blinc_core::{FsmId, FsmRuntime, StateMachine, Transition};
+
+// Utils - Camera controls
+#[cfg(feature = "utils-camera")]
+pub use crate::utils::camera::{
+    CameraController, CameraInput, CameraKeys, CameraTransform, CameraUpdateContext,
+    DroneController, FlyController, FollowController, OrbitController, CameraShake,
+};
+
+// Utils - Lighting presets
+#[cfg(feature = "utils-lighting")]
+pub use crate::utils::lighting::{
+    BuiltinPreset, CustomPreset, LightConfig, LightParams, LightType, LightingPreset,
+    LightingPresetBuilder, apply_lights,
+};
+
+// Utils - Skybox system
+#[cfg(feature = "utils-skybox")]
+pub use crate::utils::skybox::{
+    CubemapSkybox, DayNightCycle, GradientSkybox, ProceduralSkybox, Skybox, SkyboxAsset,
+    TimeOfDay, TimeOfDaySystem,
+};
+
+// Utils - Mesh loaders
+#[cfg(any(feature = "utils-gltf", feature = "utils-obj"))]
+pub use crate::utils::loader::{
+    LoadError, LoadedMaterial, LoadedMesh, LoadedScene, LoadedVertex, MeshCache, MeshLoader,
+    MeshLoaderRegistry, load_mesh,
+};

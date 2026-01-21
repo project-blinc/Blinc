@@ -54,6 +54,16 @@ pub mod systems;
 // Math utilities
 pub mod math;
 
+// Utility modules (feature-gated)
+#[cfg(any(
+    feature = "utils-camera",
+    feature = "utils-lighting",
+    feature = "utils-skybox",
+    feature = "utils-gltf",
+    feature = "utils-obj"
+))]
+pub mod utils;
+
 // Prelude for common imports
 pub mod prelude;
 
