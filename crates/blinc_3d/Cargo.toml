@@ -33,6 +33,10 @@ tracing.workspace = true
 gltf = { version = "1.4", optional = true }
 tobj = { version = "4.0", optional = true }
 
+# Optional dependencies for physics
+rapier3d = { version = "0.22", optional = true }
+parry3d = { version = "0.17", optional = true }
+
 [dev-dependencies]
 criterion.workspace = true
 
@@ -52,6 +56,21 @@ utils-gltf = ["dep:gltf"]
 utils-obj = ["dep:tobj"]
 utils-loaders = ["utils-gltf", "utils-obj"]
 
+# Utils - Phase 3 (Visual Effects)
+utils-particles = []
+
+# Utils - Phase 4 (Terrain)
+utils-terrain = []
+
+# Utils - Phase 5 (Physics)
+utils-rapier = ["dep:rapier3d"]
+utils-parry = ["dep:parry3d"]
+utils-physics = ["utils-rapier", "utils-parry"]
+
 # Bundles
 utils-foundation = ["utils-camera", "utils-lighting", "utils-skybox"]
 utils-phase1-2 = ["utils-foundation", "utils-loaders"]
+utils-phase3 = ["utils-particles"]
+utils-phase4 = ["utils-terrain"]
+utils-phase5 = ["utils-physics"]
+utils-full = ["utils-foundation", "utils-loaders", "utils-particles", "utils-terrain", "utils-physics"]
