@@ -1,33 +1,59 @@
 //! Water body rendering for terrain
+//!
+//! Provides realistic water rendering with Gerstner wave simulation,
+//! reflections, refractions, and foam effects.
+//!
+//! # Example
+//!
+//! ```ignore
+//! use blinc_3d::utils::terrain::WaterBody;
+//!
+//! // Create ocean water at sea level
+//! let ocean = WaterBody::ocean(0.0);
+//!
+//! // Create a custom lake
+//! let lake = WaterBody::new(10.0)
+//!     .with_color(Color::rgba(0.1, 0.3, 0.5, 0.8))
+//!     .with_transparency(0.7)
+//!     .calm();
+//!
+//! // Attach to entity - rendering is automatic
+//! world.spawn().insert(ocean);
+//! ```
 
 use crate::ecs::Component;
 use blinc_core::{Color, Vec3};
 
-/// Water body configuration
+/// Water body component
+///
+/// Add this to an entity to render a water surface at the specified level.
+/// The system automatically handles wave animation and GPU rendering.
 #[derive(Clone, Debug)]
 pub struct WaterBody {
     /// Water surface level (Y coordinate)
     pub water_level: f32,
-    /// Water color
+    /// Water color (blends between shallow and deep based on depth)
     pub color: Color,
     /// Water transparency (0 = opaque, 1 = fully transparent)
     pub transparency: f32,
-    /// Fresnel effect strength
+    /// Fresnel effect strength (higher = more reflection at glancing angles)
     pub fresnel_strength: f32,
     /// Specular highlight intensity
     pub specular_intensity: f32,
-    /// Wave configuration
-    pub waves: WaveConfig,
+    /// Wave intensity (0 = still, 1 = normal, 2+ = stormy)
+    pub wave_intensity: f32,
+    /// Wave style preset
+    pub wave_style: WaveStyle,
     /// Enable reflections
-    pub reflections_enabled: bool,
+    pub reflections: bool,
     /// Enable refractions
-    pub refractions_enabled: bool,
-    /// Foam configuration
-    pub foam: Option<FoamConfig>,
-    /// Caustics configuration
-    pub caustics: Option<CausticsConfig>,
-    /// Shore depth fade distance
-    pub shore_fade_distance: f32,
+    pub refractions: bool,
+    /// Foam intensity (0 = none, 1 = normal)
+    pub foam: f32,
+    /// Shore fade distance
+    pub shore_fade: f32,
+    /// Mesh size in world units
+    pub size: f32,
 }
 
 impl Component for WaterBody {}
@@ -40,18 +66,19 @@ impl Default for WaterBody {
             transparency: 0.6,
             fresnel_strength: 1.0,
             specular_intensity: 0.8,
-            waves: WaveConfig::default(),
-            reflections_enabled: true,
-            refractions_enabled: true,
-            foam: None,
-            caustics: None,
-            shore_fade_distance: 5.0,
+            wave_intensity: 1.0,
+            wave_style: WaveStyle::Calm,
+            reflections: true,
+            refractions: true,
+            foam: 0.0,
+            shore_fade: 5.0,
+            size: 1000.0,
         }
     }
 }
 
 impl WaterBody {
-    /// Create a new water body at height
+    /// Create a water body at the specified height
     pub fn new(water_level: f32) -> Self {
         Self {
             water_level,
@@ -65,50 +92,67 @@ impl WaterBody {
         self
     }
 
-    /// Set transparency
+    /// Set transparency (0 = opaque, 1 = fully transparent)
     pub fn with_transparency(mut self, transparency: f32) -> Self {
         self.transparency = transparency.clamp(0.0, 1.0);
         self
     }
 
-    /// Set wave configuration
-    pub fn with_waves(mut self, waves: WaveConfig) -> Self {
-        self.waves = waves;
+    /// Set wave intensity (0 = still, 1 = normal, 2+ = stormy)
+    pub fn with_wave_intensity(mut self, intensity: f32) -> Self {
+        self.wave_intensity = intensity.max(0.0);
         self
     }
 
-    /// Enable foam
-    pub fn with_foam(mut self, foam: FoamConfig) -> Self {
-        self.foam = Some(foam);
+    /// Set foam intensity (0 = none, 1 = normal)
+    pub fn with_foam(mut self, foam: f32) -> Self {
+        self.foam = foam.clamp(0.0, 2.0);
         self
     }
 
-    /// Enable caustics
-    pub fn with_caustics(mut self, caustics: CausticsConfig) -> Self {
-        self.caustics = Some(caustics);
+    /// Set mesh size
+    pub fn with_size(mut self, size: f32) -> Self {
+        self.size = size.max(1.0);
         self
     }
 
     /// Disable reflections
     pub fn without_reflections(mut self) -> Self {
-        self.reflections_enabled = false;
+        self.reflections = false;
         self
     }
 
     /// Disable refractions
     pub fn without_refractions(mut self) -> Self {
-        self.refractions_enabled = false;
+        self.refractions = false;
         self
     }
 
-    /// Get water height at position (including waves)
-    pub fn get_height(&self, x: f32, z: f32, time: f32) -> f32 {
-        self.water_level + self.waves.sample(x, z, time)
+    // ========== Wave Style Setters ==========
+
+    /// Still water (no waves)
+    pub fn still(mut self) -> Self {
+        self.wave_style = WaveStyle::Still;
+        self.wave_intensity = 0.0;
+        self
     }
 
-    /// Get wave normal at position
-    pub fn get_normal(&self, x: f32, z: f32, time: f32) -> Vec3 {
-        self.waves.get_normal(x, z, time)
+    /// Calm water (gentle ripples)
+    pub fn calm(mut self) -> Self {
+        self.wave_style = WaveStyle::Calm;
+        self
+    }
+
+    /// Ocean waves
+    pub fn oceanic(mut self) -> Self {
+        self.wave_style = WaveStyle::Ocean;
+        self
+    }
+
+    /// River flow (directional waves)
+    pub fn flowing(mut self) -> Self {
+        self.wave_style = WaveStyle::River;
+        self
     }
 
     // ========== Presets ==========
@@ -117,32 +161,32 @@ impl WaterBody {
     pub fn ocean(water_level: f32) -> Self {
         Self::new(water_level)
             .with_color(Color::rgba(0.05, 0.2, 0.4, 0.85))
-            .with_waves(WaveConfig::ocean())
-            .with_foam(FoamConfig::default())
+            .oceanic()
+            .with_foam(1.0)
     }
 
     /// Lake water preset
     pub fn lake(water_level: f32) -> Self {
         Self::new(water_level)
             .with_color(Color::rgba(0.1, 0.25, 0.35, 0.75))
-            .with_waves(WaveConfig::calm())
+            .calm()
+            .with_transparency(0.7)
     }
 
     /// River water preset
     pub fn river(water_level: f32) -> Self {
         Self::new(water_level)
             .with_color(Color::rgba(0.15, 0.3, 0.4, 0.7))
-            .with_waves(WaveConfig::river())
-            .with_foam(FoamConfig::subtle())
+            .flowing()
+            .with_foam(0.5)
     }
 
     /// Pool/clear water preset
     pub fn pool(water_level: f32) -> Self {
         Self::new(water_level)
             .with_color(Color::rgba(0.2, 0.5, 0.7, 0.6))
-            .with_transparency(0.8)
-            .with_waves(WaveConfig::calm())
-            .with_caustics(CausticsConfig::default())
+            .with_transparency(0.85)
+            .still()
     }
 
     /// Swamp water preset
@@ -150,241 +194,190 @@ impl WaterBody {
         Self::new(water_level)
             .with_color(Color::rgba(0.15, 0.2, 0.1, 0.9))
             .with_transparency(0.2)
-            .with_waves(WaveConfig::still())
+            .still()
     }
 }
 
-/// Wave configuration
-#[derive(Clone, Debug)]
-pub struct WaveConfig {
-    /// Wave layers
-    pub layers: Vec<WaveLayer>,
-    /// Global wave speed multiplier
-    pub speed_multiplier: f32,
-    /// Global wave height multiplier
-    pub height_multiplier: f32,
+/// Wave animation style
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum WaveStyle {
+    /// No waves
+    Still,
+    /// Gentle ripples
+    #[default]
+    Calm,
+    /// Ocean swells
+    Ocean,
+    /// Directional river flow
+    River,
 }
 
-impl Default for WaveConfig {
-    fn default() -> Self {
-        Self::calm()
+// ============================================================================
+// Internal implementation - not exposed to users
+// ============================================================================
+
+pub(crate) mod internal {
+    use super::*;
+    use bytemuck::{Pod, Zeroable};
+
+    /// GPU uniform data for water shader
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Pod, Zeroable)]
+    pub struct WaterUniform {
+        pub model: [[f32; 4]; 4],
+        pub water_level: f32,
+        pub time: f32,
+        pub transparency: f32,
+        pub fresnel_strength: f32,
+        pub wave0: [f32; 4],
+        pub wave1: [f32; 4],
+        pub wave2: [f32; 4],
+        pub wave3: [f32; 4],
+        pub wave_dir01: [f32; 4],
+        pub wave_dir23: [f32; 4],
+        pub shallow_color: [f32; 4],
+        pub deep_color: [f32; 4],
+        pub foam_color: [f32; 4],
+        pub foam_threshold: f32,
+        pub foam_intensity: f32,
+        pub shore_fade_distance: f32,
+        pub specular_intensity: f32,
     }
-}
 
-impl WaveConfig {
-    /// Create a new wave config
-    pub fn new() -> Self {
-        Self {
-            layers: Vec::new(),
-            speed_multiplier: 1.0,
-            height_multiplier: 1.0,
+    impl Default for WaterUniform {
+        fn default() -> Self {
+            Self {
+                model: [
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0],
+                ],
+                water_level: 0.0,
+                time: 0.0,
+                transparency: 0.6,
+                fresnel_strength: 1.0,
+                wave0: [0.0; 4],
+                wave1: [0.0; 4],
+                wave2: [0.0; 4],
+                wave3: [0.0; 4],
+                wave_dir01: [1.0, 0.0, 0.8, 0.6],
+                wave_dir23: [0.5, 0.9, 0.3, 1.0],
+                shallow_color: [0.1, 0.4, 0.5, 1.0],
+                deep_color: [0.0, 0.15, 0.3, 1.0],
+                foam_color: [1.0, 1.0, 1.0, 0.9],
+                foam_threshold: 0.3,
+                foam_intensity: 0.0,
+                shore_fade_distance: 5.0,
+                specular_intensity: 0.8,
+            }
         }
     }
 
-    /// Add a wave layer
-    pub fn with_layer(mut self, layer: WaveLayer) -> Self {
-        self.layers.push(layer);
-        self
+    /// Water mesh vertex
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Pod, Zeroable)]
+    pub struct WaterVertex {
+        pub position: [f32; 3],
+        pub uv: [f32; 2],
     }
 
-    /// Set speed multiplier
-    pub fn with_speed(mut self, speed: f32) -> Self {
-        self.speed_multiplier = speed;
-        self
-    }
+    /// Build GPU uniform from WaterBody configuration
+    pub fn build_uniform(water: &WaterBody, time: f32) -> WaterUniform {
+        let intensity = water.wave_intensity;
 
-    /// Set height multiplier
-    pub fn with_height(mut self, height: f32) -> Self {
-        self.height_multiplier = height;
-        self
-    }
+        // Wave parameters based on style
+        let (wave0, wave1, wave2, wave3) = match water.wave_style {
+            WaveStyle::Still => (
+                [0.0; 4],
+                [0.0; 4],
+                [0.0; 4],
+                [0.0; 4],
+            ),
+            WaveStyle::Calm => (
+                [0.02, 0.05 * intensity, 1.0, 0.1],
+                [0.05, 0.02 * intensity, 0.7, 0.1],
+                [0.0; 4],
+                [0.0; 4],
+            ),
+            WaveStyle::Ocean => (
+                [0.01, 0.5 * intensity, 0.8, 0.6],
+                [0.02, 0.3 * intensity, 1.2, 0.5],
+                [0.05, 0.1 * intensity, 0.5, 0.3],
+                [0.1, 0.03 * intensity, 0.3, 0.2],
+            ),
+            WaveStyle::River => (
+                [0.03, 0.08 * intensity, 2.0, 0.4],
+                [0.08, 0.03 * intensity, 1.5, 0.3],
+                [0.0; 4],
+                [0.0; 4],
+            ),
+        };
 
-    /// Sample wave height at position
-    pub fn sample(&self, x: f32, z: f32, time: f32) -> f32 {
-        let mut height = 0.0;
-        for layer in &self.layers {
-            height += layer.sample(x, z, time * self.speed_multiplier) * self.height_multiplier;
-        }
-        height
-    }
+        // Derive deep color from base color (darker)
+        let deep_color = [
+            water.color.r * 0.5,
+            water.color.g * 0.7,
+            water.color.b * 0.8,
+            water.color.a,
+        ];
 
-    /// Get wave normal at position
-    pub fn get_normal(&self, x: f32, z: f32, time: f32) -> Vec3 {
-        let epsilon = 0.01;
-        let h_center = self.sample(x, z, time);
-        let h_right = self.sample(x + epsilon, z, time);
-        let h_forward = self.sample(x, z + epsilon, time);
-
-        let dx = h_right - h_center;
-        let dz = h_forward - h_center;
-
-        let normal = Vec3::new(-dx, epsilon, -dz);
-        normalize_vec3(normal)
-    }
-
-    // ========== Presets ==========
-
-    /// Still water (no waves)
-    pub fn still() -> Self {
-        Self::new()
-    }
-
-    /// Calm water
-    pub fn calm() -> Self {
-        Self::new()
-            .with_layer(WaveLayer::new(0.02, 0.05, 1.0, Vec3::new(1.0, 0.0, 0.3)))
-            .with_layer(WaveLayer::new(0.05, 0.02, 0.7, Vec3::new(0.7, 0.0, 1.0)))
-    }
-
-    /// Ocean waves
-    pub fn ocean() -> Self {
-        Self::new()
-            .with_layer(WaveLayer::new(0.01, 0.5, 0.8, Vec3::new(1.0, 0.0, 0.0)))
-            .with_layer(WaveLayer::new(0.02, 0.3, 1.2, Vec3::new(0.8, 0.0, 0.6)))
-            .with_layer(WaveLayer::new(0.05, 0.1, 0.5, Vec3::new(0.5, 0.0, 0.9)))
-            .with_layer(WaveLayer::new(0.1, 0.03, 0.3, Vec3::new(0.3, 0.0, 1.0)))
-    }
-
-    /// River flow
-    pub fn river() -> Self {
-        Self::new()
-            .with_layer(WaveLayer::new(0.03, 0.08, 2.0, Vec3::new(1.0, 0.0, 0.0)))
-            .with_layer(WaveLayer::new(0.08, 0.03, 1.5, Vec3::new(0.9, 0.0, 0.3)))
-    }
-}
-
-/// Single wave layer (Gerstner-style)
-#[derive(Clone, Debug)]
-pub struct WaveLayer {
-    /// Wave frequency (wavelength = 1/frequency)
-    pub frequency: f32,
-    /// Wave amplitude (height)
-    pub amplitude: f32,
-    /// Wave speed
-    pub speed: f32,
-    /// Wave direction (normalized)
-    pub direction: Vec3,
-    /// Steepness (0 = sine wave, 1 = sharp peaks)
-    pub steepness: f32,
-}
-
-impl WaveLayer {
-    /// Create a new wave layer
-    pub fn new(frequency: f32, amplitude: f32, speed: f32, direction: Vec3) -> Self {
-        Self {
-            frequency,
-            amplitude,
-            speed,
-            direction: normalize_vec3(direction),
-            steepness: 0.5,
+        WaterUniform {
+            water_level: water.water_level,
+            time,
+            transparency: water.transparency,
+            fresnel_strength: water.fresnel_strength,
+            wave0,
+            wave1,
+            wave2,
+            wave3,
+            shallow_color: [water.color.r, water.color.g, water.color.b, water.color.a],
+            deep_color,
+            foam_intensity: water.foam,
+            foam_threshold: 0.3,
+            shore_fade_distance: water.shore_fade,
+            specular_intensity: water.specular_intensity,
+            ..Default::default()
         }
     }
 
-    /// Set steepness
-    pub fn with_steepness(mut self, steepness: f32) -> Self {
-        self.steepness = steepness.clamp(0.0, 1.0);
-        self
-    }
+    /// Generate water mesh grid
+    pub fn generate_mesh(size: f32, resolution: u32) -> (Vec<WaterVertex>, Vec<u32>) {
+        let resolution = resolution.clamp(8, 256);
+        let mut vertices = Vec::with_capacity((resolution * resolution) as usize);
+        let mut indices = Vec::with_capacity(((resolution - 1) * (resolution - 1) * 6) as usize);
 
-    /// Sample wave height at position
-    pub fn sample(&self, x: f32, z: f32, time: f32) -> f32 {
-        let dot = x * self.direction.x + z * self.direction.z;
-        let phase = dot * self.frequency - time * self.speed;
+        let half_size = size * 0.5;
 
-        if self.steepness < 0.01 {
-            // Simple sine wave
-            phase.sin() * self.amplitude
-        } else {
-            // Gerstner-style wave (sharper peaks)
-            let sin_phase = phase.sin();
-            let exp_factor = (sin_phase * self.steepness * 4.0).exp();
-            (exp_factor - 1.0) / (exp_factor + 1.0) * self.amplitude
+        for z in 0..resolution {
+            for x in 0..resolution {
+                let u = x as f32 / (resolution - 1) as f32;
+                let v = z as f32 / (resolution - 1) as f32;
+
+                vertices.push(WaterVertex {
+                    position: [u * size - half_size, 0.0, v * size - half_size],
+                    uv: [u, v],
+                });
+            }
         }
-    }
-}
 
-/// Foam configuration
-#[derive(Clone, Debug)]
-pub struct FoamConfig {
-    /// Foam color
-    pub color: Color,
-    /// Foam threshold (how much wave height triggers foam)
-    pub threshold: f32,
-    /// Foam intensity
-    pub intensity: f32,
-    /// Shore foam distance
-    pub shore_distance: f32,
-    /// Foam texture scale
-    pub texture_scale: f32,
-}
+        for z in 0..(resolution - 1) {
+            for x in 0..(resolution - 1) {
+                let i00 = z * resolution + x;
+                let i10 = i00 + 1;
+                let i01 = i00 + resolution;
+                let i11 = i01 + 1;
 
-impl Default for FoamConfig {
-    fn default() -> Self {
-        Self {
-            color: Color::rgba(1.0, 1.0, 1.0, 0.9),
-            threshold: 0.3,
-            intensity: 1.0,
-            shore_distance: 3.0,
-            texture_scale: 10.0,
+                indices.push(i00);
+                indices.push(i01);
+                indices.push(i10);
+                indices.push(i10);
+                indices.push(i01);
+                indices.push(i11);
+            }
         }
-    }
-}
 
-impl FoamConfig {
-    /// Subtle foam preset
-    pub fn subtle() -> Self {
-        Self {
-            color: Color::rgba(1.0, 1.0, 1.0, 0.6),
-            threshold: 0.5,
-            intensity: 0.5,
-            shore_distance: 1.5,
-            texture_scale: 15.0,
-        }
-    }
-
-    /// Heavy foam preset
-    pub fn heavy() -> Self {
-        Self {
-            color: Color::rgba(1.0, 1.0, 1.0, 1.0),
-            threshold: 0.2,
-            intensity: 1.5,
-            shore_distance: 5.0,
-            texture_scale: 8.0,
-        }
-    }
-}
-
-/// Caustics configuration
-#[derive(Clone, Debug)]
-pub struct CausticsConfig {
-    /// Caustics intensity
-    pub intensity: f32,
-    /// Caustics scale
-    pub scale: f32,
-    /// Caustics speed
-    pub speed: f32,
-    /// Maximum depth for caustics
-    pub max_depth: f32,
-}
-
-impl Default for CausticsConfig {
-    fn default() -> Self {
-        Self {
-            intensity: 0.5,
-            scale: 5.0,
-            speed: 1.0,
-            max_depth: 10.0,
-        }
-    }
-}
-
-fn normalize_vec3(v: Vec3) -> Vec3 {
-    let len = (v.x * v.x + v.y * v.y + v.z * v.z).sqrt();
-    if len < 0.0001 {
-        Vec3::new(0.0, 1.0, 0.0)
-    } else {
-        let inv = 1.0 / len;
-        Vec3::new(v.x * inv, v.y * inv, v.z * inv)
+        (vertices, indices)
     }
 }
 
@@ -393,22 +386,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_water_body() {
-        let water = WaterBody::ocean(10.0);
-        assert!((water.water_level - 10.0).abs() < 0.001);
+    fn test_water_presets() {
+        let ocean = WaterBody::ocean(10.0);
+        assert!((ocean.water_level - 10.0).abs() < 0.001);
+        assert_eq!(ocean.wave_style, WaveStyle::Ocean);
+        assert!(ocean.foam > 0.0);
     }
 
     #[test]
-    fn test_wave_sample() {
-        let wave = WaveLayer::new(0.1, 1.0, 1.0, Vec3::new(1.0, 0.0, 0.0));
-        let h = wave.sample(0.0, 0.0, 0.0);
-        assert!(h.is_finite());
+    fn test_water_builder() {
+        let water = WaterBody::new(5.0)
+            .with_transparency(0.8)
+            .calm()
+            .with_foam(0.5);
+
+        assert!((water.water_level - 5.0).abs() < 0.001);
+        assert!((water.transparency - 0.8).abs() < 0.001);
+        assert_eq!(water.wave_style, WaveStyle::Calm);
     }
 
     #[test]
-    fn test_wave_config() {
-        let config = WaveConfig::ocean();
-        let h = config.sample(100.0, 100.0, 1.0);
-        assert!(h.is_finite());
+    fn test_wave_styles() {
+        let still = WaterBody::new(0.0).still();
+        assert_eq!(still.wave_style, WaveStyle::Still);
+        assert!((still.wave_intensity - 0.0).abs() < 0.001);
+
+        let ocean = WaterBody::new(0.0).oceanic();
+        assert_eq!(ocean.wave_style, WaveStyle::Ocean);
     }
 }

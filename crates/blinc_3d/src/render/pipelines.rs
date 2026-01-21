@@ -17,6 +17,8 @@ pub enum VertexLayout {
     PositionNormalUVTangent,
     /// Position + Color
     PositionColor,
+    /// Position + UV (for terrain and water)
+    PositionUV,
 }
 
 impl VertexLayout {
@@ -111,6 +113,22 @@ impl VertexLayout {
                     },
                 ],
             },
+            VertexLayout::PositionUV => wgpu::VertexBufferLayout {
+                array_stride: 20,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &[
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x3,
+                        offset: 0,
+                        shader_location: 0,
+                    },
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x2,
+                        offset: 12,
+                        shader_location: 1,
+                    },
+                ],
+            },
         }
     }
 }
@@ -186,6 +204,14 @@ pub struct GamePipelines {
     pub shadow_map: Option<wgpu::RenderPipeline>,
     /// Post-process pipeline
     pub post_process: Option<wgpu::RenderPipeline>,
+    /// Terrain rendering pipeline
+    pub terrain: Option<wgpu::RenderPipeline>,
+    /// Water body rendering pipeline
+    pub water: Option<wgpu::RenderPipeline>,
+    /// Particle compute pipeline (simulation)
+    pub particle_compute: Option<wgpu::ComputePipeline>,
+    /// Particle render pipeline (drawing)
+    pub particle_render: Option<wgpu::RenderPipeline>,
     /// Custom pipelines cache
     custom_pipelines: FxHashMap<PipelineKey, wgpu::RenderPipeline>,
 }
@@ -203,6 +229,10 @@ impl GamePipelines {
             skybox: None,
             shadow_map: None,
             post_process: None,
+            terrain: None,
+            water: None,
+            particle_compute: None,
+            particle_render: None,
             custom_pipelines: FxHashMap::default(),
         }
     }
@@ -264,6 +294,41 @@ impl GamePipelines {
                 shader,
                 surface_format,
                 "sdf_raymarch",
+            ));
+        }
+
+        // Initialize terrain pipeline
+        if let Some(shader) = registry.get(super::ShaderId::Terrain) {
+            self.terrain = Some(Self::create_terrain_pipeline(
+                device,
+                shader,
+                surface_format,
+            ));
+        }
+
+        // Initialize water pipeline
+        if let Some(shader) = registry.get(super::ShaderId::Water) {
+            self.water = Some(Self::create_water_pipeline(
+                device,
+                shader,
+                surface_format,
+            ));
+        }
+
+        // Initialize particle compute pipeline
+        if let Some(shader) = registry.get(super::ShaderId::ParticleCompute) {
+            self.particle_compute = Some(Self::create_particle_compute_pipeline(
+                device,
+                shader,
+            ));
+        }
+
+        // Initialize particle render pipeline
+        if let Some(shader) = registry.get(super::ShaderId::ParticleRender) {
+            self.particle_render = Some(Self::create_particle_render_pipeline(
+                device,
+                shader,
+                surface_format,
             ));
         }
     }
@@ -381,6 +446,186 @@ impl GamePipelines {
                 ..Default::default()
             },
             depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        })
+    }
+
+    /// Create terrain rendering pipeline
+    fn create_terrain_pipeline(
+        device: &wgpu::Device,
+        shader: &wgpu::ShaderModule,
+        surface_format: wgpu::TextureFormat,
+    ) -> wgpu::RenderPipeline {
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("terrain_layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("terrain"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: shader,
+                entry_point: Some("vs_main"),
+                buffers: &[VertexLayout::PositionUV.buffer_layout()],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        })
+    }
+
+    /// Create water rendering pipeline
+    fn create_water_pipeline(
+        device: &wgpu::Device,
+        shader: &wgpu::ShaderModule,
+        surface_format: wgpu::TextureFormat,
+    ) -> wgpu::RenderPipeline {
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("water_layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("water"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: shader,
+                entry_point: Some("vs_main"),
+                buffers: &[VertexLayout::PositionUV.buffer_layout()],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None, // Water is visible from both sides
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: false, // Water doesn't write depth (transparent)
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        })
+    }
+
+    /// Create particle compute pipeline (simulation)
+    fn create_particle_compute_pipeline(
+        device: &wgpu::Device,
+        shader: &wgpu::ShaderModule,
+    ) -> wgpu::ComputePipeline {
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("particle_compute_layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("particle_compute"),
+            layout: Some(&layout),
+            module: shader,
+            entry_point: Some("cs_update"),
+            compilation_options: Default::default(),
+            cache: None,
+        })
+    }
+
+    /// Create particle render pipeline (billboard drawing)
+    fn create_particle_render_pipeline(
+        device: &wgpu::Device,
+        shader: &wgpu::ShaderModule,
+        surface_format: wgpu::TextureFormat,
+    ) -> wgpu::RenderPipeline {
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("particle_render_layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("particle_render"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: shader,
+                entry_point: Some("vs_main"),
+                buffers: &[], // Particles are generated from storage buffer
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: surface_format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: None, // Billboards visible from both sides
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: false, // Particles are transparent
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
             cache: None,

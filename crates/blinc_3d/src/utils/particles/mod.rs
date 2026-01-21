@@ -1,7 +1,7 @@
 //! Particle system for visual effects
 //!
-//! Provides GPU-instanced particle rendering with various emitter shapes
-//! and force affectors.
+//! Provides GPU-accelerated particle rendering with various emitter shapes
+//! and force affectors. All simulation and rendering happens on the GPU.
 //!
 //! # Example
 //!
@@ -9,81 +9,85 @@
 //! use blinc_3d::utils::particles::*;
 //!
 //! // Create a fire particle system
-//! let fire = ParticleSystem::new()
+//! let fire = ParticleSystem::fire();
+//!
+//! // Or build custom effects
+//! let particles = ParticleSystem::new()
 //!     .with_emitter(EmitterShape::Cone { angle: 0.3, radius: 0.5 })
 //!     .with_emission_rate(100.0)
-//!     .with_lifetime(1.0..2.0)
-//!     .with_start_color(Color::rgb(1.0, 0.8, 0.2))
-//!     .with_end_color(Color::rgba(1.0, 0.2, 0.0, 0.0))
-//!     .with_start_size(0.1..0.2)
-//!     .with_end_size(0.0..0.05)
-//!     .with_force(GravityForce(Vec3::new(0.0, 2.0, 0.0))); // Upward for fire
+//!     .with_lifetime(1.0, 2.0)
+//!     .with_colors(Color::rgb(1.0, 0.8, 0.2), Color::rgba(1.0, 0.2, 0.0, 0.0))
+//!     .with_size(0.1, 0.2, 0.0, 0.05)
+//!     .with_force(Force::gravity(Vec3::new(0.0, 2.0, 0.0)));
+//!
+//! // Attach to entity - rendering is automatic
+//! world.spawn().insert(particles);
 //! ```
 
-mod emitter;
-mod particle;
-mod forces;
-mod modules;
-
-pub use emitter::*;
-pub use particle::*;
-pub use forces::*;
-pub use modules::*;
-
 use crate::ecs::{Component, System, SystemContext, SystemStage};
-use crate::geometry::GeometryHandle;
 use blinc_core::{Color, Vec3};
-use std::ops::Range;
 
 /// Particle system component
 ///
-/// Attach to an entity to create particle effects at that location.
+/// Add this to an entity to create particle effects at that location.
+/// The system automatically handles GPU simulation and rendering.
 #[derive(Clone, Debug)]
 pub struct ParticleSystem {
-    /// Emitter shape
-    pub emitter: EmitterShape,
     /// Maximum number of particles
     pub max_particles: u32,
-    /// Particles emitted per second
+    /// Emitter shape
+    pub emitter: EmitterShape,
+    /// Emission rate (particles per second)
     pub emission_rate: f32,
-    /// Burst emission (particles, interval)
-    pub burst: Option<(u32, f32)>,
-    /// Particle lifetime range in seconds
-    pub lifetime: Range<f32>,
-    /// Initial velocity range
-    pub start_velocity: Range<f32>,
-    /// Velocity spread angle (radians)
-    pub velocity_spread: f32,
-    /// Starting color
+    /// Emission direction
+    pub direction: Vec3,
+    /// Direction randomness (0 = straight, 1 = fully random)
+    pub direction_randomness: f32,
+    /// Particle lifetime (min, max)
+    pub lifetime: (f32, f32),
+    /// Start speed (min, max)
+    pub start_speed: (f32, f32),
+    /// Start size (min, max)
+    pub start_size: (f32, f32),
+    /// End size (min, max)
+    pub end_size: (f32, f32),
+    /// Start color
     pub start_color: Color,
-    /// Ending color (interpolates over lifetime)
+    /// End color (fades over lifetime)
     pub end_color: Color,
-    /// Starting size range
-    pub start_size: Range<f32>,
-    /// Ending size range
-    pub end_size: Range<f32>,
+    /// Start rotation (min, max)
+    pub start_rotation: (f32, f32),
+    /// Rotation speed (min, max)
+    pub rotation_speed: (f32, f32),
     /// Force affectors
-    pub forces: Vec<ForceAffector>,
-    /// Color over lifetime curve
-    pub color_over_lifetime: Option<ColorOverLifetime>,
-    /// Size over lifetime curve
-    pub size_over_lifetime: Option<SizeOverLifetime>,
-    /// Rendering mode
-    pub render_mode: ParticleRenderMode,
-    /// Whether the system is playing
+    pub forces: Vec<Force>,
+    /// Gravity scale
+    pub gravity_scale: f32,
+    /// Render mode
+    pub render_mode: RenderMode,
+    /// Blend mode
+    pub blend_mode: BlendMode,
+    /// Soft particles (fade near geometry)
+    pub soft_particles: bool,
+    /// Soft particles distance
+    pub soft_particle_distance: f32,
+    /// Stretch length scale (for stretched billboards)
+    pub length_scale: f32,
+    /// Stretch speed scale
+    pub speed_scale: f32,
+    /// Sprite sheet (columns, rows)
+    pub sprite_sheet: Option<(u32, u32)>,
+    /// Animation speed for sprite sheets
+    pub animation_speed: f32,
+    /// Whether system is playing
     pub playing: bool,
     /// Whether to loop
     pub looping: bool,
-    /// Duration (for non-looping systems)
+    /// Duration (for non-looping)
     pub duration: f32,
-    /// World space vs local space
-    pub simulation_space: SimulationSpace,
-    /// Internal: accumulated emission time
-    emission_accumulator: f32,
-    /// Internal: burst timer
-    burst_timer: f32,
-    /// Internal: total elapsed time
-    elapsed: f32,
+    // Internal state
+    time: f32,
+    spawn_accumulated: f32,
 }
 
 impl Component for ParticleSystem {}
@@ -95,43 +99,51 @@ impl Default for ParticleSystem {
 }
 
 impl ParticleSystem {
-    /// Create a new particle system with default settings
+    /// Create a new particle system
     pub fn new() -> Self {
         Self {
+            max_particles: 10000,
             emitter: EmitterShape::Point,
-            max_particles: 1000,
-            emission_rate: 10.0,
-            burst: None,
-            lifetime: 1.0..2.0,
-            start_velocity: 1.0..2.0,
-            velocity_spread: 0.5,
+            emission_rate: 100.0,
+            direction: Vec3::new(0.0, 1.0, 0.0),
+            direction_randomness: 0.0,
+            lifetime: (1.0, 2.0),
+            start_speed: (1.0, 2.0),
+            start_size: (0.1, 0.2),
+            end_size: (0.0, 0.1),
             start_color: Color::WHITE,
             end_color: Color::rgba(1.0, 1.0, 1.0, 0.0),
-            start_size: 0.1..0.2,
-            end_size: 0.0..0.1,
+            start_rotation: (0.0, 0.0),
+            rotation_speed: (0.0, 0.0),
             forces: Vec::new(),
-            color_over_lifetime: None,
-            size_over_lifetime: None,
-            render_mode: ParticleRenderMode::Billboard,
+            gravity_scale: 1.0,
+            render_mode: RenderMode::Billboard,
+            blend_mode: BlendMode::Alpha,
+            soft_particles: false,
+            soft_particle_distance: 0.5,
+            length_scale: 1.0,
+            speed_scale: 0.1,
+            sprite_sheet: None,
+            animation_speed: 1.0,
             playing: true,
             looping: true,
             duration: 5.0,
-            simulation_space: SimulationSpace::World,
-            emission_accumulator: 0.0,
-            burst_timer: 0.0,
-            elapsed: 0.0,
+            time: 0.0,
+            spawn_accumulated: 0.0,
         }
     }
 
-    /// Set emitter shape
-    pub fn with_emitter(mut self, emitter: EmitterShape) -> Self {
-        self.emitter = emitter;
+    // ========== Builder Methods ==========
+
+    /// Set max particles
+    pub fn with_max_particles(mut self, max: u32) -> Self {
+        self.max_particles = max;
         self
     }
 
-    /// Set maximum particles
-    pub fn with_max_particles(mut self, max: u32) -> Self {
-        self.max_particles = max;
+    /// Set emitter shape
+    pub fn with_emitter(mut self, shape: EmitterShape) -> Self {
+        self.emitter = shape;
         self
     }
 
@@ -141,75 +153,89 @@ impl ParticleSystem {
         self
     }
 
-    /// Set burst emission
-    pub fn with_burst(mut self, count: u32, interval: f32) -> Self {
-        self.burst = Some((count, interval));
+    /// Set emission direction and randomness
+    pub fn with_direction(mut self, dir: Vec3, randomness: f32) -> Self {
+        self.direction = dir;
+        self.direction_randomness = randomness.clamp(0.0, 1.0);
         self
     }
 
     /// Set particle lifetime range
-    pub fn with_lifetime(mut self, lifetime: Range<f32>) -> Self {
-        self.lifetime = lifetime;
+    pub fn with_lifetime(mut self, min: f32, max: f32) -> Self {
+        self.lifetime = (min, max);
         self
     }
 
-    /// Set starting velocity range
-    pub fn with_start_velocity(mut self, velocity: Range<f32>) -> Self {
-        self.start_velocity = velocity;
+    /// Set particle speed range
+    pub fn with_speed(mut self, min: f32, max: f32) -> Self {
+        self.start_speed = (min, max);
         self
     }
 
-    /// Set velocity spread angle
-    pub fn with_velocity_spread(mut self, spread: f32) -> Self {
-        self.velocity_spread = spread;
+    /// Set particle size ranges
+    pub fn with_size(mut self, start_min: f32, start_max: f32, end_min: f32, end_max: f32) -> Self {
+        self.start_size = (start_min, start_max);
+        self.end_size = (end_min, end_max);
         self
     }
 
-    /// Set starting color
-    pub fn with_start_color(mut self, color: Color) -> Self {
-        self.start_color = color;
+    /// Set start and end colors
+    pub fn with_colors(mut self, start: Color, end: Color) -> Self {
+        self.start_color = start;
+        self.end_color = end;
         self
     }
 
-    /// Set ending color
-    pub fn with_end_color(mut self, color: Color) -> Self {
-        self.end_color = color;
-        self
-    }
-
-    /// Set starting size range
-    pub fn with_start_size(mut self, size: Range<f32>) -> Self {
-        self.start_size = size;
-        self
-    }
-
-    /// Set ending size range
-    pub fn with_end_size(mut self, size: Range<f32>) -> Self {
-        self.end_size = size;
+    /// Set particle rotation
+    pub fn with_rotation(mut self, start_min: f32, start_max: f32, speed_min: f32, speed_max: f32) -> Self {
+        self.start_rotation = (start_min, start_max);
+        self.rotation_speed = (speed_min, speed_max);
         self
     }
 
     /// Add a force affector
-    pub fn with_force(mut self, force: ForceAffector) -> Self {
+    pub fn with_force(mut self, force: Force) -> Self {
         self.forces.push(force);
         self
     }
 
-    /// Set color over lifetime
-    pub fn with_color_over_lifetime(mut self, curve: ColorOverLifetime) -> Self {
-        self.color_over_lifetime = Some(curve);
-        self
-    }
-
-    /// Set size over lifetime
-    pub fn with_size_over_lifetime(mut self, curve: SizeOverLifetime) -> Self {
-        self.size_over_lifetime = Some(curve);
+    /// Set gravity scale
+    pub fn with_gravity_scale(mut self, scale: f32) -> Self {
+        self.gravity_scale = scale;
         self
     }
 
     /// Set render mode
-    pub fn with_render_mode(mut self, mode: ParticleRenderMode) -> Self {
+    pub fn with_render_mode(mut self, mode: RenderMode) -> Self {
         self.render_mode = mode;
+        self
+    }
+
+    /// Set blend mode
+    pub fn with_blend_mode(mut self, mode: BlendMode) -> Self {
+        self.blend_mode = mode;
+        self
+    }
+
+    /// Enable soft particles
+    pub fn with_soft_particles(mut self, distance: f32) -> Self {
+        self.soft_particles = true;
+        self.soft_particle_distance = distance;
+        self
+    }
+
+    /// Set stretched billboard parameters
+    pub fn with_stretch(mut self, length_scale: f32, speed_scale: f32) -> Self {
+        self.render_mode = RenderMode::Stretched;
+        self.length_scale = length_scale;
+        self.speed_scale = speed_scale;
+        self
+    }
+
+    /// Set sprite sheet animation
+    pub fn with_sprite_sheet(mut self, columns: u32, rows: u32, speed: f32) -> Self {
+        self.sprite_sheet = Some((columns, rows));
+        self.animation_speed = speed;
         self
     }
 
@@ -219,259 +245,288 @@ impl ParticleSystem {
         self
     }
 
-    /// Set duration
+    /// Set duration (for non-looping)
     pub fn with_duration(mut self, duration: f32) -> Self {
         self.duration = duration;
         self
     }
 
-    /// Set simulation space
-    pub fn with_simulation_space(mut self, space: SimulationSpace) -> Self {
-        self.simulation_space = space;
-        self
-    }
+    // ========== Control Methods ==========
 
-    /// Play the particle system
+    /// Play the system
     pub fn play(&mut self) {
         self.playing = true;
     }
 
-    /// Pause the particle system
+    /// Pause the system
     pub fn pause(&mut self) {
         self.playing = false;
     }
 
-    /// Stop and reset the particle system
+    /// Stop and reset
     pub fn stop(&mut self) {
         self.playing = false;
-        self.elapsed = 0.0;
-        self.emission_accumulator = 0.0;
-        self.burst_timer = 0.0;
+        self.time = 0.0;
+        self.spawn_accumulated = 0.0;
     }
 
-    /// Check if the system is playing
-    pub fn is_playing(&self) -> bool {
-        self.playing
-    }
-
-    /// Get elapsed time
-    pub fn elapsed(&self) -> f32 {
-        self.elapsed
+    /// Emit a burst of particles
+    pub fn burst(&mut self, count: u32) {
+        self.spawn_accumulated += count as f32;
     }
 
     // ========== Presets ==========
 
-    /// Fire particle effect
+    /// Fire effect
     pub fn fire() -> Self {
         Self::new()
+            .with_max_particles(5000)
             .with_emitter(EmitterShape::Cone { angle: 0.2, radius: 0.3 })
-            .with_emission_rate(80.0)
-            .with_lifetime(0.5..1.5)
-            .with_start_velocity(2.0..4.0)
-            .with_start_color(Color::rgb(1.0, 0.8, 0.2))
-            .with_end_color(Color::rgba(1.0, 0.2, 0.0, 0.0))
-            .with_start_size(0.15..0.25)
-            .with_end_size(0.0..0.05)
-            .with_force(ForceAffector::Gravity(Vec3::new(0.0, 3.0, 0.0)))
-            .with_force(ForceAffector::Turbulence { strength: 0.5, frequency: 2.0 })
+            .with_emission_rate(200.0)
+            .with_direction(Vec3::new(0.0, 1.0, 0.0), 0.1)
+            .with_lifetime(0.5, 1.5)
+            .with_speed(2.0, 4.0)
+            .with_size(0.15, 0.25, 0.0, 0.05)
+            .with_colors(
+                Color::rgb(1.0, 0.8, 0.2),
+                Color::rgba(1.0, 0.2, 0.0, 0.0),
+            )
+            .with_force(Force::gravity(Vec3::new(0.0, 3.0, 0.0)))
+            .with_force(Force::turbulence(0.5, 2.0))
+            .with_blend_mode(BlendMode::Additive)
     }
 
-    /// Smoke particle effect
+    /// Smoke effect
     pub fn smoke() -> Self {
         Self::new()
+            .with_max_particles(2000)
             .with_emitter(EmitterShape::Cone { angle: 0.1, radius: 0.2 })
-            .with_emission_rate(30.0)
-            .with_lifetime(2.0..4.0)
-            .with_start_velocity(0.5..1.5)
-            .with_start_color(Color::rgba(0.3, 0.3, 0.3, 0.6))
-            .with_end_color(Color::rgba(0.5, 0.5, 0.5, 0.0))
-            .with_start_size(0.2..0.4)
-            .with_end_size(0.8..1.2)
-            .with_force(ForceAffector::Gravity(Vec3::new(0.0, 0.5, 0.0)))
-            .with_force(ForceAffector::Wind { direction: Vec3::new(1.0, 0.0, 0.0), strength: 0.3, turbulence: 0.0 })
+            .with_emission_rate(50.0)
+            .with_direction(Vec3::new(0.0, 1.0, 0.0), 0.05)
+            .with_lifetime(2.0, 4.0)
+            .with_speed(0.5, 1.5)
+            .with_size(0.2, 0.4, 0.8, 1.2)
+            .with_colors(
+                Color::rgba(0.3, 0.3, 0.3, 0.6),
+                Color::rgba(0.5, 0.5, 0.5, 0.0),
+            )
+            .with_force(Force::gravity(Vec3::new(0.0, 0.5, 0.0)))
+            .with_force(Force::wind(Vec3::new(1.0, 0.0, 0.0), 0.3, 0.2))
     }
 
-    /// Sparks particle effect
+    /// Sparks effect
     pub fn sparks() -> Self {
         Self::new()
+            .with_max_particles(3000)
             .with_emitter(EmitterShape::Point)
-            .with_emission_rate(50.0)
-            .with_lifetime(0.3..0.8)
-            .with_start_velocity(5.0..10.0)
-            .with_velocity_spread(1.0)
-            .with_start_color(Color::rgb(1.0, 0.9, 0.5))
-            .with_end_color(Color::rgb(1.0, 0.3, 0.0))
-            .with_start_size(0.02..0.05)
-            .with_end_size(0.0..0.01)
-            .with_force(ForceAffector::Gravity(Vec3::new(0.0, -9.8, 0.0)))
-            .with_render_mode(ParticleRenderMode::StretchedBillboard { length_scale: 0.1 })
+            .with_emission_rate(100.0)
+            .with_direction(Vec3::new(0.0, 1.0, 0.0), 0.8)
+            .with_lifetime(0.3, 0.8)
+            .with_speed(5.0, 10.0)
+            .with_size(0.02, 0.05, 0.0, 0.01)
+            .with_colors(
+                Color::rgb(1.0, 0.9, 0.5),
+                Color::rgb(1.0, 0.3, 0.0),
+            )
+            .with_force(Force::gravity(Vec3::new(0.0, -9.8, 0.0)))
+            .with_stretch(0.1, 0.2)
+            .with_blend_mode(BlendMode::Additive)
     }
 
-    /// Rain particle effect
+    /// Rain effect
     pub fn rain() -> Self {
         Self::new()
+            .with_max_particles(20000)
             .with_emitter(EmitterShape::Box { half_extents: Vec3::new(10.0, 0.1, 10.0) })
-            .with_emission_rate(500.0)
-            .with_lifetime(1.0..2.0)
-            .with_start_velocity(10.0..15.0)
-            .with_velocity_spread(0.05)
-            .with_start_color(Color::rgba(0.7, 0.8, 1.0, 0.5))
-            .with_end_color(Color::rgba(0.7, 0.8, 1.0, 0.3))
-            .with_start_size(0.01..0.02)
-            .with_end_size(0.01..0.02)
-            .with_force(ForceAffector::Gravity(Vec3::new(0.0, -9.8, 0.0)))
-            .with_render_mode(ParticleRenderMode::StretchedBillboard { length_scale: 0.5 })
+            .with_emission_rate(1000.0)
+            .with_direction(Vec3::new(0.0, -1.0, 0.0), 0.05)
+            .with_lifetime(1.0, 2.0)
+            .with_speed(10.0, 15.0)
+            .with_size(0.01, 0.02, 0.01, 0.02)
+            .with_colors(
+                Color::rgba(0.7, 0.8, 1.0, 0.5),
+                Color::rgba(0.7, 0.8, 1.0, 0.3),
+            )
+            .with_gravity_scale(0.0)
+            .with_stretch(0.5, 0.3)
     }
 
-    /// Snow particle effect
+    /// Snow effect
     pub fn snow() -> Self {
         Self::new()
+            .with_max_particles(10000)
             .with_emitter(EmitterShape::Box { half_extents: Vec3::new(10.0, 0.1, 10.0) })
-            .with_emission_rate(100.0)
-            .with_lifetime(4.0..8.0)
-            .with_start_velocity(0.5..1.0)
-            .with_velocity_spread(0.3)
-            .with_start_color(Color::WHITE)
-            .with_end_color(Color::WHITE)
-            .with_start_size(0.02..0.05)
-            .with_end_size(0.02..0.05)
-            .with_force(ForceAffector::Gravity(Vec3::new(0.0, -1.0, 0.0)))
-            .with_force(ForceAffector::Turbulence { strength: 0.3, frequency: 0.5 })
+            .with_emission_rate(200.0)
+            .with_direction(Vec3::new(0.0, -1.0, 0.0), 0.3)
+            .with_lifetime(4.0, 8.0)
+            .with_speed(0.5, 1.0)
+            .with_size(0.02, 0.05, 0.02, 0.05)
+            .with_colors(Color::WHITE, Color::WHITE)
+            .with_force(Force::gravity(Vec3::new(0.0, -1.0, 0.0)))
+            .with_force(Force::turbulence(0.3, 0.5))
     }
 
-    /// Explosion burst effect
+    /// Explosion effect
     pub fn explosion() -> Self {
         Self::new()
+            .with_max_particles(500)
             .with_emitter(EmitterShape::Sphere { radius: 0.1 })
             .with_emission_rate(0.0)
-            .with_burst(200, 0.0)
+            .with_direction(Vec3::ZERO, 1.0)
+            .with_lifetime(0.5, 1.5)
+            .with_speed(5.0, 15.0)
+            .with_size(0.2, 0.5, 0.0, 0.1)
+            .with_colors(
+                Color::rgb(1.0, 0.8, 0.3),
+                Color::rgba(0.3, 0.1, 0.0, 0.0),
+            )
+            .with_force(Force::gravity(Vec3::new(0.0, -5.0, 0.0)))
+            .with_force(Force::drag(2.0))
+            .with_blend_mode(BlendMode::Additive)
             .with_looping(false)
-            .with_lifetime(0.5..1.5)
-            .with_start_velocity(5.0..15.0)
-            .with_velocity_spread(3.14)
-            .with_start_color(Color::rgb(1.0, 0.8, 0.3))
-            .with_end_color(Color::rgba(0.3, 0.1, 0.0, 0.0))
-            .with_start_size(0.2..0.5)
-            .with_end_size(0.0..0.1)
-            .with_force(ForceAffector::Gravity(Vec3::new(0.0, -5.0, 0.0)))
-            .with_force(ForceAffector::Drag(2.0))
     }
 
     /// Magic sparkle effect
     pub fn magic() -> Self {
         Self::new()
+            .with_max_particles(2000)
             .with_emitter(EmitterShape::Sphere { radius: 0.5 })
-            .with_emission_rate(40.0)
-            .with_lifetime(1.0..2.0)
-            .with_start_velocity(0.2..0.5)
-            .with_start_color(Color::rgb(0.5, 0.8, 1.0))
-            .with_end_color(Color::rgba(1.0, 0.5, 1.0, 0.0))
-            .with_start_size(0.05..0.1)
-            .with_end_size(0.0..0.02)
-            .with_force(ForceAffector::Vortex {
-                axis: Vec3::new(0.0, 1.0, 0.0),
-                strength: 1.0,
-                center: None,
-            })
+            .with_emission_rate(80.0)
+            .with_direction(Vec3::new(0.0, 1.0, 0.0), 0.5)
+            .with_lifetime(1.0, 2.0)
+            .with_speed(0.2, 0.5)
+            .with_size(0.05, 0.1, 0.0, 0.02)
+            .with_colors(
+                Color::rgb(0.5, 0.8, 1.0),
+                Color::rgba(1.0, 0.5, 1.0, 0.0),
+            )
+            .with_force(Force::vortex(Vec3::new(0.0, 1.0, 0.0), Vec3::ZERO, 1.0))
+            .with_blend_mode(BlendMode::Additive)
+    }
+
+    /// Confetti effect
+    pub fn confetti() -> Self {
+        Self::new()
+            .with_max_particles(1000)
+            .with_emitter(EmitterShape::Point)
+            .with_emission_rate(0.0)
+            .with_direction(Vec3::new(0.0, 1.0, 0.0), 0.5)
+            .with_lifetime(3.0, 5.0)
+            .with_speed(5.0, 10.0)
+            .with_size(0.05, 0.1, 0.05, 0.1)
+            .with_colors(Color::WHITE, Color::WHITE)
+            .with_rotation(0.0, std::f32::consts::TAU, -2.0, 2.0)
+            .with_force(Force::gravity(Vec3::new(0.0, -3.0, 0.0)))
+            .with_force(Force::drag(0.5))
+            .with_looping(false)
     }
 }
 
-/// Simulation space for particles
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SimulationSpace {
-    /// Particles move in world space
-    World,
-    /// Particles move relative to emitter
-    Local,
+/// Emitter shape
+#[derive(Clone, Debug)]
+pub enum EmitterShape {
+    /// Single point
+    Point,
+    /// Sphere volume/surface
+    Sphere { radius: f32 },
+    /// Upper hemisphere
+    Hemisphere { radius: f32 },
+    /// Cone shape
+    Cone { angle: f32, radius: f32 },
+    /// Box volume
+    Box { half_extents: Vec3 },
+    /// Circle (XZ plane)
+    Circle { radius: f32 },
 }
 
-/// Particle rendering mode
+impl Default for EmitterShape {
+    fn default() -> Self {
+        Self::Point
+    }
+}
+
+/// Force affector
 #[derive(Clone, Debug)]
-pub enum ParticleRenderMode {
+pub enum Force {
+    /// Constant directional force
+    Gravity(Vec3),
+    /// Wind with turbulence
+    Wind { direction: Vec3, strength: f32, turbulence: f32 },
+    /// Vortex/swirl
+    Vortex { axis: Vec3, center: Vec3, strength: f32 },
+    /// Velocity damping
+    Drag(f32),
+    /// Noise-based force
+    Turbulence { strength: f32, frequency: f32 },
+    /// Point attractor/repeller
+    Attractor { position: Vec3, strength: f32 },
+    /// Radial force
+    Radial { center: Vec3, strength: f32 },
+}
+
+impl Force {
+    /// Create gravity force
+    pub fn gravity(acceleration: Vec3) -> Self {
+        Self::Gravity(acceleration)
+    }
+
+    /// Create wind force
+    pub fn wind(direction: Vec3, strength: f32, turbulence: f32) -> Self {
+        Self::Wind { direction, strength, turbulence }
+    }
+
+    /// Create vortex force
+    pub fn vortex(axis: Vec3, center: Vec3, strength: f32) -> Self {
+        Self::Vortex { axis, center, strength }
+    }
+
+    /// Create drag force
+    pub fn drag(coefficient: f32) -> Self {
+        Self::Drag(coefficient)
+    }
+
+    /// Create turbulence force
+    pub fn turbulence(strength: f32, frequency: f32) -> Self {
+        Self::Turbulence { strength, frequency }
+    }
+
+    /// Create attractor force
+    pub fn attractor(position: Vec3, strength: f32) -> Self {
+        Self::Attractor { position, strength }
+    }
+
+    /// Create radial force
+    pub fn radial(center: Vec3, strength: f32) -> Self {
+        Self::Radial { center, strength }
+    }
+}
+
+/// Particle render mode
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum RenderMode {
     /// Camera-facing billboards
+    #[default]
     Billboard,
     /// Stretched in velocity direction
-    StretchedBillboard {
-        /// Length scale based on velocity
-        length_scale: f32,
-    },
+    Stretched,
     /// Horizontal billboards
-    HorizontalBillboard,
+    Horizontal,
     /// Vertical billboards
-    VerticalBillboard,
-    /// 3D mesh instances
-    Mesh {
-        /// Geometry to use
-        geometry: GeometryHandle,
-    },
+    Vertical,
 }
 
-/// Particle buffer for storing active particles
-#[derive(Clone, Debug)]
-pub struct ParticleBuffer {
-    /// Active particles
-    pub particles: Vec<Particle>,
-    /// Pool of dead particles for reuse
-    dead_indices: Vec<usize>,
-}
-
-impl ParticleBuffer {
-    /// Create a new particle buffer with capacity
-    pub fn new(capacity: usize) -> Self {
-        Self {
-            particles: Vec::with_capacity(capacity),
-            dead_indices: Vec::with_capacity(capacity),
-        }
-    }
-
-    /// Spawn a new particle, reusing dead slots if available
-    pub fn spawn(&mut self, particle: Particle) -> Option<usize> {
-        if let Some(index) = self.dead_indices.pop() {
-            self.particles[index] = particle;
-            Some(index)
-        } else if self.particles.len() < self.particles.capacity() {
-            let index = self.particles.len();
-            self.particles.push(particle);
-            Some(index)
-        } else {
-            None // At capacity
-        }
-    }
-
-    /// Mark a particle as dead
-    pub fn kill(&mut self, index: usize) {
-        if index < self.particles.len() {
-            self.particles[index].alive = false;
-            self.dead_indices.push(index);
-        }
-    }
-
-    /// Get number of alive particles
-    pub fn alive_count(&self) -> usize {
-        self.particles.len() - self.dead_indices.len()
-    }
-
-    /// Clear all particles
-    pub fn clear(&mut self) {
-        self.particles.clear();
-        self.dead_indices.clear();
-    }
-
-    /// Iterate over alive particles
-    pub fn iter_alive(&self) -> impl Iterator<Item = (usize, &Particle)> {
-        self.particles
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| p.alive)
-    }
-
-    /// Iterate over alive particles mutably
-    pub fn iter_alive_mut(&mut self) -> impl Iterator<Item = (usize, &mut Particle)> {
-        self.particles
-            .iter_mut()
-            .enumerate()
-            .filter(|(_, p)| p.alive)
-    }
+/// Particle blend mode
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum BlendMode {
+    /// Standard alpha blending
+    #[default]
+    Alpha,
+    /// Additive blending (for glowing effects)
+    Additive,
+    /// Multiplicative blending
+    Multiply,
+    /// Premultiplied alpha
+    Premultiplied,
 }
 
 /// System for updating particle systems
@@ -481,21 +536,19 @@ impl System for ParticleUpdateSystem {
     fn run(&mut self, ctx: &mut SystemContext) {
         let dt = ctx.delta_time;
 
-        // Collect entities with particle systems
         let entities: Vec<_> = ctx.world
             .query::<(&ParticleSystem,)>()
             .iter()
             .map(|(e, _)| e)
             .collect();
 
-        // Update each particle system
         for entity in entities {
             if let Some(system) = ctx.world.get_mut::<ParticleSystem>(entity) {
                 if system.playing {
-                    system.elapsed += dt;
+                    system.time += dt;
+                    system.spawn_accumulated += system.emission_rate * dt;
 
-                    // Check duration for non-looping systems
-                    if !system.looping && system.elapsed >= system.duration {
+                    if !system.looping && system.time >= system.duration {
                         system.playing = false;
                     }
                 }
@@ -512,6 +565,333 @@ impl System for ParticleUpdateSystem {
     }
 
     fn priority(&self) -> i32 {
-        10 // Run after most game logic
+        10
+    }
+}
+
+// ============================================================================
+// Internal implementation - not exposed to users
+// ============================================================================
+
+pub(crate) mod internal {
+    use super::*;
+    use bytemuck::{Pod, Zeroable};
+
+    /// GPU particle data
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Pod, Zeroable)]
+    pub struct Particle {
+        pub position: [f32; 3],
+        pub life: f32,
+        pub velocity: [f32; 3],
+        pub max_life: f32,
+        pub color: [f32; 4],
+        pub size: [f32; 2],
+        pub rotation: f32,
+        pub rotation_velocity: f32,
+    }
+
+    /// GPU emitter uniform
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Pod, Zeroable)]
+    pub struct EmitterUniform {
+        pub position: [f32; 4],
+        pub shape_params: [f32; 4],
+        pub direction: [f32; 4],
+        pub emission_rate: f32,
+        pub burst_count: u32,
+        pub spawn_accumulated: f32,
+        pub _pad0: f32,
+        pub lifetime: [f32; 2],
+        pub start_speed: [f32; 2],
+        pub start_size: [f32; 2],
+        pub end_size: [f32; 2],
+        pub start_color: [f32; 4],
+        pub end_color: [f32; 4],
+        pub start_rotation: [f32; 2],
+        pub rotation_speed: [f32; 2],
+    }
+
+    impl Default for EmitterUniform {
+        fn default() -> Self {
+            Self {
+                position: [0.0; 4],
+                shape_params: [0.0; 4],
+                direction: [0.0, 1.0, 0.0, 0.0],
+                emission_rate: 100.0,
+                burst_count: 0,
+                spawn_accumulated: 0.0,
+                _pad0: 0.0,
+                lifetime: [1.0, 2.0],
+                start_speed: [1.0, 2.0],
+                start_size: [0.1, 0.2],
+                end_size: [0.0, 0.1],
+                start_color: [1.0; 4],
+                end_color: [1.0, 1.0, 1.0, 0.0],
+                start_rotation: [0.0; 2],
+                rotation_speed: [0.0; 2],
+            }
+        }
+    }
+
+    /// GPU force affector
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Pod, Zeroable)]
+    pub struct ForceUniform {
+        pub force_type: u32,
+        pub strength: f32,
+        pub _pad: [f32; 2],
+        pub direction: [f32; 4],
+        pub params: [f32; 4],
+    }
+
+    impl Default for ForceUniform {
+        fn default() -> Self {
+            Self {
+                force_type: 0,
+                strength: 0.0,
+                _pad: [0.0; 2],
+                direction: [0.0; 4],
+                params: [0.0; 4],
+            }
+        }
+    }
+
+    /// GPU system uniform
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Pod, Zeroable)]
+    pub struct SystemUniform {
+        pub max_particles: u32,
+        pub active_particles: u32,
+        pub delta_time: f32,
+        pub time: f32,
+        pub simulation_space: u32,
+        pub num_forces: u32,
+        pub gravity_scale: f32,
+        pub _pad: f32,
+        pub bounds_min: [f32; 4],
+        pub bounds_max: [f32; 4],
+    }
+
+    impl Default for SystemUniform {
+        fn default() -> Self {
+            Self {
+                max_particles: 10000,
+                active_particles: 0,
+                delta_time: 0.016,
+                time: 0.0,
+                simulation_space: 0,
+                num_forces: 0,
+                gravity_scale: 1.0,
+                _pad: 0.0,
+                bounds_min: [-1000.0; 4],
+                bounds_max: [1000.0; 4],
+            }
+        }
+    }
+
+    /// GPU render uniform
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Pod, Zeroable)]
+    pub struct RenderUniform {
+        pub render_mode: u32,
+        pub blend_mode: u32,
+        pub sort_mode: u32,
+        pub soft_particles_enabled: u32,
+        pub soft_particles_distance: f32,
+        pub length_scale: f32,
+        pub speed_scale: f32,
+        pub _pad: f32,
+        pub sprite_sheet_size: [f32; 2],
+        pub animation_speed: f32,
+        pub _pad2: f32,
+    }
+
+    impl Default for RenderUniform {
+        fn default() -> Self {
+            Self {
+                render_mode: 0,
+                blend_mode: 0,
+                sort_mode: 0,
+                soft_particles_enabled: 0,
+                soft_particles_distance: 0.5,
+                length_scale: 1.0,
+                speed_scale: 0.1,
+                _pad: 0.0,
+                sprite_sheet_size: [1.0, 1.0],
+                animation_speed: 1.0,
+                _pad2: 0.0,
+            }
+        }
+    }
+
+    fn shape_to_type(shape: &EmitterShape) -> u32 {
+        match shape {
+            EmitterShape::Point => 0,
+            EmitterShape::Sphere { .. } => 1,
+            EmitterShape::Hemisphere { .. } => 2,
+            EmitterShape::Cone { .. } => 3,
+            EmitterShape::Box { .. } => 4,
+            EmitterShape::Circle { .. } => 5,
+        }
+    }
+
+    fn shape_to_params(shape: &EmitterShape) -> [f32; 4] {
+        match shape {
+            EmitterShape::Point => [0.0; 4],
+            EmitterShape::Sphere { radius } => [*radius, 0.0, 0.0, 0.0],
+            EmitterShape::Hemisphere { radius } => [*radius, 0.0, 0.0, 0.0],
+            EmitterShape::Cone { angle, radius } => [*angle, *radius, 0.0, 0.0],
+            EmitterShape::Box { half_extents } => [half_extents.x, half_extents.y, half_extents.z, 0.0],
+            EmitterShape::Circle { radius } => [*radius, 0.0, 0.0, 0.0],
+        }
+    }
+
+    /// Build emitter uniform from ParticleSystem
+    pub fn build_emitter_uniform(system: &ParticleSystem, position: Vec3) -> EmitterUniform {
+        EmitterUniform {
+            position: [position.x, position.y, position.z, shape_to_type(&system.emitter) as f32],
+            shape_params: shape_to_params(&system.emitter),
+            direction: [system.direction.x, system.direction.y, system.direction.z, system.direction_randomness],
+            emission_rate: system.emission_rate,
+            burst_count: 0,
+            spawn_accumulated: system.spawn_accumulated,
+            _pad0: 0.0,
+            lifetime: [system.lifetime.0, system.lifetime.1],
+            start_speed: [system.start_speed.0, system.start_speed.1],
+            start_size: [system.start_size.0, system.start_size.1],
+            end_size: [system.end_size.0, system.end_size.1],
+            start_color: [system.start_color.r, system.start_color.g, system.start_color.b, system.start_color.a],
+            end_color: [system.end_color.r, system.end_color.g, system.end_color.b, system.end_color.a],
+            start_rotation: [system.start_rotation.0, system.start_rotation.1],
+            rotation_speed: [system.rotation_speed.0, system.rotation_speed.1],
+        }
+    }
+
+    /// Build force uniform from Force
+    pub fn build_force_uniform(force: &Force) -> ForceUniform {
+        match force {
+            Force::Gravity(dir) => ForceUniform {
+                force_type: 0,
+                strength: 1.0,
+                direction: [dir.x, dir.y, dir.z, 0.0],
+                ..Default::default()
+            },
+            Force::Wind { direction, strength, turbulence } => ForceUniform {
+                force_type: 1,
+                strength: *strength,
+                direction: [direction.x, direction.y, direction.z, 0.0],
+                params: [*turbulence, 0.0, 0.0, 0.0],
+                ..Default::default()
+            },
+            Force::Vortex { axis, center, strength } => ForceUniform {
+                force_type: 2,
+                strength: *strength,
+                direction: [axis.x, axis.y, axis.z, 0.0],
+                params: [center.x, center.y, center.z, 0.0],
+                ..Default::default()
+            },
+            Force::Drag(coefficient) => ForceUniform {
+                force_type: 3,
+                strength: *coefficient,
+                ..Default::default()
+            },
+            Force::Turbulence { strength, frequency } => ForceUniform {
+                force_type: 4,
+                strength: *strength,
+                params: [*frequency, 0.0, 0.0, 0.0],
+                ..Default::default()
+            },
+            Force::Attractor { position, strength } => ForceUniform {
+                force_type: 5,
+                strength: *strength,
+                direction: [position.x, position.y, position.z, 0.0],
+                ..Default::default()
+            },
+            Force::Radial { center, strength } => ForceUniform {
+                force_type: 6,
+                strength: *strength,
+                direction: [center.x, center.y, center.z, 0.0],
+                ..Default::default()
+            },
+        }
+    }
+
+    /// Build system uniform
+    pub fn build_system_uniform(system: &ParticleSystem, dt: f32) -> SystemUniform {
+        SystemUniform {
+            max_particles: system.max_particles,
+            active_particles: 0,
+            delta_time: dt,
+            time: system.time,
+            simulation_space: 0,
+            num_forces: system.forces.len() as u32,
+            gravity_scale: system.gravity_scale,
+            ..Default::default()
+        }
+    }
+
+    /// Build render uniform
+    pub fn build_render_uniform(system: &ParticleSystem) -> RenderUniform {
+        RenderUniform {
+            render_mode: system.render_mode as u32,
+            blend_mode: system.blend_mode as u32,
+            sort_mode: 0,
+            soft_particles_enabled: if system.soft_particles { 1 } else { 0 },
+            soft_particles_distance: system.soft_particle_distance,
+            length_scale: system.length_scale,
+            speed_scale: system.speed_scale,
+            _pad: 0.0,
+            sprite_sheet_size: system.sprite_sheet.map(|(c, r)| [c as f32, r as f32]).unwrap_or([1.0, 1.0]),
+            animation_speed: system.animation_speed,
+            _pad2: 0.0,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_particle_presets() {
+        let fire = ParticleSystem::fire();
+        assert!(fire.emission_rate > 100.0);
+        assert!(!fire.forces.is_empty());
+    }
+
+    #[test]
+    fn test_particle_builder() {
+        let system = ParticleSystem::new()
+            .with_emission_rate(200.0)
+            .with_lifetime(1.0, 3.0)
+            .with_force(Force::gravity(Vec3::new(0.0, -9.8, 0.0)));
+
+        assert!((system.emission_rate - 200.0).abs() < 0.001);
+        assert!((system.lifetime.0 - 1.0).abs() < 0.001);
+        assert_eq!(system.forces.len(), 1);
+    }
+
+    #[test]
+    fn test_burst() {
+        let mut system = ParticleSystem::explosion();
+        system.burst(100);
+        assert!((system.spawn_accumulated - 100.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_control_methods() {
+        let mut system = ParticleSystem::new();
+        assert!(system.playing);
+
+        system.pause();
+        assert!(!system.playing);
+
+        system.play();
+        assert!(system.playing);
+
+        system.stop();
+        assert!(!system.playing);
+        assert!((system.time - 0.0).abs() < 0.001);
     }
 }

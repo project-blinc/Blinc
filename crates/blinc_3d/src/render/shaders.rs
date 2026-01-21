@@ -24,6 +24,14 @@ pub enum ShaderId {
     ShadowMap,
     /// Post-process shader
     PostProcess,
+    /// Terrain rendering shader
+    Terrain,
+    /// Water body rendering shader
+    Water,
+    /// Particle compute shader (simulation)
+    ParticleCompute,
+    /// Particle render shader (drawing)
+    ParticleRender,
     /// Custom shader with ID
     Custom(u32),
 }
@@ -86,6 +94,26 @@ impl ShaderRegistry {
             device,
             ShaderId::ShadowMap,
             include_str!("shaders/shadow_map.wgsl"),
+        );
+        self.register(
+            device,
+            ShaderId::Terrain,
+            include_str!("shaders/terrain.wgsl"),
+        );
+        self.register(
+            device,
+            ShaderId::Water,
+            include_str!("shaders/water.wgsl"),
+        );
+        self.register(
+            device,
+            ShaderId::ParticleCompute,
+            include_str!("shaders/particle_compute.wgsl"),
+        );
+        self.register(
+            device,
+            ShaderId::ParticleRender,
+            include_str!("shaders/particle_render.wgsl"),
         );
     }
 
