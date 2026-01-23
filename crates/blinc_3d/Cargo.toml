@@ -28,6 +28,8 @@ rustc-hash.workspace = true
 
 # Utilities
 tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 # Optional dependencies for mesh loading
 gltf = { version = "1.4", optional = true }

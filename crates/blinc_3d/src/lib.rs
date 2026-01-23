@@ -45,6 +45,9 @@ pub mod render;
 // SDF system (always available, feature flag controls extended functionality)
 pub mod sdf;
 
+// Node graph system
+pub mod nodegraph;
+
 // Blinc integration
 pub mod integration;
 
@@ -76,3 +79,4 @@ pub use materials::{BasicMaterial, Material, PhongMaterial, Side, StandardMateri
 pub use math::{BoundingBox, BoundingSphere, Quat};
 pub use scene::{Mesh, Object3D, OrthographicCamera, PerspectiveCamera};
 pub use sdf::{SdfMaterial, SdfNode, SdfScene};
+pub use nodegraph::{Connection, Node, NodeGraphSystem, NodePorts, NodeValue, OnTrigger, PortDef, PortDirection, PortType, PortTypeId, TriggerContext, Triggered};

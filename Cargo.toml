@@ -80,8 +80,8 @@ serde_json = "1.0"
 toml = "0.8"
 
 # Data structures
-slotmap = "1.0"
-smallvec = "1.11"
+slotmap = { version = "1.0", features = ["serde"] }
+smallvec = { version = "1.11", features = ["serde"] }
 rustc-hash = "2.0"
 indexmap = "2.7"
 lru = "0.12"

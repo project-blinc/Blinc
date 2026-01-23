@@ -40,7 +40,7 @@ pub enum MaterialType {
 }
 
 /// Handle to a material resource
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MaterialHandle(pub u64);
 
 impl Default for MaterialHandle {

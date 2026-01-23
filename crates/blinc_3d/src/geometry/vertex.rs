@@ -153,7 +153,7 @@ impl Geometry {
 }
 
 /// Handle to a shared geometry resource
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct GeometryHandle(pub u64);
 
 impl Default for GeometryHandle {

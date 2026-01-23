@@ -46,6 +46,13 @@ pub use crate::math::{BoundingBox, BoundingSphere, Quat};
 // SDF
 pub use crate::sdf::{SdfMaterial, SdfNode, SdfOp, SdfPrimitive, SdfScene};
 
+// Node Graph
+pub use crate::nodegraph::{
+    Connection, Node, NodeGraphSystem, NodePorts, NodeValue, OnTrigger, Port, PortDef,
+    PortDirection, PortType, PortTypeId, TriggerContext, Triggered,
+};
+pub use crate::nodegraph::builtin::BuiltinNode;
+
 // Render
 pub use crate::render::{CameraUniform, GamePipelines, ModelUniform, ShaderRegistry, ShaderId};
 

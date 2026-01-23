@@ -6,7 +6,7 @@ use blinc_core::{Mat4, Vec3};
 /// Quaternion for representing 3D rotations
 ///
 /// Quaternions avoid gimbal lock and interpolate smoothly.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
 pub struct Quat {
     pub x: f32,
