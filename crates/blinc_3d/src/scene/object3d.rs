@@ -135,11 +135,15 @@ impl Object3D {
 
     /// Look at a target position
     pub fn look_at(&mut self, target: Vec3) {
-        let forward = Vec3::new(
+        // Calculate direction from position to target
+        let dir = Vec3::new(
             target.x - self.position.x,
             target.y - self.position.y,
             target.z - self.position.z,
         );
+        // Negate because forward() returns -Z in local space,
+        // but Quat::look_at treats input as +Z direction
+        let forward = Vec3::new(-dir.x, -dir.y, -dir.z);
         self.rotation = Quat::look_at(forward, Vec3::new(0.0, 1.0, 0.0));
     }
 

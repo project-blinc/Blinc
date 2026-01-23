@@ -17,7 +17,7 @@ use blinc_3d::nodegraph::{Connection, Node, NodeGraphSystem, NodeValue, Triggere
 use blinc_3d::prelude::*;
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
-use blinc_core::{BlincContextState, Brush, Color, CornerRadius, DrawContext, Path, Rect, State, Stroke, Vec2};
+use blinc_core::{Brush, Color, CornerRadius, DrawContext, Path, Rect,  Stroke, Vec2};
 use std::sync::{Arc, Mutex};
 
 fn main() -> Result<()> {
@@ -378,7 +378,7 @@ fn header_section() -> Div {
     const HEADER_HEIGHT: f32 = 24.0;
     const BODY_PADDING: f32 = 8.0;
     const PORT_HEIGHT: f32 = 22.0;
-    const PORT_GAP: f32 = 4.0;
+    const PORT_GAP: f32 = 4.0 * 4.0;
 fn graph_area(
     _ctx: &WindowedContext,
     nodes: Vec<VisualNode>,
@@ -673,7 +673,7 @@ fn node_div(node: &VisualNode) -> Div {
                 .w_full()
                 .p(2.0)
                 .flex_row()
-                .gap(PORT_GAP)
+                .justify_between()
                 .child(inputs_col)
                 .child(outputs_col),
         )

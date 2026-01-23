@@ -32,7 +32,6 @@
 
 use super::Entity;
 use rustc_hash::FxHashMap;
-use slotmap::SlotMap;
 use std::any::{Any, TypeId};
 
 /// Storage strategy for components
@@ -111,12 +110,12 @@ pub trait ComponentStorage: Any + Send + Sync {
     }
 }
 
-/// Dense storage using SlotMap
+/// Dense storage using HashMap with Entity keys
 ///
 /// Optimized for common components that most entities have.
-/// Provides O(1) access and cache-friendly iteration.
+/// Provides O(1) access via the entity key.
 pub struct DenseStorage<T: Component> {
-    components: SlotMap<Entity, T>,
+    components: FxHashMap<Entity, T>,
 }
 
 impl<T: Component> Default for DenseStorage<T> {
@@ -129,35 +128,33 @@ impl<T: Component> DenseStorage<T> {
     /// Create new dense storage
     pub fn new() -> Self {
         Self {
-            components: SlotMap::with_key(),
+            components: FxHashMap::default(),
         }
     }
 
     /// Insert a component for an entity
     pub fn insert(&mut self, entity: Entity, component: T) {
-        // Note: SlotMap uses its own key, so we use a secondary map
-        // For now, we'll store with the entity key directly
-        self.components.insert(component);
+        self.components.insert(entity, component);
     }
 
     /// Get a component reference
     pub fn get(&self, entity: Entity) -> Option<&T> {
-        self.components.get(entity)
+        self.components.get(&entity)
     }
 
     /// Get a mutable component reference
     pub fn get_mut(&mut self, entity: Entity) -> Option<&mut T> {
-        self.components.get_mut(entity)
+        self.components.get_mut(&entity)
     }
 
     /// Iterate over all components
     pub fn iter(&self) -> impl Iterator<Item = (Entity, &T)> {
-        self.components.iter()
+        self.components.iter().map(|(&e, c)| (e, c))
     }
 
     /// Iterate over all components mutably
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (Entity, &mut T)> {
-        self.components.iter_mut()
+        self.components.iter_mut().map(|(&e, c)| (e, c))
     }
 }
 
@@ -171,11 +168,11 @@ impl<T: Component> ComponentStorage for DenseStorage<T> {
     }
 
     fn remove(&mut self, entity: Entity) -> bool {
-        self.components.remove(entity).is_some()
+        self.components.remove(&entity).is_some()
     }
 
     fn contains(&self, entity: Entity) -> bool {
-        self.components.contains_key(entity)
+        self.components.contains_key(&entity)
     }
 
     fn len(&self) -> usize {

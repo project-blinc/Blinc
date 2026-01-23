@@ -447,7 +447,7 @@ fn render_meshes(ctx: &mut dyn DrawContext, world: &World, bounds: CanvasBounds,
     triangles.sort_by(|a, b| b.depth.partial_cmp(&a.depth).unwrap_or(std::cmp::Ordering::Equal));
 
     // Draw filled triangles
-    for tri in triangles {
+    for tri in &triangles {
         let path = Path::new()
             .move_to(tri.p0.0, tri.p0.1)
             .line_to(tri.p1.0, tri.p1.1)

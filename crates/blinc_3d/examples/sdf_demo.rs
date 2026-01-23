@@ -206,9 +206,10 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
 fn sdf_demos_grid(demos: Vec<SdfDemo>) -> Div {
     let mut grid = div()
         .flex_1()
+        .w_full()
         .flex_row()
         .flex_wrap()
-        .gap(12.0)
+        .gap(4.0)
         .items_start();
 
     for demo in demos {
@@ -226,7 +227,7 @@ fn sdf_demo_card(demo: SdfDemo) -> Div {
     let wgsl_short = wgsl_lines.join("\n");
 
     div()
-        .w(200.0)
+        .w(300.0)
         .bg(Color::rgba(0.1, 0.1, 0.14, 1.0))
         .rounded(8.0)
         .flex_col()
@@ -234,7 +235,8 @@ fn sdf_demo_card(demo: SdfDemo) -> Div {
         // Info header
         .child(
             div()
-                .p(12.0)
+            .w_full()
+                .p(3.0)
                 .flex_col()
                 .gap(4.0)
                 .child(text(demo.name).size(14.0).color(Color::WHITE))
@@ -247,8 +249,9 @@ fn sdf_demo_card(demo: SdfDemo) -> Div {
         // WGSL preview
         .child(
             div()
-                .px(12.0)
-                .pb(12.0)
+            .w_full()
+                .px(3.0)
+                .pb(3.0)
                 .child(
                     code(&format!("{}...", wgsl_short))
                         .font_size(8.0)
@@ -258,8 +261,9 @@ fn sdf_demo_card(demo: SdfDemo) -> Div {
         // Scene type indicator
         .child(
             div()
-                .px(12.0)
-                .pb(12.0)
+            .w_full() 
+                .px(3.0)
+                .pb(3.0)
                 .child(
                     scene_type_badge(&demo.scene),
                 ),
