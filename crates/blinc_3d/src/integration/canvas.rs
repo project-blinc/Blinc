@@ -84,6 +84,11 @@ pub fn render_scene_with_config(
     bounds: CanvasBounds,
     _config: &RenderConfig,
 ) {
+    use blinc_core::{ClipShape, Rect};
+
+    // Push clip to constrain rendering to canvas bounds
+    ctx.push_clip(ClipShape::Rect(Rect::new(0.0, 0.0, bounds.width, bounds.height)));
+
     // Get camera transform
     let camera_transform = world
         .get_component::<Object3D>(camera_entity)
@@ -123,6 +128,9 @@ pub fn render_scene_with_config(
 
     // Render meshes with CPU wireframe projection
     render_meshes(ctx, world, bounds, &core_camera);
+
+    // Pop the clip region
+    ctx.pop_clip();
 }
 
 /// Add all lights from the world to the draw context
@@ -171,10 +179,131 @@ fn add_lights_to_context(ctx: &mut dyn DrawContext, world: &World) {
     }
 }
 
-/// Render all visible meshes with CPU wireframe projection
+/// Triangle data for sorting and rendering
+struct ProjectedTriangle {
+    /// Screen coordinates of vertices
+    p0: (f32, f32),
+    p1: (f32, f32),
+    p2: (f32, f32),
+    /// Average depth for sorting (larger = further)
+    depth: f32,
+    /// Shaded color
+    color: Color,
+}
+
+/// Collect lights from the world for shading
+struct SceneLights {
+    ambient: Color,
+    ambient_intensity: f32,
+    /// Main directional light direction (normalized)
+    dir_light_dir: Vec3,
+    dir_light_color: Color,
+    dir_light_intensity: f32,
+}
+
+impl Default for SceneLights {
+    fn default() -> Self {
+        Self {
+            ambient: Color::WHITE,
+            ambient_intensity: 0.2,
+            dir_light_dir: Vec3::new(0.5, 0.8, 0.3).normalize(),
+            dir_light_color: Color::WHITE,
+            dir_light_intensity: 0.8,
+        }
+    }
+}
+
+fn collect_scene_lights(world: &World) -> SceneLights {
+    use crate::lights::{AmbientLight, DirectionalLight};
+
+    let mut lights = SceneLights::default();
+
+    // Get ambient light
+    for (_entity, ambient) in world.query::<&AmbientLight>().iter() {
+        lights.ambient = ambient.color;
+        lights.ambient_intensity = ambient.intensity;
+        break;
+    }
+
+    // Get first directional light
+    for (_entity, (light, transform)) in world.query::<(&DirectionalLight, &Object3D)>().iter() {
+        lights.dir_light_dir = transform.forward().normalize();
+        lights.dir_light_color = light.color;
+        lights.dir_light_intensity = light.intensity;
+        break;
+    }
+
+    lights
+}
+
+/// Get material color supporting all material types
+fn get_material_color(world: &World, material_handle: crate::materials::MaterialHandle) -> (Color, f32, f32) {
+    use crate::materials::{BasicMaterial, PhongMaterial, StandardMaterial};
+
+    // Try StandardMaterial first (PBR)
+    if let Some(mat) = world.get_material_as::<StandardMaterial>(material_handle) {
+        return (mat.color, mat.metalness, mat.roughness);
+    }
+
+    // Try PhongMaterial
+    if let Some(mat) = world.get_material_as::<PhongMaterial>(material_handle) {
+        return (mat.color, 0.0, 1.0 / (mat.shininess + 1.0));
+    }
+
+    // Try BasicMaterial
+    if let Some(mat) = world.get_material_as::<BasicMaterial>(material_handle) {
+        return (mat.color, 0.0, 1.0);
+    }
+
+    // Default
+    (Color::WHITE, 0.0, 0.5)
+}
+
+/// Apply simple lighting to a base color
+fn shade_color(base_color: Color, normal: Vec3, lights: &SceneLights, metalness: f32, roughness: f32) -> Color {
+    // Ambient contribution
+    let ambient = Color::rgb(
+        base_color.r * lights.ambient.r * lights.ambient_intensity,
+        base_color.g * lights.ambient.g * lights.ambient_intensity,
+        base_color.b * lights.ambient.b * lights.ambient_intensity,
+    );
+
+    // Diffuse lighting (Lambertian)
+    let n_dot_l = normal.dot(lights.dir_light_dir).max(0.0);
+    let diffuse_strength = n_dot_l * lights.dir_light_intensity * (1.0 - metalness * 0.5);
+
+    let diffuse = Color::rgb(
+        base_color.r * lights.dir_light_color.r * diffuse_strength,
+        base_color.g * lights.dir_light_color.g * diffuse_strength,
+        base_color.b * lights.dir_light_color.b * diffuse_strength,
+    );
+
+    // Simple specular highlight for metallic surfaces
+    let spec_strength = if metalness > 0.5 {
+        (1.0 - roughness) * metalness * n_dot_l.powf(2.0 + (1.0 - roughness) * 30.0) * 0.5
+    } else {
+        0.0
+    };
+
+    let specular = Color::rgb(
+        lights.dir_light_color.r * spec_strength,
+        lights.dir_light_color.g * spec_strength,
+        lights.dir_light_color.b * spec_strength,
+    );
+
+    // Combine and clamp
+    Color::rgba(
+        (ambient.r + diffuse.r + specular.r).min(1.0),
+        (ambient.g + diffuse.g + specular.g).min(1.0),
+        (ambient.b + diffuse.b + specular.b).min(1.0),
+        base_color.a,
+    )
+}
+
+/// Render all visible meshes with filled triangles and basic lighting
 fn render_meshes(ctx: &mut dyn DrawContext, world: &World, bounds: CanvasBounds, camera: &Camera) {
-    use crate::materials::BasicMaterial;
     use crate::scene::Mesh;
+    use blinc_core::{Brush, Path};
 
     let view_matrix = Mat4::look_at_rh(camera.position, camera.target, camera.up);
     let proj_matrix = match camera.projection {
@@ -186,6 +315,12 @@ fn render_meshes(ctx: &mut dyn DrawContext, world: &World, bounds: CanvasBounds,
         }
     };
     let view_proj = proj_matrix.mul(&view_matrix);
+
+    // Collect scene lights
+    let lights = collect_scene_lights(world);
+
+    // Collect all triangles for depth sorting
+    let mut triangles: Vec<ProjectedTriangle> = Vec::new();
 
     // Query all entities with Mesh and Object3D
     for (_entity, (mesh, transform)) in world.query::<(&Mesh, &Object3D)>().iter() {
@@ -199,56 +334,18 @@ fn render_meshes(ctx: &mut dyn DrawContext, world: &World, bounds: CanvasBounds,
             continue;
         };
 
-        // Get material color (default to white if not BasicMaterial)
-        let color = world
-            .get_material_as::<BasicMaterial>(mesh.material)
-            .map(|m| m.color)
-            .unwrap_or(Color::WHITE);
+        // Get material properties
+        let (base_color, metalness, roughness) = get_material_color(world, mesh.material);
 
         // Get model matrix
         let model_matrix = transform.local_matrix();
         let mvp = view_proj.mul(&model_matrix);
+        let normal_matrix = model_matrix.inverse().transpose();
 
-        // Project and draw wireframe edges
         let vertices = &geometry.vertices;
         let indices = &geometry.indices;
 
-        // Helper to project a 3D point to screen coordinates with perspective divide
-        let project = |v: &crate::geometry::Vertex| -> Option<(f32, f32)> {
-            let px = v.position[0];
-            let py = v.position[1];
-            let pz = v.position[2];
-
-            // Manual 4x4 matrix * vec4 multiplication to get clip coordinates
-            let clip_x = mvp.cols[0][0] * px + mvp.cols[1][0] * py + mvp.cols[2][0] * pz + mvp.cols[3][0];
-            let clip_y = mvp.cols[0][1] * px + mvp.cols[1][1] * py + mvp.cols[2][1] * pz + mvp.cols[3][1];
-            let clip_z = mvp.cols[0][2] * px + mvp.cols[1][2] * py + mvp.cols[2][2] * pz + mvp.cols[3][2];
-            let clip_w = mvp.cols[0][3] * px + mvp.cols[1][3] * py + mvp.cols[2][3] * pz + mvp.cols[3][3];
-
-            // Clip if behind camera (w <= 0)
-            if clip_w <= 0.0001 {
-                return None;
-            }
-
-            // Perspective divide to get NDC
-            let ndc_x = clip_x / clip_w;
-            let ndc_y = clip_y / clip_w;
-            let ndc_z = clip_z / clip_w;
-
-            // Cull if outside NDC bounds
-            if ndc_z < 0.0 || ndc_z > 1.0 {
-                return None;
-            }
-
-            // NDC to screen coordinates
-            // NDC x/y is -1 to 1, we map to 0 to viewport size
-            let screen_x = (ndc_x + 1.0) * 0.5 * bounds.width;
-            let screen_y = (1.0 - ndc_y) * 0.5 * bounds.height; // Flip Y
-
-            Some((screen_x, screen_y))
-        };
-
-        // Draw triangles as wireframe
+        // Process triangles
         for chunk in indices.chunks(3) {
             if chunk.len() < 3 {
                 continue;
@@ -261,49 +358,105 @@ fn render_meshes(ctx: &mut dyn DrawContext, world: &World, bounds: CanvasBounds,
                 continue;
             }
 
-            let p0 = project(&vertices[i0]);
-            let p1 = project(&vertices[i1]);
-            let p2 = project(&vertices[i2]);
+            let v0 = &vertices[i0];
+            let v1 = &vertices[i1];
+            let v2 = &vertices[i2];
 
-            // Draw edges if both endpoints are visible
-            if let (Some((x0, y0)), Some((x1, y1))) = (p0, p1) {
-                draw_line(ctx, x0, y0, x1, y1, color);
+            // Project vertices to screen
+            let project_with_depth = |v: &crate::geometry::Vertex| -> Option<(f32, f32, f32)> {
+                let px = v.position[0];
+                let py = v.position[1];
+                let pz = v.position[2];
+
+                let clip_x = mvp.cols[0][0] * px + mvp.cols[1][0] * py + mvp.cols[2][0] * pz + mvp.cols[3][0];
+                let clip_y = mvp.cols[0][1] * px + mvp.cols[1][1] * py + mvp.cols[2][1] * pz + mvp.cols[3][1];
+                let clip_z = mvp.cols[0][2] * px + mvp.cols[1][2] * py + mvp.cols[2][2] * pz + mvp.cols[3][2];
+                let clip_w = mvp.cols[0][3] * px + mvp.cols[1][3] * py + mvp.cols[2][3] * pz + mvp.cols[3][3];
+
+                if clip_w <= 0.0001 {
+                    return None;
+                }
+
+                let ndc_x = clip_x / clip_w;
+                let ndc_y = clip_y / clip_w;
+                let ndc_z = clip_z / clip_w;
+
+                if ndc_z < -0.1 || ndc_z > 1.1 {
+                    return None;
+                }
+
+                let screen_x = (ndc_x + 1.0) * 0.5 * bounds.width;
+                let screen_y = (1.0 - ndc_y) * 0.5 * bounds.height;
+
+                Some((screen_x, screen_y, ndc_z))
+            };
+
+            let p0 = project_with_depth(v0);
+            let p1 = project_with_depth(v1);
+            let p2 = project_with_depth(v2);
+
+            // All three vertices must be visible
+            let (Some((x0, y0, z0)), Some((x1, y1, z1)), Some((x2, y2, z2))) = (p0, p1, p2) else {
+                continue;
+            };
+
+            // Back-face culling using cross product in screen space
+            let edge1_x = x1 - x0;
+            let edge1_y = y1 - y0;
+            let edge2_x = x2 - x0;
+            let edge2_y = y2 - y0;
+            let cross = edge1_x * edge2_y - edge1_y * edge2_x;
+            if cross < 0.0 {
+                continue; // Back-facing
             }
-            if let (Some((x1, y1)), Some((x2, y2))) = (p1, p2) {
-                draw_line(ctx, x1, y1, x2, y2, color);
-            }
-            if let (Some((x2, y2)), Some((x0, y0))) = (p2, p0) {
-                draw_line(ctx, x2, y2, x0, y0, color);
-            }
+
+            // Calculate face normal in world space for shading
+            let n0 = Vec3::new(v0.normal[0], v0.normal[1], v0.normal[2]);
+            let n1 = Vec3::new(v1.normal[0], v1.normal[1], v1.normal[2]);
+            let n2 = Vec3::new(v2.normal[0], v2.normal[1], v2.normal[2]);
+            let avg_normal = Vec3::new(
+                (n0.x + n1.x + n2.x) / 3.0,
+                (n0.y + n1.y + n2.y) / 3.0,
+                (n0.z + n1.z + n2.z) / 3.0,
+            );
+
+            // Transform normal by normal matrix
+            let world_normal = Vec3::new(
+                normal_matrix.cols[0][0] * avg_normal.x + normal_matrix.cols[1][0] * avg_normal.y + normal_matrix.cols[2][0] * avg_normal.z,
+                normal_matrix.cols[0][1] * avg_normal.x + normal_matrix.cols[1][1] * avg_normal.y + normal_matrix.cols[2][1] * avg_normal.z,
+                normal_matrix.cols[0][2] * avg_normal.x + normal_matrix.cols[1][2] * avg_normal.y + normal_matrix.cols[2][2] * avg_normal.z,
+            ).normalize();
+
+            // Apply shading
+            let shaded_color = shade_color(base_color, world_normal, &lights, metalness, roughness);
+
+            // Average depth for sorting
+            let avg_depth = (z0 + z1 + z2) / 3.0;
+
+            triangles.push(ProjectedTriangle {
+                p0: (x0, y0),
+                p1: (x1, y1),
+                p2: (x2, y2),
+                depth: avg_depth,
+                color: shaded_color,
+            });
         }
     }
-}
 
-/// Draw a line using small rectangles (since DrawContext doesn't have line primitives)
-fn draw_line(ctx: &mut dyn DrawContext, x0: f32, y0: f32, x1: f32, y1: f32, color: Color) {
-    use blinc_core::{Brush, CornerRadius, Rect};
+    // Sort triangles back-to-front (painter's algorithm)
+    triangles.sort_by(|a, b| b.depth.partial_cmp(&a.depth).unwrap_or(std::cmp::Ordering::Equal));
 
-    let dx = x1 - x0;
-    let dy = y1 - y0;
-    let length = (dx * dx + dy * dy).sqrt();
-
-    if length < 0.5 {
-        return;
-    }
-
-    // Draw line as a series of small squares
-    let steps = (length / 2.0).max(1.0) as i32;
-    for i in 0..steps {
-        let t = i as f32 / steps as f32;
-        let x = x0 + dx * t;
-        let y = y0 + dy * t;
-        ctx.fill_rect(
-            Rect::new(x - 0.5, y - 0.5, 1.5, 1.5),
-            CornerRadius::ZERO,
-            Brush::Solid(color),
-        );
+    // Draw filled triangles
+    for tri in triangles {
+        let path = Path::new()
+            .move_to(tri.p0.0, tri.p0.1)
+            .line_to(tri.p1.0, tri.p1.1)
+            .line_to(tri.p2.0, tri.p2.1)
+            .close();
+        ctx.fill_path(&path, Brush::Solid(tri.color));
     }
 }
+
 
 /// Scene renderer that can be used with canvas callbacks
 pub struct SceneRenderer {

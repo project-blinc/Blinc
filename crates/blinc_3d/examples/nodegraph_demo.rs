@@ -371,11 +371,6 @@ fn header_section() -> Div {
 // Graph Area - Stack with canvas (grid) + div layer (nodes)
 // ============================================================================
 
-fn graph_area(
-    _ctx: &WindowedContext,
-    nodes: Vec<VisualNode>,
-    connections: Vec<VisualConnection>,
-) -> Div {
     // Compute port positions from node positions
     // Node layout: header (~24px) + body padding (8px) + ports
     // Each port row is ~22px tall with 4px gap
@@ -384,7 +379,11 @@ fn graph_area(
     const BODY_PADDING: f32 = 8.0;
     const PORT_HEIGHT: f32 = 22.0;
     const PORT_GAP: f32 = 4.0;
-
+fn graph_area(
+    _ctx: &WindowedContext,
+    nodes: Vec<VisualNode>,
+    connections: Vec<VisualConnection>,
+) -> Div {
     let mut port_positions = Vec::new();
 
     for node in &nodes {
@@ -674,7 +673,7 @@ fn node_div(node: &VisualNode) -> Div {
                 .w_full()
                 .p(2.0)
                 .flex_row()
-                .justify_between()
+                .gap(PORT_GAP)
                 .child(inputs_col)
                 .child(outputs_col),
         )

@@ -777,6 +777,29 @@ impl GpuRenderer {
         }
     }
 
+    /// Safely write primitives to buffer, truncating if necessary to prevent overflow
+    fn write_primitives_safe(&self, primitives: &[GpuPrimitive]) {
+        if primitives.is_empty() {
+            return;
+        }
+        let max_primitives = self.config.max_primitives;
+        let primitives_to_write = if primitives.len() > max_primitives {
+            tracing::warn!(
+                "Primitive count {} exceeds buffer capacity {}, truncating",
+                primitives.len(),
+                max_primitives
+            );
+            &primitives[..max_primitives]
+        } else {
+            primitives
+        };
+        self.queue.write_buffer(
+            &self.buffers.primitives,
+            0,
+            bytemuck::cast_slice(primitives_to_write),
+        );
+    }
+
     /// Create a new renderer without a surface (for headless rendering)
     pub async fn new(config: RendererConfig) -> Result<Self, RendererError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -2788,12 +2811,23 @@ impl GpuRenderer {
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 
-        // Update primitives buffer
+        // Update primitives buffer (with safety limit to prevent buffer overflow)
         if !batch.primitives.is_empty() {
+            let max_primitives = self.config.max_primitives;
+            let primitives_to_write = if batch.primitives.len() > max_primitives {
+                tracing::warn!(
+                    "Primitive count {} exceeds buffer capacity {}, truncating",
+                    batch.primitives.len(),
+                    max_primitives
+                );
+                &batch.primitives[..max_primitives]
+            } else {
+                &batch.primitives
+            };
             self.queue.write_buffer(
                 &self.buffers.primitives,
                 0,
-                bytemuck::cast_slice(&batch.primitives),
+                bytemuck::cast_slice(primitives_to_write),
             );
         }
 
@@ -3268,14 +3302,8 @@ impl GpuRenderer {
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 
-        // Update primitives buffer
-        if !batch.primitives.is_empty() {
-            self.queue.write_buffer(
-                &self.buffers.primitives,
-                0,
-                bytemuck::cast_slice(&batch.primitives),
-            );
-        }
+        // Update primitives buffer (using safe write to prevent overflow)
+        self.write_primitives_safe(&batch.primitives);
 
         // Update path buffers if we have path geometry
         let has_paths = !batch.paths.vertices.is_empty() && !batch.paths.indices.is_empty();
