@@ -41,6 +41,8 @@ parry3d = { version = "0.17", optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
+blinc_app = { path = "../blinc_app", features = ["windowed"] }
+tracing-subscriber.workspace = true
 
 [features]
 default = []

@@ -73,6 +73,10 @@ pub struct World {
     components: ComponentRegistry,
     /// Global resources
     resources: ResourceMap,
+    /// Geometry storage (handle -> geometry)
+    geometries: FxHashMap<u64, super::super::geometry::Geometry>,
+    /// Material storage (handle -> boxed material)
+    materials: FxHashMap<u64, Box<dyn std::any::Any + Send + Sync>>,
     /// Geometry handles
     next_geometry_id: u64,
     /// Material handles
@@ -94,6 +98,8 @@ impl World {
             entities: EntityManager::new(),
             components: ComponentRegistry::new(),
             resources: ResourceMap::new(),
+            geometries: FxHashMap::default(),
+            materials: FxHashMap::default(),
             next_geometry_id: 1,
             next_material_id: 1,
             next_texture_id: 1,
@@ -219,17 +225,34 @@ impl World {
     // === Handle Generation ===
 
     /// Add a geometry and get a handle
-    pub fn add_geometry(&mut self, _geometry: super::super::geometry::Geometry) -> super::super::geometry::GeometryHandle {
+    pub fn add_geometry(&mut self, geometry: super::super::geometry::Geometry) -> super::super::geometry::GeometryHandle {
         let id = self.next_geometry_id;
         self.next_geometry_id += 1;
+        self.geometries.insert(id, geometry);
         super::super::geometry::GeometryHandle(id)
     }
 
+    /// Get a geometry by handle
+    pub fn get_geometry(&self, handle: super::super::geometry::GeometryHandle) -> Option<&super::super::geometry::Geometry> {
+        self.geometries.get(&handle.0)
+    }
+
     /// Add a material and get a handle
-    pub fn add_material<M: super::super::materials::Material + 'static>(&mut self, _material: M) -> super::super::materials::MaterialHandle {
+    pub fn add_material<M: super::super::materials::Material + 'static>(&mut self, material: M) -> super::super::materials::MaterialHandle {
         let id = self.next_material_id;
         self.next_material_id += 1;
+        self.materials.insert(id, Box::new(material));
         super::super::materials::MaterialHandle(id)
+    }
+
+    /// Get a material by handle (returns as Any for downcasting)
+    pub fn get_material(&self, handle: super::super::materials::MaterialHandle) -> Option<&(dyn std::any::Any + Send + Sync)> {
+        self.materials.get(&handle.0).map(|b| b.as_ref())
+    }
+
+    /// Get a typed material by handle
+    pub fn get_material_as<M: super::super::materials::Material + 'static>(&self, handle: super::super::materials::MaterialHandle) -> Option<&M> {
+        self.materials.get(&handle.0).and_then(|b| b.downcast_ref::<M>())
     }
 
     /// Add a texture and get a handle

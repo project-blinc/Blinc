@@ -99,11 +99,32 @@ impl SpringId {
     }
 }
 
+/// Tick callback type - called each frame with delta time in seconds
+pub type TickCallback = Arc<Mutex<dyn FnMut(f32) + Send + Sync>>;
+
+new_key_type! {
+    /// Handle to a registered tick callback
+    pub struct TickCallbackId;
+}
+
+impl TickCallbackId {
+    /// Convert to raw u64 for storage
+    pub fn to_raw(self) -> u64 {
+        self.0.as_ffi()
+    }
+
+    /// Reconstruct from raw u64
+    pub fn from_raw(raw: u64) -> Self {
+        TickCallbackId::from(slotmap::KeyData::from_ffi(raw))
+    }
+}
+
 /// Internal state of the animation scheduler
 struct SchedulerInner {
     springs: SlotMap<SpringId, Spring>,
     keyframes: SlotMap<KeyframeId, KeyframeAnimation>,
     timelines: SlotMap<TimelineId, Timeline>,
+    tick_callbacks: SlotMap<TickCallbackId, TickCallback>,
     last_frame: Instant,
     target_fps: u32,
 }
@@ -151,6 +172,7 @@ impl AnimationScheduler {
                 springs: SlotMap::with_key(),
                 keyframes: SlotMap::with_key(),
                 timelines: SlotMap::with_key(),
+                tick_callbacks: SlotMap::with_key(),
                 last_frame: Instant::now(),
                 target_fps: 120,
             })),
@@ -212,7 +234,7 @@ impl AnimationScheduler {
                 let wants_continuous = continuous_redraw.load(Ordering::Relaxed);
 
                 // Tick animations and check if any are active
-                let has_active = {
+                let (has_active, tick_callbacks_to_call, dt) = {
                     let mut inner = inner.lock().unwrap();
                     let now = Instant::now();
                     let dt = (now - inner.last_frame).as_secs_f32();
@@ -234,6 +256,13 @@ impl AnimationScheduler {
                         timeline.tick(dt_ms);
                     }
 
+                    // Collect tick callbacks to call (we'll call them after releasing the lock)
+                    let callbacks: Vec<_> = inner
+                        .tick_callbacks
+                        .iter()
+                        .map(|(_, cb)| Arc::clone(cb))
+                        .collect();
+
                     // NOTE: We do NOT remove animations here!
                     // Springs, keyframes, and timelines are only removed when:
                     // 1. Their wrapper (AnimatedValue, AnimatedKeyframe, AnimatedTimeline) is dropped
@@ -241,10 +270,21 @@ impl AnimationScheduler {
                     // This ensures animations can be restarted after completing.
 
                     // Check if any animations are still active (playing, not just present)
-                    inner.springs.iter().any(|(_, s)| !s.is_settled())
+                    // Tick callbacks count as active - they need continuous updates
+                    let has_active = inner.springs.iter().any(|(_, s)| !s.is_settled())
                         || inner.keyframes.iter().any(|(_, k)| k.is_playing())
                         || inner.timelines.iter().any(|(_, t)| t.is_playing())
+                        || !inner.tick_callbacks.is_empty();
+
+                    (has_active, callbacks, dt)
                 };
+
+                // Call tick callbacks outside the lock to avoid deadlocks
+                for callback in tick_callbacks_to_call {
+                    if let Ok(mut cb) = callback.lock() {
+                        cb(dt);
+                    }
+                }
 
                 // Signal main thread that it needs to redraw
                 // Either from active animations OR continuous redraw request (cursor blink)
@@ -502,6 +542,47 @@ impl AnimationScheduler {
 
     pub fn remove_timeline(&self, id: TimelineId) -> Option<Timeline> {
         self.inner.lock().unwrap().timelines.remove(id)
+    }
+
+    // =========================================================================
+    // Tick Callback API (for custom per-frame updates like ECS systems)
+    // =========================================================================
+
+    /// Register a tick callback that runs each frame
+    ///
+    /// The callback receives delta time in seconds. Use this to integrate
+    /// custom systems (like ECS) with the animation scheduler's background thread.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let world = Arc::new(Mutex::new(World::new()));
+    /// let world_clone = world.clone();
+    /// let id = scheduler.add_tick_callback(move |dt| {
+    ///     let mut world = world_clone.lock().unwrap();
+    ///     // Run ECS systems with delta time
+    ///     world.run_systems(dt);
+    /// });
+    /// ```
+    pub fn add_tick_callback<F>(&self, callback: F) -> TickCallbackId
+    where
+        F: FnMut(f32) + Send + Sync + 'static,
+    {
+        self.inner
+            .lock()
+            .unwrap()
+            .tick_callbacks
+            .insert(Arc::new(Mutex::new(callback)))
+    }
+
+    /// Remove a tick callback
+    pub fn remove_tick_callback(&self, id: TickCallbackId) {
+        self.inner.lock().unwrap().tick_callbacks.remove(id);
+    }
+
+    /// Get the number of registered tick callbacks
+    pub fn tick_callback_count(&self) -> usize {
+        self.inner.lock().unwrap().tick_callbacks.len()
     }
 }
 
@@ -812,6 +893,48 @@ impl SchedulerHandle {
     /// Check if the scheduler is still alive
     pub fn is_alive(&self) -> bool {
         self.inner.strong_count() > 0
+    }
+
+    // =========================================================================
+    // Tick Callback Operations
+    // =========================================================================
+
+    /// Register a tick callback that runs each frame
+    ///
+    /// The callback receives delta time in seconds. Use this to integrate
+    /// custom systems (like ECS) with the animation scheduler's background thread.
+    ///
+    /// Returns None if the scheduler has been dropped.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let world = Arc::new(Mutex::new(World::new()));
+    /// let world_clone = world.clone();
+    /// let id = handle.register_tick_callback(move |dt| {
+    ///     let mut world = world_clone.lock().unwrap();
+    ///     // Run ECS systems with delta time
+    ///     world.run_systems(dt);
+    /// });
+    /// ```
+    pub fn register_tick_callback<F>(&self, callback: F) -> Option<TickCallbackId>
+    where
+        F: FnMut(f32) + Send + Sync + 'static,
+    {
+        self.inner.upgrade().map(|inner| {
+            inner
+                .lock()
+                .unwrap()
+                .tick_callbacks
+                .insert(Arc::new(Mutex::new(callback)))
+        })
+    }
+
+    /// Remove a tick callback
+    pub fn remove_tick_callback(&self, id: TickCallbackId) {
+        if let Some(inner) = self.inner.upgrade() {
+            inner.lock().unwrap().tick_callbacks.remove(id);
+        }
     }
 }
 

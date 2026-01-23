@@ -1095,6 +1095,93 @@ impl WindowedContext {
     }
 
     // =========================================================================
+    // Tick Callback API (for per-frame updates like ECS systems)
+    // =========================================================================
+
+    /// Register a callback that runs each frame in the animation scheduler
+    ///
+    /// This creates a persistent tick callback keyed by source location.
+    /// The callback receives delta time in seconds and runs on the animation
+    /// scheduler's background thread at 120fps.
+    ///
+    /// Use this for ECS systems, physics, or any per-frame updates.
+    /// The callback is registered once and persists across UI rebuilds.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Create ECS world (persisted via use_state)
+    /// let world = ctx.use_state_keyed("world", || Arc::new(Mutex::new(World::new())));
+    ///
+    /// // Register tick callback to run ECS systems
+    /// ctx.use_tick_callback({
+    ///     let world = world.get();
+    ///     move |dt| {
+    ///         let mut w = world.lock().unwrap();
+    ///         // Run ECS systems with delta time
+    ///         w.run_systems(dt);
+    ///     }
+    /// });
+    /// ```
+    #[track_caller]
+    pub fn use_tick_callback<F>(&self, callback: F) -> blinc_animation::TickCallbackId
+    where
+        F: FnMut(f32) + Send + Sync + 'static,
+    {
+        let location = std::panic::Location::caller();
+        let key = format!(
+            "tick_{}:{}:{}",
+            location.file(),
+            location.line(),
+            location.column()
+        );
+        self.use_tick_callback_for(&key, callback)
+    }
+
+    /// Register a tick callback with an explicit key
+    ///
+    /// Use this when you need to create multiple tick callbacks at the same
+    /// source location (e.g., in a loop) or in reusable components.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Multiple tick callbacks with unique keys
+    /// for i in 0..3 {
+    ///     ctx.use_tick_callback_for(format!("system_{}", i), move |dt| {
+    ///         // Per-frame update
+    ///     });
+    /// }
+    /// ```
+    pub fn use_tick_callback_for<K: Hash, F>(
+        &self,
+        key: K,
+        callback: F,
+    ) -> blinc_animation::TickCallbackId
+    where
+        F: FnMut(f32) + Send + Sync + 'static,
+    {
+        // Marker type for TickCallbackId storage
+        struct TickCallbackMarker;
+
+        let state_key = StateKey::new::<TickCallbackMarker, _>(&key);
+        let mut hooks = self.hooks.lock().unwrap();
+
+        if let Some(raw_id) = hooks.get(&state_key) {
+            // Already registered - return existing ID
+            blinc_animation::TickCallbackId::from_raw(raw_id)
+        } else {
+            // First time - register the callback with the scheduler
+            let id = self
+                .animation_handle()
+                .register_tick_callback(callback)
+                .expect("Animation scheduler should be alive");
+            hooks.insert(state_key, id.to_raw());
+            id
+        }
+    }
+
+    // =========================================================================
     // Theme API
     // =========================================================================
 
