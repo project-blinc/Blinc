@@ -4,16 +4,21 @@
 //! using signed distance fields and raymarching.
 
 mod codegen;
+mod eval;
 mod operations;
 mod primitives;
+mod renderer;
 
 pub use codegen::SdfCodegen;
+pub use eval::{RaymarchHit, SdfHit};
 pub use operations::SdfOp;
 pub use primitives::SdfPrimitive;
+pub use renderer::{SdfCamera, SdfGpuRenderer};
 
+use crate::integration::{render_sdf_scene_with_config, CanvasBounds, SdfRenderConfig};
 use crate::math::Mat4Ext;
 use crate::scene::Object3D;
-use blinc_core::{Color, Mat4, Vec3};
+use blinc_core::{Color, DrawContext, Mat4, Vec3};
 
 /// SDF material for raymarched surfaces
 #[derive(Clone, Debug)]
@@ -374,6 +379,54 @@ impl SdfScene {
     /// Generate WGSL code for this scene
     pub fn to_wgsl(&self) -> String {
         SdfCodegen::generate(self)
+    }
+
+    /// Render this SDF scene using GPU raymarching
+    ///
+    /// This is a convenience method that wraps `render_sdf_scene_with_config`.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The draw context from the canvas
+    /// * `camera` - The camera configuration
+    /// * `bounds` - The canvas viewport bounds
+    /// * `time` - Animation time in seconds
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// canvas(move |ctx, bounds| {
+    ///     scene.render(ctx, &camera, bounds, time);
+    /// })
+    /// ```
+    pub fn render(
+        &self,
+        ctx: &mut dyn DrawContext,
+        camera: &SdfCamera,
+        bounds: CanvasBounds,
+        time: f32,
+    ) {
+        render_sdf_scene_with_config(ctx, self, camera, bounds, time, &SdfRenderConfig::default())
+    }
+
+    /// Render this SDF scene with custom configuration
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The draw context from the canvas
+    /// * `camera` - The camera configuration
+    /// * `bounds` - The canvas viewport bounds
+    /// * `time` - Animation time in seconds
+    /// * `config` - Custom render configuration
+    pub fn render_with_config(
+        &self,
+        ctx: &mut dyn DrawContext,
+        camera: &SdfCamera,
+        bounds: CanvasBounds,
+        time: f32,
+        config: &SdfRenderConfig,
+    ) {
+        render_sdf_scene_with_config(ctx, self, camera, bounds, time, config)
     }
 }
 

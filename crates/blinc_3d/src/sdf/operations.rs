@@ -1,5 +1,27 @@
 //! SDF boolean operations
 
+use blinc_core::Vec3;
+
+/// Format a float value for WGSL (ensures decimal point is present)
+fn wgsl_float(v: f32) -> String {
+    let s = format!("{}", v);
+    if s.contains('.') || s.contains('e') || s.contains('E') {
+        s
+    } else {
+        format!("{}.0", s)
+    }
+}
+
+/// Format a Vec3 for WGSL
+fn wgsl_vec3(v: &Vec3) -> String {
+    format!(
+        "vec3<f32>({}, {}, {})",
+        wgsl_float(v.x),
+        wgsl_float(v.y),
+        wgsl_float(v.z)
+    )
+}
+
 /// SDF boolean operations
 #[derive(Clone, Debug)]
 pub enum SdfOp {
@@ -43,13 +65,28 @@ impl SdfOp {
                 format!("op_intersect({}, {})", left_var, right_var)
             }
             SdfOp::SmoothUnion { k } => {
-                format!("op_smooth_union({}, {}, {})", left_var, right_var, k)
+                format!(
+                    "op_smooth_union({}, {}, {})",
+                    left_var,
+                    right_var,
+                    wgsl_float(*k)
+                )
             }
             SdfOp::SmoothSubtract { k } => {
-                format!("op_smooth_subtract({}, {}, {})", left_var, right_var, k)
+                format!(
+                    "op_smooth_subtract({}, {}, {})",
+                    left_var,
+                    right_var,
+                    wgsl_float(*k)
+                )
             }
             SdfOp::SmoothIntersect { k } => {
-                format!("op_smooth_intersect({}, {}, {})", left_var, right_var, k)
+                format!(
+                    "op_smooth_intersect({}, {}, {})",
+                    left_var,
+                    right_var,
+                    wgsl_float(*k)
+                )
             }
         }
     }
@@ -130,45 +167,50 @@ impl SdfDomainOp {
     pub fn to_wgsl(&self, point_var: &str) -> String {
         match self {
             SdfDomainOp::Translate { offset } => {
-                format!(
-                    "{} - vec3<f32>({}, {}, {})",
-                    point_var, offset.x, offset.y, offset.z
-                )
+                format!("{} - {}", point_var, wgsl_vec3(offset))
             }
             SdfDomainOp::RotateX { angle } => {
-                format!("op_rotate_x({}, {})", point_var, angle)
+                format!("op_rotate_x({}, {})", point_var, wgsl_float(*angle))
             }
             SdfDomainOp::RotateY { angle } => {
-                format!("op_rotate_y({}, {})", point_var, angle)
+                format!("op_rotate_y({}, {})", point_var, wgsl_float(*angle))
             }
             SdfDomainOp::RotateZ { angle } => {
-                format!("op_rotate_z({}, {})", point_var, angle)
+                format!("op_rotate_z({}, {})", point_var, wgsl_float(*angle))
             }
             SdfDomainOp::Scale { factor } => {
-                format!("{} / {}", point_var, factor)
+                format!("{} / {}", point_var, wgsl_float(*factor))
             }
             SdfDomainOp::Repeat { cell_size } => {
-                format!(
-                    "op_repeat({}, vec3<f32>({}, {}, {}))",
-                    point_var, cell_size.x, cell_size.y, cell_size.z
-                )
+                format!("op_repeat({}, {})", point_var, wgsl_vec3(cell_size))
             }
             SdfDomainOp::RepeatLimited { cell_size, limit } => {
                 format!(
-                    "op_repeat_limited({}, {}, vec3<f32>({}, {}, {}))",
-                    point_var, cell_size, limit.x, limit.y, limit.z
+                    "op_repeat_limited({}, {}, {})",
+                    point_var,
+                    wgsl_float(*cell_size),
+                    wgsl_vec3(limit)
                 )
             }
             SdfDomainOp::Mirror { axis } => match axis {
-                MirrorAxis::X => format!("vec3<f32>(abs({}.x), {}.y, {}.z)", point_var, point_var, point_var),
-                MirrorAxis::Y => format!("vec3<f32>({}.x, abs({}.y), {}.z)", point_var, point_var, point_var),
-                MirrorAxis::Z => format!("vec3<f32>({}.x, {}.y, abs({}.z))", point_var, point_var, point_var),
+                MirrorAxis::X => format!(
+                    "vec3<f32>(abs({}.x), {}.y, {}.z)",
+                    point_var, point_var, point_var
+                ),
+                MirrorAxis::Y => format!(
+                    "vec3<f32>({}.x, abs({}.y), {}.z)",
+                    point_var, point_var, point_var
+                ),
+                MirrorAxis::Z => format!(
+                    "vec3<f32>({}.x, {}.y, abs({}.z))",
+                    point_var, point_var, point_var
+                ),
             },
             SdfDomainOp::Twist { amount } => {
-                format!("op_twist({}, {})", point_var, amount)
+                format!("op_twist({}, {})", point_var, wgsl_float(*amount))
             }
             SdfDomainOp::Bend { amount } => {
-                format!("op_bend({}, {})", point_var, amount)
+                format!("op_bend({}, {})", point_var, wgsl_float(*amount))
             }
         }
     }

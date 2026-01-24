@@ -44,13 +44,14 @@
 use blinc_core::{
     Affine2D, BillboardFacing, BlendMode, Brush, Camera, ClipShape, Color, CornerRadius,
     DrawCommand, DrawContext, Environment, ImageId, ImageOptions, LayerConfig, LayerId, Light,
-    Mat4, MaterialId, MeshId, MeshInstance, Path, Point, Rect, SdfBuilder, Shadow, ShapeId, Size,
-    Stroke, TextStyle, Transform,
+    Mat4, MaterialId, MeshId, MeshInstance, Path, Point, Rect, Sdf3DViewport, SdfBuilder, Shadow,
+    ShapeId, Size, Stroke, TextStyle, Transform,
 };
 
 use crate::path::{extract_brush_info, tessellate_fill, tessellate_stroke};
 use crate::primitives::{
     ClipType, FillType, GlassType, GpuGlassPrimitive, GpuPrimitive, PrimitiveBatch, PrimitiveType,
+    Sdf3DUniform, Viewport3D,
 };
 use crate::text::TextRenderingContext;
 
@@ -129,6 +130,8 @@ pub struct GpuPaintContext<'a> {
     is_3d: bool,
     /// Current camera (for 3D mode)
     camera: Option<Camera>,
+    /// Lights for 3D rendering
+    lights: Vec<Light>,
     /// Text rendering context (optional, for draw_text support)
     text_ctx: Option<&'a mut TextRenderingContext>,
     /// Whether we're rendering to the foreground layer (after glass)
@@ -151,6 +154,7 @@ impl<'a> GpuPaintContext<'a> {
             viewport: Size::new(width, height),
             is_3d: false,
             camera: None,
+            lights: Vec::new(),
             text_ctx: None,
             is_foreground: false,
             z_layer: 0,
@@ -181,6 +185,7 @@ impl<'a> GpuPaintContext<'a> {
             viewport: Size::new(width, height),
             is_3d: false,
             camera: None,
+            lights: Vec::new(),
             text_ctx: Some(text_ctx),
             is_foreground: false,
             z_layer: 0,
@@ -1757,8 +1762,8 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         // 3D mesh rendering is not yet implemented
     }
 
-    fn add_light(&mut self, _light: Light) {
-        // 3D lighting is not yet implemented
+    fn add_light(&mut self, light: Light) {
+        self.lights.push(light);
     }
 
     fn set_environment(&mut self, _env: &Environment) {
@@ -1794,6 +1799,77 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         // Restore 2D context
         self.is_3d = was_3d;
         self.camera = old_camera;
+    }
+
+    fn draw_sdf_viewport(&mut self, rect: Rect, viewport: &Sdf3DViewport) {
+        // Transform the rect to screen coordinates (like fill_rect does)
+        let transformed = self.transform_rect(rect);
+
+        // Get current clip bounds and intersect with the viewport
+        let (clip_bounds, _, _) = self.get_clip_data();
+        let clip_min_x = clip_bounds[0];
+        let clip_min_y = clip_bounds[1];
+        let clip_max_x = clip_bounds[0] + clip_bounds[2];
+        let clip_max_y = clip_bounds[1] + clip_bounds[3];
+
+        // Original viewport bounds
+        let orig_x = transformed.x();
+        let orig_y = transformed.y();
+        let orig_w = transformed.width();
+        let orig_h = transformed.height();
+
+        // Intersect viewport with clip region
+        let clipped_x = orig_x.max(clip_min_x);
+        let clipped_y = orig_y.max(clip_min_y);
+        let clipped_right = (orig_x + orig_w).min(clip_max_x);
+        let clipped_bottom = (orig_y + orig_h).min(clip_max_y);
+        let clipped_w = (clipped_right - clipped_x).max(0.0);
+        let clipped_h = (clipped_bottom - clipped_y).max(0.0);
+
+        // Skip if viewport is fully clipped
+        if clipped_w <= 0.0 || clipped_h <= 0.0 {
+            return;
+        }
+
+        // Calculate UV offset and scale for clipped viewports
+        let uv_offset_x = if orig_w > 0.0 { (clipped_x - orig_x) / orig_w } else { 0.0 };
+        let uv_offset_y = if orig_h > 0.0 { (clipped_y - orig_y) / orig_h } else { 0.0 };
+        let uv_scale_x = if orig_w > 0.0 { clipped_w / orig_w } else { 1.0 };
+        let uv_scale_y = if orig_h > 0.0 { clipped_h / orig_h } else { 1.0 };
+
+        // Create the uniform data for the shader
+        // Must match the WGSL SdfUniform struct layout exactly
+        let uniforms = Sdf3DUniform {
+            camera_pos: [viewport.camera_pos.x, viewport.camera_pos.y, viewport.camera_pos.z, 1.0],
+            camera_dir: [viewport.camera_dir.x, viewport.camera_dir.y, viewport.camera_dir.z, 0.0],
+            camera_up: [viewport.camera_up.x, viewport.camera_up.y, viewport.camera_up.z, 0.0],
+            camera_right: [
+                viewport.camera_right.x,
+                viewport.camera_right.y,
+                viewport.camera_right.z,
+                0.0,
+            ],
+            // Use ORIGINAL resolution for correct aspect ratio calculation
+            resolution: [orig_w, orig_h],
+            time: viewport.time,
+            fov: viewport.fov,
+            max_steps: viewport.max_steps,
+            max_distance: viewport.max_distance,
+            epsilon: viewport.epsilon,
+            _padding: 0.0,
+            uv_offset: [uv_offset_x, uv_offset_y],
+            uv_scale: [uv_scale_x, uv_scale_y],
+        };
+
+        // Create and push the 3D viewport with CLIPPED bounds
+        let viewport_3d = Viewport3D {
+            shader_wgsl: viewport.shader_wgsl.clone(),
+            uniforms,
+            bounds: [clipped_x, clipped_y, clipped_w, clipped_h],
+            lights: viewport.lights.clone(),
+        };
+
+        self.batch.push_viewport_3d(viewport_3d);
     }
 
     fn push_layer(&mut self, config: LayerConfig) {

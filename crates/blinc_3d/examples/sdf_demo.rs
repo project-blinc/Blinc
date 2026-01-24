@@ -4,12 +4,17 @@
 //! - SDF primitives (sphere, box, torus, cylinder, cone, capsule)
 //! - Boolean operations (union, subtract, intersect)
 //! - Smooth blending operations
+//! - GPU raymarching via `SdfScene::render` and `DrawContext`
 //! - WGSL code generation for GPU raymarching
 //!
-//! Run with: cargo run -p blinc_3d --example sdf_demo
+//! The `SdfScene::render` method renders SDF scenes through the standard
+//! Canvas/DrawContext pipeline, enabling real-time GPU raymarching without
+//! requiring direct wgpu API calls.
+//!
+//! Run with: cargo run -p blinc_3d --example sdf_demo --features sdf
 
 use blinc_3d::prelude::*;
-use blinc_3d::sdf::{SdfScene, SdfNodeContent, SdfOp, SdfPrimitive};
+use blinc_3d::sdf::{SdfNodeContent, SdfOp, SdfPrimitive, SdfScene};
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
 use std::f32::consts::PI;
@@ -21,8 +26,8 @@ fn main() -> Result<()> {
 
     let config = WindowConfig {
         title: "Blinc 3D - SDF Demo".to_string(),
-        width: 1100,
-        height: 750,
+        width: 1200,
+        height: 800,
         resizable: true,
         ..Default::default()
     };
@@ -45,10 +50,7 @@ fn get_sdf_demos() -> Vec<SdfDemo> {
         // Primitive: Sphere
         {
             let mut scene = SdfScene::new();
-            scene.set_root(
-                SdfScene::sphere(1.0)
-                    .with_color(Color::rgb(0.3, 0.7, 1.0))
-            );
+            scene.set_root(SdfScene::sphere(1.0).with_color(Color::rgb(0.3, 0.7, 1.0)));
             SdfDemo {
                 name: "Sphere",
                 description: "Basic SDF primitive",
@@ -58,10 +60,7 @@ fn get_sdf_demos() -> Vec<SdfDemo> {
         // Primitive: Box
         {
             let mut scene = SdfScene::new();
-            scene.set_root(
-                SdfScene::cube(1.5)
-                    .with_color(Color::rgb(1.0, 0.5, 0.3))
-            );
+            scene.set_root(SdfScene::cube(1.5).with_color(Color::rgb(1.0, 0.5, 0.3)));
             SdfDemo {
                 name: "Box",
                 description: "Rectangular SDF",
@@ -74,7 +73,7 @@ fn get_sdf_demos() -> Vec<SdfDemo> {
             scene.set_root(
                 SdfScene::torus(1.0, 0.3)
                     .rotated(Vec3::new(PI / 4.0, 0.0, 0.0))
-                    .with_color(Color::rgb(0.5, 1.0, 0.5))
+                    .with_color(Color::rgb(0.5, 1.0, 0.5)),
             );
             SdfDemo {
                 name: "Torus",
@@ -101,10 +100,8 @@ fn get_sdf_demos() -> Vec<SdfDemo> {
         // Boolean: Subtract
         {
             let mut scene = SdfScene::new();
-            let box_sdf = SdfScene::cube(1.5)
-                .with_color(Color::rgb(0.9, 0.3, 0.5));
-            let sphere = SdfScene::sphere(1.0)
-                .at(Vec3::new(0.5, 0.5, 0.5));
+            let box_sdf = SdfScene::cube(1.5).with_color(Color::rgb(0.9, 0.3, 0.5));
+            let sphere = SdfScene::sphere(1.0).at(Vec3::new(0.5, 0.5, 0.5));
             scene.set_root(SdfScene::subtract(box_sdf, sphere));
             SdfDemo {
                 name: "Subtract",
@@ -118,8 +115,7 @@ fn get_sdf_demos() -> Vec<SdfDemo> {
             let sphere = SdfScene::sphere(1.0)
                 .at(Vec3::new(-0.3, 0.0, 0.0))
                 .with_color(Color::rgb(0.5, 0.3, 0.9));
-            let box_sdf = SdfScene::cube(1.2)
-                .at(Vec3::new(0.3, 0.0, 0.0));
+            let box_sdf = SdfScene::cube(1.2).at(Vec3::new(0.3, 0.0, 0.0));
             scene.set_root(SdfScene::intersect(sphere, box_sdf));
             SdfDemo {
                 name: "Intersect",
@@ -134,7 +130,8 @@ fn get_sdf_demos() -> Vec<SdfDemo> {
                 .at(Vec3::new(-0.5, 0.0, 0.0))
                 .with_color(Color::rgb(0.3, 0.9, 0.7));
             let sphere2 = SdfScene::sphere(0.7)
-                .at(Vec3::new(0.5, 0.0, 0.0));
+                .at(Vec3::new(0.5, 0.0, 0.0))
+                .with_color(Color::rgb(0.9, 0.7, 0.3));
             scene.set_root(SdfScene::smooth_union(sphere1, sphere2, 0.3));
             SdfDemo {
                 name: "Smooth Union",
@@ -145,11 +142,11 @@ fn get_sdf_demos() -> Vec<SdfDemo> {
         // Complex: Cylinder + Torus
         {
             let mut scene = SdfScene::new();
-            let cylinder = SdfScene::cylinder(2.0, 0.5)
-                .with_color(Color::rgb(1.0, 0.7, 0.3));
+            let cylinder = SdfScene::cylinder(2.0, 0.5).with_color(Color::rgb(1.0, 0.7, 0.3));
             let torus = SdfScene::torus(0.8, 0.2)
                 .at(Vec3::new(0.0, 0.8, 0.0))
-                .rotated(Vec3::new(PI / 2.0, 0.0, 0.0));
+                .rotated(Vec3::new(PI / 2.0, 0.0, 0.0))
+                .with_color(Color::rgb(0.3, 0.7, 1.0));
             scene.set_root(SdfScene::union(cylinder, torus));
             SdfDemo {
                 name: "Complex",
@@ -185,7 +182,7 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
                         .color(Color::WHITE),
                 )
                 .child(
-                    text("SDF scene graph with WGSL code generation for GPU raymarching")
+                    text("GPU raymarching via Canvas DrawContext")
                         .size(14.0)
                         .color(Color::rgba(0.6, 0.6, 0.7, 1.0)),
                 ),
@@ -203,69 +200,69 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
         )
 }
 
-fn sdf_demos_grid(demos: Vec<SdfDemo>) -> Div {
+fn sdf_demos_grid(demos: Vec<SdfDemo>) -> Scroll {
     let mut grid = div()
         .flex_1()
         .w_full()
         .flex_row()
         .flex_wrap()
-        .gap(4.0)
-        .items_start();
+        .gap(8.0)
+        .items_start()
+        .content_start();
 
     for demo in demos {
         grid = grid.child(sdf_demo_card(demo));
     }
 
-    grid
+    scroll().w_full().h(600.0).child(grid)
 }
 
 fn sdf_demo_card(demo: SdfDemo) -> Div {
-    // Generate WGSL for display
-    let wgsl_preview = demo.scene.to_wgsl();
-    // Take first few lines for preview
-    let wgsl_lines: Vec<&str> = wgsl_preview.lines().take(3).collect();
-    let wgsl_short = wgsl_lines.join("\n");
+    // Clone the scene for the canvas closure
+    let scene = demo.scene.clone();
+
+    // Create camera positioned to view the scene
+    let camera = SdfCamera {
+        position: Vec3::new(0.0, 0.0, 4.0),
+        target: Vec3::ZERO,
+        up: Vec3::new(0.0, 1.0, 0.0),
+        fov: 0.8,
+    };
 
     div()
-        .w(300.0)
+        .w(280.0)
         .bg(Color::rgba(0.1, 0.1, 0.14, 1.0))
         .rounded(8.0)
         .flex_col()
         .overflow_clip()
-        // Info header
+        // GPU-rendered SDF preview via DrawContext
+        .child(
+            canvas(move |ctx, bounds| {
+                // Use GPU raymarching through the DrawContext
+                scene.render(ctx, &camera, bounds, 0.0);
+            })
+            .w_full()
+            .h(135.0),
+        )
+        // Info section
         .child(
             div()
-            .w_full()
-                .p(3.0)
+                .w_full()
+                .p(8.0)
                 .flex_col()
                 .gap(4.0)
-                .child(text(demo.name).size(14.0).color(Color::WHITE))
+                .child(
+                    div()
+                        .flex_row()
+                        .justify_between()
+                        .items_center()
+                        .child(text(demo.name).size(14.0).color(Color::WHITE))
+                        .child(scene_type_badge(&demo.scene)),
+                )
                 .child(
                     text(demo.description)
                         .size(11.0)
                         .color(Color::rgba(0.5, 0.5, 0.6, 1.0)),
-                ),
-        )
-        // WGSL preview
-        .child(
-            div()
-            .w_full()
-                .px(3.0)
-                .pb(3.0)
-                .child(
-                    code(&format!("{}...", wgsl_short))
-                        .font_size(8.0)
-                        .rounded(4.0),
-                ),
-        )
-        // Scene type indicator
-        .child(
-            div()
-            .w_full() 
-                .px(3.0)
-                .pb(3.0)
-                .child(
-                    scene_type_badge(&demo.scene),
                 ),
         )
 }
@@ -290,7 +287,7 @@ fn scene_type_badge(scene: &SdfScene) -> Div {
                     SdfPrimitive::Pyramid { .. } => "Pyramid",
                 };
                 (name, Color::rgba(0.3, 0.6, 0.9, 0.8))
-            },
+            }
             SdfNodeContent::Operation { op, .. } => {
                 let name = match op {
                     SdfOp::Union => "Union",
@@ -301,7 +298,7 @@ fn scene_type_badge(scene: &SdfScene) -> Div {
                     SdfOp::SmoothIntersect { .. } => "SmoothInt",
                 };
                 (name, Color::rgba(0.9, 0.6, 0.3, 0.8))
-            },
+            }
         },
         None => ("Empty", Color::rgba(0.5, 0.5, 0.5, 0.8)),
     };
@@ -311,11 +308,7 @@ fn scene_type_badge(scene: &SdfScene) -> Div {
         .py(2.0)
         .bg(color)
         .rounded(4.0)
-        .child(
-            text(label)
-                .size(9.0)
-                .color(Color::WHITE),
-        )
+        .child(text(label).size(9.0).color(Color::WHITE))
 }
 
 fn info_panel() -> Div {
@@ -323,7 +316,6 @@ fn info_panel() -> Div {
     let mut example_scene = SdfScene::new();
     example_scene.set_root(SdfScene::sphere(1.0));
     let example_wgsl = example_scene.to_wgsl();
-    // Show map_scene function only
     let map_scene_fn = extract_map_scene(&example_wgsl);
 
     div()
@@ -334,6 +326,7 @@ fn info_panel() -> Div {
         .p(16.0)
         .flex_col()
         .gap(16.0)
+        .overflow_scroll()
         // Primitives
         .child(text("SDF Primitives").size(16.0).color(Color::WHITE))
         .child(
@@ -342,10 +335,8 @@ fn info_panel() -> Div {
                 .gap(4.0)
                 .child(primitive_item("Sphere", "length(p) - r"))
                 .child(primitive_item("Box", "max(abs(p) - b)"))
-                .child(primitive_item("Torus", "length(vec2(len(p.xz)-R, p.y))-r"))
-                .child(primitive_item("Cylinder", "length(p.xz) - r"))
-                .child(primitive_item("Cone", "dot(normalize(h), p)"))
-                .child(primitive_item("Capsule", "length(p - clamp(...))")),
+                .child(primitive_item("Torus", "len(vec2(len(p.xz)-R, p.y))-r"))
+                .child(primitive_item("Cylinder", "length(p.xz) - r")),
         )
         // Operations
         .child(text("Boolean Operations").size(16.0).color(Color::WHITE))
@@ -354,9 +345,9 @@ fn info_panel() -> Div {
                 .flex_col()
                 .gap(4.0)
                 .child(op_item("Union", "min(d1, d2)"))
-                .child(op_item("Subtract", "max(d1, -d2)"))
+                .child(op_item("Subtract", "max(-d2, d1)"))
                 .child(op_item("Intersect", "max(d1, d2)"))
-                .child(op_item("SmoothUnion", "soft blend with k")),
+                .child(op_item("SmoothUnion", "blend with k")),
         )
         // API Usage
         .child(text("API Usage").size(16.0).color(Color::WHITE))
@@ -367,12 +358,9 @@ fn info_panel() -> Div {
         )
         // Generated WGSL
         .child(text("Generated WGSL").size(16.0).color(Color::WHITE))
-        .child(
-            code(&map_scene_fn)
-                .font_size(8.0)
-                .rounded(4.0),
-        )
+        .child(code(&map_scene_fn).font_size(8.0).rounded(4.0))
         // Rendering info
+        .child(text("Rendering").size(16.0).color(Color::WHITE))
         .child(
             div()
                 .flex_col()
@@ -380,12 +368,11 @@ fn info_panel() -> Div {
                 .child(render_item("Sphere tracing / raymarching"))
                 .child(render_item("Gradient for surface normals"))
                 .child(render_item("WGSL code generation"))
-                .child(render_item("Real-time GPU shaders")),
+                .child(render_item("GPU pipeline ready")),
         )
 }
 
 fn extract_map_scene(wgsl: &str) -> String {
-    // Find the map_scene function in the WGSL
     let lines: Vec<&str> = wgsl.lines().collect();
     let mut in_function = false;
     let mut result = Vec::new();

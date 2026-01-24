@@ -2,6 +2,26 @@
 
 use blinc_core::Vec3;
 
+/// Format a float value for WGSL (ensures decimal point is present)
+fn wgsl_float(v: f32) -> String {
+    let s = format!("{}", v);
+    if s.contains('.') || s.contains('e') || s.contains('E') {
+        s
+    } else {
+        format!("{}.0", s)
+    }
+}
+
+/// Format a Vec3 for WGSL
+fn wgsl_vec3(v: &Vec3) -> String {
+    format!(
+        "vec3<f32>({}, {}, {})",
+        wgsl_float(v.x),
+        wgsl_float(v.y),
+        wgsl_float(v.z)
+    )
+}
+
 /// SDF primitive shapes
 #[derive(Clone, Debug)]
 pub enum SdfPrimitive {
@@ -79,13 +99,10 @@ impl SdfPrimitive {
     pub fn to_wgsl(&self, point_var: &str) -> String {
         match self {
             SdfPrimitive::Sphere { radius } => {
-                format!("sdf_sphere({}, {})", point_var, radius)
+                format!("sdf_sphere({}, {})", point_var, wgsl_float(*radius))
             }
             SdfPrimitive::Box { half_extents } => {
-                format!(
-                    "sdf_box({}, vec3<f32>({}, {}, {}))",
-                    point_var, half_extents.x, half_extents.y, half_extents.z
-                )
+                format!("sdf_box({}, {})", point_var, wgsl_vec3(half_extents))
             }
             SdfPrimitive::Torus {
                 major_radius,
@@ -93,22 +110,34 @@ impl SdfPrimitive {
             } => {
                 format!(
                     "sdf_torus({}, vec2<f32>({}, {}))",
-                    point_var, major_radius, minor_radius
+                    point_var,
+                    wgsl_float(*major_radius),
+                    wgsl_float(*minor_radius)
                 )
             }
             SdfPrimitive::Cylinder { height, radius } => {
-                format!("sdf_cylinder({}, {}, {})", point_var, height, radius)
+                format!(
+                    "sdf_cylinder({}, {}, {})",
+                    point_var,
+                    wgsl_float(*height),
+                    wgsl_float(*radius)
+                )
             }
             SdfPrimitive::Plane { normal, offset } => {
                 format!(
-                    "sdf_plane({}, vec3<f32>({}, {}, {}), {})",
-                    point_var, normal.x, normal.y, normal.z, offset
+                    "sdf_plane({}, {}, {})",
+                    point_var,
+                    wgsl_vec3(normal),
+                    wgsl_float(*offset)
                 )
             }
             SdfPrimitive::Capsule { start, end, radius } => {
                 format!(
-                    "sdf_capsule({}, vec3<f32>({}, {}, {}), vec3<f32>({}, {}, {}), {})",
-                    point_var, start.x, start.y, start.z, end.x, end.y, end.z, radius
+                    "sdf_capsule({}, {}, {}, {})",
+                    point_var,
+                    wgsl_vec3(start),
+                    wgsl_vec3(end),
+                    wgsl_float(*radius)
                 )
             }
             SdfPrimitive::Cone { height, radius } => {
@@ -117,40 +146,48 @@ impl SdfPrimitive {
                 format!(
                     "sdf_cone({}, vec2<f32>({}, {}), {})",
                     point_var,
-                    angle.sin(),
-                    angle.cos(),
-                    height
+                    wgsl_float(angle.sin()),
+                    wgsl_float(angle.cos()),
+                    wgsl_float(*height)
                 )
             }
             SdfPrimitive::RoundedBox { half_extents, radius } => {
                 format!(
-                    "sdf_rounded_box({}, vec3<f32>({}, {}, {}), {})",
-                    point_var, half_extents.x, half_extents.y, half_extents.z, radius
+                    "sdf_rounded_box({}, {}, {})",
+                    point_var,
+                    wgsl_vec3(half_extents),
+                    wgsl_float(*radius)
                 )
             }
             SdfPrimitive::Ellipsoid { radii } => {
-                format!(
-                    "sdf_ellipsoid({}, vec3<f32>({}, {}, {}))",
-                    point_var, radii.x, radii.y, radii.z
-                )
+                format!("sdf_ellipsoid({}, {})", point_var, wgsl_vec3(radii))
             }
             SdfPrimitive::TriPrism { width, height } => {
                 format!(
                     "sdf_tri_prism({}, vec2<f32>({}, {}))",
-                    point_var, width, height
+                    point_var,
+                    wgsl_float(*width),
+                    wgsl_float(*height)
                 )
             }
             SdfPrimitive::HexPrism { width, height } => {
                 format!(
                     "sdf_hex_prism({}, vec2<f32>({}, {}))",
-                    point_var, width, height
+                    point_var,
+                    wgsl_float(*width),
+                    wgsl_float(*height)
                 )
             }
             SdfPrimitive::Octahedron { size } => {
-                format!("sdf_octahedron({}, {})", point_var, size)
+                format!("sdf_octahedron({}, {})", point_var, wgsl_float(*size))
             }
             SdfPrimitive::Pyramid { base, height } => {
-                format!("sdf_pyramid({}, {}, {})", point_var, base, height)
+                format!(
+                    "sdf_pyramid({}, {}, {})",
+                    point_var,
+                    wgsl_float(*base),
+                    wgsl_float(*height)
+                )
             }
         }
     }

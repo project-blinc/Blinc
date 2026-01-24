@@ -6,7 +6,7 @@ mod pipelines;
 mod post_process;
 mod shaders;
 
-pub use pipelines::{GamePipelines, PipelineKey, VertexLayout};
+pub use pipelines::{BlendConfig, CullMode, GamePipelines, PipelineKey, VertexLayout};
 pub use post_process::{
     Bloom, ColorGrading, PostEffect, PostProcessContext, PostProcessStack, ToneMapping,
     ToneMappingMode, Vignette, FXAA,

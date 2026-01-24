@@ -1528,6 +1528,54 @@ pub struct Environment {
     pub background_color: Option<Color>,
 }
 
+/// Parameters for 3D SDF raymarching viewport
+///
+/// This struct contains all the information needed to render an SDF scene
+/// using GPU raymarching.
+#[derive(Clone, Debug)]
+pub struct Sdf3DViewport {
+    /// The generated WGSL shader code containing the SDF scene definition
+    pub shader_wgsl: String,
+    /// Camera position in world space
+    pub camera_pos: Vec3,
+    /// Camera look direction (normalized)
+    pub camera_dir: Vec3,
+    /// Camera up vector (normalized)
+    pub camera_up: Vec3,
+    /// Camera right vector (normalized)
+    pub camera_right: Vec3,
+    /// Field of view in radians
+    pub fov: f32,
+    /// Animation time for time-based effects
+    pub time: f32,
+    /// Maximum raymarch steps
+    pub max_steps: u32,
+    /// Maximum ray distance
+    pub max_distance: f32,
+    /// Surface hit epsilon
+    pub epsilon: f32,
+    /// Lights in the scene
+    pub lights: Vec<Light>,
+}
+
+impl Default for Sdf3DViewport {
+    fn default() -> Self {
+        Self {
+            shader_wgsl: String::new(),
+            camera_pos: Vec3::new(0.0, 2.0, 5.0),
+            camera_dir: Vec3::new(0.0, 0.0, -1.0),
+            camera_up: Vec3::new(0.0, 1.0, 0.0),
+            camera_right: Vec3::new(1.0, 0.0, 0.0),
+            fov: 0.8,
+            time: 0.0,
+            max_steps: 128,
+            max_distance: 100.0,
+            epsilon: 0.001,
+            lights: Vec::new(),
+        }
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Layer Command Types (for Canvas2D and Scene3D)
 // ─────────────────────────────────────────────────────────────────────────────

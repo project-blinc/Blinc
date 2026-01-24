@@ -5,7 +5,8 @@
 use crate::ecs::{Entity, World};
 use crate::math::Mat4Ext;
 use crate::scene::{Object3D, OrthographicCamera, PerspectiveCamera};
-use blinc_core::{Camera, CameraProjection, DrawContext, Light, Mat4, Vec3, Color};
+use crate::sdf::{SdfCamera, SdfCodegen, SdfScene};
+use blinc_core::{Camera, CameraProjection, DrawContext, Light, Mat4, Rect, Sdf3DViewport, Vec3, Color};
 
 // Re-export CanvasBounds from blinc_layout to avoid type duplication
 pub use blinc_layout::CanvasBounds;
@@ -503,4 +504,133 @@ impl SceneRenderer {
     pub fn render(&self, ctx: &mut dyn DrawContext, bounds: CanvasBounds) {
         render_scene_with_config(ctx, &self.world, self.camera, bounds, &self.config);
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SDF Scene Rendering
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Render an SDF scene using GPU raymarching
+///
+/// This function renders procedural 3D geometry defined by signed distance functions.
+/// The scene is raymarched on the GPU for high-quality rendering.
+///
+/// # Arguments
+///
+/// * `ctx` - The draw context from the canvas
+/// * `scene` - The SDF scene to render
+/// * `camera` - The camera configuration
+/// * `bounds` - The canvas viewport bounds
+///
+/// # Example
+///
+/// ```ignore
+/// use blinc_3d::prelude::*;
+/// use blinc_layout::prelude::*;
+///
+/// // Create an SDF scene
+/// let scene = SdfScene::new()
+///     .sphere(1.0)
+///     .translate(0.0, 1.0, 0.0);
+///
+/// let camera = SdfCamera::default();
+///
+/// // Render in a canvas
+/// canvas(move |ctx, bounds| {
+///     render_sdf_scene(ctx, &scene, &camera, bounds, 0.0);
+/// });
+/// ```
+pub fn render_sdf_scene(
+    ctx: &mut dyn DrawContext,
+    scene: &SdfScene,
+    camera: &SdfCamera,
+    bounds: CanvasBounds,
+    time: f32,
+) {
+    render_sdf_scene_with_config(ctx, scene, camera, bounds, time, &SdfRenderConfig::default())
+}
+
+/// Configuration for SDF scene rendering
+#[derive(Clone, Debug)]
+pub struct SdfRenderConfig {
+    /// Maximum raymarch steps
+    pub max_steps: u32,
+    /// Maximum ray distance
+    pub max_distance: f32,
+    /// Surface hit epsilon
+    pub epsilon: f32,
+    /// Lights to use for shading (if empty, uses default lighting)
+    pub lights: Vec<Light>,
+}
+
+impl Default for SdfRenderConfig {
+    fn default() -> Self {
+        Self {
+            max_steps: 128,
+            max_distance: 100.0,
+            epsilon: 0.001,
+            lights: Vec::new(),
+        }
+    }
+}
+
+/// Render an SDF scene with custom configuration
+pub fn render_sdf_scene_with_config(
+    ctx: &mut dyn DrawContext,
+    scene: &SdfScene,
+    camera: &SdfCamera,
+    bounds: CanvasBounds,
+    time: f32,
+    config: &SdfRenderConfig,
+) {
+    // Generate the shader code from the scene
+    let shader_wgsl = SdfCodegen::generate_full_shader(scene);
+
+    // Calculate camera vectors
+    let direction = Vec3::new(
+        camera.target.x - camera.position.x,
+        camera.target.y - camera.position.y,
+        camera.target.z - camera.position.z,
+    );
+    let dir_len = (direction.x * direction.x + direction.y * direction.y + direction.z * direction.z).sqrt();
+    let camera_dir = Vec3::new(
+        direction.x / dir_len,
+        direction.y / dir_len,
+        direction.z / dir_len,
+    );
+
+    // Calculate right vector (cross product of direction and up)
+    let right = Vec3::new(
+        camera_dir.z * camera.up.y - camera_dir.y * camera.up.z,
+        camera_dir.x * camera.up.z - camera_dir.z * camera.up.x,
+        camera_dir.y * camera.up.x - camera_dir.x * camera.up.y,
+    );
+    let right_len = (right.x * right.x + right.y * right.y + right.z * right.z).sqrt();
+    let camera_right = Vec3::new(right.x / right_len, right.y / right_len, right.z / right_len);
+
+    // Recalculate up (cross product of right and direction)
+    let camera_up = Vec3::new(
+        camera_right.y * camera_dir.z - camera_right.z * camera_dir.y,
+        camera_right.z * camera_dir.x - camera_right.x * camera_dir.z,
+        camera_right.x * camera_dir.y - camera_right.y * camera_dir.x,
+    );
+
+    // Create the SDF 3D viewport
+    let viewport = Sdf3DViewport {
+        shader_wgsl,
+        camera_pos: camera.position,
+        camera_dir,
+        camera_up,
+        camera_right,
+        fov: camera.fov,
+        time,
+        max_steps: config.max_steps,
+        max_distance: config.max_distance,
+        epsilon: config.epsilon,
+        lights: config.lights.clone(),
+    };
+
+    // Draw the SDF viewport
+    let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
+    ctx.draw_sdf_viewport(rect, &viewport);
 }

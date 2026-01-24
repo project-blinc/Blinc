@@ -29,8 +29,8 @@ pub use crate::lights::{AmbientLight, DirectionalLight, HemisphereLight, PointLi
 
 // Integration
 pub use crate::integration::{
-    create_game_fsm, game_events, game_states, render_scene, AnimatedColor, AnimatedTransform,
-    AnimatedVec3, GameStateMachine,
+    create_game_fsm, game_events, game_states, render_scene, render_sdf_scene, AnimatedColor,
+    AnimatedTransform, AnimatedVec3, GameStateMachine, SdfRenderConfig,
 };
 
 // Systems
@@ -44,7 +44,7 @@ pub use crate::systems::{
 pub use crate::math::{BoundingBox, BoundingSphere, Quat};
 
 // SDF
-pub use crate::sdf::{SdfMaterial, SdfNode, SdfOp, SdfPrimitive, SdfScene};
+pub use crate::sdf::{SdfCamera, SdfGpuRenderer, SdfMaterial, SdfNode, SdfOp, SdfPrimitive, SdfScene};
 
 // Node Graph
 pub use crate::nodegraph::{
@@ -54,7 +54,9 @@ pub use crate::nodegraph::{
 pub use crate::nodegraph::builtin::BuiltinNode;
 
 // Render
-pub use crate::render::{CameraUniform, GamePipelines, ModelUniform, ShaderRegistry, ShaderId};
+pub use crate::render::{
+    CameraUniform, GamePipelines, ModelUniform, ShaderRegistry, ShaderId,
+};
 
 // Re-export common types from blinc_core
 pub use blinc_core::{Color, Mat4, Vec2, Vec3};

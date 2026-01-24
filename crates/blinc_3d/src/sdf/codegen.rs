@@ -1,6 +1,27 @@
 //! SDF WGSL code generation
 
 use super::{operations::SdfDomainOp, SdfNode, SdfNodeContent, SdfOp, SdfPrimitive, SdfScene};
+use blinc_core::Vec3;
+
+/// Format a float value for WGSL (ensures decimal point is present)
+fn wgsl_float(v: f32) -> String {
+    let s = format!("{}", v);
+    if s.contains('.') || s.contains('e') || s.contains('E') {
+        s
+    } else {
+        format!("{}.0", s)
+    }
+}
+
+/// Format a Vec3 for WGSL
+fn wgsl_vec3(v: &Vec3) -> String {
+    format!(
+        "vec3<f32>({}, {}, {})",
+        wgsl_float(v.x),
+        wgsl_float(v.y),
+        wgsl_float(v.z)
+    )
+}
 
 /// SDF code generator
 pub struct SdfCodegen;
@@ -57,23 +78,33 @@ impl SdfCodegen {
             // Apply translation
             if node.transform.position != blinc_core::Vec3::ZERO {
                 current = format!(
-                    "{} - vec3<f32>({}, {}, {})",
+                    "{} - {}",
                     current,
-                    node.transform.position.x,
-                    node.transform.position.y,
-                    node.transform.position.z
+                    wgsl_vec3(&node.transform.position)
                 );
             }
 
             // Apply rotations (ZYX order for proper Euler angles)
             if node.transform.rotation.z != 0.0 {
-                current = format!("op_rotate_z({}, {})", current, node.transform.rotation.z);
+                current = format!(
+                    "op_rotate_z({}, {})",
+                    current,
+                    wgsl_float(node.transform.rotation.z)
+                );
             }
             if node.transform.rotation.y != 0.0 {
-                current = format!("op_rotate_y({}, {})", current, node.transform.rotation.y);
+                current = format!(
+                    "op_rotate_y({}, {})",
+                    current,
+                    wgsl_float(node.transform.rotation.y)
+                );
             }
             if node.transform.rotation.x != 0.0 {
-                current = format!("op_rotate_x({}, {})", current, node.transform.rotation.x);
+                current = format!(
+                    "op_rotate_x({}, {})",
+                    current,
+                    wgsl_float(node.transform.rotation.x)
+                );
             }
 
             // Apply scale
@@ -82,15 +113,13 @@ impl SdfCodegen {
                     && node.transform.scale.y == node.transform.scale.z
                 {
                     // Uniform scale
-                    current = format!("{} / {}", current, node.transform.scale.x);
+                    current = format!("{} / {}", current, wgsl_float(node.transform.scale.x));
                 } else {
                     // Non-uniform scale (approximation)
                     current = format!(
-                        "{} / vec3<f32>({}, {}, {})",
+                        "{} / {}",
                         current,
-                        node.transform.scale.x,
-                        node.transform.scale.y,
-                        node.transform.scale.z
+                        wgsl_vec3(&node.transform.scale)
                     );
                 }
             }
@@ -113,7 +142,7 @@ impl SdfCodegen {
                     if node.transform.scale.x == node.transform.scale.y
                         && node.transform.scale.y == node.transform.scale.z
                     {
-                        format!(" * {}", node.transform.scale.x)
+                        format!(" * {}", wgsl_float(node.transform.scale.x))
                     } else {
                         // Use minimum scale for conservative distance
                         let min_scale = node
@@ -122,7 +151,7 @@ impl SdfCodegen {
                             .x
                             .min(node.transform.scale.y)
                             .min(node.transform.scale.z);
-                        format!(" * {}", min_scale)
+                        format!(" * {}", wgsl_float(min_scale))
                     }
                 } else {
                     String::new()
@@ -172,6 +201,8 @@ struct SdfUniform {
     max_distance: f32,
     epsilon: f32,
     _padding: f32,
+    uv_offset: vec2<f32>,
+    uv_scale: vec2<f32>,
 }
 
 @group(0) @binding(0) var<uniform> sdf: SdfUniform;
@@ -184,10 +215,13 @@ struct VertexOutput {
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     var out: VertexOutput;
-    let x = f32(i32(vertex_index) - 1);
-    let y = f32(i32(vertex_index & 1u) * 2 - 1);
+    // Fullscreen triangle: vertices at (-1,-1), (3,-1), (-1,3)
+    // This covers the entire viewport when clipped to [-1,1] x [-1,1]
+    let x = f32(i32(vertex_index & 1u) * 4 - 1);
+    let y = f32(i32(vertex_index >> 1u) * 4 - 1);
     out.position = vec4<f32>(x, y, 0.0, 1.0);
-    out.uv = vec2<f32>(x, -y) * 0.5 + 0.5;
+    // UV: map clip space to [0,1], with Y flipped (0 at top, 1 at bottom)
+    out.uv = vec2<f32>(x + 1.0, 1.0 - y) * 0.5;
     return out;
 }
 
@@ -224,7 +258,9 @@ fn calc_normal(p: vec3<f32>) -> vec3<f32> {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let aspect = sdf.resolution.x / sdf.resolution.y;
-    let uv = (in.uv * 2.0 - 1.0) * vec2<f32>(aspect, 1.0);
+    // Adjust UV for clipped viewports: map visible portion to original viewport space
+    let adjusted_uv = sdf.uv_offset + in.uv * sdf.uv_scale;
+    let uv = (adjusted_uv * 2.0 - 1.0) * vec2<f32>(aspect, 1.0);
 
     let ro = sdf.camera_pos.xyz;
     let rd = normalize(

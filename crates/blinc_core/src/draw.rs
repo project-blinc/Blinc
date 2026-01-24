@@ -34,7 +34,7 @@
 
 use crate::layer::{
     Affine2D, BillboardFacing, BlendMode, Brush, Camera, ClipShape, Color, CornerRadius,
-    Environment, LayerId, Light, Mat4, Point, Rect, Shadow, Size, Vec2,
+    Environment, LayerId, Light, Mat4, Point, Rect, Sdf3DViewport, Shadow, Size, Vec2,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1240,6 +1240,36 @@ pub trait DrawContext {
         camera: &Camera,
         f: &mut dyn FnMut(&mut dyn DrawContext),
     );
+
+    /// Draw an SDF 3D viewport using GPU raymarching
+    ///
+    /// This renders a procedural 3D scene defined by signed distance functions.
+    /// The shader WGSL code should contain a `map_scene(p: vec3<f32>) -> f32` function
+    /// that defines the SDF scene, and a `get_material(p: vec3<f32>) -> SdfMaterial`
+    /// function for materials.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use blinc_3d::sdf::{SdfScene, SdfCodegen};
+    /// use blinc_core::{DrawContext, Sdf3DViewport, Rect};
+    ///
+    /// // Build an SDF scene
+    /// let scene = SdfScene::new()
+    ///     .sphere(1.0)
+    ///     .translate(0.0, 1.0, 0.0);
+    ///
+    /// // Generate shader and create viewport
+    /// let mut viewport = Sdf3DViewport::default();
+    /// viewport.shader_wgsl = SdfCodegen::generate_full_shader(&scene);
+    ///
+    /// // Render the viewport
+    /// ctx.draw_sdf_viewport(Rect::new(0.0, 0.0, 800.0, 600.0), &viewport);
+    /// ```
+    fn draw_sdf_viewport(&mut self, _rect: Rect, _viewport: &Sdf3DViewport) {
+        // Default implementation does nothing
+        // GPU implementations override this to add SDF viewports to the render batch
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Layer Management

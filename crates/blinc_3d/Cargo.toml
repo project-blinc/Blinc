@@ -43,6 +43,8 @@ parry3d = { version = "0.17", optional = true }
 criterion.workspace = true
 blinc_app = { path = "../blinc_app", features = ["windowed"] }
 tracing-subscriber.workspace = true
+winit.workspace = true
+pollster.workspace = true
 
 [features]
 default = []
