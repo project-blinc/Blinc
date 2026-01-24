@@ -192,7 +192,8 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
             div()
                 .flex_1()
                 .flex_row()
-                .gap(16.0)
+                .justify_between()
+                .gap(2.0)
                 // SDF demos grid
                 .child(sdf_demos_grid(demos))
                 // Info panel
@@ -311,22 +312,20 @@ fn scene_type_badge(scene: &SdfScene) -> Div {
         .child(text(label).size(9.0).color(Color::WHITE))
 }
 
-fn info_panel() -> Div {
+fn info_panel() -> Scroll {
     // Generate example WGSL for display
     let mut example_scene = SdfScene::new();
     example_scene.set_root(SdfScene::sphere(1.0));
     let example_wgsl = example_scene.to_wgsl();
     let map_scene_fn = extract_map_scene(&example_wgsl);
-
-    div()
-        .w(280.0)
-        .h_full()
-        .bg(Color::rgba(0.1, 0.1, 0.14, 1.0))
+    scroll().w(300.0).h(600.00).bg(Color::rgba(0.1, 0.1, 0.14, 1.0))
         .rounded(8.0)
-        .p(16.0)
+        .p(4.0).child( div()
+        .w_full()
+        .h_full()
+        .rounded(8.0)
         .flex_col()
-        .gap(16.0)
-        .overflow_scroll()
+        .gap(4.0)
         // Primitives
         .child(text("SDF Primitives").size(16.0).color(Color::WHITE))
         .child(
@@ -369,7 +368,7 @@ fn info_panel() -> Div {
                 .child(render_item("Gradient for surface normals"))
                 .child(render_item("WGSL code generation"))
                 .child(render_item("GPU pipeline ready")),
-        )
+        ))
 }
 
 fn extract_map_scene(wgsl: &str) -> String {
@@ -400,11 +399,7 @@ fn primitive_item(name: &'static str, formula: &'static str) -> Div {
     div()
         .flex_col()
         .gap(1.0)
-        .child(
-            text(name)
-                .size(12.0)
-                .color(Color::rgba(0.8, 0.8, 0.9, 1.0)),
-        )
+        .child(text(name).size(12.0).color(Color::rgba(0.8, 0.8, 0.9, 1.0)))
         .child(
             text(formula)
                 .size(9.0)
@@ -416,11 +411,7 @@ fn op_item(name: &'static str, formula: &'static str) -> Div {
     div()
         .flex_row()
         .justify_between()
-        .child(
-            text(name)
-                .size(11.0)
-                .color(Color::rgba(0.7, 0.7, 0.8, 1.0)),
-        )
+        .child(text(name).size(11.0).color(Color::rgba(0.7, 0.7, 0.8, 1.0)))
         .child(
             text(formula)
                 .size(10.0)
@@ -440,9 +431,5 @@ fn render_item(info: &'static str) -> Div {
                 .rounded(2.0)
                 .bg(Color::rgba(0.3, 0.8, 0.5, 0.8)),
         )
-        .child(
-            text(info)
-                .size(11.0)
-                .color(Color::rgba(0.6, 0.6, 0.7, 1.0)),
-        )
+        .child(text(info).size(11.0).color(Color::rgba(0.6, 0.6, 0.7, 1.0)))
 }
