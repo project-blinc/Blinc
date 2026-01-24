@@ -20,6 +20,7 @@ use blinc_app::windowed::{WindowedApp, WindowedContext};
 use blinc_core::events::event_types;
 use blinc_core::Transform;
 use blinc_layout::stateful::ButtonState;
+use blinc_layout::widgets::elapsed_ms;
 use std::f32::consts::PI;
 
 fn main() -> Result<()> {
@@ -190,11 +191,10 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
         // Effect selection signal
         let effect = ctx.use_signal("particle_effect", || ParticleEffect::Fire);
 
-        // Time for animation
-        let time = ctx.use_signal("time", || 0.0f32);
-        time.update(|t| t + 0.016);
+        // Use elapsed_ms for animation - doesn't trigger re-renders
+        let time = elapsed_ms() as f32 / 1000.0;
 
-        // Camera angle
+        // Camera angle offset from mouse drag
         let angle = ctx.use_signal("angle", || 0.3f32);
 
         // Handle mouse drag for camera rotation
@@ -206,7 +206,7 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
         }
 
         // Calculate camera position
-        let cam_angle = angle.get() + time.get() * 0.05;
+        let cam_angle = angle.get() + time * 0.05;
         let cam_x = cam_angle.sin() * 6.0;
         let cam_z = cam_angle.cos() * 6.0;
 
@@ -229,7 +229,7 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
             .cursor_pointer()
             .child(
                 canvas(move |draw_ctx, bounds| {
-                    scene.render(draw_ctx, &camera, bounds, time.get());
+                    scene.render(draw_ctx, &camera, bounds, time);
                 })
                 .w_full()
                 .h_full(),

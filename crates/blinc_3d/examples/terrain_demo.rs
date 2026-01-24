@@ -25,6 +25,7 @@ use blinc_app::windowed::{WindowedApp, WindowedContext};
 use blinc_core::events::event_types;
 use blinc_core::Transform;
 use blinc_layout::stateful::ButtonState;
+use blinc_layout::widgets::elapsed_ms;
 use std::f32::consts::PI;
 use std::sync::{Arc, Mutex};
 
@@ -367,11 +368,10 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
         let water_preset = ctx.use_signal("water_preset", || WaterPreset::Lake);
         let water_level = ctx.use_signal("water_level", || 30.0f32);
 
-        // Time for animation
-        let time = ctx.use_signal("time", || 0.0f32);
-        time.update(|t| t + 0.016);
+        // Use elapsed_ms for animation - doesn't trigger re-renders
+        let time = elapsed_ms() as f32 / 1000.0;
 
-        // Camera angle
+        // Camera angle offset from mouse drag
         let angle = ctx.use_signal("angle", || 0.5f32);
 
         // Handle mouse drag for camera rotation
@@ -383,7 +383,7 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
         }
 
         // Calculate camera position
-        let cam_angle = angle.get() + time.get() * 0.02;
+        let cam_angle = angle.get() + time * 0.02;
         let cam_x = cam_angle.sin() * 15.0;
         let cam_z = cam_angle.cos() * 15.0;
         let camera_pos = Vec3::new(cam_x, 8.0, cam_z);

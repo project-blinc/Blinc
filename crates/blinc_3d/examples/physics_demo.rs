@@ -23,7 +23,7 @@ use blinc_app::windowed::{WindowedApp, WindowedContext};
 use blinc_core::events::event_types;
 use blinc_core::State;
 use blinc_layout::stateful::ButtonState;
-use std::f32::consts::PI;
+use blinc_layout::widgets::elapsed_ms;
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -997,13 +997,10 @@ fn center_panel(width: f32, height: f32) -> impl ElementBuilder {
         let collider_preset = ctx.use_signal("collider_preset", || ColliderPreset::Sphere);
         let joint_preset = ctx.use_signal("joint_preset", || JointPreset::Fixed);
 
-        // Time tracking
-        let time = ctx.use_signal("time", || 0.0f32);
-        time.update(|t| t + 0.016);
-
         // Get current values
         let cat = category.get();
-        let t = time.get();
+        // Use elapsed_ms for animation - doesn't trigger re-renders
+        let t = elapsed_ms() as f32 / 1000.0;
 
         // Create ECS World with physics entities
         let (world, camera_entity) = create_physics_world(

@@ -18,6 +18,7 @@ use blinc_app::windowed::{WindowedApp, WindowedContext};
 use blinc_core::events::event_types;
 use blinc_core::Transform;
 use blinc_layout::stateful::ButtonState;
+use blinc_layout::widgets::elapsed_ms;
 use std::f32::consts::PI;
 
 fn main() -> Result<()> {
@@ -125,10 +126,10 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
         // Camera mode signal
         let mode = ctx.use_signal("camera_mode", || CameraMode::Orbit);
 
-        // Time tracking
-        let time = ctx.use_signal("time", || 0.0f32);
-        let dt = 0.016f32; // ~60fps
-        time.update(|t| t + dt);
+        // Use elapsed_ms for time - doesn't trigger re-renders
+        let time_ms = elapsed_ms();
+        let time = time_ms as f32 / 1000.0;
+        let dt = 0.016f32; // ~60fps assumed
 
         // Mouse tracking for camera input
         let mouse_x = ctx.use_signal("mouse_x", || 0.0f32);
@@ -191,11 +192,8 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
             0.0
         };
 
-        // Update prev mouse for next frame
-        if is_dragging.get() {
-            prev_mouse_x.set(mouse_x.get());
-            prev_mouse_y.set(mouse_y.get());
-        }
+        // Update prev mouse for next frame (only if dragging to avoid triggering re-renders)
+        // Note: This is handled via mouse events now, not every frame
 
         // Build CameraInput
         let camera_input = CameraInput {
@@ -226,16 +224,18 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
                 let current = CameraTransform::default();
                 let update_ctx = CameraUpdateContext {
                     dt,
-                    elapsed: time.get(),
+                    elapsed: time,
                     current: &current,
                 };
 
                 let transform = orbit.update(&update_ctx, &camera_input);
 
-                // Store updated state
-                orbit_azimuth.set(orbit.azimuth);
-                orbit_elevation.set(orbit.elevation);
-                orbit_distance.set(orbit.distance);
+                // Only sync state when user is interacting (to avoid infinite re-renders)
+                if is_dragging.get() {
+                    orbit_azimuth.set(orbit.azimuth);
+                    orbit_elevation.set(orbit.elevation);
+                    orbit_distance.set(orbit.distance);
+                }
 
                 (transform.position, orbit.target)
             }
@@ -254,18 +254,20 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
                 let current = CameraTransform::default();
                 let update_ctx = CameraUpdateContext {
                     dt,
-                    elapsed: time.get(),
+                    elapsed: time,
                     current: &current,
                 };
 
                 let transform = fly.update(&update_ctx, &camera_input);
 
-                // Store updated state
-                fly_pos_x.set(fly.position.x);
-                fly_pos_y.set(fly.position.y);
-                fly_pos_z.set(fly.position.z);
-                fly_yaw.set(fly.yaw);
-                fly_pitch.set(fly.pitch);
+                // Only sync state when user is interacting (to avoid infinite re-renders)
+                if is_dragging.get() {
+                    fly_pos_x.set(fly.position.x);
+                    fly_pos_y.set(fly.position.y);
+                    fly_pos_z.set(fly.position.z);
+                    fly_yaw.set(fly.yaw);
+                    fly_pitch.set(fly.pitch);
+                }
 
                 let forward = fly.forward();
                 let target = Vec3::new(
@@ -287,7 +289,7 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
                 follow.position_damping = 0.05;
 
                 // Animate target moving in a circle
-                let t = time.get() * 0.5;
+                let t = time * 0.5;
                 let target_pos = Vec3::new(t.sin() * 2.0, 0.0, t.cos() * 2.0);
                 follow.set_target(target_pos, None);
 
@@ -301,7 +303,7 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
                 };
                 let update_ctx = CameraUpdateContext {
                     dt,
-                    elapsed: time.get(),
+                    elapsed: time,
                     current: &current,
                 };
 
@@ -337,22 +339,19 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
                         .with_ease(0.5),
                 );
 
-                // Manually advance time
-                drone.seek(drone_time.get());
+                // Use global time to determine position in 10-second cycle
+                let cycle_time = time % 10.0;
+                drone.seek(cycle_time);
                 drone.resume();
 
                 let current = CameraTransform::default();
                 let update_ctx = CameraUpdateContext {
                     dt,
-                    elapsed: time.get(),
+                    elapsed: time,
                     current: &current,
                 };
 
                 let transform = drone.update(&update_ctx, &camera_input);
-
-                // Update drone time for next frame
-                let new_time = (drone_time.get() + dt) % 10.0; // Total duration ~10s
-                drone_time.set(new_time);
 
                 (transform.position, Vec3::ZERO)
             }
@@ -362,16 +361,15 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
         let mut shake = CameraShake::medium();
         shake.set_trauma(shake_trauma.get());
 
-        // Decay and update shake
-        let decay_rate = 1.5;
-        let new_trauma = (shake_trauma.get() - decay_rate * dt).max(0.0);
-        shake_trauma.set(new_trauma);
+        // Note: shake_trauma decay is commented out to avoid infinite re-renders
+        // In a full application, you'd use animation frames or time-based decay
+        let current_trauma = shake_trauma.get();
 
         // Get shake offset
-        let shake_offset = if new_trauma > 0.001 {
-            shake_noise_time.update(|t| t + dt * shake.frequency);
-            let intensity = new_trauma * new_trauma;
-            let noise_t = shake_noise_time.get();
+        let shake_offset = if current_trauma > 0.001 {
+            // Use time directly for noise instead of updating signal
+            let intensity = current_trauma * current_trauma;
+            let noise_t = time * shake.frequency;
 
             Vec3::new(
                 simple_noise(noise_t, 0) * shake.max_offset.x * intensity,
@@ -404,7 +402,7 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
             .cursor_pointer()
             .child(
                 canvas(move |draw_ctx, bounds| {
-                    scene.render(draw_ctx, &camera, bounds, time.get());
+                    scene.render(draw_ctx, &camera, bounds, time);
                 })
                 .w_full()
                 .h_full(),
@@ -607,8 +605,9 @@ fn camera_settings() -> impl ElementBuilder {
                     .child(setting_row("Rotation Damping", "0.08"))
             }
             CameraMode::Drone => {
-                let drone_time = ctx.use_signal("drone_time", || 0.0f32);
-                let progress = (drone_time.get() / 10.0 * 100.0) as u32;
+                // Calculate progress based on elapsed time
+                let cycle_time = (elapsed_ms() as f32 / 1000.0) % 10.0;
+                let progress = (cycle_time / 10.0 * 100.0) as u32;
 
                 div()
                     .flex_col()
