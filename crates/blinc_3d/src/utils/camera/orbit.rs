@@ -60,11 +60,15 @@ pub struct OrbitController {
     /// Whether controller is active
     enabled: bool,
 
-    // Smooth interpolation state
-    target_azimuth: f32,
-    target_elevation: f32,
-    target_distance: f32,
-    target_position: Vec3,
+    // Smooth interpolation state (public for direct control)
+    /// Target azimuth for smooth interpolation
+    pub target_azimuth: f32,
+    /// Target elevation for smooth interpolation
+    pub target_elevation: f32,
+    /// Target distance for smooth interpolation
+    pub target_distance: f32,
+    /// Target position for smooth interpolation
+    pub target_position: Vec3,
 }
 
 impl Component for OrbitController {}

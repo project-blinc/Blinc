@@ -84,8 +84,7 @@ pub use crate::utils::lighting::{
 // Utils - Skybox system
 #[cfg(feature = "utils-skybox")]
 pub use crate::utils::skybox::{
-    CubemapSkybox, DayNightCycle, GradientSkybox, ProceduralSkybox, Skybox, SkyboxAsset,
-    TimeOfDay, TimeOfDaySystem,
+    DayNightCycle, Skybox, SkyboxAsset, TimeOfDay, TimeOfDaySystem,
 };
 
 // Utils - Mesh loaders

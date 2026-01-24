@@ -2,9 +2,18 @@
 //!
 //! Full physics simulation using the Rapier physics engine.
 
-use super::*;
+use super::{
+    Collider, ColliderShape, Entity, Joint, PhysicsBackend, PhysicsConfig, QueryFilter, Ray,
+    RaycastHit, RigidBody, RigidBodyType,
+};
 use blinc_core::Vec3;
 use std::collections::HashMap;
+
+// Use type aliases to avoid ambiguity with rapier types
+pub use super::ColliderHandle as BlincColliderHandle;
+pub use super::CollisionEvent as BlincCollisionEvent;
+pub use super::JointHandle as BlincJointHandle;
+pub use super::RigidBodyHandle as BlincRigidBodyHandle;
 
 #[cfg(feature = "utils-rapier")]
 use rapier3d::prelude::*;
@@ -38,11 +47,11 @@ pub struct RapierBackend {
 
     /// Handle mapping
     #[cfg(feature = "utils-rapier")]
-    handle_to_body: HashMap<RigidBodyHandle, rapier3d::prelude::RigidBodyHandle>,
+    handle_to_body: HashMap<BlincRigidBodyHandle, rapier3d::prelude::RigidBodyHandle>,
     #[cfg(feature = "utils-rapier")]
-    body_to_handle: HashMap<rapier3d::prelude::RigidBodyHandle, RigidBodyHandle>,
+    body_to_handle: HashMap<rapier3d::prelude::RigidBodyHandle, BlincRigidBodyHandle>,
     #[cfg(feature = "utils-rapier")]
-    handle_to_collider: HashMap<ColliderHandle, rapier3d::prelude::ColliderHandle>,
+    handle_to_collider: HashMap<BlincColliderHandle, rapier3d::prelude::ColliderHandle>,
     #[cfg(feature = "utils-rapier")]
     body_to_entity: HashMap<rapier3d::prelude::RigidBodyHandle, Entity>,
 
@@ -52,7 +61,7 @@ pub struct RapierBackend {
     next_joint_handle: u64,
 
     /// Collision events buffer
-    collision_events: Vec<CollisionEvent>,
+    collision_events: Vec<BlincCollisionEvent>,
 }
 
 impl RapierBackend {
@@ -110,7 +119,9 @@ impl PhysicsBackend for RapierBackend {
     fn init(&mut self, config: &PhysicsConfig) {
         self.gravity = vector![config.gravity.x, config.gravity.y, config.gravity.z];
         self.integration_parameters.dt = config.timestep;
-        self.integration_parameters.num_solver_iterations = config.solver_iterations as usize;
+        if let Some(iterations) = std::num::NonZeroUsize::new(config.solver_iterations as usize) {
+            self.integration_parameters.num_solver_iterations = iterations;
+        }
     }
 
     fn step(&mut self, dt: f32) {
@@ -316,7 +327,7 @@ impl PhysicsBackend for RapierBackend {
     fn set_rotation(&mut self, handle: super::RigidBodyHandle, rotation: Vec3) {
         if let Some(rapier_handle) = self.handle_to_body.get(&handle) {
             if let Some(body) = self.rigid_body_set.get_mut(*rapier_handle) {
-                let quat = UnitQuaternion::from_euler_angles(rotation.x, rotation.y, rotation.z);
+                let quat = rapier3d::na::UnitQuaternion::from_euler_angles(rotation.x, rotation.y, rotation.z);
                 body.set_rotation(quat, true);
             }
         }

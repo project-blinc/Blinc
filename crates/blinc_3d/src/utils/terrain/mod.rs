@@ -115,7 +115,7 @@ impl Terrain {
 
     /// Clear all noise layers and set new ones
     pub fn with_noise_layers(mut self, layers: &[NoiseLayer]) -> Self {
-        self.noise_layers = [None; 4];
+        self.noise_layers = [const { None }; 4];
         for (i, layer) in layers.iter().take(4).enumerate() {
             self.noise_layers[i] = Some(layer.clone());
         }

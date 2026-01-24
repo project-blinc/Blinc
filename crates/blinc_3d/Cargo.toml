@@ -47,7 +47,7 @@ winit.workspace = true
 pollster.workspace = true
 
 [features]
-default = []
+default = ["utils-full"]
 
 # SDF support
 sdf = []

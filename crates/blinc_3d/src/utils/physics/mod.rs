@@ -436,9 +436,9 @@ impl System for PhysicsSystem {
         let dt = ctx.delta_time;
 
         // Get physics world resource
-        if let Some(physics) = ctx.world.get_resource_mut::<PhysicsWorld>() {
+        if let Some(physics) = ctx.world.resource_mut::<PhysicsWorld>() {
             // Step simulation
-            physics.step(dt);
+            physics.step(dt as f32);
 
             // Clear events at end of frame
             physics.clear_events();
