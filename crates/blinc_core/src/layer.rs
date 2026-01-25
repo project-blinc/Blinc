@@ -1661,6 +1661,8 @@ pub struct ParticleSystemData {
     pub emitter_position: Vec3,
     /// Emission rate (particles per second)
     pub emission_rate: f32,
+    /// Burst count (particles to spawn in a burst, decrements each frame)
+    pub burst_count: f32,
     /// Emission direction
     pub direction: Vec3,
     /// Direction randomness (0 = straight, 1 = fully random)
@@ -1673,9 +1675,11 @@ pub struct ParticleSystemData {
     pub start_size: (f32, f32),
     /// End size range (min, max)
     pub end_size: (f32, f32),
-    /// Start color
+    /// Start color (base - young particles)
     pub start_color: Color,
-    /// End color (fades over lifetime)
+    /// Mid color (middle - mid-life particles)
+    pub mid_color: Color,
+    /// End color (tip - old/dying particles)
     pub end_color: Color,
     /// Force affectors
     pub forces: Vec<ParticleForce>,
@@ -1708,6 +1712,7 @@ impl Default for ParticleSystemData {
             emitter: ParticleEmitterShape::Point,
             emitter_position: Vec3::ZERO,
             emission_rate: 100.0,
+            burst_count: 0.0,
             direction: Vec3::new(0.0, 1.0, 0.0),
             direction_randomness: 0.0,
             lifetime: (1.0, 2.0),
@@ -1715,6 +1720,7 @@ impl Default for ParticleSystemData {
             start_size: (0.1, 0.2),
             end_size: (0.0, 0.1),
             start_color: Color::WHITE,
+            mid_color: Color::rgba(1.0, 1.0, 1.0, 0.5),
             end_color: Color::rgba(1.0, 1.0, 1.0, 0.0),
             forces: Vec::new(),
             gravity_scale: 1.0,

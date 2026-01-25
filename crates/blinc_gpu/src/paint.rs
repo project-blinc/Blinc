@@ -1940,8 +1940,8 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             ],
             emission_config: [
                 particle_data.emission_rate,
-                0.0, // burst count
-                0.0, // spawn accumulated
+                particle_data.burst_count, // burst count for one-shot effects
+                0.0, // spawn accumulated (deprecated)
                 particle_data.gravity_scale,
             ],
             lifetime_speed: [
@@ -1961,6 +1961,12 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 particle_data.start_color.g,
                 particle_data.start_color.b,
                 particle_data.start_color.a,
+            ],
+            mid_color: [
+                particle_data.mid_color.r,
+                particle_data.mid_color.g,
+                particle_data.mid_color.b,
+                particle_data.mid_color.a,
             ],
             end_color: [
                 particle_data.end_color.r,

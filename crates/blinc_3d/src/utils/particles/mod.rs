@@ -51,9 +51,11 @@ pub struct ParticleSystem {
     pub start_size: (f32, f32),
     /// End size (min, max)
     pub end_size: (f32, f32),
-    /// Start color
+    /// Start color (base of fire - young particles)
     pub start_color: Color,
-    /// End color (fades over lifetime)
+    /// Mid color (middle of fire - mid-life particles)
+    pub mid_color: Color,
+    /// End color (tip of fire - old/dying particles)
     pub end_color: Color,
     /// Start rotation (min, max)
     pub start_rotation: (f32, f32),
@@ -112,6 +114,7 @@ impl ParticleSystem {
             start_size: (0.1, 0.2),
             end_size: (0.0, 0.1),
             start_color: Color::WHITE,
+            mid_color: Color::rgba(1.0, 1.0, 1.0, 0.5),
             end_color: Color::rgba(1.0, 1.0, 1.0, 0.0),
             start_rotation: (0.0, 0.0),
             rotation_speed: (0.0, 0.0),
@@ -179,9 +182,13 @@ impl ParticleSystem {
         self
     }
 
-    /// Set start and end colors
-    pub fn with_colors(mut self, start: Color, end: Color) -> Self {
+    /// Set start, mid, and end colors for 3-stage gradient
+    /// - start: Base color (young particles, e.g., yellow for fire)
+    /// - mid: Middle color (mid-life particles, e.g., red-orange for fire)
+    /// - end: Tip color (dying particles, e.g., dark/burnt for fire)
+    pub fn with_colors(mut self, start: Color, mid: Color, end: Color) -> Self {
         self.start_color = start;
+        self.mid_color = mid;
         self.end_color = end;
         self
     }
@@ -275,43 +282,104 @@ impl ParticleSystem {
         self.spawn_accumulated += count as f32;
     }
 
+    /// Get the accumulated spawn count (for burst effects)
+    pub fn spawn_accumulated(&self) -> f32 {
+        self.spawn_accumulated
+    }
+
+    /// Clear the accumulated spawn count (called after spawning)
+    pub fn clear_spawn_accumulated(&mut self) {
+        self.spawn_accumulated = 0.0;
+    }
+
     // ========== Presets ==========
 
-    /// Fire effect
+    /// Fire effect - default campfire/bonfire style
     pub fn fire() -> Self {
+        Self::fire_bonfire()
+    }
+
+    /// Bonfire style - cohesive flames rising upward with dancing motion
+    pub fn fire_bonfire() -> Self {
         Self::new()
-            .with_max_particles(5000)
-            .with_emitter(EmitterShape::Cone { angle: 0.2, radius: 0.3 })
-            .with_emission_rate(200.0)
-            .with_direction(Vec3::new(0.0, 1.0, 0.0), 0.1)
-            .with_lifetime(0.5, 1.5)
-            .with_speed(2.0, 4.0)
-            .with_size(0.15, 0.25, 0.0, 0.05)
+            .with_max_particles(8000)
+            .with_emitter(EmitterShape::Box { half_extents: Vec3::new(0.22, 0.02, 0.22) })
+            .with_emission_rate(900.0)
+            .with_direction(Vec3::new(0.0, 1.0, 0.0), 0.4)
+            .with_lifetime(0.3, 0.7)
+            .with_speed(0.5, 1.3)
+            .with_size(0.06, 0.14, 0.02, 0.04)
             .with_colors(
-                Color::rgb(1.0, 0.8, 0.2),
-                Color::rgba(1.0, 0.2, 0.0, 0.0),
+                Color::rgba(1.0, 0.95, 0.4, 0.25),   // Base: bright yellow
+                Color::rgba(1.0, 0.3, 0.05, 0.18),   // Middle: red-orange
+                Color::rgba(0.2, 0.05, 0.0, 0.0),    // Tip: dark burnt
             )
-            .with_force(Force::gravity(Vec3::new(0.0, 3.0, 0.0)))
-            .with_force(Force::turbulence(0.5, 2.0))
+            .with_force(Force::gravity(Vec3::new(0.0, 1.8, 0.0)))
+            .with_force(Force::drag(3.5))
+            .with_force(Force::turbulence(1.8, 10.0))
             .with_blend_mode(BlendMode::Additive)
     }
 
-    /// Smoke effect
+    /// Candle flame - small, gentle, single flame with subtle flicker
+    pub fn fire_candle() -> Self {
+        Self::new()
+            .with_max_particles(1500)
+            .with_emitter(EmitterShape::Box { half_extents: Vec3::new(0.025, 0.008, 0.025) })
+            .with_emission_rate(250.0)
+            .with_direction(Vec3::new(0.0, 1.0, 0.0), 0.25)
+            .with_lifetime(0.2, 0.45)
+            .with_speed(0.25, 0.6)
+            .with_size(0.025, 0.055, 0.008, 0.02)
+            .with_colors(
+                Color::rgba(1.0, 0.9, 0.5, 0.3),    // Base: bright yellow
+                Color::rgba(1.0, 0.4, 0.1, 0.2),    // Middle: orange-red
+                Color::rgba(0.3, 0.08, 0.0, 0.0),   // Tip: dark burnt
+            )
+            .with_force(Force::gravity(Vec3::new(0.0, 1.0, 0.0)))
+            .with_force(Force::drag(4.5))
+            .with_force(Force::turbulence(0.7, 12.0))
+            .with_blend_mode(BlendMode::Additive)
+    }
+
+    /// Inferno - intense, large, aggressive flames with chaotic dancing
+    pub fn fire_inferno() -> Self {
+        Self::new()
+            .with_max_particles(10000)
+            .with_emitter(EmitterShape::Box { half_extents: Vec3::new(0.3, 0.03, 0.3) })
+            .with_emission_rate(1100.0)
+            .with_direction(Vec3::new(0.0, 1.0, 0.0), 0.45)
+            .with_lifetime(0.35, 0.85)
+            .with_speed(0.7, 1.8)
+            .with_size(0.08, 0.18, 0.025, 0.06)
+            .with_colors(
+                Color::rgba(1.0, 0.92, 0.35, 0.28),  // Base: intense yellow-white
+                Color::rgba(1.0, 0.25, 0.0, 0.2),    // Middle: deep red
+                Color::rgba(0.15, 0.02, 0.0, 0.0),   // Tip: very dark burnt
+            )
+            .with_force(Force::gravity(Vec3::new(0.0, 2.2, 0.0)))
+            .with_force(Force::drag(3.0))
+            .with_force(Force::turbulence(2.2, 8.0))
+            .with_blend_mode(BlendMode::Additive)
+    }
+
+    /// Smoke effect - billowing smoke that rises and expands
     pub fn smoke() -> Self {
         Self::new()
             .with_max_particles(2000)
-            .with_emitter(EmitterShape::Cone { angle: 0.1, radius: 0.2 })
-            .with_emission_rate(50.0)
-            .with_direction(Vec3::new(0.0, 1.0, 0.0), 0.05)
-            .with_lifetime(2.0, 4.0)
-            .with_speed(0.5, 1.5)
-            .with_size(0.2, 0.4, 0.8, 1.2)
+            .with_emitter(EmitterShape::Cone { angle: 0.15, radius: 0.15 })
+            .with_emission_rate(40.0)
+            .with_direction(Vec3::new(0.0, 1.0, 0.0), 0.1)
+            .with_lifetime(3.0, 5.0) // Long lifetime for billowing effect
+            .with_speed(0.3, 0.8) // Slow rising
+            .with_size(0.15, 0.25, 0.6, 1.0) // Expands significantly as it rises
             .with_colors(
-                Color::rgba(0.3, 0.3, 0.3, 0.6),
-                Color::rgba(0.5, 0.5, 0.5, 0.0),
+                Color::rgba(0.15, 0.15, 0.15, 0.5), // Dark gray start
+                Color::rgba(0.3, 0.3, 0.3, 0.35),   // Mid gray
+                Color::rgba(0.45, 0.45, 0.45, 0.0), // Light gray, fades out
             )
-            .with_force(Force::gravity(Vec3::new(0.0, 0.5, 0.0)))
-            .with_force(Force::wind(Vec3::new(1.0, 0.0, 0.0), 0.3, 0.2))
+            .with_force(Force::gravity(Vec3::new(0.0, 0.3, 0.0))) // Very gentle upward drift
+            .with_force(Force::drag(1.5)) // Moderate drag for slow terminal velocity
+            .with_force(Force::turbulence(0.3, 1.0)) // Gentle turbulence for billowing
     }
 
     /// Sparks effect
@@ -325,10 +393,12 @@ impl ParticleSystem {
             .with_speed(5.0, 10.0)
             .with_size(0.02, 0.05, 0.0, 0.01)
             .with_colors(
-                Color::rgb(1.0, 0.9, 0.5),
-                Color::rgb(1.0, 0.3, 0.0),
+                Color::rgb(1.0, 0.95, 0.6),  // Bright yellow-white
+                Color::rgb(1.0, 0.5, 0.1),   // Orange
+                Color::rgb(0.8, 0.2, 0.0),   // Dark red
             )
             .with_force(Force::gravity(Vec3::new(0.0, -9.8, 0.0)))
+            .with_force(Force::drag(0.5)) // Light air resistance
             .with_stretch(0.1, 0.2)
             .with_blend_mode(BlendMode::Additive)
     }
@@ -344,8 +414,9 @@ impl ParticleSystem {
             .with_speed(10.0, 15.0)
             .with_size(0.01, 0.02, 0.01, 0.02)
             .with_colors(
-                Color::rgba(0.7, 0.8, 1.0, 0.5),
-                Color::rgba(0.7, 0.8, 1.0, 0.3),
+                Color::rgba(0.7, 0.8, 1.0, 0.5),  // Light blue
+                Color::rgba(0.7, 0.8, 1.0, 0.4),  // Light blue
+                Color::rgba(0.7, 0.8, 1.0, 0.3),  // Light blue fading
             )
             .with_gravity_scale(0.0)
             .with_stretch(0.5, 0.3)
@@ -361,7 +432,7 @@ impl ParticleSystem {
             .with_lifetime(4.0, 8.0)
             .with_speed(0.5, 1.0)
             .with_size(0.02, 0.05, 0.02, 0.05)
-            .with_colors(Color::WHITE, Color::WHITE)
+            .with_colors(Color::WHITE, Color::WHITE, Color::WHITE)
             .with_force(Force::gravity(Vec3::new(0.0, -1.0, 0.0)))
             .with_force(Force::turbulence(0.3, 0.5))
     }
@@ -377,8 +448,9 @@ impl ParticleSystem {
             .with_speed(5.0, 15.0)
             .with_size(0.2, 0.5, 0.0, 0.1)
             .with_colors(
-                Color::rgb(1.0, 0.8, 0.3),
-                Color::rgba(0.3, 0.1, 0.0, 0.0),
+                Color::rgb(1.0, 0.9, 0.4),         // Bright yellow-white
+                Color::rgb(1.0, 0.4, 0.1),         // Orange
+                Color::rgba(0.2, 0.05, 0.0, 0.0),  // Dark burnt, fading
             )
             .with_force(Force::gravity(Vec3::new(0.0, -5.0, 0.0)))
             .with_force(Force::drag(2.0))
@@ -397,10 +469,13 @@ impl ParticleSystem {
             .with_speed(0.2, 0.5)
             .with_size(0.05, 0.1, 0.0, 0.02)
             .with_colors(
-                Color::rgb(0.5, 0.8, 1.0),
-                Color::rgba(1.0, 0.5, 1.0, 0.0),
+                Color::rgb(0.5, 0.8, 1.0),         // Cyan-blue
+                Color::rgb(0.8, 0.5, 1.0),         // Purple
+                Color::rgba(1.0, 0.4, 0.9, 0.0),   // Pink, fading
             )
-            .with_force(Force::vortex(Vec3::new(0.0, 1.0, 0.0), Vec3::ZERO, 1.0))
+            .with_force(Force::vortex(Vec3::new(0.0, 1.0, 0.0), Vec3::ZERO, 3.0)) // Stronger swirl
+            .with_force(Force::gravity(Vec3::new(0.0, 0.5, 0.0))) // Gentle upward drift
+            .with_force(Force::drag(1.5)) // Prevent runaway velocity
             .with_blend_mode(BlendMode::Additive)
     }
 
@@ -414,7 +489,7 @@ impl ParticleSystem {
             .with_lifetime(3.0, 5.0)
             .with_speed(5.0, 10.0)
             .with_size(0.05, 0.1, 0.05, 0.1)
-            .with_colors(Color::WHITE, Color::WHITE)
+            .with_colors(Color::WHITE, Color::WHITE, Color::WHITE)
             .with_rotation(0.0, std::f32::consts::TAU, -2.0, 2.0)
             .with_force(Force::gravity(Vec3::new(0.0, -3.0, 0.0)))
             .with_force(Force::drag(0.5))
@@ -607,6 +682,7 @@ pub(crate) mod internal {
         pub start_size: [f32; 2],
         pub end_size: [f32; 2],
         pub start_color: [f32; 4],
+        pub mid_color: [f32; 4],
         pub end_color: [f32; 4],
         pub start_rotation: [f32; 2],
         pub rotation_speed: [f32; 2],
@@ -627,6 +703,7 @@ pub(crate) mod internal {
                 start_size: [0.1, 0.2],
                 end_size: [0.0, 0.1],
                 start_color: [1.0; 4],
+                mid_color: [1.0, 1.0, 1.0, 0.5],
                 end_color: [1.0, 1.0, 1.0, 0.0],
                 start_rotation: [0.0; 2],
                 rotation_speed: [0.0; 2],
@@ -762,6 +839,7 @@ pub(crate) mod internal {
             start_size: [system.start_size.0, system.start_size.1],
             end_size: [system.end_size.0, system.end_size.1],
             start_color: [system.start_color.r, system.start_color.g, system.start_color.b, system.start_color.a],
+            mid_color: [system.mid_color.r, system.mid_color.g, system.mid_color.b, system.mid_color.a],
             end_color: [system.end_color.r, system.end_color.g, system.end_color.b, system.end_color.a],
             start_rotation: [system.start_rotation.0, system.start_rotation.1],
             rotation_speed: [system.rotation_speed.0, system.rotation_speed.1],

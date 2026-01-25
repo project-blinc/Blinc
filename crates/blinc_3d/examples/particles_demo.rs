@@ -45,7 +45,9 @@ fn main() -> Result<()> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 enum ParticleEffect {
     #[default]
-    Fire,
+    Fire,        // Bonfire (default)
+    FireCandle,  // Small candle flame
+    FireInferno, // Large intense flames
     Smoke,
     Sparks,
     Rain,
@@ -59,7 +61,9 @@ enum ParticleEffect {
 impl ParticleEffect {
     fn name(&self) -> &'static str {
         match self {
-            ParticleEffect::Fire => "Fire",
+            ParticleEffect::Fire => "Fire - Bonfire",
+            ParticleEffect::FireCandle => "Fire - Candle",
+            ParticleEffect::FireInferno => "Fire - Inferno",
             ParticleEffect::Smoke => "Smoke",
             ParticleEffect::Sparks => "Sparks",
             ParticleEffect::Rain => "Rain",
@@ -73,7 +77,9 @@ impl ParticleEffect {
 
     fn description(&self) -> &'static str {
         match self {
-            ParticleEffect::Fire => "Rising flames with additive blending",
+            ParticleEffect::Fire => "Large campfire/bonfire style flames",
+            ParticleEffect::FireCandle => "Small gentle candle flame",
+            ParticleEffect::FireInferno => "Intense raging inferno",
             ParticleEffect::Smoke => "Billowing smoke with wind drift",
             ParticleEffect::Sparks => "Fast streaking spark particles",
             ParticleEffect::Rain => "Heavy rainfall with stretched drops",
@@ -88,6 +94,8 @@ impl ParticleEffect {
     fn to_key(&self) -> &'static str {
         match self {
             ParticleEffect::Fire => "fire",
+            ParticleEffect::FireCandle => "fire_candle",
+            ParticleEffect::FireInferno => "fire_inferno",
             ParticleEffect::Smoke => "smoke",
             ParticleEffect::Sparks => "sparks",
             ParticleEffect::Rain => "rain",
@@ -102,6 +110,8 @@ impl ParticleEffect {
     fn from_key(key: &str) -> Self {
         match key {
             "fire" => ParticleEffect::Fire,
+            "fire_candle" => ParticleEffect::FireCandle,
+            "fire_inferno" => ParticleEffect::FireInferno,
             "smoke" => ParticleEffect::Smoke,
             "sparks" => ParticleEffect::Sparks,
             "rain" => ParticleEffect::Rain,
@@ -117,7 +127,9 @@ impl ParticleEffect {
     /// Get the actual ParticleSystem from blinc_3d utilities
     fn to_system(&self) -> ParticleSystem {
         match self {
-            ParticleEffect::Fire => ParticleSystem::fire(),
+            ParticleEffect::Fire => ParticleSystem::fire_bonfire(),
+            ParticleEffect::FireCandle => ParticleSystem::fire_candle(),
+            ParticleEffect::FireInferno => ParticleSystem::fire_inferno(),
             ParticleEffect::Smoke => ParticleSystem::smoke(),
             ParticleEffect::Sparks => ParticleSystem::sparks(),
             ParticleEffect::Rain => ParticleSystem::rain(),
@@ -132,13 +144,15 @@ impl ParticleEffect {
                 .with_lifetime(1.0, 3.0)
                 .with_speed(1.0, 3.0)
                 .with_size(0.1, 0.2, 0.0, 0.05)
-                .with_colors(Color::WHITE, Color::rgba(1.0, 1.0, 1.0, 0.0)),
+                .with_colors(Color::WHITE,Color::WHITE, Color::rgba(1.0, 1.0, 1.0, 0.0)),
         }
     }
 }
 
-const ALL_EFFECTS: [ParticleEffect; 9] = [
+const ALL_EFFECTS: [ParticleEffect; 11] = [
     ParticleEffect::Fire,
+    ParticleEffect::FireCandle,
+    ParticleEffect::FireInferno,
     ParticleEffect::Smoke,
     ParticleEffect::Sparks,
     ParticleEffect::Rain,
@@ -194,7 +208,15 @@ fn create_particle_world(effect: ParticleEffect, cam_angle: f32) -> (World, Enti
         .insert(Object3D::default());
 
     // Create particle system entity at emitter position
-    let particle_system = effect.to_system();
+    let mut particle_system = effect.to_system();
+
+    // For burst effects (explosion, confetti), trigger an initial burst
+    match effect {
+        ParticleEffect::Explosion => particle_system.burst(200),
+        ParticleEffect::Confetti => particle_system.burst(500),
+        _ => {}
+    }
+
     world.spawn().insert(particle_system).insert(Object3D {
         position: Vec3::new(0.0, 0.7, 0.0), // On top of pedestal
         ..Default::default()
@@ -286,6 +308,34 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
             if let Some(camera_transform) = world.get_mut::<Object3D>(camera_entity) {
                 camera_transform.position = camera_pos;
                 camera_transform.look_at(Vec3::new(0.0, 1.0, 0.0));
+            }
+
+            // For burst effects (explosion, confetti), periodically re-trigger bursts
+            // so the effect can be seen repeatedly
+            let time_secs = current.wrapping_add(delta_ms) as f32 / 1000.0;
+            let burst_interval = 3.0; // Re-burst every 3 seconds
+
+            // Check if we crossed a burst interval boundary
+            let prev_time = current as f32 / 1000.0;
+            let prev_interval = (prev_time / burst_interval) as u32;
+            let curr_interval = (time_secs / burst_interval) as u32;
+
+            if curr_interval != prev_interval {
+                // Query particle systems and re-trigger bursts for non-looping effects
+                let entities: Vec<_> = world.query::<(&ParticleSystem,)>()
+                    .iter()
+                    .map(|(e, _)| e)
+                    .collect();
+
+                for entity in entities {
+                    if let Some(ps) = world.get_mut::<ParticleSystem>(entity) {
+                        if !ps.looping && ps.emission_rate == 0.0 {
+                            // This is a burst effect - trigger a burst
+                            ps.burst(200);
+                            ps.play(); // Ensure it's playing
+                        }
+                    }
+                }
             }
 
             // Note: ParticleSystem animation is handled by the GPU shader via time parameter
@@ -452,6 +502,8 @@ fn code_example(effect: ParticleEffect) -> impl ElementBuilder {
         ParticleEffect::Custom => {
             "let particles = ParticleSystem::new()\n    .with_emitter(EmitterShape::Sphere { radius: 0.5 })\n    .with_emission_rate(100.0)\n    .with_lifetime(1.0, 3.0)\n    .with_force(Force::gravity(Vec3::new(0.0, -9.8, 0.0)));\nworld.spawn()\n    .insert(particles)\n    .insert(Object3D::default());"
         }
+        ParticleEffect::FireCandle => "world.spawn()\n    .insert(ParticleSystem::fire_candle())\n    .insert(Object3D::default());",
+        ParticleEffect::FireInferno => "world.spawn()\n    .insert(ParticleSystem::fire_inferno())\n    .insert(Object3D::default());",
     };
 
     div()

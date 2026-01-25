@@ -65,9 +65,11 @@ pub struct GpuEmitter {
     pub lifetime_speed: [f32; 4],
     /// Start size (min, max), end size (min, max)
     pub size_config: [f32; 4],
-    /// Start color (rgba)
+    /// Start color (rgba) - base of fire (yellow)
     pub start_color: [f32; 4],
-    /// End color (rgba)
+    /// Mid color (rgba) - middle of fire (red)
+    pub mid_color: [f32; 4],
+    /// End color (rgba) - tip of fire (dark/burnt)
     pub end_color: [f32; 4],
 }
 
@@ -81,6 +83,7 @@ impl Default for GpuEmitter {
             lifetime_speed: [1.0, 2.0, 1.0, 2.0],
             size_config: [0.1, 0.2, 0.0, 0.1],
             start_color: [1.0, 1.0, 1.0, 1.0],
+            mid_color: [1.0, 1.0, 1.0, 0.5],
             end_color: [1.0, 1.0, 1.0, 0.0],
         }
     }
@@ -229,8 +232,9 @@ struct Emitter {
     emission_config: vec4<f32>,      // rate, burst, spawn_acc, gravity_scale
     lifetime_speed: vec4<f32>,       // min_life, max_life, min_speed, max_speed
     size_config: vec4<f32>,          // start_min, start_max, end_min, end_max
-    start_color: vec4<f32>,          // rgba
-    end_color: vec4<f32>,            // rgba
+    start_color: vec4<f32>,          // rgba - base (young particles)
+    mid_color: vec4<f32>,            // rgba - middle age
+    end_color: vec4<f32>,            // rgba - tip (old particles)
 }
 
 struct Force {
@@ -264,6 +268,7 @@ const FORCE_VORTEX: u32 = 2u;
 const FORCE_DRAG: u32 = 3u;
 const FORCE_TURBULENCE: u32 = 4u;
 const FORCE_ATTRACTOR: u32 = 5u;
+const FORCE_RADIAL: u32 = 6u;
 
 // PCG random number generator
 fn pcg_hash(input: u32) -> u32 {
@@ -374,17 +379,52 @@ fn apply_force(force: Force, pos: vec3<f32>, vel: vec3<f32>, dt: f32) -> vec3<f3
             new_vel = vel * (1.0 - strength * dt);
         }
         case FORCE_TURBULENCE: {
-            // Simple noise-based turbulence
+            // 3D turbulence with per-particle variation
             let freq = force.direction_params.w;
-            let noise = sin(pos.x * freq + uniforms.time_config.y) *
-                       cos(pos.z * freq + uniforms.time_config.y * 0.7);
-            new_vel = vel + vec3<f32>(noise, noise * 0.5, -noise) * strength * dt;
+            let t = uniforms.time_config.y;
+
+            // Use velocity magnitude as per-particle seed for variation
+            // This makes each particle get unique turbulence even at same position
+            let vel_seed = dot(vel, vec3<f32>(12.9898, 78.233, 37.719));
+            let particle_offset = fract(sin(vel_seed) * 43758.5453) * 6.28318; // 0 to 2*PI
+
+            // Position-based noise with per-particle phase offset
+            let p1 = pos * freq + vec3<f32>(t * 1.3 + particle_offset, t * 0.7, t * 1.1);
+            let p2 = pos * freq * 1.7 + vec3<f32>(t * 0.9, t * 1.4 + particle_offset, t * 0.6);
+
+            // Multi-octave noise
+            let n1 = sin(p1.x + particle_offset) * cos(p1.y) * sin(p1.z + t);
+            let n2 = cos(p1.y * 1.3 + particle_offset) * sin(p1.z * 0.8) * cos(p1.x + t * 0.7);
+            let n3 = sin(p1.z * 1.1) * cos(p1.x * 0.9 + particle_offset) * sin(p1.y + t * 1.2);
+
+            // Second octave
+            let m1 = sin(p2.x + particle_offset * 0.7) * cos(p2.z) * 0.5;
+            let m2 = cos(p2.y) * sin(p2.x + particle_offset * 1.3) * 0.5;
+            let m3 = sin(p2.z + particle_offset * 0.5) * cos(p2.y) * 0.5;
+
+            // Combine - allow more vertical variation for dancing flames
+            let turb = vec3<f32>(
+                n1 + m1,
+                (n2 + m2) * 0.5,
+                n3 + m3
+            );
+
+            new_vel = vel + turb * strength * dt;
         }
         case FORCE_ATTRACTOR: {
             let attractor_pos = force.direction_params.xyz;
             let to_attractor = attractor_pos - pos;
             let dist = max(length(to_attractor), 0.1);
             new_vel = vel + normalize(to_attractor) * strength / (dist * dist) * dt;
+        }
+        case FORCE_RADIAL: {
+            // Centering force - pulls particles toward the Y-axis (center line)
+            // Negative strength = pull toward center, positive = push away
+            let center = force.direction_params.xyz;
+            let to_center = vec3<f32>(center.x - pos.x, 0.0, center.z - pos.z);
+            let dist = max(length(to_center), 0.01);
+            // Linear falloff - stronger when further from center
+            new_vel = vel + to_center * strength * dt;
         }
         default: {}
     }
@@ -421,13 +461,19 @@ fn cs_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             // Apply forces
             var vel = p.velocity_max_life.xyz;
             let num_forces = u32(uniforms.force_config.x);
+            let gravity_scale = emitter.emission_config.w;
 
-            // Apply gravity
-            vel.y -= 9.8 * emitter.emission_config.w * dt;
-
-            // Apply other forces
+            // Apply forces from the forces array
+            // Note: Gravity is handled via Force::Gravity in the forces array, not hardcoded
             for (var i = 0u; i < num_forces; i++) {
-                vel = apply_force(forces[i], p.position_life.xyz, vel, dt);
+                let force = forces[i];
+                // For gravity forces (type 0), apply gravity_scale
+                if (u32(force.type_strength.x) == FORCE_GRAVITY) {
+                    let gravity_dir = force.direction_params.xyz * gravity_scale;
+                    vel = vel + gravity_dir * dt;
+                } else {
+                    vel = apply_force(force, p.position_life.xyz, vel, dt);
+                }
             }
 
             p.velocity_max_life = vec4<f32>(vel, p.velocity_max_life.w);
@@ -438,9 +484,18 @@ fn cs_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 p.position_life.w
             );
 
-            // Update color based on lifetime
+            // Update color based on lifetime (3-color gradient)
+            // life_ratio: 1.0 = just born (start), 0.5 = mid-life (mid), 0.0 = dying (end)
             let life_ratio = p.position_life.w / p.velocity_max_life.w;
-            p.color = mix(emitter.end_color, emitter.start_color, life_ratio);
+            if (life_ratio > 0.5) {
+                // Young particle: interpolate from start to mid
+                let t = (life_ratio - 0.5) * 2.0; // 0.5->1.0 maps to 0->1
+                p.color = mix(emitter.mid_color, emitter.start_color, t);
+            } else {
+                // Older particle: interpolate from mid to end
+                let t = life_ratio * 2.0; // 0->0.5 maps to 0->1
+                p.color = mix(emitter.end_color, emitter.mid_color, t);
+            }
 
             // Update size based on lifetime
             let start_size = p.size_rotation.y;
@@ -450,7 +505,17 @@ fn cs_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     } else {
         // Try to spawn new particle
         let emission_rate = emitter.emission_config.x;
-        let spawn_chance = emission_rate * dt / f32(max_particles);
+        let burst_count = emitter.emission_config.y;
+
+        // Calculate spawn chance: combines continuous emission with burst
+        var spawn_chance = 0.0;
+        if (emission_rate > 0.0) {
+            spawn_chance = emission_rate * dt / f32(max_particles);
+        }
+        // For burst effects, use burst_count to determine spawn probability
+        if (burst_count > 0.0) {
+            spawn_chance = spawn_chance + burst_count / f32(max_particles);
+        }
 
         if (random_float(&seed) < spawn_chance) {
             // Spawn new particle
