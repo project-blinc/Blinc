@@ -730,6 +730,8 @@ pub struct GpuRenderer {
     layer_texture_cache: LayerTextureCache,
     /// Cached resources for SDF 3D raymarching viewports (lazily initialized)
     sdf_3d_resources: Option<Sdf3DResources>,
+    /// Cached particle systems for GPU particle rendering (keyed by hash of emitter config)
+    particle_systems: std::collections::HashMap<u64, crate::particles::ParticleSystemGpu>,
 }
 
 /// Image rendering pipeline (created lazily on first image render)
@@ -1257,6 +1259,7 @@ impl GpuRenderer {
             path_image_sampler,
             layer_texture_cache: LayerTextureCache::new(texture_format),
             sdf_3d_resources: None,
+            particle_systems: std::collections::HashMap::new(),
         })
     }
 
@@ -2911,6 +2914,11 @@ impl GpuRenderer {
         // Render SDF 3D viewports (after main content, so they render on top)
         if !batch.viewports_3d.is_empty() {
             self.render_sdf_3d_viewports(target, &batch.viewports_3d);
+        }
+
+        // Render GPU particle viewports (after SDF viewports)
+        if !batch.particle_viewports.is_empty() {
+            self.render_particle_viewports(target, &batch.particle_viewports);
         }
     }
 
@@ -7081,6 +7089,111 @@ impl GpuRenderer {
 
             // Submit
             self.queue.submit(std::iter::once(encoder.finish()));
+        }
+    }
+
+    /// Render GPU particle viewports
+    pub fn render_particle_viewports(
+        &mut self,
+        target: &wgpu::TextureView,
+        viewports: &[crate::primitives::ParticleViewport3D],
+    ) {
+        use crate::particles::{ParticleSystemGpu, ParticleViewport};
+        use std::hash::{Hash, Hasher};
+
+        if viewports.is_empty() {
+            return;
+        }
+
+        // Use the actual texture format that was selected during renderer initialization
+        let surface_format = self.texture_format;
+
+        for (vp_index, vp) in viewports.iter().enumerate() {
+            if !vp.playing {
+                continue;
+            }
+
+            // Generate a stable hash key for this particle system based on emitter config
+            // This allows us to reuse the same GPU buffers across frames
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            vp_index.hash(&mut hasher);
+            vp.max_particles.hash(&mut hasher);
+            // Hash emitter position components to differentiate systems at different positions
+            (vp.emitter.position_shape[0].to_bits()).hash(&mut hasher);
+            (vp.emitter.position_shape[1].to_bits()).hash(&mut hasher);
+            (vp.emitter.position_shape[2].to_bits()).hash(&mut hasher);
+            let system_key = hasher.finish();
+
+            // Get or create the particle system
+            let system = self.particle_systems.entry(system_key).or_insert_with(|| {
+                ParticleSystemGpu::new(&self.device, surface_format, vp.max_particles)
+            });
+
+            // Convert ParticleViewport3D to ParticleViewport for the GPU system
+            let particle_viewport = ParticleViewport {
+                emitter: vp.emitter,
+                forces: vp.forces.clone(),
+                max_particles: vp.max_particles,
+                camera_pos: vp.camera_pos,
+                camera_target: vp.camera_target,
+                camera_up: vp.camera_up,
+                fov: vp.fov,
+                time: vp.time,
+                delta_time: vp.delta_time,
+                bounds: vp.bounds,
+                blend_mode: vp.blend_mode,
+                playing: vp.playing,
+            };
+
+            // Create command encoder
+            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Particle Encoder"),
+            });
+
+            // Run compute pass to update particles
+            system.update(&self.queue, &mut encoder, &particle_viewport);
+
+            // Submit compute work first
+            self.queue.submit(std::iter::once(encoder.finish()));
+
+            // Create render encoder
+            let mut render_encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Particle Render Encoder"),
+            });
+
+            // Render pass
+            {
+                let mut render_pass = render_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Particle Render Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: target,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load, // Don't clear, draw on top
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+
+                // Set viewport to the particle bounds
+                render_pass.set_viewport(
+                    vp.bounds[0],
+                    vp.bounds[1],
+                    vp.bounds[2],
+                    vp.bounds[3],
+                    0.0,
+                    1.0,
+                );
+
+                // Render the particles
+                system.render(&self.queue, &mut render_pass, &particle_viewport);
+            }
+
+            // Submit render work
+            self.queue.submit(std::iter::once(render_encoder.finish()));
         }
     }
 }

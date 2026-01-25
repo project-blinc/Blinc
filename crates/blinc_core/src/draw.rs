@@ -34,7 +34,8 @@
 
 use crate::layer::{
     Affine2D, BillboardFacing, BlendMode, Brush, Camera, ClipShape, Color, CornerRadius,
-    Environment, LayerId, Light, Mat4, Point, Rect, Sdf3DViewport, Shadow, Size, Vec2,
+    Environment, LayerId, Light, Mat4, ParticleSystemData, Point, Rect, Sdf3DViewport, Shadow,
+    Size, Vec2,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1269,6 +1270,37 @@ pub trait DrawContext {
     fn draw_sdf_viewport(&mut self, _rect: Rect, _viewport: &Sdf3DViewport) {
         // Default implementation does nothing
         // GPU implementations override this to add SDF viewports to the render batch
+    }
+
+    /// Draw GPU-accelerated particles
+    ///
+    /// This renders a particle system using GPU compute and instanced rendering.
+    /// The particle simulation and rendering happens entirely on the GPU for
+    /// maximum performance.
+    ///
+    /// # Arguments
+    ///
+    /// * `rect` - The viewport rectangle to render particles in
+    /// * `particle_data` - The particle system configuration and state
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use blinc_core::{DrawContext, ParticleSystemData, Rect};
+    ///
+    /// // Create particle system data
+    /// let particles = ParticleSystemData {
+    ///     emitter_position: Vec3::new(0.0, 0.0, 0.0),
+    ///     emission_rate: 100.0,
+    ///     ..Default::default()
+    /// };
+    ///
+    /// // Render the particles
+    /// ctx.draw_particles(Rect::new(0.0, 0.0, 800.0, 600.0), &particles);
+    /// ```
+    fn draw_particles(&mut self, _rect: Rect, _particle_data: &ParticleSystemData) {
+        // Default implementation does nothing
+        // GPU implementations override this to render particles
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -11,23 +11,21 @@
 //!
 //! Run with: cargo run -p blinc_3d --example terrain_demo --features "utils-terrain"
 
-use blinc_3d::ecs::{Entity, System, SystemContext, World};
-use blinc_3d::geometry::{Geometry, PlaneGeometry};
-use blinc_3d::integration::{render_scene, CanvasBounds};
+use blinc_3d::ecs::{Entity, World};
+use blinc_3d::geometry::PlaneGeometry;
+use blinc_3d::integration::render_scene;
 use blinc_3d::lights::{AmbientLight, DirectionalLight, ShadowConfig};
-use blinc_3d::materials::{StandardMaterial};
+use blinc_3d::materials::StandardMaterial;
 use blinc_3d::prelude::*;
 use blinc_3d::scene::{Mesh, Object3D, PerspectiveCamera};
 use blinc_3d::utils::terrain::*;
-use blinc_animation::SpringConfig;
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
+use blinc_cn::prelude::*;
 use blinc_core::events::event_types;
-use blinc_core::Transform;
 use blinc_layout::stateful::ButtonState;
 use blinc_layout::widgets::elapsed_ms;
 use std::f32::consts::PI;
-use std::sync::{Arc, Mutex};
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -89,16 +87,30 @@ impl TerrainPreset {
         }
     }
 
-    fn color(&self) -> Color {
+    fn to_key(&self) -> &'static str {
         match self {
-            TerrainPreset::Mountains => Color::rgb(0.5, 0.6, 0.7),
-            TerrainPreset::Hills => Color::rgb(0.4, 0.6, 0.3),
-            TerrainPreset::Plains => Color::rgb(0.6, 0.7, 0.4),
-            TerrainPreset::Canyons => Color::rgb(0.7, 0.5, 0.3),
-            TerrainPreset::Dunes => Color::rgb(0.9, 0.8, 0.5),
-            TerrainPreset::Island => Color::rgb(0.3, 0.6, 0.8),
-            TerrainPreset::Flat => Color::rgb(0.5, 0.5, 0.5),
-            TerrainPreset::Custom => Color::rgb(0.6, 0.4, 0.8),
+            TerrainPreset::Mountains => "mountains",
+            TerrainPreset::Hills => "hills",
+            TerrainPreset::Plains => "plains",
+            TerrainPreset::Canyons => "canyons",
+            TerrainPreset::Dunes => "dunes",
+            TerrainPreset::Island => "island",
+            TerrainPreset::Flat => "flat",
+            TerrainPreset::Custom => "custom",
+        }
+    }
+
+    fn from_key(key: &str) -> Self {
+        match key {
+            "mountains" => TerrainPreset::Mountains,
+            "hills" => TerrainPreset::Hills,
+            "plains" => TerrainPreset::Plains,
+            "canyons" => TerrainPreset::Canyons,
+            "dunes" => TerrainPreset::Dunes,
+            "island" => TerrainPreset::Island,
+            "flat" => TerrainPreset::Flat,
+            "custom" => TerrainPreset::Custom,
+            _ => TerrainPreset::Mountains,
         }
     }
 
@@ -129,8 +141,8 @@ impl TerrainPreset {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 enum WaterPreset {
     #[default]
-    Ocean,
     Lake,
+    Ocean,
     River,
     Pool,
     Swamp,
@@ -160,14 +172,26 @@ impl WaterPreset {
         }
     }
 
-    fn color(&self) -> Color {
+    fn to_key(&self) -> &'static str {
         match self {
-            WaterPreset::Ocean => Color::rgb(0.1, 0.3, 0.6),
-            WaterPreset::Lake => Color::rgb(0.2, 0.4, 0.5),
-            WaterPreset::River => Color::rgb(0.3, 0.5, 0.6),
-            WaterPreset::Pool => Color::rgb(0.4, 0.7, 0.9),
-            WaterPreset::Swamp => Color::rgb(0.2, 0.3, 0.1),
-            WaterPreset::None => Color::rgba(0.3, 0.3, 0.3, 0.5),
+            WaterPreset::Ocean => "ocean",
+            WaterPreset::Lake => "lake",
+            WaterPreset::River => "river",
+            WaterPreset::Pool => "pool",
+            WaterPreset::Swamp => "swamp",
+            WaterPreset::None => "none",
+        }
+    }
+
+    fn from_key(key: &str) -> Self {
+        match key {
+            "ocean" => WaterPreset::Ocean,
+            "lake" => WaterPreset::Lake,
+            "river" => WaterPreset::River,
+            "pool" => WaterPreset::Pool,
+            "swamp" => WaterPreset::Swamp,
+            "none" => WaterPreset::None,
+            _ => WaterPreset::Lake,
         }
     }
 
@@ -183,26 +207,6 @@ impl WaterPreset {
         }
     }
 }
-
-const ALL_TERRAIN_PRESETS: [TerrainPreset; 8] = [
-    TerrainPreset::Mountains,
-    TerrainPreset::Hills,
-    TerrainPreset::Plains,
-    TerrainPreset::Canyons,
-    TerrainPreset::Dunes,
-    TerrainPreset::Island,
-    TerrainPreset::Flat,
-    TerrainPreset::Custom,
-];
-
-const ALL_WATER_PRESETS: [WaterPreset; 6] = [
-    WaterPreset::Ocean,
-    WaterPreset::Lake,
-    WaterPreset::River,
-    WaterPreset::Pool,
-    WaterPreset::Swamp,
-    WaterPreset::None,
-];
 
 // ============================================================================
 // ECS World Creation
@@ -248,10 +252,11 @@ fn create_terrain_world(
 
     // Spawn water entity if water preset is selected
     if let Some(water) = water_preset.to_water(water_level) {
-        let water_geom = PlaneGeometry::with_segments(25.0, 25.0, 16, 16);
+        let water_color = water.color;
+        let water_geom = PlaneGeometry::new(25.0, 25.0);
         let water_geom_handle = world.add_geometry(water_geom);
         let water_mat_handle = world.add_material(StandardMaterial {
-            color: water.color,
+            color: water_color,
             metalness: 0.2,
             roughness: 0.1,
             ..Default::default()
@@ -261,7 +266,7 @@ fn create_terrain_world(
             .spawn()
             .insert(water)
             .insert(Object3D {
-                position: Vec3::new(0.0, water_level * 0.1 - 1.0, 0.0),
+                position: Vec3::new(0.0, water_level * 0.1, 0.0),
                 visible: true,
                 ..Default::default()
             })
@@ -273,13 +278,14 @@ fn create_terrain_world(
     }
 
     // Spawn camera entity
+    let mut camera_transform = Object3D::default();
+    camera_transform.position = camera_pos;
+    camera_transform.look_at(Vec3::ZERO);
+
     let camera_entity = world
         .spawn()
         .insert(PerspectiveCamera::new(0.8, 16.0 / 9.0, 0.1, 100.0))
-        .insert(Object3D {
-            position: camera_pos,
-            ..Default::default()
-        })
+        .insert(camera_transform)
         .id();
 
     // Spawn ambient light
@@ -288,15 +294,14 @@ fn create_terrain_world(
         .insert(AmbientLight {
             color: Color::WHITE,
             intensity: 0.3,
-        })
-        .id();
+        });
 
     // Spawn directional light (sun)
     world
         .spawn()
         .insert(DirectionalLight {
-            color: Color::WHITE,
-            intensity: 0.8,
+            color: Color::rgb(1.0, 0.95, 0.9),
+            intensity: 1.2,
             cast_shadows: true,
             shadow: ShadowConfig::default(),
             shadow_camera_size: 50.0,
@@ -316,13 +321,22 @@ fn create_terrain_world(
 // ============================================================================
 
 fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
+    // Create shared state at top level - this is the key fix!
+    let terrain_state = ctx.use_state_keyed("terrain_preset", || "mountains".to_string());
+    let water_state = ctx.use_state_keyed("water_preset", || "lake".to_string());
+
     div()
         .w(ctx.width)
         .h(ctx.height)
         .bg(Color::rgba(0.06, 0.06, 0.1, 1.0))
         .flex_col()
         .child(header())
-        .child(main_content(ctx.width, ctx.height - 80.0))
+        .child(main_content(
+            ctx.width,
+            ctx.height - 80.0,
+            terrain_state,
+            water_state,
+        ))
 }
 
 fn header() -> impl ElementBuilder {
@@ -352,25 +366,32 @@ fn header() -> impl ElementBuilder {
         )
 }
 
-fn main_content(width: f32, height: f32) -> impl ElementBuilder {
+fn main_content(
+    width: f32,
+    height: f32,
+    terrain_state: blinc_core::State<String>,
+    water_state: blinc_core::State<String>,
+) -> impl ElementBuilder {
     div()
         .w(width)
         .h(height)
         .flex_row()
-        .child(viewport_area(width - 380.0, height))
-        .child(control_panel())
+        .child(viewport_area(
+            width - 380.0,
+            height,
+            terrain_state.clone(),
+            water_state.clone(),
+        ))
+        .child(control_panel(terrain_state, water_state))
 }
 
-fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
+fn viewport_area(
+    width: f32,
+    height: f32,
+    terrain_state: blinc_core::State<String>,
+    water_state: blinc_core::State<String>,
+) -> impl ElementBuilder {
     stateful::<ButtonState>().on_state(move |ctx| {
-        // Selection signals
-        let terrain_preset = ctx.use_signal("terrain_preset", || TerrainPreset::Mountains);
-        let water_preset = ctx.use_signal("water_preset", || WaterPreset::Lake);
-        let water_level = ctx.use_signal("water_level", || 30.0f32);
-
-        // Use elapsed_ms for animation - doesn't trigger re-renders
-        let time = elapsed_ms() as f32 / 1000.0;
-
         // Camera angle offset from mouse drag
         let angle = ctx.use_signal("angle", || 0.5f32);
 
@@ -382,19 +403,12 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
             }
         }
 
-        // Calculate camera position
-        let cam_angle = angle.get() + time * 0.02;
-        let cam_x = cam_angle.sin() * 15.0;
-        let cam_z = cam_angle.cos() * 15.0;
-        let camera_pos = Vec3::new(cam_x, 8.0, cam_z);
-
-        // Create ECS World with terrain and water
-        let (world, camera_entity) = create_terrain_world(
-            terrain_preset.get(),
-            water_preset.get(),
-            water_level.get(),
-            camera_pos,
-        );
+        // Get preset values from shared state
+        let terrain_key = terrain_state.get();
+        let water_key = water_state.get();
+        let current_terrain = TerrainPreset::from_key(&terrain_key);
+        let current_water = WaterPreset::from_key(&water_key);
+        let angle_offset = angle.get();
 
         div()
             .w(width)
@@ -403,6 +417,19 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
             .cursor_pointer()
             .child(
                 canvas(move |draw_ctx, bounds| {
+                    // Get current time inside canvas callback - runs every frame
+                    let time = elapsed_ms() as f32 / 1000.0;
+
+                    // Calculate camera position with time-based rotation
+                    let cam_angle = angle_offset + time * 0.02;
+                    let cam_x = cam_angle.sin() * 15.0;
+                    let cam_z = cam_angle.cos() * 15.0;
+                    let camera_pos = Vec3::new(cam_x, 8.0, cam_z);
+
+                    // Create ECS World with terrain and water
+                    let (world, camera_entity) =
+                        create_terrain_world(current_terrain, current_water, 30.0, camera_pos);
+
                     // Use the ECS render_scene function
                     render_scene(draw_ctx, &world, camera_entity, bounds);
                 })
@@ -427,7 +454,7 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
                             .weight(FontWeight::SemiBold)
                             .color(Color::WHITE),
                     )
-                    .child(code_example(terrain_preset.get(), water_preset.get())),
+                    .child(code_example(current_terrain, current_water)),
             )
     })
 }
@@ -469,18 +496,17 @@ fn code_example(terrain: TerrainPreset, water: WaterPreset) -> impl ElementBuild
         .py(6.0)
         .bg(Color::rgba(0.1, 0.12, 0.15, 1.0))
         .rounded(4.0)
-        .child(
-            text(&spawn_code)
-                .size(10.0)
-                .color(Color::rgba(0.7, 0.9, 0.7, 1.0)),
-        )
+        .child(code(&spawn_code))
 }
 
-fn control_panel() -> impl ElementBuilder {
+fn control_panel(
+    terrain_state: blinc_core::State<String>,
+    water_state: blinc_core::State<String>,
+) -> impl ElementBuilder {
     scroll()
         .w(380.0)
         .h_full()
-        .bg(Color::rgba(0.08, 0.08, 0.12, 1.0))
+        .bg(Color::GRAY)
         .child(
             div()
                 .p(16.0)
@@ -492,7 +518,7 @@ fn control_panel() -> impl ElementBuilder {
                         .weight(FontWeight::SemiBold)
                         .color(Color::WHITE),
                 )
-                .child(terrain_selector())
+                .child(terrain_radio_group(terrain_state.clone()))
                 .child(divider())
                 .child(
                     text("Terrain Configuration")
@@ -500,7 +526,7 @@ fn control_panel() -> impl ElementBuilder {
                         .weight(FontWeight::SemiBold)
                         .color(Color::WHITE),
                 )
-                .child(terrain_properties())
+                .child(terrain_properties(terrain_state.clone()))
                 .child(divider())
                 .child(
                     text("Water Presets")
@@ -508,7 +534,7 @@ fn control_panel() -> impl ElementBuilder {
                         .weight(FontWeight::SemiBold)
                         .color(Color::WHITE),
                 )
-                .child(water_selector())
+                .child(water_radio_group(water_state.clone()))
                 .child(divider())
                 .child(
                     text("Water Configuration")
@@ -516,7 +542,7 @@ fn control_panel() -> impl ElementBuilder {
                         .weight(FontWeight::SemiBold)
                         .color(Color::WHITE),
                 )
-                .child(water_properties())
+                .child(water_properties(water_state.clone()))
                 .child(divider())
                 .child(
                     text("Material Settings")
@@ -524,277 +550,124 @@ fn control_panel() -> impl ElementBuilder {
                         .weight(FontWeight::SemiBold)
                         .color(Color::WHITE),
                 )
-                .child(material_info()),
+                .child(material_info(terrain_state)),
         )
 }
 
-fn terrain_selector() -> impl ElementBuilder {
-    div().flex_col().gap(6.0).children(
-        ALL_TERRAIN_PRESETS
-            .iter()
-            .map(|&preset| terrain_button(preset))
-            .collect::<Vec<_>>(),
-    )
+fn terrain_radio_group(terrain_state: blinc_core::State<String>) -> impl ElementBuilder {
+    cn::radio_group(&terrain_state)
+        .option("mountains", "Mountains - Ridged peaks")
+        .option("hills", "Hills - Rolling terrain")
+        .option("plains", "Plains - Flat with variation")
+        .option("canyons", "Canyons - Deep valleys")
+        .option("dunes", "Dunes - Sand formations")
+        .option("island", "Island - Ocean falloff")
+        .option("flat", "Flat - No elevation")
+        .option("custom", "Custom - Multiple noise layers")
 }
 
-fn terrain_button(preset: TerrainPreset) -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(move |ctx| {
-        let current = ctx.use_signal("terrain_preset", || TerrainPreset::Mountains);
-        let is_selected = current.get() == preset;
-
-        let (bg, text_color) = match (ctx.state(), is_selected) {
-            (_, true) => (preset.color(), Color::WHITE),
-            (ButtonState::Hovered, false) => (Color::rgba(0.2, 0.2, 0.25, 1.0), Color::WHITE),            _ => (
-                Color::rgba(0.12, 0.12, 0.16, 1.0),
-                Color::rgba(0.8, 0.8, 0.8, 1.0),
-            ),
-        };
-
-        if let Some(event) = ctx.event() {
-            if event.event_type == event_types::POINTER_UP {
-                current.set(preset);
-            }
-        }
-
-        let scale = ctx.use_spring(
-            "scale",
-            if ctx.state() == ButtonState::Pressed {
-                0.97
-            } else {
-                1.0
-            },
-            SpringConfig::snappy(),
-        );
-
-        div()
-            .w_full()
-            .h(44.0)
-            .bg(bg)
-            .rounded(6.0)
-            .px(12.0)
-            .flex_row()
-            .items_center()
-            .gap(10.0)
-            .cursor_pointer()
-            .transform(Transform::scale(scale, scale))
-            .child(
-                div()
-                    .w(8.0)
-                    .h(8.0)
-                    .rounded(4.0)
-                    .bg(if is_selected {
-                        Color::WHITE
-                    } else {
-                        preset.color()
-                    }),
-            )
-            .child(
-                div()
-                    .flex_col()
-                    .gap(1.0)
-                    .child(
-                        text(preset.name())
-                            .size(13.0)
-                            .weight(FontWeight::Medium)
-                            .color(text_color),
-                    )
-                    .child(
-                        text(preset.description())
-                            .size(9.0)
-                            .color(Color::rgba(0.5, 0.5, 0.5, 1.0)),
-                    ),
-            )
-    })
+fn water_radio_group(water_state: blinc_core::State<String>) -> impl ElementBuilder {
+    cn::radio_group(&water_state)
+        .horizontal()
+        .option("ocean", "Ocean")
+        .option("lake", "Lake")
+        .option("river", "River")
+        .option("pool", "Pool")
+        .option("swamp", "Swamp")
+        .option("none", "None")
 }
 
-fn water_selector() -> impl ElementBuilder {
-    div().flex_row().flex_wrap().gap(6.0).children(
-        ALL_WATER_PRESETS
-            .iter()
-            .map(|&preset| water_chip(preset))
-            .collect::<Vec<_>>(),
-    )
-}
+fn terrain_properties(terrain_state: blinc_core::State<String>) -> impl ElementBuilder {
+    let terrain_key = terrain_state.get();
+    let preset = TerrainPreset::from_key(&terrain_key);
+    let terrain = preset.to_terrain(100.0, 10.0);
 
-fn water_chip(preset: WaterPreset) -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(move |ctx| {
-        let current = ctx.use_signal("water_preset", || WaterPreset::Lake);
-        let is_selected = current.get() == preset;
-
-        let bg = if is_selected {
-            preset.color()
-        } else {
-            match ctx.state() {
-                ButtonState::Hovered => Color::rgba(0.2, 0.2, 0.25, 1.0),
-                _ => Color::rgba(0.12, 0.12, 0.16, 1.0),
-            }
-        };
-
-        if let Some(event) = ctx.event() {
-            if event.event_type == event_types::POINTER_UP {
-                current.set(preset);
-            }
-        }
-
-        div()
-            .px(12.0)
-            .py(8.0)
-            .bg(bg)
-            .rounded(16.0)
-            .cursor_pointer()
-            .child(
-                text(preset.name())
-                    .size(12.0)
-                    .color(if is_selected {
-                        Color::WHITE
-                    } else {
-                        Color::rgba(0.8, 0.8, 0.8, 1.0)
-                    }),
-            )
-    })
-}
-
-fn terrain_properties() -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(|ctx| {
-        let preset = ctx.use_signal("terrain_preset", || TerrainPreset::Mountains);
-        let terrain = preset.get().to_terrain(1000.0, 100.0);
-
-        div()
-            .flex_col()
-            .gap(8.0)
-            .child(property_row("Size", &format!("{:.0} units", terrain.size)))
-            .child(property_row(
-                "Max Height",
-                &format!("{:.0} units", terrain.max_height),
-            ))
-            .child(property_row(
-                "Resolution",
-                &format!("{} per chunk", terrain.resolution),
-            ))
-            .child(property_row(
-                "LOD Levels",
-                &format!("{}", terrain.lod_levels),
-            ))
-            .child(noise_layers_info(&terrain))
-    })
-}
-
-fn noise_layers_info(terrain: &Terrain) -> impl ElementBuilder {
-    let mut content = div()
+    div()
         .flex_col()
-        .gap(4.0)
-        .mt(8.0)
-        .child(
-            text("Noise Layers")
-                .size(13.0)
-                .weight(FontWeight::Medium)
-                .color(Color::WHITE),
-        );
-
-    // Access noise layers info - terrain struct doesn't expose the array directly
-    // We'll show the preset info instead
-    content = content.child(
-        div()
-            .px(8.0)
-            .py(4.0)
-            .bg(Color::rgba(0.15, 0.15, 0.2, 1.0))
-            .rounded(4.0)
-            .child(
-                text("Configured via preset or builder")
-                    .size(10.0)
-                    .color(Color::rgba(0.6, 0.6, 0.6, 1.0)),
-            ),
-    );
-
-    content
+        .gap(8.0)
+        .child(property_row("Size", &format!("{:.0}m", terrain.size)))
+        .child(property_row(
+            "Max Height",
+            &format!("{:.1}m", terrain.max_height),
+        ))
+        .child(property_row(
+            "LOD Levels",
+            &format!("{}", terrain.lod_levels),
+        ))
+        .child(property_row(
+            "Resolution",
+            &format!("{}x{}", terrain.resolution, terrain.resolution),
+        ))
 }
 
-fn water_properties() -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(|ctx| {
-        let preset = ctx.use_signal("water_preset", || WaterPreset::Lake);
-        let water_level = ctx.use_signal("water_level", || 30.0f32);
+fn water_properties(water_state: blinc_core::State<String>) -> impl ElementBuilder {
+    let water_key = water_state.get();
+    let preset = WaterPreset::from_key(&water_key);
 
-        if let Some(water) = preset.get().to_water(water_level.get()) {
-            div()
-                .flex_col()
-                .gap(8.0)
-                .child(property_row(
-                    "Water Level",
-                    &format!("{:.0}", water.water_level),
-                ))
-                .child(property_row(
-                    "Transparency",
-                    &format!("{:.0}%", water.transparency * 100.0),
-                ))
-                .child(property_row(
-                    "Wave Intensity",
-                    &format!("{:.1}", water.wave_intensity),
-                ))
-                .child(property_row(
-                    "Wave Style",
-                    match water.wave_style {
-                        WaveStyle::Still => "Still",
-                        WaveStyle::Calm => "Calm",
-                        WaveStyle::Ocean => "Ocean",
-                        WaveStyle::River => "River",
-                    },
-                ))
-                .child(property_row(
-                    "Reflections",
-                    if water.reflections { "Yes" } else { "No" },
-                ))
-                .child(property_row(
-                    "Refractions",
-                    if water.refractions { "Yes" } else { "No" },
-                ))
-                .child(property_row("Foam", &format!("{:.1}", water.foam)))
-                .child(color_swatch("Water Color", water.color))
-        } else {
-            div().child(
-                text("No water body selected")
-                    .size(12.0)
-                    .color(Color::rgba(0.5, 0.5, 0.5, 1.0)),
-            )
-        }
-    })
-}
-
-fn material_info() -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(|ctx| {
-        let preset = ctx.use_signal("terrain_preset", || TerrainPreset::Mountains);
-        let terrain = preset.get().to_terrain(1000.0, 100.0);
-        let material = &terrain.material;
-
+    if let Some(water) = preset.to_water(30.0) {
         div()
             .flex_col()
             .gap(8.0)
-            .child(color_swatch("Grass", material.grass_color))
-            .child(color_swatch("Rock", material.rock_color))
-            .child(color_swatch("Snow", material.snow_color))
-            .child(color_swatch("Sand", material.sand_color))
             .child(property_row(
-                "Snow Height",
-                &format!("{:.0}%", material.snow_height * 100.0),
+                "Water Level",
+                &format!("{:.1}m", water.water_level),
             ))
             .child(property_row(
-                "Sand Height",
-                &format!("{:.0}%", material.sand_height * 100.0),
+                "Transparency",
+                &format!("{:.0}%", water.transparency * 100.0),
             ))
             .child(property_row(
-                "Rock Slope",
-                &format!("{:.0}%", material.rock_slope * 100.0),
+                "Fresnel",
+                &format!("{:.0}%", water.fresnel_strength * 100.0),
             ))
-    })
+            .child(property_row(
+                "Wave Style",
+                match water.wave_style {
+                    WaveStyle::Still => "Still",
+                    WaveStyle::Calm => "Calm",
+                    WaveStyle::Ocean => "Ocean",
+                    WaveStyle::River => "River",
+                },
+            ))
+    } else {
+        div().child(
+            text("No water selected")
+                .size(12.0)
+                .color(Color::rgba(0.5, 0.5, 0.5, 1.0)),
+        )
+    }
 }
 
-fn property_row(label: &'static str, value: &str) -> impl ElementBuilder {
+fn material_info(terrain_state: blinc_core::State<String>) -> impl ElementBuilder {
+    let terrain_key = terrain_state.get();
+    let preset = TerrainPreset::from_key(&terrain_key);
+    let terrain = preset.to_terrain(100.0, 10.0);
+
+    div()
+        .flex_col()
+        .gap(8.0)
+        .child(color_swatch("Grass", terrain.material.grass_color))
+        .child(color_swatch("Rock", terrain.material.rock_color))
+        .child(color_swatch("Snow", terrain.material.snow_color))
+        .child(color_swatch("Sand", terrain.material.sand_color))
+        .child(property_row(
+            "Snow Height",
+            &format!("{:.1}m", terrain.material.snow_height),
+        ))
+        .child(property_row(
+            "Rock Slope",
+            &format!("{:.1}°", terrain.material.rock_slope.to_degrees()),
+        ))
+}
+
+fn property_row(prop_label: &'static str, value: &str) -> impl ElementBuilder {
     let value = value.to_string();
     div()
         .flex_row()
         .justify_between()
         .items_center()
         .child(
-            text(label)
+            text(prop_label)
                 .size(12.0)
                 .color(Color::rgba(0.7, 0.7, 0.7, 1.0)),
         )
@@ -808,38 +681,39 @@ fn property_row(label: &'static str, value: &str) -> impl ElementBuilder {
         )
 }
 
-fn color_swatch(label: &'static str, color: Color) -> impl ElementBuilder {
+fn color_swatch(swatch_label: &'static str, color: Color) -> impl ElementBuilder {
     div()
         .flex_row()
         .justify_between()
         .items_center()
+        .mt(4.0)
         .child(
-            text(label)
+            text(swatch_label)
                 .size(12.0)
                 .color(Color::rgba(0.7, 0.7, 0.7, 1.0)),
         )
         .child(
             div()
                 .flex_row()
-                .gap(6.0)
+                .gap(8.0)
                 .items_center()
                 .child(
                     div()
-                        .w(20.0)
-                        .h(20.0)
+                        .w(24.0)
+                        .h(24.0)
                         .rounded(4.0)
                         .bg(color)
-                        .border(1.0, Color::rgba(0.3, 0.3, 0.3, 1.0)),
+                        .border(1.0, Color::rgba(0.4, 0.4, 0.4, 1.0)),
                 )
                 .child(
                     text(&format!(
-                        "({:.0}, {:.0}, {:.0})",
+                        "rgb({:.0}, {:.0}, {:.0})",
                         color.r * 255.0,
                         color.g * 255.0,
                         color.b * 255.0
                     ))
                     .size(10.0)
-                    .color(Color::rgba(0.5, 0.5, 0.5, 1.0)),
+                    .color(Color::rgba(0.6, 0.6, 0.6, 1.0)),
                 ),
         )
 }

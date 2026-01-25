@@ -10,9 +10,9 @@
 //!
 //! Run with: cargo run -p blinc_3d --example physics_demo --features utils-rapier
 
-use blinc_3d::ecs::{Entity, World};
+use blinc_3d::ecs::{Entity, System, SystemContext, SystemStage, World};
 use blinc_3d::geometry::{BoxGeometry, CylinderGeometry, SphereGeometry};
-use blinc_3d::integration::render_scene;
+use blinc_3d::integration::render_scene_with_time;
 use blinc_3d::lights::{AmbientLight, DirectionalLight, ShadowConfig};
 use blinc_3d::materials::StandardMaterial;
 use blinc_3d::prelude::*;
@@ -20,10 +20,9 @@ use blinc_3d::scene::{Mesh, Object3D, PerspectiveCamera};
 use blinc_3d::utils::physics::*;
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
-use blinc_core::events::event_types;
-use blinc_core::State;
-use blinc_layout::stateful::ButtonState;
-use blinc_layout::widgets::elapsed_ms;
+use blinc_cn::prelude::*;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -53,6 +52,39 @@ enum PhysicsCategory {
     Colliders,
     Joints,
     Queries,
+}
+
+impl PhysicsCategory {
+    fn to_key(&self) -> &'static str {
+        match self {
+            PhysicsCategory::Config => "config",
+            PhysicsCategory::RigidBodies => "bodies",
+            PhysicsCategory::Colliders => "colliders",
+            PhysicsCategory::Joints => "joints",
+            PhysicsCategory::Queries => "queries",
+        }
+    }
+
+    fn from_key(key: &str) -> Self {
+        match key {
+            "config" => PhysicsCategory::Config,
+            "bodies" => PhysicsCategory::RigidBodies,
+            "colliders" => PhysicsCategory::Colliders,
+            "joints" => PhysicsCategory::Joints,
+            "queries" => PhysicsCategory::Queries,
+            _ => PhysicsCategory::Config,
+        }
+    }
+
+    fn display_name(&self) -> &'static str {
+        match self {
+            PhysicsCategory::Config => "Configuration",
+            PhysicsCategory::RigidBodies => "Rigid Bodies",
+            PhysicsCategory::Colliders => "Colliders",
+            PhysicsCategory::Joints => "Joints",
+            PhysicsCategory::Queries => "Queries",
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -158,6 +190,27 @@ impl ConfigPreset {
             ConfigPreset::Custom => "Custom configuration",
         }
     }
+
+    fn to_key(&self) -> &'static str {
+        match self {
+            ConfigPreset::Default => "default",
+            ConfigPreset::ZeroGravity => "zero_gravity",
+            ConfigPreset::Sidescroller => "sidescroller",
+            ConfigPreset::LowGravity => "low_gravity",
+            ConfigPreset::Custom => "custom",
+        }
+    }
+
+    fn from_key(key: &str) -> Self {
+        match key {
+            "default" => ConfigPreset::Default,
+            "zero_gravity" => ConfigPreset::ZeroGravity,
+            "sidescroller" => ConfigPreset::Sidescroller,
+            "low_gravity" => ConfigPreset::LowGravity,
+            "custom" => ConfigPreset::Custom,
+            _ => ConfigPreset::Default,
+        }
+    }
 }
 
 impl RigidBodyPreset {
@@ -203,6 +256,37 @@ impl RigidBodyPreset {
             RigidBodyPreset::Floating => "Reduced gravity effect",
             RigidBodyPreset::Platform => "Moving platform (kinematic)",
             RigidBodyPreset::Environment => "Static world geometry",
+        }
+    }
+
+    fn to_key(&self) -> &'static str {
+        match self {
+            RigidBodyPreset::Dynamic => "dynamic",
+            RigidBodyPreset::Kinematic => "kinematic",
+            RigidBodyPreset::Static => "static",
+            RigidBodyPreset::PlayerCharacter => "player",
+            RigidBodyPreset::Projectile => "projectile",
+            RigidBodyPreset::Vehicle => "vehicle",
+            RigidBodyPreset::Debris => "debris",
+            RigidBodyPreset::Floating => "floating",
+            RigidBodyPreset::Platform => "platform",
+            RigidBodyPreset::Environment => "environment",
+        }
+    }
+
+    fn from_key(key: &str) -> Self {
+        match key {
+            "dynamic" => RigidBodyPreset::Dynamic,
+            "kinematic" => RigidBodyPreset::Kinematic,
+            "static" => RigidBodyPreset::Static,
+            "player" => RigidBodyPreset::PlayerCharacter,
+            "projectile" => RigidBodyPreset::Projectile,
+            "vehicle" => RigidBodyPreset::Vehicle,
+            "debris" => RigidBodyPreset::Debris,
+            "floating" => RigidBodyPreset::Floating,
+            "platform" => RigidBodyPreset::Platform,
+            "environment" => RigidBodyPreset::Environment,
+            _ => RigidBodyPreset::Dynamic,
         }
     }
 }
@@ -252,6 +336,37 @@ impl ColliderPreset {
             ColliderPreset::Stone => "High friction, heavy",
         }
     }
+
+    fn to_key(&self) -> &'static str {
+        match self {
+            ColliderPreset::Sphere => "sphere",
+            ColliderPreset::Cube => "cube",
+            ColliderPreset::Cuboid => "cuboid",
+            ColliderPreset::Capsule => "capsule",
+            ColliderPreset::Cylinder => "cylinder",
+            ColliderPreset::Bouncy => "bouncy",
+            ColliderPreset::Slippery => "slippery",
+            ColliderPreset::Metal => "metal",
+            ColliderPreset::Wood => "wood",
+            ColliderPreset::Stone => "stone",
+        }
+    }
+
+    fn from_key(key: &str) -> Self {
+        match key {
+            "sphere" => ColliderPreset::Sphere,
+            "cube" => ColliderPreset::Cube,
+            "cuboid" => ColliderPreset::Cuboid,
+            "capsule" => ColliderPreset::Capsule,
+            "cylinder" => ColliderPreset::Cylinder,
+            "bouncy" => ColliderPreset::Bouncy,
+            "slippery" => ColliderPreset::Slippery,
+            "metal" => ColliderPreset::Metal,
+            "wood" => ColliderPreset::Wood,
+            "stone" => ColliderPreset::Stone,
+            _ => ColliderPreset::Sphere,
+        }
+    }
 }
 
 impl JointPreset {
@@ -284,6 +399,37 @@ impl JointPreset {
             JointPreset::ChainLink => "Rigid distance connection",
         }
     }
+
+    fn to_key(&self) -> &'static str {
+        match self {
+            JointPreset::Fixed => "fixed",
+            JointPreset::Ball => "ball",
+            JointPreset::Revolute => "revolute",
+            JointPreset::Prismatic => "prismatic",
+            JointPreset::Spring => "spring",
+            JointPreset::Rope => "rope",
+            JointPreset::DoorHinge => "door_hinge",
+            JointPreset::WheelAxle => "wheel_axle",
+            JointPreset::Suspension => "suspension",
+            JointPreset::ChainLink => "chain_link",
+        }
+    }
+
+    fn from_key(key: &str) -> Self {
+        match key {
+            "fixed" => JointPreset::Fixed,
+            "ball" => JointPreset::Ball,
+            "revolute" => JointPreset::Revolute,
+            "prismatic" => JointPreset::Prismatic,
+            "spring" => JointPreset::Spring,
+            "rope" => JointPreset::Rope,
+            "door_hinge" => JointPreset::DoorHinge,
+            "wheel_axle" => JointPreset::WheelAxle,
+            "suspension" => JointPreset::Suspension,
+            "chain_link" => JointPreset::ChainLink,
+            _ => JointPreset::Fixed,
+        }
+    }
 }
 
 impl QueryPreset {
@@ -306,6 +452,27 @@ impl QueryPreset {
             QueryPreset::TriggersOnly => "Only sensor colliders",
         }
     }
+
+    fn to_key(&self) -> &'static str {
+        match self {
+            QueryPreset::GroundCheck => "ground",
+            QueryPreset::PlayerInteraction => "player_interact",
+            QueryPreset::ProjectileHit => "projectile",
+            QueryPreset::AllPhysics => "all",
+            QueryPreset::TriggersOnly => "triggers",
+        }
+    }
+
+    fn from_key(key: &str) -> Self {
+        match key {
+            "ground" => QueryPreset::GroundCheck,
+            "player_interact" => QueryPreset::PlayerInteraction,
+            "projectile" => QueryPreset::ProjectileHit,
+            "all" => QueryPreset::AllPhysics,
+            "triggers" => QueryPreset::TriggersOnly,
+            _ => QueryPreset::GroundCheck,
+        }
+    }
 }
 
 // ============================================================================
@@ -319,7 +486,6 @@ fn create_physics_world(
     body_preset: RigidBodyPreset,
     collider_preset: ColliderPreset,
     joint_preset: JointPreset,
-    time: f32,
 ) -> (World, Entity) {
     let mut world = World::new();
 
@@ -353,32 +519,33 @@ fn create_physics_world(
         .insert(Collider::cuboid(3.0, 0.1, 3.0))
         .id();
 
-    // Create entities based on category
+    // Create entities based on category (static positions - no time dependency)
     match category {
         PhysicsCategory::Config => {
-            create_config_entities(&mut world, &physics_config, time);
+            create_config_entities(&mut world, &physics_config);
         }
         PhysicsCategory::RigidBodies => {
-            create_body_entities(&mut world, body_preset, time);
+            create_body_entities(&mut world, body_preset);
         }
         PhysicsCategory::Colliders => {
-            create_collider_entities(&mut world, collider_preset, time);
+            create_collider_entities(&mut world, collider_preset);
         }
         PhysicsCategory::Joints => {
-            create_joint_entities(&mut world, joint_preset, time);
+            create_joint_entities(&mut world, joint_preset);
         }
         PhysicsCategory::Queries => {
-            create_query_entities(&mut world, time);
+            create_query_entities(&mut world);
         }
     }
 
-    // Create camera
+    // Create camera with proper look_at
+    let mut camera_transform = Object3D::default();
+    camera_transform.position = Vec3::new(0.0, 2.0, 6.0);
+    camera_transform.look_at(Vec3::new(0.0, 0.0, 0.0));
+
     let camera = world
         .spawn()
-        .insert(Object3D {
-            position: Vec3::new(0.0, 2.0, 6.0),
-            ..Default::default()
-        })
+        .insert(camera_transform)
         .insert(PerspectiveCamera::new(0.8, 16.0 / 9.0, 0.1, 100.0))
         .id();
 
@@ -405,10 +572,9 @@ fn create_physics_world(
     (world, camera)
 }
 
-fn create_config_entities(world: &mut World, config: &PhysicsConfig, time: f32) {
-    // Visualize gravity with falling spheres
-    let gravity_strength = (config.gravity.y.abs() / 9.81).min(2.0);
-    let fall_offset = (time * gravity_strength) % 4.0;
+fn create_config_entities(world: &mut World, config: &PhysicsConfig) {
+    // Visualize gravity with spheres at different heights
+    let _gravity_strength = (config.gravity.y.abs() / 9.81).min(2.0);
 
     let colors = [
         Color::rgba(0.8, 0.4, 0.2, 1.0),
@@ -418,7 +584,7 @@ fn create_config_entities(world: &mut World, config: &PhysicsConfig, time: f32) 
 
     for (i, color) in colors.iter().enumerate() {
         let x_pos = (i as f32 - 1.0) * 0.8;
-        let y_pos = 2.0 - ((fall_offset + i as f32) % 4.0);
+        let y_pos = 1.5 - (i as f32 * 0.5); // Static staggered heights
 
         let sphere_geo = SphereGeometry::new(0.3);
         let sphere_mat = StandardMaterial {
@@ -446,7 +612,7 @@ fn create_config_entities(world: &mut World, config: &PhysicsConfig, time: f32) 
     }
 }
 
-fn create_body_entities(world: &mut World, preset: RigidBodyPreset, time: f32) {
+fn create_body_entities(world: &mut World, preset: RigidBodyPreset) {
     let body = preset.to_body();
 
     let color = match body.body_type {
@@ -455,9 +621,10 @@ fn create_body_entities(world: &mut World, preset: RigidBodyPreset, time: f32) {
         RigidBodyType::Static => Color::rgba(0.5, 0.5, 0.5, 1.0),
     };
 
+    // Static position based on body type
     let y_offset = match body.body_type {
-        RigidBodyType::Dynamic => (time * 2.0).sin() * 0.5,
-        RigidBodyType::Kinematic => (time * 1.5).sin() * 0.3,
+        RigidBodyType::Dynamic => 0.5,
+        RigidBodyType::Kinematic => 0.3,
         RigidBodyType::Static => 0.0,
     };
 
@@ -476,7 +643,7 @@ fn create_body_entities(world: &mut World, preset: RigidBodyPreset, time: f32) {
         .spawn()
         .insert(Object3D {
             position: Vec3::new(0.0, y_offset, 0.0),
-            rotation: Quat::from_axis_angle(Vec3::new(0.0, 1.0, 0.0), time * 0.5),
+            rotation: Quat::from_axis_angle(Vec3::new(0.0, 1.0, 0.0), 0.3), // Static rotation
             ..Default::default()
         })
         .insert(Mesh {
@@ -487,9 +654,9 @@ fn create_body_entities(world: &mut World, preset: RigidBodyPreset, time: f32) {
         .insert(Collider::cube(0.4));
 }
 
-fn create_collider_entities(world: &mut World, preset: ColliderPreset, time: f32) {
+fn create_collider_entities(world: &mut World, preset: ColliderPreset) {
     let collider = preset.to_collider();
-    let rotation = time * 0.5;
+    let rotation = 0.3; // Static rotation angle
 
     // Create geometry based on shape
     let (geo_handle, color) = match &collider.shape {
@@ -558,36 +725,28 @@ fn create_collider_entities(world: &mut World, preset: ColliderPreset, time: f32
         .insert(collider);
 }
 
-fn create_joint_entities(world: &mut World, preset: JointPreset, time: f32) {
+fn create_joint_entities(world: &mut World, preset: JointPreset) {
+    // Static positions for each joint type - no time dependency to avoid jitter
     let (pos_a, pos_b) = match preset {
-        JointPreset::Fixed | JointPreset::ChainLink => {
-            let offset = (time * 0.5).sin() * 0.5;
-            (
-                Vec3::new(offset, 0.0, 0.0),
-                Vec3::new(offset + 1.0, 0.0, 0.0),
-            )
-        }
+        JointPreset::Fixed | JointPreset::ChainLink => (
+            Vec3::new(-0.5, 0.5, 0.0),
+            Vec3::new(0.5, 0.5, 0.0),
+        ),
         JointPreset::Ball
         | JointPreset::Revolute
         | JointPreset::DoorHinge
-        | JointPreset::WheelAxle => {
-            let angle = time * 1.5;
-            (
-                Vec3::ZERO,
-                Vec3::new(angle.cos() * 1.2, angle.sin() * 0.5, 0.0),
-            )
-        }
-        JointPreset::Prismatic | JointPreset::Suspension => {
-            let offset = (time * 2.0).sin() * 0.8;
-            (Vec3::ZERO, Vec3::new(0.0, offset, 0.0))
-        }
-        JointPreset::Spring | JointPreset::Rope => {
-            let dist = 1.0 + (time * 3.0).sin() * 0.3;
-            (
-                Vec3::ZERO,
-                Vec3::new(dist, (time * 2.0).sin() * 0.3, 0.0),
-            )
-        }
+        | JointPreset::WheelAxle => (
+            Vec3::new(-0.6, 0.5, 0.0),
+            Vec3::new(0.6, 0.3, 0.0),
+        ),
+        JointPreset::Prismatic | JointPreset::Suspension => (
+            Vec3::new(0.0, 1.0, 0.0),
+            Vec3::new(0.0, 0.0, 0.0),
+        ),
+        JointPreset::Spring | JointPreset::Rope => (
+            Vec3::new(-0.5, 1.0, 0.0),
+            Vec3::new(0.8, 0.5, 0.0),
+        ),
     };
 
     // Body A (red)
@@ -643,9 +802,9 @@ fn create_joint_entities(world: &mut World, preset: JointPreset, time: f32) {
         .id();
 }
 
-fn create_query_entities(world: &mut World, time: f32) {
-    // Ray visualization (thin elongated box)
-    let ray_length = 3.0 + (time * 0.5).sin() * 0.5;
+fn create_query_entities(world: &mut World) {
+    // Ray visualization (thin elongated box) - static length, no time dependency
+    let ray_length = 3.0;
     let ray_geo = BoxGeometry::new(ray_length, 0.02, 0.02);
     let ray_mat = StandardMaterial {
         color: Color::rgba(1.0, 0.8, 0.2, 1.0),
@@ -722,10 +881,223 @@ fn create_query_entities(world: &mut World, time: f32) {
 }
 
 // ============================================================================
+// Physics Animation System
+// ============================================================================
+
+/// Simple velocity component for physics simulation
+#[derive(Clone, Debug, Default)]
+struct Velocity {
+    linear: Vec3,
+}
+
+impl blinc_3d::ecs::Component for Velocity {
+    const STORAGE: blinc_3d::ecs::StorageType = blinc_3d::ecs::StorageType::Dense;
+}
+
+/// System that simulates physics with gravity for dynamic bodies
+struct PhysicsAnimationSystem {
+    gravity: Vec3,
+    ground_y: f32,
+    elapsed: f32,
+}
+
+impl System for PhysicsAnimationSystem {
+    fn run(&mut self, ctx: &mut SystemContext) {
+        self.elapsed += ctx.delta_time;
+
+        // Query all entities with Object3D and RigidBody - collect body info
+        let entities: Vec<_> = ctx
+            .world
+            .query::<(&Object3D, &RigidBody)>()
+            .iter()
+            .map(|(e, (_, body))| (e, body.body_type, body.gravity_scale))
+            .collect();
+
+        for (entity, body_type, gravity_scale) in entities {
+            // Static bodies never move
+            if body_type == RigidBodyType::Static {
+                continue;
+            }
+
+            // Kinematic bodies only rotate (moved by user, not physics)
+            if body_type == RigidBodyType::Kinematic {
+                if let Some(obj) = ctx.world.get_mut::<Object3D>(entity) {
+                    // Just rotate kinematic bodies slowly
+                    obj.rotation = Quat::from_axis_angle(
+                        Vec3::new(0.0, 1.0, 0.0),
+                        self.elapsed * 0.3,
+                    );
+                }
+                continue;
+            }
+
+            // Dynamic bodies: full physics simulation
+            let velocity = ctx
+                .world
+                .get::<Velocity>(entity)
+                .map(|v| v.linear)
+                .unwrap_or(Vec3::ZERO);
+
+            // Apply gravity to velocity (using gravity_scale from body)
+            let mut new_velocity = Vec3::new(
+                velocity.x,
+                velocity.y + self.gravity.y * gravity_scale * ctx.delta_time,
+                velocity.z,
+            );
+
+            // Update position with velocity
+            if let Some(obj) = ctx.world.get_mut::<Object3D>(entity) {
+                obj.position.x += new_velocity.x * ctx.delta_time;
+                obj.position.y += new_velocity.y * ctx.delta_time;
+                obj.position.z += new_velocity.z * ctx.delta_time;
+
+                // Ground collision - bounce with damping
+                if obj.position.y < self.ground_y {
+                    obj.position.y = self.ground_y;
+                    // Bounce with energy loss (60% retained)
+                    new_velocity.y = -new_velocity.y * 0.6;
+                    new_velocity.x *= 0.9;
+                    new_velocity.z *= 0.9;
+
+                    // Stop bouncing when velocity is very low
+                    if new_velocity.y.abs() < 0.1 {
+                        new_velocity.y = 0.0;
+                    }
+                }
+
+                // Rotate slowly for visual interest
+                obj.rotation = Quat::from_axis_angle(
+                    Vec3::new(0.0, 1.0, 0.0),
+                    self.elapsed * 0.5,
+                );
+            }
+
+            // Store velocity for next frame
+            if ctx.world.get::<Velocity>(entity).is_some() {
+                if let Some(vel) = ctx.world.get_mut::<Velocity>(entity) {
+                    vel.linear = new_velocity;
+                }
+            } else {
+                ctx.world.insert(entity, Velocity { linear: new_velocity });
+            }
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        "PhysicsAnimationSystem"
+    }
+
+    fn stage(&self) -> SystemStage {
+        SystemStage::Update
+    }
+}
+
+// ============================================================================
+// Shared State for Animation Thread
+// ============================================================================
+
+/// Shared elapsed time (in milliseconds as u32, divide by 1000.0 for seconds)
+static ELAPSED_TIME_MS: AtomicU32 = AtomicU32::new(0);
+
+/// World configuration - stored as hash for change detection
+static WORLD_CONFIG_HASH: AtomicU32 = AtomicU32::new(0);
+
+/// Helper to compute a simple hash of current settings
+fn compute_config_hash(
+    category: &str,
+    config: &str,
+    body: &str,
+    collider: &str,
+    joint: &str,
+) -> u32 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    category.hash(&mut hasher);
+    config.hash(&mut hasher);
+    body.hash(&mut hasher);
+    collider.hash(&mut hasher);
+    joint.hash(&mut hasher);
+    hasher.finish() as u32
+}
+
+// ============================================================================
 // UI Building
 // ============================================================================
 
 fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
+    // Create all shared state at the top level
+    let category_state = ctx.use_state_keyed("physics_category", || "config".to_string());
+    let config_state = ctx.use_state_keyed("config_preset", || "default".to_string());
+    let body_state = ctx.use_state_keyed("body_preset", || "dynamic".to_string());
+    let collider_state = ctx.use_state_keyed("collider_preset", || "sphere".to_string());
+    let joint_state = ctx.use_state_keyed("joint_preset", || "fixed".to_string());
+    let query_state = ctx.use_state_keyed("query_preset", || "ground".to_string());
+
+    // Create the world using persisted state (survives UI rebuilds)
+    // The world is recreated when settings change via the config hash
+    let cat = category_state.get();
+    let cfg = config_state.get();
+    let bod = body_state.get();
+    let col = collider_state.get();
+    let jnt = joint_state.get();
+
+    let current_hash = compute_config_hash(&cat, &cfg, &bod, &col, &jnt);
+
+    // Create world state - uses current settings (initial creation only)
+    // The center_panel handles updates when signals change via deps()
+    let world_state = ctx.use_state_keyed("physics_world", || {
+        let category = PhysicsCategory::from_key(&cat);
+        let config = ConfigPreset::from_key(&cfg);
+        let body = RigidBodyPreset::from_key(&bod);
+        let collider = ColliderPreset::from_key(&col);
+        let joint = JointPreset::from_key(&jnt);
+
+        let (world, camera) = create_physics_world(category, config, body, collider, joint);
+        WORLD_CONFIG_HASH.store(current_hash, Ordering::Relaxed);
+        Arc::new(Mutex::new((world, camera, current_hash)))
+    });
+
+    // Clone world for the tick callback (runs ECS systems to animate entities)
+    let world_for_tick = world_state.get();
+
+    // Register tick callback to run ECS systems at 120fps
+    // This runs on the animation scheduler's background thread and triggers redraws
+    ctx.use_tick_callback(move |dt| {
+        // Update elapsed time (accumulate delta time in milliseconds)
+        let current = ELAPSED_TIME_MS.load(Ordering::Relaxed);
+        let delta_ms = (dt * 1000.0) as u32;
+        ELAPSED_TIME_MS.store(current.wrapping_add(delta_ms), Ordering::Relaxed);
+
+        // Lock world and run animation systems
+        if let Ok(mut world_data) = world_for_tick.lock() {
+            let (ref mut world, _, _) = *world_data;
+
+            // Read gravity from PhysicsWorld resource (respects config preset)
+            let gravity = world
+                .resource::<PhysicsWorld>()
+                .map(|pw| pw.config.gravity)
+                .unwrap_or(Vec3::new(0.0, -9.81, 0.0));
+
+            // Create and run the physics animation system with actual gravity from config
+            let mut animation_system = PhysicsAnimationSystem {
+                gravity,
+                ground_y: -1.3, // Ground plane Y position (slightly above visual ground)
+                elapsed: current as f32 / 1000.0,
+            };
+
+            let mut sys_ctx = SystemContext {
+                world,
+                delta_time: dt.min(0.1), // Cap to avoid large jumps
+                elapsed_time: current as f32 / 1000.0,
+                frame: 0,
+            };
+
+            animation_system.run(&mut sys_ctx);
+        }
+    });
+
+    let world_for_canvas = world_state.get();
+
     div()
         .w(ctx.width)
         .h(ctx.height)
@@ -736,7 +1108,17 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
         // Header
         .child(header())
         // Main content
-        .child(main_content(ctx.width, ctx.height - 80.0))
+        .child(main_content(
+            ctx.width,
+            ctx.height - 80.0,
+            category_state,
+            config_state,
+            body_state,
+            collider_state,
+            joint_state,
+            query_state,
+            world_for_canvas,
+        ))
 }
 
 fn header() -> Div {
@@ -755,21 +1137,61 @@ fn header() -> Div {
         )
 }
 
-fn main_content(width: f32, height: f32) -> impl ElementBuilder {
+fn main_content(
+    width: f32,
+    height: f32,
+    category_state: blinc_core::State<String>,
+    config_state: blinc_core::State<String>,
+    body_state: blinc_core::State<String>,
+    collider_state: blinc_core::State<String>,
+    joint_state: blinc_core::State<String>,
+    query_state: blinc_core::State<String>,
+    world: Arc<Mutex<(World, Entity, u32)>>,
+) -> impl ElementBuilder {
     div()
         .w(width)
         .h(height)
         .flex_row()
         .gap(16.0)
         // Left: Category tabs and selection
-        .child(left_panel())
-        // Center: Visualization
-        .child(center_panel(width - 620.0, height))
+        .child(left_panel(
+            category_state.clone(),
+            config_state.clone(),
+            body_state.clone(),
+            collider_state.clone(),
+            joint_state.clone(),
+            query_state.clone(),
+        ))
+        // Center: Visualization - depends on state signals for incremental updates
+        .child(center_panel(
+            width - 620.0,
+            height,
+            world,
+            category_state.clone(),
+            config_state.clone(),
+            body_state.clone(),
+            collider_state.clone(),
+            joint_state.clone(),
+        ))
         // Right: Details
-        .child(right_panel())
+        .child(right_panel(
+            category_state,
+            config_state,
+            body_state,
+            collider_state,
+            joint_state,
+            query_state,
+        ))
 }
 
-fn left_panel() -> impl ElementBuilder {
+fn left_panel(
+    category_state: blinc_core::State<String>,
+    config_state: blinc_core::State<String>,
+    body_state: blinc_core::State<String>,
+    collider_state: blinc_core::State<String>,
+    joint_state: blinc_core::State<String>,
+    query_state: blinc_core::State<String>,
+) -> impl ElementBuilder {
     scroll()
         .w(280.0)
         .h_full()
@@ -780,285 +1202,284 @@ fn left_panel() -> impl ElementBuilder {
             div()
                 .flex_col()
                 .gap(12.0)
-                // Category tabs
-                .child(category_tabs())
-                // Selection panel
-                .child(selection_panel()),
+                // Category selection
+                .child(
+                    text("Category")
+                        .size(14.0)
+                        .weight(FontWeight::SemiBold)
+                        .color(Color::WHITE),
+                )
+                .child(category_radio_group(category_state.clone()))
+                .child(divider())
+                // Selection panel based on category
+                .child(selection_panel(
+                    category_state,
+                    config_state,
+                    body_state,
+                    collider_state,
+                    joint_state,
+                    query_state,
+                )),
         )
 }
 
-fn category_tabs() -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(|ctx| {
-        let category = ctx.use_signal("category", || PhysicsCategory::Config);
-
-        let categories = [
-            (PhysicsCategory::Config, "Config"),
-            (PhysicsCategory::RigidBodies, "Bodies"),
-            (PhysicsCategory::Colliders, "Colliders"),
-            (PhysicsCategory::Joints, "Joints"),
-            (PhysicsCategory::Queries, "Queries"),
-        ];
-
-        let mut row = div().flex_row().flex_wrap().gap(4.0);
-
-        for (cat, name) in categories {
-            let is_selected = category.get() == cat;
-            let bg = if is_selected {
-                Color::rgba(0.3, 0.5, 0.8, 1.0)
-            } else {
-                Color::rgba(0.15, 0.15, 0.2, 1.0)
-            };
-
-            row = row.child(category_button(cat, name, bg, category.clone()));
-        }
-
-        row
-    })
+fn category_radio_group(category_state: blinc_core::State<String>) -> impl ElementBuilder {
+    cn::radio_group(&category_state)
+        .horizontal()
+        .option("config", "Config")
+        .option("bodies", "Bodies")
+        .option("colliders", "Colliders")
+        .option("joints", "Joints")
+        .option("queries", "Queries")
 }
 
-fn category_button(
-    cat: PhysicsCategory,
-    name: &'static str,
-    bg: Color,
-    category: State<PhysicsCategory>,
+fn selection_panel(
+    category_state: blinc_core::State<String>,
+    config_state: blinc_core::State<String>,
+    body_state: blinc_core::State<String>,
+    collider_state: blinc_core::State<String>,
+    joint_state: blinc_core::State<String>,
+    query_state: blinc_core::State<String>,
 ) -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(move |ctx| {
-        let bg = if ctx.state() == ButtonState::Hovered {
-            Color::rgba(0.25, 0.4, 0.7, 1.0)
-        } else {
-            bg
-        };
+    let category = PhysicsCategory::from_key(&category_state.get());
 
-        if let Some(event) = ctx.event() {
-            if event.event_type == event_types::POINTER_UP {
-                category.set(cat);
-            }
+    match category {
+        PhysicsCategory::Config => {
+            div()
+                .flex_col()
+                .gap(8.0)
+                .child(
+                    text("Configuration Presets")
+                        .size(14.0)
+                        .weight(FontWeight::SemiBold)
+                        .color(Color::WHITE),
+                )
+                .child(config_radio_group(config_state))
         }
-
-        div()
-            .px(12.0)
-            .py(8.0)
-            .bg(bg)
-            .rounded(6.0)
-            .cursor_pointer()
-            .child(text(name).size(12.0).color(Color::WHITE))
-    })
-}
-
-fn selection_panel() -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(|ctx| {
-        let category = ctx.use_signal("category", || PhysicsCategory::Config);
-        let config_preset = ctx.use_signal("config_preset", || ConfigPreset::Default);
-        let body_preset = ctx.use_signal("body_preset", || RigidBodyPreset::Dynamic);
-        let collider_preset = ctx.use_signal("collider_preset", || ColliderPreset::Sphere);
-        let joint_preset = ctx.use_signal("joint_preset", || JointPreset::Fixed);
-        let query_preset = ctx.use_signal("query_preset", || QueryPreset::GroundCheck);
-
-        match category.get() {
-            PhysicsCategory::Config => preset_list_config(config_preset),
-            PhysicsCategory::RigidBodies => preset_list_body(body_preset),
-            PhysicsCategory::Colliders => preset_list_collider(collider_preset),
-            PhysicsCategory::Joints => preset_list_joint(joint_preset),
-            PhysicsCategory::Queries => preset_list_query(query_preset),
+        PhysicsCategory::RigidBodies => {
+            div()
+                .flex_col()
+                .gap(8.0)
+                .child(
+                    text("RigidBody Presets")
+                        .size(14.0)
+                        .weight(FontWeight::SemiBold)
+                        .color(Color::WHITE),
+                )
+                .child(body_radio_group(body_state))
         }
-    })
-}
-
-fn preset_list_config(selected: State<ConfigPreset>) -> Div {
-    let presets = [
-        ConfigPreset::Default,
-        ConfigPreset::ZeroGravity,
-        ConfigPreset::Sidescroller,
-        ConfigPreset::LowGravity,
-        ConfigPreset::Custom,
-    ];
-    preset_list(presets.to_vec(), selected, |p| p.name(), |p| p.description())
-}
-
-fn preset_list_body(selected: State<RigidBodyPreset>) -> Div {
-    let presets = [
-        RigidBodyPreset::Dynamic,
-        RigidBodyPreset::Kinematic,
-        RigidBodyPreset::Static,
-        RigidBodyPreset::PlayerCharacter,
-        RigidBodyPreset::Projectile,
-        RigidBodyPreset::Vehicle,
-        RigidBodyPreset::Debris,
-        RigidBodyPreset::Floating,
-        RigidBodyPreset::Platform,
-        RigidBodyPreset::Environment,
-    ];
-    preset_list(presets.to_vec(), selected, |p| p.name(), |p| p.description())
-}
-
-fn preset_list_collider(selected: State<ColliderPreset>) -> Div {
-    let presets = [
-        ColliderPreset::Sphere,
-        ColliderPreset::Cube,
-        ColliderPreset::Cuboid,
-        ColliderPreset::Capsule,
-        ColliderPreset::Cylinder,
-        ColliderPreset::Bouncy,
-        ColliderPreset::Slippery,
-        ColliderPreset::Metal,
-        ColliderPreset::Wood,
-        ColliderPreset::Stone,
-    ];
-    preset_list(presets.to_vec(), selected, |p| p.name(), |p| p.description())
-}
-
-fn preset_list_joint(selected: State<JointPreset>) -> Div {
-    let presets = [
-        JointPreset::Fixed,
-        JointPreset::Ball,
-        JointPreset::Revolute,
-        JointPreset::Prismatic,
-        JointPreset::Spring,
-        JointPreset::Rope,
-        JointPreset::DoorHinge,
-        JointPreset::WheelAxle,
-        JointPreset::Suspension,
-        JointPreset::ChainLink,
-    ];
-    preset_list(presets.to_vec(), selected, |p| p.name(), |p| p.description())
-}
-
-fn preset_list_query(selected: State<QueryPreset>) -> Div {
-    let presets = [
-        QueryPreset::GroundCheck,
-        QueryPreset::PlayerInteraction,
-        QueryPreset::ProjectileHit,
-        QueryPreset::AllPhysics,
-        QueryPreset::TriggersOnly,
-    ];
-    preset_list(presets.to_vec(), selected, |p| p.name(), |p| p.description())
-}
-
-fn preset_list<T: Copy + PartialEq + Send + Sync + Default + 'static>(
-    presets: Vec<T>,
-    selected: State<T>,
-    name_fn: fn(&T) -> &'static str,
-    desc_fn: fn(&T) -> &'static str,
-) -> Div {
-    let mut col = div().flex_col().gap(4.0);
-
-    for preset in presets {
-        col = col.child(preset_button(preset, selected.clone(), name_fn, desc_fn));
+        PhysicsCategory::Colliders => {
+            div()
+                .flex_col()
+                .gap(8.0)
+                .child(
+                    text("Collider Presets")
+                        .size(14.0)
+                        .weight(FontWeight::SemiBold)
+                        .color(Color::WHITE),
+                )
+                .child(collider_radio_group(collider_state))
+        }
+        PhysicsCategory::Joints => {
+            div()
+                .flex_col()
+                .gap(8.0)
+                .child(
+                    text("Joint Presets")
+                        .size(14.0)
+                        .weight(FontWeight::SemiBold)
+                        .color(Color::WHITE),
+                )
+                .child(joint_radio_group(joint_state))
+        }
+        PhysicsCategory::Queries => {
+            div()
+                .flex_col()
+                .gap(8.0)
+                .child(
+                    text("Query Presets")
+                        .size(14.0)
+                        .weight(FontWeight::SemiBold)
+                        .color(Color::WHITE),
+                )
+                .child(query_radio_group(query_state))
+        }
     }
-
-    col
 }
 
-fn preset_button<T: Copy + PartialEq + Send + Sync + Default + 'static>(
-    preset: T,
-    selected: State<T>,
-    name_fn: fn(&T) -> &'static str,
-    desc_fn: fn(&T) -> &'static str,
+fn config_radio_group(config_state: blinc_core::State<String>) -> impl ElementBuilder {
+    cn::radio_group(&config_state)
+        .option("default", "Default - Earth gravity")
+        .option("zero_gravity", "Zero Gravity - Space sim")
+        .option("sidescroller", "Sidescroller - High gravity")
+        .option("low_gravity", "Low Gravity - Moon")
+        .option("custom", "Custom - Manual config")
+}
+
+fn body_radio_group(body_state: blinc_core::State<String>) -> impl ElementBuilder {
+    cn::radio_group(&body_state)
+        .option("dynamic", "Dynamic - Physics driven")
+        .option("kinematic", "Kinematic - User controlled")
+        .option("static", "Static - Never moves")
+        .option("player", "Player Character - Fixed rotation")
+        .option("projectile", "Projectile - Fast with CCD")
+        .option("vehicle", "Vehicle - Heavy, damped")
+        .option("debris", "Debris - Lightweight")
+        .option("floating", "Floating - Reduced gravity")
+        .option("platform", "Platform - Moving kinematic")
+        .option("environment", "Environment - Static world")
+}
+
+fn collider_radio_group(collider_state: blinc_core::State<String>) -> impl ElementBuilder {
+    cn::radio_group(&collider_state)
+        .option("sphere", "Sphere - Round shape")
+        .option("cube", "Cube - Uniform box")
+        .option("cuboid", "Cuboid - Non-uniform box")
+        .option("capsule", "Capsule - Cylinder + hemispheres")
+        .option("cylinder", "Cylinder - Cylindrical")
+        .option("bouncy", "Bouncy - High restitution")
+        .option("slippery", "Slippery - Low friction")
+        .option("metal", "Metal - Dense")
+        .option("wood", "Wood - Medium friction")
+        .option("stone", "Stone - Heavy, high friction")
+}
+
+fn joint_radio_group(joint_state: blinc_core::State<String>) -> impl ElementBuilder {
+    cn::radio_group(&joint_state)
+        .option("fixed", "Fixed - Bodies move together")
+        .option("ball", "Ball - Rotate around point")
+        .option("revolute", "Revolute - Single axis rotation")
+        .option("prismatic", "Prismatic - Single axis slide")
+        .option("spring", "Spring - Distance with stiffness")
+        .option("rope", "Rope - Max distance constraint")
+        .option("door_hinge", "Door Hinge - Limited rotation")
+        .option("wheel_axle", "Wheel Axle - Free rotation")
+        .option("suspension", "Suspension - Vertical spring")
+        .option("chain_link", "Chain Link - Rigid distance")
+}
+
+fn query_radio_group(query_state: blinc_core::State<String>) -> impl ElementBuilder {
+    cn::radio_group(&query_state)
+        .option("ground", "Ground Check - Environment only")
+        .option("player_interact", "Player Interaction - Players/enemies")
+        .option("projectile", "Projectile Hit - Damageable objects")
+        .option("all", "All Physics - No filtering")
+        .option("triggers", "Triggers Only - Sensor colliders")
+}
+
+fn center_panel(
+    width: f32,
+    height: f32,
+    world: Arc<Mutex<(World, Entity, u32)>>,
+    category_state: blinc_core::State<String>,
+    config_state: blinc_core::State<String>,
+    body_state: blinc_core::State<String>,
+    collider_state: blinc_core::State<String>,
+    joint_state: blinc_core::State<String>,
 ) -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(move |ctx| {
-        let is_selected = selected.get() == preset;
-        let bg = if is_selected {
-            Color::rgba(0.2, 0.4, 0.6, 1.0)
-        } else if ctx.state() == ButtonState::Hovered {
-            Color::rgba(0.18, 0.18, 0.22, 1.0)
-        } else {
-            Color::rgba(0.12, 0.12, 0.15, 1.0)
-        };
+    use blinc_layout::stateful::{stateful_with_key, NoState};
 
-        if let Some(event) = ctx.event() {
-            if event.event_type == event_types::POINTER_UP {
-                selected.set(preset);
+    // Use stateful container with deps to subscribe to state changes
+    // This ensures the canvas re-renders when any setting changes
+    stateful_with_key::<NoState>("physics_center_panel")
+        .deps([
+            category_state.signal_id(),
+            config_state.signal_id(),
+            body_state.signal_id(),
+            collider_state.signal_id(),
+            joint_state.signal_id(),
+        ])
+        .on_state(move |_ctx| {
+            // Read current state values - this runs when signals change
+            let cat = category_state.get();
+            let cfg = config_state.get();
+            let bod = body_state.get();
+            let col = collider_state.get();
+            let jnt = joint_state.get();
+
+            // Check if we need to recreate the world (settings changed)
+            let current_hash = compute_config_hash(&cat, &cfg, &bod, &col, &jnt);
+            {
+                let mut world_data = world.lock().unwrap();
+                let stored_hash = world_data.2;
+                if stored_hash != current_hash {
+                    // Settings changed - recreate world with new configuration
+                    let category = PhysicsCategory::from_key(&cat);
+                    let config = ConfigPreset::from_key(&cfg);
+                    let body = RigidBodyPreset::from_key(&bod);
+                    let collider = ColliderPreset::from_key(&col);
+                    let joint = JointPreset::from_key(&jnt);
+
+                    let (new_world, camera) = create_physics_world(category, config, body, collider, joint);
+                    *world_data = (new_world, camera, current_hash);
+                    WORLD_CONFIG_HASH.store(current_hash, Ordering::Relaxed);
+                }
             }
-        }
 
-        div()
-            .w_full()
-            .p(8.0)
-            .bg(bg)
-            .rounded(6.0)
-            .cursor_pointer()
-            .flex_col()
-            .gap(2.0)
-            .child(text(name_fn(&preset)).size(13.0).color(Color::WHITE))
-            .child(
-                text(desc_fn(&preset))
-                    .size(10.0)
-                    .color(Color::rgba(0.5, 0.5, 0.6, 1.0)),
-            )
-    })
-}
+            // Clone the Arc for the canvas closure
+            let world_for_canvas = world.clone();
 
-fn center_panel(width: f32, height: f32) -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(move |ctx| {
-        // Get current selections from signals
-        let category = ctx.use_signal("category", || PhysicsCategory::Config);
-        let config_preset = ctx.use_signal("config_preset", || ConfigPreset::Default);
-        let body_preset = ctx.use_signal("body_preset", || RigidBodyPreset::Dynamic);
-        let collider_preset = ctx.use_signal("collider_preset", || ColliderPreset::Sphere);
-        let joint_preset = ctx.use_signal("joint_preset", || JointPreset::Fixed);
+            div()
+                .w(width)
+                .h(height)
+                .bg(Color::rgba(0.08, 0.08, 0.1, 1.0))
+                .rounded(8.0)
+                .overflow_clip()
+                .child(
+                    canvas(move |draw_ctx, bounds| {
+                        // Get current time from the animation scheduler (updated by tick callback)
+                        let t = ELAPSED_TIME_MS.load(Ordering::Relaxed) as f32 / 1000.0;
 
-        // Get current values
-        let cat = category.get();
-        // Use elapsed_ms for animation - doesn't trigger re-renders
-        let t = elapsed_ms() as f32 / 1000.0;
-
-        // Create ECS World with physics entities
-        let (world, camera_entity) = create_physics_world(
-            cat,
-            config_preset.get(),
-            body_preset.get(),
-            collider_preset.get(),
-            joint_preset.get(),
-            t,
-        );
-
-        div()
-            .w(width)
-            .h(height)
-            .bg(Color::rgba(0.08, 0.08, 0.1, 1.0))
-            .rounded(8.0)
-            .overflow_clip()
-            .child(
-                canvas(move |draw_ctx, bounds| {
-                    // Render using proper ECS pipeline
-                    render_scene(draw_ctx, &world, camera_entity, bounds);
-                })
-                .w_full()
-                .h_full(),
-            )
-    })
-}
-
-fn right_panel() -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(|ctx| {
-        let category = ctx.use_signal("category", || PhysicsCategory::Config);
-        let config_preset = ctx.use_signal("config_preset", || ConfigPreset::Default);
-        let body_preset = ctx.use_signal("body_preset", || RigidBodyPreset::Dynamic);
-        let collider_preset = ctx.use_signal("collider_preset", || ColliderPreset::Sphere);
-        let joint_preset = ctx.use_signal("joint_preset", || JointPreset::Fixed);
-        let query_preset = ctx.use_signal("query_preset", || QueryPreset::GroundCheck);
-
-        let content = match category.get() {
-            PhysicsCategory::Config => config_details(config_preset.get()),
-            PhysicsCategory::RigidBodies => body_details(body_preset.get()),
-            PhysicsCategory::Colliders => collider_details(collider_preset.get()),
-            PhysicsCategory::Joints => joint_details(joint_preset.get()),
-            PhysicsCategory::Queries => query_details(query_preset.get()),
-        };
-
-        div()
-            .w(320.0)
-            .h_full()
-            .child(
-                scroll()
+                        // Lock the world for rendering
+                        if let Ok(world_data) = world_for_canvas.lock() {
+                            let (ref world, camera_entity, _) = *world_data;
+                            // Render using proper ECS pipeline with time for any time-based effects
+                            render_scene_with_time(draw_ctx, world, camera_entity, bounds, t);
+                        }
+                    })
                     .w_full()
-                    .h_full()
-                    .bg(Color::rgba(0.1, 0.1, 0.12, 1.0))
-                    .rounded(8.0)
-                    .p(12.0)
-                    .child(content)
-            )
-    })
+                    .h_full(),
+                )
+        })
+}
+
+fn right_panel(
+    category_state: blinc_core::State<String>,
+    config_state: blinc_core::State<String>,
+    body_state: blinc_core::State<String>,
+    collider_state: blinc_core::State<String>,
+    joint_state: blinc_core::State<String>,
+    query_state: blinc_core::State<String>,
+) -> impl ElementBuilder {
+    let category = PhysicsCategory::from_key(&category_state.get());
+
+    let content = match category {
+        PhysicsCategory::Config => {
+            config_details(ConfigPreset::from_key(&config_state.get()))
+        }
+        PhysicsCategory::RigidBodies => {
+            body_details(RigidBodyPreset::from_key(&body_state.get()))
+        }
+        PhysicsCategory::Colliders => {
+            collider_details(ColliderPreset::from_key(&collider_state.get()))
+        }
+        PhysicsCategory::Joints => {
+            joint_details(JointPreset::from_key(&joint_state.get()))
+        }
+        PhysicsCategory::Queries => {
+            query_details(QueryPreset::from_key(&query_state.get()))
+        }
+    };
+
+    div().w(320.0).h_full().child(
+        scroll()
+            .w_full()
+            .h_full()
+            .bg(Color::rgba(0.1, 0.1, 0.12, 1.0))
+            .rounded(8.0)
+            .p(12.0)
+            .child(content),
+    )
 }
 
 // ============================================================================
@@ -1294,12 +1715,12 @@ fn section_header(title: &str) -> Div {
         .child(text(title).size(14.0).color(Color::WHITE).bold())
 }
 
-fn property_row(label: &str, value: &str) -> Div {
+fn property_row(prop_label: &str, value: &str) -> Div {
     div()
         .flex_row()
         .justify_between()
         .child(
-            text(label)
+            text(prop_label)
                 .size(11.0)
                 .color(Color::rgba(0.6, 0.6, 0.7, 1.0)),
         )

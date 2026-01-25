@@ -6,7 +6,12 @@ use crate::ecs::{Entity, World};
 use crate::math::Mat4Ext;
 use crate::scene::{Object3D, OrthographicCamera, PerspectiveCamera, SdfMesh};
 use crate::sdf::{SdfCamera, SdfCodegen, SdfScene};
-use blinc_core::{Camera, CameraProjection, DrawContext, Light, Mat4, Rect, Sdf3DViewport, Vec3, Color};
+use crate::utils::particles::{BlendMode as ParticleBlend, EmitterShape, Force, ParticleSystem, RenderMode};
+use blinc_core::{
+    Camera, CameraProjection, Color, DrawContext, Light, Mat4, ParticleBlendMode,
+    ParticleEmitterShape, ParticleForce, ParticleRenderMode, ParticleSystemData, Rect,
+    Sdf3DViewport, Vec3,
+};
 
 // Re-export CanvasBounds from blinc_layout to avoid type duplication
 pub use blinc_layout::CanvasBounds;
@@ -166,6 +171,9 @@ pub fn render_scene_full(
 
     // Render SDF meshes using the same camera
     render_sdf_meshes_with_fov(ctx, world, &camera_transform, bounds, time, fov);
+
+    // Render particle systems
+    render_particle_systems(ctx, world, &camera_transform, bounds, time, fov);
 
     // Pop the clip region
     ctx.pop_clip();
@@ -734,4 +742,161 @@ pub fn render_sdf_scene_with_config(
     // Draw the SDF viewport
     let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
     ctx.draw_sdf_viewport(rect, &viewport);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Particle System Rendering
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Render all particle system entities in the world using GPU-accelerated rendering
+fn render_particle_systems(
+    ctx: &mut dyn DrawContext,
+    world: &World,
+    camera_transform: &Object3D,
+    bounds: CanvasBounds,
+    time: f32,
+    _fov: f32,
+) {
+    let camera_pos = camera_transform.position;
+    let camera_dir = camera_transform.forward().normalize();
+    let camera_up = camera_transform.up();
+
+    // Calculate right vector (cross product of direction and up)
+    let right = Vec3::new(
+        camera_dir.z * camera_up.y - camera_dir.y * camera_up.z,
+        camera_dir.x * camera_up.z - camera_dir.z * camera_up.x,
+        camera_dir.y * camera_up.x - camera_dir.x * camera_up.y,
+    );
+    let right_len = (right.x * right.x + right.y * right.y + right.z * right.z).sqrt();
+    let camera_right = if right_len > 0.0001 {
+        Vec3::new(right.x / right_len, right.y / right_len, right.z / right_len)
+    } else {
+        Vec3::new(1.0, 0.0, 0.0)
+    };
+
+    // Query all ParticleSystem entities
+    for (_entity, (particle_system, transform)) in world.query::<(&ParticleSystem, &Object3D)>().iter() {
+        if !transform.visible || !particle_system.playing {
+            continue;
+        }
+
+        // Convert to ParticleSystemData and submit to GPU
+        let particle_data = particle_system_to_data(
+            particle_system,
+            transform.position,
+            camera_pos,
+            camera_dir,
+            camera_up,
+            camera_right,
+            time,
+        );
+
+        // Draw particles via GPU
+        let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
+        ctx.draw_particles(rect, &particle_data);
+    }
+}
+
+/// Convert blinc_3d ParticleSystem to blinc_core ParticleSystemData
+fn particle_system_to_data(
+    system: &ParticleSystem,
+    emitter_position: Vec3,
+    camera_pos: Vec3,
+    camera_dir: Vec3,
+    camera_up: Vec3,
+    camera_right: Vec3,
+    time: f32,
+) -> ParticleSystemData {
+    ParticleSystemData {
+        max_particles: system.max_particles,
+        emitter: convert_emitter_shape(&system.emitter),
+        emitter_position,
+        emission_rate: system.emission_rate,
+        direction: system.direction,
+        direction_randomness: system.direction_randomness,
+        lifetime: system.lifetime,
+        start_speed: system.start_speed,
+        start_size: system.start_size,
+        end_size: system.end_size,
+        start_color: system.start_color,
+        end_color: system.end_color,
+        forces: system.forces.iter().map(convert_force).collect(),
+        gravity_scale: system.gravity_scale,
+        render_mode: convert_render_mode(system.render_mode),
+        blend_mode: convert_blend_mode(system.blend_mode),
+        time,
+        delta_time: 0.016, // Assume 60fps, will be updated by actual frame delta
+        camera_pos,
+        camera_dir,
+        camera_up,
+        camera_right,
+        playing: system.playing,
+    }
+}
+
+/// Convert blinc_3d EmitterShape to blinc_core ParticleEmitterShape
+fn convert_emitter_shape(shape: &EmitterShape) -> ParticleEmitterShape {
+    match shape {
+        EmitterShape::Point => ParticleEmitterShape::Point,
+        EmitterShape::Sphere { radius } => ParticleEmitterShape::Sphere { radius: *radius },
+        EmitterShape::Hemisphere { radius } => ParticleEmitterShape::Hemisphere { radius: *radius },
+        EmitterShape::Cone { angle, radius } => ParticleEmitterShape::Cone {
+            angle: *angle,
+            radius: *radius,
+        },
+        EmitterShape::Box { half_extents } => ParticleEmitterShape::Box {
+            half_extents: *half_extents,
+        },
+        EmitterShape::Circle { radius } => ParticleEmitterShape::Circle { radius: *radius },
+    }
+}
+
+/// Convert blinc_3d Force to blinc_core ParticleForce
+fn convert_force(force: &Force) -> ParticleForce {
+    match force {
+        Force::Gravity(dir) => ParticleForce::Gravity(*dir),
+        Force::Wind { direction, strength, turbulence } => ParticleForce::Wind {
+            direction: *direction,
+            strength: *strength,
+            turbulence: *turbulence,
+        },
+        Force::Vortex { axis, center, strength } => ParticleForce::Vortex {
+            axis: *axis,
+            center: *center,
+            strength: *strength,
+        },
+        Force::Drag(coefficient) => ParticleForce::Drag(*coefficient),
+        Force::Turbulence { strength, frequency } => ParticleForce::Turbulence {
+            strength: *strength,
+            frequency: *frequency,
+        },
+        Force::Attractor { position, strength } => ParticleForce::Attractor {
+            position: *position,
+            strength: *strength,
+        },
+        Force::Radial { center, strength } => ParticleForce::Attractor {
+            position: *center,
+            strength: *strength,
+        },
+    }
+}
+
+/// Convert blinc_3d RenderMode to blinc_core ParticleRenderMode
+fn convert_render_mode(mode: RenderMode) -> ParticleRenderMode {
+    match mode {
+        RenderMode::Billboard => ParticleRenderMode::Billboard,
+        RenderMode::Stretched => ParticleRenderMode::Stretched,
+        RenderMode::Horizontal => ParticleRenderMode::Horizontal,
+        RenderMode::Vertical => ParticleRenderMode::Vertical,
+    }
+}
+
+/// Convert blinc_3d BlendMode to blinc_core ParticleBlendMode
+fn convert_blend_mode(mode: ParticleBlend) -> ParticleBlendMode {
+    match mode {
+        ParticleBlend::Alpha => ParticleBlendMode::Alpha,
+        ParticleBlend::Additive => ParticleBlendMode::Additive,
+        ParticleBlend::Multiply => ParticleBlendMode::Multiply,
+        ParticleBlend::Premultiplied => ParticleBlendMode::Alpha, // Map to closest
+    }
 }

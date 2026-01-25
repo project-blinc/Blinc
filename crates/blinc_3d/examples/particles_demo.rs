@@ -6,22 +6,21 @@
 //! - Force affectors: Gravity, Wind, Vortex, Drag, Turbulence
 //! - Blend modes: Alpha, Additive, Multiply
 //!
-//! This demo shows how to configure ParticleSystem components.
-//! In a full application, attach ParticleSystem to entities for GPU rendering.
+//! Particles are rendered as ECS entities using the GPU pipeline.
 //!
 //! Run with: cargo run -p blinc_3d --example particles_demo --features "sdf"
 
+use blinc_3d::lights::AmbientLight;
 use blinc_3d::prelude::*;
-use blinc_3d::sdf::{SdfCamera, SdfScene};
+use blinc_3d::sdf::SdfScene;
 use blinc_3d::utils::particles::*;
-use blinc_animation::SpringConfig;
 use blinc_app::prelude::*;
 use blinc_app::windowed::{WindowedApp, WindowedContext};
+use blinc_cn::prelude::*;
 use blinc_core::events::event_types;
-use blinc_core::Transform;
 use blinc_layout::stateful::ButtonState;
-use blinc_layout::widgets::elapsed_ms;
-use std::f32::consts::PI;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -86,17 +85,32 @@ impl ParticleEffect {
         }
     }
 
-    fn color(&self) -> Color {
+    fn to_key(&self) -> &'static str {
         match self {
-            ParticleEffect::Fire => Color::rgb(1.0, 0.4, 0.1),
-            ParticleEffect::Smoke => Color::rgb(0.5, 0.5, 0.5),
-            ParticleEffect::Sparks => Color::rgb(1.0, 0.8, 0.3),
-            ParticleEffect::Rain => Color::rgb(0.5, 0.6, 0.8),
-            ParticleEffect::Snow => Color::rgb(0.9, 0.95, 1.0),
-            ParticleEffect::Explosion => Color::rgb(1.0, 0.6, 0.2),
-            ParticleEffect::Magic => Color::rgb(0.6, 0.4, 1.0),
-            ParticleEffect::Confetti => Color::rgb(1.0, 0.5, 0.8),
-            ParticleEffect::Custom => Color::rgb(0.4, 0.8, 0.4),
+            ParticleEffect::Fire => "fire",
+            ParticleEffect::Smoke => "smoke",
+            ParticleEffect::Sparks => "sparks",
+            ParticleEffect::Rain => "rain",
+            ParticleEffect::Snow => "snow",
+            ParticleEffect::Explosion => "explosion",
+            ParticleEffect::Magic => "magic",
+            ParticleEffect::Confetti => "confetti",
+            ParticleEffect::Custom => "custom",
+        }
+    }
+
+    fn from_key(key: &str) -> Self {
+        match key {
+            "fire" => ParticleEffect::Fire,
+            "smoke" => ParticleEffect::Smoke,
+            "sparks" => ParticleEffect::Sparks,
+            "rain" => ParticleEffect::Rain,
+            "snow" => ParticleEffect::Snow,
+            "explosion" => ParticleEffect::Explosion,
+            "magic" => ParticleEffect::Magic,
+            "confetti" => ParticleEffect::Confetti,
+            "custom" => ParticleEffect::Custom,
+            _ => ParticleEffect::Fire,
         }
     }
 
@@ -136,17 +150,163 @@ const ALL_EFFECTS: [ParticleEffect; 9] = [
 ];
 
 // ============================================================================
+// Shared State for Animation Thread
+// ============================================================================
+
+/// Shared elapsed time (in milliseconds)
+static ELAPSED_TIME_MS: AtomicU32 = AtomicU32::new(0);
+
+/// Camera angle (stored as fixed-point, multiply by 0.001)
+static CAMERA_ANGLE: AtomicU32 = AtomicU32::new(300); // 0.3 initial
+
+/// Helper to compute hash for change detection
+fn compute_effect_hash(effect_key: &str, cam_angle: f32) -> u32 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    effect_key.hash(&mut hasher);
+    // Don't include cam_angle in hash - we update camera position without recreating world
+    hasher.finish() as u32
+}
+
+// ============================================================================
+// ECS World Creation
+// ============================================================================
+
+/// Create an ECS world with the particle system and scene entities
+fn create_particle_world(effect: ParticleEffect, cam_angle: f32) -> (World, Entity) {
+    let mut world = World::new();
+
+    // Add ambient light
+    world.spawn().insert(AmbientLight {
+        color: Color::WHITE,
+        intensity: 0.4,
+    });
+
+    // Create SDF scene for background (ground + pedestal)
+    let sdf_scene = create_sdf_scene();
+    world
+        .spawn()
+        .insert(SdfMesh {
+            scene: sdf_scene,
+            cast_shadows: false,
+            receive_shadows: false,
+        })
+        .insert(Object3D::default());
+
+    // Create particle system entity at emitter position
+    let particle_system = effect.to_system();
+    world.spawn().insert(particle_system).insert(Object3D {
+        position: Vec3::new(0.0, 0.7, 0.0), // On top of pedestal
+        ..Default::default()
+    });
+
+    // Create camera - position it and look at the center
+    let cam_x = cam_angle.sin() * 6.0;
+    let cam_z = cam_angle.cos() * 6.0;
+    let camera_pos = Vec3::new(cam_x, 3.0, cam_z);
+
+    let mut camera_transform = Object3D::default();
+    camera_transform.position = camera_pos;
+    camera_transform.look_at(Vec3::new(0.0, 1.0, 0.0));
+
+    let camera = world
+        .spawn()
+        .insert(camera_transform)
+        .insert(PerspectiveCamera::new(0.8, 16.0 / 9.0, 0.1, 100.0))
+        .id();
+
+    (world, camera)
+}
+
+/// Create SDF scene for background visualization
+fn create_sdf_scene() -> SdfScene {
+    let mut scene = SdfScene::new();
+
+    // Ground plane
+    let floor = SdfScene::box_node(Vec3::new(5.0, 0.05, 5.0)).at(Vec3::new(0.0, -0.5, 0.0));
+
+    // Simple pedestal
+    let pedestal = SdfScene::cylinder(0.5, 0.3).at(Vec3::new(0.0, 0.0, 0.0));
+
+    // Emitter marker sphere
+    let emitter = SdfScene::sphere(0.15).at(Vec3::new(0.0, 0.5, 0.0));
+
+    let combined = SdfScene::union(floor, pedestal);
+    let combined = SdfScene::union(combined, emitter);
+
+    scene.set_root(combined);
+    scene
+}
+
+// ============================================================================
 // UI Building
 // ============================================================================
 
 fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
+    // Create shared state at the top level
+    let effect_state = ctx.use_state_keyed("particle_effect", || "fire".to_string());
+
+    // Get current effect for initial world creation
+    let effect_key = effect_state.get();
+    let cam_angle = CAMERA_ANGLE.load(Ordering::Relaxed) as f32 * 0.001;
+    let current_hash = compute_effect_hash(&effect_key, cam_angle);
+
+    // Create persisted world state (survives UI rebuilds)
+    let world_state = ctx.use_state_keyed("particle_world", || {
+        let effect = ParticleEffect::from_key(&effect_key);
+        let (world, camera) = create_particle_world(effect, cam_angle);
+        Arc::new(Mutex::new((world, camera, current_hash)))
+    });
+
+    // Clone world for the tick callback
+    let world_for_tick = world_state.get();
+
+    // Register tick callback to update particle systems at 120fps
+    ctx.use_tick_callback(move |dt| {
+        // Update elapsed time
+        let current = ELAPSED_TIME_MS.load(Ordering::Relaxed);
+        let delta_ms = (dt * 1000.0) as u32;
+        ELAPSED_TIME_MS.store(current.wrapping_add(delta_ms), Ordering::Relaxed);
+
+        // Update camera angle with slow rotation
+        let angle = CAMERA_ANGLE.load(Ordering::Relaxed);
+        let new_angle = angle.wrapping_add((dt * 50.0) as u32); // Slow rotation
+        CAMERA_ANGLE.store(new_angle, Ordering::Relaxed);
+
+        // Lock world and update camera position
+        if let Ok(mut world_data) = world_for_tick.lock() {
+            let (ref mut world, camera_entity, _) = *world_data;
+
+            // Update camera position based on angle
+            let cam_angle = new_angle as f32 * 0.001;
+            let cam_x = cam_angle.sin() * 6.0;
+            let cam_z = cam_angle.cos() * 6.0;
+            let camera_pos = Vec3::new(cam_x, 3.0, cam_z);
+
+            if let Some(camera_transform) = world.get_mut::<Object3D>(camera_entity) {
+                camera_transform.position = camera_pos;
+                camera_transform.look_at(Vec3::new(0.0, 1.0, 0.0));
+            }
+
+            // Note: ParticleSystem animation is handled by the GPU shader via time parameter
+            // passed to render_scene_with_time - no CPU update needed
+        }
+    });
+
+    let world_for_content = world_state.get();
+
     div()
         .w(ctx.width)
         .h(ctx.height)
         .bg(Color::rgba(0.06, 0.06, 0.1, 1.0))
         .flex_col()
         .child(header())
-        .child(main_content(ctx.width, ctx.height - 80.0))
+        .child(main_content(
+            ctx.width,
+            ctx.height - 80.0,
+            effect_state,
+            world_for_content,
+        ))
 }
 
 fn header() -> impl ElementBuilder {
@@ -169,58 +329,69 @@ fn header() -> impl ElementBuilder {
                         .color(Color::WHITE),
                 )
                 .child(
-                    text("ParticleSystem presets and configuration")
+                    text("GPU-rendered ParticleSystem components via ECS")
                         .size(14.0)
                         .color(Color::rgba(0.6, 0.6, 0.7, 1.0)),
                 ),
         )
-        .child(burst_button())
 }
 
-fn main_content(width: f32, height: f32) -> impl ElementBuilder {
+fn main_content(
+    width: f32,
+    height: f32,
+    effect_state: blinc_core::State<String>,
+    world: Arc<Mutex<(World, Entity, u32)>>,
+) -> impl ElementBuilder {
     div()
         .w(width)
         .h(height)
         .flex_row()
-        .child(viewport_area(width - 360.0, height))
-        .child(control_panel())
+        .child(viewport_area(
+            width - 360.0,
+            height,
+            effect_state.clone(),
+            world,
+        ))
+        .child(control_panel(effect_state))
 }
 
-fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(move |ctx| {
-        // Effect selection signal
-        let effect = ctx.use_signal("particle_effect", || ParticleEffect::Fire);
-
-        // Use elapsed_ms for animation - doesn't trigger re-renders
-        let time = elapsed_ms() as f32 / 1000.0;
-
-        // Camera angle offset from mouse drag
-        let angle = ctx.use_signal("angle", || 0.3f32);
-
+fn viewport_area(
+    width: f32,
+    height: f32,
+    effect_state: blinc_core::State<String>,
+    world: Arc<Mutex<(World, Entity, u32)>>,
+) -> impl ElementBuilder {
+    stateful::<ButtonState>().deps([effect_state.signal_id()]).on_state(move |ctx| {
         // Handle mouse drag for camera rotation
         if let Some(event) = ctx.event() {
             if event.event_type == event_types::POINTER_MOVE && ctx.state() == ButtonState::Pressed
             {
-                angle.update(|a| a + event.local_x * 0.0005);
+                // Update camera angle via atomic
+                let current = CAMERA_ANGLE.load(Ordering::Relaxed);
+                let delta = (event.local_x * 0.5) as i32;
+                CAMERA_ANGLE.store((current as i32 + delta).max(0) as u32, Ordering::Relaxed);
             }
         }
 
-        // Calculate camera position
-        let cam_angle = angle.get() + time * 0.05;
-        let cam_x = cam_angle.sin() * 6.0;
-        let cam_z = cam_angle.cos() * 6.0;
+        // Read current effect for code example display
+        let effect_key = effect_state.get();
+        let current_effect = ParticleEffect::from_key(&effect_key);
 
-        // Get current particle system configuration
-        let system = effect.get().to_system();
+        // Check if effect changed and recreate world if needed
+        let current_hash = compute_effect_hash(&effect_key, 0.0);
+        {
+            let mut world_data = world.lock().unwrap();
+            let stored_hash = world_data.2;
+            if stored_hash != current_hash {
+                // Effect changed - recreate world with new particle system
+                let cam_angle = CAMERA_ANGLE.load(Ordering::Relaxed) as f32 * 0.001;
+                let (new_world, camera) = create_particle_world(current_effect, cam_angle);
+                *world_data = (new_world, camera, current_hash);
+            }
+        }
 
-        // Create simple scene for context
-        let scene = create_demo_scene();
-        let camera = SdfCamera {
-            position: Vec3::new(cam_x, 3.0, cam_z),
-            target: Vec3::new(0.0, 1.0, 0.0),
-            up: Vec3::new(0.0, 1.0, 0.0),
-            fov: 0.8,
-        };
+        // Clone world for canvas closure
+        let world_for_canvas = world.clone();
 
         div()
             .w(width)
@@ -229,7 +400,14 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
             .cursor_pointer()
             .child(
                 canvas(move |draw_ctx, bounds| {
-                    scene.render(draw_ctx, &camera, bounds, time);
+                    // Get current time from animation scheduler
+                    let time = ELAPSED_TIME_MS.load(Ordering::Relaxed) as f32 / 1000.0;
+
+                    // Lock world for rendering (systems run in tick callback)
+                    if let Ok(world_data) = world_for_canvas.lock() {
+                        let (ref world, camera_entity, _) = *world_data;
+                        render_scene_with_time(draw_ctx, world, camera_entity, bounds, time);
+                    }
                 })
                 .w_full()
                 .h_full(),
@@ -252,27 +430,27 @@ fn viewport_area(width: f32, height: f32) -> impl ElementBuilder {
                             .weight(FontWeight::SemiBold)
                             .color(Color::WHITE),
                     )
-                    .child(code_example(effect.get())),
+                    .child(code_example(current_effect)),
             )
     })
 }
 
 fn code_example(effect: ParticleEffect) -> impl ElementBuilder {
-    let code = match effect {
-        ParticleEffect::Fire => "let particles = ParticleSystem::fire();\nworld.spawn().insert(particles);",
-        ParticleEffect::Smoke => "let particles = ParticleSystem::smoke();\nworld.spawn().insert(particles);",
-        ParticleEffect::Sparks => "let particles = ParticleSystem::sparks();\nworld.spawn().insert(particles);",
-        ParticleEffect::Rain => "let particles = ParticleSystem::rain();\nworld.spawn().insert(particles);",
-        ParticleEffect::Snow => "let particles = ParticleSystem::snow();\nworld.spawn().insert(particles);",
+    let code_str = match effect {
+        ParticleEffect::Fire => "world.spawn()\n    .insert(ParticleSystem::fire())\n    .insert(Object3D { position: Vec3::new(0.0, 1.0, 0.0), ..Default::default() });",
+        ParticleEffect::Smoke => "world.spawn()\n    .insert(ParticleSystem::smoke())\n    .insert(Object3D::default());",
+        ParticleEffect::Sparks => "world.spawn()\n    .insert(ParticleSystem::sparks())\n    .insert(Object3D::default());",
+        ParticleEffect::Rain => "world.spawn()\n    .insert(ParticleSystem::rain())\n    .insert(Object3D { position: Vec3::new(0.0, 10.0, 0.0), ..Default::default() });",
+        ParticleEffect::Snow => "world.spawn()\n    .insert(ParticleSystem::snow())\n    .insert(Object3D { position: Vec3::new(0.0, 10.0, 0.0), ..Default::default() });",
         ParticleEffect::Explosion => {
-            "let mut particles = ParticleSystem::explosion();\nparticles.burst(100); // Trigger burst\nworld.spawn().insert(particles);"
+            "let mut system = ParticleSystem::explosion();\nsystem.burst(100); // Trigger burst\nworld.spawn()\n    .insert(system)\n    .insert(Object3D::default());"
         }
-        ParticleEffect::Magic => "let particles = ParticleSystem::magic();\nworld.spawn().insert(particles);",
+        ParticleEffect::Magic => "world.spawn()\n    .insert(ParticleSystem::magic())\n    .insert(Object3D::default());",
         ParticleEffect::Confetti => {
-            "let mut particles = ParticleSystem::confetti();\nparticles.burst(500); // Launch confetti\nworld.spawn().insert(particles);"
+            "let mut system = ParticleSystem::confetti();\nsystem.burst(500); // Launch confetti\nworld.spawn()\n    .insert(system)\n    .insert(Object3D::default());"
         }
         ParticleEffect::Custom => {
-            "let particles = ParticleSystem::new()\n    .with_emitter(EmitterShape::Sphere { radius: 0.5 })\n    .with_emission_rate(100.0)\n    .with_lifetime(1.0, 3.0)\n    .with_force(Force::gravity(Vec3::new(0.0, -9.8, 0.0)));\nworld.spawn().insert(particles);"
+            "let particles = ParticleSystem::new()\n    .with_emitter(EmitterShape::Sphere { radius: 0.5 })\n    .with_emission_rate(100.0)\n    .with_lifetime(1.0, 3.0)\n    .with_force(Force::gravity(Vec3::new(0.0, -9.8, 0.0)));\nworld.spawn()\n    .insert(particles)\n    .insert(Object3D::default());"
         }
     };
 
@@ -281,14 +459,10 @@ fn code_example(effect: ParticleEffect) -> impl ElementBuilder {
         .py(6.0)
         .bg(Color::rgba(0.1, 0.12, 0.15, 1.0))
         .rounded(4.0)
-        .child(
-            text(code)
-                .size(11.0)
-                .color(Color::rgba(0.7, 0.9, 0.7, 1.0)),
-        )
+        .child(code(code_str))
 }
 
-fn control_panel() -> impl ElementBuilder {
+fn control_panel(effect_state: blinc_core::State<String>) -> impl ElementBuilder {
     scroll()
         .w(360.0)
         .h_full()
@@ -304,7 +478,12 @@ fn control_panel() -> impl ElementBuilder {
                         .weight(FontWeight::SemiBold)
                         .color(Color::WHITE),
                 )
-                .child(effect_selector())
+                .child(
+                    div()
+                        .bg(Color::GRAY)
+                        .rounded_md()
+                        .child(effect_radio_group(effect_state.clone())),
+                )
                 .child(divider())
                 .child(
                     text("System Configuration")
@@ -312,7 +491,7 @@ fn control_panel() -> impl ElementBuilder {
                         .weight(FontWeight::SemiBold)
                         .color(Color::WHITE),
                 )
-                .child(system_properties())
+                .child(system_properties(effect_state.clone()))
                 .child(divider())
                 .child(
                     text("Emitter Details")
@@ -320,7 +499,7 @@ fn control_panel() -> impl ElementBuilder {
                         .weight(FontWeight::SemiBold)
                         .color(Color::WHITE),
                 )
-                .child(emitter_info())
+                .child(emitter_info(effect_state.clone()))
                 .child(divider())
                 .child(
                     text("Force Affectors")
@@ -328,247 +507,163 @@ fn control_panel() -> impl ElementBuilder {
                         .weight(FontWeight::SemiBold)
                         .color(Color::WHITE),
                 )
-                .child(forces_info()),
+                .child(forces_info(effect_state)),
         )
 }
 
-fn effect_selector() -> impl ElementBuilder {
-    div().flex_col().gap(6.0).children(
-        ALL_EFFECTS
-            .iter()
-            .map(|&effect| effect_button(effect))
-            .collect::<Vec<_>>(),
-    )
+fn effect_radio_group(effect_state: blinc_core::State<String>) -> impl ElementBuilder {
+    cn::radio_group(&effect_state)
+        .label("Select Effect")
+        .option("fire", "Fire - Rising flames")
+        .option("smoke", "Smoke - Billowing clouds")
+        .option("sparks", "Sparks - Fast streaks")
+        .option("rain", "Rain - Falling drops")
+        .option("snow", "Snow - Gentle flakes")
+        .option("explosion", "Explosion - Burst outward")
+        .option("magic", "Magic - Swirling sparkles")
+        .option("confetti", "Confetti - Celebration")
+        .option("custom", "Custom - Build your own")
 }
 
-fn effect_button(effect: ParticleEffect) -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(move |ctx| {
-        let current_effect = ctx.use_signal("particle_effect", || ParticleEffect::Fire);
-        let is_selected = current_effect.get() == effect;
+fn system_properties(effect_state: blinc_core::State<String>) -> impl ElementBuilder {
+    let effect_key = effect_state.get();
+    let effect = ParticleEffect::from_key(&effect_key);
+    let system = effect.to_system();
 
-        let (bg, text_color) = match (ctx.state(), is_selected) {
-            (_, true) => (effect.color(), Color::WHITE),
-            (ButtonState::Hovered, false) => (Color::rgba(0.2, 0.2, 0.25, 1.0), Color::WHITE),
-            _ => (
-                Color::rgba(0.12, 0.12, 0.16, 1.0),
-                Color::rgba(0.8, 0.8, 0.8, 1.0),
-            ),
-        };
-
-        if let Some(event) = ctx.event() {
-            if event.event_type == event_types::POINTER_UP {
-                current_effect.set(effect);
-            }
-        }
-
-        let scale = ctx.use_spring(
-            "scale",
-            if ctx.state() == ButtonState::Pressed {
-                0.97
-            } else {
-                1.0
+    div()
+        .flex_col()
+        .gap(8.0)
+        .child(property_row(
+            "Max Particles",
+            &format!("{}", system.max_particles),
+        ))
+        .child(property_row(
+            "Emission Rate",
+            &format!("{:.0}/s", system.emission_rate),
+        ))
+        .child(property_row(
+            "Lifetime",
+            &format!("{:.1} - {:.1}s", system.lifetime.0, system.lifetime.1),
+        ))
+        .child(property_row(
+            "Speed",
+            &format!("{:.1} - {:.1}", system.start_speed.0, system.start_speed.1),
+        ))
+        .child(property_row(
+            "Start Size",
+            &format!("{:.2} - {:.2}", system.start_size.0, system.start_size.1),
+        ))
+        .child(property_row(
+            "End Size",
+            &format!("{:.2} - {:.2}", system.end_size.0, system.end_size.1),
+        ))
+        .child(property_row(
+            "Blend Mode",
+            match system.blend_mode {
+                BlendMode::Alpha => "Alpha",
+                BlendMode::Additive => "Additive",
+                BlendMode::Multiply => "Multiply",
+                BlendMode::Premultiplied => "Premultiplied",
             },
-            SpringConfig::snappy(),
-        );
-
-        div()
-            .w_full()
-            .h(52.0)
-            .bg(bg)
-            .rounded(8.0)
-            .px(12.0)
-            .flex_row()
-            .items_center()
-            .gap(12.0)
-            .cursor_pointer()
-            .transform(Transform::scale(scale, scale))
-            .child(
-                div()
-                    .w(28.0)
-                    .h(28.0)
-                    .rounded(6.0)
-                    .bg(if is_selected {
-                        Color::rgba(1.0, 1.0, 1.0, 0.2)
-                    } else {
-                        effect.color().with_alpha(0.3)
-                    })
-                    .justify_center().items_center()
-                    .child(effect_icon(effect)),
-            )
-            .child(
-                div()
-                    .flex_col()
-                    .gap(2.0)
-                    .child(
-                        text(effect.name())
-                            .size(14.0)
-                            .weight(FontWeight::Medium)
-                            .color(text_color),
-                    )
-                    .child(
-                        text(effect.description())
-                            .size(10.0)
-                            .color(Color::rgba(0.6, 0.6, 0.6, 1.0)),
-                    ),
-            )
-    })
+        ))
+        .child(property_row(
+            "Render Mode",
+            match system.render_mode {
+                RenderMode::Billboard => "Billboard",
+                RenderMode::Stretched => "Stretched",
+                RenderMode::Horizontal => "Horizontal",
+                RenderMode::Vertical => "Vertical",
+            },
+        ))
+        .child(property_row(
+            "Looping",
+            if system.looping { "Yes" } else { "No" },
+        ))
 }
 
-fn effect_icon(effect: ParticleEffect) -> impl ElementBuilder {
-    let color = effect.color();
-    div().w(12.0).h(12.0).rounded(6.0).bg(color)
-}
+fn emitter_info(effect_state: blinc_core::State<String>) -> impl ElementBuilder {
+    let effect_key = effect_state.get();
+    let effect = ParticleEffect::from_key(&effect_key);
+    let system = effect.to_system();
 
-fn system_properties() -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(|ctx| {
-        let effect = ctx.use_signal("particle_effect", || ParticleEffect::Fire);
-        let system = effect.get().to_system();
-
-        div()
-            .flex_col()
-            .gap(8.0)
-            .child(property_row(
-                "Max Particles",
-                &format!("{}", system.max_particles),
-            ))
-            .child(property_row(
-                "Emission Rate",
-                &format!("{:.0}/s", system.emission_rate),
-            ))
-            .child(property_row(
-                "Lifetime",
-                &format!("{:.1} - {:.1}s", system.lifetime.0, system.lifetime.1),
-            ))
-            .child(property_row(
-                "Speed",
-                &format!(
-                    "{:.1} - {:.1}",
-                    system.start_speed.0, system.start_speed.1
-                ),
-            ))
-            .child(property_row(
-                "Start Size",
-                &format!(
-                    "{:.2} - {:.2}",
-                    system.start_size.0, system.start_size.1
-                ),
-            ))
-            .child(property_row(
-                "End Size",
-                &format!("{:.2} - {:.2}", system.end_size.0, system.end_size.1),
-            ))
-            .child(property_row(
-                "Blend Mode",
-                match system.blend_mode {
-                    BlendMode::Alpha => "Alpha",
-                    BlendMode::Additive => "Additive",
-                    BlendMode::Multiply => "Multiply",
-                    BlendMode::Premultiplied => "Premultiplied",
-                },
-            ))
-            .child(property_row(
-                "Render Mode",
-                match system.render_mode {
-                    RenderMode::Billboard => "Billboard",
-                    RenderMode::Stretched => "Stretched",
-                    RenderMode::Horizontal => "Horizontal",
-                    RenderMode::Vertical => "Vertical",
-                },
-            ))
-            .child(property_row(
-                "Looping",
-                if system.looping { "Yes" } else { "No" },
-            ))
-    })
-}
-
-fn emitter_info() -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(|ctx| {
-        let effect = ctx.use_signal("particle_effect", || ParticleEffect::Fire);
-        let system = effect.get().to_system();
-
-        let emitter_desc = match &system.emitter {
-            EmitterShape::Point => "Point".to_string(),
-            EmitterShape::Sphere { radius } => format!("Sphere (r={:.2})", radius),
-            EmitterShape::Hemisphere { radius } => format!("Hemisphere (r={:.2})", radius),
-            EmitterShape::Cone { angle, radius } => {
-                format!("Cone (angle={:.2}, r={:.2})", angle, radius)
-            }
-            EmitterShape::Box { half_extents } => format!(
-                "Box ({:.1} x {:.1} x {:.1})",
-                half_extents.x * 2.0,
-                half_extents.y * 2.0,
-                half_extents.z * 2.0
-            ),
-            EmitterShape::Circle { radius } => format!("Circle (r={:.2})", radius),
-        };
-
-        div()
-            .flex_col()
-            .gap(8.0)
-            .child(property_row("Shape", &emitter_desc))
-            .child(property_row(
-                "Direction",
-                &format!(
-                    "({:.1}, {:.1}, {:.1})",
-                    system.direction.x, system.direction.y, system.direction.z
-                ),
-            ))
-            .child(property_row(
-                "Randomness",
-                &format!("{:.0}%", system.direction_randomness * 100.0),
-            ))
-            .child(property_row(
-                "Gravity Scale",
-                &format!("{:.1}", system.gravity_scale),
-            ))
-    })
-}
-
-fn forces_info() -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(|ctx| {
-        let effect = ctx.use_signal("particle_effect", || ParticleEffect::Fire);
-        let system = effect.get().to_system();
-
-        let mut content = div().flex_col().gap(6.0);
-
-        if system.forces.is_empty() {
-            content = content.child(
-                text("No forces applied")
-                    .size(12.0)
-                    .color(Color::rgba(0.5, 0.5, 0.5, 1.0)),
-            );
-        } else {
-            for (i, force) in system.forces.iter().enumerate() {
-                let force_desc = describe_force(force);
-                content = content.child(force_badge(&format!("{}. {}", i + 1, force_desc)));
-            }
+    let emitter_desc = match &system.emitter {
+        EmitterShape::Point => "Point".to_string(),
+        EmitterShape::Sphere { radius } => format!("Sphere (r={:.2})", radius),
+        EmitterShape::Hemisphere { radius } => format!("Hemisphere (r={:.2})", radius),
+        EmitterShape::Cone { angle, radius } => {
+            format!("Cone (angle={:.2}, r={:.2})", angle, radius)
         }
+        EmitterShape::Box { half_extents } => format!(
+            "Box ({:.1} x {:.1} x {:.1})",
+            half_extents.x * 2.0,
+            half_extents.y * 2.0,
+            half_extents.z * 2.0
+        ),
+        EmitterShape::Circle { radius } => format!("Circle (r={:.2})", radius),
+    };
 
-        // Colors section
-        content = content
-            .child(
-                div()
-                    .h(1.0)
-                    .w_full()
-                    .bg(Color::rgba(0.2, 0.2, 0.25, 1.0))
-                    .mt(8.0),
-            )
-            .child(
-                div()
-                    .mt(8.0)
-                    .child(
-                        text("Particle Colors")
-                            .size(14.0)
-                            .weight(FontWeight::Medium)
-                            .color(Color::WHITE),
-                    ),
-            )
-            .child(color_swatch("Start", system.start_color))
-            .child(color_swatch("End", system.end_color));
+    div()
+        .flex_col()
+        .gap(8.0)
+        .child(property_row("Shape", &emitter_desc))
+        .child(property_row(
+            "Direction",
+            &format!(
+                "({:.1}, {:.1}, {:.1})",
+                system.direction.x, system.direction.y, system.direction.z
+            ),
+        ))
+        .child(property_row(
+            "Randomness",
+            &format!("{:.0}%", system.direction_randomness * 100.0),
+        ))
+        .child(property_row(
+            "Gravity Scale",
+            &format!("{:.1}", system.gravity_scale),
+        ))
+}
 
-        content
-    })
+fn forces_info(effect_state: blinc_core::State<String>) -> impl ElementBuilder {
+    let effect_key = effect_state.get();
+    let effect = ParticleEffect::from_key(&effect_key);
+    let system = effect.to_system();
+
+    let mut content = div().flex_col().gap(6.0);
+
+    if system.forces.is_empty() {
+        content = content.child(
+            text("No forces applied")
+                .size(12.0)
+                .color(Color::rgba(0.5, 0.5, 0.5, 1.0)),
+        );
+    } else {
+        for (i, force) in system.forces.iter().enumerate() {
+            let force_desc = describe_force(force);
+            content = content.child(force_badge(&format!("{}. {}", i + 1, force_desc)));
+        }
+    }
+
+    // Colors section
+    content = content
+        .child(
+            div()
+                .h(1.0)
+                .w_full()
+                .bg(Color::rgba(0.2, 0.2, 0.25, 1.0))
+                .mt(8.0),
+        )
+        .child(
+            div().mt(8.0).child(
+                text("Particle Colors")
+                    .size(14.0)
+                    .weight(FontWeight::Medium)
+                    .color(Color::WHITE),
+            ),
+        )
+        .child(color_swatch("Start", system.start_color))
+        .child(color_swatch("End", system.end_color));
+
+    content
 }
 
 fn describe_force(force: &Force) -> String {
@@ -610,14 +705,14 @@ fn describe_force(force: &Force) -> String {
     }
 }
 
-fn property_row(label: &'static str, value: &str) -> impl ElementBuilder {
+fn property_row(prop_label: &'static str, value: &str) -> impl ElementBuilder {
     let value = value.to_string();
     div()
         .flex_row()
         .justify_between()
         .items_center()
         .child(
-            text(label)
+            text(prop_label)
                 .size(12.0)
                 .color(Color::rgba(0.7, 0.7, 0.7, 1.0)),
         )
@@ -631,139 +726,58 @@ fn property_row(label: &'static str, value: &str) -> impl ElementBuilder {
         )
 }
 
-fn force_badge(label: &str) -> impl ElementBuilder {
-    let label = label.to_string();
+fn force_badge(badge_label: &str) -> impl ElementBuilder {
+    let badge_label = badge_label.to_string();
     div()
         .px(8.0)
         .py(4.0)
         .bg(Color::rgba(0.2, 0.25, 0.35, 1.0))
         .rounded(4.0)
         .child(
-            text(&label)
+            text(&badge_label)
                 .size(10.0)
                 .color(Color::rgba(0.8, 0.9, 1.0, 1.0)),
         )
 }
 
-fn color_swatch(label: &'static str, color: Color) -> impl ElementBuilder {
+fn color_swatch(swatch_label: &'static str, color: Color) -> impl ElementBuilder {
     div()
         .flex_row()
         .justify_between()
         .items_center()
         .mt(4.0)
         .child(
-            text(label)
+            text(swatch_label)
                 .size(12.0)
                 .color(Color::rgba(0.7, 0.7, 0.7, 1.0)),
         )
         .child(
-            div().flex_row().gap(8.0).items_center().child(
-                div()
-                    .w(24.0)
-                    .h(24.0)
-                    .rounded(4.0)
-                    .bg(color)
-                    .border(1.0, Color::rgba(0.4, 0.4, 0.4, 1.0)),
-            ).child(
-                text(&format!(
-                    "rgba({:.0}, {:.0}, {:.0}, {:.2})",
-                    color.r * 255.0,
-                    color.g * 255.0,
-                    color.b * 255.0,
-                    color.a
-                ))
-                .size(10.0)
-                .color(Color::rgba(0.6, 0.6, 0.6, 1.0)),
-            ),
+            div()
+                .flex_row()
+                .gap(8.0)
+                .items_center()
+                .child(
+                    div()
+                        .w(24.0)
+                        .h(24.0)
+                        .rounded(4.0)
+                        .bg(color)
+                        .border(1.0, Color::rgba(0.4, 0.4, 0.4, 1.0)),
+                )
+                .child(
+                    text(&format!(
+                        "rgba({:.0}, {:.0}, {:.0}, {:.2})",
+                        color.r * 255.0,
+                        color.g * 255.0,
+                        color.b * 255.0,
+                        color.a
+                    ))
+                    .size(10.0)
+                    .color(Color::rgba(0.6, 0.6, 0.6, 1.0)),
+                ),
         )
 }
 
-fn burst_button() -> impl ElementBuilder {
-    stateful::<ButtonState>().on_state(|ctx| {
-        let effect = ctx.use_signal("particle_effect", || ParticleEffect::Fire);
-        let system = effect.get().to_system();
-        let is_burst_effect = !system.looping;
-
-        let bg = match ctx.state() {
-            ButtonState::Hovered => Color::rgba(0.5, 0.8, 0.4, 1.0),
-            ButtonState::Pressed => Color::rgba(0.3, 0.6, 0.2, 1.0),
-            _ => Color::rgba(0.4, 0.7, 0.3, 1.0),
-        };
-
-        if let Some(event) = ctx.event() {
-            if event.event_type == event_types::POINTER_UP {
-                // In a real app: system.burst(100);
-                tracing::info!("Burst triggered for {}", effect.get().name());
-            }
-        }
-
-        let scale = ctx.use_spring(
-            "scale",
-            if ctx.state() == ButtonState::Pressed {
-                0.95
-            } else {
-                1.0
-            },
-            SpringConfig::snappy(),
-        );
-
-        div()
-            .px(16.0)
-            .py(10.0)
-            .bg(bg)
-            .rounded(8.0)
-            .cursor_pointer()
-            .transform(Transform::scale(scale, scale))
-            .child(
-                div()
-                    .flex_col()
-                    .items_center()
-                    .child(
-                        text("Burst!")
-                            .size(14.0)
-                            .weight(FontWeight::SemiBold)
-                            .color(Color::WHITE),
-                    )
-                    .child(if is_burst_effect {
-                        text("(one-shot effect)")
-                            .size(10.0)
-                            .color(Color::rgba(1.0, 1.0, 1.0, 0.7))
-                    } else {
-                        text("system.burst(100)")
-                            .size(10.0)
-                            .color(Color::rgba(1.0, 1.0, 1.0, 0.7))
-                    }),
-            )
-    })
-}
-
 fn divider() -> impl ElementBuilder {
-    div()
-        .w_full()
-        .h(1.0)
-        .bg(Color::rgba(0.2, 0.2, 0.25, 1.0))
-}
-
-// ============================================================================
-// Scene Creation (simple scene for visual context)
-// ============================================================================
-
-fn create_demo_scene() -> SdfScene {
-    let mut scene = SdfScene::new();
-
-    // Ground plane (thin box: 10 wide x 0.1 tall x 10 deep)
-    let floor = SdfScene::box_node(Vec3::new(5.0, 0.05, 5.0))
-        .at(Vec3::new(0.0, -0.5, 0.0));
-
-    // Emitter marker sphere
-    let emitter = SdfScene::sphere(0.2).at(Vec3::new(0.0, 0.5, 0.0));
-
-    // Simple pedestal
-    let pedestal = SdfScene::cylinder(0.5, 0.3).at(Vec3::new(0.0, 0.0, 0.0));
-
-    let combined = SdfScene::union(floor, pedestal);
-    let combined = SdfScene::union(combined, emitter);
-
-    scene.set_root(combined);
-    scene
+    div().w_full().h(1.0).bg(Color::rgba(0.2, 0.2, 0.25, 1.0))
 }

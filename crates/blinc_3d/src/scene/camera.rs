@@ -138,6 +138,120 @@ impl PerspectiveCamera {
 
         (camera_pos, camera_dir, camera_up, camera_right, self.effective_fov())
     }
+
+    /// Project a 3D world point to 2D screen coordinates
+    ///
+    /// Returns `Some((screen_x, screen_y, depth))` if the point is in front of the camera,
+    /// or `None` if the point is behind the camera.
+    ///
+    /// # Arguments
+    /// * `world_point` - The 3D point to project
+    /// * `camera_pos` - Camera position in world space
+    /// * `camera_target` - Point the camera is looking at
+    /// * `viewport_width` - Width of the viewport in pixels
+    /// * `viewport_height` - Height of the viewport in pixels
+    ///
+    /// # Returns
+    /// * `screen_x` - X coordinate in viewport (0 = left edge)
+    /// * `screen_y` - Y coordinate in viewport (0 = top edge)
+    /// * `depth` - Distance from camera (for depth sorting/size scaling)
+    pub fn project_to_screen(
+        &self,
+        world_point: blinc_core::Vec3,
+        camera_pos: blinc_core::Vec3,
+        camera_target: blinc_core::Vec3,
+        viewport_width: f32,
+        viewport_height: f32,
+    ) -> Option<(f32, f32, f32)> {
+        project_point_to_screen(
+            world_point,
+            camera_pos,
+            camera_target,
+            self.effective_fov(),
+            viewport_width,
+            viewport_height,
+        )
+    }
+}
+
+/// Project a 3D point to 2D screen coordinates
+///
+/// Standalone function for projecting world coordinates to screen space.
+/// Useful when you don't have a full camera component.
+///
+/// # Arguments
+/// * `world_point` - The 3D point to project
+/// * `camera_pos` - Camera position in world space
+/// * `camera_target` - Point the camera is looking at
+/// * `fov` - Field of view in radians
+/// * `viewport_width` - Width of the viewport in pixels
+/// * `viewport_height` - Height of the viewport in pixels
+///
+/// # Returns
+/// `Some((screen_x, screen_y, depth))` if point is visible, `None` if behind camera
+pub fn project_point_to_screen(
+    world_point: blinc_core::Vec3,
+    camera_pos: blinc_core::Vec3,
+    camera_target: blinc_core::Vec3,
+    fov: f32,
+    viewport_width: f32,
+    viewport_height: f32,
+) -> Option<(f32, f32, f32)> {
+    // Helper to normalize a vector
+    fn normalize(x: f32, y: f32, z: f32) -> (f32, f32, f32) {
+        let len = (x * x + y * y + z * z).sqrt();
+        if len > 0.0001 {
+            (x / len, y / len, z / len)
+        } else {
+            (0.0, 1.0, 0.0)
+        }
+    }
+
+    // Calculate camera basis vectors
+    let fx = camera_target.x - camera_pos.x;
+    let fy = camera_target.y - camera_pos.y;
+    let fz = camera_target.z - camera_pos.z;
+    let (fx, fy, fz) = normalize(fx, fy, fz);
+
+    // Right = Up x Forward (where Up is (0, 1, 0))
+    // right = (0, 1, 0) x (fx, fy, fz) = (1*fz - 0*fy, 0*fx - 0*fz, 0*fy - 1*fx)
+    let rx = -fz;
+    let ry = 0.0;
+    let rz = fx;
+    let (rx, ry, rz) = normalize(rx, ry, rz);
+
+    // Up = Forward x Right
+    let ux = fy * rz - fz * ry;
+    let uy = fz * rx - fx * rz;
+    let uz = fx * ry - fy * rx;
+
+    // Vector from camera to point
+    let tpx = world_point.x - camera_pos.x;
+    let tpy = world_point.y - camera_pos.y;
+    let tpz = world_point.z - camera_pos.z;
+
+    // Transform to camera space (dot products)
+    let cam_x = tpx * rx + tpy * ry + tpz * rz;
+    let cam_y = tpx * ux + tpy * uy + tpz * uz;
+    let cam_z = tpx * fx + tpy * fy + tpz * fz;
+
+    // Check if point is in front of camera
+    if cam_z <= 0.1 {
+        return None;
+    }
+
+    // Project to normalized device coordinates
+    let aspect = viewport_width / viewport_height;
+    let scale = 1.0 / (fov * 0.5).tan();
+
+    let ndc_x = (cam_x / cam_z) * scale / aspect;
+    let ndc_y = (cam_y / cam_z) * scale;
+
+    // Convert to pixel coordinates (origin at top-left)
+    let screen_x = viewport_width * 0.5 + ndc_x * viewport_width * 0.5;
+    let screen_y = viewport_height * 0.5 - ndc_y * viewport_height * 0.5;
+
+    Some((screen_x, screen_y, cam_z))
 }
 
 /// Orthographic camera for 2D-like 3D rendering

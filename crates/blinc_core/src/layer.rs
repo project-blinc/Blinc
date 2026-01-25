@@ -1577,6 +1577,161 @@ impl Default for Sdf3DViewport {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GPU Particle System Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Emitter shape for GPU particle systems
+#[derive(Clone, Debug, PartialEq)]
+pub enum ParticleEmitterShape {
+    /// Single point emitter
+    Point,
+    /// Sphere volume/surface
+    Sphere { radius: f32 },
+    /// Upper hemisphere
+    Hemisphere { radius: f32 },
+    /// Cone shape
+    Cone { angle: f32, radius: f32 },
+    /// Box volume
+    Box { half_extents: Vec3 },
+    /// Circle (XZ plane)
+    Circle { radius: f32 },
+}
+
+impl Default for ParticleEmitterShape {
+    fn default() -> Self {
+        Self::Point
+    }
+}
+
+/// Force affector for GPU particles
+#[derive(Clone, Debug, PartialEq)]
+pub enum ParticleForce {
+    /// Constant directional force (gravity)
+    Gravity(Vec3),
+    /// Wind with turbulence
+    Wind { direction: Vec3, strength: f32, turbulence: f32 },
+    /// Vortex/swirl
+    Vortex { axis: Vec3, center: Vec3, strength: f32 },
+    /// Velocity damping
+    Drag(f32),
+    /// Noise-based force
+    Turbulence { strength: f32, frequency: f32 },
+    /// Point attractor/repeller
+    Attractor { position: Vec3, strength: f32 },
+}
+
+/// Particle render mode
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ParticleRenderMode {
+    /// Camera-facing billboards
+    #[default]
+    Billboard,
+    /// Stretched in velocity direction
+    Stretched,
+    /// Horizontal billboards
+    Horizontal,
+    /// Vertical billboards
+    Vertical,
+}
+
+/// Particle blend mode
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ParticleBlendMode {
+    /// Standard alpha blending
+    #[default]
+    Alpha,
+    /// Additive blending (for glowing effects)
+    Additive,
+    /// Multiplicative blending
+    Multiply,
+}
+
+/// GPU particle system data for rendering
+///
+/// This structure contains all the data needed to simulate and render
+/// a particle system on the GPU. It's created from blinc_3d's ParticleSystem
+/// component for submission to the GPU renderer.
+#[derive(Clone, Debug)]
+pub struct ParticleSystemData {
+    /// Maximum number of particles
+    pub max_particles: u32,
+    /// Emitter shape
+    pub emitter: ParticleEmitterShape,
+    /// Emitter world position
+    pub emitter_position: Vec3,
+    /// Emission rate (particles per second)
+    pub emission_rate: f32,
+    /// Emission direction
+    pub direction: Vec3,
+    /// Direction randomness (0 = straight, 1 = fully random)
+    pub direction_randomness: f32,
+    /// Particle lifetime range (min, max)
+    pub lifetime: (f32, f32),
+    /// Start speed range (min, max)
+    pub start_speed: (f32, f32),
+    /// Start size range (min, max)
+    pub start_size: (f32, f32),
+    /// End size range (min, max)
+    pub end_size: (f32, f32),
+    /// Start color
+    pub start_color: Color,
+    /// End color (fades over lifetime)
+    pub end_color: Color,
+    /// Force affectors
+    pub forces: Vec<ParticleForce>,
+    /// Gravity scale
+    pub gravity_scale: f32,
+    /// Render mode
+    pub render_mode: ParticleRenderMode,
+    /// Blend mode
+    pub blend_mode: ParticleBlendMode,
+    /// Current time for simulation
+    pub time: f32,
+    /// Delta time for this frame
+    pub delta_time: f32,
+    /// Camera position (for billboarding)
+    pub camera_pos: Vec3,
+    /// Camera direction (for billboarding)
+    pub camera_dir: Vec3,
+    /// Camera up vector
+    pub camera_up: Vec3,
+    /// Camera right vector
+    pub camera_right: Vec3,
+    /// Whether system is playing
+    pub playing: bool,
+}
+
+impl Default for ParticleSystemData {
+    fn default() -> Self {
+        Self {
+            max_particles: 10000,
+            emitter: ParticleEmitterShape::Point,
+            emitter_position: Vec3::ZERO,
+            emission_rate: 100.0,
+            direction: Vec3::new(0.0, 1.0, 0.0),
+            direction_randomness: 0.0,
+            lifetime: (1.0, 2.0),
+            start_speed: (1.0, 2.0),
+            start_size: (0.1, 0.2),
+            end_size: (0.0, 0.1),
+            start_color: Color::WHITE,
+            end_color: Color::rgba(1.0, 1.0, 1.0, 0.0),
+            forces: Vec::new(),
+            gravity_scale: 1.0,
+            render_mode: ParticleRenderMode::Billboard,
+            blend_mode: ParticleBlendMode::Alpha,
+            time: 0.0,
+            delta_time: 0.016,
+            camera_pos: Vec3::new(0.0, 2.0, 5.0),
+            camera_dir: Vec3::new(0.0, 0.0, -1.0),
+            camera_up: Vec3::new(0.0, 1.0, 0.0),
+            camera_right: Vec3::new(1.0, 0.0, 0.0),
+            playing: true,
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Layer Command Types (for Canvas2D and Scene3D)
 // ─────────────────────────────────────────────────────────────────────────────
 

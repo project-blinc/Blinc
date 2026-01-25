@@ -1139,6 +1139,8 @@ pub struct PrimitiveBatch {
     pub layer_commands: Vec<LayerCommandEntry>,
     /// 3D viewports to render via raymarching
     pub viewports_3d: Vec<Viewport3D>,
+    /// GPU particle viewports to render
+    pub particle_viewports: Vec<ParticleViewport3D>,
 }
 
 impl PrimitiveBatch {
@@ -1152,6 +1154,7 @@ impl PrimitiveBatch {
             foreground_paths: PathBatch::default(),
             layer_commands: Vec::new(),
             viewports_3d: Vec::new(),
+            particle_viewports: Vec::new(),
         }
     }
 
@@ -1164,6 +1167,7 @@ impl PrimitiveBatch {
         self.foreground_paths = PathBatch::default();
         self.layer_commands.clear();
         self.viewports_3d.clear();
+        self.particle_viewports.clear();
     }
 
     /// Push a 3D viewport for SDF raymarching
@@ -1174,6 +1178,16 @@ impl PrimitiveBatch {
     /// Check if there are any 3D viewports to render
     pub fn has_3d_viewports(&self) -> bool {
         !self.viewports_3d.is_empty()
+    }
+
+    /// Push a particle viewport for GPU particle rendering
+    pub fn push_particle_viewport(&mut self, viewport: ParticleViewport3D) {
+        self.particle_viewports.push(viewport);
+    }
+
+    /// Check if there are any particle viewports to render
+    pub fn has_particle_viewports(&self) -> bool {
+        !self.particle_viewports.is_empty()
     }
 
     /// Record a layer command at the current primitive index
@@ -1623,6 +1637,54 @@ pub struct Viewport3D {
     pub bounds: [f32; 4],
     /// Lights in the scene
     pub lights: Vec<blinc_core::Light>,
+}
+
+/// GPU particle viewport for rendering particle systems
+#[derive(Clone, Debug)]
+pub struct ParticleViewport3D {
+    /// Emitter configuration
+    pub emitter: crate::particles::GpuEmitter,
+    /// Force affectors
+    pub forces: Vec<crate::particles::GpuForce>,
+    /// Maximum particles in this system
+    pub max_particles: u32,
+    /// Viewport bounds in screen coordinates (x, y, width, height)
+    pub bounds: [f32; 4],
+    /// Camera position
+    pub camera_pos: [f32; 3],
+    /// Camera target
+    pub camera_target: [f32; 3],
+    /// Camera up vector
+    pub camera_up: [f32; 3],
+    /// Field of view
+    pub fov: f32,
+    /// Current time
+    pub time: f32,
+    /// Delta time for this frame
+    pub delta_time: f32,
+    /// Blend mode (0=alpha, 1=additive)
+    pub blend_mode: u32,
+    /// Whether system is playing
+    pub playing: bool,
+}
+
+impl Default for ParticleViewport3D {
+    fn default() -> Self {
+        Self {
+            emitter: crate::particles::GpuEmitter::default(),
+            forces: Vec::new(),
+            max_particles: 10000,
+            bounds: [0.0, 0.0, 800.0, 600.0],
+            camera_pos: [0.0, 2.0, 5.0],
+            camera_target: [0.0, 0.0, 0.0],
+            camera_up: [0.0, 1.0, 0.0],
+            fov: 0.8,
+            time: 0.0,
+            delta_time: 0.016,
+            blend_mode: 0,
+            playing: true,
+        }
+    }
 }
 
 // Keep the old GpuRect for backwards compatibility during transition

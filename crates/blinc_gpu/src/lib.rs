@@ -18,6 +18,7 @@ pub mod backbuffer;
 pub mod gradient_texture;
 pub mod image;
 pub mod paint;
+pub mod particles;
 pub mod path;
 pub mod primitives;
 pub mod renderer;
@@ -35,8 +36,8 @@ pub use path::{
 pub use primitives::{
     BlurUniforms, ClipType, ColorMatrixUniforms, CompositeUniforms, DropShadowUniforms, FillType,
     GlassType, GlassUniforms, GlowUniforms, GpuGlassPrimitive, GpuGlyph, GpuPrimitive,
-    LayerCommand, LayerCommandEntry, LayerCompositeUniforms, PathBatch, PathUniforms,
-    PrimitiveBatch, PrimitiveType, Uniforms,
+    LayerCommand, LayerCommandEntry, LayerCompositeUniforms, ParticleViewport3D, PathBatch,
+    PathUniforms, PrimitiveBatch, PrimitiveType, Uniforms,
 };
 pub use renderer::{GpuRenderer, LayerTexture, LayerTextureCache, RendererConfig};
 pub use shaders::{
@@ -45,6 +46,13 @@ pub use shaders::{
     SIMPLE_GLASS_SHADER, TEXT_SHADER,
 };
 pub use text::TextRenderingContext;
+
+// Particle system exports
+pub use particles::{
+    GpuEmitter, GpuForce, GpuParticle, GpuRenderUniforms, GpuSimulationUniforms,
+    ParticleManager, ParticleSystemGpu, ParticleViewport, PARTICLE_COMPUTE_SHADER,
+    PARTICLE_RENDER_SHADER,
+};
 
 // Re-export text types for convenience
 pub use blinc_text::{ColorSpan, FontRegistry, GenericFont, TextAlignment, TextAnchor};
