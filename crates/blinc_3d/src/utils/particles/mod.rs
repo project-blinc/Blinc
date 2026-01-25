@@ -302,21 +302,21 @@ impl ParticleSystem {
     /// Bonfire style - cohesive flames rising upward with dancing motion
     pub fn fire_bonfire() -> Self {
         Self::new()
-            .with_max_particles(8000)
-            .with_emitter(EmitterShape::Box { half_extents: Vec3::new(0.22, 0.02, 0.22) })
-            .with_emission_rate(900.0)
+            .with_max_particles(12000)
+            .with_emitter(EmitterShape::Box { half_extents: Vec3::new(0.35, 0.03, 0.35) })
+            .with_emission_rate(1200.0)
             .with_direction(Vec3::new(0.0, 1.0, 0.0), 0.4)
-            .with_lifetime(0.3, 0.7)
-            .with_speed(0.5, 1.3)
-            .with_size(0.06, 0.14, 0.02, 0.04)
+            .with_lifetime(0.4, 0.9)
+            .with_speed(0.6, 1.5)
+            .with_size(0.12, 0.28, 0.04, 0.08)
             .with_colors(
                 Color::rgba(1.0, 0.95, 0.4, 0.25),   // Base: bright yellow
                 Color::rgba(1.0, 0.3, 0.05, 0.18),   // Middle: red-orange
                 Color::rgba(0.2, 0.05, 0.0, 0.0),    // Tip: dark burnt
             )
-            .with_force(Force::gravity(Vec3::new(0.0, 1.8, 0.0)))
-            .with_force(Force::drag(3.5))
-            .with_force(Force::turbulence(1.8, 10.0))
+            .with_force(Force::gravity(Vec3::new(0.0, 2.2, 0.0)))
+            .with_force(Force::drag(3.0))
+            .with_force(Force::turbulence(2.0, 8.0))
             .with_blend_mode(BlendMode::Additive)
     }
 
