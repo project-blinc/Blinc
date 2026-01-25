@@ -4,7 +4,7 @@
 
 use crate::ecs::{Entity, World};
 use crate::math::Mat4Ext;
-use crate::scene::{Object3D, OrthographicCamera, PerspectiveCamera};
+use crate::scene::{Object3D, OrthographicCamera, PerspectiveCamera, SdfMesh};
 use crate::sdf::{SdfCamera, SdfCodegen, SdfScene};
 use blinc_core::{Camera, CameraProjection, DrawContext, Light, Mat4, Rect, Sdf3DViewport, Vec3, Color};
 
@@ -74,7 +74,26 @@ pub fn render_scene(
     camera_entity: Entity,
     bounds: CanvasBounds,
 ) {
-    render_scene_with_config(ctx, world, camera_entity, bounds, &RenderConfig::default())
+    render_scene_with_time(ctx, world, camera_entity, bounds, 0.0)
+}
+
+/// Render a 3D scene to the canvas with time for SDF animations
+///
+/// # Arguments
+///
+/// * `ctx` - The draw context from the canvas
+/// * `world` - The ECS world containing entities and components
+/// * `camera_entity` - The entity with camera and Object3D components
+/// * `bounds` - The canvas viewport bounds
+/// * `time` - Animation time in seconds (used for SDF animations)
+pub fn render_scene_with_time(
+    ctx: &mut dyn DrawContext,
+    world: &World,
+    camera_entity: Entity,
+    bounds: CanvasBounds,
+    time: f32,
+) {
+    render_scene_full(ctx, world, camera_entity, bounds, time, &RenderConfig::default())
 }
 
 /// Render a 3D scene with custom configuration
@@ -83,6 +102,21 @@ pub fn render_scene_with_config(
     world: &World,
     camera_entity: Entity,
     bounds: CanvasBounds,
+    config: &RenderConfig,
+) {
+    render_scene_full(ctx, world, camera_entity, bounds, 0.0, config)
+}
+
+/// Render a 3D scene with time and custom configuration
+///
+/// This is the full render function that includes all parameters for both
+/// mesh rendering and SDF raymarching.
+pub fn render_scene_full(
+    ctx: &mut dyn DrawContext,
+    world: &World,
+    camera_entity: Entity,
+    bounds: CanvasBounds,
+    time: f32,
     _config: &RenderConfig,
 ) {
     use blinc_core::{ClipShape, Rect};
@@ -97,10 +131,10 @@ pub fn render_scene_with_config(
         .unwrap_or_default();
 
     // Try to get perspective camera first, then orthographic
-    let core_camera = if let Some(perspective) = world.get_component::<PerspectiveCamera>(camera_entity) {
-        perspective.to_core_camera(&camera_transform, bounds.aspect_ratio())
+    let (core_camera, fov) = if let Some(perspective) = world.get_component::<PerspectiveCamera>(camera_entity) {
+        (perspective.to_core_camera(&camera_transform, bounds.aspect_ratio()), perspective.effective_fov())
     } else if let Some(ortho) = world.get_component::<OrthographicCamera>(camera_entity) {
-        ortho.to_core_camera(&camera_transform)
+        (ortho.to_core_camera(&camera_transform), 0.8) // Ortho doesn't have FOV, use default
     } else {
         // Default perspective camera
         let target = Vec3::new(
@@ -108,7 +142,7 @@ pub fn render_scene_with_config(
             camera_transform.position.y + camera_transform.forward().y,
             camera_transform.position.z + camera_transform.forward().z,
         );
-        Camera {
+        (Camera {
             position: camera_transform.position,
             target,
             up: Vec3::UP,
@@ -118,7 +152,7 @@ pub fn render_scene_with_config(
                 near: 0.1,
                 far: 100.0,
             },
-        }
+        }, 0.8)
     };
 
     // Set camera on context
@@ -129,6 +163,9 @@ pub fn render_scene_with_config(
 
     // Render meshes with CPU wireframe projection
     render_meshes(ctx, world, bounds, &core_camera);
+
+    // Render SDF meshes using the same camera
+    render_sdf_meshes_with_fov(ctx, world, &camera_transform, bounds, time, fov);
 
     // Pop the clip region
     ctx.pop_clip();
@@ -458,6 +495,70 @@ fn render_meshes(ctx: &mut dyn DrawContext, world: &World, bounds: CanvasBounds,
     }
 }
 
+
+/// Render all SdfMesh entities in the world
+fn render_sdf_meshes_with_fov(
+    ctx: &mut dyn DrawContext,
+    world: &World,
+    camera_transform: &Object3D,
+    bounds: CanvasBounds,
+    time: f32,
+    fov: f32,
+) {
+    // Calculate camera vectors from transform
+    let camera_pos = camera_transform.position;
+    let camera_dir = camera_transform.forward().normalize();
+    let up = camera_transform.up();
+
+    // Calculate right vector (cross product of direction and up)
+    let right = Vec3::new(
+        camera_dir.z * up.y - camera_dir.y * up.z,
+        camera_dir.x * up.z - camera_dir.z * up.x,
+        camera_dir.y * up.x - camera_dir.x * up.y,
+    );
+    let right_len = (right.x * right.x + right.y * right.y + right.z * right.z).sqrt();
+    let camera_right = if right_len > 0.0001 {
+        Vec3::new(right.x / right_len, right.y / right_len, right.z / right_len)
+    } else {
+        Vec3::new(1.0, 0.0, 0.0)
+    };
+
+    // Recalculate up (cross product of right and direction)
+    let camera_up = Vec3::new(
+        camera_right.y * camera_dir.z - camera_right.z * camera_dir.y,
+        camera_right.z * camera_dir.x - camera_right.x * camera_dir.z,
+        camera_right.x * camera_dir.y - camera_right.y * camera_dir.x,
+    );
+
+    // Query all SdfMesh entities
+    for (_entity, (sdf_mesh, transform)) in world.query::<(&SdfMesh, &Object3D)>().iter() {
+        if !transform.visible {
+            continue;
+        }
+
+        // Generate shader code for this SDF scene
+        let shader_wgsl = SdfCodegen::generate_full_shader(&sdf_mesh.scene);
+
+        // Create the SDF 3D viewport
+        let viewport = Sdf3DViewport {
+            shader_wgsl,
+            camera_pos,
+            camera_dir,
+            camera_up,
+            camera_right,
+            fov,
+            time,
+            max_steps: 128,
+            max_distance: 100.0,
+            epsilon: 0.001,
+            lights: Vec::new(),
+        };
+
+        // Draw the SDF viewport
+        let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
+        ctx.draw_sdf_viewport(rect, &viewport);
+    }
+}
 
 /// Scene renderer that can be used with canvas callbacks
 pub struct SceneRenderer {

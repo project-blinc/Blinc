@@ -376,6 +376,11 @@ impl SdfScene {
         self.root.as_ref()
     }
 
+    /// Get the root node mutably
+    pub fn root_mut(&mut self) -> Option<&mut SdfNode> {
+        self.root.as_mut()
+    }
+
     /// Generate WGSL code for this scene
     pub fn to_wgsl(&self) -> String {
         SdfCodegen::generate(self)

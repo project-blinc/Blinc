@@ -104,6 +104,40 @@ impl PerspectiveCamera {
             },
         }
     }
+
+    /// Convert to SDF camera vectors for raymarching
+    ///
+    /// Returns (camera_pos, camera_dir, camera_up, camera_right, fov)
+    pub fn to_sdf_camera_vectors(
+        &self,
+        transform: &Object3D,
+    ) -> (blinc_core::Vec3, blinc_core::Vec3, blinc_core::Vec3, blinc_core::Vec3, f32) {
+        let camera_pos = transform.position;
+        let camera_dir = transform.forward().normalize();
+        let up = transform.up();
+
+        // Calculate right vector (cross product of direction and up)
+        let right = blinc_core::Vec3::new(
+            camera_dir.z * up.y - camera_dir.y * up.z,
+            camera_dir.x * up.z - camera_dir.z * up.x,
+            camera_dir.y * up.x - camera_dir.x * up.y,
+        );
+        let right_len = (right.x * right.x + right.y * right.y + right.z * right.z).sqrt();
+        let camera_right = blinc_core::Vec3::new(
+            right.x / right_len,
+            right.y / right_len,
+            right.z / right_len,
+        );
+
+        // Recalculate up (cross product of right and direction)
+        let camera_up = blinc_core::Vec3::new(
+            camera_right.y * camera_dir.z - camera_right.z * camera_dir.y,
+            camera_right.z * camera_dir.x - camera_right.x * camera_dir.z,
+            camera_right.x * camera_dir.y - camera_right.y * camera_dir.x,
+        );
+
+        (camera_pos, camera_dir, camera_up, camera_right, self.effective_fov())
+    }
 }
 
 /// Orthographic camera for 2D-like 3D rendering

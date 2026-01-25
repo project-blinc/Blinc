@@ -11,7 +11,7 @@ pub use crate::ecs::{
 };
 
 // Scene
-pub use crate::scene::{Mesh, Object3D, OrthographicCamera, PerspectiveCamera};
+pub use crate::scene::{Mesh, Object3D, OrthographicCamera, PerspectiveCamera, SdfMesh};
 
 // Geometry
 pub use crate::geometry::{
@@ -29,8 +29,9 @@ pub use crate::lights::{AmbientLight, DirectionalLight, HemisphereLight, PointLi
 
 // Integration
 pub use crate::integration::{
-    create_game_fsm, game_events, game_states, render_scene, render_sdf_scene, AnimatedColor,
-    AnimatedTransform, AnimatedVec3, GameStateMachine, SdfRenderConfig,
+    create_game_fsm, game_events, game_states, render_scene, render_scene_with_time,
+    render_sdf_scene, AnimatedColor, AnimatedTransform, AnimatedVec3, GameStateMachine,
+    SdfRenderConfig,
 };
 
 // Systems
