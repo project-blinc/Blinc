@@ -20,6 +20,11 @@ High-level application framework for Blinc UI, combining layout and GPU renderin
 - **Theme Integration**: Built-in theme support
 - **Platform Abstraction**: Unified API across platforms
 
+## Android input notes
+
+- 1-finger drag emits `SCROLL` with `scroll_time=Some` (for momentum tracking).
+- Pinch emits `SCROLL` with `scroll_time=None`, and `delta_y` encodes zoom.
+
 ## Quick Start
 
 ### Windowed Application

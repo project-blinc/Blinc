@@ -235,6 +235,7 @@ impl AndroidApp {
         let mut last_touch_x: Option<f32> = None;
         let mut last_touch_y: Option<f32> = None;
         let mut is_scrolling = false;
+        let mut pinch_prev_span: Option<f32> = None;
 
         tracing::info!("Entering Android event loop");
 
@@ -435,6 +436,8 @@ impl AndroidApp {
             let mut pending_events: Vec<PendingEvent> = Vec::new();
             // Track scroll info for dispatch after event processing (mouse_x, mouse_y, delta_x, delta_y)
             let mut scroll_info: Option<(f32, f32, f32, f32)> = None;
+            // Track pinch scroll info for dispatch after event processing (mouse_x, mouse_y, delta_y)
+            let mut pinch_scroll_info: Option<(f32, f32, f32)> = None;
             // Track if touch ended (for scroll physics)
             let mut touch_ended = false;
 
@@ -480,6 +483,22 @@ impl AndroidApp {
                                         let pointer = motion_event.pointer_at_index(pointer_idx);
                                         let lx = pointer.x() / scale;
                                         let ly = pointer.y() / scale;
+                                        let pinch_info = if pointer_count >= 2 {
+                                            let pointer0 = motion_event.pointer_at_index(0);
+                                            let pointer1 = motion_event.pointer_at_index(1);
+                                            let x0 = pointer0.x() / scale;
+                                            let y0 = pointer0.y() / scale;
+                                            let x1 = pointer1.x() / scale;
+                                            let y1 = pointer1.y() / scale;
+                                            let dx = x1 - x0;
+                                            let dy = y1 - y0;
+                                            let span = (dx * dx + dy * dy).sqrt();
+                                            let center_x = (x0 + x1) * 0.5;
+                                            let center_y = (y0 + y1) * 0.5;
+                                            Some((center_x, center_y, span))
+                                        } else {
+                                            None
+                                        };
 
                                         match action {
                                             MotionAction::Down | MotionAction::PointerDown => {
@@ -495,8 +514,16 @@ impl AndroidApp {
                                                     MouseButton::Left,
                                                 );
                                                 // Initialize touch tracking for scroll
-                                                last_touch_x = Some(lx);
-                                                last_touch_y = Some(ly);
+                                                if let Some((_center_x, _center_y, span)) = pinch_info
+                                                {
+                                                    pinch_prev_span = Some(span);
+                                                    last_touch_x = None;
+                                                    last_touch_y = None;
+                                                    is_scrolling = false;
+                                                } else {
+                                                    last_touch_x = Some(lx);
+                                                    last_touch_y = Some(ly);
+                                                }
                                                 is_scrolling = false;
                                                 // Update pending events with coordinates
                                                 unsafe {
@@ -511,32 +538,60 @@ impl AndroidApp {
                                             MotionAction::Move => {
                                                 router.on_mouse_move(tree, lx, ly);
 
-                                                // Calculate scroll delta from touch movement
-                                                // Touch: dragging down = positive delta = content scrolls up (shows below)
-                                                if let (Some(prev_x), Some(prev_y)) =
-                                                    (last_touch_x, last_touch_y)
+                                                if let Some((center_x, center_y, span)) = pinch_info
                                                 {
-                                                    let delta_x = lx - prev_x;
-                                                    let delta_y = ly - prev_y;
-
-                                                    // Only collect scroll if there's actual movement
-                                                    // Small threshold to avoid jitter
-                                                    if delta_x.abs() > 0.5 || delta_y.abs() > 0.5 {
-                                                        is_scrolling = true;
-                                                        // Store scroll info for dispatch after event loop
-                                                        scroll_info =
-                                                            Some((lx, ly, delta_x, delta_y));
-                                                        tracing::trace!(
-                                                            "Touch scroll: delta=({:.1}, {:.1})",
-                                                            delta_x,
-                                                            delta_y
-                                                        );
+                                                    if let Some(prev_span) = pinch_prev_span {
+                                                        if prev_span > 0.0 && span > 0.0 {
+                                                            let mut scale_ratio = span / prev_span;
+                                                            if scale_ratio.is_finite() {
+                                                                scale_ratio =
+                                                                    scale_ratio.clamp(0.90, 1.10);
+                                                                let zoom_delta_y =
+                                                                    -(scale_ratio.ln()) / 0.0015;
+                                                                pinch_scroll_info = Some((
+                                                                    center_x,
+                                                                    center_y,
+                                                                    zoom_delta_y,
+                                                                ));
+                                                            }
+                                                        }
+                                                        pinch_prev_span = Some(span);
+                                                    } else {
+                                                        pinch_prev_span = Some(span);
+                                                        last_touch_x = None;
+                                                        last_touch_y = None;
+                                                        is_scrolling = false;
                                                     }
-                                                }
+                                                } else {
+                                                    // Calculate scroll delta from touch movement
+                                                    // Touch: dragging down = positive delta = content scrolls up (shows below)
+                                                    if let (Some(prev_x), Some(prev_y)) =
+                                                        (last_touch_x, last_touch_y)
+                                                    {
+                                                        let delta_x = lx - prev_x;
+                                                        let delta_y = ly - prev_y;
 
-                                                // Update last touch position
-                                                last_touch_x = Some(lx);
-                                                last_touch_y = Some(ly);
+                                                        // Only collect scroll if there's actual movement
+                                                        // Small threshold to avoid jitter
+                                                        if delta_x.abs() > 0.5
+                                                            || delta_y.abs() > 0.5
+                                                        {
+                                                            is_scrolling = true;
+                                                            // Store scroll info for dispatch after event loop
+                                                            scroll_info =
+                                                                Some((lx, ly, delta_x, delta_y));
+                                                            tracing::trace!(
+                                                                "Touch scroll: delta=({:.1}, {:.1})",
+                                                                delta_x,
+                                                                delta_y
+                                                            );
+                                                        }
+                                                    }
+
+                                                    // Update last touch position
+                                                    last_touch_x = Some(lx);
+                                                    last_touch_y = Some(ly);
+                                                }
 
                                                 unsafe {
                                                     let events = &mut pending_events
@@ -563,6 +618,7 @@ impl AndroidApp {
                                                 last_touch_x = None;
                                                 last_touch_y = None;
                                                 is_scrolling = false;
+                                                pinch_prev_span = None;
 
                                                 unsafe {
                                                     let events = &mut pending_events
@@ -583,6 +639,7 @@ impl AndroidApp {
                                                     touch_ended = true;
                                                 }
                                                 is_scrolling = false;
+                                                pinch_prev_span = None;
                                             }
                                             _ => {}
                                         }
@@ -631,6 +688,49 @@ impl AndroidApp {
                             event.mouse_x,
                             event.mouse_y,
                         );
+                    }
+                }
+            }
+
+            // Dispatch pinch zoom as scroll without time (scroll_time=None)
+            if let Some((mouse_x, mouse_y, delta_y)) = pinch_scroll_info {
+                if let (Some(ref mut windowed_ctx), Some(ref mut tree)) =
+                    (&mut ctx, &mut render_tree)
+                {
+                    let router = &mut windowed_ctx.event_router;
+                    if let Some(hit) = router.hit_test(tree, mouse_x, mouse_y) {
+                        let mut has_scroll_container =
+                            tree.get_scroll_direction(hit.node).is_some();
+                        if !has_scroll_container {
+                            for ancestor in &hit.ancestors {
+                                if tree.get_scroll_direction(*ancestor).is_some() {
+                                    has_scroll_container = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if has_scroll_container {
+                            tracing::trace!(
+                                "Skipping pinch zoom over scroll container: hit={:?}",
+                                hit.node
+                            );
+                        } else {
+                            tracing::debug!(
+                                "Dispatching pinch zoom: hit={:?}, delta_y={:.3}",
+                                hit.node,
+                                delta_y
+                            );
+                            tree.dispatch_scroll_chain(
+                                hit.node,
+                                &hit.ancestors,
+                                mouse_x,
+                                mouse_y,
+                                0.0,
+                                delta_y,
+                            );
+                            needs_redraw_next_frame = true;
+                        }
                     }
                 }
             }
