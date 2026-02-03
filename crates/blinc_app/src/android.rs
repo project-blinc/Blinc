@@ -495,6 +495,7 @@ impl AndroidApp {
                                             let span = (dx * dx + dy * dy).sqrt();
                                             let center_x = (x0 + x1) * 0.5;
                                             let center_y = (y0 + y1) * 0.5;
+                                            // Pinch uses the first two pointers in logical coords.
                                             Some((center_x, center_y, span))
                                         } else {
                                             None
@@ -516,6 +517,7 @@ impl AndroidApp {
                                                 // Initialize touch tracking for scroll
                                                 if let Some((_center_x, _center_y, span)) = pinch_info
                                                 {
+                                                    // Pinch starts: disable 1-finger scroll tracking.
                                                     pinch_prev_span = Some(span);
                                                     last_touch_x = None;
                                                     last_touch_y = None;

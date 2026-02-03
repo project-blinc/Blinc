@@ -24,6 +24,8 @@ High-level application framework for Blinc UI, combining layout and GPU renderin
 
 - 1-finger drag emits `SCROLL` with `scroll_time=Some` (for momentum tracking).
 - Pinch emits `SCROLL` with `scroll_time=None`, and `delta_y` encodes zoom.
+- `mouse_x`/`mouse_y` are logical window coordinates derived from touch positions.
+- Pinch uses the centroid of the first two pointers; pinch is skipped over scroll containers.
 
 ## Quick Start
 
