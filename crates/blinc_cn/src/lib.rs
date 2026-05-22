@@ -126,7 +126,7 @@ pub mod prelude {
         BreadcrumbSize,
     };
     pub use crate::components::button::{
-        button, Button, ButtonBuilder, ButtonSize, ButtonVariant, IconPosition,
+        button, Button, ButtonBuilder, ButtonSize, ButtonVariant, IconPosition, PressSpread,
     };
     // Re-export ButtonState for use with buttons
     pub use crate::components::card::{

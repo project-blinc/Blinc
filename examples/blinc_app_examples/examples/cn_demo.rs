@@ -538,6 +538,39 @@ fn buttons_section(_ctx: &WindowedContext) -> impl ElementBuilder {
                 // Button with icon + label
                 .child(cn::button("With Icon").icon(icons::STAR)),
         )
+        // Press-spread: shape-conforming press feedback via the GPU @flow
+        // shader (cn_styles::CN_STYLES → `@flow blinc-press-spread`).
+        // Hold the mouse down on any of these and the spread emanates
+        // from the cursor, bounded by the button's corner shape.
+        // `PressSpread::Light` for dark-bg buttons (white overlay);
+        // `PressSpread::Dark` for light-bg buttons (black overlay).
+        .child(
+            text("Press-spread (hold mouse down)")
+                .size(t_xs())
+                .color(text_secondary),
+        )
+        .child(
+            div()
+                .flex_row()
+                .flex_wrap()
+                .gap(12.0)
+                .child(cn::button("Primary").press_spread(PressSpread::Light))
+                .child(
+                    cn::button("Destructive")
+                        .variant(ButtonVariant::Destructive)
+                        .press_spread(PressSpread::Light),
+                )
+                .child(
+                    cn::button("Outline (dark)")
+                        .variant(ButtonVariant::Outline)
+                        .press_spread(PressSpread::Dark),
+                )
+                .child(
+                    cn::button("Ghost (dark)")
+                        .variant(ButtonVariant::Ghost)
+                        .press_spread(PressSpread::Dark),
+                ),
+        )
 }
 
 // ============================================================================

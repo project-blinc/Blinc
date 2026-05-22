@@ -346,6 +346,11 @@ impl BlincApp {
         self.ctx.set_cursor_position(x, y);
     }
 
+    /// Update the global mouse-pressed state (for `@flow` `builtin(pressure)`).
+    pub fn set_cursor_pressed(&mut self, pressed: bool) {
+        self.ctx.set_cursor_pressed(pressed);
+    }
+
     /// Set the current render target texture for blend mode two-pass compositing.
     pub fn set_blend_target(&mut self, texture: &wgpu::Texture) {
         self.ctx.set_blend_target(texture);

@@ -233,5 +233,12 @@ strip = "symbols"
 blinc_core = { path = "crates/blinc_core" }
 blinc_layout = { path = "crates/blinc_layout" }
 blinc_platform = { path = "crates/blinc_platform" }
+# `blinc_gpu` is path-patched too because git-pinned versions in
+# `packages/*` would otherwise compile their own `flow_codegen.rs`
+# against the LOCAL `blinc_core` (path-patched above). New variants
+# on shared pub enums (e.g. `BuiltinVar::Pressure`) break the
+# pinned `blinc_gpu`'s exhaustive matches. Path-patching keeps the
+# GPU pipeline in lockstep with core.
+blinc_gpu = { path = "crates/blinc_gpu" }
 
 

@@ -291,6 +291,7 @@ pub fn button(label: impl Into<String>) -> ButtonBuilder {
             icon_size: None,
             text_color: None,
             on_click: None,
+            press_spread: PressSpread::Off,
         },
         built: std::cell::OnceCell::new(),
     }
@@ -309,6 +310,29 @@ struct ButtonConfig {
     icon_size: Option<f32>,
     text_color: Option<Color>,
     on_click: Option<Arc<dyn Fn(&blinc_layout::event_handler::EventContext) + Send + Sync>>,
+    /// Opt-in Universal HID press-spread feedback. When set, the
+    /// button attaches the `blinc-press-spread` class (and optionally
+    /// `blinc-press-spread-dark` for light-surface variants), wiring
+    /// the @flow shader-driven press overlay.
+    press_spread: PressSpread,
+}
+
+/// Press-spread variant for [`ButtonBuilder::press_spread`].
+///
+/// `Off` is the default (no press feedback). `Light` puts a white
+/// tint overlay on press — reads well on darker bg variants
+/// (Primary, Destructive). `Dark` is the inverse for lighter
+/// variants (Outline, Ghost, Link) where a white tint would be
+/// invisible.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PressSpread {
+    /// No press-spread.
+    #[default]
+    Off,
+    /// White overlay — works on darker button surfaces.
+    Light,
+    /// Black overlay — works on lighter button surfaces.
+    Dark,
 }
 
 /// The built button element — wraps `blinc_layout::widgets::button::Button`
@@ -372,6 +396,23 @@ impl Button {
             .class("cn-button")
             .class(variant.css_class())
             .class(config.btn_size.css_class());
+
+        // Universal HID press-spread — opt-in via `.press_spread(...)`.
+        // The class wires the @flow shader-driven press overlay defined
+        // in cn_styles.rs; `--dark` is the inverse-tint variant for
+        // light-bg button variants where a white overlay would be
+        // invisible.
+        match config.press_spread {
+            PressSpread::Off => {}
+            PressSpread::Light => {
+                btn = btn.class("blinc-press-spread");
+            }
+            PressSpread::Dark => {
+                btn = btn
+                    .class("blinc-press-spread")
+                    .class("blinc-press-spread-dark");
+            }
+        }
 
         // Icon-only: explicit square dimensions so items_center/justify_center
         // can center the icon. `flex_shrink_0` pins both axes — without it
@@ -566,6 +607,7 @@ impl ButtonBuilder {
                 icon_size: None,
                 text_color: None,
                 on_click: None,
+                press_spread: PressSpread::Off,
             },
             built: std::cell::OnceCell::new(),
         }
@@ -610,6 +652,26 @@ impl ButtonBuilder {
     /// Set the icon size in pixels (overrides the default derived from font size)
     pub fn icon_size(mut self, size: f32) -> Self {
         self.config.icon_size = Some(size);
+        self
+    }
+
+    /// Enable Universal HID press-spread feedback.
+    ///
+    /// Attaches the `@flow`-driven shader overlay (defined in
+    /// `cn_styles::CN_STYLES`) that emanates from the cursor on press
+    /// and is bounded by the button's corner shape. Pass
+    /// [`PressSpread::Light`] for the default light tint (works on
+    /// dark-background variants like `Primary`/`Destructive`) and
+    /// [`PressSpread::Dark`] for lighter variants (`Outline`/`Ghost`/
+    /// `Link`).
+    ///
+    /// ```ignore
+    /// cn::button("Click")
+    ///     .variant(ButtonVariant::Primary)
+    ///     .press_spread(PressSpread::Light)
+    /// ```
+    pub fn press_spread(mut self, mode: PressSpread) -> Self {
+        self.config.press_spread = mode;
         self
     }
 

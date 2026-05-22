@@ -4577,6 +4577,7 @@ impl GpuRenderer {
         flow_name: &str,
         uniforms: &crate::flow_pipeline::FlowUniformData,
         viewport: Option<[f32; 4]>,
+        clip_rect: Option<[f32; 4]>,
     ) -> bool {
         // If this flow uses sample_scene(), ensure scene copy is ready
         let scene_view_owned: Option<*const wgpu::TextureView> =
@@ -4618,8 +4619,14 @@ impl GpuRenderer {
                 occlusion_query_set: None,
             });
 
-            // Scope the flow quad to the element's bounds via viewport + scissor.
-            // Clamp to render target bounds to avoid wgpu validation errors.
+            // Scope the flow quad to the element's bounds via viewport
+            // + scissor. The viewport is always set to the element's
+            // full bounds (so the shader sees consistent UVs across
+            // the quad), but the scissor additionally intersects with
+            // the active clip stack — without that intersection, a
+            // flow element scrolled out of its container or near a
+            // window edge would visibly leak past the clip boundary
+            // (see `gotcha_flow_render_ignores_active_clips.md`).
             if let Some([x, y, w, h]) = viewport {
                 let (tw, th) = self.viewport_size;
                 let tw = tw as f32;
@@ -4630,7 +4637,36 @@ impl GpuRenderer {
                 let ch = (h - (cy - y)).min(th - cy).max(1.0);
                 if cx < tw && cy < th {
                     pass.set_viewport(cx, cy, cw, ch, 0.0, 1.0);
-                    pass.set_scissor_rect(cx as u32, cy as u32, cw as u32, ch as u32);
+                    // Intersect with the active clip (scroll, overflow,
+                    // overlay) when present, then clamp to the
+                    // render-target bounds.
+                    let (mut sx, mut sy, mut sw, mut sh) = (cx, cy, cw, ch);
+                    if let Some([ax, ay, aw, ah]) = clip_rect {
+                        let x0 = sx.max(ax);
+                        let y0 = sy.max(ay);
+                        let x1 = (sx + sw).min(ax + aw);
+                        let y1 = (sy + sh).min(ay + ah);
+                        sx = x0;
+                        sy = y0;
+                        sw = (x1 - x0).max(0.0);
+                        sh = (y1 - y0).max(0.0);
+                    }
+                    // Re-clamp to target bounds after the clip
+                    // intersection so a clip that overhangs the
+                    // viewport doesn't trip wgpu validation.
+                    let sx = sx.max(0.0);
+                    let sy = sy.max(0.0);
+                    let sw = sw.min(tw - sx).max(0.0);
+                    let sh = sh.min(th - sy).max(0.0);
+                    if sw > 0.0 && sh > 0.0 {
+                        pass.set_scissor_rect(sx as u32, sy as u32, sw as u32, sh as u32);
+                    } else {
+                        // Empty intersection — skip the draw entirely
+                        // by setting a 1×1 scissor outside the
+                        // viewport so the pipeline still runs without
+                        // touching pixels.
+                        pass.set_scissor_rect(0, 0, 1, 1);
+                    }
                 }
             }
 

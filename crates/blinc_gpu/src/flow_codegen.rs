@@ -304,7 +304,7 @@ impl<'a> CodegenContext<'a> {
         let _ = writeln!(out, "    element_bounds: vec4<f32>,");
         let _ = writeln!(out, "    pointer: vec2<f32>,");
         let _ = writeln!(out, "    corner_radius: f32,");
-        let _ = writeln!(out, "    _padding: f32,");
+        let _ = writeln!(out, "    pressure: f32,");
 
         // Add CSS property inputs as uniforms
         for input in &self.graph.inputs {
@@ -1031,6 +1031,7 @@ impl<'a> CodegenContext<'a> {
                         }
                         blinc_core::BuiltinVar::FrameIndex => "u.frame_index".to_string(),
                         blinc_core::BuiltinVar::Pointer => "u.pointer".to_string(),
+                        blinc_core::BuiltinVar::Pressure => "u.pressure".to_string(),
                         // 3D vertex builtins
                         blinc_core::BuiltinVar::VertexPosition => "in_vert.position".to_string(),
                         blinc_core::BuiltinVar::VertexNormal => "in_vert.normal".to_string(),

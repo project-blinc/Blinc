@@ -51,8 +51,12 @@ pub struct FlowUniformData {
     pub pointer: [f32; 2],
     /// Corner radius in pixels (for rounded-rect clipping)
     pub corner_radius: f32,
-    /// Padding to maintain 16-byte alignment
-    pub _padding: f32,
+    /// Press intensity (0.0 released, 1.0 pressed). Driven by the
+    /// renderer directly from cursor + button-pressed state, so any
+    /// `@flow`-using element gets a press envelope without needing to
+    /// register `pointer-space:` in the stylesheet (which only fires
+    /// for id-keyed rules).
+    pub pressure: f32,
 }
 
 impl Default for FlowUniformData {
@@ -64,7 +68,7 @@ impl Default for FlowUniformData {
             element_bounds: [0.0; 4],
             pointer: [0.0; 2],
             corner_radius: 0.0,
-            _padding: 0.0,
+            pressure: 0.0,
         }
     }
 }

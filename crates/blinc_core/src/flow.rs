@@ -152,6 +152,10 @@ pub enum BuiltinVar {
     FrameIndex,
     /// Pointer position (`vec2`, from pointer query system)
     Pointer,
+    /// Press intensity (0.0 released, 1.0 pressed). Renderer-driven,
+    /// always populated for any `@flow` element — no `pointer-space`
+    /// registration required.
+    Pressure,
 
     // ── 3D builtins (available in Vertex and Material targets) ──
     /// Vertex position in model space (vec3) — Vertex target
@@ -200,6 +204,7 @@ impl BuiltinVar {
             "sdf" => Some(Self::Sdf),
             "frame-index" | "frame_index" => Some(Self::FrameIndex),
             "pointer" => Some(Self::Pointer),
+            "pressure" => Some(Self::Pressure),
             // 3D vertex builtins
             "vertex_position" | "position" => Some(Self::VertexPosition),
             "vertex_normal" | "normal" => Some(Self::VertexNormal),
@@ -230,6 +235,7 @@ impl BuiltinVar {
             Self::Time
             | Self::Sdf
             | Self::FrameIndex
+            | Self::Pressure
             | Self::VertexIndex
             | Self::TangentHandedness
             | Self::LightIntensity => FlowType::Float,

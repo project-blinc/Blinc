@@ -384,6 +384,14 @@ pub struct RenderContext {
     scratch_images: Vec<ImageElement>,
     // Current cursor position in physical pixels (for @flow pointer input)
     cursor_pos: [f32; 2],
+    /// Whether any mouse button is currently held down. Set by the
+    /// runner via `set_cursor_pressed` on mouse-down / -up. Feeds the
+    /// per-element `pressure` uniform that `@flow` shaders read via
+    /// `builtin(pressure)` — populated for ALL flow elements without
+    /// needing `pointer-space:` registration (which only fires for
+    /// id-keyed stylesheet rules and so misses class-based widgets
+    /// like `.blinc-press-spread`).
+    cursor_pressed: bool,
     // Whether the last render contained @flow shader elements (triggers continuous redraw)
     has_active_flows: bool,
     /// Whether any image emitted during the last render is in the
@@ -704,6 +712,14 @@ struct FlowElement {
     z_index: u32,
     /// Corner radius in physical pixels
     corner_radius: f32,
+    /// Active clip rect from the collection-pass ancestor chain
+    /// (scroll containers, overflow:hidden parents, overlay clips). In
+    /// physical pixels. `render_flow` intersects this with the
+    /// element bounds before setting the GPU scissor — without it,
+    /// a `@flow` element scrolled out of its container or near a
+    /// window edge would visibly leak past the clip boundary
+    /// (see `gotcha_flow_render_ignores_active_clips.md`).
+    clip_rect: Option<[f32; 4]>,
 }
 
 /// Debug bounds element for layout visualization
@@ -756,6 +772,7 @@ impl RenderContext {
             scratch_svgs: Vec::with_capacity(32),     // Pre-allocate for SVG elements
             scratch_images: Vec::with_capacity(32),   // Pre-allocate for image elements
             cursor_pos: [0.0; 2],
+            cursor_pressed: false,
             has_active_flows: false,
             has_pending_image_fade: false,
             frame_count: 0,
@@ -2724,6 +2741,14 @@ impl RenderContext {
 
     pub fn set_cursor_position(&mut self, x: f32, y: f32) {
         self.cursor_pos = [x, y];
+    }
+
+    /// Update the global mouse-pressed state. Drives the per-element
+    /// `pressure` uniform that `@flow` shaders read via
+    /// `builtin(pressure)`. Call on mouse-down (with `true`) and
+    /// mouse-up / pointer-cancel (with `false`).
+    pub fn set_cursor_pressed(&mut self, pressed: bool) {
+        self.cursor_pressed = pressed;
     }
 
     /// Whether the last render frame contained @flow shader elements.
@@ -6237,6 +6262,14 @@ impl RenderContext {
             // Collect flow element if this node has a @flow shader reference.
             // Flow elements render via custom GPU pipelines instead of (or on top of) the SDF path.
             if let Some(ref flow_name) = render_node.props.flow {
+                // Capture the active clip from the collection-pass
+                // ancestor chain (scroll viewports + overflow:hidden +
+                // overlay clips). Already in logical pixels — scale to
+                // physical to match `x/y/width/height` below. Without
+                // this the @flow output leaks past scroll edges and
+                // window boundaries.
+                let effective_clip = effective_single_clip(current_clip, current_scroll_clip)
+                    .map(|[cx, cy, cw, ch]| [cx * scale, cy * scale, cw * scale, ch * scale]);
                 flows.push(FlowElement {
                     flow_name: flow_name.clone(),
                     flow_graph: render_node.props.flow_graph.clone(),
@@ -6246,6 +6279,7 @@ impl RenderContext {
                     height: bounds.height * scale,
                     z_index: *z_layer,
                     corner_radius: render_node.props.border_radius.top_left * scale,
+                    clip_rect: effective_clip,
                 });
             }
         }
@@ -9091,6 +9125,23 @@ impl RenderContext {
                         continue;
                     }
 
+                    // Pressure: 1.0 when the cursor is inside the
+                    // element bounds AND any mouse button is held
+                    // down, else 0.0. Drives press-feedback @flow
+                    // shaders (e.g. `.blinc-press-spread`) without
+                    // requiring `pointer-space:` registration —
+                    // `pointer_query.register_from_stylesheet` only
+                    // walks id-keyed rules, so class-only widgets
+                    // would otherwise never get a press envelope.
+                    let cursor_inside = self.cursor_pos[0] >= flow_el.x
+                        && self.cursor_pos[0] < flow_el.x + flow_el.width
+                        && self.cursor_pos[1] >= flow_el.y
+                        && self.cursor_pos[1] < flow_el.y + flow_el.height;
+                    let pressure = if cursor_inside && self.cursor_pressed {
+                        1.0
+                    } else {
+                        0.0
+                    };
                     let uniforms = blinc_gpu::FlowUniformData {
                         viewport_size: [width as f32, height as f32],
                         time: elapsed_secs,
@@ -9101,7 +9152,7 @@ impl RenderContext {
                             (self.cursor_pos[1] - flow_el.y) / flow_el.height.max(1.0),
                         ],
                         corner_radius: flow_el.corner_radius,
-                        _padding: 0.0,
+                        pressure,
                     };
 
                     let viewport = [flow_el.x, flow_el.y, flow_el.width, flow_el.height];
@@ -9110,6 +9161,7 @@ impl RenderContext {
                         &flow_el.flow_name,
                         &uniforms,
                         Some(viewport),
+                        flow_el.clip_rect,
                     ) {
                         tracing::warn!("@flow '{}' render failed", flow_el.flow_name);
                     }

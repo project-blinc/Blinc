@@ -1166,4 +1166,75 @@ pub const CN_STYLES: &str = r#"
     background: var(--selection);
     color: var(--accent);
 }
+
+/* ============================================================================
+   Press-spread — Universal HID press feedback
+   ============================================================================
+   A gradual, shape-conforming alpha-tint that emanates from the press
+   position. Rendered entirely on the GPU via the `@flow` fragment-shader
+   system: `builtin(pointer)` gives the cursor's UV inside the element,
+   `env(pointer-pressure)` gives a smoothed 0→1 press envelope (with
+   `pointer-smoothing` config below applying an exponential damp), and
+   `smoothstep` produces the soft falloff. The flow codegen
+   automatically clips the output to the element's rounded-rect
+   `corner_radius`, so the spread reads as bounded by whatever shape
+   the host widget already has. No Rust plumbing required — opt in
+   from any element with `.class("blinc-press-spread")`.
+
+   KNOWN LIMITATION: `@flow` rendering currently doesn't intersect with
+   the active clip stack (scroll containers, overlay clips, window
+   edges) — the scissor in `blinc_gpu::renderer::render_flow` only
+   clamps to render-target bounds. A `.blinc-press-spread` element
+   inside a scroll container or near a window edge will visibly leak
+   its overlay past the clip boundary. Fix is one-sided: teach
+   `render_flow` to read the active clip rect and intersect before
+   `set_scissor_rect`. Tracked in
+   `gotcha_flow_render_ignores_active_clips.md`. */
+
+@flow blinc-press-spread {
+    target: fragment;
+    input uv: builtin(uv);
+    input pointer: builtin(pointer);
+    /* Renderer-driven press intensity. 1.0 when the cursor is inside
+       the element AND a button is held, else 0.0. Populated for every
+       @flow element via `FlowUniformData.pressure` — no
+       `pointer-space:` stylesheet registration required (which only
+       fires for id-keyed rules and so misses class-only widgets). */
+    input pressure: builtin(pressure);
+    /* Tint mode (0 = light overlay, 1 = dark). Override via
+       `--blinc-press-spread-dark: 1` on the same element. Default 0
+       reads well against the typical cn primary / destructive button
+       (solid dark bg); switch to 1 on light surfaces (outline / ghost
+       buttons, cards, list rows). */
+    input dark: css(--blinc-press-spread-dark);
+    /* Peak alpha at the press centre (0..1). Override via
+       `--blinc-press-spread-alpha: 0.10` etc. */
+    input peak_alpha: css(--blinc-press-spread-alpha);
+
+    /* Distance from cursor UV to this fragment, in UV space. */
+    node delta = uv - pointer;
+    node dist = length(delta);
+    /* Soft falloff — full at the press point, fades to 0 by ~0.8 UV.
+       0.8 covers most of the widget without sharp edge artifacts. */
+    node falloff = smoothstep(0.8, 0.0, dist);
+    /* Pressure envelope: 0 when released, 1 while pressed. */
+    node alpha = falloff * pressure * peak_alpha;
+
+    /* tint = 1 - dark: white (1) for default light overlay, black (0)
+       when --blinc-press-spread-dark is 1. */
+    node tint = 1.0 - dark;
+    output color = vec4(tint, tint, tint, alpha);
+}
+
+.blinc-press-spread {
+    flow: blinc-press-spread;
+    /* Defaults — overridable per-widget via inline `--var` or a
+       cascading rule. */
+    --blinc-press-spread-dark: 0;
+    --blinc-press-spread-alpha: 0.18;
+}
+
+.blinc-press-spread-dark {
+    --blinc-press-spread-dark: 1;
+}
 "#;

@@ -5766,10 +5766,17 @@ impl WindowedApp {
                                 // Set blend target for mix-blend-mode support
                                 blinc_app.set_blend_target(&frame.texture);
 
-                                // Pass cursor position for @flow pointer input
+                                // Pass cursor position + press state for @flow
+                                // pointer / pressure inputs. Reading from the
+                                // router here (rather than tracking a separate
+                                // flag) keeps a single source of truth — same
+                                // logic that drives `:active` CSS state.
                                 let (mx, my) = windowed_ctx.event_router.mouse_position();
                                 let sf = windowed_ctx.scale_factor as f32;
                                 blinc_app.set_cursor_position(mx * sf, my * sf);
+                                blinc_app.set_cursor_pressed(
+                                    windowed_ctx.event_router.has_pressed_target(),
+                                );
 
                                 // Drain any custom passes queued via BlincContextState
                                 // (e.g. SceneKit3D registering a GridPass from a closure)
