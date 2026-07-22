@@ -55,14 +55,12 @@ impl StableNodeId {
         Self(raw)
     }
 
-    /// Derive a child stable id from this node's id and the child's
-    /// position (0-indexed sibling slot) and optional widget-supplied
-    /// key (e.g. an `InstanceKey` string for `Stateful` / `scroll()`).
+    /// Derive a child stable id from this node's id and either its explicit
+    /// key or, for unkeyed children, its 0-indexed sibling position.
     ///
-    /// `widget_key` is hashed in alongside `sibling_index` so two
-    /// widgets at the same position with different keys (e.g. a
-    /// keyed-by-id list re-ordering) get distinct ids and don't drag
-    /// stale state forward.
+    /// Explicit keys intentionally dominate position so keyed children retain
+    /// identity when reordered. Callers must suppress duplicate sibling keys;
+    /// the renderer falls back to positional identity for those entries.
     pub fn derive_child(self, sibling_index: usize, widget_key: Option<&str>) -> Self {
         use std::hash::{BuildHasher, Hasher};
         // `rustc_hash` is already a workspace dep (used by routes,
@@ -83,9 +81,12 @@ impl StableNodeId {
         let mut hasher = rustc_hash::FxBuildHasher.build_hasher();
         hasher.write_u64(STABLE_ID_SALT);
         hasher.write_u64(self.0);
-        hasher.write_usize(sibling_index);
         if let Some(k) = widget_key {
+            hasher.write_u8(1);
             hasher.write(k.as_bytes());
+        } else {
+            hasher.write_u8(0);
+            hasher.write_usize(sibling_index);
         }
         let h = hasher.finish();
         Self(if h == 0 { 1 } else { h })

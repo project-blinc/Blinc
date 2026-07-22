@@ -758,9 +758,13 @@ pub struct RenderTree {
     /// Hash of the element tree used to build this RenderTree
     /// Used for quick equality checks to skip unnecessary rebuilds
     tree_hash: Option<DivHash>,
+    /// Topology hash paired with `tree_hash` so identity-only changes
+    /// (for example, reordering same-shaped `.id()` children) cannot
+    /// incorrectly take the no-change fast path.
+    tree_topology_hash: Option<DivHash>,
     /// Per-node hashes for incremental change detection
-    /// Maps node_id to (own_hash, tree_hash) - own excludes children, tree includes children
-    node_hashes: HashMap<LayoutNodeId, (DivHash, DivHash)>,
+    /// Maps node_id to (own_hash, tree_hash, topology_hash).
+    node_hashes: HashMap<LayoutNodeId, (DivHash, DivHash, DivHash)>,
     /// Layout bounds storages to update after layout computation
     /// Maps node_id to entry with shared storage and optional change callback
     layout_bounds_storages: HashMap<LayoutNodeId, LayoutBoundsEntry>,
@@ -972,6 +976,7 @@ impl RenderTree {
             scale_factor: 1.0,
             animations: Weak::new(),
             tree_hash: None,
+            tree_topology_hash: None,
             node_hashes: HashMap::new(),
             layout_bounds_storages: HashMap::new(),
             element_registry: Arc::new(ElementRegistry::new()),
@@ -1198,9 +1203,18 @@ impl RenderTree {
             vec![(root_id, root_stable)];
         while let Some((node, stable)) = stack.pop() {
             let children = self.layout_tree.children(node);
+            let mut key_counts: HashMap<String, usize> = HashMap::new();
+            for &child in &children {
+                if let Some(key) = self.element_registry.get_id(child) {
+                    *key_counts.entry(key).or_default() += 1;
+                }
+            }
             for (i, &child) in children.iter().enumerate() {
                 let widget_key = self.element_registry.get_id(child);
-                let child_stable = stable.derive_child(i, widget_key.as_deref());
+                let unique_key = widget_key
+                    .as_deref()
+                    .filter(|key| key_counts.get(*key) == Some(&1));
+                let child_stable = stable.derive_child(i, unique_key);
                 self.register_stable(child_stable, child);
                 stack.push((child, child_stable));
             }
@@ -2861,6 +2875,105 @@ mod tests {
 
         assert_eq!(bounds.width, 200.0);
         assert_eq!(bounds.height, 200.0);
+    }
+
+    #[test]
+    fn incremental_update_reconciles_same_length_keyed_reorder() {
+        let initial = div().child(div().id("alice")).child(div().id("bob"));
+        let mut tree = RenderTree::from_element(&initial);
+
+        let root = tree.root().unwrap();
+        let initial_children = tree.layout_tree.children(root);
+        let alice_stable = tree.stable_id(initial_children[0]).unwrap();
+        let bob_stable = tree.stable_id(initial_children[1]).unwrap();
+        let mut router = crate::event_router::EventRouter::new();
+        router.set_focus(Some(initial_children[1]));
+        assert_eq!(tree.query_by_id("alice"), Some(initial_children[0]));
+        assert_eq!(tree.query_by_id("bob"), Some(initial_children[1]));
+
+        let reordered = div().child(div().id("bob")).child(div().id("alice"));
+
+        assert_ne!(
+            DivHash::compute_topology_tree(&initial),
+            DivHash::compute_topology_tree(&reordered),
+            "reordering explicitly identified children must change topology"
+        );
+
+        assert_eq!(
+            tree.incremental_update(&reordered),
+            UpdateResult::ChildrenChanged
+        );
+
+        let reordered_children = tree.layout_tree.children(root);
+        assert_eq!(tree.query_by_id("bob"), Some(reordered_children[0]));
+        assert_eq!(tree.query_by_id("alice"), Some(reordered_children[1]));
+        assert_eq!(reordered_children[0], initial_children[1]);
+        assert_eq!(reordered_children[1], initial_children[0]);
+        assert_eq!(tree.stable_id(reordered_children[0]), Some(bob_stable));
+        assert_eq!(tree.stable_id(reordered_children[1]), Some(alice_stable));
+        assert_eq!(router.focused(), Some(reordered_children[0]));
+    }
+
+    #[test]
+    fn incremental_update_preserves_keyed_survivors_across_insert_and_remove() {
+        let initial = div().child(div().id("alice")).child(div().id("bob"));
+        let mut tree = RenderTree::from_element(&initial);
+        let root = tree.root().unwrap();
+        let initial_children = tree.layout_tree.children(root);
+        let alice = initial_children[0];
+        let bob = initial_children[1];
+        let alice_stable = tree.stable_id(alice).unwrap();
+        let bob_stable = tree.stable_id(bob).unwrap();
+
+        let inserted = div()
+            .child(div().id("carol"))
+            .child(div().id("alice"))
+            .child(div().id("bob"));
+        assert_eq!(
+            tree.incremental_update(&inserted),
+            UpdateResult::ChildrenChanged
+        );
+
+        let after_insert = tree.layout_tree.children(root);
+        assert_eq!(after_insert[1], alice);
+        assert_eq!(after_insert[2], bob);
+        assert_eq!(tree.stable_id(alice), Some(alice_stable));
+        assert_eq!(tree.stable_id(bob), Some(bob_stable));
+
+        let removed = div().child(div().id("bob"));
+        assert_eq!(
+            tree.incremental_update(&removed),
+            UpdateResult::ChildrenChanged
+        );
+
+        let after_remove = tree.layout_tree.children(root);
+        assert_eq!(after_remove, vec![bob]);
+        assert_eq!(tree.query_by_id("bob"), Some(bob));
+        assert_eq!(tree.stable_id(bob), Some(bob_stable));
+        assert!(!tree.layout_tree.node_exists(alice));
+    }
+
+    #[test]
+    fn incremental_update_refreshes_classes_on_reused_keyed_survivor() {
+        let initial = div()
+            .child(div().id("alice").class("row"))
+            .child(div().id("bob").class("row"));
+        let mut tree = RenderTree::from_element(&initial);
+        let root = tree.root().unwrap();
+        let bob = tree.layout_tree.children(root)[1];
+
+        let updated = div()
+            .child(div().id("carol").class("row"))
+            .child(div().id("alice").class("row"))
+            .child(div().id("bob").class("row").class("row--active"));
+        assert_eq!(
+            tree.incremental_update(&updated),
+            UpdateResult::ChildrenChanged
+        );
+
+        assert_eq!(tree.layout_tree.children(root)[2], bob);
+        let index = tree.element_registry.class_to_nodes_index();
+        assert_eq!(index.get("row--active"), Some(&vec![bob]));
     }
 
     #[test]

@@ -24,6 +24,7 @@ use crate::diff::{ChangeCategory, DivHash, render_props_eq};
 use crate::div::ElementBuilder;
 use crate::element::RenderProps;
 use crate::tree::LayoutNodeId;
+use std::collections::{HashMap, HashSet};
 
 use super::super::{RenderNode, RenderTree};
 
@@ -42,6 +43,10 @@ impl RenderTree {
         parent_id: LayoutNodeId,
         new_children: &[Box<dyn ElementBuilder>],
     ) {
+        if self.try_reconcile_keyed_children(parent_id, new_children) {
+            return;
+        }
+
         // Remove old children
         let old_children = self.layout_tree.children(parent_id);
         for child_id in &old_children {
@@ -56,6 +61,12 @@ impl RenderTree {
             let child_id = child.build(&mut self.layout_tree);
             self.layout_tree.add_child(parent_id, child_id);
             built.push(child_id);
+        }
+
+        // Stable ids incorporate author-supplied element ids, so the
+        // fresh subtree's ids must be registered before reminting.
+        for (child, child_id) in new_children.iter().zip(built.iter()) {
+            self.register_element_ids_walk(child.as_ref(), *child_id);
         }
 
         // Mint stable ids over the updated tree before collect, so
@@ -87,6 +98,152 @@ impl RenderTree {
         self.apply_stylesheet_layout_overrides_for_subtree(parent_id);
     }
 
+    /// Reconcile uniquely keyed direct children while retaining the layout ids
+    /// of unchanged survivors. Unkeyed children remain positional.
+    fn try_reconcile_keyed_children(
+        &mut self,
+        parent_id: LayoutNodeId,
+        new_children: &[Box<dyn ElementBuilder>],
+    ) -> bool {
+        let old_children = self.layout_tree.children(parent_id);
+        let mut old_key_counts = HashMap::<String, usize>::new();
+        let mut old_by_key = HashMap::<String, LayoutNodeId>::new();
+        for &child_id in &old_children {
+            if let Some(key) = self.element_registry.get_id(child_id) {
+                *old_key_counts.entry(key.clone()).or_default() += 1;
+                old_by_key.insert(key, child_id);
+            }
+        }
+
+        let mut new_key_counts = HashMap::<String, usize>::new();
+        for child in new_children {
+            if let Some(key) = child.element_id() {
+                *new_key_counts.entry(key.to_string()).or_default() += 1;
+            }
+        }
+
+        let new_topologies: Vec<DivHash> = new_children
+            .iter()
+            .map(|child| DivHash::compute_topology_tree(child.as_ref()))
+            .collect();
+
+        let can_preserve_keyed_survivor =
+            new_children
+                .iter()
+                .zip(new_topologies.iter())
+                .any(|(child, &new_topology)| {
+                    let Some(key) = child.element_id() else {
+                        return false;
+                    };
+                    if new_key_counts.get(key) != Some(&1) || old_key_counts.get(key) != Some(&1) {
+                        return false;
+                    }
+                    let Some(&old_id) = old_by_key.get(key) else {
+                        return false;
+                    };
+                    self.node_hashes
+                        .get(&old_id)
+                        .is_some_and(|&(_, _, old_topology)| old_topology == new_topology)
+                });
+        if !can_preserve_keyed_survivor {
+            return false;
+        }
+
+        let mut reused = HashSet::new();
+        let mut fresh = HashSet::new();
+        let mut reconciled = Vec::with_capacity(new_children.len());
+
+        for (index, (child, &new_topology)) in
+            new_children.iter().zip(new_topologies.iter()).enumerate()
+        {
+            let keyed_match = child.element_id().and_then(|key| {
+                if new_key_counts.get(key) != Some(&1) || old_key_counts.get(key) != Some(&1) {
+                    return None;
+                }
+                let old_id = *old_by_key.get(key)?;
+                self.node_hashes
+                    .get(&old_id)
+                    .is_some_and(|&(_, _, old_topology)| old_topology == new_topology)
+                    .then_some(old_id)
+            });
+
+            let positional_match = if child.element_id().is_none() {
+                old_children.get(index).copied().filter(|old_id| {
+                    !reused.contains(old_id)
+                        && self.element_registry.get_id(*old_id).is_none()
+                        && self
+                            .node_hashes
+                            .get(old_id)
+                            .is_some_and(|&(_, _, old_topology)| old_topology == new_topology)
+                })
+            } else {
+                None
+            };
+
+            let child_id = if let Some(old_id) = keyed_match.or(positional_match) {
+                reused.insert(old_id);
+                old_id
+            } else {
+                let new_id = child.build(&mut self.layout_tree);
+                fresh.insert(new_id);
+                new_id
+            };
+            reconciled.push(child_id);
+        }
+
+        self.layout_tree
+            .replace_children(parent_id, reconciled.clone());
+
+        for old_id in old_children {
+            if !reused.contains(&old_id) {
+                self.remove_subtree_nodes(old_id);
+                self.layout_tree.remove_subtree(old_id);
+            }
+        }
+
+        for (child, &child_id) in new_children.iter().zip(reconciled.iter()) {
+            if fresh.contains(&child_id) {
+                self.register_element_ids_walk(child.as_ref(), child_id);
+            }
+        }
+        self.element_registry
+            .replace_children(parent_id, &reconciled);
+
+        self.build_generation = self.build_generation.wrapping_add(1);
+        self.mint_stable_ids_walk();
+
+        for (child, &child_id) in new_children.iter().zip(reconciled.iter()) {
+            if fresh.contains(&child_id) {
+                self.collect_render_props_boxed(child.as_ref(), child_id);
+            } else {
+                self.update_render_props_in_place_boxed(child.as_ref(), child_id);
+            }
+        }
+
+        self.auto_fill_animation_stable_keys();
+        self.sweep_stale_handlers();
+        self.sweep_stale_css_animations();
+        self.apply_stylesheet_base_styles_for_subtree(parent_id, None);
+        self.apply_stylesheet_layout_overrides_for_subtree(parent_id);
+        true
+    }
+
+    /// True if `child_node_id`'s stored topology hash no longer matches
+    /// `child_builder`'s. Shared by the generic and boxed `analyze_changes`
+    /// variants, which both need to detect a same-shaped reorder (equal
+    /// tree hash length, different child identity) and bail out to a full
+    /// children rebuild rather than diffing positionally.
+    fn child_topology_changed(
+        &self,
+        child_builder: &dyn ElementBuilder,
+        child_node_id: LayoutNodeId,
+    ) -> bool {
+        let child_topology = DivHash::compute_topology_tree(child_builder);
+        self.node_hashes
+            .get(&child_node_id)
+            .is_none_or(|&(_, _, stored_topology)| stored_topology != child_topology)
+    }
+
     /// Analyze what categories of changes occurred between stored tree and new element
     pub(crate) fn analyze_changes<E: ElementBuilder>(
         &self,
@@ -96,7 +253,9 @@ impl RenderTree {
         let mut changes = ChangeCategory::none();
 
         // Get stored hash for this node
-        let Some(&(stored_own_hash, stored_tree_hash)) = self.node_hashes.get(&node_id) else {
+        let Some(&(stored_own_hash, stored_tree_hash, stored_topology_hash)) =
+            self.node_hashes.get(&node_id)
+        else {
             // No stored hash - treat as everything changed
             changes.layout = true;
             changes.visual = true;
@@ -107,9 +266,10 @@ impl RenderTree {
         // Compute new hashes
         let new_own_hash = DivHash::compute_element(element);
         let new_tree_hash = DivHash::compute_element_tree(element);
+        let new_topology_hash = DivHash::compute_topology_tree(element);
 
         // If tree hashes match, nothing changed in this subtree
-        if stored_tree_hash == new_tree_hash {
+        if stored_tree_hash == new_tree_hash && stored_topology_hash == new_topology_hash {
             return changes;
         }
 
@@ -150,6 +310,10 @@ impl RenderTree {
 
         // Recursively check children
         for (child_builder, &child_node_id) in child_builders.iter().zip(child_node_ids.iter()) {
+            if self.child_topology_changed(child_builder.as_ref(), child_node_id) {
+                changes.children = true;
+                return changes;
+            }
             let child_changes = self.analyze_changes_boxed(child_builder.as_ref(), child_node_id);
             changes.layout = changes.layout || child_changes.layout;
             changes.visual = changes.visual || child_changes.visual;
@@ -173,7 +337,9 @@ impl RenderTree {
     ) -> ChangeCategory {
         let mut changes = ChangeCategory::none();
 
-        let Some(&(stored_own_hash, stored_tree_hash)) = self.node_hashes.get(&node_id) else {
+        let Some(&(stored_own_hash, stored_tree_hash, stored_topology_hash)) =
+            self.node_hashes.get(&node_id)
+        else {
             changes.layout = true;
             changes.visual = true;
             changes.children = true;
@@ -182,8 +348,9 @@ impl RenderTree {
 
         let new_own_hash = DivHash::compute_element(element);
         let new_tree_hash = DivHash::compute_element_tree(element);
+        let new_topology_hash = DivHash::compute_topology_tree(element);
 
-        if stored_tree_hash == new_tree_hash {
+        if stored_tree_hash == new_tree_hash && stored_topology_hash == new_topology_hash {
             return changes;
         }
 
@@ -213,6 +380,10 @@ impl RenderTree {
         }
 
         for (child_builder, &child_node_id) in child_builders.iter().zip(child_node_ids.iter()) {
+            if self.child_topology_changed(child_builder.as_ref(), child_node_id) {
+                changes.children = true;
+                return changes;
+            }
             let child_changes = self.analyze_changes_boxed(child_builder.as_ref(), child_node_id);
             changes.layout = changes.layout || child_changes.layout;
             changes.visual = changes.visual || child_changes.visual;
@@ -272,7 +443,9 @@ impl RenderTree {
         // Update stored hash
         let own_hash = DivHash::compute_element(element);
         let tree_hash = DivHash::compute_element_tree(element);
-        self.node_hashes.insert(node_id, (own_hash, tree_hash));
+        let topology_hash = DivHash::compute_topology_tree(element);
+        self.node_hashes
+            .insert(node_id, (own_hash, tree_hash, topology_hash));
 
         // Update event handlers
         if let Some(handlers) = element.event_handlers() {
@@ -328,6 +501,7 @@ impl RenderTree {
             new_props.node_id = Some(node_id);
             new_props.motion = render_node.props.motion.clone();
             render_node.props = new_props;
+            render_node.element_type = Self::determine_element_type_boxed(element);
         } else {
             // Render node doesn't exist - this can happen if the tree structure changed
             // but rebuild_children_in_place wasn't called for this subtree.
@@ -354,9 +528,24 @@ impl RenderTree {
             self.layout_tree.set_style(node_id, style.clone());
         }
 
+        let new_classes = element.element_classes();
+        let old_classes = self.element_registry.get_classes(node_id);
+        let classes_changed = new_classes != old_classes.as_deref().unwrap_or(&[]);
+        if !new_classes.is_empty() {
+            self.element_registry
+                .register_classes(node_id, new_classes.to_vec());
+        } else {
+            self.element_registry.clear_classes(node_id);
+        }
+        if classes_changed {
+            self.base_styles.remove(&node_id);
+        }
+
         let own_hash = DivHash::compute_element(element);
         let tree_hash = DivHash::compute_element_tree(element);
-        self.node_hashes.insert(node_id, (own_hash, tree_hash));
+        let topology_hash = DivHash::compute_topology_tree(element);
+        self.node_hashes
+            .insert(node_id, (own_hash, tree_hash, topology_hash));
 
         if let Some(handlers) = element.event_handlers() {
             let stable_id = self.stable_id_or_warn(node_id);

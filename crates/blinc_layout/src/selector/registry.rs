@@ -171,6 +171,37 @@ impl ElementRegistry {
         }
     }
 
+    /// Replace the cached direct-child ordering for `parent` after layout
+    /// reconciliation moves existing nodes without rebuilding them.
+    pub fn replace_children(&self, parent: LayoutNodeId, new_children: &[LayoutNodeId]) {
+        let old_children = self
+            .children
+            .write()
+            .ok()
+            .and_then(|mut children| children.insert(parent, new_children.to_vec()))
+            .unwrap_or_default();
+
+        if let Ok(mut parents) = self.parents.write() {
+            for child in old_children {
+                if !new_children.contains(&child) && parents.get(&child) == Some(&parent) {
+                    parents.remove(&child);
+                }
+            }
+            for &child in new_children {
+                parents.insert(child, parent);
+            }
+        }
+
+        if let (Ok(mut indices), Ok(mut counts)) =
+            (self.child_indices.write(), self.sibling_counts.write())
+        {
+            for (index, &child) in new_children.iter().enumerate() {
+                indices.insert(child, index);
+                counts.insert(child, new_children.len());
+            }
+        }
+    }
+
     /// Check if a node has a specific CSS class
     /// Get the CSS classes registered for a node
     pub fn get_classes(&self, node_id: LayoutNodeId) -> Option<Vec<Arc<str>>> {

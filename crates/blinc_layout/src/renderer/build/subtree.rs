@@ -35,6 +35,29 @@ use crate::tree::LayoutNodeId;
 use super::super::RenderTree;
 
 impl RenderTree {
+    /// True if any slot in `child_builders`/`child_node_ids` has a topology
+    /// hash that no longer matches the stored one for that node.
+    ///
+    /// Equal child counts do not imply equal child identity — a same-shaped
+    /// reorder still needs a rebuild so ids, handlers, and other node-keyed
+    /// state cannot remain attached positionally. Shared by the generic and
+    /// boxed `rebuild_changed_subtrees` variants below.
+    fn any_child_topology_changed(
+        &self,
+        child_builders: &[Box<dyn ElementBuilder>],
+        child_node_ids: &[LayoutNodeId],
+    ) -> bool {
+        child_builders
+            .iter()
+            .zip(child_node_ids.iter())
+            .any(|(child, child_id)| {
+                let new_topology = DivHash::compute_topology_tree(child.as_ref());
+                self.node_hashes
+                    .get(child_id)
+                    .is_none_or(|&(_, _, stored_topology)| stored_topology != new_topology)
+            })
+    }
+
     /// Rebuild subtrees for nodes with changed children
     ///
     /// This walks the tree comparing stored hashes with the new element tree.
@@ -54,10 +77,15 @@ impl RenderTree {
             return;
         }
 
+        if self.any_child_topology_changed(child_builders, &child_node_ids) {
+            self.rebuild_children_in_place(node_id, child_builders);
+            return;
+        }
+
         // Same child count - check each child for deeper changes
         for (child_builder, &child_node_id) in child_builders.iter().zip(child_node_ids.iter()) {
             // Get stored hash for this child
-            if let Some(&(_, stored_tree_hash)) = self.node_hashes.get(&child_node_id) {
+            if let Some(&(_, stored_tree_hash, _)) = self.node_hashes.get(&child_node_id) {
                 let new_tree_hash = DivHash::compute_element_tree(child_builder.as_ref());
                 if stored_tree_hash != new_tree_hash {
                     // Child's subtree changed - check if it's the child count or deeper changes
@@ -93,8 +121,13 @@ impl RenderTree {
             return;
         }
 
+        if self.any_child_topology_changed(child_builders, &child_node_ids) {
+            self.rebuild_children_in_place(node_id, child_builders);
+            return;
+        }
+
         for (child_builder, &child_node_id) in child_builders.iter().zip(child_node_ids.iter()) {
-            if let Some(&(_, stored_tree_hash)) = self.node_hashes.get(&child_node_id) {
+            if let Some(&(_, stored_tree_hash, _)) = self.node_hashes.get(&child_node_id) {
                 let new_tree_hash = DivHash::compute_element_tree(child_builder.as_ref());
                 if stored_tree_hash != new_tree_hash {
                     let child_children_count = self.layout_tree.children(child_node_id).len();

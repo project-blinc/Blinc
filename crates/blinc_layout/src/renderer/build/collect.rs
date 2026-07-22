@@ -153,7 +153,9 @@ impl RenderTree {
         // Store per-node hashes for incremental update detection
         let own_hash = DivHash::compute_element(element);
         let tree_hash = DivHash::compute_element_tree(element);
-        self.node_hashes.insert(node_id, (own_hash, tree_hash));
+        let topology_hash = DivHash::compute_topology_tree(element);
+        self.node_hashes
+            .insert(node_id, (own_hash, tree_hash, topology_hash));
 
         // Register event handlers if present
         if let Some(handlers) = element.event_handlers() {
@@ -385,7 +387,9 @@ impl RenderTree {
         // Store per-node hashes for incremental update detection
         let own_hash = DivHash::compute_element(element);
         let tree_hash = DivHash::compute_element_tree(element);
-        self.node_hashes.insert(node_id, (own_hash, tree_hash));
+        let topology_hash = DivHash::compute_topology_tree(element);
+        self.node_hashes
+            .insert(node_id, (own_hash, tree_hash, topology_hash));
 
         // Register event handlers if present
         if let Some(handlers) = element.event_handlers() {
@@ -690,7 +694,9 @@ impl RenderTree {
         // Store per-node hashes for incremental update detection
         let own_hash = DivHash::compute_element(element);
         let tree_hash = DivHash::compute_element_tree(element);
-        self.node_hashes.insert(node_id, (own_hash, tree_hash));
+        let topology_hash = DivHash::compute_topology_tree(element);
+        self.node_hashes
+            .insert(node_id, (own_hash, tree_hash, topology_hash));
 
         // Register event handlers if present
         if let Some(handlers) = element.event_handlers() {

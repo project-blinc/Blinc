@@ -29,7 +29,10 @@ impl RenderTree {
     /// Returns true if the element tree hash matches, meaning no rebuild is needed.
     pub fn matches_element<E: ElementBuilder>(&self, element: &E) -> bool {
         match self.tree_hash {
-            Some(hash) => hash == DivHash::compute_element_tree(element),
+            Some(hash) => {
+                hash == DivHash::compute_element_tree(element)
+                    && self.tree_topology_hash == Some(DivHash::compute_topology_tree(element))
+            }
             None => false,
         }
     }

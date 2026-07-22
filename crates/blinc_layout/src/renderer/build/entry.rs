@@ -40,6 +40,7 @@ impl RenderTree {
     pub fn from_element<E: ElementBuilder>(element: &E) -> Self {
         let mut tree = Self::new();
         tree.tree_hash = Some(DivHash::compute_element_tree(element));
+        tree.tree_topology_hash = Some(DivHash::compute_topology_tree(element));
         tree.build_element(element);
         tree
     }
@@ -58,6 +59,7 @@ impl RenderTree {
         // Set shared registry BEFORE building so IDs are registered correctly
         tree.element_registry = registry;
         tree.tree_hash = Some(DivHash::compute_element_tree(element));
+        tree.tree_topology_hash = Some(DivHash::compute_topology_tree(element));
         tree.build_element(element);
         tree
     }
@@ -71,15 +73,17 @@ impl RenderTree {
     pub fn update_if_changed<E: ElementBuilder>(&mut self, element: &E) -> bool {
         self.invalidate_mouse_move_pipeline_cache();
         let new_hash = DivHash::compute_element_tree(element);
+        let new_topology_hash = DivHash::compute_topology_tree(element);
 
         // If hash matches, no changes - skip rebuild
-        if self.tree_hash == Some(new_hash) {
+        if self.tree_hash == Some(new_hash) && self.tree_topology_hash == Some(new_topology_hash) {
             return false;
         }
 
         // Hash differs - need to rebuild
         // For now, do a full rebuild. Future optimization: use diff for incremental updates
         self.tree_hash = Some(new_hash);
+        self.tree_topology_hash = Some(new_topology_hash);
 
         // Clear existing data that will be repopulated during rebuild.
         //
@@ -127,9 +131,12 @@ impl RenderTree {
     /// - ChildrenChanged: call compute_layout(), then render
     pub fn incremental_update<E: ElementBuilder>(&mut self, element: &E) -> UpdateResult {
         let new_tree_hash = DivHash::compute_element_tree(element);
+        let new_topology_hash = DivHash::compute_topology_tree(element);
 
         // Quick path: if tree hash matches, nothing changed
-        if self.tree_hash == Some(new_tree_hash) {
+        if self.tree_hash == Some(new_tree_hash)
+            && self.tree_topology_hash == Some(new_topology_hash)
+        {
             return UpdateResult::NoChanges;
         }
 
@@ -144,6 +151,7 @@ impl RenderTree {
         let Some(root_id) = self.root else {
             // No existing tree - build it (this is initial build, not an update)
             self.tree_hash = Some(new_tree_hash);
+            self.tree_topology_hash = Some(new_topology_hash);
             self.root = Some(self.build_element(element));
             return UpdateResult::ChildrenChanged;
         };
@@ -161,6 +169,7 @@ impl RenderTree {
 
         // Update tree hash
         self.tree_hash = Some(new_tree_hash);
+        self.tree_topology_hash = Some(new_topology_hash);
 
         // Determine update strategy based on change category
         if changes.children {
