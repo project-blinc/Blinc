@@ -2902,6 +2902,19 @@ impl WebApp {
             }
         }
 
+        // ─── Phase 4c: drain deferred focus/blur ─────────────────
+        // Mirror windowed.rs Phase-3 post-rebuild drain. Deferred
+        // focus (`focus_text_input_deferred`, used by OTP auto-advance
+        // and backspace-rewind) and deferred blur are queued during
+        // event dispatch and applied here — after the rebuild so the
+        // target's node_id is set, and before the focus sync below so
+        // `:focus` selectors and the focused-node lookup see the
+        // result this frame. Without this the web runner never advanced
+        // OTP focus per keystroke and backspace only cleared the last
+        // slots.
+        blinc_layout::widgets::process_pending_input_focus();
+        blinc_layout::widgets::process_pending_area_focus();
+
         // ─── Phase 5: pre-render CSS + pointer-query ─────────────
         // Focus sync so :focus selectors work
         {
