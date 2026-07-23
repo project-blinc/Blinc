@@ -369,6 +369,11 @@ pub fn enqueue_pending_focus_area(state: Weak<Mutex<crate::widgets::text_area::T
 static PENDING_FOCUS_INPUT: Mutex<Vec<(u64, Weak<Mutex<TextInputData>>)>> = Mutex::new(Vec::new());
 /// Bumped by [`blur_all_text_inputs`] to cancel deferred focus queued before blur.
 static PENDING_FOCUS_GENERATION: AtomicU64 = AtomicU64::new(0);
+/// Slots to blur on the next `process_pending_input_focus`. Used when a
+/// click's FSM focus (from Stateful's auto POINTER_DOWN handler) must be
+/// undone AFTER the event dispatch that set it — see
+/// [`blur_text_input_deferred`].
+static PENDING_BLUR_INPUT: Mutex<Vec<Weak<Mutex<TextInputData>>>> = Mutex::new(Vec::new());
 static PENDING_FOCUS_AREA: Mutex<
     Vec<(u64, Weak<Mutex<crate::widgets::text_area::TextAreaState>>)>,
 > = Mutex::new(Vec::new());
@@ -688,6 +693,20 @@ pub fn focus_text_input_deferred(state: &SharedTextInputData) {
 /// state flip is visible on the same frame the popover paints — no
 /// visual delay between popover appearance and focus indicator.
 pub fn process_pending_input_focus() {
+    // Apply deferred blurs first: these undo an auto POINTER_DOWN focus
+    // from the dispatch that just completed (e.g. an OTP slot whose
+    // click was redirected). Running before the focus drain keeps the
+    // two independent — blur and focus target different slots.
+    let blurs: Vec<Weak<Mutex<TextInputData>>> = match PENDING_BLUR_INPUT.lock() {
+        Ok(mut p) => std::mem::take(&mut *p),
+        Err(_) => Vec::new(),
+    };
+    for weak in blurs {
+        if let Some(strong) = weak.upgrade() {
+            blur_text_input(&strong);
+        }
+    }
+
     let drained: Vec<(u64, Weak<Mutex<TextInputData>>)> = {
         match PENDING_FOCUS_INPUT.lock() {
             Ok(mut p) => std::mem::take(&mut *p),
@@ -870,6 +889,36 @@ pub(crate) fn clear_focused_text_input(state: &SharedTextInputData) {
             }
         }
     }
+}
+
+/// Blur one specific text input, resetting its FSM + visual to a
+/// non-focused state and repainting it.
+///
+/// `Stateful` auto-registers a `POINTER_DOWN -> Focused` handler that
+/// runs on every click, independent of the manual focus path that
+/// updates the global `FOCUSED_TEXT_INPUT` tracker. When a widget
+/// intercepts a click and redirects focus elsewhere (e.g. an OTP slot
+/// bouncing focus to the first empty slot), the clicked slot's FSM
+/// still latches `Focused` — painting a `:focus` outline that
+/// `blur_all_text_inputs` (which only clears the single tracked input)
+/// can never reach. Widgets call this to blur such an orphaned slot.
+pub fn blur_text_input(state: &SharedTextInputData) {
+    clear_focused_text_input(state);
+    blur_text_input_state(state);
+}
+
+/// Queue a blur for the next [`process_pending_input_focus`].
+///
+/// Needed when the FSM focus to undo was set by Stateful's auto
+/// POINTER_DOWN handler DURING the current event dispatch: a synchronous
+/// [`blur_text_input`] from another handler on the same click can run
+/// before that auto handler and no-op. Deferring runs the blur after the
+/// dispatch, so it wins.
+pub fn blur_text_input_deferred(state: &SharedTextInputData) {
+    if let Ok(mut pending) = PENDING_BLUR_INPUT.lock() {
+        pending.push(Arc::downgrade(state));
+    }
+    crate::stateful::request_redraw();
 }
 
 pub(crate) fn set_focused_text_area(state: &crate::widgets::text_area::SharedTextAreaState) {
@@ -2142,14 +2191,17 @@ impl TextInput {
                 new_state
             });
 
-        // Clear stale node_id from previous tree builds
-        // During full rebuild (e.g., window resize), the old node_id points to
-        // nodes in the old tree. Clearing it ensures the new node_id gets assigned
-        // when this element is added to the new tree.
-        {
-            let mut shared = stateful_state.lock().unwrap();
-            shared.node_id = None;
-        }
+        // Deliberately do NOT clear `node_id` here. `Stateful::build`
+        // overwrites it with the fresh node whenever a rebuild actually
+        // runs, so a full rebuild (e.g. window resize) still gets the
+        // right id. But when the incremental diff decides a reused slot
+        // is unchanged, `build` is skipped — its layout node persists,
+        // and the old `node_id` is still valid. Wiping it here left that
+        // node id at `None`, so a later out-of-band `refresh_stateful`
+        // (e.g. an OTP slot blurring when focus moves to a sibling) hit
+        // the `node_id == None` early-return in `refresh_props_internal`
+        // and dropped the repaint, leaving the slot's `:focus` outline
+        // ring baked on. Keeping the id lets that refresh land.
 
         // Create inner Stateful with text input event handlers
         let mut inner = Self::create_inner_with_handlers(

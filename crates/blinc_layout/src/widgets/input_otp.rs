@@ -15,8 +15,8 @@ use crate::key::InstanceKey;
 use crate::stateful::{NoState, stateful_with_key};
 use crate::tree::{LayoutNodeId, LayoutTree};
 use crate::widgets::text_input::{
-    InputType, SharedTextInputData, TextInput, focus_text_input_deferred, text_input,
-    text_input_data,
+    InputType, SharedTextInputData, TextInput, blur_text_input_deferred, focus_text_input_deferred,
+    text_input, text_input_data,
 };
 
 /// Reactive OTP configuration bound to a [`State<String>`] holding the
@@ -106,6 +106,13 @@ pub fn wire_otp_slot(
             }
             let first_empty = first_empty_slot(&slots);
             if index > first_empty && first_empty < slots.len() {
+                // The click drives this slot's FSM to `Focused` via
+                // Stateful's auto POINTER_DOWN handler, which fires
+                // AFTER this callback within the same dispatch. Defer the
+                // blur so it runs after that, clearing the outline this
+                // bounced-past slot would otherwise keep — it's not the
+                // tracked focus, so nothing else would ever blur it.
+                blur_text_input_deferred(&slots[index]);
                 focus_text_input_deferred(&slots[first_empty]);
                 return true;
             }
@@ -606,6 +613,58 @@ mod tests {
 
         assert!(slots[0].lock().unwrap().visual.is_focused());
         assert!(!slots[1].lock().unwrap().visual.is_focused());
+    }
+
+    // A redirected click still drove the slot's FSM to `Focused` via
+    // Stateful's auto POINTER_DOWN handler (the `:focus` outline is
+    // painted from the FSM, not `data.visual`), and nothing blurred it
+    // because it was never the tracked focus — so the outline ring
+    // stuck. Assert the FSM, not just `visual`.
+    #[test]
+    fn redirected_click_does_not_leave_slot_fsm_focused() {
+        let _guard = OTP_FOCUS_TEST_LOCK.lock().unwrap();
+        reset_focus_for_test();
+        blinc_theme::ThemeState::init_default();
+
+        let value = test_state("");
+        let slots = Arc::new(vec![
+            text_input_data(),
+            text_input_data(),
+            text_input_data(),
+        ]);
+        let mut tree = LayoutTree::new();
+        let fields: Vec<_> = (0..slots.len())
+            .map(|i| {
+                wire_otp_slot(
+                    text_input(&slots[i]).max_length(1),
+                    i,
+                    &slots,
+                    false,
+                    &value,
+                    None,
+                    None,
+                )
+            })
+            .collect();
+        for field in &fields {
+            field.build(&mut tree);
+        }
+
+        // Click slot 2 while every slot is empty: focus bounces to the
+        // first empty slot (0), and slot 2 must not keep a focus ring.
+        let ctx = EventContext::new(event_types::POINTER_DOWN, LayoutNodeId::default());
+        fields[2].event_handlers().unwrap().dispatch(&ctx);
+        process_pending_input_focus();
+        process_pending_input_focus();
+
+        assert!(
+            !stateful_is_focused(&slots[2]),
+            "redirected slot kept its FSM Focused (outline ring persists)"
+        );
+        assert!(
+            stateful_is_focused(&slots[0]),
+            "focus should have bounced to the first empty slot"
+        );
     }
 
     #[test]
