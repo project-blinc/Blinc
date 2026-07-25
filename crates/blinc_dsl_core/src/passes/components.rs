@@ -449,8 +449,59 @@ pub(crate) fn lower_component_calls(program: &mut TypedProgram, filename: &str) 
                             current_slot = None;
                             continue;
                         }
-                        let TypedStatement::Expression(e) = s.node else {
-                            continue;
+                        // Control flow (`if` / `while`) in a widget body used
+                        // to be dropped here, so its children silently never
+                        // rendered. Carry it through in child position as a
+                        // `__cf_children__(Block{stmt})` marker call —
+                        // `lower_children_arrays_to_blocks` recognises the
+                        // marker and rewrites the child-producing calls inside
+                        // into `__push_child__` against the hoisted list. A
+                        // marker call, NOT a bare Block: a nested
+                        // widget-with-children is itself lowered to a
+                        // trailing-expression Block, so a bare Block in child
+                        // position is ambiguous. In-place wrapping keeps source
+                        // order between static and conditional children.
+                        // `let` is deliberately not carried (bindings are
+                        // hoisted by earlier passes; wrapping would change
+                        // their scope).
+                        let e = match s.node {
+                            TypedStatement::Expression(e) => e,
+                            node @ (TypedStatement::If(_) | TypedStatement::While(_)) => {
+                                let span = s.span;
+                                let block = zyntax_typed_ast::TypedNode::new(
+                                    TypedExpression::Block(
+                                        zyntax_typed_ast::typed_ast::TypedBlock {
+                                            statements: vec![zyntax_typed_ast::TypedNode::new(
+                                                node,
+                                                Type::Primitive(PrimitiveType::Unit),
+                                                span,
+                                            )],
+                                            span,
+                                        },
+                                    ),
+                                    Type::Primitive(PrimitiveType::Unit),
+                                    span,
+                                );
+                                Box::new(zyntax_typed_ast::TypedNode::new(
+                                    TypedExpression::Call(zyntax_typed_ast::TypedCall {
+                                        callee: Box::new(zyntax_typed_ast::TypedNode::new(
+                                            TypedExpression::Variable(
+                                                zyntax_typed_ast::InternedString::new_global(
+                                                    "__cf_children__",
+                                                ),
+                                            ),
+                                            Type::Any,
+                                            span,
+                                        )),
+                                        positional_args: vec![block],
+                                        named_args: vec![],
+                                        type_args: vec![],
+                                    }),
+                                    Type::Primitive(PrimitiveType::Unit),
+                                    span,
+                                ))
+                            }
+                            _ => continue,
                         };
                         match &current_slot {
                             None => default_children.push(*e),

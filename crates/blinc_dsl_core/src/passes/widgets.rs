@@ -160,6 +160,21 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
                     }
                 }
             }
+            // A widget nested in a loop body needs its OWN children
+            // expanded too. Without this arm the inner call kept a raw
+            // `children` Array that never became a child list, so the
+            // nested widget rendered childless.
+            TypedStatement::While(w) => {
+                rewrite_expr(&mut w.condition, counter);
+                for s in &mut w.body.statements {
+                    walk_stmt(s, counter);
+                }
+            }
+            TypedStatement::Block(b) => {
+                for s in &mut b.statements {
+                    walk_stmt(s, counter);
+                }
+            }
             _ => {}
         }
     }
@@ -278,6 +293,26 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
 
             // for each child: __push_child__(__list, child)
             for child_expr in child_exprs {
+                // `__cf_children__(Block)` is the control-flow carrier planted
+                // by `collect_children_into` (`if` / `while` in a widget
+                // body). Splice its statements into the prelude with the
+                // child-producing calls inside rewritten to push onto this
+                // list, so children created in a branch or loop iteration
+                // land in source order.
+                if is_cf_carrier(&child_expr) {
+                    let TypedExpression::Call(mut carrier_call) = child_expr.node else {
+                        unreachable!("is_cf_carrier just confirmed the Call shape");
+                    };
+                    if let TypedExpression::Block(mut carrier) =
+                        carrier_call.positional_args.remove(0).node
+                    {
+                        for stmt in &mut carrier.statements {
+                            rewrite_child_pushes_in_stmt(stmt, list_ident);
+                        }
+                        prelude.extend(carrier.statements);
+                    }
+                    continue;
+                }
                 let push_call = TypedExpression::Call(TypedCall {
                     callee: Box::new(typed_node(
                         TypedExpression::Variable(zyntax_typed_ast::InternedString::new_global(
@@ -338,6 +373,120 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
             statements: prelude,
             span,
         });
+    }
+
+    /// True for the `__cf_children__(Block)` marker planted by
+    /// `collect_children_into` for `if` / `while` in a widget body.
+    fn is_cf_carrier(expr: &zyntax_typed_ast::TypedNode<TypedExpression>) -> bool {
+        let TypedExpression::Call(c) = &expr.node else {
+            return false;
+        };
+        let TypedExpression::Variable(callee) = &c.callee.node else {
+            return false;
+        };
+        callee.resolve_global().as_deref() == Some("__cf_children__")
+            && c.positional_args.len() == 1
+            && matches!(c.positional_args[0].node, TypedExpression::Block(_))
+    }
+
+    /// True when the expression evaluates to a widget handle: a call to a
+    /// `…$view` symbol (substrate primitive or user component), or a Block
+    /// whose trailing expression is one (a widget-with-children after this
+    /// pass's own expansion). The shape test alone (`Expression(Call)`) is
+    /// NOT enough: by this stage `sig.set(v)` has been lowered to a bare
+    /// `__signal_set_by_id_*` call — same shape, but a VOID result.
+    /// Wrapping that in `__push_child__` feeds codegen a void value as an
+    /// argument, which dies in Cranelift with "arg not in value_map".
+    fn is_widget_producing_expr(expr: &zyntax_typed_ast::TypedNode<TypedExpression>) -> bool {
+        match &expr.node {
+            TypedExpression::Call(c) => {
+                let TypedExpression::Variable(callee) = &c.callee.node else {
+                    return false;
+                };
+                callee
+                    .resolve_global()
+                    .is_some_and(|n| n.ends_with("$view") || n == "__component_call__")
+            }
+            TypedExpression::Block(b) => b.statements.last().is_some_and(|s| match &s.node {
+                TypedStatement::Expression(e) => is_widget_producing_expr(e),
+                TypedStatement::Return(Some(e)) => is_widget_producing_expr(e),
+                _ => false,
+            }),
+            _ => false,
+        }
+    }
+
+    /// Rewrite child-producing calls inside a control-flow statement into
+    /// `__push_child__(<list>, …)`, so children created in a branch or a
+    /// loop iteration append to the enclosing widget's child list.
+    ///
+    /// Only widget-producing expressions are wrapped (see
+    /// `is_widget_producing_expr`); side-effect statements like
+    /// `sig.set(…)` stay untouched, so
+    /// `while c { Row {…} i.set(i.get() + 1) }` both emits rows and
+    /// advances the counter.
+    fn rewrite_child_pushes_in_stmt(
+        stmt: &mut zyntax_typed_ast::TypedNode<TypedStatement>,
+        list_ident: zyntax_typed_ast::InternedString,
+    ) {
+        let span = stmt.span;
+        match &mut stmt.node {
+            TypedStatement::Expression(e) => {
+                if !is_widget_producing_expr(e) {
+                    return;
+                }
+                let placeholder = typed_node(
+                    TypedExpression::Literal(zyntax_typed_ast::TypedLiteral::Integer(0)),
+                    Type::Primitive(PrimitiveType::I64),
+                    span,
+                );
+                let child = std::mem::replace(&mut **e, placeholder);
+                **e = typed_node(
+                    TypedExpression::Call(TypedCall {
+                        callee: Box::new(typed_node(
+                            TypedExpression::Variable(
+                                zyntax_typed_ast::InternedString::new_global("__push_child__"),
+                            ),
+                            Type::Any,
+                            span,
+                        )),
+                        positional_args: vec![
+                            typed_node(
+                                TypedExpression::Variable(list_ident),
+                                Type::Primitive(PrimitiveType::I64),
+                                span,
+                            ),
+                            child,
+                        ],
+                        named_args: vec![],
+                        type_args: vec![],
+                    }),
+                    Type::Primitive(PrimitiveType::Unit),
+                    span,
+                );
+            }
+            TypedStatement::If(if_stmt) => {
+                for s in &mut if_stmt.then_block.statements {
+                    rewrite_child_pushes_in_stmt(s, list_ident);
+                }
+                if let Some(else_block) = &mut if_stmt.else_block {
+                    for s in &mut else_block.statements {
+                        rewrite_child_pushes_in_stmt(s, list_ident);
+                    }
+                }
+            }
+            TypedStatement::While(w) => {
+                for s in &mut w.body.statements {
+                    rewrite_child_pushes_in_stmt(s, list_ident);
+                }
+            }
+            TypedStatement::Block(b) => {
+                for s in &mut b.statements {
+                    rewrite_child_pushes_in_stmt(s, list_ident);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Return child-slot prop names (`children`, `slot_<Name>`) in registry order.

@@ -42,6 +42,13 @@
     __signal_set_by_id_i32: "__signal_set_by_id_i32",
     __signal_set_by_id_f64: "__signal_set_by_id_f64",
     __signal_set_by_id_string: "__signal_set_by_id_string",
+    // bool accessors — wire type is i32 (Zyntax lowers DSL `bool` to
+    // `i32` across the FFI). Absent from this table until now, so a
+    // `bool` signal read inside a `computed { … } : bool` body failed
+    // lowering with "Call to undefined function". It went unnoticed
+    // because the computed body used to be discarded at parse time.
+    __signal_get_by_id_bool: "__signal_get_by_id_bool",
+    __signal_set_by_id_bool: "__signal_set_by_id_bool",
     // `effect { ... }` block — registers a reactive side-effect that
     // re-fires whenever any signal read inside the body changes.
     // The DSL grammar's `effect_stmt` rule wraps the body into a
