@@ -39,11 +39,11 @@ pub use host::{DslOp, take_scene_ops};
 use passes::inject_call_site_keys;
 use passes::inject_user_view_instance_id_params;
 use passes::{
-    apply_module_namespace_prefix, bind_component_props, collect_declared,
-    desugar_compound_assigns, detect_and_strip_stateful_views, ensure_unit_return,
-    expand_const_groups, extract_and_strip_stylesheets, inject_fsm_context_markers,
-    lower_bare_call_named_args, lower_children_arrays_to_blocks, lower_component_calls,
-    lower_match_blocks, lower_reactive_args, lower_struct_literals,
+    annotate_computed_lambda_types, apply_module_namespace_prefix, bind_component_props,
+    collect_declared, desugar_compound_assigns, detect_and_strip_stateful_views,
+    ensure_unit_return, expand_const_groups, extract_and_strip_stylesheets,
+    inject_fsm_context_markers, lower_bare_call_named_args, lower_children_arrays_to_blocks,
+    lower_component_calls, lower_match_blocks, lower_reactive_args, lower_struct_literals,
     lower_struct_widget_props_to_handles, lower_styling_args_to_overlays,
     lower_view_to_value_returning, materialize_view, module_namespace_from_path,
     populate_fsm_registry_pass, resolve_const_references, resolve_dotted_fsm_field_access,
@@ -637,6 +637,13 @@ impl BlincDsl {
         inject_call_site_keys(&mut typed_program, filename);
 
         // Defensive `Return(None)` so the body classifier can't infer a value-bearing return.
+        // Last pass before codegen: earlier passes rebuild the computed
+        // lambda nodes, so annotate here where the shape is final. Zyntax
+        // reads the Lambda node's `Type::Function` to pick the return
+        // register; without it the lambda returns I64 in `rax` while the
+        // host FFI reads `xmm0` as f64 (silent 0.0).
+        annotate_computed_lambda_types(&mut typed_program);
+
         ensure_unit_return(&mut typed_program);
 
         let function_names = runtime
@@ -1105,6 +1112,7 @@ impl BlincDsl {
         lower_view_to_value_returning(&mut program, &mut local_vrv);
 
         lower_children_arrays_to_blocks(&mut program);
+        annotate_computed_lambda_types(&mut program);
         lower_styling_args_to_overlays(&mut program);
         lower_struct_widget_props_to_handles(&mut program)
             .map_err(|errors| BlincDslError::Compile(errors.join("\n")))?;

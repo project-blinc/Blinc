@@ -644,8 +644,31 @@ impl ReactiveGraph {
             &node.compute as *const _
         };
 
+        // Set the in-flight pointer around the compute call, mirroring
+        // run_effect: a JIT'd DSL closure (or any nested code) reading a
+        // signal via `Signal::try_get` must take the re-entrant fast path
+        // — the caller already holds the global graph mutex here, so the
+        // fallback lock path would deadlock the thread against itself.
+        // The fast path also records the read into `self.tracking`, which
+        // is exactly the dependency registration this recompute needs.
+        // Guarded so a panic inside compute can't leak the pointer.
+        struct InFlightGuard;
+        impl Drop for InFlightGuard {
+            fn drop(&mut self) {
+                IN_FLIGHT_GRAPH.with(|c| c.set(std::ptr::null()));
+            }
+        }
+        let prev_in_flight = IN_FLIGHT_GRAPH.with(|c| c.get());
+        IN_FLIGHT_GRAPH.with(|c| c.set(self as *const _));
+        let _in_flight_guard = InFlightGuard;
+
         // SAFETY: We're not modifying derived while calling compute
         let value = unsafe { (*compute)(self) };
+
+        drop(_in_flight_guard);
+        // Restore an enclosing in-flight scope (nested evaluation inside
+        // an effect) rather than leaving it cleared.
+        IN_FLIGHT_GRAPH.with(|c| c.set(prev_in_flight));
 
         // Get tracked dependencies
         let deps = self.tracking.take().unwrap_or_default();
@@ -1493,6 +1516,29 @@ where
 mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
+
+    /// A derived whose compute closure reads a signal through the
+    /// GLOBAL path (`Signal::try_get`) instead of the passed `&graph`.
+    /// This is exactly what a JIT'd DSL `computed {{ sig.get() }}` does —
+    /// the generated code can't thread the graph param, so it goes
+    /// through the process-global registry. Before `get_derived` set
+    /// `IN_FLIGHT_GRAPH` around compute, that read re-locked the global
+    /// mutex the caller already held: a self-deadlock (the DSL computed
+    /// tests hung forever). Also asserts the in-flight read registers
+    /// the dependency, so the derived re-fires on set.
+    #[test]
+    fn derived_compute_may_read_signals_via_global_path() {
+        let sig = signal(0.25_f64);
+        let c = computed::<f64, _>(move |_graph| sig.try_get().unwrap_or(-1.0));
+        assert_eq!(c.try_get(), Some(0.25));
+
+        sig.set(0.85);
+        assert_eq!(
+            c.try_get(),
+            Some(0.85),
+            "global-path read inside compute must register the dependency"
+        );
+    }
 
     #[test]
     fn test_signal_create_get_set() {

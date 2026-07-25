@@ -2096,7 +2096,7 @@ computed_expr_i32 = { ("computed" | "derived") ~ "{" ~ e:expr ~ "}" ~ ":" ~ "i32
       callee: Box::new(TypedExpression::Variable { name: intern("__blinc_computed_i32__") }),
       args: [TypedExpression::Lambda {
           params: [],
-          body: TypedExpression::Block { statements: [TypedStatement::Return(Some(e))] },
+          body: TypedExpression::Block { statements: [TypedStatement::Return { value: e }] },
       }],
   }
 
@@ -2105,7 +2105,7 @@ computed_expr_bool = { ("computed" | "derived") ~ "{" ~ e:expr ~ "}" ~ ":" ~ "bo
       callee: Box::new(TypedExpression::Variable { name: intern("__blinc_computed_bool__") }),
       args: [TypedExpression::Lambda {
           params: [],
-          body: TypedExpression::Block { statements: [TypedStatement::Return(Some(e))] },
+          body: TypedExpression::Block { statements: [TypedStatement::Return { value: e }] },
       }],
   }
 
@@ -2114,7 +2114,7 @@ computed_expr_f64 = { ("computed" | "derived") ~ "{" ~ e:expr ~ "}" ~ ":" ~ "f64
       callee: Box::new(TypedExpression::Variable { name: intern("__blinc_computed_f64__") }),
       args: [TypedExpression::Lambda {
           params: [],
-          body: TypedExpression::Block { statements: [TypedStatement::Return(Some(e))] },
+          body: TypedExpression::Block { statements: [TypedStatement::Return { value: e }] },
       }],
   }
 
@@ -2123,7 +2123,7 @@ computed_expr_string = { ("computed" | "derived") ~ "{" ~ e:expr ~ "}" ~ ":" ~ "
       callee: Box::new(TypedExpression::Variable { name: intern("__blinc_computed_string__") }),
       args: [TypedExpression::Lambda {
           params: [],
-          body: TypedExpression::Block { statements: [TypedStatement::Return(Some(e))] },
+          body: TypedExpression::Block { statements: [TypedStatement::Return { value: e }] },
       }],
   }
 

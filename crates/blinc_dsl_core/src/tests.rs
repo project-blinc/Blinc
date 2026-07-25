@@ -6240,30 +6240,29 @@ fn dsl_bg_computed_binding_compiles() {
 
 /// End-to-end value verification for `Div(opacity = computed { alpha.get() } : f64)`.
 ///
-/// IGNORED: blocked on an upstream Zyntax bug where a zero-arg lambda
-/// body whose `Return(Some(expr))` returns f64 doesn't propagate the
-/// value to the JIT epilogue's f64 return register. The compute
-/// closure executes (verified via probe trace) but always returns
-/// 0.0 regardless of the body, even for `computed { 0.5 } : f64`.
-///
-/// All wiring on the Blinc side (overlay slot, extern setter, ABI
-/// registration, lowering pass) is in place. Re-enable this test
-/// once the lambda return-value flow lands in zyntax. See
-/// `gotcha-zyntax-lambda-return-value` and the related
-/// `gotcha-zyntax-closure-body-control-flow` which fixed lambda
-/// control-flow but didn't touch the return-value path.
+/// Historically ignored as "blocked on upstream zyntax lambda f64-return
+/// propagation" — that attribution was wrong (a raw-TypedAST program run
+/// straight through ZyntaxRuntime returns lambda values fine; see
+/// tests/lambda_return_abi.rs). Three Blinc-side bugs stacked here:
+/// the grammar's `computed_expr_*` rules built `Return` in tuple form,
+/// which the action-language interpreter (which only reads the named
+/// `value` field) parsed as `Return(None)` — the body was discarded at
+/// parse time; the Lambda node carried no `Type::Function`, so codegen
+/// fell back to an I64 return read as f64 garbage by the host FFI
+/// (fixed by `annotate_computed_lambda_types`); and once the body ran,
+/// its `alpha_cmp.get()` deadlocked against the graph mutex held by
+/// `get_derived` (fixed by the in-flight guard in blinc_core).
 #[test]
-#[ignore = "blocked on upstream zyntax lambda f64-return propagation; see gotcha-zyntax-lambda-return-value"]
 fn dsl_opacity_computed_binding_reflects_signal_changes() {
     let _ = tracing_subscriber::fmt::try_init();
 
     let dsl = BlincDsl::new().expect("runtime init");
-    dsl.set_signal_f64("alpha", 0.25);
+    dsl.set_signal_f64("alpha_cmp", 0.25);
     dsl.compile_source(
         r#"
-            signal alpha: f64
+            signal alpha_cmp: f64
             view {
-                Div(opacity = computed { alpha.get() } : f64)
+                Div(opacity = computed { alpha_cmp.get() } : f64)
             }
         "#,
         "div_opacity_computed.blinc",
@@ -6287,7 +6286,7 @@ fn dsl_opacity_computed_binding_reflects_signal_changes() {
         props.opacity
     );
 
-    dsl.set_signal_f64("alpha", 0.85);
+    dsl.set_signal_f64("alpha_cmp", 0.85);
     let props2 = builder.render_props();
     assert!(
         (props2.opacity - 0.85).abs() < 1e-6,
@@ -6296,23 +6295,20 @@ fn dsl_opacity_computed_binding_reflects_signal_changes() {
     );
 }
 
-/// End-to-end value verification for the IntColor computed path.
-///
-/// IGNORED: same upstream lambda return-value bug as
-/// `dsl_opacity_computed_binding_reflects_signal_changes`.
+/// IntColor mirror of the opacity test above — same three stacked
+/// Blinc-side bugs, same fixes; see that test's comment for the story.
 #[test]
-#[ignore = "blocked on upstream zyntax lambda i32-return propagation; see gotcha-zyntax-lambda-return-value"]
 fn dsl_bg_computed_binding_reflects_signal_changes() {
     let _ = tracing_subscriber::fmt::try_init();
 
     let dsl = BlincDsl::new().expect("runtime init");
     // 0xFF0000 = pure red.
-    dsl.set_signal_i32("bg_color", 0xFF_0000);
+    dsl.set_signal_i32("bg_color_cmp", 0xFF_0000);
     dsl.compile_source(
         r#"
-            signal bg_color: i32
+            signal bg_color_cmp: i32
             view {
-                Div(bg = computed { bg_color.get() } : i32)
+                Div(bg = computed { bg_color_cmp.get() } : i32)
             }
         "#,
         "div_bg_computed.blinc",
@@ -6342,7 +6338,7 @@ fn dsl_bg_computed_binding_reflects_signal_changes() {
     assert!(c.b.abs() < 0.01, "first render b should be ~0.0");
 
     // 0x00FF00 = pure green.
-    dsl.set_signal_i32("bg_color", 0x00_FF00);
+    dsl.set_signal_i32("bg_color_cmp", 0x00_FF00);
     let props2 = builder.render_props();
     let Some(blinc_core::layer::Brush::Solid(c2)) = props2.background else {
         panic!("expected solid background brush after second bg computed apply");

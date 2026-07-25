@@ -399,3 +399,153 @@ pub(crate) fn lower_reactive_args(program: &mut TypedProgram) {
         }
     }
 }
+
+/// Give every `computed { … } : T` lambda a real `Type::Function`
+/// annotation on its node.
+///
+/// Zyntax builds a lambda's compiled signature from the type carried on
+/// the Lambda expression node: `Type::Function { return_type, .. }` is
+/// honoured, and **anything else falls back to an `I64` return**. The
+/// grammar emits the lambda with the node type left as `Unit`, so a
+/// `computed { … } : f64` compiled to a function returning an integer in
+/// `rax` — while the host side (`blinc_dsl_computed_f64`) transmutes the
+/// pointer to `extern "C" fn() -> f64` and reads `xmm0`. The result was a
+/// silent `0.0` for every f64 computed binding (and the same class of
+/// mismatch for the other widths).
+///
+/// Annotating the node makes the JIT emit the return in the register the
+/// host FFI actually reads. MUST run before the reactive/styling passes
+/// consume these calls, and before codegen.
+pub(crate) fn annotate_computed_lambda_types(program: &mut TypedProgram) {
+    use zyntax_typed_ast::type_registry::{AsyncKind, CallingConvention, NullabilityKind};
+    use zyntax_typed_ast::{TypedDeclaration, TypedExpression, TypedNode};
+
+    /// `__blinc_computed_<T>__` → the `T` the host FFI reads back.
+    fn computed_return_ty(callee: &str) -> Option<Type> {
+        match callee {
+            "__blinc_computed_i32__" => Some(Type::Primitive(PrimitiveType::I32)),
+            "__blinc_computed_f64__" => Some(Type::Primitive(PrimitiveType::F64)),
+            "__blinc_computed_bool__" => Some(Type::Primitive(PrimitiveType::Bool)),
+            // The string ABI returns a length-prefixed pointer, which the
+            // host decodes — an integer-width return is correct here.
+            "__blinc_computed_string__" => Some(Type::Primitive(PrimitiveType::I64)),
+            _ => None,
+        }
+    }
+
+    fn fn_ty(return_type: Type) -> Type {
+        Type::Function {
+            params: Vec::new(),
+            return_type: Box::new(return_type),
+            is_varargs: false,
+            has_named_params: false,
+            has_default_params: false,
+            async_kind: AsyncKind::Sync,
+            calling_convention: CallingConvention::Default,
+            nullability: NullabilityKind::NonNull,
+        }
+    }
+
+    fn walk_expr(expr: &mut TypedNode<TypedExpression>) {
+        if let TypedExpression::Call(call) = &mut expr.node {
+            let callee_name = match &call.callee.node {
+                TypedExpression::Variable(v) => v.resolve_global().map(|s| s.to_string()),
+                _ => None,
+            };
+            if let Some(ret) = callee_name.as_deref().and_then(computed_return_ty)
+                && let Some(arg) = call.positional_args.first_mut()
+                && matches!(arg.node, TypedExpression::Lambda(_))
+            {
+                arg.ty = fn_ty(ret);
+                // Normalise the body to the shape zyntax's lambda compiler
+                // documents as the implicit-return form: `LambdaBody::Block`
+                // whose trailing statement is a bare `Expression`. The
+                // grammar emits `LambdaBody::Expression(Block{[Return(e)]})`,
+                // which compiles but yields no value.
+                if let TypedExpression::Lambda(l) = &mut arg.node
+                    && let zyntax_typed_ast::typed_ast::TypedLambdaBody::Expression(be) = &l.body
+                    && let TypedExpression::Block(b) = &be.node
+                    && b.statements.len() == 1
+                    && let TypedStatement::Return(Some(inner)) = &b.statements[0].node
+                {
+                    let span = b.statements[0].span;
+                    let inner = inner.clone();
+                    l.body = zyntax_typed_ast::typed_ast::TypedLambdaBody::Block(
+                        zyntax_typed_ast::typed_ast::TypedBlock {
+                            statements: vec![TypedNode::new(
+                                TypedStatement::Expression(inner),
+                                Type::Primitive(PrimitiveType::Unit),
+                                span,
+                            )],
+                            span,
+                        },
+                    );
+                }
+            }
+            walk_expr(&mut call.callee);
+            for a in &mut call.positional_args {
+                walk_expr(a);
+            }
+            for n in &mut call.named_args {
+                walk_expr(&mut n.value);
+            }
+        } else {
+            match &mut expr.node {
+                TypedExpression::Array(items) => items.iter_mut().for_each(walk_expr),
+                TypedExpression::Block(b) => b.statements.iter_mut().for_each(walk_stmt),
+                TypedExpression::Binary(b) => {
+                    walk_expr(&mut b.left);
+                    walk_expr(&mut b.right);
+                }
+                TypedExpression::Lambda(l) => {
+                    if let zyntax_typed_ast::typed_ast::TypedLambdaBody::Block(b) = &mut l.body {
+                        b.statements.iter_mut().for_each(walk_stmt);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn walk_stmt(stmt: &mut TypedNode<TypedStatement>) {
+        match &mut stmt.node {
+            TypedStatement::Expression(e) | TypedStatement::Return(Some(e)) => walk_expr(e),
+            TypedStatement::Let(l) => {
+                if let Some(i) = &mut l.initializer {
+                    walk_expr(i);
+                }
+            }
+            TypedStatement::If(i) => {
+                walk_expr(&mut i.condition);
+                i.then_block.statements.iter_mut().for_each(walk_stmt);
+                if let Some(e) = &mut i.else_block {
+                    e.statements.iter_mut().for_each(walk_stmt);
+                }
+            }
+            TypedStatement::While(w) => {
+                walk_expr(&mut w.condition);
+                w.body.statements.iter_mut().for_each(walk_stmt);
+            }
+            TypedStatement::Block(b) => b.statements.iter_mut().for_each(walk_stmt),
+            _ => {}
+        }
+    }
+
+    for decl in program.declarations.iter_mut() {
+        match &mut decl.node {
+            TypedDeclaration::Function(f) => {
+                if let Some(b) = &mut f.body {
+                    b.statements.iter_mut().for_each(walk_stmt);
+                }
+            }
+            TypedDeclaration::Impl(imp) => {
+                for m in imp.methods.iter_mut() {
+                    if let Some(b) = &mut m.body {
+                        b.statements.iter_mut().for_each(walk_stmt);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
