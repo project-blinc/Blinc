@@ -14,6 +14,20 @@
 # DO NOT commit Cargo.toml with this block present — CI's
 # `scripts/check-no-local-patch.sh` guard will fail the build.
 
+# Zyntax — the DSL's grammar + JIT. Redirects to a sibling checkout at
+# `../zyntax` so DSL work builds against local zyntax fixes instead of the
+# git pin. Local zyntax is well ahead of `origin/main` and its HEAD is
+# unpushed, so a git rev can't point at it; a path patch is the only way.
+#
+# Keep Blinc source compatible with BOTH this and the git pin: construct
+# upstream structs with `..Default::default()` rather than naming every
+# field, so a field added locally (e.g. `TypedFunction.is_fiber`) doesn't
+# break the pinned build that CI uses after stripping this block.
+[patch."https://github.com/darmie/zyntax"]
+zyntax_embed = { path = "../zyntax/crates/zyntax_embed" }
+zyntax_typed_ast = { path = "../zyntax/crates/typed_ast" }
+zrtl = { path = "../zyntax/sdk/zrtl" }
+
 [patch."https://github.com/project-blinc/blinc_canvas_kit.git"]
 blinc_canvas_kit = { path = "packages/blinc_canvas_kit" }
 

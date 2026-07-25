@@ -104,6 +104,10 @@ pub(crate) fn expand_const_groups(program: &mut TypedProgram) {
 
             // Synthesise a `__blinc_const__` marker decl with the
             // same body shape `resolve_const_references` expects.
+            // `needless_update` fires against the git pin, where every field
+            // is already named; the rest-default is there for local zyntax
+            // checkouts that have added fields. Intentional on both.
+            #[allow(clippy::needless_update)]
             let const_func = zyntax_typed_ast::typed_ast::TypedFunction {
                 name: zyntax_typed_ast::InternedString::new_global("__blinc_const__"),
                 annotations: Vec::new(),
@@ -137,6 +141,10 @@ pub(crate) fn expand_const_groups(program: &mut TypedProgram) {
                 is_external: false,
                 calling_convention: Default::default(),
                 link_name: None,
+                // Rest-default so fields added upstream (e.g. `is_fiber`)
+                // don't break this literal. Keeps the source compiling
+                // against both the git pin and a local zyntax checkout.
+                ..Default::default()
             };
             let _ = name_arc;
             hoisted.push(TypedNode::new(

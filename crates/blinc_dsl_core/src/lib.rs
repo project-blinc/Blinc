@@ -830,6 +830,9 @@ impl BlincDsl {
                 continue;
             }
             let interned = InternedString::new_global(&sym);
+            // See `passes::consts` — rest-default is intentional so the
+            // literal survives fields added in a local zyntax checkout.
+            #[allow(clippy::needless_update)]
             let func = TypedFunction {
                 name: interned,
                 annotations: vec![],
@@ -845,6 +848,10 @@ impl BlincDsl {
                 is_external: true,
                 calling_convention: CallingConvention::Default,
                 link_name: Some(interned),
+                // Rest-default so fields added upstream (e.g. `is_fiber`)
+                // don't break this literal. Keeps the source compiling
+                // against both the git pin and a local zyntax checkout.
+                ..Default::default()
             };
             program.declarations.push(typed_node(
                 TypedDeclaration::Function(func),
