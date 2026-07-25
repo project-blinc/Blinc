@@ -1,22 +1,51 @@
 // {{project_name}}
 // Created with Blinc UI Framework
+//
+// State lives in the FSM's `context` block: transitions mutate it and
+// the `@stateful` view re-renders. For props that update in place
+// without a subtree rebuild, bind a signal directly to the prop — see
+// `reactive_dsl.blinc` in the blinc_dsl_core examples.
 
-@widget App {
-    @state greeting: String = "Hello, Blinc!"
+fsm AppFsm {
+    context {
+        count: i32 = 0
+    }
+    state Idle
+    initial Idle
+    on Idle.Increment -> Idle { ctx.count += 1 }
+    on Idle.Reset     -> Idle { ctx.count = 0 }
+}
 
-    @render {
-        Container(
-            width: 100.percent,
-            height: 100.percent,
-            background: Color::gray(0.1),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-        ) {
-            Text(
-                content: greeting,
-                font_size: 32.px,
-                color: Color::white(),
-            )
+component App {
+    style {
+        .card {
+            background: #1e293b;
+            border-radius: 16px;
+            padding: 28px;
+            gap: 16px;
+            color: #f8fafc;
+            flex-direction: column;
+        }
+        .row { gap: 12px; flex-direction: row }
+        .btn { background: #3b82f6; border-radius: 10px; padding: 14px }
+        .btn-reset { background: #ef4444; border-radius: 10px; padding: 14px }
+        .btn *, .btn-reset * { pointer-events: none }
+    }
+
+    @stateful @fsm([AppFsm]) view {
+        Div(class = "card") {
+            Text("Hello, Blinc!")
+            Text(f"Count: {AppFsm.count.get()}")
+            Div(class = "row") {
+                Div(class = "btn", on_click = || { AppFsm.trigger("Increment") }) {
+                    Text("+1")
+                }
+                Div(class = "btn-reset", on_click = || { AppFsm.trigger("Reset") }) {
+                    Text("Reset")
+                }
+            }
         }
     }
 }
+
+view { App() }

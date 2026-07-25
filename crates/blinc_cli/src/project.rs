@@ -1154,48 +1154,54 @@ fn template_default(name: &str) -> String {
     format!(
         r#"// {name} - Blinc Application
 //
-// A simple Blinc application with reactive state and animations.
+// State lives in the FSM's `context` block: transitions mutate it and
+// the `@stateful` view re-renders. For props that update in place
+// without a subtree rebuild, bind a signal directly to the prop — see
+// `reactive_dsl.blinc` in the blinc_dsl_core examples.
 
-@widget App {{
-    @state count: i32 = 0
+fsm AppFsm {{
+    context {{
+        count: i32 = 0
+    }}
+    state Idle
+    initial Idle
+    on Idle.Increment -> Idle {{ ctx.count += 1 }}
+    on Idle.Reset     -> Idle {{ ctx.count = 0 }}
+}}
 
-    @spring scale: f32 = 1.0 {{
-        stiffness: 400
-        damping: 30
+component App {{
+    style {{
+        .card {{
+            background: #1e293b;
+            border-radius: 16px;
+            padding: 28px;
+            gap: 16px;
+            color: #f8fafc;
+            flex-direction: column;
+        }}
+        .row {{ gap: 12px; flex-direction: row }}
+        .btn {{ background: #3b82f6; border-radius: 10px; padding: 14px }}
+        .btn-reset {{ background: #ef4444; border-radius: 10px; padding: 14px }}
+        .btn *, .btn-reset * {{ pointer-events: none }}
     }}
 
-    @machine button_state {{
-        initial: idle
-
-        idle -> hovered: pointer_enter
-        hovered -> idle: pointer_leave
-        hovered -> pressed: pointer_down
-        pressed -> hovered: pointer_up
-    }}
-
-    @render {{
-        Column {{
-            spacing: 20
-            align: center
-
-            Text {{
-                content: "Welcome to {name}"
-                font_size: 24
-            }}
-
-            Text {{
-                content: "Count: {{count}}"
-                font_size: 48
-            }}
-
-            Button {{
-                label: "Increment"
-                on_click: {{ count += 1 }}
-                scale: scale
+    @stateful @fsm([AppFsm]) view {{
+        Div(class = "card") {{
+            Text("Welcome to {name}")
+            Text(f"Count: {{AppFsm.count.get()}}")
+            Div(class = "row") {{
+                Div(class = "btn", on_click = || {{ AppFsm.trigger("Increment") }}) {{
+                    Text("+1")
+                }}
+                Div(class = "btn-reset", on_click = || {{ AppFsm.trigger("Reset") }}) {{
+                    Text("Reset")
+                }}
             }}
         }}
     }}
 }}
+
+view {{ App() }}
 "#
     )
 }
@@ -1204,13 +1210,24 @@ fn template_minimal(name: &str) -> String {
     format!(
         r#"// {name} - Minimal Blinc Application
 
-@widget App {{
-    @render {{
-        Text {{
-            content: "Hello, Blinc!"
+component App {{
+    style {{
+        .root {{
+            background: #0f172a;
+            padding: 32px;
+            border-radius: 16px;
+            color: #f8fafc;
+        }}
+    }}
+
+    view {{
+        Div(class = "root") {{
+            Text("Hello, Blinc!")
         }}
     }}
 }}
+
+view {{ App() }}
 "#
     )
 }
@@ -1219,75 +1236,57 @@ fn template_counter(name: &str) -> String {
     format!(
         r#"// {name} - Counter Example
 //
-// Demonstrates reactive state and FSM-driven interactions.
+// FSM-driven state: `context` owns `count`, each transition mutates
+// it, and `@stateful @fsm([...])` re-renders the view when the FSM
+// advances. `f"..."` reads the value at render time.
 
-@widget Counter {{
-    @state count: i32 = 0
-
-    @derived doubled: i32 = count * 2
-
-    @machine state {{
-        initial: idle
-
-        idle -> active: pointer_enter
-        active -> idle: pointer_leave
+fsm CounterFsm {{
+    context {{
+        count: i32 = 0
     }}
+    state Idle
+    initial Idle
+    on Idle.Increment -> Idle {{ ctx.count += 1 }}
+    on Idle.Decrement -> Idle {{ ctx.count -= 1 }}
+    on Idle.Reset     -> Idle {{ ctx.count = 0 }}
+}}
 
-    @spring opacity: f32 = 1.0 {{
-        stiffness: 300
-        damping: 25
-    }}
-
-    @effect {{
-        // Animate opacity based on state
-        when state == active {{
-            opacity = 1.0
-        }} else {{
-            opacity = 0.7
+component Counter {{
+    style {{
+        .card {{
+            background: #1e293b;
+            border-radius: 16px;
+            padding: 28px;
+            gap: 16px;
+            color: #f8fafc;
+            flex-direction: column;
+            align-items: center;
         }}
+        .row {{ gap: 12px; flex-direction: row; align-items: center }}
+        .btn {{ background: #3b82f6; border-radius: 10px; padding: 14px }}
+        .btn-reset {{ background: #ef4444; border-radius: 10px; padding: 14px }}
+        .btn *, .btn-reset * {{ pointer-events: none }}
     }}
 
-    @render {{
-        Column {{
-            spacing: 16
-            padding: 24
-
-            Row {{
-                spacing: 12
-
-                Button {{
-                    label: "-"
-                    on_click: {{ count -= 1 }}
+    @stateful @fsm([CounterFsm]) view {{
+        Div(class = "card") {{
+            Text(f"Count: {{CounterFsm.count.get()}}")
+            Div(class = "row") {{
+                Div(class = "btn", on_click = || {{ CounterFsm.trigger("Decrement") }}) {{
+                    Text("-1")
                 }}
-
-                Text {{
-                    content: "{{count}}"
-                    font_size: 32
-                    opacity: opacity
+                Div(class = "btn", on_click = || {{ CounterFsm.trigger("Increment") }}) {{
+                    Text("+1")
                 }}
-
-                Button {{
-                    label: "+"
-                    on_click: {{ count += 1 }}
+                Div(class = "btn-reset", on_click = || {{ CounterFsm.trigger("Reset") }}) {{
+                    Text("Reset")
                 }}
-            }}
-
-            Text {{
-                content: "Doubled: {{doubled}}"
-                font_size: 14
-                color: #666
             }}
         }}
     }}
 }}
 
-@widget App {{
-    @render {{
-        Center {{
-            Counter {{}}
-        }}
-    }}
-}}
+view {{ Counter() }}
 "#
     )
 }
