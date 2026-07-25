@@ -1,0 +1,415 @@
+//! View value-returning lowering and children-array to child-list expansion.
+
+use crate::*;
+
+/// Rewrite view fns to value-returning (`I64` widget handle) when their body
+/// ends in a `$Blinc$<X>$view` call. MUST run before [`ensure_unit_return`].
+/// Pinning return to a concrete `I64` (not `Any`) keeps Zyntax's body
+/// classifier on the well-trodden specialised-call path.
+pub(crate) fn lower_view_to_value_returning(
+    program: &mut TypedProgram,
+    value_returning_symbols: &mut std::collections::HashSet<String>,
+) {
+    use zyntax_typed_ast::{TypedDeclaration, TypedExpression};
+
+    fn is_view_name(name: zyntax_typed_ast::InternedString) -> bool {
+        matches!(
+            name.resolve_global().as_deref(),
+            Some("render_view") | Some("view")
+        )
+    }
+
+    /// Match `Expression(Call(Variable("<X>$view"), ...))` where `<X>` is a
+    /// substrate primitive or a user component whose own view is value-returning.
+    fn is_primitive_view_call_stmt(
+        stmt: &TypedStatement,
+        value_returning_symbols: &std::collections::HashSet<String>,
+    ) -> bool {
+        let TypedStatement::Expression(expr) = stmt else {
+            return false;
+        };
+        let TypedExpression::Call(call) = &expr.node else {
+            return false;
+        };
+        let TypedExpression::Variable(callee) = &call.callee.node else {
+            return false;
+        };
+        let Some(name) = callee.resolve_global() else {
+            return false;
+        };
+        let s: &str = name.as_ref();
+        // Substrate primitives are always i64-returning.
+        if s.starts_with("$Blinc$") && s.ends_with("$view") {
+            return true;
+        }
+        // User components: only if promoted by an earlier pass.
+        value_returning_symbols.contains(s)
+    }
+
+    /// Rewrite trailing primitive-call to `Return(Some(call))` and return whether converted.
+    fn try_convert_trailing(
+        body: &mut zyntax_typed_ast::typed_ast::TypedBlock,
+        value_returning_symbols: &std::collections::HashSet<String>,
+    ) -> bool {
+        let Some(last) = body.statements.last() else {
+            return false;
+        };
+        if !is_primitive_view_call_stmt(&last.node, value_returning_symbols) {
+            return false;
+        }
+        let last = body
+            .statements
+            .last_mut()
+            .expect("just confirmed last exists above");
+        let placeholder = TypedStatement::Continue;
+        let original = std::mem::replace(&mut last.node, placeholder);
+        let TypedStatement::Expression(expr) = original else {
+            unreachable!("just confirmed Expression shape above");
+        };
+        last.node = TypedStatement::Return(Some(expr));
+        true
+    }
+
+    let widget_handle_type = Type::Primitive(PrimitiveType::I64);
+
+    // Pass 1: impl `view` methods. Pass 2: free-standing view fns referencing them.
+    for decl in program.declarations.iter_mut() {
+        let TypedDeclaration::Impl(imp) = &mut decl.node else {
+            continue;
+        };
+        // `<TypeName>$<method>` mangling — pull the type name once per impl.
+        let type_name: Option<String> = match &imp.for_type {
+            Type::Unresolved(name) => name.resolve_global().map(|s| s.to_string()),
+            Type::Named { id, .. } => program
+                .type_registry
+                .get_type_by_id(*id)
+                .and_then(|t| t.name.resolve_global())
+                .map(|s| s.to_string()),
+            _ => None,
+        };
+        for method in &mut imp.methods {
+            if !is_view_name(method.name) {
+                continue;
+            }
+            let Some(body) = method.body.as_mut() else {
+                continue;
+            };
+            if try_convert_trailing(body, value_returning_symbols) {
+                method.return_type = widget_handle_type.clone();
+                if let (Some(t), Some(m)) = (type_name.as_ref(), method.name.resolve_global()) {
+                    value_returning_symbols.insert(format!("{t}${m}"));
+                }
+            }
+        }
+    }
+
+    for decl in program.declarations.iter_mut() {
+        let TypedDeclaration::Function(func) = &mut decl.node else {
+            continue;
+        };
+        if func.is_external {
+            continue;
+        }
+        if !is_view_name(func.name) {
+            continue;
+        }
+        let Some(body) = func.body.as_mut() else {
+            continue;
+        };
+        if try_convert_trailing(body, value_returning_symbols) {
+            func.return_type = widget_handle_type.clone();
+            if let Some(name) = func.name.resolve_global() {
+                value_returning_symbols.insert(name.to_string());
+            }
+        }
+    }
+}
+
+/// Expand substrate primitive calls carrying `children = Array([...])` (and slot
+/// arrays) into Block expansions backed by `__new_child_list__` / `__push_child__`.
+/// Post-order recursive. MUST run after `lower_view_to_value_returning` and
+/// before `ensure_unit_return`.
+pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
+    use zyntax_typed_ast::{TypedCall, TypedDeclaration, TypedExpression, TypedNamedArg};
+
+    /// Counter for unique `__blinc_children_<N>` idents.
+    fn next_id(counter: &mut u32) -> u32 {
+        let id = *counter;
+        *counter += 1;
+        id
+    }
+
+    /// Walk a statement and rewrite any nested primitive calls.
+    fn walk_stmt(stmt: &mut zyntax_typed_ast::TypedNode<TypedStatement>, counter: &mut u32) {
+        match &mut stmt.node {
+            TypedStatement::Expression(e) => rewrite_expr(e, counter),
+            TypedStatement::Return(Some(e)) => rewrite_expr(e, counter),
+            TypedStatement::Let(l) => {
+                if let Some(init) = &mut l.initializer {
+                    rewrite_expr(init, counter);
+                }
+            }
+            TypedStatement::If(if_stmt) => {
+                rewrite_expr(&mut if_stmt.condition, counter);
+                for s in &mut if_stmt.then_block.statements {
+                    walk_stmt(s, counter);
+                }
+                if let Some(else_block) = &mut if_stmt.else_block {
+                    for s in &mut else_block.statements {
+                        walk_stmt(s, counter);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Post-order — recurse before rewriting `expr`.
+    fn rewrite_expr(expr: &mut zyntax_typed_ast::TypedNode<TypedExpression>, counter: &mut u32) {
+        match &mut expr.node {
+            TypedExpression::Call(call) => {
+                rewrite_expr(&mut call.callee, counter);
+                for arg in &mut call.positional_args {
+                    rewrite_expr(arg, counter);
+                }
+                for named in &mut call.named_args {
+                    rewrite_expr(&mut named.value, counter);
+                }
+            }
+            TypedExpression::Array(items) => {
+                for item in items {
+                    rewrite_expr(item, counter);
+                }
+            }
+            TypedExpression::Block(block) => {
+                for stmt in &mut block.statements {
+                    walk_stmt(stmt, counter);
+                }
+            }
+            TypedExpression::Binary(b) => {
+                rewrite_expr(&mut b.left, counter);
+                rewrite_expr(&mut b.right, counter);
+            }
+            _ => {}
+        }
+
+        // For primitives with child-slot props (`children`, `slot_<Name>`), gather each
+        // Array into a `__new_child_list__` Block. The final call carries the lists as
+        // named args; `resolve_extern_widget_named_args` later positionalises them.
+        let span = expr.span;
+        let i64_ty = Type::Primitive(PrimitiveType::I64);
+        let unit_ty = Type::Primitive(PrimitiveType::Unit);
+
+        let TypedExpression::Call(call) = &mut expr.node else {
+            return;
+        };
+        let Some(slot_prop_names) = callee_slot_prop_names(call) else {
+            return;
+        };
+
+        let mut prelude: Vec<zyntax_typed_ast::TypedNode<TypedStatement>> = Vec::new();
+        let mut had_real_slot = false;
+
+        for slot_name in &slot_prop_names {
+            let na_idx = call
+                .named_args
+                .iter()
+                .position(|na| na.name.resolve_global().as_deref() == Some(slot_name.as_str()));
+            let Some(idx) = na_idx else {
+                // Slot not supplied — inject a `0` literal so
+                // the registry-driven resolution finds something
+                // at this slot's named position.
+                call.named_args.push(TypedNamedArg {
+                    name: zyntax_typed_ast::InternedString::new_global(slot_name),
+                    value: Box::new(typed_node(
+                        TypedExpression::Literal(zyntax_typed_ast::TypedLiteral::Integer(0)),
+                        i64_ty.clone(),
+                        span,
+                    )),
+                    span,
+                });
+                continue;
+            };
+            let mut na = call.named_args.remove(idx);
+            let TypedExpression::Array(child_exprs) = std::mem::replace(
+                &mut na.value.node,
+                TypedExpression::Literal(zyntax_typed_ast::TypedLiteral::Integer(0)),
+            ) else {
+                // Already a non-Array value (e.g., user passed
+                // a raw i64 list pointer). Leave it alone.
+                call.named_args.push(na);
+                continue;
+            };
+            had_real_slot = true;
+
+            let id = next_id(counter);
+            let list_ident =
+                zyntax_typed_ast::InternedString::new_global(&format!("__blinc_children_{id}"));
+
+            // let __blinc_children_<id> = __new_child_list__()
+            prelude.push(typed_node(
+                TypedStatement::Let(zyntax_typed_ast::typed_ast::TypedLet {
+                    name: list_ident,
+                    ty: i64_ty.clone(),
+                    mutability: zyntax_typed_ast::Mutability::Immutable,
+                    initializer: Some(Box::new(typed_node(
+                        TypedExpression::Call(TypedCall {
+                            callee: Box::new(typed_node(
+                                TypedExpression::Variable(
+                                    zyntax_typed_ast::InternedString::new_global(
+                                        "__new_child_list__",
+                                    ),
+                                ),
+                                Type::Any,
+                                span,
+                            )),
+                            positional_args: vec![],
+                            named_args: vec![],
+                            type_args: vec![],
+                        }),
+                        i64_ty.clone(),
+                        span,
+                    ))),
+                    span,
+                }),
+                unit_ty.clone(),
+                span,
+            ));
+
+            // for each child: __push_child__(__list, child)
+            for child_expr in child_exprs {
+                let push_call = TypedExpression::Call(TypedCall {
+                    callee: Box::new(typed_node(
+                        TypedExpression::Variable(zyntax_typed_ast::InternedString::new_global(
+                            "__push_child__",
+                        )),
+                        Type::Any,
+                        span,
+                    )),
+                    positional_args: vec![
+                        typed_node(TypedExpression::Variable(list_ident), i64_ty.clone(), span),
+                        child_expr,
+                    ],
+                    named_args: vec![],
+                    type_args: vec![],
+                });
+                prelude.push(typed_node(
+                    TypedStatement::Expression(Box::new(typed_node(
+                        push_call,
+                        unit_ty.clone(),
+                        span,
+                    ))),
+                    unit_ty.clone(),
+                    span,
+                ));
+            }
+
+            // Re-attach the slot as a named arg pointing at the ident.
+            call.named_args.push(TypedNamedArg {
+                name: zyntax_typed_ast::InternedString::new_global(slot_name),
+                value: Box::new(typed_node(
+                    TypedExpression::Variable(list_ident),
+                    i64_ty.clone(),
+                    span,
+                )),
+                span,
+            });
+        }
+
+        if !had_real_slot {
+            // No body-supplied slots — `0`-literal fills already on call.
+            return;
+        }
+
+        // Wrap call in a trailing-expression Block.
+        let final_call = TypedExpression::Call(TypedCall {
+            callee: call.callee.clone(),
+            positional_args: std::mem::take(&mut call.positional_args),
+            named_args: std::mem::take(&mut call.named_args),
+            type_args: std::mem::take(&mut call.type_args),
+        });
+        prelude.push(typed_node(
+            TypedStatement::Expression(Box::new(typed_node(final_call, i64_ty.clone(), span))),
+            i64_ty.clone(),
+            span,
+        ));
+
+        expr.node = TypedExpression::Block(zyntax_typed_ast::typed_ast::TypedBlock {
+            statements: prelude,
+            span,
+        });
+    }
+
+    /// Return child-slot prop names (`children`, `slot_<Name>`) in registry order.
+    /// `None` for leaf primitives or non-primitives.
+    fn callee_slot_prop_names(call: &TypedCall) -> Option<Vec<String>> {
+        let TypedExpression::Variable(callee) = &call.callee.node else {
+            return None;
+        };
+        let sym = callee.resolve_global()?;
+        let sym: &str = &sym;
+        let name = sym
+            .strip_prefix("$Blinc$")
+            .and_then(|s| s.strip_suffix("$view"))?;
+        let slots: Vec<String> = blinc_runtime::component::with_component_registry(|r| {
+            r.get_by_name(name)
+                .map(|def| {
+                    def.props
+                        .iter()
+                        .filter_map(|p| {
+                            let n = p.name.as_ref();
+                            (n == "children" || n.starts_with("slot_")).then(|| n.to_string())
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        });
+        if slots.is_empty() { None } else { Some(slots) }
+    }
+
+    /// Legacy — unused after refactor.
+    #[allow(dead_code)]
+    fn callee_takes_children(call: &TypedCall) -> bool {
+        let TypedExpression::Variable(callee) = &call.callee.node else {
+            return false;
+        };
+        let Some(sym) = callee.resolve_global() else {
+            return false;
+        };
+        let sym: &str = &sym;
+        let Some(name) = sym
+            .strip_prefix("$Blinc$")
+            .and_then(|s| s.strip_suffix("$view"))
+        else {
+            return false;
+        };
+        blinc_runtime::component::with_component_registry(|r| {
+            r.get_by_name(name)
+                .map(|def| def.props.iter().any(|p| p.name.as_ref() == "children"))
+                .unwrap_or(false)
+        })
+    }
+
+    let mut counter: u32 = 0;
+    for decl in program.declarations.iter_mut() {
+        match &mut decl.node {
+            TypedDeclaration::Function(func) => {
+                if let Some(body) = func.body.as_mut() {
+                    for stmt in &mut body.statements {
+                        walk_stmt(stmt, &mut counter);
+                    }
+                }
+            }
+            TypedDeclaration::Impl(imp) => {
+                for method in &mut imp.methods {
+                    if let Some(body) = method.body.as_mut() {
+                        for stmt in &mut body.statements {
+                            walk_stmt(stmt, &mut counter);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}

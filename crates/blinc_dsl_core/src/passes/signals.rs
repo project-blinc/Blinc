@@ -1,0 +1,406 @@
+//! Signal decl recognition and `signal.get()/.set()` call resolution.
+
+use super::*;
+use crate::*;
+
+/// stable `SignalId.to_raw()` minted via the process-global signal
+/// registry. Lives at module scope so the inner helper `fn` items in
+/// [`resolve_signal_calls`] can name the type in their signatures.
+#[derive(Clone)]
+struct SignalEntry {
+    ty: Type,
+    /// `SignalId.to_raw()` cast to i64 — Cranelift's value-map population
+    /// doesn't handle `HirConstant::U64`, so we stay in i64-land.
+    id_raw: i64,
+}
+
+pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
+    use std::collections::HashMap;
+    use zyntax_typed_ast::InternedString;
+    use zyntax_typed_ast::typed_ast::{TypedCall, TypedDeclaration, TypedExpression, TypedLiteral};
+
+    // Step 1: collect signal name → (type, id_raw). The id_raw is
+    // minted on first encounter via the process-global
+    // `blinc_dsl_core::signal_registry` — that calls
+    // `blinc_core::reactive::signal(default)` and caches the resulting
+    // `SignalId.to_raw()`. Subsequent compiles of the same source reuse
+    // the existing id.
+    //
+    // `SignalEntry` declared above this fn so the helper `fn` items
+    // (`rewrite_expr`, `rewrite_block`, `rewrite_stmt`) can name the
+    // type in their signatures without lifting it to module scope.
+    let mut signals: HashMap<InternedString, SignalEntry> = HashMap::new();
+    for decl in &program.declarations {
+        let TypedDeclaration::Function(func) = &decl.node else {
+            continue;
+        };
+        if !is_signal_decl(func) {
+            continue;
+        }
+        let Type::Primitive(prim) = &func.return_type else {
+            continue;
+        };
+        let sig_ty = match prim {
+            PrimitiveType::I32 => blinc_runtime::signal::SignalType::I32,
+            PrimitiveType::F64 => blinc_runtime::signal::SignalType::F64,
+            PrimitiveType::String => blinc_runtime::signal::SignalType::String,
+            PrimitiveType::Bool => blinc_runtime::signal::SignalType::Bool,
+            _ => continue,
+        };
+        let Some(name_str) = func.name.resolve_global() else {
+            continue;
+        };
+        let id_raw_u64 = blinc_runtime::signal::mint_or_get(name_str.as_ref(), sig_ty);
+        signals.insert(
+            func.name,
+            SignalEntry {
+                ty: func.return_type.clone(),
+                // i64 over the wire — the Cranelift backend lacks a
+                // `HirConstant::U64` case in its value_map population
+                // (see commit 54dc831b for context). Re-cast back to
+                // u64 inside the extern.
+                id_raw: id_raw_u64 as i64,
+            },
+        );
+    }
+
+    if signals.is_empty() {
+        return;
+    }
+
+    // Step 2: rewrite `<sig>.get()` → `__signal_get_by_id_<T>(<id_literal>)`.
+    fn typed_signal_extern_name(ty: &Type) -> Option<&'static str> {
+        match ty {
+            Type::Primitive(PrimitiveType::I32) => Some("__signal_get_by_id_i32"),
+            Type::Primitive(PrimitiveType::F64) => Some("__signal_get_by_id_f64"),
+            Type::Primitive(PrimitiveType::String) => Some("__signal_get_by_id_string"),
+            Type::Primitive(PrimitiveType::Bool) => Some("__signal_get_by_id_bool"),
+            _ => None,
+        }
+    }
+
+    fn typed_signal_setter_extern_name(ty: &Type) -> Option<&'static str> {
+        match ty {
+            Type::Primitive(PrimitiveType::I32) => Some("__signal_set_by_id_i32"),
+            Type::Primitive(PrimitiveType::F64) => Some("__signal_set_by_id_f64"),
+            Type::Primitive(PrimitiveType::String) => Some("__signal_set_by_id_string"),
+            Type::Primitive(PrimitiveType::Bool) => Some("__signal_set_by_id_bool"),
+            _ => None,
+        }
+    }
+
+    fn rewrite_expr(
+        expr: &mut zyntax_typed_ast::TypedNode<TypedExpression>,
+        signals: &HashMap<InternedString, SignalEntry>,
+    ) {
+        // MUST intercept `<signal> = <expr>` BEFORE the recursive walk — the
+        // LHS `Variable` doesn't otherwise trigger a rewrite.
+        if let TypedExpression::Binary(b) = &expr.node
+            && b.op == zyntax_typed_ast::typed_ast::BinaryOp::Assign
+            && let TypedExpression::Variable(name) = &b.left.node
+            && let Some(entry) = signals.get(name).cloned()
+            && let Some(setter) = typed_signal_setter_extern_name(&entry.ty)
+        {
+            // Rewrite RHS first so nested signal reads route through getters.
+            let mut rhs = (*b.right).clone();
+            rewrite_expr(&mut rhs, signals);
+
+            let id_arg = zyntax_typed_ast::TypedNode::new(
+                TypedExpression::Literal(TypedLiteral::Integer(entry.id_raw as i128)),
+                Type::Primitive(PrimitiveType::I64),
+                expr.span,
+            );
+            let callee = zyntax_typed_ast::TypedNode::new(
+                TypedExpression::Variable(InternedString::new_global(setter)),
+                Type::Unknown,
+                expr.span,
+            );
+            expr.node = TypedExpression::Call(TypedCall {
+                callee: Box::new(callee),
+                positional_args: vec![id_arg, rhs],
+                named_args: vec![],
+                type_args: vec![],
+            });
+            expr.ty = Type::Primitive(PrimitiveType::Unit);
+            return;
+        }
+
+        // Children first so nested signal calls (e.g. `text(count.get())`) are rewritten.
+        // EXCEPTION: MethodCall.receiver and Call+Field.object aren't walked
+        // when they're a bare `Variable(<signal>)` — the dedicated
+        // `count.get()` / `count.set(...)` rewrite below needs to see the
+        // receiver as a Variable, not as a pre-rewritten getter-Call.
+        match &mut expr.node {
+            TypedExpression::Binary(b) => {
+                rewrite_expr(&mut b.left, signals);
+                rewrite_expr(&mut b.right, signals);
+            }
+            TypedExpression::Unary(u) => {
+                rewrite_expr(&mut u.operand, signals);
+            }
+            TypedExpression::Call(c) => {
+                // If the callee is `Field { object: Variable(<signal>), ... }`,
+                // skip rewriting the object so the post-walk MethodCall/Call+Field
+                // handler can match `<signal>.<method>(args)`. Args are still walked.
+                let preserve_callee = matches!(
+                    &c.callee.node,
+                    TypedExpression::Field(f)
+                        if matches!(
+                            &f.object.node,
+                            TypedExpression::Variable(n) if signals.contains_key(n)
+                        )
+                );
+                if !preserve_callee {
+                    rewrite_expr(&mut c.callee, signals);
+                }
+                for a in &mut c.positional_args {
+                    rewrite_expr(a, signals);
+                }
+            }
+            TypedExpression::Field(f) => {
+                rewrite_expr(&mut f.object, signals);
+            }
+            TypedExpression::Index(idx) => {
+                rewrite_expr(&mut idx.object, signals);
+                rewrite_expr(&mut idx.index, signals);
+            }
+            TypedExpression::Array(items) | TypedExpression::Tuple(items) => {
+                for item in items {
+                    rewrite_expr(item, signals);
+                }
+            }
+            TypedExpression::MethodCall(mc) => {
+                let preserve_receiver = matches!(
+                    &mc.receiver.node,
+                    TypedExpression::Variable(n) if signals.contains_key(n)
+                );
+                if !preserve_receiver {
+                    rewrite_expr(&mut mc.receiver, signals);
+                }
+                for a in &mut mc.positional_args {
+                    rewrite_expr(a, signals);
+                }
+            }
+            TypedExpression::Block(block) => {
+                rewrite_block(block, signals);
+            }
+            TypedExpression::If(if_expr) => {
+                rewrite_expr(&mut if_expr.condition, signals);
+                rewrite_expr(&mut if_expr.then_branch, signals);
+                rewrite_expr(&mut if_expr.else_branch, signals);
+            }
+            TypedExpression::Lambda(lam) => match &mut lam.body {
+                zyntax_typed_ast::typed_ast::TypedLambdaBody::Expression(e) => {
+                    rewrite_expr(e, signals);
+                }
+                zyntax_typed_ast::typed_ast::TypedLambdaBody::Block(block) => {
+                    rewrite_block(block, signals);
+                }
+            },
+            _ => {}
+        }
+
+        // `.get()` / `.set(x)` lands in two AST shapes:
+        //   1. `MethodCall` — expression position (postfix-expr).
+        //   2. `Call { callee: Field { ... }, ... }` — statement position.
+        // Recognise both.
+        let method_call = match &expr.node {
+            TypedExpression::MethodCall(mc) => {
+                if let TypedExpression::Variable(receiver_name) = &mc.receiver.node {
+                    Some((
+                        *receiver_name,
+                        mc.method,
+                        mc.positional_args.clone(),
+                        expr.span,
+                    ))
+                } else {
+                    None
+                }
+            }
+            TypedExpression::Call(c) => {
+                if let TypedExpression::Field(f) = &c.callee.node {
+                    if let TypedExpression::Variable(receiver_name) = &f.object.node {
+                        Some((
+                            *receiver_name,
+                            f.field,
+                            c.positional_args.clone(),
+                            expr.span,
+                        ))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+
+        let Some((receiver_name, method, args, span)) = method_call else {
+            // Bare `Variable(<signal>)` read — not `.get()`, not an
+            // Assign LHS (those returned at the top). Rewrite to a
+            // getter call so the JIT issues an actual signal load
+            // instead of treating the name as an undefined local.
+            //
+            // SCOPE: only `__fsm_ctx_*` (FSM context-field) signals.
+            // User-declared signals are left as bare Variables because
+            // `lower_styling_args_to_overlays` (which runs after us)
+            // pattern-matches on bare-Variable args to widget props
+            // and rewrites them to the `_signal__` overlay variant for
+            // LIVE binding at paint time. Forcing a getter call here
+            // would freeze the value at compile time and break that
+            // feature for `Div(bg = bg_color)`-style code.
+            //
+            // For ctx-signals the force-wrap is still required —
+            // action bodies use them in arithmetic (`ctx.pct + 0.1`)
+            // and f-string interpolation. The styling-args pass has
+            // its own recognizer for the wrapped
+            // `__signal_get_by_id_<T>(id_literal)` shape so
+            // `Div(opacity = Ticker.pct)` still binds live.
+            if let TypedExpression::Variable(name) = &expr.node
+                && let Some(entry) = signals.get(name).cloned()
+                && name
+                    .resolve_global()
+                    .map(|s| s.starts_with("__fsm_ctx_"))
+                    .unwrap_or(false)
+                && let Some(extern_name) = typed_signal_extern_name(&entry.ty)
+            {
+                let span = expr.span;
+                expr.node = TypedExpression::Call(TypedCall {
+                    callee: Box::new(zyntax_typed_ast::TypedNode::new(
+                        TypedExpression::Variable(InternedString::new_global(extern_name)),
+                        Type::Unknown,
+                        span,
+                    )),
+                    positional_args: vec![zyntax_typed_ast::TypedNode::new(
+                        TypedExpression::Literal(TypedLiteral::Integer(entry.id_raw as i128)),
+                        Type::Primitive(PrimitiveType::I64),
+                        span,
+                    )],
+                    named_args: vec![],
+                    type_args: vec![],
+                });
+                expr.ty = entry.ty;
+            }
+            return;
+        };
+        let Some(entry) = signals.get(&receiver_name).cloned() else {
+            return;
+        };
+        let method_name = method.resolve_global().map(|s| s.to_string());
+        match method_name.as_deref() {
+            // `count.get()` — read. Zero args, returns the
+            // signal's value type.
+            Some("get") if args.is_empty() => {
+                let Some(extern_name) = typed_signal_extern_name(&entry.ty) else {
+                    return;
+                };
+                expr.node = TypedExpression::Call(TypedCall {
+                    callee: Box::new(zyntax_typed_ast::TypedNode::new(
+                        TypedExpression::Variable(InternedString::new_global(extern_name)),
+                        Type::Unknown,
+                        span,
+                    )),
+                    positional_args: vec![zyntax_typed_ast::TypedNode::new(
+                        TypedExpression::Literal(TypedLiteral::Integer(entry.id_raw as i128)),
+                        Type::Primitive(PrimitiveType::I64),
+                        span,
+                    )],
+                    named_args: vec![],
+                    type_args: vec![],
+                });
+                expr.ty = entry.ty;
+            }
+            // `count.set(value)` — write. Arg already child-rewritten.
+            Some("set") if args.len() == 1 => {
+                let Some(setter) = typed_signal_setter_extern_name(&entry.ty) else {
+                    return;
+                };
+                let value = args.into_iter().next().expect("len == 1 just checked");
+                expr.node = TypedExpression::Call(TypedCall {
+                    callee: Box::new(zyntax_typed_ast::TypedNode::new(
+                        TypedExpression::Variable(InternedString::new_global(setter)),
+                        Type::Unknown,
+                        span,
+                    )),
+                    positional_args: vec![
+                        zyntax_typed_ast::TypedNode::new(
+                            TypedExpression::Literal(TypedLiteral::Integer(entry.id_raw as i128)),
+                            Type::Primitive(PrimitiveType::I64),
+                            span,
+                        ),
+                        value,
+                    ],
+                    named_args: vec![],
+                    type_args: vec![],
+                });
+                expr.ty = Type::Primitive(PrimitiveType::Unit);
+            }
+            _ => {}
+        }
+    }
+
+    fn rewrite_block(
+        block: &mut zyntax_typed_ast::typed_ast::TypedBlock,
+        signals: &HashMap<InternedString, SignalEntry>,
+    ) {
+        for stmt in &mut block.statements {
+            rewrite_stmt(stmt, signals);
+        }
+    }
+
+    fn rewrite_stmt(
+        stmt: &mut zyntax_typed_ast::TypedNode<TypedStatement>,
+        signals: &HashMap<InternedString, SignalEntry>,
+    ) {
+        match &mut stmt.node {
+            TypedStatement::Expression(e) => rewrite_expr(e, signals),
+            TypedStatement::Let(l) => {
+                if let Some(init) = &mut l.initializer {
+                    rewrite_expr(init, signals);
+                }
+            }
+            TypedStatement::Return(Some(e)) => rewrite_expr(e, signals),
+            TypedStatement::If(if_stmt) => {
+                rewrite_expr(&mut if_stmt.condition, signals);
+                rewrite_block(&mut if_stmt.then_block, signals);
+                if let Some(else_block) = &mut if_stmt.else_block {
+                    rewrite_block(else_block, signals);
+                }
+            }
+            TypedStatement::While(w) => {
+                rewrite_expr(&mut w.condition, signals);
+                rewrite_block(&mut w.body, signals);
+            }
+            TypedStatement::Block(b) => rewrite_block(b, signals),
+            _ => {}
+        }
+    }
+
+    for decl in &mut program.declarations {
+        let TypedDeclaration::Function(func) = &mut decl.node else {
+            continue;
+        };
+        if let Some(body) = &mut func.body {
+            rewrite_block(body, &signals);
+        }
+    }
+    for decl in &mut program.declarations {
+        let TypedDeclaration::Impl(imp) = &mut decl.node else {
+            continue;
+        };
+        for method in &mut imp.methods {
+            if let Some(body) = &mut method.body {
+                rewrite_block(body, &signals);
+            }
+        }
+    }
+
+    // Step 3: strip signal-marker decls (metadata only; usage was rewritten above).
+    program.declarations.retain(|decl| {
+        let TypedDeclaration::Function(func) = &decl.node else {
+            return true;
+        };
+        !is_signal_decl(func)
+    });
+}
