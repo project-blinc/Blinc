@@ -115,6 +115,8 @@ component Playground {
             gap: 16px;
             flex-direction: column;
             width: 620px;
+            height: 100vh;
+            overflow: scroll;
             /* Section labels are plain `Text`, which has no colour of its
                own -- without this they render near-black on the dark
                surface. cn widgets that set their own text colour (Button,

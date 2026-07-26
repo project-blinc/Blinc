@@ -689,6 +689,15 @@ impl WindowedContext {
         let logical_width = physical_width as f32 / scale_factor as f32;
         let logical_height = physical_height as f32 / scale_factor as f32;
 
+        // Publish to the shared context so CSS viewport units (`vh` /
+        // `vw`) resolve. iOS and web already did this; desktop did not,
+        // so `height: 100vh` in a stylesheet parsed against a zero
+        // viewport and was dropped.
+        if blinc_core::context_state::BlincContextState::is_initialized() {
+            blinc_core::context_state::BlincContextState::get()
+                .set_viewport_size(logical_width, logical_height);
+        }
+
         Self {
             width: logical_width,
             height: logical_height,

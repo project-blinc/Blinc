@@ -8727,8 +8727,11 @@ fn parse_css_px(input: &str) -> Option<f32> {
     // Support calc() expressions — evaluate static calcs immediately
     if trimmed.starts_with("calc(") {
         if let Some(expr) = crate::calc::parse_calc(trimmed) {
-            if !expr.is_dynamic() {
-                return Some(expr.eval(&crate::calc::CalcContext::default()));
+            let ctx = viewport_calc_context();
+            // A calc over viewport units is only "dynamic" for want of a
+            // viewport; with one in hand it evaluates like any other.
+            if !expr.is_dynamic() || ctx.viewport_height > 0.0 {
+                return Some(expr.eval(&ctx));
             }
         }
         return None;
@@ -8737,8 +8740,41 @@ fn parse_css_px(input: &str) -> Option<f32> {
     if let Some(px_str) = trimmed.strip_suffix("px") {
         return px_str.trim().parse::<f32>().ok();
     }
+
+    // Viewport units. The calc module already knows how to evaluate
+    // these; they just never reached it, because this parser only
+    // understood px. Without a live viewport (styles parsed before the
+    // window exists) there is no sane answer, so fall through to None
+    // rather than silently resolving against zero.
+    for suffix in ["vh", "vw"] {
+        if let Some(num) = trimmed.strip_suffix(suffix) {
+            let value = num.trim().parse::<f32>().ok()?;
+            let ctx = viewport_calc_context();
+            if ctx.viewport_width <= 0.0 || ctx.viewport_height <= 0.0 {
+                return None;
+            }
+            let unit = crate::calc::CalcUnit::parse(suffix)?;
+            return Some(unit.to_pixels(value, &ctx));
+        }
+    }
+
     // Unitless number = px
     trimmed.parse::<f32>().ok()
+}
+
+/// `CalcContext` seeded with the live viewport, so viewport-relative
+/// units resolve. Falls back to the default (zero viewport) before the
+/// window exists.
+fn viewport_calc_context() -> crate::calc::CalcContext {
+    let mut ctx = crate::calc::CalcContext::default();
+    if blinc_core::context_state::BlincContextState::is_initialized() {
+        let (w, h) = blinc_core::context_state::BlincContextState::get().viewport_size();
+        if w > 0.0 && h > 0.0 {
+            ctx.viewport_width = w;
+            ctx.viewport_height = h;
+        }
+    }
+    ctx
 }
 
 /// Parse a CSS `object-position` value into [x, y] in 0.0-1.0 range.
@@ -12813,6 +12849,49 @@ mod tests {
         for t in &trans.transitions {
             assert_eq!(t.duration_ms, 150);
             assert!(matches!(t.timing, AnimationTiming::CubicBezier(_, _, _, _)));
+        }
+    }
+
+    /// CSS viewport units resolve against the live viewport.
+    ///
+    /// The calc module has understood `vh` / `vw` all along, but this
+    /// parser only handled `px`, so `height: 100vh` parsed to nothing
+    /// and the declaration was dropped. A page relying on it for its
+    /// height then had none, and `overflow: scroll` had nothing to
+    /// scroll.
+    mod viewport_units {
+        use super::*;
+
+        fn with_viewport(w: f32, h: f32) {
+            use blinc_core::context_state::{BlincContextState, HookState};
+            use std::sync::atomic::AtomicBool;
+            use std::sync::{Arc, Mutex};
+            static I: std::sync::Once = std::sync::Once::new();
+            I.call_once(|| {
+                if !BlincContextState::is_initialized() {
+                    BlincContextState::init(
+                        blinc_core::reactive::global_graph(),
+                        Arc::new(Mutex::new(HookState::new())),
+                        Arc::new(AtomicBool::new(false)),
+                    );
+                }
+            });
+            BlincContextState::get().set_viewport_size(w, h);
+        }
+
+        #[test]
+        fn vh_and_vw_resolve() {
+            with_viewport(1000.0, 800.0);
+            assert_eq!(parse_css_px("100vh"), Some(800.0));
+            assert_eq!(parse_css_px("50vw"), Some(500.0));
+            assert_eq!(parse_css_px("25vh"), Some(200.0));
+        }
+
+        #[test]
+        fn px_and_unitless_still_work() {
+            with_viewport(1000.0, 800.0);
+            assert_eq!(parse_css_px("12px"), Some(12.0));
+            assert_eq!(parse_css_px("12"), Some(12.0));
         }
     }
 }
