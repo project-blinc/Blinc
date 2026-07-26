@@ -593,7 +593,11 @@ pub(crate) fn publish_fsms_to_runtime_registry(program: &TypedProgram) {
                     blinc_runtime::signal::set_f64(&mangled, *v);
                 }
                 crate::fsm_registry::ContextDefault::Bool(v) => {
-                    blinc_runtime::signal::set_i32(&mangled, if *v { 1 } else { 0 });
+                    // `set_bool`, not `set_i32` with 0/1: the synthesised
+                    // signal is declared Bool, and minting it again as
+                    // I32 leaves a type-mismatch warning and a signal
+                    // whose stored type disagrees with every reader.
+                    blinc_runtime::signal::set_bool(&mangled, *v);
                 }
                 crate::fsm_registry::ContextDefault::String(s) => {
                     if let Some(s_str) = s.resolve_global() {

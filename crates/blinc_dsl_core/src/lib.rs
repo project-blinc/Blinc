@@ -945,7 +945,7 @@ impl BlincDsl {
     /// module pulled by multiple files only compiles once.
     pub fn compile_project(&self, entry: &Path, source_root: &Path) -> BlincDslResult<Vec<String>> {
         let mut aggregated: Vec<String> = Vec::new();
-        self.compile_project_inner(entry, source_root, &mut aggregated)?;
+        self.compile_project_inner(entry, source_root, &mut aggregated, true)?;
         Ok(aggregated)
     }
 
@@ -954,6 +954,7 @@ impl BlincDsl {
         entry: &Path,
         source_root: &Path,
         out: &mut Vec<String>,
+        is_entry: bool,
     ) -> BlincDslResult<()> {
         // ES6 / Node-style resolution: tries `<root>/<segs>.blinc`
         // then `<root>/<segs>/index.blinc`. Drives the dotted
@@ -994,10 +995,21 @@ impl BlincDsl {
             if already {
                 continue;
             }
-            self.compile_project_inner(&imported, source_root, out)?;
+            self.compile_project_inner(&imported, source_root, out, false)?;
         }
 
-        let namespace = module_namespace_from_path(entry, source_root);
+        // The entry compiles unnamespaced. Namespaces exist to keep
+        // imported modules' components from colliding, but the entry has
+        // no importer to disambiguate it from -- and mangling it breaks
+        // identity that the host and the source both address by name:
+        // `dispatch_default("Play", ...)` and a bare `view { App() }`
+        // calling a component declared in the same file both look up the
+        // unmangled name.
+        let namespace = if is_entry {
+            String::new()
+        } else {
+            module_namespace_from_path(entry, source_root)
+        };
         let names = self.compile_file_with_namespace(entry, &namespace)?;
         out.extend(names);
         Ok(())
