@@ -100,7 +100,11 @@ impl ElementBuilder for CnAvatar {
         self.get_or_build().render_props()
     }
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
-        &[]
+        // Forwarded, not `&[]`: the avatar builds a fallback-initials
+        // text child, and reporting none left the renderer unable to
+        // walk into it -- "N layout children but 0 builder children" --
+        // so the initials never picked up their render props.
+        self.get_or_build().children_builders()
     }
 
     // MUST forward — see `gotcha_element_builder_trait_forwarding`.

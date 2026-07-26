@@ -67,3 +67,38 @@ fn css_driven_widgets_expose_their_classes() {
         );
     }
 }
+
+/// A wrapper that reports no builder children while `build()` creates
+/// layout children leaves the renderer unable to walk into them: they
+/// never collect render props. Surfaced as
+/// "N layout children but 0 builder children" and, visibly, as
+/// cn.Avatar's fallback initials rendering unstyled.
+#[test]
+fn wrappers_report_the_children_they_build() {
+    use blinc_layout::tree::LayoutTree;
+
+    init();
+    let dsl = BlincDsl::new().expect("dsl init");
+    blinc_cn_dsl::register_all(&dsl).expect("register cn.*");
+    dsl.compile_source(r#"view { cn.Avatar(fallback = "AB") }"#, "avatar.blinc")
+        .expect("compile");
+
+    let widget = dsl.view_widget();
+    let mut tree = LayoutTree::new();
+    let root = widget.build(&mut tree);
+
+    // Walk both sides in lockstep: any node with layout children must
+    // expose builder children too.
+    fn check(b: &dyn ElementBuilder, id: blinc_layout::tree::LayoutNodeId, tree: &LayoutTree) {
+        let layout_kids = tree.children(id).len();
+        let builder_kids = b.children_builders().len();
+        assert!(
+            layout_kids == 0 || builder_kids > 0,
+            "node has {layout_kids} layout children but 0 builder children"
+        );
+        for (c, cid) in b.children_builders().iter().zip(tree.children(id)) {
+            check(c.as_ref(), cid, tree);
+        }
+    }
+    check(widget.as_ref(), root, &tree);
+}
