@@ -1559,38 +1559,6 @@ mod tests {
         State::new(signal, Arc::clone(graph), dirty)
     }
 
-    /// `bind_opacity_from` resolves a constant at build time and registers
-    /// a binding for a signal-backed source, so a later `set` patches
-    /// `props.opacity` without a rebuild.
-    #[test]
-    fn bind_opacity_from_const_and_bound() {
-        let _guard = lock_and_reset();
-        with_registry(|_| {});
-
-        // Const source resolves immediately.
-        let d = crate::div::div().bind_opacity_from(0.25f32, |v| v);
-        assert!(
-            (d.opacity - 0.25).abs() < 1e-6,
-            "const source must resolve at build time"
-        );
-
-        // A bool signal driving opacity — the shape a "dimmed while
-        // disabled" treatment needs.
-        let graph: Arc<Mutex<ReactiveGraph>> = Arc::new(Mutex::new(ReactiveGraph::new()));
-        let sig = graph.lock().unwrap().create_signal(false);
-        let state = State::new(sig, Arc::clone(&graph), Arc::new(AtomicBool::new(false)));
-        let d = crate::div::div()
-            .bind_opacity_from(state.clone(), |off: bool| if off { 0.4 } else { 1.0 });
-        assert!(
-            (d.opacity - 1.0).abs() < 1e-6,
-            "initial value comes from the signal"
-        );
-        assert!(
-            !d.pending_bindings.is_empty(),
-            "a signal-backed source must register a binding, not snapshot"
-        );
-    }
-
     #[test]
     fn computed_into_reactive_produces_computed_variant() {
         let _guard = lock_and_reset();

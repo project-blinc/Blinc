@@ -3465,59 +3465,6 @@ impl Div {
         self
     }
 
-    /// Bind this element's opacity to a reactive source.
-    ///
-    /// Sibling of [`Self::bind_transform_from`] on the unified property
-    /// channel: a `Const` source resolves once at build time, while a
-    /// signal- or computed-backed source registers a binding so each
-    /// update patches `props.opacity` in place — no `Stateful` rebuild,
-    /// no `compute_layout`.
-    ///
-    /// The mapper turns the source value into an opacity, which lets a
-    /// non-float signal drive it (e.g. `bool` -> dimmed/opaque for a
-    /// disabled state).
-    pub fn bind_opacity_from<T>(
-        mut self,
-        source: impl crate::binding::IntoReactive<T>,
-        mapper: impl Fn(T) -> f32 + Send + Sync + 'static,
-    ) -> Self
-    where
-        T: Clone + Default + Send + Sync + 'static,
-    {
-        use crate::binding::{Reactive, TypedPendingBinding};
-        let mapper = std::sync::Arc::new(mapper);
-        match source.into_reactive() {
-            Reactive::Const(v) => {
-                self.opacity = mapper(v);
-            }
-            Reactive::Bound(state) => {
-                let initial = state.try_get().unwrap_or_default();
-                self.opacity = mapper(initial);
-                self.pending_bindings
-                    .push(Box::new(TypedPendingBinding::new(
-                        state,
-                        crate::property::PropertyId::Opacity,
-                        move |props, v: T| {
-                            props.opacity = mapper(v);
-                        },
-                    )));
-            }
-            Reactive::Computed(computed) => {
-                let initial = computed.try_get().unwrap_or_default();
-                self.opacity = mapper(initial);
-                self.pending_bindings
-                    .push(Box::new(TypedPendingBinding::from_computed(
-                        computed,
-                        crate::property::PropertyId::Opacity,
-                        move |props, v: T| {
-                            props.opacity = mapper(v);
-                        },
-                    )));
-            }
-        }
-        self
-    }
-
     /// Animate the visual width of this element by scaling along the
     /// X axis from the left edge. Phase 8.1 of the unified property
     /// channel ([[project-reactive-architecture-v2]]).
