@@ -312,11 +312,11 @@ pub(crate) fn reset_button_state(key: &str) {
 /// }
 /// ```
 #[track_caller]
-pub fn button(label: impl Into<String>) -> ButtonBuilder {
+pub fn button(label: impl IntoReactive<String>) -> ButtonBuilder {
     ButtonBuilder {
         key: InstanceKey::new("button"),
         config: ButtonConfig {
-            label: label.into(),
+            label: label.into_reactive(),
             variant: ButtonVariant::default(),
             btn_size: ButtonSize::default(),
             disabled: Reactive::Const(false),
@@ -333,7 +333,10 @@ pub fn button(label: impl Into<String>) -> ButtonBuilder {
 /// Internal configuration for ButtonBuilder
 #[allow(clippy::type_complexity)]
 struct ButtonConfig {
-    label: String,
+    /// Text content has no property-binding writer (`PropertyId::TextContent`
+    /// is declared but unimplemented), so a bound label rebuilds the
+    /// subtree via `deps()` rather than patching in place.
+    label: Reactive<String>,
     variant: ButtonVariant,
     btn_size: ButtonSize,
     /// `disabled` gates the entire style branch (background, border,
@@ -351,7 +354,7 @@ struct ButtonConfig {
 impl Clone for ButtonConfig {
     fn clone(&self) -> Self {
         Self {
-            label: self.label.clone(),
+            label: clone_reactive(&self.label),
             variant: self.variant,
             btn_size: self.btn_size,
             disabled: clone_reactive(&self.disabled),
@@ -394,7 +397,8 @@ impl Button {
 
         // Content closure — returns ONLY the text/icon content.
         // The layout button handles bg, rounded, padding, etc.
-        let label = config.label.clone();
+        let label = current(&config.label);
+        let label_dep = dep_signal(&config.label);
         let icon = config.icon.clone();
         let icon_position = config.icon_position;
         let custom_icon_size = config.icon_size;
@@ -405,7 +409,7 @@ impl Button {
             .unwrap_or_else(|| variant.foreground(theme));
 
         // Determine icon-only mode at construction time (needed for sizing)
-        let is_icon_only = config.icon.is_some() && config.label.is_empty();
+        let is_icon_only = config.icon.is_some() && label.is_empty();
         let resolved_icon_size = config.icon_size.unwrap_or(font_size + 2.0);
 
         // Create button with empty content — we'll set up on_state below
@@ -548,8 +552,9 @@ impl Button {
         // A bound `disabled` rebuilds the subtree: the value picks
         // different backgrounds, borders, shadows and FSM start state,
         // none of which a single property write can express.
-        if let Some(sid) = disabled_dep {
-            btn = btn.deps(&[sid]);
+        let deps: Vec<_> = [disabled_dep, label_dep].into_iter().flatten().collect();
+        if !deps.is_empty() {
+            btn = btn.deps(&deps);
         }
 
         // Click handler
@@ -621,11 +626,11 @@ impl ButtonBuilder {
     ///
     /// For most use cases, prefer `button()` which auto-generates a unique key.
     /// Use this when you need a deterministic key for programmatic access.
-    pub fn with_key(key: impl Into<String>, label: impl Into<String>) -> Self {
+    pub fn with_key(key: impl Into<String>, label: impl IntoReactive<String>) -> Self {
         Self {
             key: InstanceKey::explicit(key),
             config: ButtonConfig {
-                label: label.into(),
+                label: label.into_reactive(),
                 variant: ButtonVariant::default(),
                 btn_size: ButtonSize::default(),
                 disabled: Reactive::Const(false),
@@ -739,7 +744,7 @@ impl ElementBuilder for ButtonBuilder {
 #[cfg(test)]
 mod reactive_disabled_tests {
     use super::*;
-    use crate::reactive_props::dep_signal;
+    use crate::reactive_props::{current, dep_signal};
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
 
@@ -772,8 +777,31 @@ mod reactive_disabled_tests {
     }
 
     #[test]
+    fn plain_str_label_stays_const() {
+        // `&str` / `&String` / `String` call sites must keep working
+        // now that the constructor takes `impl IntoReactive<String>`.
+        let b = button("Save");
+        assert!(matches!(b.config.label, Reactive::Const(_)));
+        assert!(dep_signal(&b.config.label).is_none());
+        assert_eq!(current(&b.config.label), "Save");
+    }
+
+    #[test]
+    fn bound_label_produces_rebuild_dep() {
+        let graph = Arc::new(Mutex::new(blinc_core::reactive::ReactiveGraph::new()));
+        let signal = graph.lock().unwrap().create_signal(String::from("Save"));
+        let state =
+            blinc_core::reactive::State::new(signal, graph, Arc::new(AtomicBool::new(false)));
+        let b = button(&state);
+        assert!(matches!(b.config.label, Reactive::Bound(_)));
+        assert!(dep_signal(&b.config.label).is_some());
+        assert_eq!(current(&b.config.label), "Save");
+        state.set(String::from("Saving..."));
+        assert_eq!(current(&b.config.label), "Saving...");
+    }
+
+    #[test]
     fn bound_value_reads_through_at_build_time() {
-        use crate::reactive_props::current;
         let state = bound_state(true);
         let b = button("Save").disabled(&state);
         assert!(current(&b.config.disabled), "reads the signal's value");

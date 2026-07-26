@@ -105,16 +105,13 @@ impl CnButton {
                 blinc_cn::ButtonSize::Medium
             }
         };
-        // `disabled` crosses live: the DSL `Reactive<bool>` converts
-        // to the layout channel via `IntoReactive`, so a signal-bound
-        // value registers a `deps()` subscription on the cn side and
-        // the button restyles on set.
-        //
-        // `label` still snapshots — `ButtonBuilder::label` takes a
-        // plain `String`. Swap it the same way once that setter grows
-        // an `IntoReactive<String>` surface.
-        let label = self.label.get_or_else(String::new());
-        let mut b = blinc_cn::button(label)
+        // Both props cross live: the DSL `Reactive<T>` converts to the
+        // layout channel via `IntoReactive`, so a signal-bound value
+        // registers a `deps()` subscription on the cn side and the
+        // button refreshes on set. Neither is patched in place --
+        // `disabled` gates the whole style branch, and text content has
+        // no property-binding writer -- so both take the rebuild path.
+        let mut b = blinc_cn::button(self.label.clone())
             .variant(variant)
             .size(size)
             .disabled(self.disabled.clone());

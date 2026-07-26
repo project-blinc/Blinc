@@ -135,6 +135,24 @@ impl<T> IntoReactive<T> for T {
     }
 }
 
+// `&str` -> `Reactive<String>`. The blanket impl above only gives
+// `IntoReactive<&str> for &str`, so without this a builder that takes
+// `impl IntoReactive<String>` would reject every string-literal call
+// site. Distinct trait instantiation, so no overlap with the blanket.
+impl IntoReactive<String> for &str {
+    fn into_reactive(self) -> Reactive<String> {
+        Reactive::Const(self.to_string())
+    }
+}
+
+// Same reasoning for `&String`, which `impl Into<String>` call sites
+// also passed freely before the reactive surface existed.
+impl IntoReactive<String> for &String {
+    fn into_reactive(self) -> Reactive<String> {
+        Reactive::Const(self.clone())
+    }
+}
+
 // Signal-bound: a `&State<T>` produces a Bound reactive. `State<T>::clone`
 // is cheap (Arc internals) so capturing it here doesn't allocate the
 // underlying graph again.

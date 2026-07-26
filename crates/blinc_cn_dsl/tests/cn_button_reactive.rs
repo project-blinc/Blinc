@@ -94,3 +94,33 @@ fn cn_button_disabled_omitted() {
         .compile_source(src, "cn_button_disabled_omitted.blinc")
         .expect("compile cn.Button without disabled");
 }
+
+/// `label` crosses live too. Text content has no property-binding
+/// writer, so a bound label takes the same `deps()` rebuild path as
+/// `disabled` rather than patching in place.
+#[test]
+fn cn_button_label_signal() {
+    let src = r#"
+        signal caption: string
+        view {
+            cn.Button(label = caption)
+        }
+    "#;
+    dsl()
+        .compile_source(src, "cn_button_label_signal.blinc")
+        .expect("compile cn.Button(label = signal)");
+}
+
+#[test]
+fn cn_button_label_and_disabled_both_bound() {
+    let src = r#"
+        signal caption: string
+        signal busy: bool
+        view {
+            cn.Button(label = caption, disabled = busy)
+        }
+    "#;
+    dsl()
+        .compile_source(src, "cn_button_both_bound.blinc")
+        .expect("compile cn.Button with both props bound");
+}

@@ -11,23 +11,32 @@ use std::sync::atomic::AtomicBool;
 
 /// cn widgets read the theme and the process-global reactive context at
 /// build time; both are app-startup singletons in a real app.
+///
+/// Tests in one binary share a process, and cargo runs them in
+/// parallel, so a `is_initialized()` check followed by `init()` races:
+/// two threads both observe "not yet" and the second `init()` panics
+/// with "called more than once". `Once` makes the whole block run
+/// exactly one time, and later callers block until it has.
 fn init_runtime_singletons() {
-    blinc_theme::ThemeState::init_default();
-    if !blinc_animation::is_scheduler_initialized() {
-        let scheduler = blinc_animation::AnimationScheduler::new();
-        blinc_animation::set_global_scheduler(scheduler.handle());
-        // Keep the scheduler alive for the process; the handle holds a Weak.
-        Box::leak(Box::new(scheduler));
-    }
-    if !blinc_core::BlincContextState::is_initialized() {
-        blinc_core::BlincContextState::init(
-            blinc_core::reactive::global_graph(),
-            Arc::new(std::sync::Mutex::new(
-                blinc_core::context_state::HookState::new(),
-            )),
-            Arc::new(AtomicBool::new(false)),
-        );
-    }
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| {
+        blinc_theme::ThemeState::init_default();
+        if !blinc_animation::is_scheduler_initialized() {
+            let scheduler = blinc_animation::AnimationScheduler::new();
+            blinc_animation::set_global_scheduler(scheduler.handle());
+            // Keep the scheduler alive for the process; the handle holds a Weak.
+            Box::leak(Box::new(scheduler));
+        }
+        if !blinc_core::BlincContextState::is_initialized() {
+            blinc_core::BlincContextState::init(
+                blinc_core::reactive::global_graph(),
+                Arc::new(std::sync::Mutex::new(
+                    blinc_core::context_state::HookState::new(),
+                )),
+                Arc::new(AtomicBool::new(false)),
+            );
+        }
+    });
 }
 
 /// Node count of the rendered view (root included).
