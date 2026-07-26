@@ -123,6 +123,32 @@ fn playground_layout_is_stable_across_frames() {
     for (i, (a, b)) in w1_snapshot.iter().zip(w2h.iter()).enumerate() {
         if (a - b).abs() > 1.0 {
             println!("  GREW n{i}: {a} -> {b} (depth {})", w2[i].2);
+            // Is this container bounded, or does it size to content?
+            let mut stack = vec![tree.root().unwrap()];
+            let mut idx = 0usize;
+            while let Some(id) = stack.pop() {
+                if idx == i {
+                    if let Some(st) = tree.layout_tree.get_style(id) {
+                        println!(
+                            "    style: size={:?} min={:?} max={:?} dir={:?} overflow={:?}",
+                            st.size, st.min_size, st.max_size, st.flex_direction, st.overflow,
+                        );
+                    }
+                    let kids = tree.layout_tree.children(id);
+                    let sum: f32 = kids
+                        .iter()
+                        .filter_map(|c| tree.layout_tree.get_layout(*c))
+                        .map(|l| l.size.height)
+                        .sum();
+                    println!("    children={} sum_h={sum}", kids.len());
+                    break;
+                }
+                idx += 1;
+                let kids = tree.layout_tree.children(id);
+                for c in kids.into_iter().rev() {
+                    stack.push(c);
+                }
+            }
         }
     }
     assert_eq!(
