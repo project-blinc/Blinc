@@ -25,8 +25,10 @@
 //!     .on_click(|_| println!("Submitted!"))
 //! ```
 
+use crate::reactive_props::{clone_reactive, current, dep_signal};
 use blinc_core::Color;
 use blinc_layout::InstanceKey;
+use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::ElementBuilder;
 use blinc_layout::prelude::*;
 use blinc_layout::stateful::{ButtonState, SharedState, use_fsm_keyed};
@@ -317,7 +319,7 @@ pub fn button(label: impl Into<String>) -> ButtonBuilder {
             label: label.into(),
             variant: ButtonVariant::default(),
             btn_size: ButtonSize::default(),
-            disabled: false,
+            disabled: Reactive::Const(false),
             icon: None,
             icon_position: IconPosition::default(),
             icon_size: None,
@@ -329,18 +331,37 @@ pub fn button(label: impl Into<String>) -> ButtonBuilder {
 }
 
 /// Internal configuration for ButtonBuilder
-#[derive(Clone)]
 #[allow(clippy::type_complexity)]
 struct ButtonConfig {
     label: String,
     variant: ButtonVariant,
     btn_size: ButtonSize,
-    disabled: bool,
+    /// `disabled` gates the entire style branch (background, border,
+    /// shadow, text colour) plus the FSM's starting state, so a change
+    /// can't be patched as a single `RenderProps` write. `Bound` values
+    /// register a `deps()` subscription that rebuilds the subtree.
+    disabled: Reactive<bool>,
     icon: Option<String>,
     icon_position: IconPosition,
     icon_size: Option<f32>,
     text_color: Option<Color>,
     on_click: Option<Arc<dyn Fn(&blinc_layout::event_handler::EventContext) + Send + Sync>>,
+}
+
+impl Clone for ButtonConfig {
+    fn clone(&self) -> Self {
+        Self {
+            label: self.label.clone(),
+            variant: self.variant,
+            btn_size: self.btn_size,
+            disabled: clone_reactive(&self.disabled),
+            icon: self.icon.clone(),
+            icon_position: self.icon_position,
+            icon_size: self.icon_size,
+            text_color: self.text_color,
+            on_click: self.on_click.clone(),
+        }
+    }
 }
 
 /// The built button element — wraps `blinc_layout::widgets::button::Button`
@@ -355,7 +376,8 @@ impl Button {
         let theme = ThemeState::get();
         let font_size = config.btn_size.font_size();
         let variant = config.variant;
-        let disabled = config.disabled;
+        let disabled = current(&config.disabled);
+        let disabled_dep = dep_signal(&config.disabled);
 
         // Get persistent state for this button
         let state_key = format!("_cn_btn_{}", instance_key);
@@ -523,6 +545,13 @@ impl Button {
             }
         }
 
+        // A bound `disabled` rebuilds the subtree: the value picks
+        // different backgrounds, borders, shadows and FSM start state,
+        // none of which a single property write can express.
+        if let Some(sid) = disabled_dep {
+            btn = btn.deps(&[sid]);
+        }
+
         // Click handler
         if let Some(handler) = config.on_click {
             btn = btn.on_click(move |ctx| handler(ctx));
@@ -599,7 +628,7 @@ impl ButtonBuilder {
                 label: label.into(),
                 variant: ButtonVariant::default(),
                 btn_size: ButtonSize::default(),
-                disabled: false,
+                disabled: Reactive::Const(false),
                 icon: None,
                 icon_position: IconPosition::Start,
                 icon_size: None,
@@ -629,8 +658,8 @@ impl ButtonBuilder {
     }
 
     /// Make the button disabled
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 
@@ -704,5 +733,54 @@ impl ElementBuilder for ButtonBuilder {
 
     fn element_id(&self) -> Option<&str> {
         self.get_or_build().element_id()
+    }
+}
+
+#[cfg(test)]
+mod reactive_disabled_tests {
+    use super::*;
+    use crate::reactive_props::dep_signal;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::{Arc, Mutex};
+
+    fn bound_state(v: bool) -> blinc_core::reactive::State<bool> {
+        let graph = Arc::new(Mutex::new(blinc_core::reactive::ReactiveGraph::new()));
+        let signal = graph.lock().unwrap().create_signal(v);
+        blinc_core::reactive::State::new(signal, graph, Arc::new(AtomicBool::new(false)))
+    }
+
+    #[test]
+    fn plain_bool_stays_const() {
+        let b = button("Save").disabled(true);
+        assert!(matches!(b.config.disabled, Reactive::Const(true)));
+        // A constant has nothing to subscribe to, so no rebuild dep.
+        assert!(dep_signal(&b.config.disabled).is_none());
+    }
+
+    #[test]
+    fn bound_state_produces_rebuild_dep() {
+        let state = bound_state(true);
+        let b = button("Save").disabled(&state);
+        assert!(
+            matches!(b.config.disabled, Reactive::Bound(_)),
+            "a State<bool> must reach the builder as Reactive::Bound"
+        );
+        assert!(
+            dep_signal(&b.config.disabled).is_some(),
+            "a bound disabled must yield a SignalId for deps()"
+        );
+    }
+
+    #[test]
+    fn bound_value_reads_through_at_build_time() {
+        use crate::reactive_props::current;
+        let state = bound_state(true);
+        let b = button("Save").disabled(&state);
+        assert!(current(&b.config.disabled), "reads the signal's value");
+        state.set(false);
+        assert!(
+            !current(&b.config.disabled),
+            "a later set is visible to the next build"
+        );
     }
 }

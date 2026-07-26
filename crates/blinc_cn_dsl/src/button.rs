@@ -105,18 +105,19 @@ impl CnButton {
                 blinc_cn::ButtonSize::Medium
             }
         };
-        // Snapshot the label + disabled values at build time. Signal
-        // / computed shapes resolve through the same `get_or_else`
-        // path; live binding waits on cn-side `IntoReactive<T>` on
-        // `ButtonBuilder::label` / `disabled`. The DSL-side wiring
-        // is complete — once cn grows the reactive surface, swap
-        // the snapshot for a bridge in the three Reactive arms.
+        // `disabled` crosses live: the DSL `Reactive<bool>` converts
+        // to the layout channel via `IntoReactive`, so a signal-bound
+        // value registers a `deps()` subscription on the cn side and
+        // the button restyles on set.
+        //
+        // `label` still snapshots — `ButtonBuilder::label` takes a
+        // plain `String`. Swap it the same way once that setter grows
+        // an `IntoReactive<String>` surface.
         let label = self.label.get_or_else(String::new());
-        let disabled = self.disabled.get_or_else(false);
         let mut b = blinc_cn::button(label)
             .variant(variant)
             .size(size)
-            .disabled(disabled);
+            .disabled(self.disabled.clone());
         if !self.icon.is_empty() {
             b = b.icon(self.icon.clone());
             // `icon_position` only meaningful when an icon is present.

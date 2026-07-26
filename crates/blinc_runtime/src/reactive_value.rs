@@ -270,3 +270,24 @@ mod tests {
         assert_eq!(sig.try_get(), Some(123));
     }
 }
+
+// Bridge the DSL's `Reactive<T>` onto the cn/layout builder channel.
+//
+// The two enums carry the same three cases with different payloads:
+// this one holds a raw `Signal<T>`, the layout one holds a `State<T>`
+// (a signal plus the graph and dirty flag it belongs to). `Signal<T>`
+// and `Computed<T>` already have `IntoReactive` impls that supply the
+// process-global graph, so each arm just delegates.
+//
+// With this in place a `#[reactive] Reactive<T>` prop can be handed
+// straight to a cn builder that takes `impl IntoReactive<T>`, and the
+// binding stays live instead of snapshotting at build time.
+impl<T: Clone + Send + 'static> blinc_layout::binding::IntoReactive<T> for Reactive<T> {
+    fn into_reactive(self) -> blinc_layout::binding::Reactive<T> {
+        match self {
+            Self::Literal(v) => blinc_layout::binding::Reactive::Const(v),
+            Self::Signal(s) => s.into_reactive(),
+            Self::Computed(c) => c.into_reactive(),
+        }
+    }
+}

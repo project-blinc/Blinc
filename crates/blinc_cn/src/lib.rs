@@ -43,6 +43,7 @@
 pub mod cn_styles;
 pub mod components;
 pub mod css_overrides;
+pub mod reactive_props;
 pub mod theme;
 
 pub use components::*;
