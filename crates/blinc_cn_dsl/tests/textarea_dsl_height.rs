@@ -59,3 +59,31 @@ fn dsl_textarea_height_matches_rows() {
         }
     }
 }
+
+/// The wrapper must expose the widget's taffy style.
+///
+/// Intrinsic size lives there — a textarea's rows-derived height, an
+/// input's height — so a wrapper that cannot forward `layout_style`
+/// hides the size from every builder-tree reader, even though `build()`
+/// still applies it to the node.
+#[test]
+fn wrappers_expose_layout_style() {
+    use blinc_layout::div::ElementBuilder;
+    init();
+    let dsl = BlincDsl::new().unwrap();
+    blinc_cn_dsl::register_all(&dsl).unwrap();
+    dsl.compile_source(r#"view { cn.Textarea(key = "ls", rows = 3) }"#, "ls.blinc")
+        .unwrap();
+    let w = dsl.view_widget();
+
+    fn find_sized(b: &dyn ElementBuilder) -> bool {
+        if b.layout_style().is_some() {
+            return true;
+        }
+        b.children_builders().iter().any(|c| find_sized(c.as_ref()))
+    }
+    assert!(
+        find_sized(w.as_ref()),
+        "the textarea's taffy style must be reachable from the builder tree"
+    );
+}

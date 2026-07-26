@@ -67,4 +67,11 @@ impl ElementBuilder for CnKbd {
     fn element_type_id(&self) -> blinc_layout::div::ElementTypeId {
         self.get_or_build().element_type_id()
     }
+
+    // Intrinsic size lives here: a textarea's rows-derived height and an
+    // input's height are set on the taffy style, so a wrapper that does
+    // not forward it hides the size from every builder-tree reader.
+    fn layout_style(&self) -> Option<&taffy::Style> {
+        self.get_or_build().layout_style()
+    }
 }

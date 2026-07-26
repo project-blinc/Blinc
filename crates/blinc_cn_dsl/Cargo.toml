@@ -36,6 +36,11 @@ name = "cn_playground"
 path = "examples/cn_playground.rs"
 
 [dependencies]
+# Needed to forward `ElementBuilder::layout_style`, whose return type is
+# `Option<&taffy::Style>`. Widgets with intrinsic sizing (textarea rows,
+# input height) carry that size in the taffy style, so a wrapper that
+# cannot forward it hides the size from any builder-tree reader.
+taffy = { workspace = true }
 # DSL surface — host registration API + the `#[extern_widget]` macro
 # that generates the FFI thunks. We hold the BlincDsl handle and call
 # `register_extern_widget::<W>()` per wrapper.
