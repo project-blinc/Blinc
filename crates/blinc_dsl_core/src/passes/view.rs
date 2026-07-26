@@ -55,11 +55,16 @@ pub(crate) fn view_root(
 }
 
 /// Detect view decorators and strip the synthetic marker calls.
-/// Returns `(saw_stateful, explicit_signal_deps, explicit_fsms)`.
-/// Empty `signal_deps` with `saw_stateful=true` means subscribe to all declared signals.
+/// Returns `(saw_stateful, explicit_signal_deps, explicit_fsms,
+/// ctx_value_reads)`.
+///
+/// Empty `signal_deps` with `saw_stateful=true` means subscribe to all
+/// declared signals. `ctx_value_reads` holds `"<Fsm>.<field>"` for every
+/// context field the decorated body reads as a VALUE -- see
+/// [`collect_ctx_value_reads`].
 pub(crate) fn detect_and_strip_stateful_views(
     program: &mut TypedProgram,
-) -> (bool, Vec<String>, Vec<String>) {
+) -> (bool, Vec<String>, Vec<String>, Vec<String>) {
     use zyntax_typed_ast::typed_ast::{TypedDeclaration, TypedExpression, TypedLiteral};
 
     // Strip a leading marker call matching `expected_callee` and return its string args.
@@ -98,15 +103,18 @@ pub(crate) fn detect_and_strip_stateful_views(
     let mut saw_stateful = false;
     let mut signal_deps: Vec<String> = Vec::new();
     let mut fsms: Vec<String> = Vec::new();
+    let mut ctx_value_reads: Vec<String> = Vec::new();
 
     let mut process = |body: &mut Option<zyntax_typed_ast::typed_ast::TypedBlock>| {
         let Some(body) = body else {
             return;
         };
+        let mut decorated = false;
         // Decorators can stack either way; strip until no more match.
         loop {
             if let Some(names) = strip_leading_marker(body, "__stateful_view__") {
                 saw_stateful = true;
+                decorated = true;
                 for n in names {
                     if !signal_deps.contains(&n) {
                         signal_deps.push(n);
@@ -116,6 +124,7 @@ pub(crate) fn detect_and_strip_stateful_views(
             }
             if let Some(names) = strip_leading_marker(body, "__fsm_view__") {
                 saw_stateful = true;
+                decorated = true;
                 for n in names {
                     if !fsms.contains(&n) {
                         fsms.push(n);
@@ -124,6 +133,9 @@ pub(crate) fn detect_and_strip_stateful_views(
                 continue;
             }
             break;
+        }
+        if decorated {
+            collect_ctx_value_reads(body, &mut ctx_value_reads);
         }
     };
 
@@ -139,7 +151,149 @@ pub(crate) fn detect_and_strip_stateful_views(
         }
     }
 
-    (saw_stateful, signal_deps, fsms)
+    (saw_stateful, signal_deps, fsms, ctx_value_reads)
+}
+
+/// Context fields a decorated view reads AS A VALUE, as `"<Fsm>.<field>"`.
+///
+/// The two ways to mention a context field are not equivalent:
+///
+///   `Play.pct`        a binding handle. Passed to a prop, the property
+///                     channel writes it in place -- a repaint, no
+///                     re-render, no layout.
+///   `Play.busy.get()` a value. A branch condition or an interpolation
+///                     can only follow it by re-rendering.
+///
+/// A stateful therefore needs the second kind in its deps and must NOT
+/// have the first: one `Grow` action writing five bound fields cost five
+/// full re-renders of the program, ~6ms apart, for a frame the binding
+/// registry had already handled.
+///
+/// `computed { … }` bodies are skipped: reads in there feed a derived,
+/// and the derived is what the prop binds to.
+fn collect_ctx_value_reads(body: &zyntax_typed_ast::typed_ast::TypedBlock, out: &mut Vec<String>) {
+    use zyntax_typed_ast::TypedNode;
+    use zyntax_typed_ast::typed_ast::TypedExpression;
+
+    fn is_computed_call(call: &zyntax_typed_ast::typed_ast::TypedCall) -> bool {
+        let TypedExpression::Variable(callee) = &call.callee.node else {
+            return false;
+        };
+        callee
+            .resolve_global()
+            .is_some_and(|n| n.starts_with("__blinc_computed_"))
+    }
+
+    /// `X.y` where `X` is a bare name -- the handle shape. Anything
+    /// deeper (`a.b.c`, an index, a call result) is not one.
+    fn dotted_name(expr: &TypedNode<TypedExpression>) -> Option<String> {
+        let TypedExpression::Field(f) = &expr.node else {
+            return None;
+        };
+        let TypedExpression::Variable(obj) = &f.object.node else {
+            return None;
+        };
+        Some(format!(
+            "{}.{}",
+            obj.resolve_global()?,
+            f.field.resolve_global()?
+        ))
+    }
+
+    fn record(expr: &TypedNode<TypedExpression>, out: &mut Vec<String>) {
+        if let Some(name) = dotted_name(expr)
+            && !out.contains(&name)
+        {
+            out.push(name);
+        }
+    }
+
+    fn walk_expr(expr: &TypedNode<TypedExpression>, out: &mut Vec<String>) {
+        record(expr, out);
+        match &expr.node {
+            TypedExpression::Call(call) => {
+                if is_computed_call(call) {
+                    return;
+                }
+                walk_expr(&call.callee, out);
+                // An argument that IS a bare `X.y` is a binding handle:
+                // do not descend, do not record.
+                for a in &call.positional_args {
+                    if dotted_name(a).is_none() {
+                        walk_expr(a, out);
+                    }
+                }
+                for na in &call.named_args {
+                    if dotted_name(&na.value).is_none() {
+                        walk_expr(&na.value, out);
+                    }
+                }
+            }
+            TypedExpression::MethodCall(mc) => {
+                // `.get()` on a handle is precisely a value read, so the
+                // receiver counts here even though a bare arg does not.
+                walk_expr(&mc.receiver, out);
+                for a in &mc.positional_args {
+                    walk_expr(a, out);
+                }
+            }
+            TypedExpression::Binary(b) => {
+                walk_expr(&b.left, out);
+                walk_expr(&b.right, out);
+            }
+            TypedExpression::Unary(u) => walk_expr(&u.operand, out),
+            TypedExpression::Field(f) => walk_expr(&f.object, out),
+            TypedExpression::Index(i) => {
+                walk_expr(&i.object, out);
+                walk_expr(&i.index, out);
+            }
+            TypedExpression::Array(items) | TypedExpression::Tuple(items) => {
+                for it in items {
+                    walk_expr(it, out);
+                }
+            }
+            TypedExpression::Block(b) => walk_block(b, out),
+            TypedExpression::If(i) => {
+                walk_expr(&i.condition, out);
+                walk_expr(&i.then_branch, out);
+                walk_expr(&i.else_branch, out);
+            }
+            _ => {}
+        }
+    }
+
+    fn walk_block(block: &zyntax_typed_ast::typed_ast::TypedBlock, out: &mut Vec<String>) {
+        for stmt in &block.statements {
+            walk_stmt(stmt, out);
+        }
+    }
+
+    fn walk_stmt(stmt: &TypedNode<TypedStatement>, out: &mut Vec<String>) {
+        match &stmt.node {
+            TypedStatement::Expression(e) => walk_expr(e, out),
+            TypedStatement::Let(l) => {
+                if let Some(init) = &l.initializer {
+                    walk_expr(init, out);
+                }
+            }
+            TypedStatement::Return(Some(e)) => walk_expr(e, out),
+            TypedStatement::If(i) => {
+                walk_expr(&i.condition, out);
+                walk_block(&i.then_block, out);
+                if let Some(else_block) = &i.else_block {
+                    walk_block(else_block, out);
+                }
+            }
+            TypedStatement::While(w) => {
+                walk_expr(&w.condition, out);
+                walk_block(&w.body, out);
+            }
+            TypedStatement::Block(b) => walk_block(b, out),
+            _ => {}
+        }
+    }
+
+    walk_block(body, out);
 }
 
 /// Snapshot `signal <name>: <T>` and `fsm <Name> { … }` decls. MUST run BEFORE

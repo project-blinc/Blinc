@@ -157,6 +157,11 @@ pub struct BlincDsl {
     stateful_view_deps: Arc<Mutex<Vec<String>>>,
     /// FSM names listed in `@fsm([…])`. Empty = first declared FSM.
     stateful_view_fsms: Arc<Mutex<Vec<String>>>,
+    /// `"<Fsm>.<field>"` for every context field a decorated view reads
+    /// as a VALUE. Fields only passed as binding handles are absent, and
+    /// must stay absent: they update through the property channel, so a
+    /// stateful subscribed to them re-renders for nothing.
+    stateful_ctx_value_reads: Arc<Mutex<Vec<String>>>,
 }
 
 impl BlincDsl {
@@ -194,6 +199,7 @@ impl BlincDsl {
         let has_stateful_view = Arc::new(Mutex::new(false));
         let stateful_view_deps = Arc::new(Mutex::new(Vec::new()));
         let stateful_view_fsms = Arc::new(Mutex::new(Vec::new()));
+        let stateful_ctx_value_reads = Arc::new(Mutex::new(Vec::new()));
 
         let this = Self {
             grammar,
@@ -209,6 +215,7 @@ impl BlincDsl {
             has_stateful_view,
             stateful_view_deps,
             stateful_view_fsms,
+            stateful_ctx_value_reads,
         };
         // Auto-install the JIT bridge so FSM tick guards + transition
         // action bodies dispatch out of the box. Pre-fix this was an
@@ -457,8 +464,19 @@ impl BlincDsl {
 
         // Detect and strip `@stateful` / `@fsm` markers. Accumulate explicit deps.
         {
-            let (saw_stateful, explicit_deps, explicit_fsms) =
+            let (saw_stateful, explicit_deps, explicit_fsms, ctx_value_reads) =
                 detect_and_strip_stateful_views(&mut typed_program);
+            if !ctx_value_reads.is_empty() {
+                let mut acc = self
+                    .stateful_ctx_value_reads
+                    .lock()
+                    .expect("stateful_ctx_value_reads mutex poisoned");
+                for name in ctx_value_reads {
+                    if !acc.contains(&name) {
+                        acc.push(name);
+                    }
+                }
+            }
             if saw_stateful {
                 *self
                     .has_stateful_view
@@ -1299,13 +1317,31 @@ impl BlincDsl {
                 // extreme: unrelated signals re-rendered this stateful,
                 // and the FSM's own fields notified alongside the shared
                 // state, so one transition rendered twice.
-                let prefixes: Vec<String> = explicit_fsms
+                //
+                // Not every context field of the bound FSM, either --
+                // only the ones the body reads as a VALUE. A field
+                // passed to a prop as a binding handle updates through
+                // the property channel, so subscribing to it buys a full
+                // re-render for a frame that was already correct: one
+                // `Grow` writing five bound fields re-rendered the whole
+                // program five times.
+                let value_reads = self
+                    .stateful_ctx_value_reads
+                    .lock()
+                    .expect("stateful_ctx_value_reads mutex poisoned");
+                let wanted: Vec<String> = value_reads
                     .iter()
-                    .map(|f| crate::fsm_registry::mangle_ctx_signal(f, ""))
+                    .filter_map(|dotted| {
+                        let (fsm, field) = dotted.split_once('.')?;
+                        explicit_fsms
+                            .iter()
+                            .any(|f| f == fsm)
+                            .then(|| crate::fsm_registry::mangle_ctx_signal(fsm, field))
+                    })
                     .collect();
                 signals
                     .iter()
-                    .filter(|(n, _)| prefixes.iter().any(|p| n.starts_with(p.as_str())))
+                    .filter(|(n, _)| wanted.iter().any(|w| w == n))
                     .cloned()
                     .collect()
             }
