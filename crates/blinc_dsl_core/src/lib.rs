@@ -1488,6 +1488,20 @@ impl BlincDsl {
         ))
         .try_get()
     }
+
+    /// Set a bool-typed signal. Auto-mints on first call.
+    ///
+    /// Widgets that own a toggle (`cn.Switch`, `cn.Checkbox`) write
+    /// through the same signal, so this is both how a host drives them
+    /// and how it observes what the user did.
+    pub fn set_signal_bool(&self, name: &str, value: bool) {
+        blinc_runtime::signal::set_bool(name, value);
+    }
+
+    /// Read a bool-typed signal. `None` if undeclared or wrong type.
+    pub fn get_signal_bool(&self, name: &str) -> Option<bool> {
+        blinc_runtime::signal::get_bool(name)
+    }
 }
 
 #[cfg(test)]

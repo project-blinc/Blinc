@@ -188,6 +188,27 @@ pub(crate) fn lower_reactive_args(program: &mut TypedProgram) {
         Some(*id_lit as i64 as u64)
     }
 
+    /// Unwrap the `if <cond> { 1 } else { 0 }` shape a bool reference
+    /// picks up on its way into an integer-typed arg slot.
+    ///
+    /// `Tog.busy` resolves to `__signal_get_by_id_bool(<id>)`, which
+    /// Shape A' recognises -- but only until the bool-to-int coercion
+    /// wraps it, and then the whole thing reads as an ordinary
+    /// expression and falls through to LITERAL. The prop then snapshots
+    /// `false` for the session: the toggle never tracks the FSM, and
+    /// because `bool_state` mints its own signal for a literal, clicking
+    /// it writes nowhere the DSL can see.
+    fn unwrap_bool_int_coercion(
+        value: &TypedNode<TypedExpression>,
+    ) -> Option<&TypedNode<TypedExpression>> {
+        let TypedExpression::If(if_expr) = &value.node else {
+            return None;
+        };
+        let is_int = |n: &TypedNode<TypedExpression>, want: i128| matches!(&n.node, TypedExpression::Literal(TypedLiteral::Integer(v)) if *v == want);
+        (is_int(&if_expr.then_branch, 1) && is_int(&if_expr.else_branch, 0))
+            .then_some(&if_expr.condition)
+    }
+
     /// Expand one reactive-prop arg into the wire-format slots the
     /// macro thunk expects. Scalar `Reactive<T>` returns two slots
     /// `(tag, payload: i64)`; `Reactive<String>` returns three
@@ -199,9 +220,12 @@ pub(crate) fn lower_reactive_args(program: &mut TypedProgram) {
     ) -> Vec<TypedNode<TypedExpression>> {
         let span = arg.span;
         let is_string = matches!(inner_ty, Type::Primitive(PrimitiveType::String));
+        // Recognisers run against the coercion-stripped expression; the
+        // literal path below still encodes the original.
+        let probe = unwrap_bool_int_coercion(&arg).unwrap_or(&arg);
 
         // Shape A: bare-Variable signal ref → SIGNAL tag.
-        if let Some(id_raw) = signal_id_for_variable(&arg) {
+        if let Some(id_raw) = signal_id_for_variable(probe) {
             let tag = i32_literal(TAG_SIGNAL, span);
             let id = i64_literal(id_raw as i128, span);
             if is_string {
@@ -215,7 +239,7 @@ pub(crate) fn lower_reactive_args(program: &mut TypedProgram) {
         // interp compiles; without this recognizer the wrapper survives
         // into the reactive arg slot and falls back to LITERAL, snapping
         // the value to its initial constant for the entire session.
-        if let Some(id_raw) = signal_id_for_wrapped_getter(&arg, inner_ty) {
+        if let Some(id_raw) = signal_id_for_wrapped_getter(probe, inner_ty) {
             let tag = i32_literal(TAG_SIGNAL, span);
             let id = i64_literal(id_raw as i128, span);
             if is_string {
@@ -226,7 +250,7 @@ pub(crate) fn lower_reactive_args(program: &mut TypedProgram) {
         // Shape B: `computed { … } : T` call → COMPUTED tag.
         // For string the call's return value is the raw derived id
         // (an i64); the literal slot stays null.
-        if is_computed_call(&arg) {
+        if is_computed_call(probe) {
             let tag = i32_literal(TAG_COMPUTED, span);
             if is_string {
                 return vec![tag, arg, null_string_ptr_literal(span)];

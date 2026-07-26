@@ -162,11 +162,16 @@ component Playground {
                 cn.Progress(value = computed { Play.pct + Play.radius } : f64)
             }
 
+            // Two-way: the toggles read Play.busy AND write it, so
+            // clicking either one flips the BusyPanel above and the
+            // button below, exactly as the Busy action does. Both
+            // toggles track each other for the same reason -- one
+            // signal, two views of it.
             cn.Label("toggles: two-way bound to Play.busy")
-        Div(class = "row") {
-            cn.Switch(checked = Play.busy, label = "busy")
-            cn.Checkbox(checked = Play.busy, label = "busy")
-        }
+            Div(class = "row") {
+                cn.Switch(checked = Play.busy, label = "busy")
+                cn.Checkbox(checked = Play.busy, label = "busy")
+            }
 
         cn.Label("button: label AND disabled both bound (deps rebuild)")
             Div(class = "row") {
