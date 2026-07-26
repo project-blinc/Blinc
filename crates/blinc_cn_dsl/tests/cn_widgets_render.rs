@@ -101,6 +101,15 @@ fn every_exposed_cn_widget_renders() {
             "Skeleton",
             r#"cn.Skeleton(w = 200.0, h = 16.0, rounded = 4.0)"#,
         ),
+        ("Kbd", r#"cn.Kbd("Ctrl", size = "small")"#),
+        (
+            "Switch",
+            r#"cn.Switch(checked = true, label = "Wifi", size = "medium")"#,
+        ),
+        (
+            "Checkbox",
+            r#"cn.Checkbox(checked = false, label = "Accept", size = "small")"#,
+        ),
     ];
 
     let mut dropped = Vec::new();

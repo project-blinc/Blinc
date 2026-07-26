@@ -53,11 +53,14 @@ pub mod badge;
 pub mod bridge;
 pub mod button;
 pub mod card;
+pub mod checkbox;
+pub mod kbd;
 pub mod label;
 pub mod progress;
 pub mod separator;
 pub mod skeleton;
 pub mod spinner;
+pub mod switch;
 
 // Internal — shared helpers used by per-widget modules. Not
 // re-exported; widgets pull what they need via `crate::color::…`.
@@ -68,11 +71,14 @@ pub use avatar::CnAvatar;
 pub use badge::CnBadge;
 pub use button::CnButton;
 pub use card::CnCard;
+pub use checkbox::CnCheckbox;
+pub use kbd::CnKbd;
 pub use label::CnLabel;
 pub use progress::CnProgress;
 pub use separator::CnSeparator;
 pub use skeleton::CnSkeleton;
 pub use spinner::CnSpinner;
+pub use switch::CnSwitch;
 
 use blinc_dsl_core::{BlincDsl, BlincDslResult};
 
@@ -123,5 +129,8 @@ pub fn register_basics(dsl: &BlincDsl) -> BlincDslResult<()> {
     dsl.register_extern_widget::<CnProgress>()?;
     dsl.register_extern_widget::<CnAvatar>()?;
     dsl.register_extern_widget::<CnSkeleton>()?;
+    dsl.register_extern_widget::<CnKbd>()?;
+    dsl.register_extern_widget::<CnSwitch>()?;
+    dsl.register_extern_widget::<CnCheckbox>()?;
     Ok(())
 }

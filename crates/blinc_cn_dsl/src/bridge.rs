@@ -21,3 +21,24 @@ pub fn is_set(r: &Reactive<f64>) -> bool {
         Reactive::Signal(_) | Reactive::Computed(_) => true,
     }
 }
+
+/// A `State<bool>` for cn widgets that own a toggle (`cn::switch`,
+/// `cn::checkbox` take `&State<bool>`).
+///
+/// A DSL `signal`-bound prop maps onto the very same signal, so the
+/// widget and the DSL share one source of truth: toggling the widget is
+/// visible to the DSL and vice versa. A literal has no signal behind it,
+/// so one is minted to hold the initial value -- the widget stays
+/// interactive, the DSL just has no handle on it.
+pub fn bool_state(r: &Reactive<bool>) -> blinc_core::reactive::State<bool> {
+    use blinc_core::reactive::{Signal, State, global_dirty_flag, global_graph, signal};
+    let sig: Signal<bool> = match r {
+        Reactive::Signal(s) => *s,
+        Reactive::Literal(v) => signal::<bool>(*v),
+        // A computed is derived, so it has no signal to write back to.
+        // Seed a fresh one from its current value; the widget owns it
+        // from then on.
+        Reactive::Computed(c) => signal::<bool>(c.try_get().unwrap_or(false)),
+    };
+    State::new(sig, global_graph(), global_dirty_flag())
+}
