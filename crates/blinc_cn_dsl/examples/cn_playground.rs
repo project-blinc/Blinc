@@ -65,7 +65,6 @@ fn main() -> Result<()> {
                 .w(ctx.width)
                 .h(ctx.height)
                 .bg(Color::rgb(0.04, 0.06, 0.1))
-                .items_center()
                 // Not `justify_center`: centring a child taller than the
                 // viewport pins it around the midpoint, so the top and
                 // bottom are unreachable and the wheel has nowhere to go.
