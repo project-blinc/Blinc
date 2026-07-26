@@ -2,13 +2,13 @@
 
 component MediaWidgets {
     style {
-        .group { gap: 8px; flex-direction: column; color: #e2e8f0 }
+        .group { gap: 8px; flex-direction: column }
         .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
     }
 
     view {
         Div(class = "group") {
-            Text("avatar: size x shape")
+            cn.Label("avatar: size x shape")
             Div(class = "row") {
                 cn.Avatar(fallback = "AB", size = "small")
                 cn.Avatar(fallback = "CD", size = "medium")
@@ -16,13 +16,13 @@ component MediaWidgets {
                 cn.Avatar(fallback = "GH", shape = "square")
             }
 
-            Text("card: container with children")
+            cn.Label("card: container with children")
             cn.Card {
-                Text("card content")
+                cn.Label("card content")
                 cn.Badge("nested", variant = "secondary")
             }
 
-            Text("separator + static skeleton")
+            cn.Label("separator + static skeleton")
             cn.Separator()
             cn.Skeleton(w = 140.0, h = 140.0, rounded = 6.0)
         }

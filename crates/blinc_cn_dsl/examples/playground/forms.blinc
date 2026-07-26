@@ -5,13 +5,13 @@
 
 component FormWidgets {
     style {
-        .group { gap: 8px; flex-direction: column; color: #e2e8f0 }
+        .group { gap: 8px; flex-direction: column }
         .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
     }
 
     view {
         Div(class = "group") {
-            Text("button variants")
+            cn.Label("button variants")
             Div(class = "row") {
                 cn.Button("primary")
                 cn.Button("secondary", variant = "secondary")
@@ -21,7 +21,7 @@ component FormWidgets {
                 cn.Button("link", variant = "link")
             }
 
-            Text("button sizes + disabled")
+            cn.Label("button sizes + disabled")
             Div(class = "row") {
                 cn.Button("small", size = "small")
                 cn.Button("medium", size = "medium")
@@ -29,7 +29,7 @@ component FormWidgets {
                 cn.Button("disabled", disabled = true)
             }
 
-            Text("label: size, required, disabled")
+            cn.Label("label: size, required, disabled")
             Div(class = "row") {
                 cn.Label("small", size = "small")
                 cn.Label("required", required = true)

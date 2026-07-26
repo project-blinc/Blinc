@@ -2,13 +2,13 @@
 
 component FeedbackWidgets {
     style {
-        .group { gap: 8px; flex-direction: column; color: #e2e8f0 }
+        .group { gap: 8px; flex-direction: column }
         .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
     }
 
     view {
         Div(class = "group") {
-            Text("badge: variant x style")
+            cn.Label("badge: variant x style")
             Div(class = "row") {
                 cn.Badge("default")
                 cn.Badge("secondary", variant = "secondary")
@@ -18,13 +18,13 @@ component FeedbackWidgets {
                 cn.Badge("solid", variant = "success", style = "solid")
             }
 
-            Text("alert variants")
+            cn.Label("alert variants")
             cn.Alert("default alert")
             cn.Alert("something went wrong", variant = "destructive")
             cn.Alert("saved successfully", variant = "success")
             cn.Alert("check your input", variant = "warning")
 
-            Text("spinner sizes")
+            cn.Label("spinner sizes")
             Div(class = "row") {
                 cn.Spinner(size = "small")
                 cn.Spinner(size = "medium")

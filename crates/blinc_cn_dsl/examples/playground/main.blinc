@@ -127,34 +127,34 @@ component Playground {
             FeedbackWidgets()
             MediaWidgets()
 
-            Text("progress: value = pct (in-place)")
+            cn.Label("progress: value = pct (in-place)")
             Div(class = "row") {
                 cn.Progress(value = Play.pct, size = "medium")
             }
 
-            Text("skeleton: w / h / rounded all bound (in-place)")
+            cn.Label("skeleton: w / h / rounded all bound (in-place)")
             Div(class = "row") {
                 cn.Skeleton(w = Play.bar_w, h = Play.bar_h, rounded = Play.radius)
             }
 
-            Text("separator: opacity bound (clamped by Div::opacity)")
+            cn.Label("separator: opacity bound (clamped by Div::opacity)")
             Div(class = "row") {
                 cn.Separator(opacity = Play.fade)
             }
 
             // Derived values bind to the upstream derived itself, so
             // these track like the signal-bound props above.
-            Text("progress: computed { pct / 2 }")
+            cn.Label("progress: computed { pct / 2 }")
             Div(class = "row") {
                 cn.Progress(value = computed { Play.pct / 2.0 } : f64)
             }
 
-            Text("progress: computed over TWO signals")
+            cn.Label("progress: computed over TWO signals")
             Div(class = "row") {
                 cn.Progress(value = computed { Play.pct + Play.radius } : f64)
             }
 
-            Text("button: label AND disabled both bound (deps rebuild)")
+            cn.Label("button: label AND disabled both bound (deps rebuild)")
             Div(class = "row") {
                 cn.Button(label = Play.caption, disabled = Play.busy)
             }
