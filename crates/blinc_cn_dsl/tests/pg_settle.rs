@@ -74,13 +74,57 @@ fn playground_layout_is_stable_across_frames() {
     tree.apply_stylesheet_layout_overrides();
     tree.compute_layout(720.0, 820.0);
     let frame1 = section_tops(&tree);
+    let w1_snapshot = {
+        let mut out = Vec::new();
+        let mut stack = vec![tree.root().unwrap()];
+        while let Some(id) = stack.pop() {
+            if let Some(l) = tree.layout_tree.get_layout(id) {
+                out.push(l.size.height);
+            }
+            let kids = tree.layout_tree.children(id);
+            for c in kids.into_iter().rev() {
+                stack.push(c);
+            }
+        }
+        out
+    };
 
     let applied = tree.process_pending_subtree_rebuilds();
     tree.apply_stylesheet_layout_overrides();
     tree.compute_layout(720.0, 820.0);
     let frame2 = section_tops(&tree);
 
-    println!("PG applied={applied}\n  frame1={frame1:?}\n  frame2={frame2:?}");
+    // Which nodes actually changed? Walk in a stable order both frames
+    // and report the biggest movers.
+    fn walk(tree: &RenderTree) -> Vec<(usize, f32, usize)> {
+        let mut out = Vec::new();
+        let mut stack = vec![(tree.root().unwrap(), 0usize)];
+        let mut idx = 0usize;
+        while let Some((id, depth)) = stack.pop() {
+            if let Some(l) = tree.layout_tree.get_layout(id) {
+                out.push((idx, l.size.height, depth));
+            }
+            idx += 1;
+            let kids = tree.layout_tree.children(id);
+            for c in kids.into_iter().rev() {
+                stack.push((c, depth + 1));
+            }
+        }
+        out
+    }
+    let w2 = walk(&tree);
+    println!("PG applied={applied}");
+    println!("  frame1={frame1:?}");
+    println!("  frame2={frame2:?}");
+    for (i, h, d) in w2.iter().take(0) {
+        println!("  n{i} d{d} h{h}");
+    }
+    let w2h: Vec<f32> = w2.iter().map(|(_, h, _)| *h).collect();
+    for (i, (a, b)) in w1_snapshot.iter().zip(w2h.iter()).enumerate() {
+        if (a - b).abs() > 1.0 {
+            println!("  GREW n{i}: {a} -> {b} (depth {})", w2[i].2);
+        }
+    }
     assert_eq!(
         frame1, frame2,
         "sections must not move between frames with no input"
