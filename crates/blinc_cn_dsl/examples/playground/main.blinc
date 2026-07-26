@@ -81,6 +81,27 @@ fsm Play {
     }
 }
 
+// Structural reactivity needs the rebuild hatch. A view body renders
+// once, so an `if` on a signal picks its branch at build and never
+// swaps -- `@stateful @fsm([Play])` re-renders this body when Play
+// transitions, and only then does the branch follow `busy`.
+//
+// Deliberately its own component so the hatch is scoped: the
+// per-property bindings in `Playground` stay outside it and keep
+// patching in place instead of being rebuilt.
+component BusyPanel {
+    @stateful @fsm([Play]) view {
+        Div(class = "row") {
+            if Play.busy {
+                cn.Alert("busy - work in flight", variant = "warning")
+                cn.Spinner(size = "small")
+            } else {
+                cn.Alert("idle - press Busy", variant = "success")
+            }
+        }
+    }
+}
+
 // Wrapped in a component, matching cn_dsl_demo and reactive_dsl: fsm
 // at top level, `component X { style { } view { } }`, then
 // `view { X() }`. Root-level `style { }` is supported too -- it is
@@ -144,21 +165,7 @@ component Playground {
                 cn.Button(label = Play.caption, disabled = Play.busy)
             }
 
-            // if / else with children in both branches. This is
-            // BUILD-TIME structure, not a reactive construct: the view
-            // renders once and the tree is not rebuilt per signal, so
-            // the branch taken here is fixed at build and never swaps.
-            // Reacting to `Play.busy` by swapping subtrees needs an
-            // effect (or signal-bound structural reactivity), not `if`.
-            //
-            // Kept at this nesting depth deliberately: one container
-            // deeper still fails to lower.
-            if Play.busy {
-                cn.Alert("built while busy", variant = "warning")
-                cn.Spinner(size = "small")
-            } else {
-                cn.Alert("built while idle - this does not swap", variant = "success")
-            }
+            BusyPanel()
 
             Div(class = "row") {
                 cn.Button("Grow", on_click = || { Play.trigger("Grow") })
