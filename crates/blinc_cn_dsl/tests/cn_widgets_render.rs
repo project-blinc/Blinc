@@ -64,16 +64,21 @@ fn render_one(widget_src: &str, file: &str) -> usize {
     node_count(&dsl)
 }
 
-/// Baseline: the host Div alone is one node. Anchors every count below —
-/// without it, "1 node" reads as a broken probe rather than a dropped widget.
+/// Baseline: the DSL view root plus the host Div — two nodes. Anchors
+/// every count below; without it a low count reads as a broken probe
+/// rather than a dropped widget.
+///
+/// The view root is the element every DSL view mounts under so it
+/// inherits the viewport (`materialize_view`). It is why the baseline is
+/// two rather than one.
 #[test]
-fn empty_host_div_is_one_node() {
+fn empty_host_div_is_two_nodes() {
     init_runtime_singletons();
     let dsl = BlincDsl::new().expect("dsl init");
     blinc_cn_dsl::register_basics(&dsl).expect("register cn basics");
     dsl.compile_source(r#"view { Div(class = "host") { } }"#, "empty.blinc")
         .expect("compile");
-    assert_eq!(node_count(&dsl), 1);
+    assert_eq!(node_count(&dsl), 2);
 }
 
 #[test]

@@ -1330,7 +1330,7 @@ impl BlincDsl {
             let inner = unsafe { materialize_widget(handle) }
                 .map(|w| w.into_element_builder())
                 .unwrap_or_else(|| Box::new(blinc_layout::div::Div::new()));
-            blinc_layout::div::Div::new().child_box(inner)
+            crate::passes::view_root(inner)
         }))
     }
 

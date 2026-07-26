@@ -21,9 +21,37 @@ pub(crate) fn materialize_view(
     let ZyntaxValue::Int(handle) = value else {
         return Box::new(blinc_layout::div::Div::new());
     };
-    unsafe { materialize_widget(handle) }
+    let inner = unsafe { materialize_widget(handle) }
         .map(|w| w.into_element_builder())
-        .unwrap_or_else(|| Box::new(blinc_layout::div::Div::new()))
+        .unwrap_or_else(|| Box::new(blinc_layout::div::Div::new()));
+
+    Box::new(view_root(inner))
+}
+
+/// The root every DSL view mounts under, so it inherits the viewport.
+///
+/// The body of `view { … }` materialises as an `Auto`-sized element, and
+/// `Auto` resolves by axis: on a host's cross axis it stretches, on the
+/// main axis it shrinks to content. An inner `width: 100%` therefore saw
+/// the window or a shrink-wrapped box purely according to the host's
+/// flex direction -- the same stylesheet laying out differently for a
+/// reason invisible from the DSL.
+///
+/// `w_full` / `h_full` are percentages of the host, so they fill
+/// whichever axis they sit on, and the column direction puts width on
+/// the cross axis so the body stretches across it.
+///
+/// Used by both the plain and the `@stateful` paths; they disagreed
+/// before, which meant adding `@stateful` anywhere silently changed
+/// how the whole view sized.
+pub(crate) fn view_root(
+    inner: Box<dyn blinc_layout::div::ElementBuilder>,
+) -> blinc_layout::div::Div {
+    blinc_layout::div::div()
+        .w_full()
+        .h_full()
+        .flex_col()
+        .child_box(inner)
 }
 
 /// Detect view decorators and strip the synthetic marker calls.

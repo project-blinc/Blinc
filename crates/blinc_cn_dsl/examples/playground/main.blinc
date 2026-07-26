@@ -81,16 +81,19 @@ fsm Play {
     }
 }
 
-// Structural reactivity needs the rebuild hatch. A view body renders
-// once, so an `if` on a signal picks its branch at build and never
-// swaps -- `@stateful @fsm([Play])` re-renders this body when Play
-// transitions, and only then does the branch follow `busy`.
+// NOTE: no `@stateful` here, deliberately.
 //
-// Deliberately its own component so the hatch is scoped: the
-// per-property bindings in `Playground` stay outside it and keep
-// patching in place instead of being rebuilt.
+// Blinc's `Stateful` rebuilds only its own subtree. The DSL, though,
+// mounts exactly one of them at the view root -- `has_stateful_view` is
+// a single flag, and `view_widget` wraps the whole view when it is set
+// -- so that subtree is the entire program, and its `on_state` re-runs
+// `render_main` for all of it.
+//
+// Until the DSL mounts a `Stateful` per decorated component, adding
+// `@stateful` anywhere costs a whole-view re-render. The branch below
+// is therefore fixed at build time.
 component BusyPanel {
-    @stateful @fsm([Play]) view {
+    view {
         Div(class = "row") {
             if Play.busy {
                 cn.Alert("busy - work in flight", variant = "warning")

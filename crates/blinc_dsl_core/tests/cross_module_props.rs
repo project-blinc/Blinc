@@ -127,5 +127,5 @@ view { C() }"#,
         Some(5),
         "side effect must run"
     );
-    assert_eq!(count, 2, "root Div plus the Text child");
+    assert_eq!(count, 3, "view root + root Div + the Text child");
 }

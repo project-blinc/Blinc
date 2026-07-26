@@ -57,11 +57,9 @@ fn page_fills_the_window_width() {
         .drain_stylesheets()
         .join("\n");
     // `flex_col` mirrors the example host; see the module note.
-    let host = div()
-        .w(VIEWPORT_W)
-        .h(VIEWPORT_H)
-        .flex_col()
-        .child_box(widget);
+    // Deliberately a ROW host with no cross-axis help: the DSL view
+    // root must reach full width on its own.
+    let host = div().w(VIEWPORT_W).h(VIEWPORT_H).child_box(widget);
     let mut tree = RenderTree::from_element(&host);
     tree.set_stylesheet(blinc_layout::css_parser::Stylesheet::parse(&css).expect("dsl css parses"));
     tree.apply_stylesheet_layout_overrides();
@@ -70,6 +68,7 @@ fn page_fills_the_window_width() {
     // Deepest node reachable at depth 2 is the component's `.page` root.
     let root = tree.root().expect("root");
     let wrapper = tree.layout_tree.children(root);
+    // host -> DSL view root -> the component's `.page`
     let page = wrapper
         .first()
         .and_then(|w| tree.layout_tree.children(*w).first().copied())
@@ -82,8 +81,7 @@ fn page_fills_the_window_width() {
     assert_eq!(
         wrapper_w,
         Some(VIEWPORT_W),
-        "the DSL view root is Auto-sized; it only reaches full width \
-         because the host is a column, where Auto stretches on the cross axis"
+        "the DSL view root must inherit the viewport regardless of host direction"
     );
     assert_eq!(
         layout.size.width, VIEWPORT_W,

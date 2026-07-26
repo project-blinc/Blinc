@@ -26,9 +26,12 @@ fn compile(src: &str, name: &str) -> BlincDsl {
     dsl
 }
 
-/// Baseline: one static child Div wrapping a Text is root + Div + Text.
-/// Anchors the node counts below — without it, "1 node" reads as a broken
-/// probe rather than a dropped child.
+/// Baseline: the DSL view root + one static child Div wrapping a Text.
+/// Anchors the node counts below — without it, a low count reads as a
+/// broken probe rather than a dropped child.
+///
+/// Every count here includes the view root, the element each DSL view
+/// mounts under so it inherits the viewport (`materialize_view`).
 #[test]
 fn static_children_baseline() {
     let dsl = compile(
@@ -36,7 +39,7 @@ fn static_children_baseline() {
            view { C() }"#,
         "baseline.blinc",
     );
-    assert_eq!(node_count(&dsl), 3);
+    assert_eq!(node_count(&dsl), 4, "view root + Div + Div + Text");
 }
 
 #[test]
@@ -48,7 +51,7 @@ fn if_true_emits_children_and_if_false_gates_them() {
     );
     assert_eq!(
         node_count(&yes),
-        3,
+        4,
         "a taken branch must contribute its widgets as children"
     );
 
@@ -59,7 +62,7 @@ fn if_true_emits_children_and_if_false_gates_them() {
     );
     assert_eq!(
         node_count(&no),
-        1,
+        2,
         "an untaken branch must contribute nothing"
     );
 }
@@ -79,7 +82,7 @@ fn side_effects_inside_a_branch_still_run() {
     dsl.set_signal_i32("cf_probe_hit", 0);
     let nodes = node_count(&dsl);
     assert_eq!(dsl.get_signal_i32("cf_probe_hit"), Some(42));
-    assert_eq!(nodes, 2, "root Div + the branch's Text");
+    assert_eq!(nodes, 3, "view root + root Div + the branch's Text");
 }
 
 /// A loop emits one child per iteration.
@@ -105,7 +108,7 @@ fn loop_emits_one_child_per_iteration() {
         Some(3),
         "loop must run 3 times"
     );
-    assert_eq!(nodes, 4, "root Div + one Text per iteration");
+    assert_eq!(nodes, 5, "view root + root Div + one Text per iteration");
 }
 
 /// Same, with a nested widget-with-children as the per-iteration child.
@@ -120,7 +123,7 @@ fn loop_emits_nested_widgets_per_iteration() {
     dsl.set_signal_i32("cf_nest", 0);
     let nodes = node_count(&dsl);
     assert_eq!(dsl.get_signal_i32("cf_nest"), Some(3));
-    assert_eq!(nodes, 7, "root + 3 * (Div + Text)");
+    assert_eq!(nodes, 8, "view root + root + 3 * (Div + Text)");
 }
 
 /// A loop body with no child push runs to completion inside a widget body.
