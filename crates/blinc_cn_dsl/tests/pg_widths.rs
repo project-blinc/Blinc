@@ -16,8 +16,8 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-const VIEWPORT_W: f32 = 1400.0;
-const VIEWPORT_H: f32 = 900.0;
+const VIEWPORT_W: f32 = 720.0;
+const VIEWPORT_H: f32 = 820.0;
 
 fn init() {
     static I: std::sync::Once = std::sync::Once::new();
@@ -74,7 +74,17 @@ fn page_fills_the_window_width() {
         .first()
         .and_then(|w| tree.layout_tree.children(*w).first().copied())
         .expect("page node");
+    let wrapper_w = wrapper
+        .first()
+        .and_then(|w| tree.layout_tree.get_layout(*w))
+        .map(|l| l.size.width);
     let layout = tree.layout_tree.get_layout(page).expect("page layout");
+    assert_eq!(
+        wrapper_w,
+        Some(VIEWPORT_W),
+        "the DSL view root is Auto-sized; it only reaches full width \
+         because the host is a column, where Auto stretches on the cross axis"
+    );
     assert_eq!(
         layout.size.width, VIEWPORT_W,
         "`.page {{ width: 100% }}` must resolve against the window, not a shrunk wrapper"

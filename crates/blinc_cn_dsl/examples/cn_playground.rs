@@ -65,7 +65,6 @@ fn main() -> Result<()> {
                 .w(ctx.width)
                 .h(ctx.height)
                 .bg(ThemeState::get().colors().background)
-                .overflow_clip()
                 .child_box(dsl.view_widget())
         },
     )
