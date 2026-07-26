@@ -1,5 +1,7 @@
 //! `cn.Avatar` — circular / square profile image with fallback initials.
 
+use std::cell::OnceCell;
+
 use blinc_dsl_core::extern_widget;
 use blinc_layout::div::ElementBuilder;
 
@@ -30,9 +32,19 @@ pub struct CnAvatar {
     pub shape: String,
     pub fallback_bg: String,
     pub fallback_color: String,
+    /// Cached cn builder. Needed so the `ElementBuilder` identity
+    /// methods can return references -- they borrow from the built
+    /// widget, which a fresh `to_cn_builder()` temporary cannot
+    /// outlive. Same caching rationale as `CnButton::built`.
+    #[skip]
+    built: OnceCell<blinc_cn::AvatarBuilder>,
 }
 
 impl CnAvatar {
+    fn get_or_build(&self) -> &blinc_cn::AvatarBuilder {
+        self.built.get_or_init(|| self.to_cn_builder())
+    }
+
     fn to_cn_builder(&self) -> blinc_cn::AvatarBuilder {
         let size = match self.size.as_str() {
             "extra_small" | "xs" => blinc_cn::AvatarSize::ExtraSmall,
@@ -82,12 +94,35 @@ impl CnAvatar {
 
 impl ElementBuilder for CnAvatar {
     fn build(&self, tree: &mut blinc_layout::LayoutTree) -> blinc_layout::LayoutNodeId {
-        self.to_cn_builder().build(tree)
+        self.get_or_build().build(tree)
     }
     fn render_props(&self) -> blinc_layout::RenderProps {
-        self.to_cn_builder().render_props()
+        self.get_or_build().render_props()
     }
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
         &[]
+    }
+
+    // MUST forward — see `gotcha_element_builder_trait_forwarding`.
+    // Without these the renderer queries the wrapper for identity and
+    // interaction surface and gets the trait defaults (None / &[]),
+    // even though every layer below carries the real values. For a
+    // CSS-class-driven widget that means selectors never match, so it
+    // renders with no chrome and inherits whatever text colour is
+    // around it.
+    fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
+        self.get_or_build().event_handlers()
+    }
+
+    fn element_classes(&self) -> &[std::sync::Arc<str>] {
+        self.get_or_build().element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        self.get_or_build().element_id()
+    }
+
+    fn element_type_id(&self) -> blinc_layout::div::ElementTypeId {
+        self.get_or_build().element_type_id()
     }
 }

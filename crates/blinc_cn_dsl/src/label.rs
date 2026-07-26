@@ -60,4 +60,27 @@ impl ElementBuilder for CnLabel {
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
         self.get_or_build().children_builders()
     }
+
+    // MUST forward — see `gotcha_element_builder_trait_forwarding`.
+    // Without these the renderer queries the wrapper for identity and
+    // interaction surface and gets the trait defaults (None / &[]),
+    // even though every layer below carries the real values. For a
+    // CSS-class-driven widget that means selectors never match, so it
+    // renders with no chrome and inherits whatever text colour is
+    // around it.
+    fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
+        self.get_or_build().event_handlers()
+    }
+
+    fn element_classes(&self) -> &[std::sync::Arc<str>] {
+        self.get_or_build().element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        self.get_or_build().element_id()
+    }
+
+    fn element_type_id(&self) -> blinc_layout::div::ElementTypeId {
+        self.get_or_build().element_type_id()
+    }
 }
