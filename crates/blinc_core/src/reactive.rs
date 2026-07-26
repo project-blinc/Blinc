@@ -616,6 +616,20 @@ impl ReactiveGraph {
     }
 
     /// Get the value of a derived, computing if necessary
+    /// Read a derived's cached value without recomputing.
+    ///
+    /// For re-entrant reads: [`get_derived`](Self::get_derived) needs
+    /// `&mut self`, so a compute closure that reads another derived
+    /// cannot call it, and going through `Computed::try_get` would
+    /// re-lock the graph mutex on a thread that already holds it and
+    /// deadlock. Returns `None` when the derived has never been
+    /// computed; the value may be stale, since derived-to-derived
+    /// dependencies are not tracked (see `get_derived`).
+    pub fn peek_derived<T: Clone + 'static>(&self, derived: Derived<T>) -> Option<T> {
+        let node = self.derived.get(derived.id)?;
+        node.value.as_ref()?.downcast_ref::<T>().cloned()
+    }
+
     pub fn get_derived<T: Clone + 'static>(&mut self, derived: Derived<T>) -> Option<T> {
         // Note: For now, we don't track derived -> derived dependencies
         // This would require converting DerivedId to SignalId somehow
@@ -1379,6 +1393,13 @@ impl<T: Clone + Send + 'static> Computed<T> {
     /// `Some` unless the derived handle is invalid (i.e. the graph
     /// was rebuilt and the derived id no longer resolves).
     pub fn try_get(&self) -> Option<T> {
+        // Re-entrant path first, mirroring `Signal::try_get`: when this
+        // thread is already inside a compute (it holds the graph mutex),
+        // locking again would deadlock against itself. Reads the cached
+        // value rather than recomputing, since recompute needs `&mut`.
+        if let Some(value) = with_in_flight_graph(|g| g.peek_derived(self.derived)) {
+            return value;
+        }
         self.reactive.lock().unwrap().get_derived(self.derived)
     }
 

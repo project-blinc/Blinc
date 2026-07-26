@@ -104,10 +104,15 @@ view {
         Text("separator: opacity bound (clamped by Div::opacity)")
         cn.Separator(opacity = Play.fade)
 
-        Text("progress: computed { pct / 2 }")
+        // NOTE: derived values reach cn widgets but do not yet update
+        // live -- `get_derived` does not track derived-to-derived
+        // dependencies, so the narrowing wrapper is never marked dirty.
+        // These show their initial value. Signal-bound props above do
+        // update.
+        Text("progress: computed { pct / 2 } (initial value only)")
         cn.Progress(value = computed { Play.pct / 2.0 } : f64)
 
-        Text("progress: computed over TWO signals")
+        Text("progress: computed over TWO signals (initial value only)")
         cn.Progress(value = computed { Play.pct + Play.radius } : f64)
 
         Text("button: label AND disabled both bound (deps rebuild)")
