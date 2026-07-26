@@ -88,6 +88,21 @@ component LiveBind {
                 Div(class = "swatch", corner_radius = Ticker.radius)
                 Div(class = "swatch", bg = Ticker.hue)
             }
+
+            // Derived row. Each prop is a `computed { } : T` over the
+            // same context, so one `Step` drives both rows.
+            Text("derived")
+            Div(class = "swatch-row") {
+                // Inverse fade — the transform a raw binding can't do.
+                Div(class = "swatch", opacity = computed { 1.0 - Ticker.pct } : f64)
+                // Amplified, and clamped by the compute itself.
+                Div(class = "swatch", corner_radius = computed { Ticker.radius * 2.0 } : f64)
+                // Two sources in one value. This is the case a
+                // single-signal binding genuinely cannot express: the
+                // derived binding fires when EITHER dependency sets.
+                Div(class = "swatch",
+                    opacity = computed { Ticker.pct + Ticker.radius / 200.0 } : f64)
+            }
             Div(class = "btn-row") {
                 Div(class = "btn", on_click = || { Ticker.trigger("Step") }) {
                     Text("Step")
