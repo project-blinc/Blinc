@@ -299,6 +299,18 @@ pub struct TextAreaConfig {
     /// When true, long lines wrap to the next visual line.
     /// When false, content scrolls horizontally.
     pub wrap: bool,
+    /// Whether `width` was asked for by the caller (`w`, `cols`, `size`,
+    /// `text_size`) rather than measured after layout.
+    ///
+    /// `width` doubles as the text-wrapping width, so the layout bounds
+    /// callback keeps it in sync with the box the widget actually got.
+    /// Emitting that measured value as a fixed style width is what must
+    /// not happen: it equals the parent's available width by
+    /// construction, and a child exactly filling its parent tips taffy
+    /// into sizing the ancestor by min-content instead of its children.
+    /// Unset, the wrapper stays auto-width and stretches, which is both
+    /// correct on the first frame and immune to that edge.
+    pub width_is_explicit: bool,
 }
 
 impl Default for TextAreaConfig {
@@ -307,6 +319,7 @@ impl Default for TextAreaConfig {
         Self {
             placeholder: String::new(),
             width: 300.0,
+            width_is_explicit: false,
             height: 120.0,
             rows: None,
             cols: None,
@@ -2637,26 +2650,26 @@ impl TextArea {
             .flex_grow() // Take remaining space
             .child(text_content);
 
-        // Main content wrapper - uses explicit sizing to ensure proper intrinsic dimensions
-        // Using flex_grow/w_full causes issues with w_fit() ancestors because
-        // Percent(1.0) doesn't resolve correctly when ancestors don't have fixed sizes.
+        // Main content wrapper. Heights are explicit so the box has proper
+        // intrinsic dimensions; width is only pinned when the caller asked
+        // for one. A measured width must never be emitted here -- see
+        // `TextAreaConfig::width_is_explicit`. Left auto, the wrapper is
+        // stretched by its parent, which is what a full-width field wants
+        // and what a `w_fit()` ancestor can still shrink to fit.
         // Structure matches TextInput: outer styled container -> padding spacers -> clip container
+        let pin_width = config.width_is_explicit;
         let content_width = config.effective_width();
         let content_height = config.effective_height();
         let inner_height = content_height - padding_y * 2.0;
+        let pinned = |d: Div| if pin_width { d.w(content_width) } else { d };
 
-        div()
-            .flex_col()
-            .w(content_width)
+        pinned(div().flex_col())
             .h(content_height)
             // Top padding spacer
-            .child(div().h(padding_y).w(content_width))
+            .child(pinned(div().h(padding_y)))
             // Middle row with left/right padding and scroll content
             .child(
-                div()
-                    .flex_row()
-                    .h(inner_height)
-                    .w(content_width)
+                pinned(div().flex_row().h(inner_height))
                     // Left padding spacer
                     .child(div().w(padding_x).h(inner_height))
                     // Scroll content in the middle (no rounded corners on scroll itself)
@@ -2665,7 +2678,7 @@ impl TextArea {
                     .child(div().w(padding_x).h(inner_height)),
             )
             // Bottom padding spacer
-            .child(div().h(padding_y).w(content_width))
+            .child(pinned(div().h(padding_y)))
     }
 
     /// Set placeholder text
@@ -2715,6 +2728,7 @@ impl TextArea {
         let width = {
             let mut cfg = self.config.lock().unwrap();
             cfg.cols = Some(cols);
+            cfg.width_is_explicit = true;
             cfg.effective_width()
         };
         self.inner = std::mem::take(&mut self.inner).w(width);
@@ -2727,6 +2741,7 @@ impl TextArea {
             let mut cfg = self.config.lock().unwrap();
             cfg.rows = Some(rows);
             cfg.cols = Some(cols);
+            cfg.width_is_explicit = true;
             (cfg.effective_width(), cfg.effective_height())
         };
         self.inner = std::mem::take(&mut self.inner).w(width).h(height);
@@ -2782,6 +2797,7 @@ impl TextArea {
             let mut cfg = self.config.lock().unwrap();
             cfg.width = px;
             cfg.cols = None;
+            cfg.width_is_explicit = true;
         }
         self.inner = std::mem::take(&mut self.inner).w(px);
         self
@@ -2805,6 +2821,7 @@ impl TextArea {
             cfg.height = h;
             cfg.cols = None;
             cfg.rows = None;
+            cfg.width_is_explicit = true;
         }
         self.inner = std::mem::take(&mut self.inner).size(w, h);
         self.update_scroll_dimensions();

@@ -28,6 +28,8 @@ fn init() {
     blinc_core::BlincContextState::get().set_viewport_size(720.0, 820.0);
 }
 
+/// Top edge of every section, which is what visibly jumps when a widget
+/// settles a frame late.
 fn section_tops(tree: &RenderTree) -> Vec<f32> {
     let root = tree.root().unwrap();
     let page = tree.layout_tree.children(root)[0];
@@ -40,24 +42,17 @@ fn section_tops(tree: &RenderTree) -> Vec<f32> {
         .collect()
 }
 
-/// REPRODUCES AN OPEN BUG — ignored so the suite stays green.
+/// A widget that measures itself and rebuilds must land on the layout it
+/// already had.
 ///
-/// With no input, `FormWidgets` grows ~410px on the second frame and
-/// every section below shifts down. `applied=true` shows the first
-/// frame queued a subtree rebuild on its own, and its effect only lands
-/// on frame 2.
-///
-/// The Stateful-backed widgets (cn.Input / cn.Textarea) are the
-/// suspects: they contribute little on frame 1 and their real height
-/// only after the queued rebuild. Remove them from `forms.blinc` and
-/// the growth should go -- that is the next step, then finding why
-/// their first build under-reports.
-///
-/// Run with `--ignored` while working on it.
+/// The textarea used to write its measured width back as a fixed style
+/// width. That value equals the parent's available width by
+/// construction, and a child exactly filling its parent makes taffy size
+/// the ancestor by min-content: the enclosing section jumped 519 -> 929
+/// on the second frame and every section below it shifted down, visibly,
+/// during launch.
 #[test]
-#[ignore = "open: playground layout settles on the second frame"]
 fn playground_layout_is_stable_across_frames() {
-    let _ = tracing_subscriber::fmt::try_init();
     init();
     let root_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/playground");
     let dsl = BlincDsl::new().unwrap();
@@ -74,83 +69,14 @@ fn playground_layout_is_stable_across_frames() {
     tree.apply_stylesheet_layout_overrides();
     tree.compute_layout(720.0, 820.0);
     let frame1 = section_tops(&tree);
-    let w1_snapshot = {
-        let mut out = Vec::new();
-        let mut stack = vec![tree.root().unwrap()];
-        while let Some(id) = stack.pop() {
-            if let Some(l) = tree.layout_tree.get_layout(id) {
-                out.push(l.size.height);
-            }
-            let kids = tree.layout_tree.children(id);
-            for c in kids.into_iter().rev() {
-                stack.push(c);
-            }
-        }
-        out
-    };
 
-    let applied = tree.process_pending_subtree_rebuilds();
+    // A first frame that queues its own rebuild is expected: widgets
+    // learn their measured size here. Applying it must not move anything.
+    tree.process_pending_subtree_rebuilds();
     tree.apply_stylesheet_layout_overrides();
     tree.compute_layout(720.0, 820.0);
     let frame2 = section_tops(&tree);
 
-    // Which nodes actually changed? Walk in a stable order both frames
-    // and report the biggest movers.
-    fn walk(tree: &RenderTree) -> Vec<(usize, f32, usize)> {
-        let mut out = Vec::new();
-        let mut stack = vec![(tree.root().unwrap(), 0usize)];
-        let mut idx = 0usize;
-        while let Some((id, depth)) = stack.pop() {
-            if let Some(l) = tree.layout_tree.get_layout(id) {
-                out.push((idx, l.size.height, depth));
-            }
-            idx += 1;
-            let kids = tree.layout_tree.children(id);
-            for c in kids.into_iter().rev() {
-                stack.push((c, depth + 1));
-            }
-        }
-        out
-    }
-    let w2 = walk(&tree);
-    println!("PG applied={applied}");
-    println!("  frame1={frame1:?}");
-    println!("  frame2={frame2:?}");
-    for (i, h, d) in w2.iter().take(0) {
-        println!("  n{i} d{d} h{h}");
-    }
-    let w2h: Vec<f32> = w2.iter().map(|(_, h, _)| *h).collect();
-    for (i, (a, b)) in w1_snapshot.iter().zip(w2h.iter()).enumerate() {
-        if (a - b).abs() > 1.0 {
-            println!("  GREW n{i}: {a} -> {b} (depth {})", w2[i].2);
-            // Is this container bounded, or does it size to content?
-            let mut stack = vec![tree.root().unwrap()];
-            let mut idx = 0usize;
-            while let Some(id) = stack.pop() {
-                if idx == i {
-                    if let Some(st) = tree.layout_tree.get_style(id) {
-                        println!(
-                            "    style: size={:?} min={:?} max={:?} dir={:?} overflow={:?}",
-                            st.size, st.min_size, st.max_size, st.flex_direction, st.overflow,
-                        );
-                    }
-                    let kids = tree.layout_tree.children(id);
-                    let sum: f32 = kids
-                        .iter()
-                        .filter_map(|c| tree.layout_tree.get_layout(*c))
-                        .map(|l| l.size.height)
-                        .sum();
-                    println!("    children={} sum_h={sum}", kids.len());
-                    break;
-                }
-                idx += 1;
-                let kids = tree.layout_tree.children(id);
-                for c in kids.into_iter().rev() {
-                    stack.push(c);
-                }
-            }
-        }
-    }
     assert_eq!(
         frame1, frame2,
         "sections must not move between frames with no input"

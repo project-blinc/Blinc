@@ -314,6 +314,21 @@ impl LayoutTree {
             .collect()
     }
 
+    /// Number of children taffy actually lays out under `parent`.
+    ///
+    /// [`Self::children`] drops any child missing from `reverse_map`, so a
+    /// node detached from the id maps but still attached in taffy is
+    /// invisible to every tree walk while still contributing to its
+    /// parent's size. Comparing this against `children().len()` is how
+    /// that is detected.
+    pub fn taffy_child_count(&self, parent: LayoutNodeId) -> usize {
+        self.node_map
+            .get(parent)
+            .and_then(|&taffy_node| self.taffy.children(taffy_node).ok())
+            .map(|c| c.len())
+            .unwrap_or(0)
+    }
+
     /// Get computed layout as ElementBounds with parent offset
     pub fn get_bounds(&self, id: LayoutNodeId, parent_offset: (f32, f32)) -> Option<ElementBounds> {
         self.get_layout(id)
