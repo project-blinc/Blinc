@@ -1129,6 +1129,16 @@ pub struct State<T> {
     dirty_flag: DirtyFlag,
     /// Optional callback for notifying stateful elements of signal changes
     stateful_deps_callback: Option<StatefulDepsCallback>,
+    /// Optional read adapter, for a `State<T>` that subscribes to a
+    /// signal of a *different* stored type.
+    ///
+    /// `signal` still carries the source signal's id, so binding
+    /// registration and `deps()` subscribe to the right thing; only the
+    /// read is redirected. Used to expose an `f64` signal as a
+    /// `State<f32>` for the f32-backed layout properties, without
+    /// wrapping it in a derived -- a derived source would register a
+    /// derived binding, which does not refresh those properties.
+    read_adapter: Option<Arc<dyn Fn() -> Option<T> + Send + Sync>>,
 }
 
 impl<T: Clone + Send + 'static> State<T> {
@@ -1139,6 +1149,24 @@ impl<T: Clone + Send + 'static> State<T> {
             reactive,
             dirty_flag,
             stateful_deps_callback: None,
+            read_adapter: None,
+        }
+    }
+
+    /// Build a `State<T>` that subscribes to `source` but reads through
+    /// `read`. See [`State::read_adapter`].
+    pub fn mapped(
+        source: SignalId,
+        read: Arc<dyn Fn() -> Option<T> + Send + Sync>,
+        reactive: SharedReactiveGraph,
+        dirty_flag: DirtyFlag,
+    ) -> Self {
+        Self {
+            signal: Signal::from_id(source),
+            reactive,
+            dirty_flag,
+            stateful_deps_callback: None,
+            read_adapter: Some(read),
         }
     }
 
@@ -1154,6 +1182,7 @@ impl<T: Clone + Send + 'static> State<T> {
             reactive,
             dirty_flag,
             stateful_deps_callback: Some(callback),
+            read_adapter: None,
         }
     }
 
@@ -1162,6 +1191,9 @@ impl<T: Clone + Send + 'static> State<T> {
     where
         T: Default,
     {
+        if let Some(read) = &self.read_adapter {
+            return read().unwrap_or_default();
+        }
         self.reactive
             .lock()
             .unwrap()
@@ -1171,6 +1203,9 @@ impl<T: Clone + Send + 'static> State<T> {
 
     /// Get the current value, returning None if not found
     pub fn try_get(&self) -> Option<T> {
+        if let Some(read) = &self.read_adapter {
+            return read();
+        }
         self.reactive.lock().unwrap().get(self.signal)
     }
 

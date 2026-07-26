@@ -135,22 +135,30 @@ impl<T> IntoReactive<T> for T {
     }
 }
 
-/// Build a `Reactive<f32>` from an f64 source, narrowing on every read.
+/// Expose an f64 signal as a `Reactive<f32>` on the **signal** path.
 ///
-/// A `Const` casts once. Bound and computed sources can't: their value
-/// changes over time, so the cast has to happen per read or the
-/// binding would freeze at its build-time value. Those arms wrap the
-/// source in a derived node that narrows as it reads.
-/// Note the derived node reads through the process-global graph, so
-/// the source signal must live there -- which every `use_state` /
-/// DSL-declared signal does. A signal minted on a throwaway local
-/// graph won't resolve and reads fall back to `0.0`.
-fn narrow_f64_signal(sig: Signal<f64>) -> Reactive<f32> {
-    Reactive::Computed(blinc_core::reactive::computed(move |g| {
-        g.get(sig).unwrap_or(0.0) as f32
-    }))
+/// Returns `Bound`, not `Computed`, and that distinction is the whole
+/// point. A `Bound` source registers against its `SignalId` and the
+/// binding fires on every set. A `Computed` source registers a derived
+/// binding, and derived bindings do not refresh the Div-backed
+/// properties -- the value would render once and then freeze while
+/// still compiling cleanly.
+///
+/// The returned `State<f32>` keeps the *source* signal's id, so
+/// subscription and `deps()` are unchanged, and narrows only on read.
+fn bind_f64_as_f32(sig: Signal<f64>) -> Reactive<f32> {
+    Reactive::Bound(State::mapped(
+        sig.id(),
+        Arc::new(move || sig.try_get().map(|v| v as f32)),
+        blinc_core::reactive::global_graph(),
+        blinc_core::reactive::global_dirty_flag(),
+    ))
 }
 
+/// Narrow a `Computed<f64>`. Unlike the signal case this stays a
+/// derived: there is no signal id to subscribe to, only a `DerivedId`.
+/// Derived-backed props show their build-time value until
+/// derived-to-derived dependency tracking lands; see `get_derived`.
 fn narrow_f64_computed(c: Computed<f64>) -> Reactive<f32> {
     Reactive::Computed(blinc_core::reactive::computed(move |_| {
         c.try_get().unwrap_or(0.0) as f32
@@ -178,25 +186,25 @@ impl IntoReactive<f32> for f64 {
 
 impl IntoReactive<f32> for &State<f64> {
     fn into_reactive(self) -> Reactive<f32> {
-        narrow_f64_signal(Signal::from_id(self.signal_id()))
+        bind_f64_as_f32(Signal::from_id(self.signal_id()))
     }
 }
 
 impl IntoReactive<f32> for State<f64> {
     fn into_reactive(self) -> Reactive<f32> {
-        narrow_f64_signal(Signal::from_id(self.signal_id()))
+        bind_f64_as_f32(Signal::from_id(self.signal_id()))
     }
 }
 
 impl IntoReactive<f32> for Signal<f64> {
     fn into_reactive(self) -> Reactive<f32> {
-        narrow_f64_signal(self)
+        bind_f64_as_f32(self)
     }
 }
 
 impl IntoReactive<f32> for &Signal<f64> {
     fn into_reactive(self) -> Reactive<f32> {
-        narrow_f64_signal(*self)
+        bind_f64_as_f32(*self)
     }
 }
 
@@ -1853,6 +1861,42 @@ mod tests {
             ));
         }
 
+        /// The regression that mattered: a bound f64 must reach the
+        /// builder as `Bound`, not `Computed`. A `Bound` source keys its
+        /// binding off a `SignalId` and fires on every set; a `Computed`
+        /// source registers a derived binding, which does not refresh
+        /// these properties -- so the prop compiles, renders once, and
+        /// then silently freezes.
+        #[test]
+        fn bound_f64_uses_the_signal_path_not_a_derived() {
+            let s = state_f64(0.25);
+            let r: Reactive<f32> = (&s).into_reactive();
+            let Reactive::Bound(mapped) = r else {
+                panic!("a bound f64 must stay on the signal path");
+            };
+            assert_eq!(
+                mapped.signal_id(),
+                s.signal_id(),
+                "must subscribe to the SOURCE signal, or sets never reach it"
+            );
+        }
+
+        /// Reads narrow live rather than snapshotting at build.
+        #[test]
+        fn mapped_f64_reads_follow_later_sets() {
+            let s = state_f64(0.25);
+            let Reactive::Bound(mapped) = (&s).into_reactive() else {
+                panic!("expected Bound");
+            };
+            assert_eq!(mapped.try_get(), Some(0.25_f32));
+            s.set(0.75);
+            assert_eq!(
+                mapped.try_get(),
+                Some(0.75_f32),
+                "the adapter must re-read the source, not cache"
+            );
+        }
+
         #[test]
         fn bound_f64_stays_reactive() {
             let s = state_f64(0.25);
@@ -1860,22 +1904,6 @@ mod tests {
             assert!(
                 !matches!(r, Reactive::Const(_)),
                 "a bound f64 must not collapse to a build-time constant"
-            );
-        }
-
-        #[test]
-        fn bound_f64_re_reads_rather_than_freezing() {
-            let s = state_f64(0.25);
-            let r: Reactive<f32> = (&s).into_reactive();
-            let Reactive::Computed(c) = r else {
-                panic!("a bound f64 should narrow to a derived node");
-            };
-            assert_eq!(c.try_get(), Some(0.25_f32));
-            s.set(0.75);
-            assert_eq!(
-                c.try_get(),
-                Some(0.75_f32),
-                "the narrowing must re-read on every update"
             );
         }
 
