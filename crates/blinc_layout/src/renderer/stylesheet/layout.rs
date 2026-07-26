@@ -890,14 +890,16 @@ impl RenderTree {
     pub fn auto_create_css_scroll_physics(&mut self) {
         use crate::scroll::{Scroll, ScrollConfig, ScrollDirection, ScrollPhysics};
 
-        // Collect nodes that need scroll physics
-        let all_ids = self.element_registry.all_ids();
+        // Walk the whole tree, not `element_registry.all_ids()`: that
+        // enumerates only elements carrying an explicit `id`, so a
+        // class-only rule (`.page { overflow: scroll }`) was never
+        // considered and CSS-driven scrolling silently worked for
+        // `#id` selectors alone.
         let mut needs_physics: Vec<(LayoutNodeId, ScrollDirection)> = Vec::new();
+        let mut stack: Vec<LayoutNodeId> = self.root().into_iter().collect();
 
-        for id in &all_ids {
-            let Some(node_id) = self.element_registry.get(id) else {
-                continue;
-            };
+        while let Some(node_id) = stack.pop() {
+            stack.extend(self.layout_tree.children(node_id));
             // Skip if already has scroll physics (from Scroll widget or Div builder)
             if self.scroll_physics.contains_key(&node_id) {
                 continue;
@@ -940,5 +942,40 @@ impl RenderTree {
             let stable_id = self.stable_id_or_warn(node_id);
             self.handler_registry.register(stable_id, handlers);
         }
+    }
+}
+
+#[cfg(test)]
+mod css_scroll_tests {
+    use crate::div::div;
+    use crate::renderer::RenderTree;
+
+    /// CSS-driven scrolling must work for a class selector, not only
+    /// for `#id`.
+    ///
+    /// `auto_create_css_scroll_physics` used to enumerate
+    /// `element_registry.all_ids()`, which lists only elements carrying
+    /// an explicit `id`. A `.page { overflow: scroll }` rule therefore
+    /// set taffy's overflow but never got scroll physics, so the
+    /// element clipped its content and refused to scroll -- with no
+    /// warning, and while `#page` on the same markup worked.
+    #[test]
+    fn class_selector_overflow_scroll_gets_physics() {
+        let el = div()
+            .class("page")
+            .w(200.0)
+            .h(100.0)
+            .child(div().w(200.0).h(1000.0));
+        let mut tree = RenderTree::from_element(&el);
+        tree.set_stylesheet(
+            crate::css_parser::Stylesheet::parse(".page { overflow: scroll }")
+                .expect("stylesheet parses"),
+        );
+        tree.apply_stylesheet_layout_overrides();
+
+        assert!(
+            !tree.scroll_physics.is_empty(),
+            "a class-selected overflow:scroll element must get scroll physics"
+        );
     }
 }
