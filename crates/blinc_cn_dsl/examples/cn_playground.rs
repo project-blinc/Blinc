@@ -67,6 +67,7 @@ fn main() -> Result<()> {
                 .bg(Color::rgb(0.04, 0.06, 0.1))
                 .items_center()
                 .justify_center()
+                .overflow_scroll()
                 .child_box(dsl.view_widget())
         },
     )
