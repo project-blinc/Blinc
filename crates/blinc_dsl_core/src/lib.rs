@@ -1282,17 +1282,28 @@ impl BlincDsl {
             if explicit_fsms.is_empty() {
                 signals.clone()
             } else {
-                // An explicitly bound FSM already drives this stateful
-                // through its shared state. Subscribing to every declared
-                // signal on top of that double-fires: the FSM's own
-                // context fields ARE declared signals
-                // (`__fsm_ctx_<Fsm>_<field>`), so one transition notified
-                // twice and re-rendered twice.
+                // Narrow to the bound FSM's OWN context fields.
                 //
-                // `@stateful([...])` with an explicit list still means
-                // exactly that list, so nothing is lost -- this only
-                // narrows the bare `@stateful @fsm([X])` case to X.
-                Vec::new()
+                // The shared state alone is not enough: a self
+                // transition (`Idle -> Idle`, the common shape for an
+                // action that only mutates context) leaves the state
+                // value unchanged, so a stateful bound to it never
+                // fires. The context writes are what actually signal
+                // the change, so they have to be in the deps.
+                //
+                // Subscribing to EVERY declared signal was the other
+                // extreme: unrelated signals re-rendered this stateful,
+                // and the FSM's own fields notified alongside the shared
+                // state, so one transition rendered twice.
+                let prefixes: Vec<String> = explicit_fsms
+                    .iter()
+                    .map(|f| crate::fsm_registry::mangle_ctx_signal(f, ""))
+                    .collect();
+                signals
+                    .iter()
+                    .filter(|(n, _)| prefixes.iter().any(|p| n.starts_with(p.as_str())))
+                    .cloned()
+                    .collect()
             }
         } else {
             explicit_deps
