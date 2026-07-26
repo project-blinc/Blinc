@@ -59,6 +59,7 @@ fn css_driven_widgets_expose_their_classes() {
         (r#"view { cn.Badge("x", variant = "success") }"#, "cn-badge"),
         (r#"view { cn.Alert("x", variant = "warning") }"#, "cn-alert"),
         (r#"view { cn.Button("x") }"#, "cn-button"),
+        (r#"view { cn.Card { Text("x") } }"#, "cn-card"),
     ] {
         let classes = classes_for(src, "probe.blinc");
         assert!(

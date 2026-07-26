@@ -1,5 +1,7 @@
 //! `cn.Card` — surface container with `cn-card` CSS class + shadow.
 
+use std::cell::OnceCell;
+
 use blinc_dsl_core::extern_widget;
 use blinc_layout::div::ElementBuilder;
 
@@ -31,6 +33,19 @@ use blinc_layout::div::ElementBuilder;
 pub struct CnCard {
     #[children]
     pub children: Vec<Box<dyn ElementBuilder>>,
+    /// Cached card shell. Built once so `build()` and `render_props()`
+    /// describe the same instance, and so the identity methods can
+    /// return references -- they borrow from the shell, which a fresh
+    /// `Card::new()` temporary cannot outlive. Same rationale as
+    /// `CnButton::built`.
+    #[skip]
+    shell: OnceCell<blinc_cn::Card>,
+}
+
+impl CnCard {
+    fn get_or_build(&self) -> &blinc_cn::Card {
+        self.shell.get_or_init(blinc_cn::Card::new)
+    }
 }
 
 impl ElementBuilder for CnCard {
@@ -44,7 +59,7 @@ impl ElementBuilder for CnCard {
         // shared refs. Manual tree.add_child has the same observable
         // result — every child's `build()` runs once and its node
         // ends up parented to the card.
-        let card_node = blinc_cn::Card::new().build(tree);
+        let card_node = self.get_or_build().build(tree);
         for child in &self.children {
             let child_node = child.build(tree);
             tree.add_child(card_node, child_node);
@@ -54,12 +69,34 @@ impl ElementBuilder for CnCard {
 
     fn render_props(&self) -> blinc_layout::RenderProps {
         // RenderProps is element-local — children don't contribute,
-        // so a fresh `cn::Card::new()` carries exactly the visual
-        // state this wrapper renders.
-        blinc_cn::Card::new().render_props()
+        // so the card shell carries exactly the visual state this
+        // wrapper renders.
+        self.get_or_build().render_props()
     }
 
+    // The DSL body children, not the shell's: `build()` parents these
+    // to the card node directly, so these are the builders that
+    // correspond to its layout children.
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
         &self.children
+    }
+
+    // MUST forward — see `gotcha_element_builder_trait_forwarding`.
+    // Without `element_classes` the `cn-card` selector never matches
+    // and the card renders with no surface, border or shadow.
+    fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
+        self.get_or_build().event_handlers()
+    }
+
+    fn element_classes(&self) -> &[std::sync::Arc<str>] {
+        self.get_or_build().element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        self.get_or_build().element_id()
+    }
+
+    fn element_type_id(&self) -> blinc_layout::div::ElementTypeId {
+        self.get_or_build().element_type_id()
     }
 }

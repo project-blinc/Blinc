@@ -66,8 +66,13 @@ fn main() -> Result<()> {
                 .h(ctx.height)
                 .bg(Color::rgb(0.04, 0.06, 0.1))
                 .items_center()
-                .justify_center()
-                .overflow_scroll()
+                // Not `justify_center`: centring a child taller than the
+                // viewport pins it around the midpoint, so the top and
+                // bottom are unreachable and the wheel has nowhere to go.
+                // Content flows from the top and this root is the single
+                // scroll container.
+                .justify_start()
+                .overflow_y_scroll()
                 .child_box(dsl.view_widget())
         },
     )
