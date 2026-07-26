@@ -12,6 +12,9 @@ rust-version.workspace = true
 crate-type = ["lib"]
 
 [dev-dependencies]
+# Animated widgets (Spinner, Progress) call `get_scheduler()` at build
+# time; render tests install a global scheduler the way an app would.
+blinc_animation = { path = "../blinc_animation", version = "0.5.1" }
 # `tracing_subscriber::fmt::try_init` for the integration tests.
 tracing-subscriber.workspace = true
 # Renderer surface + ZyntaxValue used to materialise widgets through
