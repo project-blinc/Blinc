@@ -92,12 +92,13 @@ fsm Play {
 //
 // The condition below reads a value, so it takes `.get()`.
 //
-// It is evaluated once, at build: swapping the branch is structural,
-// and structure is the one thing a redraw cannot change. Everything
-// else in this playground is a redraw -- bound props patch in place,
-// and the spinners animate continuously without any rebuild.
+// Swapping a branch is structural, which a redraw cannot do, so this
+// component carries `@stateful @fsm([Play])` -- the same shape
+// counter_dsl uses. Everything else in the playground is a redraw:
+// bound props patch in place, and the spinners animate continuously
+// with nothing rebuilt.
 component BusyPanel {
-    view {
+    @stateful @fsm([Play]) view {
         Div(class = "row") {
             if Play.busy.get() {
                 cn.Alert("busy - work in flight", variant = "warning")
