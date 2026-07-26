@@ -399,6 +399,14 @@ impl Button {
         // The layout button handles bg, rounded, padding, etc.
         let label = current(&config.label);
         let label_dep = dep_signal(&config.label);
+        // The state callback re-reads the label rather than closing over
+        // this snapshot. A `deps()` notification refreshes the existing
+        // Stateful in place -- the tree is not rebuilt -- so a captured
+        // String would keep rendering the build-time text and the
+        // container would keep measuring it. The snapshot above stays
+        // for the structural icon-only decision, which cannot change
+        // without a rebuild anyway.
+        let label_src = clone_reactive(&config.label);
         let icon = config.icon.clone();
         let icon_position = config.icon_position;
         let custom_icon_size = config.icon_size;
@@ -469,6 +477,7 @@ impl Button {
                 }
             } else {
                 // With label: use content wrapper for flex_row layout
+                let label = current(&label_src);
                 let label_text = text(&label)
                     .size(font_size)
                     .color(fg)

@@ -29,6 +29,7 @@ use std::sync::atomic::AtomicBool;
 fn init() {
     static I: std::sync::Once = std::sync::Once::new();
     I.call_once(|| {
+        let _ = tracing_subscriber::fmt::try_init();
         blinc_theme::ThemeState::init_default();
         if !blinc_animation::is_scheduler_initialized() {
             let s = blinc_animation::AnimationScheduler::new();
@@ -181,5 +182,70 @@ fn successive_renders_track_the_current_label() {
     assert!(
         (third - first).abs() < 1.0,
         "back to the short label, the width must return: {first} -> {second} -> {third}"
+    );
+}
+
+/// Drive the real path: a bound label changed through the reactive
+/// graph, refreshing the existing Stateful in place.
+///
+/// This is the shape the app uses and the one the tests above do not
+/// cover. `set()` notifies the stateful deps, the Stateful refreshes
+/// its subtree without the tree being rebuilt, and the next layout pass
+/// must reflect the new label.
+#[test]
+fn bound_label_resizes_on_signal_set() {
+    use blinc_core::reactive::State;
+    init();
+
+    // Wire the stateful-deps notifier the way the windowed / web hosts
+    // do; without it `Signal::set` notifies nobody and no refresh runs.
+    static NOTIFIER: std::sync::Once = std::sync::Once::new();
+    NOTIFIER.call_once(|| {
+        blinc_core::reactive::set_stateful_deps_notifier(|ids| {
+            blinc_layout::check_stateful_deps(ids);
+        });
+    });
+
+    let label = State::new(
+        blinc_core::reactive::signal::<String>("Save".to_string()),
+        blinc_core::reactive::global_graph(),
+        blinc_core::reactive::global_dirty_flag(),
+    );
+
+    let host = div().w(800.0).h(200.0).child(button(&label));
+    let mut tree = blinc_layout::renderer::RenderTree::from_element(&host);
+    tree.apply_stylesheet_layout_overrides();
+    tree.compute_layout(800.0, 200.0);
+
+    let root = tree.root().expect("root");
+    let btn = tree.layout_tree.children(root)[0];
+    let width = |t: &blinc_layout::renderer::RenderTree| {
+        t.layout_tree
+            .get_layout(btn)
+            .map(|l| l.size.width)
+            .unwrap_or(0.0)
+    };
+
+    let before = width(&tree);
+
+    // Write through the Signal, as the DSL host does. `State::set`
+    // notifies statefuls only via a per-instance callback that
+    // `State::new` does not install; `Signal::set` fires the global
+    // stateful-deps notifier.
+    blinc_core::reactive::Signal::<String>::from_id(label.signal_id()).set("Saving...".to_string());
+
+    // Next frame: the refresh queues a subtree rebuild, the host
+    // applies it, then layout runs again on the SAME tree.
+    let applied = tree.process_pending_subtree_rebuilds();
+    tree.apply_stylesheet_layout_overrides();
+    tree.compute_layout(800.0, 200.0);
+    let after = width(&tree);
+    println!("APPLIED rebuilds={applied}");
+
+    println!("BOUND before={before} after={after}");
+    assert!(
+        after > before,
+        "a bound label that grew must widen its button in the next layout \
+         pass: {before} -> {after}"
     );
 }

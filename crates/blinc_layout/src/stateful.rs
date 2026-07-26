@@ -3337,6 +3337,29 @@ impl<S: StateTransitions> Stateful<S> {
             let mut inner = self.shared_state.lock().unwrap();
             inner.deps = signals.to_vec();
         }
+        // Register here too, not only in `on_state`.
+        //
+        // `on_state` registers from whatever `shared.deps` holds at that
+        // moment, so a builder that sets its callback before its deps --
+        // `.on_state(...)` then `.deps(...)`, which reads naturally and
+        // is what cn Button does -- registered an empty list and was
+        // skipped by the `is_empty` guard. The signals were stored but
+        // no subscription existed, so `check_stateful_deps` never
+        // matched and a bound prop never refreshed.
+        //
+        // Keyed by the shared-state pointer, so registering twice for
+        // one Button just overwrites the same entry.
+        if !signals.is_empty() {
+            let stateful_key = Arc::as_ptr(&self.shared_state) as u64;
+            let shared_for_refresh = Arc::clone(&self.shared_state);
+            register_stateful_deps(
+                stateful_key,
+                signals.to_vec(),
+                Arc::new(move || {
+                    refresh_stateful(&shared_for_refresh);
+                }),
+            );
+        }
         self
     }
 

@@ -28,3 +28,6 @@ taffy.workspace = true
 
 # Logging
 tracing.workspace = true
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }
