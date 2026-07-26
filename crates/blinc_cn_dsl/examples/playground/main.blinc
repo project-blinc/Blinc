@@ -162,7 +162,13 @@ component Playground {
                 cn.Progress(value = computed { Play.pct + Play.radius } : f64)
             }
 
-            cn.Label("button: label AND disabled both bound (deps rebuild)")
+            cn.Label("toggles: two-way bound to Play.busy")
+        Div(class = "row") {
+            cn.Switch(checked = Play.busy, label = "busy")
+            cn.Checkbox(checked = Play.busy, label = "busy")
+        }
+
+        cn.Label("button: label AND disabled both bound (deps rebuild)")
             Div(class = "row") {
                 cn.Button(label = Play.caption, disabled = Play.busy)
             }

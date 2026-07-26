@@ -70,7 +70,15 @@ impl CnInput {
         };
 
         let data = text_input_data_keyed(&self.key);
-        let mut i = blinc_cn::input(&data).size(size).input_type(kind);
+        let mut i = blinc_cn::input(&data).size(size);
+        // `password()` sets the masking flag AND the input type;
+        // `input_type(Password)` alone types the field without masking
+        // it, so the secret renders in clear text.
+        if self.kind == "password" {
+            i = i.password();
+        } else {
+            i = i.input_type(kind);
+        }
         if !self.placeholder.is_empty() {
             i = i.placeholder(self.placeholder.clone());
         }

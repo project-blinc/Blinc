@@ -65,6 +65,10 @@ pub use blinc_dsl_macro::extern_widget;
 // canonical definition lives in `blinc_runtime::reactive_value`
 // so the JIT and AOT compile paths share one enum.
 pub use blinc_runtime::Reactive;
+/// Stable per-call-site id, pushed around every widget call by the
+/// lowering. Extern widgets use it to key per-instance state without
+/// asking the DSL author for a name.
+pub use widget_ffi::current_call_id;
 pub use widget_ffi::{
     __extern_widget_internals, BlincStructFieldValue, BlincStructValue, ExternWidget,
     ExternWidgetSpec, RenderPropsOverlay, Styled, WidgetBox, materialize_overlay,

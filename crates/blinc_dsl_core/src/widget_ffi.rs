@@ -99,7 +99,7 @@ pub extern "C" fn blinc_dsl_current_call_id() -> u64 {
 /// commit can switch `dsl_state_key` over without touching the FFI
 /// surface.
 #[allow(dead_code)]
-pub(crate) fn current_call_id() -> u64 {
+pub fn current_call_id() -> u64 {
     CALL_ID_STACK.with(|s| s.borrow().last().copied().unwrap_or(0))
 }
 

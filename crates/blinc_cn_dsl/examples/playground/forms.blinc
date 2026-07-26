@@ -29,6 +29,24 @@ component FormWidgets {
                 cn.Button("disabled", disabled = true)
             }
 
+            cn.Label("text fields: `key` is what persists your typing")
+            Div(class = "row") {
+                cn.Input(key = "pg_user", label = "User", placeholder = "username")
+                cn.Input(
+                    key = "pg_pw",
+                    label = "Password",
+                    placeholder = "secret",
+                    kind = "password"
+                )
+            }
+            cn.Textarea(key = "pg_bio", label = "Bio", placeholder = "a few words", rows = 3)
+
+            cn.Label("kbd")
+            Div(class = "row") {
+                cn.Kbd("Ctrl", size = "small")
+                cn.Kbd("K", size = "small")
+            }
+
             cn.Label("label: size, required, disabled")
             Div(class = "row") {
                 cn.Label("small", size = "small")

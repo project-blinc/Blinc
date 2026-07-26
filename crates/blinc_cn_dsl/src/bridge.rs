@@ -40,7 +40,21 @@ pub fn bool_state(r: &Reactive<bool>) -> blinc_core::reactive::State<bool> {
         // from then on.
         Reactive::Computed(c) => signal::<bool>(c.try_get().unwrap_or(false)),
     };
-    State::new(sig, global_graph(), global_dirty_flag())
+    // `with_stateful_callback`, not `new`: `State::set` notifies ONLY
+    // through this per-instance callback -- unlike `Signal::set`, it
+    // never reaches the global stateful-deps notifier. A widget that
+    // owns its State (switch, checkbox) writes through `State::set`, so
+    // without this a toggle updated the value and told nobody: no
+    // stateful refreshed, nothing queued a rebuild, and the frame only
+    // repainted when some unrelated event forced one.
+    State::with_stateful_callback(
+        sig,
+        global_graph(),
+        global_dirty_flag(),
+        std::sync::Arc::new(|ids: &[blinc_core::reactive::SignalId]| {
+            blinc_layout::check_stateful_deps(ids);
+        }),
+    )
 }
 
 /// Per-key `SharedTextInputData`, so a DSL text field keeps what the
@@ -91,4 +105,50 @@ pub fn text_area_state_keyed(key: &str) -> blinc_layout::widgets::text_area::Sha
         .entry(key.to_string())
         .or_insert_with(text_area_state)
         .clone()
+}
+
+/// The DSL call-site id, captured when the widget struct is built.
+///
+/// `current_call_id()` only reads correctly *inside* the
+/// `__push_call_id__` / `__pop_call_id__` bracket the lowering emits
+/// around each call — i.e. while the FFI constructs the struct. A
+/// widget's `to_cn_widget()` runs lazily at first build, long after the
+/// bracket popped, so reading it there yields 0 and every instance
+/// collides. Capturing through `Default` pins it at the right moment.
+#[derive(Clone, Copy)]
+pub struct CallSiteId(pub u64);
+
+impl Default for CallSiteId {
+    fn default() -> Self {
+        Self(blinc_dsl_core::current_call_id())
+    }
+}
+
+/// `SharedTextInputData` for a text field, keyed by whichever identity
+/// the field actually has.
+///
+/// A bound signal is the real identity: the field belongs to that
+/// signal, two fields bound to it share a buffer, and the DSL can read
+/// what was typed. Unbound, the call site is the identity — distinct
+/// `cn.Input(...)` calls get distinct buffers without the author naming
+/// anything.
+pub fn text_input_data_for(
+    value: &Reactive<String>,
+    call_site: CallSiteId,
+) -> blinc_layout::widgets::text_input::SharedTextInputData {
+    let key = match value {
+        Reactive::Signal(s) => format!("sig:{:?}", s.id()),
+        _ => format!("call:{}", call_site.0),
+    };
+    let data = text_input_data_keyed(&key);
+    // Seed once from the bound value so the field opens showing it.
+    if let Reactive::Signal(s) = value
+        && let Some(current) = s.try_get()
+        && data.lock().map(|d| d.value.is_empty()).unwrap_or(false)
+        && !current.is_empty()
+        && let Ok(mut d) = data.lock()
+    {
+        d.value = current;
+    }
+    data
 }
