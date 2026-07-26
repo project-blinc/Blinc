@@ -11,10 +11,36 @@
 
 use blinc_dsl_core::BlincDsl;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+
+/// `@stateful` builds through `BlincContextState`, so the playground
+/// needs the app singletons a real host would have installed.
+fn init() {
+    static I: std::sync::Once = std::sync::Once::new();
+    I.call_once(|| {
+        blinc_theme::ThemeState::init_default();
+        if !blinc_animation::is_scheduler_initialized() {
+            let s = blinc_animation::AnimationScheduler::new();
+            blinc_animation::set_global_scheduler(s.handle());
+            Box::leak(Box::new(s));
+        }
+        if !blinc_core::BlincContextState::is_initialized() {
+            blinc_core::BlincContextState::init(
+                blinc_core::reactive::global_graph(),
+                Arc::new(std::sync::Mutex::new(
+                    blinc_core::context_state::HookState::new(),
+                )),
+                Arc::new(AtomicBool::new(false)),
+            );
+        }
+    });
+}
 
 #[test]
 fn entry_fsm_is_addressable_by_source_name() {
     let _ = tracing_subscriber::fmt::try_init();
+    init();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/playground");
     let dsl = BlincDsl::new().expect("dsl init");
     blinc_cn_dsl::register_all(&dsl).expect("register cn.*");
