@@ -81,21 +81,25 @@ fsm Play {
     }
 }
 
-// NOTE: no `@stateful` here, deliberately.
+// Two ways to read an FSM context field, and they are not
+// interchangeable:
 //
-// Blinc's `Stateful` rebuilds only its own subtree. The DSL, though,
-// mounts exactly one of them at the view root -- `has_stateful_view` is
-// a single flag, and `view_widget` wraps the whole view when it is set
-// -- so that subtree is the entire program, and its `on_state` re-runs
-// `render_main` for all of it.
+//   `Play.busy`        the binding handle -- what a prop wants
+//                      (`disabled = Play.busy`). The property binding
+//                      redraws on set; nothing is rebuilt.
+//   `Play.busy.get()`  the value -- what an expression wants, as in
+//                      counter_dsl's `f"{CounterFsm.count.get()}"`.
 //
-// Until the DSL mounts a `Stateful` per decorated component, adding
-// `@stateful` anywhere costs a whole-view re-render. The branch below
-// is therefore fixed at build time.
+// The condition below reads a value, so it takes `.get()`.
+//
+// It is evaluated once, at build: swapping the branch is structural,
+// and structure is the one thing a redraw cannot change. Everything
+// else in this playground is a redraw -- bound props patch in place,
+// and the spinners animate continuously without any rebuild.
 component BusyPanel {
     view {
         Div(class = "row") {
-            if Play.busy {
+            if Play.busy.get() {
                 cn.Alert("busy - work in flight", variant = "warning")
                 cn.Spinner(size = "small")
             } else {
