@@ -64,7 +64,7 @@ fn main() -> Result<()> {
             div()
                 .w(ctx.width)
                 .h(ctx.height)
-                .bg(Color::rgb(0.04, 0.06, 0.1))
+                .bg(ThemeState::get().colors().background)
                 .overflow_clip()
                 .child_box(dsl.view_widget())
         },

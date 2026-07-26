@@ -114,14 +114,9 @@ component Playground {
             padding: 24px;
             gap: 16px;
             flex-direction: column;
-            width: 620px;
+            width: 100%;
             height: 100vh;
             overflow: scroll;
-            /* Section labels are plain `Text`, which has no colour of its
-               own -- without this they render near-black on the dark
-               surface. cn widgets that set their own text colour (Button,
-               Label) are unaffected either way. */
-            color: #e2e8f0;
         }
         .row { gap: 10px; flex-direction: row; align-items: center; flex-wrap: wrap }
     }
