@@ -313,6 +313,21 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
                     }
                     continue;
                 }
+                // Not every statement in a widget body produces a child.
+                // `sig.set(v)` and friends are side effects: emit them as
+                // plain prelude statements. Pushing one would hand
+                // `__push_child__` a void argument, which codegen cannot
+                // resolve. Same rule the control-flow carrier applies to
+                // statements inside a branch or loop body.
+                if !is_widget_producing_expr(&child_expr) {
+                    let ty = child_expr.ty.clone();
+                    prelude.push(typed_node(
+                        TypedStatement::Expression(Box::new(child_expr)),
+                        ty,
+                        span,
+                    ));
+                    continue;
+                }
                 let push_call = TypedExpression::Call(TypedCall {
                     callee: Box::new(typed_node(
                         TypedExpression::Variable(zyntax_typed_ast::InternedString::new_global(

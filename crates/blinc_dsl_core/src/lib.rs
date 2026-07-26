@@ -686,9 +686,11 @@ impl BlincDsl {
     /// is rewritten to `__component_call__("<ns>$X")` so the same
     /// mangled name flows through `lower_component_calls`.
     ///
-    /// Today assumes zero-prop view signatures — prop-bearing imports
-    /// need their param list mirrored too. Sufficient for the
-    /// `compile_project` test surface.
+    /// The synthesized extern carries no parameter list. Prop values still
+    /// reach an imported component: `lower_component_calls` positionalises
+    /// the call's arguments against the component's own signature, which is
+    /// resolved from the imported module's compiled form rather than from
+    /// this declaration. Covered by `tests/cross_module_props.rs`.
     fn inject_imported_view_externs(&self, program: &mut TypedProgram, entry_filename: &str) {
         use std::collections::HashMap;
         use zyntax_typed_ast::type_registry::{CallingConvention, Visibility};
