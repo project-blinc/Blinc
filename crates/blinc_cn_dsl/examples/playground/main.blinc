@@ -102,13 +102,19 @@ view {
         MediaWidgets()
 
         Text("progress: value = pct (in-place)")
-        cn.Progress(value = Play.pct, size = "medium")
+        Div(class = "row") {
+            cn.Progress(value = Play.pct, size = "medium")
+        }
 
         Text("skeleton: w / h / rounded all bound (in-place)")
-        cn.Skeleton(w = Play.bar_w, h = Play.bar_h, rounded = Play.radius)
+        Div(class = "row") {
+            cn.Skeleton(w = Play.bar_w, h = Play.bar_h, rounded = Play.radius)
+        }
 
         Text("separator: opacity bound (clamped by Div::opacity)")
-        cn.Separator(opacity = Play.fade)
+        Div(class = "row") {
+            cn.Separator(opacity = Play.fade)
+        }
 
         // NOTE: derived values reach cn widgets but do not yet update
         // live -- `get_derived` does not track derived-to-derived
@@ -116,13 +122,19 @@ view {
         // These show their initial value. Signal-bound props above do
         // update.
         Text("progress: computed { pct / 2 } (initial value only)")
-        cn.Progress(value = computed { Play.pct / 2.0 } : f64)
+        Div(class = "row") {
+            cn.Progress(value = computed { Play.pct / 2.0 } : f64)
+        }
 
         Text("progress: computed over TWO signals (initial value only)")
-        cn.Progress(value = computed { Play.pct + Play.radius } : f64)
+        Div(class = "row") {
+            cn.Progress(value = computed { Play.pct + Play.radius } : f64)
+        }
 
         Text("button: label AND disabled both bound (deps rebuild)")
-        cn.Button(label = Play.caption, disabled = Play.busy)
+        Div(class = "row") {
+            cn.Button(label = Play.caption, disabled = Play.busy)
+        }
 
         // if / else with children in both branches. Kept at this
         // nesting depth deliberately: one container deeper still fails
