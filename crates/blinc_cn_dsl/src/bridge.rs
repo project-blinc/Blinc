@@ -42,3 +42,53 @@ pub fn bool_state(r: &Reactive<bool>) -> blinc_core::reactive::State<bool> {
     };
     State::new(sig, global_graph(), global_dirty_flag())
 }
+
+/// Per-key `SharedTextInputData`, so a DSL text field keeps what the
+/// user typed across rebuilds.
+///
+/// `cn::input` takes external state that "persists across rebuilds" --
+/// but a DSL wrapper is reconstructed every render, so calling
+/// `text_input_data()` inline would hand the widget a fresh, empty
+/// buffer each time and typing would vanish. Extern widgets carry no
+/// call-site identity (unlike cn's `#[track_caller]` `InstanceKey`), so
+/// the key has to come from the DSL author.
+///
+/// An empty key returns a detached buffer: the field still works within
+/// one render, but its contents do not survive a rebuild.
+pub fn text_input_data_keyed(key: &str) -> blinc_layout::widgets::text_input::SharedTextInputData {
+    use blinc_layout::widgets::text_input::{SharedTextInputData, text_input_data};
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    if key.is_empty() {
+        return text_input_data();
+    }
+    static STORE: OnceLock<Mutex<HashMap<String, SharedTextInputData>>> = OnceLock::new();
+    let store = STORE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = store.lock().expect("text input store poisoned");
+    guard
+        .entry(key.to_string())
+        .or_insert_with(text_input_data)
+        .clone()
+}
+
+/// Per-key `SharedTextAreaState`. Same rationale as
+/// [`text_input_data_keyed`]: the textarea keeps its contents in state
+/// that must outlive a rebuild, and a DSL wrapper is reconstructed
+/// every render.
+pub fn text_area_state_keyed(key: &str) -> blinc_layout::widgets::text_area::SharedTextAreaState {
+    use blinc_layout::widgets::text_area::{SharedTextAreaState, text_area_state};
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    if key.is_empty() {
+        return text_area_state();
+    }
+    static STORE: OnceLock<Mutex<HashMap<String, SharedTextAreaState>>> = OnceLock::new();
+    let store = STORE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = store.lock().expect("textarea store poisoned");
+    guard
+        .entry(key.to_string())
+        .or_insert_with(text_area_state)
+        .clone()
+}

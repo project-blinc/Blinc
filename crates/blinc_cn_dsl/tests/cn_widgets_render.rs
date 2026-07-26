@@ -103,6 +103,14 @@ fn every_exposed_cn_widget_renders() {
         ),
         ("Kbd", r#"cn.Kbd("Ctrl", size = "small")"#),
         (
+            "Input",
+            r#"cn.Input(key = "probe_user", placeholder = "Username", label = "User")"#,
+        ),
+        (
+            "Textarea",
+            r#"cn.Textarea(key = "probe_bio", placeholder = "Bio", rows = 3)"#,
+        ),
+        (
             "Switch",
             r#"cn.Switch(checked = true, label = "Wifi", size = "medium")"#,
         ),
