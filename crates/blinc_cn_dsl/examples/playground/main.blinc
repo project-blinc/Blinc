@@ -43,7 +43,7 @@ fsm Play {
     context {
         pct: f64 = 0.0
         bar_w: f64 = 90.0
-        bar_h: f64 = 14.0
+        bar_h: f64 = 90.0
         radius: f64 = 4.0
         fade: f64 = 1.0
         busy: bool = false
@@ -73,7 +73,7 @@ fsm Play {
     on Idle.Reset -> Idle {
         ctx.pct = 0.0
         ctx.bar_w = 90.0
-        ctx.bar_h = 14.0
+        ctx.bar_h = 90.0
         ctx.radius = 4.0
         ctx.fade = 1.0
         ctx.busy = false
@@ -145,17 +145,14 @@ component Playground {
                 cn.Separator(opacity = Play.fade)
             }
 
-            // NOTE: derived values reach cn widgets but do not yet update
-            // live -- `get_derived` does not track derived-to-derived
-            // dependencies, so the narrowing wrapper is never marked dirty.
-            // These show their initial value. Signal-bound props above do
-            // update.
-            Text("progress: computed { pct / 2 } (initial value only)")
+            // Derived values bind to the upstream derived itself, so
+            // these track like the signal-bound props above.
+            Text("progress: computed { pct / 2 }")
             Div(class = "row") {
                 cn.Progress(value = computed { Play.pct / 2.0 } : f64)
             }
 
-            Text("progress: computed over TWO signals (initial value only)")
+            Text("progress: computed over TWO signals")
             Div(class = "row") {
                 cn.Progress(value = computed { Play.pct + Play.radius } : f64)
             }

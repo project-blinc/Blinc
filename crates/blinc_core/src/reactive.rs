@@ -1387,6 +1387,17 @@ pub(crate) fn notify_property_bindings_for_derived(id: DerivedId) {
 pub struct Computed<T> {
     derived: Derived<T>,
     reactive: SharedReactiveGraph,
+    /// Optional read adapter, for a `Computed<T>` that subscribes to a
+    /// derived of a *different* stored type.
+    ///
+    /// `derived` still carries the source derived's id, so binding
+    /// registration keys off the upstream and fires whenever it does;
+    /// only the read is redirected. Mirrors [`State::mapped`] for the
+    /// derived path -- wrapping the upstream in a second `Computed`
+    /// instead would need derived-to-derived dependency tracking,
+    /// which `get_derived` does not do, so the wrapper would never be
+    /// marked dirty.
+    read_adapter: Option<Arc<dyn Fn() -> Option<T> + Send + Sync>>,
 }
 
 impl<T> Clone for Computed<T> {
@@ -1394,6 +1405,7 @@ impl<T> Clone for Computed<T> {
         Self {
             derived: self.derived,
             reactive: Arc::clone(&self.reactive),
+            read_adapter: self.read_adapter.clone(),
         }
     }
 }
@@ -1402,7 +1414,25 @@ impl<T: Clone + Send + 'static> Computed<T> {
     /// Create a new `Computed<T>` bundling a `Derived<T>` handle with
     /// the reactive graph it lives in.
     pub fn new(derived: Derived<T>, reactive: SharedReactiveGraph) -> Self {
-        Self { derived, reactive }
+        Self {
+            derived,
+            reactive,
+            read_adapter: None,
+        }
+    }
+
+    /// Build a `Computed<T>` that subscribes to `source` but reads
+    /// through `read`. See [`Computed::read_adapter`].
+    pub fn mapped(
+        source: DerivedId,
+        read: Arc<dyn Fn() -> Option<T> + Send + Sync>,
+        reactive: SharedReactiveGraph,
+    ) -> Self {
+        Self {
+            derived: Derived::from_id(source),
+            reactive,
+            read_adapter: Some(read),
+        }
     }
 
     /// Reconstruct a `Computed<T>` from a raw `DerivedId`, anchored
@@ -1421,6 +1451,7 @@ impl<T: Clone + Send + 'static> Computed<T> {
         Self {
             derived: Derived::from_id(id),
             reactive: global_graph(),
+            read_adapter: None,
         }
     }
 
@@ -1428,6 +1459,9 @@ impl<T: Clone + Send + 'static> Computed<T> {
     /// `Some` unless the derived handle is invalid (i.e. the graph
     /// was rebuilt and the derived id no longer resolves).
     pub fn try_get(&self) -> Option<T> {
+        if let Some(read) = &self.read_adapter {
+            return read();
+        }
         // Re-entrant path first, mirroring `Signal::try_get`: when this
         // thread is already inside a compute (it holds the graph mutex),
         // locking again would deadlock against itself. Reads the cached

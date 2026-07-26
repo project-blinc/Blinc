@@ -24,7 +24,7 @@ component MediaWidgets {
 
             Text("separator + static skeleton")
             cn.Separator()
-            cn.Skeleton(w = 140.0, h = 14.0, rounded = 6.0)
+            cn.Skeleton(w = 140.0, h = 140.0, rounded = 6.0)
         }
     }
 }

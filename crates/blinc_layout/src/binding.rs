@@ -155,14 +155,22 @@ fn bind_f64_as_f32(sig: Signal<f64>) -> Reactive<f32> {
     ))
 }
 
-/// Narrow a `Computed<f64>`. Unlike the signal case this stays a
-/// derived: there is no signal id to subscribe to, only a `DerivedId`.
-/// Derived-backed props show their build-time value until
-/// derived-to-derived dependency tracking lands; see `get_derived`.
-fn narrow_f64_computed(c: Computed<f64>) -> Reactive<f32> {
-    Reactive::Computed(blinc_core::reactive::computed(move |_| {
-        c.try_get().unwrap_or(0.0) as f32
-    }))
+/// Expose a `Computed<f64>` as a `Reactive<f32>` bound to the SAME
+/// derived.
+///
+/// Mirrors [`bind_f64_as_f32`] for the derived path. Wrapping the
+/// upstream in a second `Computed` would need derived-to-derived
+/// dependency tracking, which `get_derived` does not do -- the wrapper
+/// would never be marked dirty, so the prop would render once and
+/// freeze. Keeping the upstream's `DerivedId` means the binding fires
+/// exactly when the upstream does.
+fn bind_f64_computed_as_f32(c: Computed<f64>) -> Reactive<f32> {
+    let id = c.derived_id();
+    Reactive::Computed(Computed::mapped(
+        id,
+        Arc::new(move || c.try_get().map(|v| v as f32)),
+        blinc_core::reactive::global_graph(),
+    ))
 }
 
 // f64 -> f32 property sources.
@@ -210,13 +218,13 @@ impl IntoReactive<f32> for &Signal<f64> {
 
 impl IntoReactive<f32> for Computed<f64> {
     fn into_reactive(self) -> Reactive<f32> {
-        narrow_f64_computed(self)
+        bind_f64_computed_as_f32(self)
     }
 }
 
 impl IntoReactive<f32> for &Computed<f64> {
     fn into_reactive(self) -> Reactive<f32> {
-        narrow_f64_computed(self.clone())
+        bind_f64_computed_as_f32(self.clone())
     }
 }
 
@@ -1904,6 +1912,37 @@ mod tests {
             assert!(
                 !matches!(r, Reactive::Const(_)),
                 "a bound f64 must not collapse to a build-time constant"
+            );
+        }
+
+        /// A `computed { } : f64` fed to an f32 property must bind to
+        /// the SAME derived, not a wrapper. `get_derived` does not track
+        /// derived-to-derived dependencies, so a wrapper is never marked
+        /// dirty and the prop freezes at its build-time value.
+        #[test]
+        fn computed_f64_binds_to_the_upstream_derived() {
+            let s = state_f64(10.0);
+            // Read through the graph handle, not `State::try_get`:
+            // inside a compute the thread already holds the graph
+            // mutex, and `State::try_get` has no re-entrant fast path
+            // (unlike `Signal::try_get`), so it deadlocks.
+            let sig = blinc_core::reactive::Signal::<f64>::from_id(s.signal_id());
+            let upstream = blinc_core::reactive::computed(move |g| g.get(sig).unwrap_or(0.0) * 2.0);
+            let r: Reactive<f32> = (&upstream).into_reactive();
+            let Reactive::Computed(mapped) = r else {
+                panic!("expected a Computed");
+            };
+            assert_eq!(
+                mapped.derived_id(),
+                upstream.derived_id(),
+                "must bind to the upstream derived, or updates never arrive"
+            );
+            assert_eq!(mapped.try_get(), Some(20.0_f32));
+            s.set(30.0);
+            assert_eq!(
+                mapped.try_get(),
+                Some(60.0_f32),
+                "the adapter must re-read the upstream, not cache"
             );
         }
 
