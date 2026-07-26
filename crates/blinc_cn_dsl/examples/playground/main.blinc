@@ -68,9 +68,12 @@ fsm Play {
 
     on Idle.Grow -> Idle {
         ctx.pct += 10.0          // cn.Progress expects 0..=100
-        ctx.bar_w += 26.0
-        ctx.bar_h += 5.0
-        ctx.radius += 3.0
+        // Small increments: the skeleton is demonstrating that w / h /
+        // rounded patch in place, and large steps turn it into a blob
+        // within a few clicks rather than showing the binding.
+        ctx.bar_w += 12.0
+        ctx.bar_h += 2.0
+        ctx.radius += 1.0
         ctx.fade -= 0.12         // Div::opacity clamps, so this may undershoot
     }
 
