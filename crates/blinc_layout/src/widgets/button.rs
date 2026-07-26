@@ -623,7 +623,18 @@ impl ElementBuilder for Button {
     }
 
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
-        // Delegate to the inner Stateful which has the cached children
+        // Same mirror as `render_props`: the state callback lives on this
+        // Button until `register_state_callback` installs it on the inner
+        // Stateful, so without this the Stateful has no callback yet and
+        // reports no children.
+        //
+        // A parent's refresh hashes its rebuilt content through
+        // `children_builders`. Seeing a childless button meant the hash
+        // did not change when only the label did, so the refresh took the
+        // visual-only path and never re-measured -- a
+        // `dropdown_menu_custom` trigger kept its previous width when its
+        // label changed.
+        self.register_state_callback();
         self.inner.children_builders()
     }
 

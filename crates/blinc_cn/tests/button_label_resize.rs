@@ -249,3 +249,116 @@ fn bound_label_resizes_on_signal_set() {
          pass: {before} -> {after}"
     );
 }
+
+/// The shrink direction. A `w_fit` container that grows but never
+/// shrinks looks identical to "not resizing" for a label that starts
+/// long: cn_demo's trigger opens as "Custom Trigger" (140px) and
+/// switches to "Close Menu" (109px).
+#[test]
+fn bound_label_shrinks_on_signal_set() {
+    use blinc_core::reactive::State;
+    init();
+
+    static NOTIFIER: std::sync::Once = std::sync::Once::new();
+    NOTIFIER.call_once(|| {
+        blinc_core::reactive::set_stateful_deps_notifier(|ids| {
+            blinc_layout::check_stateful_deps(ids);
+        });
+    });
+
+    let label = State::new(
+        blinc_core::reactive::signal::<String>("Custom Trigger".to_string()),
+        blinc_core::reactive::global_graph(),
+        blinc_core::reactive::global_dirty_flag(),
+    );
+
+    let host = div().w(800.0).h(200.0).child(button(&label));
+    let mut tree = blinc_layout::renderer::RenderTree::from_element(&host);
+    tree.apply_stylesheet_layout_overrides();
+    tree.compute_layout(800.0, 200.0);
+
+    let root = tree.root().expect("root");
+    let btn = tree.layout_tree.children(root)[0];
+    let width = |t: &blinc_layout::renderer::RenderTree| {
+        t.layout_tree
+            .get_layout(btn)
+            .map(|l| l.size.width)
+            .unwrap_or(0.0)
+    };
+
+    let long = width(&tree);
+    blinc_core::reactive::Signal::<String>::from_id(label.signal_id())
+        .set("Close Menu".to_string());
+    tree.process_pending_subtree_rebuilds();
+    tree.apply_stylesheet_layout_overrides();
+    tree.compute_layout(800.0, 200.0);
+    let short = width(&tree);
+
+    println!("SHRINK long={long} short={short}");
+    assert!(
+        short < long,
+        "a shorter label must narrow the button: {long} -> {short}"
+    );
+}
+
+/// The cn_demo custom-trigger shape: a parent Stateful whose callback
+/// builds a FRESH button whose label depends on the parent's state.
+///
+/// Nothing is bound -- each refresh constructs a new `cn::button` with a
+/// different `&str`, so the fix for bound labels does not apply here.
+#[test]
+fn parent_stateful_swapping_button_labels_resizes() {
+    use blinc_layout::stateful::{ButtonState, stateful};
+    init();
+
+    static NOTIFIER: std::sync::Once = std::sync::Once::new();
+    NOTIFIER.call_once(|| {
+        blinc_core::reactive::set_stateful_deps_notifier(|ids| {
+            blinc_layout::check_stateful_deps(ids);
+        });
+    });
+
+    let open = blinc_core::reactive::signal::<i32>(0);
+    let host = div()
+        .w(800.0)
+        .h(200.0)
+        .child(
+            stateful::<ButtonState>()
+                .deps([open.id()])
+                .on_state(move |_ctx| {
+                    let is_open = open.try_get().unwrap_or(0) != 0;
+                    let label = if is_open {
+                        "Close Menu"
+                    } else {
+                        "Custom Trigger"
+                    };
+                    div().w_fit().child(button(label))
+                }),
+        );
+
+    let mut tree = blinc_layout::renderer::RenderTree::from_element(&host);
+    tree.apply_stylesheet_layout_overrides();
+    tree.compute_layout(800.0, 200.0);
+
+    let root = tree.root().expect("root");
+    let outer = tree.layout_tree.children(root)[0];
+    let width = |t: &blinc_layout::renderer::RenderTree| {
+        t.layout_tree
+            .get_layout(outer)
+            .map(|l| l.size.width)
+            .unwrap_or(0.0)
+    };
+
+    let closed = width(&tree);
+    blinc_core::reactive::Signal::<i32>::from_id(open.id()).set(1);
+    tree.process_pending_subtree_rebuilds();
+    tree.apply_stylesheet_layout_overrides();
+    tree.compute_layout(800.0, 200.0);
+    let opened = width(&tree);
+
+    println!("TRIGGER closed={closed} opened={opened}");
+    assert!(
+        opened < closed,
+        "the trigger must narrow when its label shortens: {closed} -> {opened}"
+    );
+}
