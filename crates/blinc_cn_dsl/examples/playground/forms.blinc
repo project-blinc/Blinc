@@ -39,7 +39,7 @@ component FormWidgets {
                     kind = "password"
                 )
             }
-            cn.Textarea(key = "pg_bio", label = "Bio", placeholder = "a few words", rows = 3)
+           cn.Textarea(key = "pg_bio", label = "Bio", placeholder = "a few words", rows = 3)
 
             cn.Label("kbd")
             Div(class = "row") {
