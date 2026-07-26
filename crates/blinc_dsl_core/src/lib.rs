@@ -1279,7 +1279,21 @@ impl BlincDsl {
 
         // Skip signals whose type isn't bridged (only i32/f64/string today).
         let dep_pool: Vec<(String, Type)> = if explicit_deps.is_empty() {
-            signals.clone()
+            if explicit_fsms.is_empty() {
+                signals.clone()
+            } else {
+                // An explicitly bound FSM already drives this stateful
+                // through its shared state. Subscribing to every declared
+                // signal on top of that double-fires: the FSM's own
+                // context fields ARE declared signals
+                // (`__fsm_ctx_<Fsm>_<field>`), so one transition notified
+                // twice and re-rendered twice.
+                //
+                // `@stateful([...])` with an explicit list still means
+                // exactly that list, so nothing is lost -- this only
+                // narrows the bare `@stateful @fsm([X])` case to X.
+                Vec::new()
+            }
         } else {
             explicit_deps
                 .iter()

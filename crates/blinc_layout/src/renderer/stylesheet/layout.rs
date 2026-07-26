@@ -890,6 +890,25 @@ impl RenderTree {
     pub fn auto_create_css_scroll_physics(&mut self) {
         use crate::scroll::{Scroll, ScrollConfig, ScrollDirection, ScrollPhysics};
 
+        /// CSS-created physics, kept by STABLE id so they outlive the
+        /// tree.
+        ///
+        /// `scroll_physics` is keyed by `LayoutNodeId`, which is
+        /// reissued whenever the tree is rebuilt -- so a rebuild used to
+        /// mint fresh physics here and the scroll position jumped back
+        /// to the top. A `scroll()` widget does not suffer this because
+        /// `use_scroll_ref_keyed` parks its state outside the tree; a
+        /// CSS-declared scroller has no such anchor, so it gets one
+        /// here.
+        static CSS_SCROLL_PHYSICS: std::sync::Mutex<
+            Option<
+                std::collections::HashMap<
+                    crate::tree::StableNodeId,
+                    crate::scroll::SharedScrollPhysics,
+                >,
+            >,
+        > = std::sync::Mutex::new(None);
+
         // Walk the whole tree, not `element_registry.all_ids()`: that
         // enumerates only elements carrying an explicit `id`, so a
         // class-only rule (`.page { overflow: scroll }`) was never
@@ -932,14 +951,23 @@ impl RenderTree {
                 direction,
                 ..Default::default()
             };
-            let physics = Arc::new(Mutex::new(ScrollPhysics::new(config)));
+            let stable_id = self.stable_id_or_warn(node_id);
+            // Reuse this node's physics across rebuilds, so its offset
+            // survives; only mint on first sight.
+            let physics = {
+                let mut cache = CSS_SCROLL_PHYSICS.lock().expect("poisoned");
+                let cache = cache.get_or_insert_with(std::collections::HashMap::new);
+                cache
+                    .entry(stable_id)
+                    .or_insert_with(|| Arc::new(Mutex::new(ScrollPhysics::new(config))))
+                    .clone()
+            };
             // Set animation scheduler for bounce springs
             if let Some(scheduler) = self.animations.upgrade() {
                 physics.lock().unwrap().set_scheduler(&scheduler);
             }
             let handlers = Scroll::create_internal_handlers(Arc::clone(&physics));
             self.scroll_physics.insert(node_id, physics);
-            let stable_id = self.stable_id_or_warn(node_id);
             self.handler_registry.register(stable_id, handlers);
         }
     }
