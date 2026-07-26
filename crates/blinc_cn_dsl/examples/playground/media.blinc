@@ -1,0 +1,30 @@
+// Avatars, cards, separators, and the static skeleton shape.
+
+component MediaWidgets {
+    style {
+        .group { gap: 8px; flex-direction: column }
+        .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
+    }
+
+    view {
+        Div(class = "group") {
+            Text("avatar: size x shape")
+            Div(class = "row") {
+                cn.Avatar(fallback = "AB", size = "small")
+                cn.Avatar(fallback = "CD", size = "medium")
+                cn.Avatar(fallback = "EF", size = "large")
+                cn.Avatar(fallback = "GH", shape = "square")
+            }
+
+            Text("card: container with children")
+            cn.Card {
+                Text("card content")
+                cn.Badge("nested", variant = "secondary")
+            }
+
+            Text("separator + static skeleton")
+            cn.Separator()
+            cn.Skeleton(w = 140.0, h = 14.0, rounded = 6.0)
+        }
+    }
+}

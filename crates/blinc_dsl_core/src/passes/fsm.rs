@@ -1489,10 +1489,28 @@ pub(crate) fn resolve_dotted_fsm_field_access(program: &mut TypedProgram) {
         let Some(field_str) = f.field.resolve_global() else {
             return;
         };
+        // Under `compile_project` every file carries a module
+        // namespace, so the FSM declaration is mangled (`Play` ->
+        // `shell$Play`) and its synthesised context signal with it,
+        // while the source-level reference stays `Play.pct`. Match the
+        // unmangled candidate first, then fall back to any known
+        // context signal whose FSM segment matches after the `$`
+        // namespace prefix. Without the fallback the Field access is
+        // left untouched, SSA reads a bare `Play` as an undefined
+        // variable, and the whole view fn is silently dropped.
         let candidate = crate::fsm_registry::mangle_ctx_signal(&obj_str, &field_str);
-        if !known.contains(&candidate) {
-            return;
-        }
+        let candidate = if known.contains(&candidate) {
+            candidate
+        } else {
+            let suffix = format!("${obj_str}_{field_str}");
+            let Some(namespaced) = known
+                .iter()
+                .find(|n| n.starts_with("__fsm_ctx_") && n.ends_with(&suffix))
+            else {
+                return;
+            };
+            namespaced.clone()
+        };
         let span = expr.span;
         let ty = expr.ty.clone();
         expr.node = TypedExpression::Variable(InternedString::new_global(&candidate));

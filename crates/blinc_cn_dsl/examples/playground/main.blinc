@@ -1,0 +1,132 @@
+// Playground entry point for the DSL widget surface.
+//
+// The static widget gallery lives in one module per group, imported
+// below, so this file stays small as widgets land: add a module, add an
+// import, add one call.
+//
+// State lives in the FSM's `context` block, co-located with the actions
+// that mutate it and the view that reads it.
+//
+// Reactive mechanisms, side by side so a regression in one shows up
+// against the others:
+//
+//   in-place property write  cn.Skeleton(w/h/rounded),
+//     cn.Separator(opacity), cn.Progress(value). Bindable properties,
+//     so a set patches RenderProps -- no rebuild, no compute_layout.
+//
+//   deps() subtree rebuild   cn.Button(label/disabled). Text content
+//     has no property writer, and `disabled` gates the whole style
+//     branch plus the FSM start state.
+//
+//   derived                  cn.Progress(value = computed { ... }),
+//     including one value over two signals. A derived binding fires
+//     when either dependency sets.
+//
+// The f64 props also cover the numeric-width path: the DSL types every
+// number as f64 while layout stores f32, and the narrowing happens
+// inside the binding layer, not at the call site.
+//
+// Local CSS is layout only -- widgets take their appearance from
+// CN_STYLES and the theme, so a regression in either shows here rather
+// than being masked by per-example overrides.
+//
+// Compile with `compile_project(main.blinc, playground/)`: imports are
+// resolved by walking the module graph from the entry, which
+// `compile_source` / `compile_file` alone do not do.
+
+import { FormWidgets } from "./forms"
+import { FeedbackWidgets } from "./feedback"
+import { MediaWidgets } from "./media"
+
+style {
+    .page {
+        padding: 24px;
+        gap: 16px;
+        flex-direction: column;
+        width: 620px;
+        max-height: 760px;
+        overflow: scroll;
+    }
+    .row { gap: 10px; flex-direction: row; align-items: center; flex-wrap: wrap }
+}
+
+fsm Play {
+    context {
+        pct: f64 = 0.0
+        bar_w: f64 = 90.0
+        bar_h: f64 = 14.0
+        radius: f64 = 4.0
+        fade: f64 = 1.0
+        busy: bool = false
+        caption: string = "Save"
+    }
+    state Idle
+    initial Idle
+
+    on Idle.Grow -> Idle {
+        ctx.pct += 10.0          // cn.Progress expects 0..=100
+        ctx.bar_w += 26.0
+        ctx.bar_h += 5.0
+        ctx.radius += 3.0
+        ctx.fade -= 0.12         // Div::opacity clamps, so this may undershoot
+    }
+
+    // Flips both Button props at once: label and disabled come from
+    // different signals, one deps() rebuild covers both.
+    on Idle.Busy -> Idle {
+        ctx.busy = true
+        ctx.caption = "Saving..."
+    }
+
+    on Idle.Reset -> Idle {
+        ctx.pct = 0.0
+        ctx.bar_w = 90.0
+        ctx.bar_h = 14.0
+        ctx.radius = 4.0
+        ctx.fade = 1.0
+        ctx.busy = false
+        ctx.caption = "Save"
+    }
+}
+
+view {
+    Div(class = "page") {
+        FormWidgets()
+        FeedbackWidgets()
+        MediaWidgets()
+
+        Text("progress: value = pct (in-place)")
+        cn.Progress(value = Play.pct, size = "medium")
+
+        Text("skeleton: w / h / rounded all bound (in-place)")
+        cn.Skeleton(w = Play.bar_w, h = Play.bar_h, rounded = Play.radius)
+
+        Text("separator: opacity bound (clamped by Div::opacity)")
+        cn.Separator(opacity = Play.fade)
+
+        Text("progress: computed { pct / 2 }")
+        cn.Progress(value = computed { Play.pct / 2.0 } : f64)
+
+        Text("progress: computed over TWO signals")
+        cn.Progress(value = computed { Play.pct + Play.radius } : f64)
+
+        Text("button: label AND disabled both bound (deps rebuild)")
+        cn.Button(label = Play.caption, disabled = Play.busy)
+
+        // if / else with children in both branches. Kept at this
+        // nesting depth deliberately: one container deeper still fails
+        // to lower.
+        if Play.busy {
+            cn.Alert("busy - work in flight", variant = "warning")
+            cn.Spinner(size = "small")
+        } else {
+            cn.Alert("idle - press Busy", variant = "success")
+        }
+
+        Div(class = "row") {
+            cn.Button("Grow", on_click = || { Play.trigger("Grow") })
+            cn.Button("Busy", variant = "secondary", on_click = || { Play.trigger("Busy") })
+            cn.Button("Reset", variant = "destructive", on_click = || { Play.trigger("Reset") })
+        }
+    }
+}

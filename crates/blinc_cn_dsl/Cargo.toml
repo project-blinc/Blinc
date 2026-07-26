@@ -31,6 +31,10 @@ blinc_theme = { path = "../blinc_theme", version = "0.5.1" }
 name = "cn_dsl_demo"
 path = "examples/cn_dsl_demo.rs"
 
+[[example]]
+name = "cn_playground"
+path = "examples/cn_playground.rs"
+
 [dependencies]
 # DSL surface — host registration API + the `#[extern_widget]` macro
 # that generates the FFI thunks. We hold the BlincDsl handle and call

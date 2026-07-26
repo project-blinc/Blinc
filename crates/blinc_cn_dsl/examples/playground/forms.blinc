@@ -1,0 +1,40 @@
+// Form-ish widgets: the button variant/size matrix and labels.
+//
+// One module per widget group so the playground stays small as new
+// widgets land -- add a module, add one import line, add one call.
+
+component FormWidgets {
+    style {
+        .group { gap: 8px; flex-direction: column }
+        .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
+    }
+
+    view {
+        Div(class = "group") {
+            Text("button variants")
+            Div(class = "row") {
+                cn.Button("primary")
+                cn.Button("secondary", variant = "secondary")
+                cn.Button("destructive", variant = "destructive")
+                cn.Button("outline", variant = "outline")
+                cn.Button("ghost", variant = "ghost")
+                cn.Button("link", variant = "link")
+            }
+
+            Text("button sizes + disabled")
+            Div(class = "row") {
+                cn.Button("small", size = "small")
+                cn.Button("medium", size = "medium")
+                cn.Button("large", size = "large")
+                cn.Button("disabled", disabled = true)
+            }
+
+            Text("label: size, required, disabled")
+            Div(class = "row") {
+                cn.Label("small", size = "small")
+                cn.Label("required", required = true)
+                cn.Label("disabled", disabled = true)
+            }
+        }
+    }
+}

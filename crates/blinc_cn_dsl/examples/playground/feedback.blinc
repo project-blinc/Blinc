@@ -1,0 +1,35 @@
+// Status / feedback widgets: badges, alerts, spinners.
+
+component FeedbackWidgets {
+    style {
+        .group { gap: 8px; flex-direction: column }
+        .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
+    }
+
+    view {
+        Div(class = "group") {
+            Text("badge: variant x style")
+            Div(class = "row") {
+                cn.Badge("default")
+                cn.Badge("secondary", variant = "secondary")
+                cn.Badge("success", variant = "success")
+                cn.Badge("warning", variant = "warning")
+                cn.Badge("destructive", variant = "destructive")
+                cn.Badge("solid", variant = "success", style = "solid")
+            }
+
+            Text("alert variants")
+            cn.Alert("default alert")
+            cn.Alert("something went wrong", variant = "destructive")
+            cn.Alert("saved successfully", variant = "success")
+            cn.Alert("check your input", variant = "warning")
+
+            Text("spinner sizes")
+            Div(class = "row") {
+                cn.Spinner(size = "small")
+                cn.Spinner(size = "medium")
+                cn.Spinner(size = "large")
+            }
+        }
+    }
+}
