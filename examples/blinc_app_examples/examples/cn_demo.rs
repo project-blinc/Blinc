@@ -1403,9 +1403,11 @@ fn dropdown_menu_section() -> impl ElementBuilder + use<> {
                 // Dropdown with custom trigger
                 .child(
                     cn::dropdown_menu_custom(|is_open| {
-                        // No pinned width: the labels measure 140px and
-                        // 109px, so a 100px wrapper clipped both.
-                        div().child(
+                        // `w_fit`, not a pinned width: the labels measure
+                        // 140px and 109px, so the wrapper has to track
+                        // whichever is current instead of clipping to a
+                        // fixed 100px.
+                        div().w_fit().child(
                             cn::button(if is_open {
                                 "Close Menu"
                             } else {
