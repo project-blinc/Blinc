@@ -37,9 +37,11 @@
     // site; these externs reconstruct `Signal::from_id` and delegate
     // to `blinc_core::reactive` directly. No runtime name lookup.
     __signal_get_by_id_i32: "__signal_get_by_id_i32",
+    __signal_get_by_id_i64: "__signal_get_by_id_i64",
     __signal_get_by_id_f64: "__signal_get_by_id_f64",
     __signal_get_by_id_string: "__signal_get_by_id_string",
     __signal_set_by_id_i32: "__signal_set_by_id_i32",
+    __signal_set_by_id_i64: "__signal_set_by_id_i64",
     __signal_set_by_id_f64: "__signal_set_by_id_f64",
     __signal_set_by_id_string: "__signal_set_by_id_string",
     // bool accessors — wire type is i32 (Zyntax lowers DSL `bool` to

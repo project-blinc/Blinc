@@ -77,6 +77,14 @@ pub(crate) extern "C" fn blinc_signal_get_by_id_i32(id_raw: i64) -> i32 {
     reconstruct_signal::<i32>(id_raw).try_get().unwrap_or(0)
 }
 
+/// `__signal_get_by_id_i64(id_raw)` — i64 mirror. Distinct from the
+/// i32 form: `signal n: i64` creates a `Signal<i64>`, and
+/// `reconstruct_signal::<i32>` on that id would read the wrong slot
+/// type.
+pub(crate) extern "C" fn blinc_signal_get_by_id_i64(id_raw: i64) -> i64 {
+    reconstruct_signal::<i64>(id_raw).try_get().unwrap_or(0)
+}
+
 /// `__signal_get_by_id_f64(id_raw)` — f64 mirror.
 pub(crate) extern "C" fn blinc_signal_get_by_id_f64(id_raw: i64) -> f64 {
     reconstruct_signal::<f64>(id_raw).try_get().unwrap_or(0.0)
@@ -134,6 +142,11 @@ fn decode_signal_name<'a>(name_ptr: *const i32) -> Option<&'a str> {
 /// Rust `.set()` does, so any `.bg(&signal)` binding repaints.
 pub(crate) extern "C" fn blinc_signal_set_by_id_i32(id_raw: i64, value: i32) {
     reconstruct_signal::<i32>(id_raw).set(value);
+}
+
+/// `__signal_set_by_id_i64(id_raw, value)` — i64 write side.
+pub(crate) extern "C" fn blinc_signal_set_by_id_i64(id_raw: i64, value: i64) {
+    reconstruct_signal::<i64>(id_raw).set(value);
 }
 
 /// `__signal_set_by_id_f64(id_raw, value)` — f64 mirror.

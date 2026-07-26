@@ -3,9 +3,10 @@ use crate::host::{
     blinc_dsl_computed_bool, blinc_dsl_computed_f64, blinc_dsl_computed_i32,
     blinc_dsl_computed_string, blinc_dsl_effect, blinc_format_int, blinc_fsm_runtime_trigger,
     blinc_fsm_subscribe, blinc_fsm_subscribe_all, blinc_signal_get_by_id_bool,
-    blinc_signal_get_by_id_f64, blinc_signal_get_by_id_i32, blinc_signal_get_by_id_string,
-    blinc_signal_set_by_id_bool, blinc_signal_set_by_id_f64, blinc_signal_set_by_id_i32,
-    blinc_signal_set_by_id_string, blinc_string_concat, blinc_text, blinc_text_int,
+    blinc_signal_get_by_id_f64, blinc_signal_get_by_id_i32, blinc_signal_get_by_id_i64,
+    blinc_signal_get_by_id_string, blinc_signal_set_by_id_bool, blinc_signal_set_by_id_f64,
+    blinc_signal_set_by_id_i32, blinc_signal_set_by_id_i64, blinc_signal_set_by_id_string,
+    blinc_string_concat, blinc_text, blinc_text_int,
 };
 use crate::widget_ffi::{
     blinc_b_view, blinc_blockquote_view, blinc_button_view, blinc_canvas_view, blinc_caption_view,
@@ -72,6 +73,12 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             ptr: blinc_signal_get_by_id_i32 as *const u8,
         },
         BuiltinDescriptor {
+            name: "__signal_get_by_id_i64",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::I64),
+            ptr: blinc_signal_get_by_id_i64 as *const u8,
+        },
+        BuiltinDescriptor {
             name: "__signal_get_by_id_f64",
             param_types: &[Type::Primitive(PrimitiveType::I64)],
             return_type: Type::Primitive(PrimitiveType::F64),
@@ -91,6 +98,15 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             ],
             return_type: Type::Primitive(PrimitiveType::Unit),
             ptr: blinc_signal_set_by_id_i32 as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__signal_set_by_id_i64",
+            param_types: &[
+                Type::Primitive(PrimitiveType::I64),
+                Type::Primitive(PrimitiveType::I64),
+            ],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_signal_set_by_id_i64 as *const u8,
         },
         BuiltinDescriptor {
             name: "__signal_set_by_id_f64",

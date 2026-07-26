@@ -34,6 +34,7 @@ use std::sync::{OnceLock, RwLock};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SignalType {
     I32,
+    I64,
     F64,
     String,
     Bool,
@@ -82,6 +83,7 @@ pub fn mint_or_get(name: &str, ty: SignalType) -> u64 {
 
     let id_raw = match ty {
         SignalType::I32 => blinc_core::reactive::signal::<i32>(0).id().to_raw(),
+        SignalType::I64 => blinc_core::reactive::signal::<i64>(0).id().to_raw(),
         SignalType::F64 => blinc_core::reactive::signal::<f64>(0.0).id().to_raw(),
         SignalType::String => blinc_core::reactive::signal::<String>(String::new())
             .id()

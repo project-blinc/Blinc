@@ -42,6 +42,7 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
         };
         let sig_ty = match prim {
             PrimitiveType::I32 => blinc_runtime::signal::SignalType::I32,
+            PrimitiveType::I64 => blinc_runtime::signal::SignalType::I64,
             PrimitiveType::F64 => blinc_runtime::signal::SignalType::F64,
             PrimitiveType::String => blinc_runtime::signal::SignalType::String,
             PrimitiveType::Bool => blinc_runtime::signal::SignalType::Bool,
@@ -72,6 +73,7 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
     fn typed_signal_extern_name(ty: &Type) -> Option<&'static str> {
         match ty {
             Type::Primitive(PrimitiveType::I32) => Some("__signal_get_by_id_i32"),
+            Type::Primitive(PrimitiveType::I64) => Some("__signal_get_by_id_i64"),
             Type::Primitive(PrimitiveType::F64) => Some("__signal_get_by_id_f64"),
             Type::Primitive(PrimitiveType::String) => Some("__signal_get_by_id_string"),
             Type::Primitive(PrimitiveType::Bool) => Some("__signal_get_by_id_bool"),
@@ -82,10 +84,108 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
     fn typed_signal_setter_extern_name(ty: &Type) -> Option<&'static str> {
         match ty {
             Type::Primitive(PrimitiveType::I32) => Some("__signal_set_by_id_i32"),
+            Type::Primitive(PrimitiveType::I64) => Some("__signal_set_by_id_i64"),
             Type::Primitive(PrimitiveType::F64) => Some("__signal_set_by_id_f64"),
             Type::Primitive(PrimitiveType::String) => Some("__signal_set_by_id_string"),
             Type::Primitive(PrimitiveType::Bool) => Some("__signal_set_by_id_bool"),
             _ => None,
+        }
+    }
+
+    /// Replace a bare `Variable(<signal>)` read with
+    /// `__signal_get_by_id_<T>(<id_literal>)`.
+    ///
+    /// Only valid in a value context — see the `Lambda` arm in
+    /// [`rewrite_expr`]. `shadowed` carries the enclosing lambda's
+    /// parameter names so a parameter that happens to share a signal's
+    /// name still resolves to the parameter.
+    fn rewrite_bare_reads(
+        expr: &mut zyntax_typed_ast::TypedNode<TypedExpression>,
+        signals: &HashMap<InternedString, SignalEntry>,
+        shadowed: &[InternedString],
+    ) {
+        if let TypedExpression::Variable(name) = &expr.node
+            && !shadowed.contains(name)
+            && let Some(entry) = signals.get(name)
+            && let Some(getter) = typed_signal_extern_name(&entry.ty)
+        {
+            let id_arg = zyntax_typed_ast::TypedNode::new(
+                TypedExpression::Literal(TypedLiteral::Integer(entry.id_raw as i128)),
+                Type::Primitive(PrimitiveType::I64),
+                expr.span,
+            );
+            let callee = zyntax_typed_ast::TypedNode::new(
+                TypedExpression::Variable(InternedString::new_global(getter)),
+                Type::Unknown,
+                expr.span,
+            );
+            expr.node = TypedExpression::Call(TypedCall {
+                callee: Box::new(callee),
+                positional_args: vec![id_arg],
+                named_args: Vec::new(),
+                type_args: Vec::new(),
+            });
+            // The read yields the signal's own type, not the enclosing
+            // expression's — a `: bool` computed over an i64 signal
+            // reads i64 and compares.
+            expr.ty = entry.ty.clone();
+            return;
+        }
+
+        match &mut expr.node {
+            TypedExpression::Binary(b) => {
+                rewrite_bare_reads(&mut b.left, signals, shadowed);
+                rewrite_bare_reads(&mut b.right, signals, shadowed);
+            }
+            TypedExpression::Unary(u) => rewrite_bare_reads(&mut u.operand, signals, shadowed),
+            TypedExpression::Call(c) => {
+                for a in &mut c.positional_args {
+                    rewrite_bare_reads(a, signals, shadowed);
+                }
+            }
+            TypedExpression::MethodCall(mc) => {
+                for a in &mut mc.positional_args {
+                    rewrite_bare_reads(a, signals, shadowed);
+                }
+            }
+            TypedExpression::Index(idx) => {
+                rewrite_bare_reads(&mut idx.object, signals, shadowed);
+                rewrite_bare_reads(&mut idx.index, signals, shadowed);
+            }
+            TypedExpression::Array(items) | TypedExpression::Tuple(items) => {
+                for it in items {
+                    rewrite_bare_reads(it, signals, shadowed);
+                }
+            }
+            TypedExpression::If(if_expr) => {
+                rewrite_bare_reads(&mut if_expr.condition, signals, shadowed);
+                rewrite_bare_reads(&mut if_expr.then_branch, signals, shadowed);
+                rewrite_bare_reads(&mut if_expr.else_branch, signals, shadowed);
+            }
+            TypedExpression::Block(block) => {
+                for stmt in &mut block.statements {
+                    rewrite_bare_reads_in_stmt(stmt, signals, shadowed);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn rewrite_bare_reads_in_stmt(
+        stmt: &mut zyntax_typed_ast::TypedNode<zyntax_typed_ast::TypedStatement>,
+        signals: &HashMap<InternedString, SignalEntry>,
+        shadowed: &[InternedString],
+    ) {
+        use zyntax_typed_ast::TypedStatement;
+        match &mut stmt.node {
+            TypedStatement::Expression(e) => rewrite_bare_reads(e, signals, shadowed),
+            TypedStatement::Return(Some(e)) => rewrite_bare_reads(e, signals, shadowed),
+            TypedStatement::Let(l) => {
+                if let Some(init) = &mut l.initializer {
+                    rewrite_bare_reads(init, signals, shadowed);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -189,14 +289,32 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
                 rewrite_expr(&mut if_expr.then_branch, signals);
                 rewrite_expr(&mut if_expr.else_branch, signals);
             }
-            TypedExpression::Lambda(lam) => match &mut lam.body {
-                zyntax_typed_ast::typed_ast::TypedLambdaBody::Expression(e) => {
-                    rewrite_expr(e, signals);
+            TypedExpression::Lambda(lam) => {
+                // A lambda body is a pure value context, so a bare
+                // `<signal>` there means "read it" — unlike the widget-arg
+                // position, where the bare name is the signal *handle* and
+                // `lower_reactive_args` needs it left alone.
+                //
+                // `.get()` shapes are rewritten by the recursive walk;
+                // `rewrite_bare_reads` then catches what's left. Without it
+                // the read never lowers: SSA can't resolve the name and
+                // falls back to an undefined variable (silently reads
+                // garbage) or, when the name collides with a function, to
+                // an extern ref that fails to link.
+                let shadowed: Vec<_> = lam.params.iter().map(|p| p.name).collect();
+                match &mut lam.body {
+                    zyntax_typed_ast::typed_ast::TypedLambdaBody::Expression(e) => {
+                        rewrite_expr(e, signals);
+                        rewrite_bare_reads(e, signals, &shadowed);
+                    }
+                    zyntax_typed_ast::typed_ast::TypedLambdaBody::Block(block) => {
+                        rewrite_block(block, signals);
+                        for stmt in &mut block.statements {
+                            rewrite_bare_reads_in_stmt(stmt, signals, &shadowed);
+                        }
+                    }
                 }
-                zyntax_typed_ast::typed_ast::TypedLambdaBody::Block(block) => {
-                    rewrite_block(block, signals);
-                }
-            },
+            }
             _ => {}
         }
 

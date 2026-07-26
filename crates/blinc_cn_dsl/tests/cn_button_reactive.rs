@@ -60,25 +60,24 @@ fn cn_button_disabled_computed() {
         .expect("compile cn.Button(disabled = computed)");
 }
 
-/// Known gap, pinned as `#[ignore]` rather than dropped: a computed
-/// whose body reads a signal of a *different* type than its declared
-/// return type fails to link with "can't resolve symbol <name>". The
-/// accessor is picked from the computed's return type, so an `i64`
-/// signal inside a `: bool` computed asks for a symbol that was never
-/// emitted. Not specific to Button — `cn.Progress(value = computed {
-/// count } : f64)` over an `i64` signal fails identically.
+/// Bare signal reads inside a `computed { }` body. Regression guard
+/// for the missing `Variable` arm in `resolve_signal_calls`: a bare
+/// `<signal>` (no `.get()`) was never lowered to
+/// `__signal_get_by_id_<T>`, so SSA fell back to an undefined variable
+/// or, when the name collided with a function, an extern ref that
+/// failed to link. Verified at the HIR level: the body now emits
+/// `call @__signal_get_by_id_i32(<id>)`.
 #[test]
-#[ignore = "mixed-type computed: accessor chosen by return type, not signal type"]
-fn cn_button_disabled_computed_mixed_types() {
+fn cn_button_disabled_computed_bare_signal_read() {
     let src = r#"
-        signal count: i64
+        signal n: i32
         view {
-            cn.Button(label = "Next", disabled = computed { count > 3 } : bool)
+            cn.Button(label = "Next", disabled = computed { n > 3 } : bool)
         }
     "#;
     dsl()
-        .compile_source(src, "cn_button_disabled_mixed.blinc")
-        .expect("compile cn.Button(disabled = mixed-type computed)");
+        .compile_source(src, "cn_button_disabled_bare_read.blinc")
+        .expect("compile cn.Button(disabled = computed over bare signal)");
 }
 
 /// The default must survive: omitting `disabled` leaves the button

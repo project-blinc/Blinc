@@ -171,6 +171,7 @@ pub(crate) fn lower_reactive_args(program: &mut TypedProgram) {
         };
         let want = match inner_ty {
             Type::Primitive(PrimitiveType::I32) => "__signal_get_by_id_i32",
+            Type::Primitive(PrimitiveType::I64) => "__signal_get_by_id_i64",
             Type::Primitive(PrimitiveType::F64) => "__signal_get_by_id_f64",
             Type::Primitive(PrimitiveType::Bool) => "__signal_get_by_id_bool",
             Type::Primitive(PrimitiveType::String) => "__signal_get_by_id_string",
