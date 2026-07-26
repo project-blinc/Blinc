@@ -72,13 +72,13 @@ impl Separator {
     // These consume self and return Self for chaining
 
     /// Set width
-    pub fn w(mut self, width: f32) -> Self {
+    pub fn w(mut self, width: impl blinc_layout::binding::IntoReactive<f32>) -> Self {
         self.inner = self.inner.w(width);
         self
     }
 
     /// Set height
-    pub fn h(mut self, height: f32) -> Self {
+    pub fn h(mut self, height: impl blinc_layout::binding::IntoReactive<f32>) -> Self {
         self.inner = self.inner.h(height);
         self
     }
@@ -132,7 +132,7 @@ impl Separator {
     }
 
     /// Set opacity
-    pub fn opacity(mut self, opacity: f32) -> Self {
+    pub fn opacity(mut self, opacity: impl blinc_layout::binding::IntoReactive<f32>) -> Self {
         self.inner = self.inner.opacity(opacity);
         self
     }

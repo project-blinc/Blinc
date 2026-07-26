@@ -2,7 +2,8 @@
 
 use std::cell::OnceCell;
 
-use blinc_dsl_core::extern_widget;
+use crate::bridge::is_set;
+use blinc_dsl_core::{Reactive, extern_widget};
 use blinc_layout::div::ElementBuilder;
 
 /// `cn.Skeleton(w?, h?, rounded?, circle_size?)` — placeholder
@@ -24,9 +25,9 @@ use blinc_layout::div::ElementBuilder;
 /// today. Static skeletons cover the loading-state case for now.
 #[extern_widget(namespace = "cn", name = "Skeleton")]
 pub struct CnSkeleton {
-    pub w: f64,
-    pub h: f64,
-    pub rounded: f64,
+    pub w: Reactive<f64>,
+    pub h: Reactive<f64>,
+    pub rounded: Reactive<f64>,
     pub circle_size: f64,
     /// Lazy-constructed cn widget. Same caching rationale as
     /// `CnButton::built`.
@@ -40,21 +41,26 @@ impl CnSkeleton {
     }
 
     fn to_cn_widget(&self) -> blinc_cn::Skeleton {
+        // `circle_size` stays eager: it selects a different
+        // constructor, so a change is structural rather than a value
+        // patch and there is no binding to hang it on.
         if self.circle_size > 0.0 {
             // Circle takes priority — its own dimensions; `w`/`h`/
             // `rounded` are silently ignored to keep the call shape
             // small. The doc above flags this.
             return blinc_cn::Skeleton::circle(self.circle_size as f32);
         }
+        // Width / height / radius are all bindable properties, so a
+        // signal patches `RenderProps` in place — no rebuild.
         let mut s = blinc_cn::Skeleton::new();
-        if self.w > 0.0 {
-            s = s.w(self.w as f32);
+        if is_set(&self.w) {
+            s = s.w(self.w.clone());
         }
-        if self.h > 0.0 {
-            s = s.h(self.h as f32);
+        if is_set(&self.h) {
+            s = s.h(self.h.clone());
         }
-        if self.rounded > 0.0 {
-            s = s.rounded(self.rounded as f32);
+        if is_set(&self.rounded) {
+            s = s.rounded(self.rounded.clone());
         }
         s
     }

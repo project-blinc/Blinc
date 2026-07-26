@@ -66,29 +66,10 @@ impl CnProgress {
                 blinc_cn::ProgressSize::Medium
             }
         };
-        // Route every Reactive<f64> shape into cn::progress's
-        // `IntoReactive<f32>` channel. Signal / Computed variants
-        // bridge through a fresh `Computed<f32>` that downcasts f64
-        // → f32 at read time (cn::progress's internal binding fires
-        // whenever the bridge's tracked dependencies change). The
-        // literal path passes an f32 constant — `IntoReactive::Const`
-        // — so there's no extra graph node.
-        let mut b = match &self.value {
-            Reactive::Literal(v) => blinc_cn::progress(*v as f32),
-            Reactive::Signal(sig) => {
-                let s = *sig;
-                let bridge =
-                    blinc_core::reactive::computed(move |g| g.get(s).unwrap_or(0.0) as f32);
-                blinc_cn::progress(bridge)
-            }
-            Reactive::Computed(c) => {
-                let upstream = c.clone();
-                let bridge = blinc_core::reactive::computed(move |_| {
-                    upstream.try_get().unwrap_or(0.0) as f32
-                });
-                blinc_cn::progress(bridge)
-            }
-        };
+        // `Reactive<f64>` goes straight through: cn::progress is
+        // generic over `IntoF32`, so the f64 -> f32 narrowing happens
+        // once inside the binding layer instead of here.
+        let mut b = blinc_cn::progress(self.value.clone());
         b = b.size(size);
         if self.width > 0.0 {
             b = b.w(self.width as f32);

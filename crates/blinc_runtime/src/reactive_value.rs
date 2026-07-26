@@ -291,3 +291,24 @@ impl<T: Clone + Send + 'static> blinc_layout::binding::IntoReactive<T> for React
         }
     }
 }
+
+// `Reactive<f64>` -> an f32-backed layout property.
+//
+// The DSL types every number as f64, its only float, while layout
+// stores f32. This mirrors the f64 source impls in
+// `blinc_layout::binding`: literals cast once, and signal / computed
+// shapes narrow per read so the binding stays live instead of freezing
+// at its build-time value.
+//
+// Without this a DSL wrapper would have to snapshot the value to hand
+// it to a cn builder, which silently drops reactivity.
+impl blinc_layout::binding::IntoReactive<f32> for Reactive<f64> {
+    fn into_reactive(self) -> blinc_layout::binding::Reactive<f32> {
+        use blinc_layout::binding::IntoReactive as _;
+        match self {
+            Self::Literal(v) => blinc_layout::binding::Reactive::Const(v as f32),
+            Self::Signal(s) => s.into_reactive(),
+            Self::Computed(c) => c.into_reactive(),
+        }
+    }
+}

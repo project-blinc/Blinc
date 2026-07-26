@@ -67,13 +67,13 @@ impl Skeleton {
     }
 
     /// Set width
-    pub fn w(mut self, width: f32) -> Self {
+    pub fn w(mut self, width: impl blinc_layout::binding::IntoReactive<f32>) -> Self {
         self.inner = self.inner.w(width);
         self
     }
 
     /// Set height
-    pub fn h(mut self, height: f32) -> Self {
+    pub fn h(mut self, height: impl blinc_layout::binding::IntoReactive<f32>) -> Self {
         self.inner = self.inner.h(height);
         self
     }
@@ -85,7 +85,7 @@ impl Skeleton {
     }
 
     /// Set border radius
-    pub fn rounded(mut self, radius: f32) -> Self {
+    pub fn rounded(mut self, radius: impl blinc_layout::binding::IntoReactive<f32>) -> Self {
         self.inner = self.inner.rounded(radius);
         self
     }

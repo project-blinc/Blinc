@@ -2,7 +2,9 @@
 
 use std::cell::OnceCell;
 
-use blinc_dsl_core::extern_widget;
+use crate::bridge::is_set;
+
+use blinc_dsl_core::{Reactive, extern_widget};
 use blinc_layout::div::ElementBuilder;
 
 /// `cn.Separator(orientation?, bg?, opacity?)` — divider line.
@@ -24,7 +26,7 @@ use blinc_layout::div::ElementBuilder;
 pub struct CnSeparator {
     pub orientation: String,
     pub bg: String,
-    pub opacity: f64,
+    pub opacity: Reactive<f64>,
     /// Lazy-constructed cn widget. Same caching rationale as
     /// `CnButton::built`.
     #[skip]
@@ -51,13 +53,17 @@ impl CnSeparator {
         if let Some(c) = crate::color::parse_color_prop("cn.Separator", "bg", &self.bg) {
             s = s.bg(c);
         }
-        if self.opacity > 0.0 {
-            // `0.0` is the macro-injected default for an unsupplied f64
-            // prop — we treat it as "no override" rather than "fully
-            // transparent" because making a separator invisible by
-            // default is the wrong ergonomic. Users who want explicit
-            // zero can fall back to other surface (overlay opacity).
-            s = s.opacity(self.opacity.clamp(0.0, 1.0) as f32);
+        if is_set(&self.opacity) {
+            // `0.0` is the macro-injected default for an unsupplied
+            // literal prop — treated as "no override" rather than
+            // "fully transparent", because an invisible-by-default
+            // separator is the wrong ergonomic. A bound opacity is
+            // always wired up: reading 0.0 on the first frame is a
+            // live binding, not an absent one.
+            //
+            // `Div::opacity` clamps to [0, 1] on every write, including
+            // binding updates, so no clamp is needed here.
+            s = s.opacity(self.opacity.clone());
         }
         s
     }

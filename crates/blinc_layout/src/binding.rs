@@ -135,6 +135,93 @@ impl<T> IntoReactive<T> for T {
     }
 }
 
+/// Build a `Reactive<f32>` from an f64 source, narrowing on every read.
+///
+/// A `Const` casts once. Bound and computed sources can't: their value
+/// changes over time, so the cast has to happen per read or the
+/// binding would freeze at its build-time value. Those arms wrap the
+/// source in a derived node that narrows as it reads.
+/// Note the derived node reads through the process-global graph, so
+/// the source signal must live there -- which every `use_state` /
+/// DSL-declared signal does. A signal minted on a throwaway local
+/// graph won't resolve and reads fall back to `0.0`.
+fn narrow_f64_signal(sig: Signal<f64>) -> Reactive<f32> {
+    Reactive::Computed(blinc_core::reactive::computed(move |g| {
+        g.get(sig).unwrap_or(0.0) as f32
+    }))
+}
+
+fn narrow_f64_computed(c: Computed<f64>) -> Reactive<f32> {
+    Reactive::Computed(blinc_core::reactive::computed(move |_| {
+        c.try_get().unwrap_or(0.0) as f32
+    }))
+}
+
+// f64 -> f32 property sources.
+//
+// Layout stores f32 end to end (taffy's `Style`, `RenderProps`, the GPU
+// primitive buffers), but callers legitimately hold f64 -- the DSL
+// types every number as f64, its only float. These impls let an f64
+// value or signal reach an f32-backed property directly.
+//
+// Deliberately NOT done by making the setters generic over the numeric
+// type: with a generic `N`, `.opacity(&state)` becomes ambiguous,
+// because `&State<f32>` satisfies both `IntoReactive<f32>` and the
+// blanket `IntoReactive<&State<f32>>`. Keeping the setters at a
+// concrete `f32` pins `N` and leaves the documented call shapes
+// turbofish-free.
+impl IntoReactive<f32> for f64 {
+    fn into_reactive(self) -> Reactive<f32> {
+        Reactive::Const(self as f32)
+    }
+}
+
+impl IntoReactive<f32> for &State<f64> {
+    fn into_reactive(self) -> Reactive<f32> {
+        narrow_f64_signal(Signal::from_id(self.signal_id()))
+    }
+}
+
+impl IntoReactive<f32> for State<f64> {
+    fn into_reactive(self) -> Reactive<f32> {
+        narrow_f64_signal(Signal::from_id(self.signal_id()))
+    }
+}
+
+impl IntoReactive<f32> for Signal<f64> {
+    fn into_reactive(self) -> Reactive<f32> {
+        narrow_f64_signal(self)
+    }
+}
+
+impl IntoReactive<f32> for &Signal<f64> {
+    fn into_reactive(self) -> Reactive<f32> {
+        narrow_f64_signal(*self)
+    }
+}
+
+impl IntoReactive<f32> for Computed<f64> {
+    fn into_reactive(self) -> Reactive<f32> {
+        narrow_f64_computed(self)
+    }
+}
+
+impl IntoReactive<f32> for &Computed<f64> {
+    fn into_reactive(self) -> Reactive<f32> {
+        narrow_f64_computed(self.clone())
+    }
+}
+
+// Identity: an already-built `Reactive<T>` passes straight through.
+// Lets a caller that has resolved a reactive itself (a DSL bridge
+// narrowing f64 to f32, say) hand it to any `impl IntoReactive<T>`
+// parameter without unwrapping and losing the binding.
+impl<T> IntoReactive<T> for Reactive<T> {
+    fn into_reactive(self) -> Reactive<T> {
+        self
+    }
+}
+
 // `&str` -> `Reactive<String>`. The blanket impl above only gives
 // `IntoReactive<&str> for &str`, so without this a builder that takes
 // `impl IntoReactive<String>` would reject every string-literal call
@@ -1731,5 +1818,90 @@ mod tests {
             updates.is_empty(),
             "no subscribers → no partial updates after node unregister"
         );
+    }
+
+    /// f64 sources reach f32-backed properties without the caller
+    /// converting, and without the documented call shapes needing a
+    /// turbofish.
+    mod numeric_width {
+        use super::*;
+
+        /// Built on the process-global graph, as `use_state` and
+        /// DSL-declared signals are: the f64 narrowing mints a derived
+        /// node there, so a local throwaway graph would never resolve.
+        fn state_f64(v: f64) -> State<f64> {
+            State::new(
+                blinc_core::reactive::signal::<f64>(v),
+                blinc_core::reactive::global_graph(),
+                blinc_core::reactive::global_dirty_flag(),
+            )
+        }
+
+        fn state_f32(v: f32) -> State<f32> {
+            State::new(
+                blinc_core::reactive::signal::<f32>(v),
+                blinc_core::reactive::global_graph(),
+                blinc_core::reactive::global_dirty_flag(),
+            )
+        }
+
+        #[test]
+        fn const_f64_narrows() {
+            assert!(matches!(
+                IntoReactive::<f32>::into_reactive(0.5_f64),
+                Reactive::Const(v) if v == 0.5_f32
+            ));
+        }
+
+        #[test]
+        fn bound_f64_stays_reactive() {
+            let s = state_f64(0.25);
+            let r: Reactive<f32> = (&s).into_reactive();
+            assert!(
+                !matches!(r, Reactive::Const(_)),
+                "a bound f64 must not collapse to a build-time constant"
+            );
+        }
+
+        #[test]
+        fn bound_f64_re_reads_rather_than_freezing() {
+            let s = state_f64(0.25);
+            let r: Reactive<f32> = (&s).into_reactive();
+            let Reactive::Computed(c) = r else {
+                panic!("a bound f64 should narrow to a derived node");
+            };
+            assert_eq!(c.try_get(), Some(0.25_f32));
+            s.set(0.75);
+            assert_eq!(
+                c.try_get(),
+                Some(0.75_f32),
+                "the narrowing must re-read on every update"
+            );
+        }
+
+        #[test]
+        fn f32_source_is_unaffected() {
+            // The f32 path must stay a plain Bound -- no derived node,
+            // and no change to the documented `.opacity(&state)` shape.
+            let s = state_f32(1.0);
+            let r: Reactive<f32> = (&s).into_reactive();
+            assert!(matches!(r, Reactive::Bound(_)));
+        }
+
+        #[test]
+        fn documented_call_shapes_need_no_turbofish() {
+            // Regression guard: making the setters generic over the
+            // numeric type broke these, because `&State<f32>` satisfies
+            // both `IntoReactive<f32>` and the blanket
+            // `IntoReactive<&State<f32>>`. Concrete f32 setters keep
+            // them inferable. Compiling IS the assertion.
+            let f32_state = state_f32(0.5);
+            let f64_state = state_f64(0.5);
+            let _ = crate::prelude::div()
+                .opacity(&f32_state)
+                .rounded(8.0)
+                .w(120.0);
+            let _ = crate::prelude::div().opacity(&f64_state).w(120.0_f64);
+        }
     }
 }
