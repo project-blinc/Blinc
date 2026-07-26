@@ -82,12 +82,48 @@ fn side_effects_inside_a_branch_still_run() {
     assert_eq!(nodes, 2, "root Div + the branch's Text");
 }
 
-/// A loop body with no child push runs to completion inside a widget body.
+/// A loop emits one child per iteration.
 ///
-/// The `while`-with-children case is NOT yet covered: adding any
-/// `__push_child__` to the body zeroes the iterations (the child list is
-/// defined in the entry block and the loop body's cross-block use of it
-/// silently fails). Left uncovered deliberately rather than asserted-wrong.
+/// Every typed-AST pass that rewrites a widget call has to walk into loop
+/// bodies. `resolve_extern_widget_named_args` did not, so the `Text` call
+/// kept the short argument list its surface form had and reached Cranelift
+/// with 2 args against a 4-parameter signature. The verifier rejected the
+/// whole function, the backend skipped it, and the call site degraded to a
+/// constant — the loop appeared to run zero times.
+#[test]
+fn loop_emits_one_child_per_iteration() {
+    let dsl = compile(
+        r#"signal cf_rows: i32
+           component C { view { Div(class="a") { while cf_rows.get() < 3 { Text("r") cf_rows.set(cf_rows.get() + 1) } } } }
+           view { C() }"#,
+        "loop_children.blinc",
+    );
+    dsl.set_signal_i32("cf_rows", 0);
+    let nodes = node_count(&dsl);
+    assert_eq!(
+        dsl.get_signal_i32("cf_rows"),
+        Some(3),
+        "loop must run 3 times"
+    );
+    assert_eq!(nodes, 4, "root Div + one Text per iteration");
+}
+
+/// Same, with a nested widget-with-children as the per-iteration child.
+#[test]
+fn loop_emits_nested_widgets_per_iteration() {
+    let dsl = compile(
+        r#"signal cf_nest: i32
+           component C { view { Div(class="a") { while cf_nest.get() < 3 { Div(class="row") { Text("r") } cf_nest.set(cf_nest.get() + 1) } } } }
+           view { C() }"#,
+        "loop_nested.blinc",
+    );
+    dsl.set_signal_i32("cf_nest", 0);
+    let nodes = node_count(&dsl);
+    assert_eq!(dsl.get_signal_i32("cf_nest"), Some(3));
+    assert_eq!(nodes, 7, "root + 3 * (Div + Text)");
+}
+
+/// A loop body with no child push runs to completion inside a widget body.
 #[test]
 fn loop_body_executes_inside_a_widget_body() {
     let dsl = compile(

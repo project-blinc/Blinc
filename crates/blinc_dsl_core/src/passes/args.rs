@@ -303,6 +303,22 @@ pub(crate) fn resolve_extern_widget_named_args(program: &mut TypedProgram) {
                     }
                 }
             }
+            // A widget call in a loop body needs its named args
+            // positionalised too. Without this the call keeps the short
+            // arg list its surface form had, and Cranelift's verifier
+            // rejects the whole function for a mismatched argument count
+            // against the registered widget signature.
+            TypedStatement::While(w) => {
+                rewrite_expr(&mut w.condition);
+                for s in &mut w.body.statements {
+                    walk_stmt(s);
+                }
+            }
+            TypedStatement::Block(b) => {
+                for s in &mut b.statements {
+                    walk_stmt(s);
+                }
+            }
             _ => {}
         }
     }

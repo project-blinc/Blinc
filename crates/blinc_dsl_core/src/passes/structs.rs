@@ -580,6 +580,12 @@ pub(crate) fn lower_struct_widget_props_to_handles(
                     }
                 }
             }
+            TypedStatement::While(w) => {
+                rewrite_expr(&mut w.condition, structs, counter);
+                for s in &mut w.body.statements {
+                    walk_stmt(s, structs, counter);
+                }
+            }
             TypedStatement::Block(block) => {
                 for s in &mut block.statements {
                     walk_stmt(s, structs, counter);

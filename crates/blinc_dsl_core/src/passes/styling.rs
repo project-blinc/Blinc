@@ -166,6 +166,17 @@ pub(crate) fn lower_styling_args_to_overlays(program: &mut TypedProgram) {
                     }
                 }
             }
+            TypedStatement::While(w) => {
+                rewrite_expr(&mut w.condition, counter);
+                for s in &mut w.body.statements {
+                    walk_stmt(s, counter);
+                }
+            }
+            TypedStatement::Block(b) => {
+                for s in &mut b.statements {
+                    walk_stmt(s, counter);
+                }
+            }
             _ => {}
         }
     }
