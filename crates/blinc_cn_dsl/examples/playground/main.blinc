@@ -38,20 +38,6 @@ import { FormWidgets } from "./forms"
 import { FeedbackWidgets } from "./feedback"
 import { MediaWidgets } from "./media"
 
-style {
-    .page {
-        padding: 24px;
-        gap: 16px;
-        flex-direction: column;
-        width: 620px;
-        /* Section labels are plain `Text`, which has no colour of its
-           own -- without this they render near-black on the dark
-           surface. cn widgets that set their own text colour (Button,
-           Label) are unaffected either way. */
-        color: #e2e8f0;
-    }
-    .row { gap: 10px; flex-direction: row; align-items: center; flex-wrap: wrap }
-}
 
 fsm Play {
     context {
@@ -95,61 +81,86 @@ fsm Play {
     }
 }
 
-view {
-    Div(class = "page") {
-        FormWidgets()
-        FeedbackWidgets()
-        MediaWidgets()
-
-        Text("progress: value = pct (in-place)")
-        Div(class = "row") {
-            cn.Progress(value = Play.pct, size = "medium")
+// Wrapped in a component, matching cn_dsl_demo and reactive_dsl: fsm
+// at top level, `component X { style { } view { } }`, then
+// `view { X() }`. Root-level `style { }` is supported too -- it is
+// extracted by `extract_and_strip_stylesheets` and flushed into the
+// context on the first `view_widget()` -- but the component form is
+// the convention the other examples follow.
+component Playground {
+    style {
+        .page {
+            padding: 24px;
+            gap: 16px;
+            flex-direction: column;
+            width: 620px;
+            /* Section labels are plain `Text`, which has no colour of its
+               own -- without this they render near-black on the dark
+               surface. cn widgets that set their own text colour (Button,
+               Label) are unaffected either way. */
+            color: #e2e8f0;
         }
+        .row { gap: 10px; flex-direction: row; align-items: center; flex-wrap: wrap }
+    }
 
-        Text("skeleton: w / h / rounded all bound (in-place)")
-        Div(class = "row") {
-            cn.Skeleton(w = Play.bar_w, h = Play.bar_h, rounded = Play.radius)
-        }
+    view {
+        Div(class = "page") {
+            FormWidgets()
+            FeedbackWidgets()
+            MediaWidgets()
 
-        Text("separator: opacity bound (clamped by Div::opacity)")
-        Div(class = "row") {
-            cn.Separator(opacity = Play.fade)
-        }
+            Text("progress: value = pct (in-place)")
+            Div(class = "row") {
+                cn.Progress(value = Play.pct, size = "medium")
+            }
 
-        // NOTE: derived values reach cn widgets but do not yet update
-        // live -- `get_derived` does not track derived-to-derived
-        // dependencies, so the narrowing wrapper is never marked dirty.
-        // These show their initial value. Signal-bound props above do
-        // update.
-        Text("progress: computed { pct / 2 } (initial value only)")
-        Div(class = "row") {
-            cn.Progress(value = computed { Play.pct / 2.0 } : f64)
-        }
+            Text("skeleton: w / h / rounded all bound (in-place)")
+            Div(class = "row") {
+                cn.Skeleton(w = Play.bar_w, h = Play.bar_h, rounded = Play.radius)
+            }
 
-        Text("progress: computed over TWO signals (initial value only)")
-        Div(class = "row") {
-            cn.Progress(value = computed { Play.pct + Play.radius } : f64)
-        }
+            Text("separator: opacity bound (clamped by Div::opacity)")
+            Div(class = "row") {
+                cn.Separator(opacity = Play.fade)
+            }
 
-        Text("button: label AND disabled both bound (deps rebuild)")
-        Div(class = "row") {
-            cn.Button(label = Play.caption, disabled = Play.busy)
-        }
+            // NOTE: derived values reach cn widgets but do not yet update
+            // live -- `get_derived` does not track derived-to-derived
+            // dependencies, so the narrowing wrapper is never marked dirty.
+            // These show their initial value. Signal-bound props above do
+            // update.
+            Text("progress: computed { pct / 2 } (initial value only)")
+            Div(class = "row") {
+                cn.Progress(value = computed { Play.pct / 2.0 } : f64)
+            }
 
-        // if / else with children in both branches. Kept at this
-        // nesting depth deliberately: one container deeper still fails
-        // to lower.
-        if Play.busy {
-            cn.Alert("busy - work in flight", variant = "warning")
-            cn.Spinner(size = "small")
-        } else {
-            cn.Alert("idle - press Busy", variant = "success")
-        }
+            Text("progress: computed over TWO signals (initial value only)")
+            Div(class = "row") {
+                cn.Progress(value = computed { Play.pct + Play.radius } : f64)
+            }
 
-        Div(class = "row") {
-            cn.Button("Grow", on_click = || { Play.trigger("Grow") })
-            cn.Button("Busy", variant = "secondary", on_click = || { Play.trigger("Busy") })
-            cn.Button("Reset", variant = "destructive", on_click = || { Play.trigger("Reset") })
+            Text("button: label AND disabled both bound (deps rebuild)")
+            Div(class = "row") {
+                cn.Button(label = Play.caption, disabled = Play.busy)
+            }
+
+            // if / else with children in both branches. Kept at this
+            // nesting depth deliberately: one container deeper still fails
+            // to lower.
+            if Play.busy {
+                cn.Alert("busy - work in flight", variant = "warning")
+                cn.Spinner(size = "small")
+            } else {
+                cn.Alert("idle - press Busy", variant = "success")
+            }
+
+            Div(class = "row") {
+                cn.Button("Grow", on_click = || { Play.trigger("Grow") })
+                cn.Button("Busy", variant = "secondary", on_click = || { Play.trigger("Busy") })
+                cn.Button("Reset", variant = "destructive", on_click = || { Play.trigger("Reset") })
+            }
         }
     }
 }
+
+view { Playground() }
