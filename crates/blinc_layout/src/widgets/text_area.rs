@@ -444,6 +444,10 @@ pub struct TextAreaState {
     pub(crate) change_version: Arc<AtomicU64>,
     /// Signal ID for the change version (set externally when binding to reactive system)
     pub(crate) change_signal_id: Option<SignalId>,
+    /// Invoked with the new text after an edit. Runs OUTSIDE the state
+    /// lock -- a callback that writes a signal can end up back in this
+    /// widget, and holding the lock across that deadlocks.
+    pub(crate) on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
     /// Layout bounds storage - updated after layout to get actual rendered dimensions
     pub layout_bounds_storage: crate::renderer::LayoutBoundsStorage,
     /// CSS element ID for stylesheet matching (set via TextArea::id())
@@ -492,6 +496,7 @@ impl Default for TextAreaState {
             clicked_visual_line: None, // Set by line click handlers
             change_version: Arc::new(AtomicU64::new(0)),
             change_signal_id: None,
+            on_change: None,
             layout_bounds_storage: Arc::new(Mutex::new(None)),
             css_element_id: None,
             css_classes: Vec::new(),
@@ -2029,7 +2034,7 @@ impl TextArea {
             })
             // Handle text input
             .on_event(event_types::TEXT_INPUT, move |ctx| {
-                let (needs_refresh, change_signal) = {
+                let (needs_refresh, change_signal, edited) = {
                     let mut d = match data_for_text.lock() {
                         Ok(d) => d,
                         Err(_) => return,
@@ -2057,9 +2062,9 @@ impl TextArea {
                         let viewport_height = d.viewport_height;
                         d.ensure_cursor_visible(line_height, viewport_height);
                         tracing::debug!("TextArea received char: {:?}, value: {}", c, d.value());
-                        (true, d.change_signal_id)
+                        (true, d.change_signal_id, changed_text(&d))
                     } else {
-                        (false, None)
+                        (false, None, None)
                     }
                 }; // Lock released here
 
@@ -2072,6 +2077,7 @@ impl TextArea {
                 if let Some(signal_id) = change_signal {
                     crate::stateful::check_stateful_deps(&[signal_id]);
                 }
+                fire_on_change(edited);
             })
             // Handle key down for navigation and deletion
             .on_key_down(move |ctx| {
@@ -2210,8 +2216,9 @@ impl TextArea {
                     } else {
                         None
                     };
+                    let edited = if text_changed { changed_text(&d) } else { None };
 
-                    (cursor_changed, should_blur, change_signal)
+                    (cursor_changed, should_blur, change_signal, edited)
                 }; // Lock released here
 
                 // Handle blur (Escape key)
@@ -2226,6 +2233,7 @@ impl TextArea {
                 if let Some(signal_id) = needs_refresh.2 {
                     crate::stateful::check_stateful_deps(&[signal_id]);
                 }
+                fire_on_change(needs_refresh.3);
             })
             // Set text cursor (I-beam) for text area
             .cursor_text()
@@ -3121,6 +3129,22 @@ impl TextArea {
         self
     }
 
+    /// Called after every edit with the new text.
+    ///
+    /// Complements [`Self::on_change_signal`], which only pokes the
+    /// stateful dep graph: this one carries the text, which is what a
+    /// caller keeping an external value (a DSL signal, a form model) in
+    /// sync actually needs.
+    pub fn on_change<F>(self, callback: F) -> Self
+    where
+        F: Fn(&str) + Send + Sync + 'static,
+    {
+        if let Ok(mut state) = self.state.lock() {
+            state.on_change = Some(Arc::new(callback));
+        }
+        self
+    }
+
     /// Set a signal ID to be notified when text content changes
     ///
     /// When the text area content is modified (typing, deletion, paste, etc.),
@@ -3149,6 +3173,23 @@ impl TextArea {
             state.set_change_signal(signal_id);
         }
         self
+    }
+}
+
+/// The callback and the text to hand it, read while the state lock is
+/// already held.
+///
+/// Split from firing it on purpose: the callback commonly writes a
+/// signal, which can refresh a stateful that locks this same state, so
+/// it must run only after the lock is released.
+fn changed_text(d: &TextAreaState) -> Option<(Arc<dyn Fn(&str) + Send + Sync>, String)> {
+    d.on_change.as_ref().map(|cb| (Arc::clone(cb), d.value()))
+}
+
+/// Fire what [`changed_text`] captured, now that the lock is gone.
+fn fire_on_change(edited: Option<(Arc<dyn Fn(&str) + Send + Sync>, String)>) {
+    if let Some((cb, text)) = edited {
+        cb(&text);
     }
 }
 

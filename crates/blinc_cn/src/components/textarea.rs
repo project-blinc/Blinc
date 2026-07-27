@@ -74,6 +74,8 @@ impl TextareaSize {
 #[derive(Clone)]
 struct TextareaConfig {
     state: SharedTextAreaState,
+    /// Called after every edit with the new text.
+    on_change: Option<std::sync::Arc<dyn Fn(&str) + Send + Sync>>,
     size: TextareaSize,
     rows: Option<usize>,
     cols: Option<usize>,
@@ -112,6 +114,7 @@ impl TextareaConfig {
             full_width: true,
             border_width: None,
             corner_radius: None,
+            on_change: None,
         }
     }
 }
@@ -138,6 +141,10 @@ impl Textarea {
             .rounded(radius)
             .disabled(config.disabled)
             .wrap(config.wrap);
+
+        if let Some(cb) = config.on_change.clone() {
+            ta = ta.on_change(move |text| cb(text));
+        }
 
         // Apply border width if specified
         if let Some(border) = config.border_width {
@@ -353,6 +360,15 @@ impl TextareaBuilder {
     /// Set maximum character length
     pub fn max_length(mut self, max: usize) -> Self {
         self.config.max_length = Some(max);
+        self
+    }
+
+    /// Called after every edit with the new text.
+    pub fn on_change<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(&str) + Send + Sync + 'static,
+    {
+        self.config.on_change = Some(std::sync::Arc::new(callback));
         self
     }
 

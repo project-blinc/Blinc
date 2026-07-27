@@ -26,6 +26,15 @@ use blinc_layout::renderer::RenderTree;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
+/// The pending-subtree-rebuild queue and the stateful-deps registry are
+/// process-global. One test's `Signal::set` therefore queues work that
+/// another test's `process_pending_subtree_rebuilds` can drain, so the
+/// refresh-driven tests take turns.
+fn rebuild_lock() -> std::sync::MutexGuard<'static, ()> {
+    static L: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    L.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 fn init() {
     static I: std::sync::Once = std::sync::Once::new();
     I.call_once(|| {
@@ -148,6 +157,7 @@ fn tree_hash_distinguishes_button_labels() {
 /// not the first.
 #[test]
 fn successive_renders_track_the_current_label() {
+    let _guard = rebuild_lock();
     use blinc_layout::selector::ElementRegistry;
     use std::sync::Arc as StdArc;
     init();
@@ -194,6 +204,7 @@ fn successive_renders_track_the_current_label() {
 /// must reflect the new label.
 #[test]
 fn bound_label_resizes_on_signal_set() {
+    let _guard = rebuild_lock();
     use blinc_core::reactive::State;
     init();
 
@@ -256,6 +267,7 @@ fn bound_label_resizes_on_signal_set() {
 /// switches to "Close Menu" (109px).
 #[test]
 fn bound_label_shrinks_on_signal_set() {
+    let _guard = rebuild_lock();
     use blinc_core::reactive::State;
     init();
 
@@ -308,6 +320,7 @@ fn bound_label_shrinks_on_signal_set() {
 /// different `&str`, so the fix for bound labels does not apply here.
 #[test]
 fn parent_stateful_swapping_button_labels_resizes() {
+    let _guard = rebuild_lock();
     use blinc_layout::stateful::{ButtonState, stateful};
     init();
 

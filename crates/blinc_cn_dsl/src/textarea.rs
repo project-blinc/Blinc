@@ -2,17 +2,22 @@
 
 use std::cell::OnceCell;
 
-use blinc_dsl_core::extern_widget;
+use blinc_dsl_core::{Reactive, extern_widget};
 use blinc_layout::div::ElementBuilder;
 
-use crate::bridge::text_area_state_keyed;
+use crate::bridge::{CallSiteId, text_area_state_for_field, writable_signal};
 
 /// `cn.Textarea(key, placeholder?, label?, description?, error?, rows?,
 /// size?, disabled?, required?, max_length?)` — a multi-line field.
 ///
 /// Props (DSL surface):
-/// - `key: string` — identity for the typed text, exactly as
-///   `cn.Input`. Omitting it means the text does not survive a rebuild.
+/// - `value: Reactive<String>` — bind a `signal` here and the field
+///   shares it, exactly as `cn.Input`: the signal seeds the text and
+///   every edit writes back. A bound field needs no `key`.
+/// - `on_change: || => unit` — DSL closure fired after each edit, after
+///   the write, so it can read the new text off the binding.
+/// - `key: string` — identity for the typed text for an UNBOUND field.
+///   Omitting it means the text does not survive a rebuild.
 /// - `placeholder: string` — shown while empty.
 /// - `label: string` / `description: string` / `error: string` — form
 ///   furniture; a non-empty `error` also switches to error styling.
@@ -26,6 +31,7 @@ use crate::bridge::text_area_state_keyed;
 /// Colour props are omitted: those belong in CSS via `.cn-textarea`.
 #[extern_widget(namespace = "cn", name = "Textarea")]
 pub struct CnTextarea {
+    pub value: Reactive<String>,
     pub key: String,
     pub placeholder: String,
     pub label: String,
@@ -36,6 +42,12 @@ pub struct CnTextarea {
     pub disabled: bool,
     pub required: bool,
     pub max_length: i64,
+    /// Zero when the user omitted `on_change`. Same zero-arg
+    /// `extern "C" fn()` pointer convention as `cn.Button`'s `on_click`.
+    pub on_change: i64,
+    /// Call-site identity, captured while the FFI builds the struct.
+    #[skip]
+    call_site: CallSiteId,
     /// Lazy-constructed cn widget. Same caching rationale as
     /// `CnButton::built`.
     #[skip]
@@ -54,8 +66,24 @@ impl CnTextarea {
             _ => blinc_cn::TextareaSize::Medium,
         };
 
-        let state = text_area_state_keyed(&self.key);
+        let state = text_area_state_for_field(&self.value, &self.key, self.call_site);
         let mut t = blinc_cn::textarea(&state).size(size);
+        // Signal first, then the author's closure, so a zero-arg
+        // closure reads the text that was just written.
+        let bound = writable_signal(&self.value);
+        let on_change_ptr = self.on_change;
+        if bound.is_some() || on_change_ptr != 0 {
+            t = t.on_change(move |new_value: &str| {
+                if let Some(sig) = bound {
+                    sig.set(new_value.to_string());
+                }
+                if on_change_ptr != 0 {
+                    type ClosureFn = extern "C" fn();
+                    let func: ClosureFn = unsafe { std::mem::transmute(on_change_ptr) };
+                    func();
+                }
+            });
+        }
         if !self.placeholder.is_empty() {
             t = t.placeholder(self.placeholder.clone());
         }

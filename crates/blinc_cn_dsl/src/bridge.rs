@@ -86,6 +86,36 @@ pub fn text_input_data_keyed(key: &str) -> blinc_layout::widgets::text_input::Sh
         .clone()
 }
 
+/// `SharedTextAreaState` for a textarea, keyed like
+/// [`text_input_data_for_field`]: explicit `key`, else the bound
+/// signal, else the call site.
+pub fn text_area_state_for_field(
+    value: &Reactive<String>,
+    key: &str,
+    call_site: CallSiteId,
+) -> blinc_layout::widgets::text_area::SharedTextAreaState {
+    let store_key = if !key.is_empty() {
+        key.to_string()
+    } else {
+        match value {
+            Reactive::Signal(s) => format!("sig:{:?}", s.id()),
+            _ => format!("call:{}", call_site.0),
+        }
+    };
+    let state = text_area_state_keyed(&store_key);
+    // Seed an EMPTY buffer only: a rebuild must not reset what the user
+    // has typed since.
+    if let Reactive::Signal(s) = value
+        && let Some(current) = s.try_get()
+        && !current.is_empty()
+        && let Ok(mut d) = state.lock()
+        && d.value().is_empty()
+    {
+        d.set_value(&current);
+    }
+    state
+}
+
 /// Per-key `SharedTextAreaState`. Same rationale as
 /// [`text_input_data_keyed`]: the textarea keeps its contents in state
 /// that must outlive a rebuild, and a DSL wrapper is reconstructed

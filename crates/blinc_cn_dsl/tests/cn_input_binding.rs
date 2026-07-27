@@ -184,3 +184,43 @@ fn on_change_fires_after_the_write() {
         "the closure must see the value already written"
     );
 }
+
+/// `cn.Textarea` has the same contract as `cn.Input`.
+#[test]
+fn textarea_typing_writes_the_bound_signal() {
+    let _guard = focus_lock();
+    let dsl = dsl();
+    dsl.compile_source(
+        r#"
+        signal ta_bio: string
+        signal ta_hits: i32
+        view {
+            Div {
+                cn.Textarea(value = ta_bio, rows = 3, on_change = || {
+                    ta_hits.set(ta_hits.get() + 1)
+                })
+            }
+        }
+        "#,
+        "textarea_bound.blinc",
+    )
+    .expect("compile");
+    dsl.set_signal_string("ta_bio", "");
+    dsl.set_signal_i32("ta_hits", 0);
+
+    let widget = dsl.view_widget();
+    assert!(
+        type_char(widget.as_ref(), 'y'),
+        "the textarea must take text"
+    );
+    assert_eq!(
+        dsl.get_signal_string("ta_bio").as_deref(),
+        Some("y"),
+        "typing must write the bound signal"
+    );
+    assert_eq!(
+        dsl.get_signal_i32("ta_hits"),
+        Some(1),
+        "on_change must fire once per edit"
+    );
+}

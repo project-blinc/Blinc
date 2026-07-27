@@ -6,6 +6,9 @@
 // Two-way text binding: the field writes this signal on every edit,
 // and the button's label reads it, so the button tracks what you type.
 signal form_name: string
+// The textarea binds the same way: no `key` needed, because the signal
+// IS the field's identity, and its contents survive a rebuild.
+signal form_bio: string
 
 component FormWidgets {
     style {
@@ -44,7 +47,7 @@ component FormWidgets {
                 )
             }
             
-           cn.Textarea(key = "pg_bio", label = "Bio", placeholder = "a few words", rows = 3)
+            cn.Textarea(value = form_bio, label = "Bio", placeholder = "a few words", rows = 3)
 
             cn.Label("input: `value` is two-way; the button label follows it")
             Div(class = "row") {
