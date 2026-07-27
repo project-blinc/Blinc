@@ -124,6 +124,60 @@ impl Default for CallSiteId {
     }
 }
 
+/// Identity for a text field: an explicit `key` wins, then the bound
+/// signal, then the call site.
+///
+/// A `key` the author wrote is deliberate and may be shared on purpose,
+/// so it takes precedence. Failing that a bound signal IS the identity:
+/// two fields bound to one signal are two views of one value. Failing
+/// both, the call site keeps distinct fields distinct without the author
+/// naming anything.
+pub fn text_input_data_for_field(
+    value: &Reactive<String>,
+    key: &str,
+    call_site: CallSiteId,
+) -> blinc_layout::widgets::text_input::SharedTextInputData {
+    if !key.is_empty() {
+        let data = text_input_data_keyed(key);
+        seed_from_signal(&data, value);
+        return data;
+    }
+    text_input_data_for(value, call_site)
+}
+
+/// Push the bound signal's value into an empty buffer.
+///
+/// Only into an EMPTY one: the buffer is what the user is typing into,
+/// and a rebuild must not reset it to whatever the signal held when the
+/// field was first built.
+fn seed_from_signal(
+    data: &blinc_layout::widgets::text_input::SharedTextInputData,
+    value: &Reactive<String>,
+) {
+    let Reactive::Signal(s) = value else { return };
+    let Some(current) = s.try_get() else { return };
+    if current.is_empty() {
+        return;
+    }
+    if let Ok(mut d) = data.lock()
+        && d.value.is_empty()
+    {
+        d.value = current;
+    }
+}
+
+/// The `Signal<String>` behind a bound `value`, if there is one.
+///
+/// A field bound to a signal writes back through it on every edit, so
+/// the DSL sees what was typed without polling the buffer. A literal or
+/// a computed has nothing to write to.
+pub fn writable_signal(value: &Reactive<String>) -> Option<blinc_core::reactive::Signal<String>> {
+    match value {
+        Reactive::Signal(s) => Some(*s),
+        _ => None,
+    }
+}
+
 /// `SharedTextInputData` for a text field, keyed by whichever identity
 /// the field actually has.
 ///

@@ -3,6 +3,10 @@
 // One module per widget group so the playground stays small as new
 // widgets land -- add a module, add one import line, add one call.
 
+// Two-way text binding: the field writes this signal on every edit,
+// and the button's label reads it, so the button tracks what you type.
+signal form_name: string
+
 component FormWidgets {
     style {
         .group { gap: 8px; flex-direction: column }
@@ -41,6 +45,12 @@ component FormWidgets {
             }
             
            cn.Textarea(key = "pg_bio", label = "Bio", placeholder = "a few words", rows = 3)
+
+            cn.Label("input: `value` is two-way; the button label follows it")
+            Div(class = "row") {
+                cn.Input(value = form_name, placeholder = "type a name")
+                cn.Button(label = form_name)
+            }
 
             cn.Label("kbd")
             Div(class = "row") {

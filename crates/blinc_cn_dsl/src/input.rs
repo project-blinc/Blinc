@@ -2,16 +2,23 @@
 
 use std::cell::OnceCell;
 
-use blinc_dsl_core::extern_widget;
+use blinc_dsl_core::{Reactive, extern_widget};
 use blinc_layout::div::ElementBuilder;
 
-use crate::bridge::text_input_data_keyed;
+use crate::bridge::{CallSiteId, text_input_data_for_field, writable_signal};
 
 /// `cn.Input(key, placeholder?, label?, description?, error?, kind?,
 /// size?, disabled?, required?, width?)` — a single-line text field.
 ///
 /// Props (DSL surface):
-/// - `key: string` — identity for the typed text. `cn::input` keeps its
+/// - `value: Reactive<String>` — bind a `signal` here and the field
+///   shares it: what the user types is written back on every edit, and
+///   the signal's value seeds the field. It also doubles as the
+///   field's identity, so no `key` is needed for a bound field.
+/// - `on_change: || => unit` — DSL closure fired after each edit.
+///   Zero-arg, like `Div(on_click = …)`: read the new text from the
+///   bound signal, which is written first.
+/// - `key: string` — identity for the typed text, for an UNBOUND field. `cn::input` keeps its
 ///   contents in external state that must outlive a rebuild, and extern
 ///   widgets have no call-site identity to derive one from, so the key
 ///   comes from you. Two fields sharing a key share their contents.
@@ -31,6 +38,7 @@ use crate::bridge::text_input_data_keyed;
 /// Colour props are omitted: those belong in CSS via `.cn-input`.
 #[extern_widget(namespace = "cn", name = "Input")]
 pub struct CnInput {
+    pub value: Reactive<String>,
     pub key: String,
     pub placeholder: String,
     pub label: String,
@@ -41,6 +49,13 @@ pub struct CnInput {
     pub disabled: bool,
     pub required: bool,
     pub width: f64,
+    /// Zero when the user omitted `on_change`. Same zero-arg
+    /// `extern "C" fn()` pointer convention as `cn.Button`'s `on_click`.
+    pub on_change: i64,
+    /// Call-site identity, captured while the FFI builds the struct --
+    /// `current_call_id()` reads correctly only inside that bracket.
+    #[skip]
+    call_site: CallSiteId,
     /// Lazy-constructed cn widget. Same caching rationale as
     /// `CnButton::built`.
     #[skip]
@@ -69,8 +84,25 @@ impl CnInput {
             _ => InputType::Text,
         };
 
-        let data = text_input_data_keyed(&self.key);
+        let data = text_input_data_for_field(&self.value, &self.key, self.call_site);
         let mut i = blinc_cn::input(&data).size(size);
+        // Write-back and the author's callback share one handler: the
+        // signal is written FIRST so a zero-arg closure can read the new
+        // text straight off it.
+        let bound = writable_signal(&self.value);
+        let on_change_ptr = self.on_change;
+        if bound.is_some() || on_change_ptr != 0 {
+            i = i.on_change(move |new_value: &str| {
+                if let Some(sig) = bound {
+                    sig.set(new_value.to_string());
+                }
+                if on_change_ptr != 0 {
+                    type ClosureFn = extern "C" fn();
+                    let func: ClosureFn = unsafe { std::mem::transmute(on_change_ptr) };
+                    func();
+                }
+            });
+        }
         // `password()` sets the masking flag AND the input type;
         // `input_type(Password)` alone types the field without masking
         // it, so the secret renders in clear text.
