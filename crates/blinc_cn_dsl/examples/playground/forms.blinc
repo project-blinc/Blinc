@@ -49,10 +49,10 @@ component FormWidgets {
             
             cn.Textarea(value = form_bio, label = "Bio", placeholder = "a few words", rows = 3)
 
-            cn.Label("input: `value` is two-way; the button label follows it")
+            cn.Label("input: `value` is two-way; the chip follows what you type")
             Div(class = "row") {
                 cn.Input(value = form_name, placeholder = "type a name")
-                cn.Button(label = form_name)
+                cn.Badge(label = form_name, variant = "secondary")
             }
 
             cn.Label("kbd")

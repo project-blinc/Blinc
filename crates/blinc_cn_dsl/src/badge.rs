@@ -2,13 +2,15 @@
 
 use std::cell::OnceCell;
 
-use blinc_dsl_core::extern_widget;
+use blinc_dsl_core::{Reactive, extern_widget};
 use blinc_layout::div::ElementBuilder;
 
 /// `cn.Badge(label, variant?, style?)` — inline status / count chip.
 ///
 /// Props (DSL surface):
-/// - `label: string` — chip text.
+/// - `label: Reactive<String>` — chip text. Bind a `signal` and the
+///   chip follows it; text has no property writer, so a bound label
+///   rebuilds the chip through `deps()`.
 /// - `variant: string` — `"default"`, `"secondary"`, `"success"`,
 ///   `"warning"`, or `"destructive"`. Unknown values fall back to
 ///   `"default"`. (`blinc_cn::BadgeVariant` doesn't currently expose
@@ -22,7 +24,7 @@ use blinc_layout::div::ElementBuilder;
 /// children blocks generally.
 #[extern_widget(namespace = "cn", name = "Badge")]
 pub struct CnBadge {
-    pub label: String,
+    pub label: Reactive<String>,
     pub variant: String,
     pub style: String,
     /// Lazy-constructed cn widget. Same caching rationale as
@@ -62,9 +64,15 @@ impl CnBadge {
                 blinc_cn::BadgeStyle::Soft
             }
         };
-        blinc_cn::badge(self.label.clone())
+        // Variant and style first: `reactive_label` snapshots them into
+        // the rebuild closure, so anything set after it would be lost on
+        // the next refresh.
+        blinc_cn::badge("")
             .variant(variant)
             .style(style)
+            .reactive_label(blinc_layout::binding::IntoReactive::into_reactive(
+                self.label.clone(),
+            ))
     }
 }
 

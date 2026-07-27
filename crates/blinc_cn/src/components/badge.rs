@@ -171,6 +171,37 @@ impl Badge {
         }
     }
 
+    /// Bind the chip's text to a reactive source.
+    ///
+    /// Text content has no property writer -- a changed label needs a
+    /// new text node -- so a bound label wraps the chip in a
+    /// `Stateful` subscribed to the source. A `Const` needs none of
+    /// that and rebuilds in place, exactly as `new` does.
+    pub fn reactive_label(self, label: blinc_layout::binding::Reactive<String>) -> Self {
+        use crate::reactive_props::{clone_reactive, current, dep_signal};
+        use blinc_layout::stateful::{ButtonState, stateful};
+
+        let (variant, style, icon_position) = (self.variant, self.style, self.icon_position);
+        let Some(sig) = dep_signal(&label) else {
+            return Self::rebuild(current(&label), variant, style, None, icon_position);
+        };
+
+        let src = clone_reactive(&label);
+        let chip = stateful::<ButtonState>().deps([sig]).on_state(move |_ctx| {
+            Self::rebuild(current(&src), variant, style, None, icon_position).inner
+        });
+        Self {
+            // A shrink-wrapping host for the stateful: `inner` is a
+            // `Div`, and the chip itself is rebuilt inside it.
+            inner: div().child(chip),
+            label: current(&label),
+            variant,
+            style,
+            icon: None,
+            icon_position,
+        }
+    }
+
     /// Set the badge variant (semantic colour).
     pub fn variant(self, variant: BadgeVariant) -> Self {
         Self::rebuild(

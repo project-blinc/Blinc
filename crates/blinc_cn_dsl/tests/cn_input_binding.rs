@@ -224,3 +224,57 @@ fn textarea_typing_writes_the_bound_signal() {
         "on_change must fire once per edit"
     );
 }
+
+/// A `cn.Badge` bound to the same signal tracks it: text has no
+/// property writer, so the chip rebuilds through `deps()`.
+#[test]
+fn a_bound_badge_follows_the_signal() {
+    use blinc_layout::renderer::RenderTree;
+
+    let _guard = focus_lock();
+    let dsl = dsl();
+    dsl.compile_source(
+        r#"
+        signal chip_text: string
+        view { Div { cn.Badge(label = chip_text, variant = "secondary") } }
+        "#,
+        "badge_bound.blinc",
+    )
+    .expect("compile");
+    dsl.set_signal_string("chip_text", "ab");
+
+    let host = blinc_layout::div::div()
+        .w(400.0)
+        .h(200.0)
+        .child_box(dsl.view_widget());
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(400.0, 200.0);
+    // Widest LEAF: the containers stretch to the 400px host, so only a
+    // childless node reports the text's own measured width.
+    let width = |t: &RenderTree| {
+        let mut max = 0.0f32;
+        let mut stack = vec![t.root().unwrap()];
+        while let Some(id) = stack.pop() {
+            let kids = t.layout_tree.children(id);
+            if kids.is_empty()
+                && let Some(l) = t.layout_tree.get_layout(id)
+            {
+                max = max.max(l.size.width);
+            }
+            stack.extend(kids);
+        }
+        max
+    };
+    let before = width(&tree);
+
+    dsl.set_signal_string("chip_text", "a much longer chip label");
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 200.0);
+    let after = width(&tree);
+
+    println!("BADGE width {before} -> {after}");
+    assert!(
+        after > before,
+        "a bound chip must re-render with the new text: {before} -> {after}"
+    );
+}
