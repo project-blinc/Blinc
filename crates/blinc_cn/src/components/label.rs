@@ -77,12 +77,17 @@ impl Label {
             // Build a row with text + asterisk
             let required_color = theme.color(ColorToken::Error);
 
+            // No `w_fit()` / `h_fit()`: both set `align_self: Start` as a
+            // side effect, which overrides the parent's `align-items`.
+            // In a row that pinned the label to the top, so a label beside
+            // a padded chip sat a couple of pixels high. Width is the main
+            // axis in a row and already hugs; `flex_shrink_0` keeps it from
+            // being squeezed.
             div()
-                .w_fit()
+                .flex_shrink_0()
                 .class("cn-label")
                 .class(disabled_class)
                 .flex_row()
-                .h_fit()
                 .gap(2.0)
                 .child_box(crate::reactive_props::reactive_text(
                     &config.text,
@@ -91,10 +96,9 @@ impl Label {
                 .child(text("*").size(font_size).color(required_color).medium())
         } else {
             div()
-                .w_fit()
+                .flex_shrink_0()
                 .class("cn-label")
                 .class(disabled_class)
-                .h_fit()
                 .child_box(crate::reactive_props::reactive_text(
                     &config.text,
                     move |t| t.size(font_size).color(text_color).medium().no_wrap(),

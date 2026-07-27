@@ -1853,6 +1853,14 @@ impl Div {
     /// touch `flex_basis`: that field is per-axis (main axis only) and
     /// setting it here would clobber sibling-axis sizing when parent
     /// direction and fit axis disagree.
+    /// Width hugs the content and the box neither grows nor shrinks.
+    ///
+    /// Also sets `align_self: Start`, which is what stops a COLUMN
+    /// parent stretching the box across its cross axis. Note the cost:
+    /// in a ROW the cross axis is vertical, so this silently overrides
+    /// the parent's `align-items` and pins the box to the top. Reach for
+    /// [`Self::flex_shrink_0`] instead when the parent is a row -- width
+    /// there is the main axis and already hugs.
     pub fn w_fit(mut self) -> Self {
         self.style.size.width = Dimension::Auto;
         self.style.flex_grow = 0.0;
@@ -1924,6 +1932,11 @@ impl Div {
     /// touch `flex_basis`: that field is per-axis (main axis only) and
     /// setting it here would clobber sibling-axis sizing when parent
     /// direction and fit axis disagree.
+    /// Height hugs the content and the box neither grows nor shrinks.
+    ///
+    /// Mirror of [`Self::w_fit`], including the `align_self: Start` and
+    /// its cost: in a ROW this overrides the parent's `align-items` and
+    /// pins the box to the top.
     pub fn h_fit(mut self) -> Self {
         self.style.size.height = Dimension::Auto;
         self.style.flex_grow = 0.0;
