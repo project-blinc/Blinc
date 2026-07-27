@@ -43,6 +43,7 @@ use std::ops::{Deref, DerefMut};
 
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
 use blinc_layout::prelude::*;
+use blinc_theme::ColorToken;
 use blinc_theme::ThemeState;
 
 pub use super::button::IconPosition;
@@ -96,6 +97,22 @@ impl BadgeVariant {
             BadgeVariant::Warning => "warning",
             BadgeVariant::Destructive => "destructive",
         }
+    }
+}
+
+/// The theme colour `.cn-badge--{style}-{variant}` sets as `color`.
+///
+/// Mirrors the stylesheet: change one and change the other, or a bound
+/// label drifts from a static one.
+fn label_color_token(style: BadgeStyle, variant: BadgeVariant) -> ColorToken {
+    match (style, variant) {
+        (BadgeStyle::Solid, _) => ColorToken::TextInverse,
+        (_, BadgeVariant::Default) => ColorToken::Primary,
+        (BadgeStyle::Soft, BadgeVariant::Secondary) => ColorToken::TextSecondary,
+        (BadgeStyle::Outline, BadgeVariant::Secondary) => ColorToken::TextPrimary,
+        (_, BadgeVariant::Success) => ColorToken::Success,
+        (_, BadgeVariant::Warning) => ColorToken::Warning,
+        (_, BadgeVariant::Destructive) => ColorToken::Error,
     }
 }
 
@@ -197,9 +214,22 @@ impl Badge {
         // colour instead of the variant's.
         let src = clone_reactive(&label);
         let variant_class = format!("cn-badge--{}-{}", style.css_suffix(), variant.css_suffix());
+        // The label's colour is set in Rust rather than left to the
+        // cascade. A static chip's text is a plain child of the classed
+        // node and inherits `color` from it; a rebuilt label is created
+        // by the stateful's callback, so whether it carries the
+        // variant's colour depends on a stylesheet pass having run over
+        // it since. That is why the chip rendered in the default text
+        // colour until some unrelated interaction happened to trigger
+        // one. Reading the token here makes the rebuilt label
+        // self-sufficient. The trade-off is that a CSS override of
+        // `.cn-badge--{style}-{variant} { color }` no longer reaches a
+        // BOUND label -- the same trade-off cn::Button already makes for
+        // its own label.
+        let fg = ThemeState::get().color(label_color_token(style, variant));
         let label_slot = stateful::<ButtonState>()
             .deps([sig])
-            .on_state(move |_ctx| div().child(text(&current(&src)).medium()));
+            .on_state(move |_ctx| div().child(text(&current(&src)).medium().color(fg)));
         Self {
             inner: div()
                 .class("cn-badge")

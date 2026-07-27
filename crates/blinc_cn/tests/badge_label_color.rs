@@ -94,8 +94,18 @@ fn bound_and_static_labels_resolve_the_same_colour() {
     println!("BOUND label colour, after rebuild: {second:?}");
 
     assert!(want.is_some(), "sanity: the static chip resolves a colour");
+
+    // A bound label carries the variant's THEME colour, set in Rust
+    // rather than inherited, so it is right on the first frame whether
+    // or not a stylesheet pass has run over the rebuilt subtree. It
+    // therefore does NOT follow a CSS override of the class -- the
+    // trade-off documented on `Badge::reactive_label`.
+    let secondary = blinc_theme::ThemeState::get().color(blinc_theme::ColorToken::TextSecondary);
+    let expected = [secondary.r, secondary.g, secondary.b, secondary.a];
     assert_eq!(
-        first, want,
-        "a bound chip must resolve the same colour on the FIRST frame"
+        first,
+        Some(expected),
+        "a bound chip must carry the variant's colour on the FIRST frame"
     );
+    assert_eq!(second, first, "and must keep it across a rebuild");
 }
