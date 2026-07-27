@@ -274,7 +274,22 @@ impl RenderTree {
         // text-overflow, text-align) from parent to child nodes. This must run AFTER all
         // CSS styles are applied above, because during initial tree construction the
         // stylesheet wasn't set yet and inherit_text_props_from_parent found no parent values.
-        let all_node_ids: Vec<LayoutNodeId> = self.render_nodes.keys().copied().collect();
+        // PARENT BEFORE CHILD. Each node copies from its immediate
+        // parent, so a single pass carries an inherited value exactly
+        // one level down. `render_nodes` is insertion-ordered, which is
+        // parent-first for a tree built top-down -- but not after a
+        // subtree rebuild re-inserts a parent behind children that
+        // outlived it. Walking depth-first from the root makes the pass
+        // converge at any depth regardless of insertion history. Nodes
+        // outside the main tree (overlays) are appended afterwards, as
+        // before.
+        let mut all_node_ids: Vec<LayoutNodeId> = Vec::with_capacity(self.render_nodes.len());
+        if let Some(root) = self.root {
+            self.collect_subtree_ids(root, &mut all_node_ids);
+        }
+        let visited: HashSet<LayoutNodeId> = all_node_ids.iter().copied().collect();
+        all_node_ids.extend(self.render_nodes.keys().filter(|id| !visited.contains(id)));
+
         for node_id in all_node_ids {
             let parent_id = match self.element_registry.get_parent(node_id) {
                 Some(id) => id,
@@ -535,5 +550,52 @@ impl RenderTree {
         for child_id in self.layout_tree.children(node_id) {
             self.collect_subtree_ids(child_id, out);
         }
+    }
+}
+
+#[cfg(test)]
+mod inherit_tests {
+    use crate::css_parser::Stylesheet;
+    use crate::div::div;
+    use crate::renderer::RenderTree;
+    use crate::text::text;
+
+    /// An inherited colour must reach a deeply nested text node in ONE
+    /// pass.
+    ///
+    /// The propagation copies from the immediate parent, so the pass
+    /// only converges if parents are visited first. Insertion order
+    /// happens to satisfy that for a freshly built tree -- this pins the
+    /// invariant so a rebuild that re-inserts a parent behind its
+    /// children cannot quietly cost a frame per level.
+    #[test]
+    fn inherited_text_color_reaches_a_deep_child_in_one_pass() {
+        let host = div().class("tinted").child(
+            // Two intermediate wrappers, as a Stateful-backed widget
+            // introduces between the classed node and its label.
+            div().child(div().child(text("hello"))),
+        );
+        let mut tree = RenderTree::from_element(&host);
+        tree.set_stylesheet(Stylesheet::parse(".tinted { color: #ff0000 }").expect("css"));
+        tree.apply_stylesheet_base_styles();
+
+        // Deepest node is the text.
+        let mut deepest = tree.root().expect("root");
+        loop {
+            let kids = tree.layout_tree.children(deepest);
+            match kids.first() {
+                Some(&c) => deepest = c,
+                None => break,
+            }
+        }
+        let color = tree
+            .render_nodes
+            .get(&deepest)
+            .and_then(|n| n.props.text_color)
+            .expect("the text node must have inherited a colour");
+        assert_eq!(
+            color[0], 1.0,
+            "expected the red from `.tinted`, got {color:?}"
+        );
     }
 }

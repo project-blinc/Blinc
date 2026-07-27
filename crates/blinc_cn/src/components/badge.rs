@@ -186,14 +186,27 @@ impl Badge {
             return Self::rebuild(current(&label), variant, style, None, icon_position);
         };
 
+        // The class stays on a STABLE node outside the stateful, and
+        // only the text is rebuilt inside it. The chip's whole
+        // appearance -- background, border, radius, and the text colour
+        // the label inherits -- comes from
+        // `.cn-badge--{style}-{variant}`, and that cascade only reaches
+        // content the stylesheet pass can see as a descendant. Building
+        // the classed node inside the callback put it behind the
+        // stateful boundary, so the label rendered in the default text
+        // colour instead of the variant's.
         let src = clone_reactive(&label);
-        let chip = stateful::<ButtonState>().deps([sig]).on_state(move |_ctx| {
-            Self::rebuild(current(&src), variant, style, None, icon_position).inner
-        });
+        let variant_class = format!("cn-badge--{}-{}", style.css_suffix(), variant.css_suffix());
+        let label_slot = stateful::<ButtonState>()
+            .deps([sig])
+            .on_state(move |_ctx| div().child(text(&current(&src)).medium()));
         Self {
-            // A shrink-wrapping host for the stateful: `inner` is a
-            // `Div`, and the chip itself is rebuilt inside it.
-            inner: div().child(chip),
+            inner: div()
+                .class("cn-badge")
+                .class(&variant_class)
+                .items_center()
+                .justify_center()
+                .child(label_slot),
             label: current(&label),
             variant,
             style,
