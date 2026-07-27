@@ -87,9 +87,36 @@ where
         return Box::new(style(text(current(src))));
     };
     let src = clone_reactive(src);
+    // The Stateful sits inside a plain hugging Div.
+    //
+    // A Stateful's own container does not take the parent's
+    // `items_center` the way an ordinary child does, so on its own it
+    // lands at the top-left of a taller box -- visible as a chip label
+    // pinned to the top of its pill instead of centred. Wrapped, the
+    // parent aligns an ordinary Div and the content follows it.
+    //
+    // The inner Div hugs too: the callback has to return a container,
+    // and a stretching one would put the text back in the corner.
     Box::new(
-        stateful::<ButtonState>()
-            .deps([sig])
-            .on_state(move |_ctx| blinc_layout::div::div().child(style(text(current(&src))))),
+        blinc_layout::div::div()
+            .w_fit()
+            .h_fit()
+            // `h_fit()` also sets `align_self: Start`, which pins the
+            // wrapper to the top of a taller parent -- a chip label
+            // against the top of its pill rather than centred in it.
+            // Text in a box is centred in every caller here, so say so.
+            .align_self_center()
+            .child(
+                stateful::<ButtonState>()
+                    .deps([sig])
+                    .on_state(move |_ctx| {
+                        blinc_layout::div::div()
+                            .w_fit()
+                            .h_fit()
+                            .child(style(text(current(&src))))
+                    })
+                    .w_fit()
+                    .h_fit(),
+            ),
     )
 }

@@ -227,16 +227,17 @@ impl Badge {
         // BOUND label -- the same trade-off cn::Button already makes for
         // its own label.
         let fg = ThemeState::get().color(label_color_token(style, variant));
-        let label_slot = stateful::<ButtonState>()
-            .deps([sig])
-            .on_state(move |_ctx| div().child(text(&current(&src)).medium().color(fg)));
+        // Same helper every other reactive text prop uses, so the
+        // wrapper's sizing and the "set your own colour" rule live in
+        // one place.
+        let label_slot = crate::reactive_props::reactive_text(&src, move |t| t.medium().color(fg));
         Self {
             inner: div()
                 .class("cn-badge")
                 .class(&variant_class)
                 .items_center()
                 .justify_center()
-                .child(label_slot),
+                .child_box(label_slot),
             label: current(&label),
             variant,
             style,

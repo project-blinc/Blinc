@@ -36,6 +36,7 @@ fn rebuild_lock() -> std::sync::MutexGuard<'static, ()> {
 
 #[test]
 fn dsl_textarea_height_matches_rows() {
+    let _guard = rebuild_lock();
     let _ = tracing_subscriber::fmt::try_init();
     init();
     let dsl = BlincDsl::new().unwrap();
@@ -76,6 +77,7 @@ fn dsl_textarea_height_matches_rows() {
 /// still applies it to the node.
 #[test]
 fn wrappers_expose_layout_style() {
+    let _guard = rebuild_lock();
     use blinc_layout::div::ElementBuilder;
     init();
     let dsl = BlincDsl::new().unwrap();

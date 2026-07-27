@@ -35,6 +35,25 @@ fn deepest(tree: &RenderTree) -> blinc_layout::LayoutNodeId {
     id
 }
 
+/// Absolute position of the deepest node. `location` is
+/// parent-relative, and a bound label sits one level deeper than a
+/// static one, so only accumulated offsets compare.
+fn deepest_origin(tree: &RenderTree) -> (f32, f32) {
+    let (mut x, mut y) = (0.0f32, 0.0f32);
+    let mut id = tree.root().expect("root");
+    loop {
+        if let Some(l) = tree.layout_tree.get_layout(id) {
+            x += l.location.x;
+            y += l.location.y;
+        }
+        match tree.layout_tree.children(id).first() {
+            Some(&c) => id = c,
+            None => break,
+        }
+    }
+    (x, y)
+}
+
 fn build(el: impl blinc_layout::div::ElementBuilder + 'static) -> RenderTree {
     let host = div().w(400.0).h(100.0).child(el);
     let mut tree = RenderTree::from_element(&host);
@@ -108,4 +127,61 @@ fn bound_and_static_labels_resolve_the_same_colour() {
         "a bound chip must carry the variant's colour on the FIRST frame"
     );
     assert_eq!(second, first, "and must keep it across a rebuild");
+}
+
+/// The label must sit in the same place whether it is bound or not.
+///
+/// A bound label is wrapped by the stateful's content div, and a plain
+/// `div()` left-aligns its child rather than centring it, so the chip's
+/// `justify_center` stopped reaching the text.
+#[test]
+fn a_bound_label_sits_where_a_static_one_does() {
+    init();
+    let stat = build(blinc_cn::badge("Hello World").variant(blinc_cn::BadgeVariant::Secondary));
+    let label = State::new(
+        signal::<String>("Hello World".to_string()),
+        global_graph(),
+        global_dirty_flag(),
+    );
+    let bound = build(
+        blinc_cn::badge("")
+            .variant(blinc_cn::BadgeVariant::Secondary)
+            .reactive_label(Reactive::Bound(label)),
+    );
+
+    // (chip width, text width, text x within the chip)
+    let geom = |tree: &RenderTree| {
+        let chip = tree.layout_tree.children(tree.root().unwrap())[0];
+        let chip_w = tree.layout_tree.get_layout(chip).unwrap().size.width;
+        let t = deepest(tree);
+        let l = tree.layout_tree.get_layout(t).unwrap();
+        (chip_w, l.size.width, l.location.x)
+    };
+    let (sw, stw, sx) = geom(&stat);
+    let (bw, btw, bx) = geom(&bound);
+    println!("STATIC chip={sw} text={stw} x={sx}");
+    println!("BOUND  chip={bw} text={btw} x={bx}");
+
+    assert!(
+        (sw - bw).abs() < 1.0,
+        "the chip must be the same width: static {sw}, bound {bw}"
+    );
+    assert!(
+        (stw - btw).abs() < 1.0,
+        "the label must measure the same: static {stw}, bound {btw}"
+    );
+
+    // Position, not just size: the stateful's wrappers must leave the
+    // label where the text node they replace would have been.
+    let (sox, soy) = deepest_origin(&stat);
+    let (box_, boy) = deepest_origin(&bound);
+    println!("STATIC origin=({sox}, {soy})  BOUND origin=({box_}, {boy})");
+    assert!(
+        (soy - boy).abs() < 1.0,
+        "the label must sit at the same y: static {soy}, bound {boy}"
+    );
+    assert!(
+        (sox - box_).abs() < 1.0,
+        "and the same x: static {sox}, bound {box_}"
+    );
 }
