@@ -2,7 +2,7 @@
 
 use std::cell::OnceCell;
 
-use blinc_dsl_core::extern_widget;
+use blinc_dsl_core::{Reactive, extern_widget};
 use blinc_layout::div::ElementBuilder;
 
 /// `cn.Alert(message, variant?)` — inline notification banner.
@@ -13,7 +13,7 @@ use blinc_layout::div::ElementBuilder;
 ///   `"destructive"`. Unknown values fall back to `"default"`.
 #[extern_widget(namespace = "cn", name = "Alert")]
 pub struct CnAlert {
-    pub message: String,
+    pub message: Reactive<String>,
     pub variant: String,
     /// Lazy-constructed cn widget. Same caching rationale as
     /// `CnButton::built`.

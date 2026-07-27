@@ -50,8 +50,8 @@ pub struct Label {
 
 impl Label {
     /// Create a new label with the given text
-    pub fn new(text: impl Into<String>) -> Self {
-        Self::with_config(LabelConfig::new(text.into()))
+    pub fn new(text: impl blinc_layout::binding::IntoReactive<String>) -> Self {
+        Self::with_config(LabelConfig::new(text.into_reactive()))
     }
 
     /// Create from a full configuration
@@ -84,13 +84,10 @@ impl Label {
                 .flex_row()
                 .h_fit()
                 .gap(2.0)
-                .child(
-                    text(&config.text)
-                        .size(font_size)
-                        .color(text_color)
-                        .medium()
-                        .no_wrap(),
-                )
+                .child_box(crate::reactive_props::reactive_text(
+                    &config.text,
+                    move |t| t.size(font_size).color(text_color).medium().no_wrap(),
+                ))
                 .child(text("*").size(font_size).color(required_color).medium())
         } else {
             div()
@@ -98,13 +95,10 @@ impl Label {
                 .class("cn-label")
                 .class(disabled_class)
                 .h_fit()
-                .child(
-                    text(&config.text)
-                        .size(font_size)
-                        .color(text_color)
-                        .medium()
-                        .no_wrap(),
-                )
+                .child_box(crate::reactive_props::reactive_text(
+                    &config.text,
+                    move |t| t.size(font_size).color(text_color).medium().no_wrap(),
+                ))
         };
 
         Self { inner }
@@ -124,16 +118,28 @@ impl Label {
 }
 
 /// Internal configuration for building a Label
-#[derive(Clone)]
 pub(crate) struct LabelConfig {
-    text: String,
+    text: blinc_layout::binding::Reactive<String>,
     size: LabelSize,
     required: bool,
     disabled: bool,
 }
 
+/// Hand-written: `Reactive<T>` carries type-erased handles and is not
+/// `Clone` itself, though every variant's payload is.
+impl Clone for LabelConfig {
+    fn clone(&self) -> Self {
+        Self {
+            text: crate::reactive_props::clone_reactive(&self.text),
+            size: self.size,
+            required: self.required,
+            disabled: self.disabled,
+        }
+    }
+}
+
 impl LabelConfig {
-    fn new(text: String) -> Self {
+    fn new(text: blinc_layout::binding::Reactive<String>) -> Self {
         Self {
             text,
             size: LabelSize::default(),
@@ -153,9 +159,9 @@ pub struct LabelBuilder {
 
 impl LabelBuilder {
     /// Create a new label builder with the given text
-    pub fn new(text: impl Into<String>) -> Self {
+    pub fn new(text: impl blinc_layout::binding::IntoReactive<String>) -> Self {
         Self {
-            config: LabelConfig::new(text.into()),
+            config: LabelConfig::new(text.into_reactive()),
             built: std::cell::OnceCell::new(),
         }
     }
@@ -235,7 +241,7 @@ impl ElementBuilder for LabelBuilder {
 }
 
 /// Create a styled label component
-pub fn label(text: impl Into<String>) -> LabelBuilder {
+pub fn label(text: impl blinc_layout::binding::IntoReactive<String>) -> LabelBuilder {
     LabelBuilder::new(text)
 }
 

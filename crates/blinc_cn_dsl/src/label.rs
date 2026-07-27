@@ -2,7 +2,7 @@
 
 use std::cell::OnceCell;
 
-use blinc_dsl_core::extern_widget;
+use blinc_dsl_core::{Reactive, extern_widget};
 use blinc_layout::div::ElementBuilder;
 
 /// `cn.Label(text, size?, required?, disabled?)` — form-field caption.
@@ -14,7 +14,7 @@ use blinc_layout::div::ElementBuilder;
 /// - `disabled: bool` — dimmed appearance when true.
 #[extern_widget(namespace = "cn", name = "Label")]
 pub struct CnLabel {
-    pub text: String,
+    pub text: Reactive<String>,
     pub size: String,
     pub required: bool,
     pub disabled: bool,

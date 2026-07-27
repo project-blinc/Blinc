@@ -49,11 +49,16 @@ component FormWidgets {
             
             cn.Textarea(value = form_bio, label = "Bio", placeholder = "a few words", rows = 3)
 
-            cn.Label("input: `value` is two-way; the chip follows what you type")
+            // Every text prop below takes the same signal: text content
+            // has no property writer, so each rebuilds through deps()
+            // and carries its own colour rather than inheriting one.
+            cn.Label("input: `value` is two-way; chip, label and alert all follow it")
             Div(class = "row") {
                 cn.Input(value = form_name, placeholder = "type a name")
                 cn.Badge(label = form_name, variant = "secondary")
+                cn.Label(form_name)
             }
+            cn.Alert(form_name, variant = "warning")
 
             cn.Label("kbd")
             Div(class = "row") {

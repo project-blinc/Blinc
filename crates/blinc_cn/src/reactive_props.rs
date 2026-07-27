@@ -60,3 +60,36 @@ pub fn clone_reactive<T: Clone>(r: &Reactive<T>) -> Reactive<T> {
         Reactive::Computed(computed) => Reactive::Computed(computed.clone()),
     }
 }
+
+/// A text node that follows a reactive source.
+///
+/// Text content has no property writer, so a changed string needs a new
+/// text node: bound sources get a `Stateful` subscribed to the signal,
+/// and a `Const` is built once with no wrapper at all.
+///
+/// `style` runs on every rebuild and MUST set everything the text
+/// needs -- size, colour, weight. Content built inside a stateful
+/// callback is created after the stylesheet pass has walked the tree,
+/// so it cannot rely on inheriting anything from an ancestor's class;
+/// it would render unstyled until some later event triggered another
+/// pass. See `gotcha_stateful_content_loses_css_inheritance`.
+pub fn reactive_text<F>(
+    src: &Reactive<String>,
+    style: F,
+) -> Box<dyn blinc_layout::div::ElementBuilder>
+where
+    F: Fn(blinc_layout::text::Text) -> blinc_layout::text::Text + Send + Sync + 'static,
+{
+    use blinc_layout::stateful::{ButtonState, stateful};
+    use blinc_layout::text::text;
+
+    let Some(sig) = dep_signal(src) else {
+        return Box::new(style(text(current(src))));
+    };
+    let src = clone_reactive(src);
+    Box::new(
+        stateful::<ButtonState>()
+            .deps([sig])
+            .on_state(move |_ctx| blinc_layout::div::div().child(style(text(current(&src))))),
+    )
+}

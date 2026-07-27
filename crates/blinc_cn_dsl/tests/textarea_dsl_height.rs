@@ -26,6 +26,14 @@ fn init() {
     });
 }
 
+/// `process_pending_subtree_rebuilds` drains a process-global queue, so
+/// a test measuring frame-to-frame stability must not run while another
+/// test is queueing rebuilds.
+fn rebuild_lock() -> std::sync::MutexGuard<'static, ()> {
+    static L: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    L.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[test]
 fn dsl_textarea_height_matches_rows() {
     let _ = tracing_subscriber::fmt::try_init();
@@ -92,6 +100,7 @@ fn wrappers_expose_layout_style() {
 /// a frame after launch, so a single `compute_layout` cannot see it.
 #[test]
 fn textarea_height_is_stable_across_frames() {
+    let _guard = rebuild_lock();
     init();
     let dsl = BlincDsl::new().unwrap();
     blinc_cn_dsl::register_all(&dsl).unwrap();

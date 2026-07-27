@@ -33,6 +33,7 @@ use std::ops::{Deref, DerefMut};
 
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
 use blinc_layout::prelude::*;
+use blinc_theme::ColorToken;
 use blinc_theme::ThemeState;
 
 /// Alert severity variants
@@ -55,18 +56,24 @@ pub enum AlertVariant {
 /// Simple alert with a single message
 pub struct Alert {
     inner: Div,
-    message: String,
+    message: blinc_layout::binding::Reactive<String>,
     variant: AlertVariant,
 }
 
 impl Alert {
-    /// Create a new alert with a message
-    pub fn new(message: impl Into<String>) -> Self {
+    /// Create a new alert with a message.
+    ///
+    /// Bind a signal here and the message follows it; text content has
+    /// no property writer, so a bound message rebuilds through `deps()`.
+    pub fn new(message: impl blinc_layout::binding::IntoReactive<String>) -> Self {
         Self::with_variant(message, AlertVariant::default())
     }
 
-    fn with_variant(message: impl Into<String>, variant: AlertVariant) -> Self {
-        let message = message.into();
+    fn with_variant(
+        message: impl blinc_layout::binding::IntoReactive<String>,
+        variant: AlertVariant,
+    ) -> Self {
+        let message = message.into_reactive();
         let inner = Self::build_div(&message, variant);
         Self {
             inner,
@@ -75,7 +82,7 @@ impl Alert {
         }
     }
 
-    fn build_div(message: &str, variant: AlertVariant) -> Div {
+    fn build_div(message: &blinc_layout::binding::Reactive<String>, variant: AlertVariant) -> Div {
         let variant_class = match variant {
             AlertVariant::Default => "cn-alert--info",
             AlertVariant::Success => "cn-alert--success",
@@ -83,11 +90,19 @@ impl Alert {
             AlertVariant::Destructive => "cn-alert--error",
         };
 
-        // All visual props from CSS: .cn-alert + .cn-alert--{variant}
-        div()
-            .class("cn-alert")
-            .class(variant_class)
-            .child(text(message).size(14.0))
+        // Visual props come from CSS: .cn-alert + .cn-alert--{variant}.
+        // The message colour is ALSO set here, because a bound message
+        // is rebuilt inside a stateful and cannot inherit the class's
+        // `color` -- see `reactive_text`.
+        let fg = ThemeState::get().color(match variant {
+            AlertVariant::Default => ColorToken::Info,
+            AlertVariant::Success => ColorToken::Success,
+            AlertVariant::Warning => ColorToken::Warning,
+            AlertVariant::Destructive => ColorToken::Error,
+        });
+        div().class("cn-alert").class(variant_class).child_box(
+            crate::reactive_props::reactive_text(message, move |t| t.size(14.0).color(fg)),
+        )
     }
 
     /// Set the alert variant
@@ -155,7 +170,7 @@ impl ElementBuilder for Alert {
 }
 
 /// Create a simple alert with a message
-pub fn alert(message: impl Into<String>) -> Alert {
+pub fn alert(message: impl blinc_layout::binding::IntoReactive<String>) -> Alert {
     Alert::new(message)
 }
 
