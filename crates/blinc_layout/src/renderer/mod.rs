@@ -1112,6 +1112,16 @@ impl RenderTree {
         self.root
     }
 
+    /// The text colour a node ended up with, after the stylesheet and
+    /// its inheritance pass.
+    ///
+    /// `None` means nothing set one, so the node paints in whatever
+    /// default its element type carries. Exposed because "the label is
+    /// the wrong colour" is otherwise only observable on screen.
+    pub fn resolved_text_color(&self, id: LayoutNodeId) -> Option<[f32; 4]> {
+        self.render_nodes.get(&id).and_then(|n| n.props.text_color)
+    }
+
     // ========================================================================
     // Stable Node Identity (read API)
     // ========================================================================
