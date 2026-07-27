@@ -14,6 +14,48 @@ struct SignalEntry {
     id_raw: i64,
 }
 
+/// Write a declared initial value into a freshly minted signal.
+///
+/// The literal's own type is what the author wrote; the signal's type
+/// is what they declared. Integer-to-float is the one widening worth
+/// supporting (`signal ratio: f64 = 1`), since a bare `1` is the
+/// natural way to write it. Anything else mismatched is ignored rather
+/// than guessed at.
+fn seed_signal(
+    name: &str,
+    ty: blinc_runtime::signal::SignalType,
+    lit: &zyntax_typed_ast::typed_ast::TypedLiteral,
+) {
+    use blinc_runtime::signal::{self, SignalType};
+    use zyntax_typed_ast::typed_ast::TypedLiteral;
+    match (ty, lit) {
+        (SignalType::I32, TypedLiteral::Integer(n)) => signal::set_i32(name, *n as i32),
+        // No i64 setter in the runtime helpers; the id is the same
+        // registry entry either way, so go through the typed handle.
+        (SignalType::I64, TypedLiteral::Integer(n)) => {
+            if let Some((id, _)) = signal::lookup(name) {
+                blinc_core::reactive::Signal::<i64>::from_id(
+                    blinc_core::reactive::SignalId::from_raw(id),
+                )
+                .set(*n as i64);
+            }
+        }
+        (SignalType::F64, TypedLiteral::Float(f)) => signal::set_f64(name, *f),
+        (SignalType::F64, TypedLiteral::Integer(n)) => signal::set_f64(name, *n as f64),
+        (SignalType::Bool, TypedLiteral::Bool(b)) => signal::set_bool(name, *b),
+        (SignalType::String, TypedLiteral::String(sym)) => {
+            if let Some(v) = sym.resolve_global() {
+                signal::set_str(name, v.to_string());
+            }
+        }
+        _ => tracing::warn!(
+            signal = name,
+            ?ty,
+            "initial value does not match the declared type -- ignored"
+        ),
+    }
+}
+
 pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
     use std::collections::HashMap;
     use zyntax_typed_ast::InternedString;
@@ -51,7 +93,15 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
         let Some(name_str) = func.name.resolve_global() else {
             continue;
         };
+        // `= <literal>` applies ONLY on the first sight of this name.
+        // The registry outlives a compile (hot reload, a second
+        // `compile_source` in one process), and re-applying the default
+        // would throw away whatever the user has since typed or clicked.
+        let is_new = blinc_runtime::signal::lookup(name_str.as_ref()).is_none();
         let id_raw_u64 = blinc_runtime::signal::mint_or_get(name_str.as_ref(), sig_ty);
+        if is_new && let Some(lit) = crate::passes::signal_initial_literal(func) {
+            seed_signal(name_str.as_ref(), sig_ty, lit);
+        }
         signals.insert(
             func.name,
             SignalEntry {

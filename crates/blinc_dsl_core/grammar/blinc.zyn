@@ -182,7 +182,7 @@ top_level_items = { item:top_level_item* }
 // `component_decl`. Falling through handles standalone struct-only
 // `component { fields }` decls, standalone `impl` blocks, and the
 // bare `view { ... }` quick-test shape.
-top_level_item = { import_stmt | style_decl | signal_decl | const_group | const_decl | struct_decl | component_folded | component_decl | fsm_decl | impl_block | fn_decl | bare_view_item }
+top_level_item = { import_stmt | style_decl | signal_decl_init | signal_decl | const_group | const_decl | struct_decl | component_folded | component_decl | fsm_decl | impl_block | fn_decl | bare_view_item }
 
 // `style { ...CSS... }` — block-form CSS declaration. Author
 // writes raw CSS between the braces; balanced nested braces
@@ -265,6 +265,26 @@ import_path_chars = @{ (!("\"" | "\\") ~ ANY)* }
 // metadata structure. The is_external + body=None shape mirrors
 // what Zyntax's own extern injection produces, so downstream
 // passes that already handle externs handle ours uniformly.
+// `signal <name>: <T> = <literal>` — declaration with an initial
+// value. Same marker shape as the bare form, with the literal parked
+// in the body: `is_signal_decl` accepts either, and the signals pass
+// reads the body when it MINTS the signal, so the default applies once
+// and a later write is never clobbered by a recompile.
+//
+// Ordered before the bare form: PEG takes the first matching arm, and
+// the bare rule would otherwise match the prefix and leave `= …`
+// unconsumed.
+signal_decl_init = { "signal" ~ name:identifier ~ ":" ~ ty:state_type ~ "=" ~ value:const_literal }
+  -> TypedDeclaration::Function {
+      name: intern(name),
+      params: [],
+      return_type: ty,
+      body: Some(TypedBlock { statements: [
+          TypedStatement::Expression { expr: value },
+      ] }),
+      is_external: true,
+  }
+
 signal_decl = { "signal" ~ name:identifier ~ ":" ~ ty:state_type }
   -> TypedDeclaration::Function {
       name: intern(name),

@@ -4,8 +4,9 @@
 // widgets land -- add a module, add one import line, add one call.
 
 // Two-way text binding: the field writes this signal on every edit,
-// and the button's label reads it, so the button tracks what you type.
-signal form_name: string
+// and the chip / label / alert read it. The `= "…"` seeds it, so the
+// field opens showing that text.
+signal form_name: string = "Change this value"
 // The textarea binds the same way: no `key` needed, because the signal
 // IS the field's identity, and its contents survive a rebuild.
 signal form_bio: string

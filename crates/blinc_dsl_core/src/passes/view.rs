@@ -6,10 +6,44 @@ use crate::*;
 /// no params, primitive return, `link_name: None` (so we don't catch host builtins).
 pub(crate) fn is_signal_decl(func: &zyntax_typed_ast::typed_ast::TypedFunction) -> bool {
     func.is_external
-        && func.body.is_none()
         && func.params.is_empty()
         && func.link_name.is_none()
         && matches!(func.return_type, Type::Primitive(_))
+        // A body is allowed: `signal x: T = <literal>` parks its initial
+        // value there. Everything else about the shape still has to
+        // match, and the signals pass strips these decls before
+        // lowering, so the body never reaches Cranelift.
+        && func.body.as_ref().is_none_or(is_single_literal_body)
+}
+
+/// The one-statement literal body a `signal … = <literal>` carries.
+fn is_single_literal_body(body: &zyntax_typed_ast::typed_ast::TypedBlock) -> bool {
+    use zyntax_typed_ast::typed_ast::TypedExpression;
+    matches!(
+        body.statements.as_slice(),
+        [stmt] if matches!(
+            &stmt.node,
+            TypedStatement::Expression(e)
+                if matches!(e.node, TypedExpression::Literal(_))
+        )
+    )
+}
+
+/// The initial value a `signal … = <literal>` declares, if any.
+pub(crate) fn signal_initial_literal(
+    func: &zyntax_typed_ast::typed_ast::TypedFunction,
+) -> Option<&zyntax_typed_ast::typed_ast::TypedLiteral> {
+    use zyntax_typed_ast::typed_ast::TypedExpression;
+    let [stmt] = func.body.as_ref()?.statements.as_slice() else {
+        return None;
+    };
+    let TypedStatement::Expression(e) = &stmt.node else {
+        return None;
+    };
+    let TypedExpression::Literal(lit) = &e.node else {
+        return None;
+    };
+    Some(lit)
 }
 
 /// Run the JIT'd view once and box the resulting widget builder (no reactive wrapper).
