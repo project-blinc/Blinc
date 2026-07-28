@@ -45,10 +45,15 @@ fn main() -> Result<()> {
     // `compile_project`, not `compile_source`: the gallery modules are
     // only resolved by walking the import graph from the entry file.
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/playground");
-    let dsl = std::sync::Arc::new(BlincDsl::new().expect("BlincDsl::new"));
-    blinc_cn_dsl::register_all(&dsl).expect("register cn.* widgets");
-    dsl.compile_project(&root.join("main.blinc"), &root)
-        .expect("compile");
+
+    // Everything a fresh instance needs: the extern widgets it cannot
+    // know about, then the sources. A reload runs exactly this again.
+    let build = |root: &std::path::Path| -> blinc_dsl_core::BlincDslResult<BlincDsl> {
+        BlincDsl::reload_project(&root.join("main.blinc"), root, |dsl| {
+            blinc_cn_dsl::register_all(dsl)
+        })
+    };
+    let dsl = std::cell::RefCell::new(build(&root).expect("compile"));
 
     // Edit any `.blinc` file under `examples/playground` and the window
     // follows, with signal values intact -- the registry is keyed by
@@ -57,9 +62,9 @@ fn main() -> Result<()> {
     // `cargo run -p blinc_cn_dsl --example cn_playground --features hot-reload`
     //
     // The watcher thread only raises a flag. `BlincDsl` owns JIT
-    // function pointers and is not `Send`, so the recompile itself has
-    // to happen where the view is built: on the main thread, at the top
-    // of the UI builder, before anything reads the program.
+    // function pointers and is not `Send`, so the rebuild happens where
+    // the view is built: on the main thread, at the top of the UI
+    // builder, before anything reads the program.
     #[cfg(feature = "hot-reload")]
     static SOURCES_DIRTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     #[cfg(feature = "hot-reload")]
@@ -85,12 +90,15 @@ fn main() -> Result<()> {
         move |ctx| {
             #[cfg(feature = "hot-reload")]
             if SOURCES_DIRTY.swap(false, std::sync::atomic::Ordering::AcqRel) {
-                match dsl.recompile_project(&root.join("main.blinc"), &root) {
-                    Ok(_) => tracing::info!("hot-reload: recompiled"),
-                    // Keep the previous program: source is unparseable
+                match build(&root) {
+                    Ok(fresh) => {
+                        *dsl.borrow_mut() = fresh;
+                        tracing::info!("hot-reload: reloaded");
+                    }
+                    // Keep the instance we have: source is unparseable
                     // for most of the time it is being typed.
                     Err(e) => {
-                        tracing::warn!(error = %e, "hot-reload: keeping the previous program")
+                        tracing::warn!(error = %e, "hot-reload: keeping the running program")
                     }
                 }
             }
@@ -98,7 +106,7 @@ fn main() -> Result<()> {
                 .w(ctx.width)
                 .h(ctx.height)
                 .bg(ThemeState::get().colors().background)
-                .child_box(dsl.view_widget())
+                .child_box(dsl.borrow().view_widget())
         },
     )
 }

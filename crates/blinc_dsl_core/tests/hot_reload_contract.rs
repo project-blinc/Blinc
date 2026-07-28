@@ -75,73 +75,28 @@ fn recompile_swaps_the_view() {
     assert!(after > before, "a recompile must swap the rendered view");
 }
 
-/// A reload must not leave the instance holding two of everything.
+/// A reload builds a FRESH instance, and `setup` is where a host
+/// re-registers what a new runtime cannot know about.
 #[test]
-fn recompile_replaces_rather_than_accumulates() {
+fn reload_runs_setup_on_the_new_instance() {
     use std::io::Write;
-    let dir = std::env::temp_dir().join("blinc_reload_accum");
+    let dir = std::env::temp_dir().join("blinc_reload_setup");
     std::fs::create_dir_all(&dir).unwrap();
     let entry = dir.join("main.blinc");
-    let write = |body: &str| {
-        let mut f = std::fs::File::create(&entry).unwrap();
-        f.write_all(body.as_bytes()).unwrap();
-    };
+    let mut f = std::fs::File::create(&entry).unwrap();
+    f.write_all(b"signal s_v: i32 = 9\nview { Div { } }")
+        .unwrap();
 
-    write(
-        r#"
-        signal r_a: i32 = 1
-        component App { style { .r { gap: 4px } } view { Div(class = "r") { } } }
-        view { App() }
-        "#,
-    );
-    let dsl = BlincDsl::new().unwrap();
-    dsl.compile_project(&entry, &dir).expect("first compile");
-    let signals_once = dsl.declared_signals().len();
-    let sheets_once = dsl.compiled_stylesheets().len();
-
-    dsl.recompile_project(&entry, &dir).expect("recompile");
+    let ran = std::cell::Cell::new(false);
+    let fresh = BlincDsl::reload_project(&entry, &dir, |_dsl| {
+        ran.set(true);
+        Ok(())
+    })
+    .expect("reload");
+    assert!(ran.get(), "setup must run before the sources compile");
     assert_eq!(
-        dsl.declared_signals().len(),
-        signals_once,
-        "a reload must not declare every signal twice"
+        fresh.get_signal_i32("s_v"),
+        Some(9),
+        "and the new instance is usable"
     );
-    assert_eq!(
-        dsl.compiled_stylesheets().len(),
-        sheets_once,
-        "a reload must not queue a second copy of every stylesheet"
-    );
-}
-
-/// Unparseable source keeps the running program: a file is
-/// unparseable for most of the time it is being edited.
-#[test]
-fn a_failed_recompile_keeps_the_previous_program() {
-    use std::io::Write;
-    let dir = std::env::temp_dir().join("blinc_reload_broken");
-    std::fs::create_dir_all(&dir).unwrap();
-    let entry = dir.join("main.blinc");
-    let write = |body: &str| {
-        let mut f = std::fs::File::create(&entry).unwrap();
-        f.write_all(body.as_bytes()).unwrap();
-    };
-
-    write(
-        r#"signal r_ok: i32 = 3
-             view { Div { } }"#,
-    );
-    let dsl = BlincDsl::new().unwrap();
-    dsl.compile_project(&entry, &dir).expect("first compile");
-    let signals = dsl.declared_signals().len();
-
-    write(r#"signal r_ok: i32 = "#);
-    assert!(
-        dsl.recompile_project(&entry, &dir).is_err(),
-        "half-typed source must not compile"
-    );
-    assert_eq!(
-        dsl.declared_signals().len(),
-        signals,
-        "a failed reload must leave the previous program intact"
-    );
-    assert_eq!(dsl.get_signal_i32("r_ok"), Some(3), "and its state");
 }
