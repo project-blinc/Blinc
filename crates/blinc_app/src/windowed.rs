@@ -6540,11 +6540,6 @@ impl WindowedApp {
                                 Some(interval) => elapsed_since_paint >= interval,
                             };
                             if !should_render {
-                                tracing::debug!(
-                                    target: "blinc_app::paint_probe",
-                                    elapsed_since_paint,
-                                    "paint SKIPPED by the cap gate",
-                                );
                                 // Schedule the next Frame for exactly the
                                 // moment the cap interval elapses. `wake_at`
                                 // routes through the platform shim's timer

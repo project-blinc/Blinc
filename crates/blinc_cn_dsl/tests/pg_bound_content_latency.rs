@@ -10,6 +10,10 @@ use blinc_layout::renderer::{ElementType, RenderTree};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
+/// Signal and FSM registries are process-global and keyed by name, and
+/// each test compiles its own program into them. They take turns.
+static REGISTRY: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn init() {
     static I: std::sync::Once = std::sync::Once::new();
     I.call_once(|| {
@@ -61,6 +65,7 @@ fn frame(tree: &mut RenderTree) {
 
 #[test]
 fn bound_content_settles_on_the_first_frame() {
+    let _guard = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
     init();
     let dsl = BlincDsl::new().expect("dsl init");
     blinc_cn_dsl::register_all(&dsl).expect("register");
@@ -116,6 +121,7 @@ view {
 /// test calling `dispatch_default` directly.
 #[test]
 fn a_click_moves_bound_content_on_the_same_frame() {
+    let _guard = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
     init();
     let dsl = BlincDsl::new().expect("dsl init");
     blinc_cn_dsl::register_all(&dsl).expect("register");
@@ -166,5 +172,79 @@ view {
     assert!(
         after.contains(&"Saving...".to_string()),
         "a click must move bound content on the same frame: {after:?}"
+    );
+}
+
+/// A transition that writes TWO context fields must not paint the first
+/// write with the second one stale.
+///
+/// This is the shape that failed in the window. `refresh_stateful`
+/// builds its element eagerly, so notifying on the `flag` write
+/// rebuilt the view with `caption` still at its old value; the
+/// `caption` write then queued its own rebuild, which was dropped
+/// because the first had already replaced those nodes. The frame
+/// painted the new flag beside the stale caption.
+#[test]
+fn a_transition_writing_two_fields_lands_both() {
+    let _guard = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+    init();
+    let dsl = BlincDsl::new().expect("dsl init");
+    blinc_cn_dsl::register_all(&dsl).expect("register");
+    dsl.compile_source(
+        r#"
+fsm Pair {
+    context {
+        pair_flag: bool = false
+        pair_caption: string = "Save"
+    }
+    state Idle
+    initial Idle
+    on Idle.Go -> Idle {
+        ctx.pair_flag = true
+        ctx.pair_caption = "Saving..."
+    }
+}
+component Panel {
+    @stateful @fsm([Pair]) view {
+        Div {
+            if Pair.pair_flag.get() {
+                cn.Label("flag on")
+            } else {
+                cn.Label("flag off")
+            }
+        }
+    }
+}
+component Root {
+    view {
+        Div {
+            Panel()
+            cn.Kbd(text = Pair.pair_caption)
+        }
+    }
+}
+view { Root() }
+"#,
+        "pair.blinc",
+    )
+    .expect("compile");
+
+    let host = div().w(720.0).h(820.0).child_box(dsl.view_widget());
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(720.0, 820.0);
+
+    blinc_runtime::fsm::dispatch_default("Pair", "Go").expect("Go must dispatch");
+    frame(&mut tree);
+    let after = texts(&tree);
+    println!("AFTER PAIR {after:?}");
+
+    // The field written FIRST is the one that used to win alone.
+    assert!(
+        after.contains(&"flag on".to_string()),
+        "the first write lands: {after:?}"
+    );
+    assert!(
+        after.contains(&"Saving...".to_string()),
+        "and so does the second, on the same frame: {after:?}"
     );
 }

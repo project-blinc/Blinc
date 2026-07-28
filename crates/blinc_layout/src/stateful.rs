@@ -491,7 +491,6 @@ unsafe impl Send for PendingSubtreeRebuild {}
 
 /// Queue a subtree rebuild for a node (with layout recomputation)
 pub fn queue_subtree_rebuild(parent_id: LayoutNodeId, new_child: crate::div::Div) {
-    tracing::debug!(target: "blinc_layout::queue_probe", ?parent_id, "queued structural rebuild");
     PENDING_SUBTREE_REBUILDS
         .lock()
         .unwrap()

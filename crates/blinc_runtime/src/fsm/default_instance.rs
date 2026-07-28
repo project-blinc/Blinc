@@ -109,6 +109,15 @@ pub fn reset_default(fsm_name: &str) -> Option<Arc<str>> {
 /// `i32` signal writes), and every callback registered via
 /// [`register_transition_effect`] fires in order.
 pub fn dispatch_default(fsm_name: &str, event_name: &str) -> Option<(Arc<str>, Arc<str>)> {
+    // One transition, one notification. A transition's action block
+    // usually writes several context fields, and a `Stateful` refresh
+    // builds its element eagerly -- so notifying on the first write
+    // bakes the values written so far and drops the rebuilds the later
+    // writes queue. See `batch_stateful_deps`.
+    blinc_core::reactive::batch_stateful_deps(|| dispatch_default_inner(fsm_name, event_name))
+}
+
+fn dispatch_default_inner(fsm_name: &str, event_name: &str) -> Option<(Arc<str>, Arc<str>)> {
     tracing::debug!(fsm = fsm_name, event = event_name, "fsm dispatch_default");
     let event_code = with_fsm_registry(|r| {
         let id = r.id_of(fsm_name)?;

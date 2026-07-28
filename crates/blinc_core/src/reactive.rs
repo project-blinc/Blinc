@@ -1004,8 +1004,67 @@ pub fn set_stateful_deps_notifier(notifier: impl Fn(&[SignalId]) + Send + Sync +
     let _ = STATEFUL_DEPS_NOTIFIER.set(Box::new(notifier));
 }
 
+thread_local! {
+    /// Nesting depth of [`batch_stateful_deps`], and the ids collected
+    /// while inside it.
+    static DEPS_BATCH: std::cell::RefCell<(usize, Vec<SignalId>)> =
+        const { std::cell::RefCell::new((0, Vec::new())) };
+}
+
+/// Coalesce every stateful-deps notification `f` produces into one,
+/// fired after `f` returns.
+///
+/// A `Stateful` refresh does not queue a marker — it re-runs the
+/// callback and queues the element it BUILT. So a notification part-way
+/// through a multi-write action bakes the values written so far and
+/// misses the rest. An FSM transition setting `busy` then `caption`
+/// rebuilt the view on the `busy` write, capturing the old `caption`;
+/// the `caption` write then queued its own rebuild, which was dropped
+/// because the first rebuild had already replaced those nodes. The
+/// frame painted new `busy` with stale `caption`, and only the next
+/// interaction squared it up.
+///
+/// Re-entrant: only the outermost call flushes.
+pub fn batch_stateful_deps<R>(f: impl FnOnce() -> R) -> R {
+    DEPS_BATCH.with(|b| b.borrow_mut().0 += 1);
+    let result = f();
+    let flush = DEPS_BATCH.with(|b| {
+        let mut guard = b.borrow_mut();
+        guard.0 -= 1;
+        if guard.0 == 0 {
+            Some(std::mem::take(&mut guard.1))
+        } else {
+            None
+        }
+    });
+    if let Some(mut ids) = flush
+        && !ids.is_empty()
+    {
+        ids.dedup();
+        if let Some(notifier) = STATEFUL_DEPS_NOTIFIER.get() {
+            notifier(&ids);
+        }
+    }
+    result
+}
+
 /// Fire the stateful-deps notifier. No-op if none installed.
+///
+/// Inside [`batch_stateful_deps`] the ids are collected instead, so a
+/// multi-write action notifies once with all of them.
 pub(crate) fn notify_stateful_deps(ids: &[SignalId]) {
+    let batched = DEPS_BATCH.with(|b| {
+        let mut guard = b.borrow_mut();
+        if guard.0 > 0 {
+            guard.1.extend_from_slice(ids);
+            true
+        } else {
+            false
+        }
+    });
+    if batched {
+        return;
+    }
     if let Some(notifier) = STATEFUL_DEPS_NOTIFIER.get() {
         notifier(ids);
     }
