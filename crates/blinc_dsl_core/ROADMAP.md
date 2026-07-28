@@ -107,13 +107,38 @@ dropped by build epoch); and mixed int/float arithmetic reached
 Cranelift with an integer operand under a float instruction, which the
 verifier rejected, silently dropping the function.
 
-**Scoped `@stateful`.** A decorated component mounts one `Stateful` at
-the view root, so any transition re-renders the whole program. Anything
-keyed on node identity survives only because of stable ids. The runtime
-half exists — rendering a single component's view — but a component has
-to mount its own `Stateful` at its call site, and the attempt so far
-stalls on call-site key injection ordering and on re-entering the JIT
-during the first render.
+**Scoped `@stateful`.** `has_stateful_view` is a single global flag:
+ANY view carrying `@stateful` makes `view_widget` wrap the whole
+program in one `Stateful` whose `on_state` calls `render_main` — a
+re-run of the entire entry view. So one decorated component means every
+signal write tears down and rebuilds every node.
+
+That is not just a cost. A rebuilt subtree loses anything mid-flight:
+`cn.Switch`'s thumb spring is reconstructed on every toggle, which is
+why it jumped in the playground and animates correctly in `cn_demo`,
+where nothing rebuilds it. Widgets can defend themselves by persisting
+state across rebuilds, and the switch now does, but every animated
+widget would have to.
+
+Two known stalls, and what is now known about each:
+
+1. *Call-site key injection.* A scoped `Stateful` needs a stable key
+   per call site. The primitives exist (`__push_call_id__` /
+   `__pop_call_id__` / `__pop_call_id_and_return__`) but NOTHING emits
+   them — `lower_component_calls` defers the bracket because a
+   `Block`-as-expression at the trailing-statement position trips
+   Zyntax's SSA value map. A Block-free route: rely on left-to-right
+   argument evaluation and emit one call whose first argument does the
+   push. `__pop_call_id_and_return__` is already designed on exactly
+   that assumption — but since nothing calls it, the assumption is
+   unverified. Confirm it with a two-argument host call before building
+   on it.
+2. *JIT reentrancy on the first render.* `Stateful::on_state` runs
+   during build, so a scoped one would call the component's JIT
+   function while the parent's render already holds the runtime lock. A
+   possible route: let the parent's render produce the first subtree as
+   it does today, have the `Stateful` adopt that already-built result,
+   and invoke the JIT only on later refreshes.
 
 ## Later
 
@@ -141,7 +166,7 @@ or two, L is a week or more and usually hides a design question.
 | ✅ | A collection type across the FFI | Done. `[a, b, c]` literals, `xs[i]` indexing, `Vec<T>` props for String / bool / i32 / i64 / f64, and `cn.Breadcrumb` as the first consumer. A list of structs still needs the element layout. |
 | M | Module system | Export lists and a manifest. Composes with hot reload, so worth doing after it. |
 | L | Item-driven widgets | Select, Combobox, DropdownMenu, Menubar, ContextMenu, NavigationMenu, Breadcrumb, Pagination, ToggleGroup, Table, Tree, Chart. Each is large on its own and every one waits on the collection type. Chart is the biggest single surface in cn. |
-| L | Scoped `@stateful` | A decorated component must mount its own `Stateful` at its call site. Two attempts stalled, on call-site key injection ordering and on re-entering the JIT during the first render. |
+| L | Scoped `@stateful` | One `@stateful` anywhere rebuilds the whole program on every signal write, which also kills in-flight animation. Two stalls, both with a candidate route — see the section above. |
 | L | Router | Route declarations, params, nested outlets, and how a route change interacts with subtree rebuilds. |
 | L | Standard library | Open-ended by nature; scope it against what view bodies actually reach for. |
 
