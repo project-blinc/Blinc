@@ -216,6 +216,42 @@ Two known stalls, and what is now known about each:
 
 ## Later
 
+**Signals and FSMs as algebraic effects.** Zyntax has a real effect
+system — `effect_system.rs` carries `EffectHandler` /
+`EffectHandlerOperation`, `TypedFunction.with_handlers` wraps a body in
+`HandleEffect` at HIR lowering, and there is a whole
+`passes/algebraic_effects` crate with continuation and dispatch
+support. None of it is used by the DSL, which instead reaches around
+the language: signals live in a process-global registry keyed by name,
+dependency sets are computed by a pass that walks the AST guessing what
+a view reads, and FSM dispatch is a host function.
+
+Effect handlers are dynamically scoped, which is exactly the shape
+dependency tracking wants. If a signal READ were an effect operation, a
+handler installed at a reactive boundary would observe precisely the
+signals a render actually touched — no declared `deps([…])`, no pass
+inferring them. That would delete a class of bug this file already
+records twice: `stateful_ctx_value_reads` exists only because
+subscribing to every declared signal re-rendered the program on
+unrelated writes, and the binding-handle vs `.get()` distinction exists
+because the pass cannot tell a read from a reference. A handler can.
+
+Likewise a signal WRITE as an operation gives batching for free — the
+`batch_stateful_deps` guard around FSM dispatch is a hand-rolled
+version of what a handler scope does natively — and an FSM transition
+as an operation puts guards, actions and effects under one handler
+rather than split between the registry and host callbacks.
+
+Speculative until someone reads the effect runtime properly. The
+questions to answer first: what a handler costs per operation when the
+operation is as hot as a signal read; whether handlers compose across
+the JIT boundary, since the reactive boundary is Rust-side
+(`Stateful`) and the reads are DSL-side; and whether continuations are
+needed at all here or only the handler-scope part. Worth a spike before
+any commitment — the payoff is that reactivity stops being bolted onto
+the language and starts being expressed in it.
+
+
 **Module system.** Export lists, a manifest, and a watcher story that
 composes with hot reload.
 
