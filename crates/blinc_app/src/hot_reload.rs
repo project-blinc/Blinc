@@ -520,10 +520,51 @@ static RELOAD_ERROR: Mutex<Option<String>> = Mutex::new(None);
 /// A host that reloads source calls this on both arms: the running
 /// program survives a broken file, so without something on screen the
 /// only signal that a save did nothing is the log.
+///
+/// The message is stored stripped of ANSI escapes. A compiler
+/// diagnostic is colourised when the process has a terminal, and the
+/// same string ends up here, where the escapes are not colour but
+/// literal glyphs.
 pub fn set_reload_error(message: Option<String>) {
     if let Ok(mut slot) = RELOAD_ERROR.lock() {
-        *slot = message;
+        *slot = message.map(|m| strip_ansi(&m));
     }
+}
+
+/// Drop ANSI CSI / OSC sequences, keeping the text they wrapped.
+fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c != '\u{1b}' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            // CSI: parameters and intermediates, then a final byte in
+            // 0x40..=0x7e.
+            Some('[') => {
+                for c in chars.by_ref() {
+                    if ('\u{40}'..='\u{7e}').contains(&c) {
+                        break;
+                    }
+                }
+            }
+            // OSC: runs until BEL or ST (ESC \).
+            Some(']') => {
+                let mut prev_esc = false;
+                for c in chars.by_ref() {
+                    if c == '\u{7}' || (prev_esc && c == '\\') {
+                        break;
+                    }
+                    prev_esc = c == '\u{1b}';
+                }
+            }
+            // Two-character escape: the second char is the whole of it.
+            Some(_) | None => {}
+        }
+    }
+    out
 }
 
 /// The last recorded reload error, if it hasn't been cleared.
@@ -569,6 +610,10 @@ pub fn error_banner(width: f32) -> blinc_layout::div::Div {
         .h(height)
         .flex_col()
         .p(3.0)
+        // The UI underneath is the broken one, and it may well paint
+        // over anything that shares its layer. The layer is not
+        // inherited, so the text nodes below declare it too.
+        .foreground()
         // Opaque. The point of the banner is that the text is legible,
         // and a diagnostic over a live UI is unreadable at any alpha
         // below 1.
@@ -581,6 +626,7 @@ pub fn error_banner(width: f32) -> blinc_layout::div::Div {
                 .line_height(LINE_HEIGHT)
                 .monospace()
                 .no_wrap()
+                .foreground()
                 .color(blinc_core::Color::rgba(0.98, 0.82, 0.84, 1.0)),
         );
     }
@@ -591,6 +637,26 @@ pub fn error_banner(width: f32) -> blinc_layout::div::Div {
 mod tests {
     use super::*;
     use std::time::{Duration, Instant};
+
+    /// A colourised diagnostic must not reach the banner as escape
+    /// glyphs. `render_auto` colours when the process has a terminal,
+    /// and the same string is what a host hands to `set_reload_error`.
+    #[test]
+    fn reload_errors_are_stored_without_ansi_escapes() {
+        set_reload_error(Some(
+            "\u{1b}[31mError\u{1b}[0m: \u{1b}[1;38;5;9munexpected syntax\u{1b}[0m".to_string(),
+        ));
+        assert_eq!(reload_error().as_deref(), Some("Error: unexpected syntax"));
+
+        // OSC (hyperlinks, terminal titles) terminates on BEL or ESC \.
+        set_reload_error(Some(
+            "\u{1b}]8;;file:///tmp/a.blinc\u{7}a.blinc\u{1b}]8;;\u{1b}\\ failed".to_string(),
+        ));
+        assert_eq!(reload_error().as_deref(), Some("a.blinc failed"));
+
+        set_reload_error(None);
+        assert_eq!(reload_error(), None);
+    }
 
     /// Verifies the watcher → queue path: drop a file into a watched
     /// dir and the path lands in ASSET_QUEUE within a reasonable
