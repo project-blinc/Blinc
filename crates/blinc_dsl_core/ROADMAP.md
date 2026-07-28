@@ -263,11 +263,15 @@ whether one runs:
    operation inlined, at a call count that matters for a signal read.
    A handler per read is only viable if the overhead is small against a
    `HashMap` lookup, which is what the read costs today.
-3. Then composition across the JIT boundary — the reactive boundary is
-   Rust-side (`Stateful`) and the reads are DSL-side, so a handler
-   installed in Rust has to observe operations performed in compiled
-   code. This is the question most likely to kill the idea, and it
-   cannot be answered from the IR.
+3. Then composition across the JIT boundary. Less of a risk than it
+   first looks: a handler need not BE the reactive boundary, it can
+   delegate to whatever `Stateful` is active, or to nothing when there
+   is none. `set_stateful_deps_notifier` is already that shape in the
+   other direction — a process-global hook the boundary registers and
+   compiled code reaches through without knowing `Stateful` exists. A
+   read handler accumulates the reads in its scope and hands the set
+   over on exit, which is what `check_stateful_deps` receives today,
+   except exact instead of inferred.
 
 Whether continuations are needed at all, or only the handler-scope
 part, falls out of (1). The payoff if it holds: reactivity stops being
