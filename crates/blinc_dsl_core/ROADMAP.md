@@ -83,10 +83,11 @@ values outlive the instance that declared them.
    tree away, so scroll offsets, focus and node identity survive too.
    A stylesheet edit is the one thing the diff can't see — it changes
    no element hash — so a reload forces one stylesheet pass.
-4. *Ergonomics.* **Mostly done.** `watch_sources` settles a save on the
-   watcher thread and raises one flag, so a host drains a flag and
-   recompiles instead of hand-rolling debounce and retry. Still open:
-   parse errors surfaced in-window rather than only in the log.
+4. *Ergonomics.* **Done.** `watch_sources` settles a save on the watcher
+   thread and raises one flag, so a host drains a flag and recompiles
+   instead of hand-rolling debounce and retry. A failed compile renders
+   as a source snippet — the offending line, a caret, a hint — and
+   `error_banner` shows it over the UI until a compile succeeds.
 
 Two bugs this shook out, both worth knowing about outside hot reload:
 queued subtree rebuilds outlive the tree that queued them, since a full
@@ -122,7 +123,7 @@ or two, L is a week or more and usually hides a design question.
 | --- | --- | --- |
 | ✅ | Hot reload, the loop | Done. Fresh instance per reload, swapped in by the host. |
 | ✅ | Hot reload, state checks | Done. Signals survive, and the reload updates the tree incrementally rather than replacing it. |
-| S | Hot reload, ergonomics | `watch_sources` settles the save and raises one flag. Parse errors in-window still open. |
+| ✅ | Hot reload, ergonomics | Done. `watch_sources` settles the save; parse errors render as snippets and banner over the UI. |
 | S | Reactive props on the four exposed-but-static widgets | Card, Kbd, Spinner are mechanical. Avatar needs its content enum to carry a boxed builder. |
 | S each | Expose a container-shaped widget | Dialog, Popover, Tooltip, Sheet, Drawer, Collapsible, Accordion, ScrollArea, AspectRatio, Toggle. Children blocks and named slots already work, so these are wrappers plus scalars. |
 | M | `while` with children | The child list belongs to the entry block and a later block cannot use it. A lowering change, not a widget change. |
@@ -133,9 +134,8 @@ or two, L is a week or more and usually hides a design question.
 | L | Router | Route declarations, params, nested outlets, and how a route change interacts with subtree rebuilds. |
 | L | Standard library | Open-ended by nature; scope it against what view bodies actually reach for. |
 
-**Suggested order.** Hot reload first: it is the only item that makes
-every later item cheaper to test, and three of its four phases are S.
-Then the four exposed-but-static widgets, then the collection type,
+**Suggested order.** Hot reload is done. Next the four
+exposed-but-static widgets, then the collection type,
 since it gates more of the remaining surface than anything else. `while`
 with children and scoped `@stateful` are independent and can slot in
 whenever the compiler work is worth the context switch.
