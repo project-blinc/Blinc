@@ -6054,6 +6054,14 @@ impl WindowedApp {
                                     // surface visually.
                                     ws.render_tree = None;
                                     windowed_ctx.reset_for_hot_reload();
+                                    // The tree is rebuilt but the
+                                    // renderer's cached scene is not,
+                                    // so a reloaded literal composited
+                                    // under the glyphs of the string it
+                                    // replaced: both drawn at once, the
+                                    // box sized for one and filled with
+                                    // the other.
+                                    blinc_app.invalidate_render_cache_tagged("hot-reload");
                                 }
                             }
 
