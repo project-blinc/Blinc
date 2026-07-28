@@ -242,14 +242,36 @@ version of what a handler scope does natively — and an FSM transition
 as an operation puts guards, actions and effects under one handler
 rather than split between the registry and host callbacks.
 
-Speculative until someone reads the effect runtime properly. The
-questions to answer first: what a handler costs per operation when the
-operation is as hot as a signal read; whether handlers compose across
-the JIT boundary, since the reactive boundary is Rust-side
-(`Stateful`) and the reads are DSL-side; and whether continuations are
-needed at all here or only the handler-scope part. Worth a spike before
-any commitment — the payoff is that reactivity stops being bolted onto
-the language and starts being expressed in it.
+**First, a harness.** Checked before writing any of this down: none of
+zyntax's three effect test files executes JIT'd code. Not one
+`get_function_ptr` between `effect_compilation_tests`,
+`effect_emission_tests` and `llvm_effect_parity_tests` — they cover
+effect analysis, handler resolution and emission, and stop at the IR.
+So the runtime behaviour of a perform/handle round-trip is, as far as
+the test suite goes, unverified.
+
+That reorders the spike. Before asking what a handler costs, ask
+whether one runs:
+
+1. Build an HIR function that performs an operation under a handler,
+   JIT it, call it, assert the returned value. The existing
+   `create_simple_effect` / `create_simple_handler` helpers in
+   `effect_compilation_tests.rs` give the IR shape; what is missing is
+   `compile_function` + `get_function_ptr` + a transmuted call, the
+   pattern `cranelift_backend_tests.rs` already uses.
+2. Then cost: time that call against the same function with the
+   operation inlined, at a call count that matters for a signal read.
+   A handler per read is only viable if the overhead is small against a
+   `HashMap` lookup, which is what the read costs today.
+3. Then composition across the JIT boundary — the reactive boundary is
+   Rust-side (`Stateful`) and the reads are DSL-side, so a handler
+   installed in Rust has to observe operations performed in compiled
+   code. This is the question most likely to kill the idea, and it
+   cannot be answered from the IR.
+
+Whether continuations are needed at all, or only the handler-scope
+part, falls out of (1). The payoff if it holds: reactivity stops being
+bolted onto the language and starts being expressed in it.
 
 
 **Module system.** Export lists, a manifest, and a watcher story that
