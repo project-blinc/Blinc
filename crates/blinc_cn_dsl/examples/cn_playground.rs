@@ -67,6 +67,10 @@ fn main() -> Result<()> {
     // builder, before anything reads the program.
     #[cfg(feature = "hot-reload")]
     static SOURCES_DIRTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    /// Failed reload attempts since the last good one, so a half-written
+    /// file gets another look while broken source does not spin.
+    #[cfg(feature = "hot-reload")]
+    static RETRIES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     #[cfg(feature = "hot-reload")]
     let _watch = blinc_app::hot_reload::watch_dir_with(&root, |paths| {
         if paths
@@ -93,12 +97,27 @@ fn main() -> Result<()> {
                 match build(&root) {
                     Ok(fresh) => {
                         *dsl.borrow_mut() = fresh;
+                        RETRIES.store(0, std::sync::atomic::Ordering::Release);
                         tracing::info!("hot-reload: reloaded");
                     }
-                    // Keep the instance we have: source is unparseable
-                    // for most of the time it is being typed.
                     Err(e) => {
-                        tracing::warn!(error = %e, "hot-reload: keeping the running program")
+                        // Two different failures look identical here.
+                        // Source is unparseable for most of the time it
+                        // is being typed, and the running program has to
+                        // survive that. But `notify` also fires while an
+                        // editor is still writing, so the same error can
+                        // mean "read a half-written file" -- and giving
+                        // up on that one left the window showing the old
+                        // text until the file was saved a second time.
+                        // A few retries cover the partial write without
+                        // spinning on genuinely broken source.
+                        let n = RETRIES.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                        if n < 3 {
+                            SOURCES_DIRTY.store(true, std::sync::atomic::Ordering::Release);
+                            blinc_app::hot_reload::request_rebuild();
+                        } else {
+                            tracing::warn!(error = %e, "hot-reload: keeping the running program");
+                        }
                     }
                 }
             }
