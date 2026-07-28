@@ -70,3 +70,18 @@ fn a_const_label_is_the_static_path() {
         .reactive_label(Reactive::Const("hi".to_string()));
     assert_eq!(classes(&konst), classes(&stat));
 }
+
+/// An Alert with no variant is the info one, classes and all.
+#[test]
+fn a_variant_less_alert_is_info() {
+    init();
+    let plain = blinc_cn::alert("hello");
+    let explicit = blinc_cn::alert("hello").variant(blinc_cn::AlertVariant::Default);
+    let cls = classes(&plain);
+    println!("ALERT classes {cls:?}");
+    assert_eq!(cls, classes(&explicit));
+    assert!(
+        cls.iter().any(|c| c == "cn-alert--info"),
+        "the default variant paints as info, got {cls:?}"
+    );
+}

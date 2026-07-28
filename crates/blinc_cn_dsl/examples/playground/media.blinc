@@ -20,7 +20,7 @@ component MediaWidgets {
             cn.Card {
                 cn.Label("card content")
                 cn.Badge("nested", variant = "secondary")
-                cn.Badge("Another", variant = "primary")
+                cn.Badge("Another")
             }
 
             cn.Label("separator + static skeleton")

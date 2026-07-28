@@ -59,7 +59,7 @@ component FormWidgets {
                 cn.Badge(label = form_name, variant = "secondary")
                 cn.Label(form_name)
             }
-            cn.Alert(form_name, variant = "warning")
+            cn.Alert(form_name, variant = "info")
 
             cn.Label("kbd")
             Div(class = "row") {
