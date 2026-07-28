@@ -112,6 +112,9 @@ pub(crate) unsafe fn mount(id: i64, child: i64) -> i64 {
 fn render_region(name: &str) -> blinc_layout::div::Div {
     use zyntax_embed::ZyntaxValue;
 
+    // Same phrasing as the whole-program container's line, so a host
+    // counting re-renders sees a scoped one the same way.
+    tracing::debug!(region = name, "with region: on_state re-render");
     let Some(renderer) = blinc_runtime::view::global_renderer() else {
         tracing::warn!(
             region = name,

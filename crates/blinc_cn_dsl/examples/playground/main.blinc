@@ -92,24 +92,6 @@ fsm Play {
 //
 // The condition below reads a value, so it takes `.get()`.
 //
-// Swapping a branch is structural, which a redraw cannot do, so this
-// component carries `@stateful @fsm([Play])` -- the same shape
-// counter_dsl uses. Everything else in the playground is a redraw:
-// bound props patch in place, and the spinners animate continuously
-// with nothing rebuilt.
-component BusyPanel {
-    @stateful @fsm([Play]) view {
-        Div(class = "row") {
-            if Play.busy.get() {
-                cn.Alert("busy - work in flight", variant = "warning")
-                cn.Spinner(size = "small")
-            } else {
-                cn.Alert("idle - press Busy", variant = "success")
-            }
-        }
-    }
-}
-
 // Wrapped in a component, matching cn_dsl_demo and reactive_dsl: fsm
 // at top level, `component X { style { } view { } }`, then
 // `view { X() }`. Root-level `style { }` is supported too -- it is
@@ -187,7 +169,26 @@ component Playground {
                 cn.Kbd(text = Play.caption)
             }
 
-            BusyPanel()
+            // Swapping a branch is structural, which a redraw cannot
+            // do, so this slice needs to re-render. `with` scopes that
+            // to the slice: the region subscribes to `Play`, and a
+            // transition rebuilds these two nodes rather than the
+            // program. The decorated-component form (`component X {
+            // @stateful @fsm([Play]) view { ... } }`) still works and
+            // is the right tool when there is state behaviour worth
+            // naming, but it sets a global flag -- every signal write
+            // then tears down and rebuilds every node, which is also
+            // what discards any animation mid-flight.
+            with @fsm([Play]) {
+                Div(class = "row") {
+                    if Play.busy.get() {
+                        cn.Alert("busy - work in flight", variant = "warning")
+                        cn.Spinner(size = "small")
+                    } else {
+                        cn.Alert("idle - press Busy", variant = "success")
+                    }
+                }
+            }
 
             Div(class = "row") {
                 cn.Button("Grow", on_click = || { Play.trigger("Grow") })

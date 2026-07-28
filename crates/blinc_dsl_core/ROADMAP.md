@@ -120,35 +120,53 @@ where nothing rebuilds it. Widgets can defend themselves by persisting
 state across rebuilds, and the switch now does, but every animated
 widget would have to.
 
-**`with` blocks — the sugar to build first.** A decorated component is
-the right tool when there is real state behaviour to name. For the
-common case there should be an inline form:
+**`with` blocks. Done.** A decorated component is the right tool when
+there is state behaviour worth naming. For the common case there is now
+an inline form:
 
     with @fsm([Play, Change]) {
         if Play.busy.get() { ... } else { ... }
     }
 
 A reactive region placed directly in a parent view, no component
-needed. It is also the easier thing to implement, because it has no
-existing call site to rewrite — which is exactly what broke the
-component-scoped attempt. Desugaring:
+needed, and only that region rebuilds when a listed dependency changes.
+The playground's `BusyPanel` was exactly the shape this replaces: a
+component that existed only to carry a decorated view, whose decoration
+wrapped the whole program.
 
-- lift the block into a generated view function, `__blinc_with_<n>$view`,
-  registered like any component view so `render_component` can call it
-  by name;
-- emit `__scoped_stateful__("__blinc_with_<n>")` where the block stood,
-  with the `@fsm` / `@stateful` lists as its deps.
+The lowering lifts the block's body into a synthetic component — a
+`Class` plus an inherent `impl { fn view() }`, the same pair the folded
+`component` form emits — and rewrites the site to
+`__blinc_with__(<id>, __component_call__("__blinc_with_<id>"))`. Two
+things fall out of lifting to a real component rather than keeping the
+body inline:
 
-Nothing about user component lowering changes, so the `Root$view` wall
-below does not apply. The generated name is unique per block, so
-call-site keying is not needed either — both recorded stalls are
-side-stepped rather than solved.
+- component-call lowering, children expansion and the value-returning
+  promotion all key on an impl method named `view`, and NONE of them
+  descend into lambda bodies. A body left inline would have needed all
+  three taught about a new shape;
+- argument order renders the region before the builtin runs, so the
+  builtin adopts an already-built widget. `on_state` invokes its
+  callback during construction, so a region that re-rendered on its
+  first call would re-enter the JIT with the outer view still executing.
+  The mounted `Stateful` serves the pre-built handle once and
+  re-renders only from the second call on.
 
-Worth settling while designing it: whether a bare `Play.busy` inside a
-`with` should read as a value. Everywhere else the distinction between
-`Play.busy` (binding handle) and `Play.busy.get()` (value) is load
-bearing, and a block that declares its deps up front is the one place
-the shorthand could be unambiguous.
+Neither recorded stall applies: there is no existing call site to
+rewrite, and the id is minted process-wide so it is unique per block and
+across recompiles.
+
+Two limits worth knowing. A `with` nested inside another `with` does
+not lift — the synthetic views are appended after the walk, and an inner
+region has no meaning the outer one doesn't already cover. And a region
+reads its deps from the decorators alone: a bare `with { }` falls back
+to every declared signal, the same as a bare `@stateful`.
+
+Still open: whether a bare `Play.busy` inside a `with` should read as a
+value. Everywhere else the distinction between `Play.busy` (binding
+handle) and `Play.busy.get()` (value) is load bearing, and a block that
+declares its deps up front is the one place the shorthand could be
+unambiguous.
 
 **The shape the fix takes.** A component call lowers to
 `<Name>$view(...)`. Wrapping a decorated one as
@@ -302,13 +320,12 @@ or two, L is a week or more and usually hides a design question.
 | ✅ | A collection type across the FFI | Done. `[a, b, c]` literals, `xs[i]` indexing, `Vec<T>` props for String / bool / i32 / i64 / f64, and `cn.Breadcrumb` as the first consumer. A list of structs still needs the element layout. |
 | M | Module system | Export lists and a manifest. Composes with hot reload, so worth doing after it. |
 | L | Item-driven widgets | Select, Combobox, DropdownMenu, Menubar, ContextMenu, NavigationMenu, Breadcrumb, Pagination, ToggleGroup, Table, Tree, Chart. Each is large on its own and every one waits on the collection type. Chart is the biggest single surface in cn. |
-| M | `with @fsm([…]) { … }` blocks | An inline reactive region: no component, no call site to rewrite, so neither scoped-`@stateful` stall applies. Desugars to a generated view + `__scoped_stateful__`. Do this before the component-scoped form. |
-| L | Scoped `@stateful` | One `@stateful` anywhere rebuilds the whole program on every signal write, which also kills in-flight animation. Blocked on the `Root$view` wall — see the section above. `with` blocks deliver most of the benefit without it. |
+| L | Scoped `@stateful` | One `@stateful` anywhere rebuilds the whole program on every signal write, which also kills in-flight animation. Blocked on the `Root$view` wall — see the section above. `with` blocks now deliver most of the benefit without it, so this is only worth doing for the case where the state behaviour deserves a name. |
 | L | Router | Route declarations, params, nested outlets, and how a route change interacts with subtree rebuilds. |
 | L | Standard library | Open-ended by nature; scope it against what view bodies actually reach for. |
 
-**Suggested order.** Hot reload, the four exposed-but-static widgets and
-the collection type are done. The item-driven widgets are unblocked and
-can land one at a time. `while`
-with children and scoped `@stateful` are independent and can slot in
-whenever the compiler work is worth the context switch.
+**Suggested order.** Hot reload, the four exposed-but-static widgets,
+the collection type and `with` blocks are done. The item-driven widgets
+are unblocked and can land one at a time. `while` with children and
+scoped `@stateful` are independent and can slot in whenever the
+compiler work is worth the context switch.
