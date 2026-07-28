@@ -120,6 +120,30 @@ where nothing rebuilds it. Widgets can defend themselves by persisting
 state across rebuilds, and the switch now does, but every animated
 widget would have to.
 
+**The shape the fix takes.** A component call lowers to
+`<Name>$view(...)`. Wrapping a decorated one as
+
+    __scoped_stateful__("Name", <Name>$view(...))
+
+does the whole job: argument evaluation runs the inner call FIRST, so
+the builtin receives an already-rendered widget handle and adopts it as
+the `Stateful`'s first content. Later refreshes call
+`render_component(renderer, "Name")`, which runs outside any render.
+Nothing re-enters the JIT during build, and it is a plain nested call —
+no `Block`-as-expression, so neither stall applies to it.
+
+Remaining to build: the `__scoped_stateful__` builtin (adopt the handle,
+mount a `Stateful` with the component's deps, re-render on refresh), one
+rewrite in `lower_component_calls` for names in `stateful_components`,
+and gating `view_widget`'s whole-program wrap so it only fires for a
+decorated ENTRY view. Detection is done: `stateful_components` records
+which components carry the decorator, attributed by stripping `$view`
+from the owning function.
+
+First cut can key the `Stateful` on the component name, which is
+sufficient while a decorated component appears once, and leaves
+multi-instance keying to the call-id work below.
+
 Two known stalls, and what is now known about each:
 
 1. *Call-site key injection.* A scoped `Stateful` needs a stable key

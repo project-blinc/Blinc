@@ -152,6 +152,12 @@ pub struct BlincDsl {
     /// Set when any view carries `@stateful`. `view_widget` then
     /// wraps the tree in a reactive `Stateful`.
     has_stateful_view: Arc<Mutex<bool>>,
+    /// Components carrying `@stateful`, by name. These mount their own
+    /// `Stateful` at their call site, so a transition re-renders that
+    /// component rather than the whole program. The entry `view { }` is
+    /// never in here: it has no call site to scope to, so a decoration
+    /// there still wraps everything.
+    stateful_components: Arc<Mutex<Vec<String>>>,
     /// Signal names listed in `@stateful([…])`. Empty = subscribe
     /// to every declared signal.
     stateful_view_deps: Arc<Mutex<Vec<String>>>,
@@ -197,6 +203,7 @@ impl BlincDsl {
         let declared_signals = Arc::new(Mutex::new(Vec::new()));
         let declared_fsms = Arc::new(Mutex::new(Vec::new()));
         let has_stateful_view = Arc::new(Mutex::new(false));
+        let stateful_components = Arc::new(Mutex::new(Vec::new()));
         let stateful_view_deps = Arc::new(Mutex::new(Vec::new()));
         let stateful_view_fsms = Arc::new(Mutex::new(Vec::new()));
         let stateful_ctx_value_reads = Arc::new(Mutex::new(Vec::new()));
@@ -213,6 +220,7 @@ impl BlincDsl {
             declared_signals,
             declared_fsms,
             has_stateful_view,
+            stateful_components,
             stateful_view_deps,
             stateful_view_fsms,
             stateful_ctx_value_reads,
@@ -472,8 +480,19 @@ impl BlincDsl {
 
         // Detect and strip `@stateful` / `@fsm` markers. Accumulate explicit deps.
         {
-            let (saw_stateful, explicit_deps, explicit_fsms, ctx_value_reads) =
+            let (saw_stateful, explicit_deps, explicit_fsms, ctx_value_reads, components) =
                 detect_and_strip_stateful_views(&mut typed_program);
+            if !components.is_empty() {
+                let mut acc = self
+                    .stateful_components
+                    .lock()
+                    .expect("stateful_components mutex poisoned");
+                for name in components {
+                    if !acc.contains(&name) {
+                        acc.push(name);
+                    }
+                }
+            }
             if !ctx_value_reads.is_empty() {
                 let mut acc = self
                     .stateful_ctx_value_reads

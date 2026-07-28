@@ -98,7 +98,7 @@ pub(crate) fn view_root(
 /// [`collect_ctx_value_reads`].
 pub(crate) fn detect_and_strip_stateful_views(
     program: &mut TypedProgram,
-) -> (bool, Vec<String>, Vec<String>, Vec<String>) {
+) -> (bool, Vec<String>, Vec<String>, Vec<String>, Vec<String>) {
     use zyntax_typed_ast::typed_ast::{TypedDeclaration, TypedExpression, TypedLiteral};
 
     // Strip a leading marker call matching `expected_callee` and return its string args.
@@ -138,8 +138,13 @@ pub(crate) fn detect_and_strip_stateful_views(
     let mut signal_deps: Vec<String> = Vec::new();
     let mut fsms: Vec<String> = Vec::new();
     let mut ctx_value_reads: Vec<String> = Vec::new();
+    /// Components carrying `@stateful`, by name. The entry `view { }`
+    /// compiles to `render_view` and is not one — it has no call site
+    /// to scope to.
+    let mut decorated_components: Vec<String> = Vec::new();
 
-    let mut process = |body: &mut Option<zyntax_typed_ast::typed_ast::TypedBlock>| {
+    let mut process = |body: &mut Option<zyntax_typed_ast::typed_ast::TypedBlock>,
+                       owner: Option<&str>| {
         let Some(body) = body else {
             return;
         };
@@ -170,22 +175,43 @@ pub(crate) fn detect_and_strip_stateful_views(
         }
         if decorated {
             collect_ctx_value_reads(body, &mut ctx_value_reads);
+            // Attribute the decoration to its component. A view
+            // function is `<Component>$view`; the entry `view { }`
+            // compiles to `render_view`, which has no component to
+            // scope to and stays a whole-program wrap.
+            if let Some(component) = owner
+                .and_then(|n| n.strip_suffix("$view"))
+                .filter(|n| !n.is_empty())
+                && !decorated_components.iter().any(|c: &String| c == component)
+            {
+                decorated_components.push(component.to_string());
+            }
         }
     };
 
     for decl in program.declarations.iter_mut() {
         match &mut decl.node {
-            TypedDeclaration::Function(func) => process(&mut func.body),
+            TypedDeclaration::Function(func) => {
+                let name = func.name.resolve_global().map(|n| n.to_string());
+                process(&mut func.body, name.as_deref());
+            }
             TypedDeclaration::Impl(imp) => {
                 for method in imp.methods.iter_mut() {
-                    process(&mut method.body);
+                    let name = method.name.resolve_global().map(|n| n.to_string());
+                    process(&mut method.body, name.as_deref());
                 }
             }
             _ => {}
         }
     }
 
-    (saw_stateful, signal_deps, fsms, ctx_value_reads)
+    (
+        saw_stateful,
+        signal_deps,
+        fsms,
+        ctx_value_reads,
+        decorated_components,
+    )
 }
 
 /// Context fields a decorated view reads AS A VALUE, as `"<Fsm>.<field>"`.
