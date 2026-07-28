@@ -14,6 +14,36 @@ struct SignalEntry {
     id_raw: i64,
 }
 
+/// Last `= <literal>` seen for each signal name, so a reload can tell an
+/// edited default from an unchanged one.
+///
+/// Process-global because the signal registry is: a hot reload builds a
+/// fresh `BlincDsl`, and per-instance state would make every reload look
+/// like a first sight and clobber the live value.
+fn declared_defaults() -> &'static std::sync::Mutex<std::collections::HashMap<String, String>> {
+    static D: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, String>>> =
+        std::sync::OnceLock::new();
+    D.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
+/// Record this compile's declared default and report whether it differs
+/// from the one before it.
+fn declared_default_changed(name: &str, lit: &zyntax_typed_ast::typed_ast::TypedLiteral) -> bool {
+    use zyntax_typed_ast::typed_ast::TypedLiteral;
+    // Tagged, so `7` and `"7"` read as different declarations.
+    let key = match lit {
+        TypedLiteral::Integer(n) => format!("i:{n}"),
+        TypedLiteral::Float(f) => format!("f:{f}"),
+        TypedLiteral::Bool(b) => format!("b:{b}"),
+        TypedLiteral::String(sym) => format!("s:{}", sym.resolve_global().unwrap_or_default()),
+        other => format!("?:{other:?}"),
+    };
+    let mut map = declared_defaults()
+        .lock()
+        .expect("declared defaults poisoned");
+    map.insert(name.to_string(), key.clone()) != Some(key)
+}
+
 /// Write a declared initial value into a freshly minted signal.
 ///
 /// The literal's own type is what the author wrote; the signal's type
@@ -93,14 +123,35 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
         let Some(name_str) = func.name.resolve_global() else {
             continue;
         };
-        // `= <literal>` applies ONLY on the first sight of this name.
-        // The registry outlives a compile (hot reload, a second
-        // `compile_source` in one process), and re-applying the default
-        // would throw away whatever the user has since typed or clicked.
+        // `= <literal>` applies on first sight, and again whenever the
+        // DECLARED value itself changes.
+        //
+        // The registry outlives a compile, so re-applying on every
+        // compile would throw away whatever the user has typed or
+        // clicked -- but never re-applying means editing the default in
+        // source does nothing on a hot reload, which is just as wrong.
+        // Comparing against the last DECLARED default separates the two:
+        // an edit to the source is an authoring action and wins, while a
+        // recompile of unchanged source leaves the live value alone.
         let is_new = blinc_runtime::signal::lookup(name_str.as_ref()).is_none();
         let id_raw_u64 = blinc_runtime::signal::mint_or_get(name_str.as_ref(), sig_ty);
-        if is_new && let Some(lit) = crate::passes::signal_initial_literal(func) {
-            seed_signal(name_str.as_ref(), sig_ty, lit);
+        if let Some(lit) = crate::passes::signal_initial_literal(func) {
+            // Recorded unconditionally, BEFORE the `is_new` test: `||`
+            // short-circuits, so folding this into the condition meant
+            // the first compile never recorded anything and the next one
+            // read "no previous default", called it a change, and
+            // clobbered the live value.
+            let changed = declared_default_changed(name_str.as_ref(), lit);
+            if is_new || changed {
+                seed_signal(name_str.as_ref(), sig_ty, lit);
+            }
+        } else {
+            // The default was removed; forget it, so re-adding the same
+            // literal later still reads as a change.
+            declared_defaults()
+                .lock()
+                .expect("declared defaults poisoned")
+                .remove(name_str.as_ref() as &str);
         }
         signals.insert(
             func.name,

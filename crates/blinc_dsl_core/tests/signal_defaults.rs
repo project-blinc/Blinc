@@ -100,3 +100,45 @@ fn a_recompile_does_not_reset_the_value() {
         "the declared default must not clobber a live value"
     );
 }
+
+/// Editing the default in source must reach the running app, while a
+/// reload of UNCHANGED source must leave a live value alone. Both are
+/// the same code path, told apart by whether the declaration changed.
+#[test]
+fn an_edited_default_applies_but_an_unchanged_one_does_not() {
+    let _g = lock();
+    let src = |v: &str| {
+        format!(
+            r#"signal d_edit: string = "{v}"
+                                   view {{ Div {{ }} }}"#
+        )
+    };
+
+    let a = dsl();
+    a.compile_source(&src("first"), "edit.blinc")
+        .expect("compile");
+    assert_eq!(a.get_signal_string("d_edit").as_deref(), Some("first"));
+
+    // The user types something.
+    a.set_signal_string("d_edit", "typed");
+
+    // A reload of the SAME source keeps it.
+    let b = dsl();
+    b.compile_source(&src("first"), "edit.blinc")
+        .expect("reload");
+    assert_eq!(
+        b.get_signal_string("d_edit").as_deref(),
+        Some("typed"),
+        "an unchanged default must not clobber a live value"
+    );
+
+    // Editing the default is an authoring action, and wins.
+    let c = dsl();
+    c.compile_source(&src("second"), "edit.blinc")
+        .expect("reload");
+    assert_eq!(
+        c.get_signal_string("d_edit").as_deref(),
+        Some("second"),
+        "an edited default must reach the running app"
+    );
+}
