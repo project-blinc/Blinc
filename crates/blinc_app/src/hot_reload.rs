@@ -120,6 +120,80 @@ pub fn request_rebuild() {
     }
 }
 
+/// Raised once per settled batch of source edits by
+/// [`watch_sources`], drained by [`take_sources_dirty`].
+static SOURCES_DIRTY: AtomicBool = AtomicBool::new(false);
+/// Wall-clock millis of the most recent source event.
+static LAST_SOURCE_EVENT_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// Whether a settle thread is already waiting for the writes to stop.
+static SETTLING: AtomicBool = AtomicBool::new(false);
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Whether source files have changed since this was last called.
+///
+/// Call it at the top of the UI builder, recompile if it returns true,
+/// and build the view from the result. Recompiling has to happen on the
+/// main thread -- a `BlincDsl` owns JIT function pointers and is not
+/// `Send` -- which is why this is a flag rather than a callback.
+pub fn take_sources_dirty() -> bool {
+    SOURCES_DIRTY.swap(false, Ordering::AcqRel)
+}
+
+/// Watch `dir` for edits to files with any of `extensions`, and raise
+/// the [`take_sources_dirty`] flag once the writes stop.
+///
+/// One save is several file events: editors write, truncate, rename and
+/// touch metadata, and `notify` reports every step. Recompiling on each
+/// one reads files mid-rewrite, and asking for a rebuild on each one
+/// costs a full pass over the UI per event. So the settle happens here,
+/// on the watcher's thread, and the frame loop hears about the save
+/// exactly once.
+///
+/// `settle` is how long the events have to go quiet. 100-200ms covers
+/// an editor save without being perceptible.
+pub fn watch_sources(
+    dir: impl AsRef<std::path::Path>,
+    extensions: &'static [&'static str],
+    settle: std::time::Duration,
+) -> Option<WatcherHandle> {
+    let settle_ms = settle.as_millis() as u64;
+    watch_dir_quiet(dir, move |paths| {
+        let touched = paths.iter().any(|p| {
+            p.extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| extensions.contains(&e))
+        });
+        if !touched {
+            return;
+        }
+        LAST_SOURCE_EVENT_MS.store(now_ms(), Ordering::Release);
+        // One waiter is enough; the rest of the burst just moves the
+        // deadline it is watching.
+        if SETTLING.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(settle_ms));
+                let quiet_for =
+                    now_ms().saturating_sub(LAST_SOURCE_EVENT_MS.load(Ordering::Acquire));
+                if quiet_for >= settle_ms {
+                    break;
+                }
+            }
+            SETTLING.store(false, Ordering::Release);
+            SOURCES_DIRTY.store(true, Ordering::Release);
+            request_rebuild();
+        });
+    })
+}
+
 /// Watch a directory and run `on_change` before the rebuild is queued.
 ///
 /// [`watch_dir`] invalidates cached assets and asks for a rebuild,
@@ -136,7 +210,16 @@ pub fn watch_dir_with<F>(dir: impl AsRef<std::path::Path>, on_change: F) -> Opti
 where
     F: Fn(&[PathBuf]) + Send + Sync + 'static,
 {
-    watch_dir_inner(dir, Some(Box::new(on_change)))
+    watch_dir_inner(dir, Some(Box::new(on_change)), true)
+}
+
+/// [`watch_dir_with`] without the automatic rebuild request, for
+/// callbacks that decide for themselves when the app should look.
+fn watch_dir_quiet<F>(dir: impl AsRef<std::path::Path>, on_change: F) -> Option<WatcherHandle>
+where
+    F: Fn(&[PathBuf]) + Send + Sync + 'static,
+{
+    watch_dir_inner(dir, Some(Box::new(on_change)), false)
 }
 
 /// Watch a directory for asset changes. The watcher runs on its own
@@ -169,7 +252,7 @@ where
 /// let it drop, in which case the watcher thread exits). The handle
 /// is `Send + Sync` so storing it in a static / `Arc` works fine.
 pub fn watch_dir(dir: impl AsRef<std::path::Path>) -> Option<WatcherHandle> {
-    watch_dir_inner(dir, None)
+    watch_dir_inner(dir, None, true)
 }
 
 type ChangeFn = Box<dyn Fn(&[PathBuf]) + Send + Sync + 'static>;
@@ -177,6 +260,7 @@ type ChangeFn = Box<dyn Fn(&[PathBuf]) + Send + Sync + 'static>;
 fn watch_dir_inner(
     dir: impl AsRef<std::path::Path>,
     on_change: Option<ChangeFn>,
+    enqueue: bool,
 ) -> Option<WatcherHandle> {
     use notify::{RecursiveMode, Watcher};
 
@@ -205,7 +289,9 @@ fn watch_dir_inner(
                     if let Some(cb) = &on_change {
                         cb(&event.paths);
                     }
-                    enqueue_invalidations(event.paths);
+                    if enqueue {
+                        enqueue_invalidations(event.paths);
+                    }
                 }
             }
             Err(e) => tracing::warn!(error = ?e, "hot-reload: watcher error"),
