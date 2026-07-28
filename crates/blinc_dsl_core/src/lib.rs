@@ -1295,6 +1295,15 @@ impl BlincDsl {
             .clone()
     }
 
+    /// Components carrying `@stateful`, by name. These are the ones a
+    /// scoped `Stateful` can be mounted for.
+    pub fn stateful_components(&self) -> Vec<String> {
+        self.stateful_components
+            .lock()
+            .expect("stateful_components mutex poisoned")
+            .clone()
+    }
+
     /// Every declared `fsm <Name> { ... }` across all compiled sources.
     pub fn declared_fsms(&self) -> Vec<String> {
         self.declared_fsms

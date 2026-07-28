@@ -500,8 +500,16 @@ bare_view_item = { attrs:view_attr* ~ "view" ~ "{" ~ stmts:statements ~ "}" }
 // This is the natural user-facing component shape — UI authors
 // think in terms of "a component IS a thing with state and a
 // view". Internally we lower to Zyntax's struct + impl idiom.
+// Decorators may sit on the COMPONENT rather than on its view. A
+// component owns exactly one view, so that is where they belong — and
+// it is the only placement carrying the component's NAME, which
+// whoever consumes the decoration needs. `__blinc_component_attrs__`
+// pairs the two: first statement is the name, the rest are the
+// decorator markers. Emitted unconditionally (like
+// `__blinc_struct_type__`) since the action language has no
+// conditional; an undecorated component carries a name and no markers.
 component_folded = {
-    "component" ~ name:identifier ~ props:component_props? ~ "{"
+    attrs:view_attr* ~ "component" ~ name:identifier ~ props:component_props? ~ "{"
     ~ fields:struct_field_list?
     ~ styles:style_decl*
     ~ init:init_block?
@@ -511,14 +519,29 @@ component_folded = {
 }
   -> concat_list(
       concat_list(
-          [TypedDeclaration::Class {
-              name: intern(name),
-              // Props are NOT class fields — they're constructor
-              // bindings the `bind_component_props` post-parse pass
-              // injects as method params. Class.fields holds only the
-              // body's `state` / data declarations.
-              fields: fields.unwrap_or([]),
-          }],
+          concat_list(
+              [TypedDeclaration::Class {
+                  name: intern(name),
+                  // Props are NOT class fields — they're constructor
+                  // bindings the `bind_component_props` post-parse pass
+                  // injects as method params. Class.fields holds only the
+                  // body's `state` / data declarations.
+                  fields: fields.unwrap_or([]),
+              }],
+              [TypedDeclaration::Function {
+                  name: intern("__blinc_component_attrs__"),
+                  params: [],
+                  return_type: Type::Unit,
+                  body: Some(TypedBlock { statements:
+                      concat_list(
+                          [TypedStatement::Expression { expr:
+                              TypedExpression::StringLiteral { value: name }
+                          }],
+                          attrs.unwrap_or([]),
+                      )
+                  }),
+              }],
+          ),
           styles.unwrap_or([]),
       ),
       [TypedDeclaration::Impl {

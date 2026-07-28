@@ -143,6 +143,86 @@ pub(crate) fn detect_and_strip_stateful_views(
     /// to scope to.
     let mut decorated_components: Vec<String> = Vec::new();
 
+    for decl in program.declarations.iter_mut() {
+        // `__blinc_component_attrs__` — decorators written on the
+        // component. The grammar emits one per component: first
+        // statement the name, the rest the decorator markers. This is
+        // the placement that carries the name, so it is the only one
+        // that can attribute a decoration to a component without
+        // inferring it from a mangled symbol.
+        if let TypedDeclaration::Function(func) = &mut decl.node
+            && func.name.resolve_global().as_deref() == Some("__blinc_component_attrs__")
+        {
+            if let Some(body) = &mut func.body {
+                let stmts = std::mem::take(&mut body.statements);
+                let mut iter = stmts.into_iter();
+                let name = iter.next().and_then(|s| match &s.node {
+                    TypedStatement::Expression(e) => match &e.node {
+                        TypedExpression::Literal(TypedLiteral::String(v)) => {
+                            v.resolve_global().map(|n| n.to_string())
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                });
+                let mut decorated_here = false;
+                for stmt in iter {
+                    let TypedStatement::Expression(e) = &stmt.node else {
+                        continue;
+                    };
+                    let TypedExpression::Call(call) = &e.node else {
+                        continue;
+                    };
+                    let TypedExpression::Variable(callee) = &call.callee.node else {
+                        continue;
+                    };
+                    let marker = callee.resolve_global().unwrap_or_default();
+                    let args: Vec<String> = call
+                        .positional_args
+                        .iter()
+                        .filter_map(|a| match &a.node {
+                            TypedExpression::Literal(TypedLiteral::String(v)) => {
+                                v.resolve_global().map(|n| n.to_string())
+                            }
+                            TypedExpression::Variable(v) => {
+                                v.resolve_global().map(|n| n.to_string())
+                            }
+                            _ => None,
+                        })
+                        .collect();
+                    match marker.as_ref() {
+                        "__stateful_view__" => {
+                            saw_stateful = true;
+                            decorated_here = true;
+                            for n in args {
+                                if !signal_deps.contains(&n) {
+                                    signal_deps.push(n);
+                                }
+                            }
+                        }
+                        "__fsm_view__" => {
+                            saw_stateful = true;
+                            decorated_here = true;
+                            for n in args {
+                                if !fsms.contains(&n) {
+                                    fsms.push(n);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                if decorated_here
+                    && let Some(name) = name
+                    && !decorated_components.contains(&name)
+                {
+                    decorated_components.push(name);
+                }
+            }
+            continue;
+        }
+    }
+
     let mut process = |body: &mut Option<zyntax_typed_ast::typed_ast::TypedBlock>,
                        owner: Option<&str>| {
         let Some(body) = body else {
