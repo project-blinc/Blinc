@@ -120,7 +120,7 @@ component Playground {
     style {
         .page {
             padding: 24px;
-            gap: 8px;
+            gap: 16px;
             flex-direction: column;
             width: 100%;
             height: 100vh;

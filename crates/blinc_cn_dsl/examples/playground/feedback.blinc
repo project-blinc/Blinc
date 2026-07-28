@@ -2,7 +2,7 @@
 
 component FeedbackWidgets {
     style {
-        .group { gap: 8px; flex-direction: column }
+        .group { gap: 16px; flex-direction: column }
         .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
     }
 
