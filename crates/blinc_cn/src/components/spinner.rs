@@ -64,17 +64,37 @@ impl SpinnerSize {
 
 /// Internal configuration accumulated by `SpinnerBuilder` before the
 /// inner element is materialised on first `ElementBuilder` access.
-#[derive(Clone)]
 struct SpinnerConfig {
     size: SpinnerSize,
-    color: Option<Color>,
+    color: Option<blinc_layout::binding::Reactive<Color>>,
     /// Faint full-circle ring drawn behind the rotating arc. Defaults
     /// to `ColorToken::Border` when `None`. Pass `Color::TRANSPARENT`
     /// (or override via `.track_color(...)`) to suppress the track.
-    track_color: Option<Color>,
+    track_color: Option<blinc_layout::binding::Reactive<Color>>,
     duration_ms: u32,
     classes: Vec<Arc<str>>,
     user_id: Option<String>,
+}
+
+// `Reactive<T>` isn't `Clone` -- it carries type-erased handles -- but
+// every variant's payload is.
+impl Clone for SpinnerConfig {
+    fn clone(&self) -> Self {
+        Self {
+            size: self.size,
+            color: self
+                .color
+                .as_ref()
+                .map(crate::reactive_props::clone_reactive),
+            track_color: self
+                .track_color
+                .as_ref()
+                .map(crate::reactive_props::clone_reactive),
+            duration_ms: self.duration_ms,
+            classes: self.classes.clone(),
+            user_id: self.user_id.clone(),
+        }
+    }
 }
 
 impl Default for SpinnerConfig {
@@ -107,12 +127,18 @@ impl Spinner {
         let diameter = config.size.diameter();
         let border_width = config.size.border_width();
         let half = diameter / 2.0;
-        let spinner_color = config
-            .color
-            .unwrap_or_else(|| theme.color(ColorToken::Primary));
-        let track_color = config
-            .track_color
-            .unwrap_or_else(|| theme.color(ColorToken::Border));
+        // Bound colours ride the property-binding path: `border_color`
+        // registers a writer, so a set patches render props in place --
+        // no rebuild, and the rotation keeps its phase instead of
+        // snapping back to 0°.
+        let spinner_color = config.color.unwrap_or_else(|| {
+            blinc_layout::binding::Reactive::Const(theme.color(ColorToken::Primary))
+        });
+        let track_color = config.track_color.unwrap_or_else(|| {
+            blinc_layout::binding::Reactive::Const(theme.color(ColorToken::Border))
+        });
+        let spinner_color_now = crate::reactive_props::current(&spinner_color);
+        let track_color_now = crate::reactive_props::current(&track_color);
 
         // Internal timeline — one per built spinner. The scheduler
         // handle is global so multiple spinners share the same animation
@@ -150,7 +176,8 @@ impl Spinner {
             .w(diameter)
             .h(diameter)
             .rounded(half)
-            .border(border_width, track_color);
+            .border(border_width, track_color_now)
+            .border_color(track_color);
 
         // Rotating arc: full-circle ring masked to 180° by polygon.
         let arc = motion().rotate_timeline(timeline.clone(), entry_id).child(
@@ -159,7 +186,8 @@ impl Spinner {
                 .w(diameter)
                 .h(diameter)
                 .rounded(half)
-                .border(border_width, spinner_color)
+                .border(border_width, spinner_color_now)
+                .border_color(spinner_color)
                 .clip_path(polygon),
         );
 
@@ -251,16 +279,16 @@ impl SpinnerBuilder {
     }
 
     /// Set the rotating arc colour. Defaults to `ColorToken::Primary`.
-    pub fn color(self, color: impl Into<Color>) -> Self {
-        self.config.borrow_mut().color = Some(color.into());
+    pub fn color(self, color: impl blinc_layout::binding::IntoReactive<Color>) -> Self {
+        self.config.borrow_mut().color = Some(color.into_reactive());
         self
     }
 
     /// Override the faint full-circle track ring colour. Defaults
     /// to `ColorToken::Border`. Pass `Color::TRANSPARENT` to hide
     /// the track entirely (e.g. for a pure-arc spinner).
-    pub fn track_color(self, color: impl Into<Color>) -> Self {
-        self.config.borrow_mut().track_color = Some(color.into());
+    pub fn track_color(self, color: impl blinc_layout::binding::IntoReactive<Color>) -> Self {
+        self.config.borrow_mut().track_color = Some(color.into_reactive());
         self
     }
 

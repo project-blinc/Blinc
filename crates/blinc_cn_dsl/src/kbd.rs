@@ -2,20 +2,22 @@
 
 use std::cell::OnceCell;
 
-use blinc_dsl_core::extern_widget;
+use blinc_dsl_core::{Reactive, extern_widget};
 use blinc_layout::div::ElementBuilder;
 
 /// `cn.Kbd(text, size?)` — a keyboard key rendered as a chip, for
 /// documenting shortcuts inline.
 ///
 /// Props (DSL surface):
-/// - `text: string` — the key or chord, e.g. `"Ctrl"`, `"⌘K"`.
+/// - `text: Reactive<String>` — the key or chord, e.g. `"Ctrl"`,
+///   `"⌘K"`. Bind a `signal` and the chip follows it; text has no
+///   property writer, so a bound key rebuilds through `deps()`.
 /// - `size: string` — `"small"` / `"sm"`, `"medium"` / `"md"`
 ///   (default), `"large"` / `"lg"`. Unknown values fall back to
 ///   medium.
 #[extern_widget(namespace = "cn", name = "Kbd")]
 pub struct CnKbd {
-    pub text: String,
+    pub text: Reactive<String>,
     pub size: String,
     /// Lazy-constructed cn widget. Same caching rationale as
     /// `CnButton::built`.
@@ -34,7 +36,10 @@ impl CnKbd {
             "large" | "lg" => blinc_cn::KbdSize::Large,
             _ => blinc_cn::KbdSize::Medium,
         };
-        blinc_cn::kbd(self.text.clone()).size(size)
+        blinc_cn::kbd(blinc_layout::binding::IntoReactive::into_reactive(
+            self.text.clone(),
+        ))
+        .size(size)
     }
 }
 

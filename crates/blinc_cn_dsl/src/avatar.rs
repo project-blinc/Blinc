@@ -2,7 +2,7 @@
 
 use std::cell::OnceCell;
 
-use blinc_dsl_core::extern_widget;
+use blinc_dsl_core::{Reactive, extern_widget};
 use blinc_layout::div::ElementBuilder;
 
 /// `cn.Avatar(src?, fallback?, size?, shape?, fallback_bg?, fallback_color?)`
@@ -26,8 +26,8 @@ use blinc_layout::div::ElementBuilder;
 /// children-bearing API on cn::Avatar).
 #[extern_widget(namespace = "cn", name = "Avatar")]
 pub struct CnAvatar {
-    pub src: String,
-    pub fallback: String,
+    pub src: Reactive<String>,
+    pub fallback: Reactive<String>,
     pub size: String,
     pub shape: String,
     pub fallback_bg: String,
@@ -38,6 +38,20 @@ pub struct CnAvatar {
     /// outlive. Same caching rationale as `CnButton::built`.
     #[skip]
     built: OnceCell<blinc_cn::AvatarBuilder>,
+}
+
+/// Whether a reactive string prop was actually supplied.
+///
+/// An omitted prop arrives as an empty literal, and `src` and
+/// `fallback` pick different content, so an empty one has to read as
+/// absent. A bound prop counts as supplied whatever it holds right now:
+/// it can become non-empty later, and the rebuild that follows needs
+/// the branch to already be there.
+fn supplied(r: &Reactive<String>) -> bool {
+    match r {
+        Reactive::Literal(s) => !s.is_empty(),
+        _ => true,
+    }
 }
 
 impl CnAvatar {
@@ -72,11 +86,15 @@ impl CnAvatar {
             }
         };
         let mut b = blinc_cn::avatar().size(size).shape(shape);
-        if !self.src.is_empty() {
-            b = b.src(self.src.clone());
+        if supplied(&self.src) {
+            b = b.src(blinc_layout::binding::IntoReactive::into_reactive(
+                self.src.clone(),
+            ));
         }
-        if !self.fallback.is_empty() {
-            b = b.fallback(self.fallback.clone());
+        if supplied(&self.fallback) {
+            b = b.fallback(blinc_layout::binding::IntoReactive::into_reactive(
+                self.fallback.clone(),
+            ));
         }
         if let Some(c) =
             crate::color::parse_color_prop("cn.Avatar", "fallback_bg", &self.fallback_bg)

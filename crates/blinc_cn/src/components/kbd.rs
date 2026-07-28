@@ -37,10 +37,29 @@ pub enum KbdSize {
 }
 
 /// Configuration for the Kbd component
-#[derive(Clone, Debug)]
 struct KbdConfig {
-    text: String,
+    text: blinc_layout::binding::Reactive<String>,
     size: KbdSize,
+}
+
+// `Reactive<T>` carries type-erased handles and isn't `Clone`, so the
+// derive can't apply; every variant's payload is.
+impl Clone for KbdConfig {
+    fn clone(&self) -> Self {
+        Self {
+            text: crate::reactive_props::clone_reactive(&self.text),
+            size: self.size,
+        }
+    }
+}
+
+impl std::fmt::Debug for KbdConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KbdConfig")
+            .field("text", &crate::reactive_props::current(&self.text))
+            .field("size", &self.size)
+            .finish()
+    }
 }
 
 /// Builder for the Kbd component
@@ -52,18 +71,21 @@ pub struct KbdBuilder {
 impl std::fmt::Debug for KbdBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("KbdBuilder")
-            .field("text", &self.config.text)
-            .field("size", &self.config.size)
+            .field("config", &self.config)
             .finish()
     }
 }
 
 impl KbdBuilder {
-    /// Create a new Kbd builder with the given text
-    pub fn new(text: impl Into<String>) -> Self {
+    /// Create a new Kbd builder with the given text.
+    ///
+    /// Takes a plain string or a bound source. A bound key rebuilds
+    /// through `deps()` on change: text content has no property writer,
+    /// so a new string needs a new text node.
+    pub fn new(text: impl blinc_layout::binding::IntoReactive<String>) -> Self {
         Self {
             config: KbdConfig {
-                text: text.into(),
+                text: text.into_reactive(),
                 size: KbdSize::Medium,
             },
             built: OnceCell::new(),
@@ -111,15 +133,21 @@ impl KbdBuilder {
             .padding_y_px(py)
             // Subtle shadow for depth
             .shadow_sm()
-            .child(
-                text(&self.config.text)
-                    .size(font_size)
-                    .color(text_color)
-                    .font_family(FontFamily::generic(GenericFont::Monospace))
-                    .weight(FontWeight::SemiBold)
-                    .medium()
-                    .no_wrap(),
-            );
+            // The style closure runs on every rebuild and has to set
+            // everything: content built inside a stateful callback is
+            // created after the stylesheet pass has walked the tree, so
+            // it inherits nothing from an ancestor's class.
+            .child_box(crate::reactive_props::reactive_text(
+                &self.config.text,
+                move |t| {
+                    t.size(font_size)
+                        .color(text_color)
+                        .font_family(FontFamily::generic(GenericFont::Monospace))
+                        .weight(FontWeight::SemiBold)
+                        .medium()
+                        .no_wrap()
+                },
+            ));
 
         Kbd { inner }
     }
@@ -224,7 +252,7 @@ impl ElementBuilder for Kbd {
 /// // With size
 /// cn::kbd("Enter").size(KbdSize::Large)
 /// ```
-pub fn kbd(text: impl Into<String>) -> KbdBuilder {
+pub fn kbd(text: impl blinc_layout::binding::IntoReactive<String>) -> KbdBuilder {
     KbdBuilder::new(text)
 }
 

@@ -178,6 +178,16 @@ component Playground {
                 cn.Button(label = Play.caption, disabled = Play.busy)
             }
 
+            // Content, so both take the deps() rebuild path -- same as
+            // the button label above and for the same reason. The
+            // avatar's fallback shares the signal, so pressing Busy
+            // moves all three at once.
+            cn.Label("kbd + avatar: content bound (deps rebuild)")
+            Div(class = "row") {
+                cn.Kbd(text = Play.caption)
+                cn.Avatar(fallback = Play.caption, size = "small")
+            }
+
             BusyPanel()
 
             Div(class = "row") {

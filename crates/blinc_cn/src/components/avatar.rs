@@ -153,11 +153,11 @@ impl AvatarStatus {
 #[derive(Default)]
 struct AvatarConfig {
     /// Image source URL
-    src: Option<String>,
+    src: Option<blinc_layout::binding::Reactive<String>>,
     /// Alt text for accessibility
     alt: Option<String>,
     /// Fallback text (initials) when no image
-    fallback: Option<String>,
+    fallback: Option<blinc_layout::binding::Reactive<String>>,
     /// Avatar size
     size: AvatarSize,
     /// Avatar shape
@@ -193,9 +193,12 @@ impl BuiltAvatar {
 
         // Determine background and content
         let (background, content) = if let Some(ref src) = config.src {
-            // Image avatar
-            let image = img(src).size(size_px, size_px).cover().rounded(radius);
-            (None, AvatarContent::Image(image))
+            // Image avatar. An image source has no property writer
+            // either, so a bound one rebuilds the same way text does.
+            let node = crate::reactive_props::reactive_node(src, move |s| {
+                Box::new(img(s).size(size_px, size_px).cover().rounded(radius))
+            });
+            (None, AvatarContent::Node(node))
         } else if let Some(ref fallback_text) = config.fallback {
             // Fallback initials
             let bg = config
@@ -205,13 +208,17 @@ impl BuiltAvatar {
                 .fallback_color
                 .unwrap_or_else(|| theme.color(ColorToken::TextPrimary));
 
-            let initials = text(fallback_text)
-                .size(config.size.font_size())
-                .weight(FontWeight::Medium)
-                .color(fg)
-                .no_wrap();
+            // The style closure sets everything: rebuilt content is
+            // created after the stylesheet pass, so it inherits nothing.
+            let font_size = config.size.font_size();
+            let initials = crate::reactive_props::reactive_text(fallback_text, move |t| {
+                t.size(font_size)
+                    .weight(FontWeight::Medium)
+                    .color(fg)
+                    .no_wrap()
+            });
 
-            (Some(bg), AvatarContent::Initials(initials))
+            (Some(bg), AvatarContent::Node(initials))
         } else {
             // Empty fallback - show placeholder
             let bg = config
@@ -228,7 +235,7 @@ impl BuiltAvatar {
                 .color(fg)
                 .no_wrap();
 
-            (Some(bg), AvatarContent::Initials(placeholder))
+            (Some(bg), AvatarContent::Node(Box::new(placeholder)))
         };
 
         // Build the inner avatar container (with clipping for image/initials).
@@ -269,11 +276,8 @@ impl BuiltAvatar {
 
         // Add content
         match content {
-            AvatarContent::Image(image) => {
-                inner = inner.child(image);
-            }
-            AvatarContent::Initials(text_el) => {
-                inner = inner.child(text_el);
+            AvatarContent::Node(node) => {
+                inner = inner.child_box(node);
             }
         }
 
@@ -325,8 +329,9 @@ impl BuiltAvatar {
 
 /// Avatar content type
 enum AvatarContent {
-    Image(Image),
-    Initials(TextElement),
+    /// Boxed rather than `Image` / `TextElement`: a bound `src` or
+    /// `fallback` hands back a `Stateful` wrapper, not the leaf.
+    Node(Box<dyn ElementBuilder>),
 }
 
 /// Avatar component
@@ -380,8 +385,8 @@ impl AvatarBuilder {
     }
 
     /// Set the image source URL
-    pub fn src(self, src: impl Into<String>) -> Self {
-        self.config.borrow_mut().src = Some(src.into());
+    pub fn src(self, src: impl blinc_layout::binding::IntoReactive<String>) -> Self {
+        self.config.borrow_mut().src = Some(src.into_reactive());
         self
     }
 
@@ -392,8 +397,8 @@ impl AvatarBuilder {
     }
 
     /// Set fallback text (initials) when no image
-    pub fn fallback(self, text: impl Into<String>) -> Self {
-        self.config.borrow_mut().fallback = Some(text.into());
+    pub fn fallback(self, text: impl blinc_layout::binding::IntoReactive<String>) -> Self {
+        self.config.borrow_mut().fallback = Some(text.into_reactive());
         self
     }
 
@@ -886,7 +891,13 @@ mod tests {
             .shape(AvatarShape::Square);
 
         let config = builder.config.borrow();
-        assert_eq!(config.fallback, Some("JD".to_string()));
+        assert_eq!(
+            config
+                .fallback
+                .as_ref()
+                .map(crate::reactive_props::current::<String>),
+            Some("JD".to_string())
+        );
         assert_eq!(config.size, AvatarSize::Large);
         assert_eq!(config.shape, AvatarShape::Square);
     }
