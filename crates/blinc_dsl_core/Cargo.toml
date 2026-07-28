@@ -77,6 +77,9 @@ anyhow = { workspace = true }
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
+# Tests walk the typed AST as JSON rather than hand-rolling a visitor
+# for every expression shape.
+serde_json = { workspace = true }
 
 # Windowed demo example (`counter_dsl`) — pulls the desktop app
 # loop in as a dev-dep so the example can host a real

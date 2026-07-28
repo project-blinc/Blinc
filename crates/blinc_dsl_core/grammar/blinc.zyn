@@ -1969,6 +1969,7 @@ primary_expr = {
     lambda_expr |
     computed_expr |
     if_expr |
+    array_literal |
     paren_expr |
     f_string_literal |
     string_literal |
@@ -1979,6 +1980,30 @@ primary_expr = {
     bare_call_expr |
     variable_expr
 }
+
+// `[a, b, c]` — a list literal. Trailing comma allowed; `[]` is an
+// empty list.
+//
+// Lowers to Zyntax's native `TypedExpression::Array`, which the
+// compiler already turns into a `List<T> { data, len, capacity }`
+// (see `prelude.zynml`). So a collection prop crosses the extern ABI
+// as one pointer to that struct — no per-element marshalling, and no
+// lowering pass of our own.
+//
+// PEG ordering: before `paren_expr` and the literals, none of which
+// can start with `[`, so placement is unambiguous. It sits after
+// `if_expr` only to keep the keyword-led shapes together.
+array_literal = { "[" ~ items:array_items? ~ "]" }
+  -> TypedExpression::Array { elements: items.unwrap_or([]) }
+
+// Split from `array_literal` so the empty case (`[]`) is expressible:
+// a `first ~ rest*` shape can't match zero elements, and making the
+// whole thing optional at the call site is what `items:...?` does.
+array_items = { first:expr ~ rest:array_items_tail* ~ ","? }
+  -> prepend_list(first, rest)
+
+array_items_tail = { "," ~ item:expr }
+  -> item
 
 // `if cond { value } else { value }` as an expression. Both
 // branches must be present (no value-less if-expression — that
