@@ -549,6 +549,119 @@ pub enum BlincStructFieldValue {
     F64(f64),
     String(String),
     Struct(BlincStructValue),
+    List(BlincListValue),
+}
+
+/// Runtime-owned representation of a DSL list literal after it has been
+/// marshalled across the JIT boundary as an opaque `i64` handle.
+///
+/// Same shape as [`BlincStructValue`] and for the same reason: the JIT
+/// can only pass scalars, so anything with structure is built by a
+/// prelude of builtin calls and handed over as a pointer the widget
+/// thunk takes ownership of.
+///
+/// Elements are [`BlincStructFieldValue`], so a list holds any type a
+/// struct field can — including nested structs and lists.
+#[derive(Debug, Clone, Default)]
+pub struct BlincListValue {
+    items: Vec<BlincStructFieldValue>,
+}
+
+impl BlincListValue {
+    pub fn push(&mut self, value: BlincStructFieldValue) {
+        self.items.push(value);
+    }
+
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &BlincStructFieldValue> {
+        self.items.iter()
+    }
+
+    pub fn get(&self, index: usize) -> Option<&BlincStructFieldValue> {
+        self.items.get(index)
+    }
+
+    /// Every element that is a string, in order.
+    ///
+    /// Elements of any other type are skipped rather than stringified:
+    /// a widget asking for labels wants the labels, and a silently
+    /// coerced `42` would be worse than a missing one.
+    pub fn strings(&self) -> Vec<String> {
+        self.items
+            .iter()
+            .filter_map(|v| match v {
+                BlincStructFieldValue::String(s) => Some(s.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Every element that is a struct, in order.
+    pub fn structs(&self) -> Vec<&BlincStructValue> {
+        self.items
+            .iter()
+            .filter_map(|v| match v {
+                BlincStructFieldValue::Struct(s) => Some(s),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Every element that is numeric, in order. Integers widen.
+    pub fn f64s(&self) -> Vec<f64> {
+        self.items
+            .iter()
+            .filter_map(|v| match v {
+                BlincStructFieldValue::F64(f) => Some(*f),
+                BlincStructFieldValue::I32(i) => Some(f64::from(*i)),
+                BlincStructFieldValue::I64(i) => Some(*i as f64),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Every element that is an integer, in order.
+    pub fn i64s(&self) -> Vec<i64> {
+        self.items
+            .iter()
+            .filter_map(|v| match v {
+                BlincStructFieldValue::I32(i) => Some(i64::from(*i)),
+                BlincStructFieldValue::I64(i) => Some(*i),
+                BlincStructFieldValue::Bool(b) => Some(i64::from(*b)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Every element that is a bool, in order.
+    pub fn bools(&self) -> Vec<bool> {
+        self.items
+            .iter()
+            .filter_map(|v| match v {
+                BlincStructFieldValue::Bool(b) => Some(*b),
+                BlincStructFieldValue::I32(i) => Some(*i != 0),
+                BlincStructFieldValue::I64(i) => Some(*i != 0),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
+impl BlincStructValue {
+    /// A list-valued field, if the name holds one.
+    pub fn get_list(&self, name: &str) -> Option<&BlincListValue> {
+        match self.get(name) {
+            Some(BlincStructFieldValue::List(value)) => Some(value),
+            _ => None,
+        }
+    }
 }
 
 /// Wraps a widget with a per-call styling overlay. Build /
@@ -696,6 +809,20 @@ pub mod __extern_widget_internals {
             return crate::BlincStructValue::default();
         }
         *unsafe { Box::from_raw(ptr as *mut crate::BlincStructValue) }
+    }
+
+    /// Decode a DSL list-value pointer. Null/zero yields an empty list,
+    /// which is what an omitted collection prop arrives as.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be the `i64`-encoded payload minted by
+    /// `__new_list_value__`.
+    pub unsafe fn decode_list(ptr: i64) -> crate::BlincListValue {
+        if ptr == 0 {
+            return crate::BlincListValue::default();
+        }
+        *unsafe { Box::from_raw(ptr as *mut crate::BlincListValue) }
     }
 }
 
@@ -884,6 +1011,81 @@ pub(crate) extern "C" fn blinc_set_struct_handle(ptr: i64, name_ptr: *const i32,
     let nested = *unsafe { Box::from_raw(value_ptr as *mut BlincStructValue) };
     with_struct_value(ptr, |s| {
         s.insert(name, BlincStructFieldValue::Struct(nested));
+    });
+}
+
+pub(crate) extern "C" fn blinc_new_list_value() -> i64 {
+    Box::into_raw(Box::new(BlincListValue::default())) as i64
+}
+
+fn with_list_value(ptr: i64, f: impl FnOnce(&mut BlincListValue)) {
+    if ptr == 0 {
+        return;
+    }
+    // SAFETY: `ptr` is owned by the DSL-side list marshalling block
+    // until the final widget thunk consumes it.
+    let value = unsafe { &mut *(ptr as *mut BlincListValue) };
+    f(value);
+}
+
+pub(crate) extern "C" fn blinc_list_push_i32(ptr: i64, value: i32) {
+    with_list_value(ptr, |l| l.push(BlincStructFieldValue::I32(value)));
+}
+
+pub(crate) extern "C" fn blinc_list_push_bool(ptr: i64, value: i32) {
+    with_list_value(ptr, |l| l.push(BlincStructFieldValue::Bool(value != 0)));
+}
+
+pub(crate) extern "C" fn blinc_list_push_i64(ptr: i64, value: i64) {
+    with_list_value(ptr, |l| l.push(BlincStructFieldValue::I64(value)));
+}
+
+pub(crate) extern "C" fn blinc_list_push_f64(ptr: i64, value: f64) {
+    with_list_value(ptr, |l| l.push(BlincStructFieldValue::F64(value)));
+}
+
+pub(crate) extern "C" fn blinc_list_push_string(ptr: i64, value_ptr: *const i32) {
+    let value = decode_string_arg(value_ptr);
+    with_list_value(ptr, |l| l.push(BlincStructFieldValue::String(value)));
+}
+
+/// Append a nested struct handle, consuming it.
+pub(crate) extern "C" fn blinc_list_push_struct(ptr: i64, value_ptr: i64) {
+    if value_ptr == 0 {
+        with_list_value(ptr, |l| {
+            l.push(BlincStructFieldValue::Struct(BlincStructValue::default()))
+        });
+        return;
+    }
+    // SAFETY: nested handles are consumed when appended to the parent.
+    let nested = *unsafe { Box::from_raw(value_ptr as *mut BlincStructValue) };
+    with_list_value(ptr, |l| l.push(BlincStructFieldValue::Struct(nested)));
+}
+
+/// Append a nested list handle, consuming it.
+pub(crate) extern "C" fn blinc_list_push_list(ptr: i64, value_ptr: i64) {
+    if value_ptr == 0 {
+        with_list_value(ptr, |l| {
+            l.push(BlincStructFieldValue::List(BlincListValue::default()))
+        });
+        return;
+    }
+    // SAFETY: nested handles are consumed when appended to the parent.
+    let nested = *unsafe { Box::from_raw(value_ptr as *mut BlincListValue) };
+    with_list_value(ptr, |l| l.push(BlincStructFieldValue::List(nested)));
+}
+
+/// Set a list-valued struct field, consuming the list handle.
+pub(crate) extern "C" fn blinc_set_struct_list(ptr: i64, name_ptr: *const i32, value_ptr: i64) {
+    let name = decode_string_arg(name_ptr);
+    let nested = if value_ptr == 0 {
+        BlincListValue::default()
+    } else {
+        // SAFETY: as above.
+        *unsafe { Box::from_raw(value_ptr as *mut BlincListValue) }
+    };
+    with_struct_value(ptr, |s| {
+        s.insert(name, BlincStructFieldValue::List(nested));
     });
 }
 
