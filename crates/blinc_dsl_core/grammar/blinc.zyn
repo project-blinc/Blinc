@@ -1304,7 +1304,29 @@ effect_stmt = { "effect" ~ "{" ~ stmts:statement* ~ "}" }
 // the same marker-stripping the view path uses. The lambda is only a
 // transport: the lift pass takes its statements into a synthetic
 // component view and discards the lambda itself.
-with_stmt = { "with" ~ attrs:view_attr* ~ "{" ~ stmts:statement* ~ "}" }
+//
+// Two surfaces, same lowering. The decorator form spells out which
+// mechanism each dependency is:
+//
+//   with @fsm([Play]) { … }
+//   with @stateful([count]) { … }
+//
+// The bare form just names them, which is what a region usually wants:
+//
+//   with count { … }
+//   with count, Play { … }
+//
+// Bare names are NOT classified here. The grammar cannot tell a signal
+// from an FSM, and guessing by capitalisation would silently leave a
+// misjudged region subscribed to nothing. `register_with_regions`
+// resolves each name against the declared signals and FSMs instead, so
+// a name that matches neither is a warning rather than a dead region.
+//
+// PEG ordering: the decorator form first, since it locks on `@`. A
+// bare name fails its `"{"` and backtracks into the deps form.
+with_stmt = { with_stmt_attrs | with_stmt_deps }
+
+with_stmt_attrs = { "with" ~ attrs:view_attr* ~ "{" ~ stmts:statement* ~ "}" }
   -> TypedStatement::Expression {
       expr: TypedExpression::Call {
           callee: Box::new(TypedExpression::Variable { name: intern("__blinc_with__") }),
@@ -1314,6 +1336,36 @@ with_stmt = { "with" ~ attrs:view_attr* ~ "{" ~ stmts:statement* ~ "}" }
           }],
       },
   }
+
+with_stmt_deps = { "with" ~ deps:with_dep_list ~ "{" ~ stmts:statement* ~ "}" }
+  -> TypedStatement::Expression {
+      expr: TypedExpression::Call {
+          callee: Box::new(TypedExpression::Variable { name: intern("__blinc_with__") }),
+          args: [TypedExpression::Lambda {
+              params: [],
+              body: TypedExpression::Block { statements: prepend_list(
+                  TypedStatement::Expression {
+                      expr: TypedExpression::Call {
+                          callee: Box::new(TypedExpression::Variable { name: intern("__with_deps__") }),
+                          args: deps,
+                      },
+                  },
+                  stmts,
+              ) },
+          }],
+      },
+  }
+
+// Comma-or-space separated names. Commas optional, same rationale as
+// `stateful_deps_list`.
+with_dep_list = { first:with_dep_name ~ rest:with_dep_tail* }
+  -> prepend_list(first, rest)
+
+with_dep_tail = { ","? ~ name:with_dep_name }
+  -> name
+
+with_dep_name = { name:identifier }
+  -> TypedExpression::StringLiteral { value: name }
 
 // `match e { "a" -> f(), "b" -> g(), _ -> h() }`. Arrow-arm pattern
 // matching with string-literal patterns + `_` wildcard. Each arm body

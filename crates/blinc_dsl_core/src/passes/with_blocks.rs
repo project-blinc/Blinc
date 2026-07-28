@@ -27,6 +27,12 @@ pub(crate) struct WithRegion {
     pub signal_deps: Vec<String>,
     /// FSM names from `@fsm([A, B])`.
     pub fsms: Vec<String>,
+    /// Names from the bare `with count, Play { … }` form, still
+    /// unclassified. `BlincDsl::register_with_regions` sorts them into
+    /// signals and FSMs against what the program declared — the grammar
+    /// cannot tell the two apart, and capitalisation is a convention,
+    /// not a rule.
+    pub named_deps: Vec<String>,
     /// `"<Fsm>.<field>"` for every context field the body reads as a
     /// value — see [`super::collect_ctx_value_reads`].
     pub ctx_value_reads: Vec<String>,
@@ -196,7 +202,7 @@ fn rewrite_expr(
     let id = NEXT_REGION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let name = format!("__blinc_with_{id}");
 
-    let (signal_deps, fsms) = strip_decorator_markers(&mut body);
+    let (signal_deps, fsms, named_deps) = strip_decorator_markers(&mut body);
     let mut ctx_value_reads = Vec::new();
     super::collect_ctx_value_reads(&body, &mut ctx_value_reads);
 
@@ -206,6 +212,7 @@ fn rewrite_expr(
             name: name.clone(),
             signal_deps,
             fsms,
+            named_deps,
             ctx_value_reads,
         },
         body,
@@ -263,10 +270,11 @@ fn rewrite_expr(
     expr.ty = i64_ty;
 }
 
-/// Consume the leading `__stateful_view__` / `__fsm_view__` marker
-/// statements the grammar folded into the block, returning their
-/// arguments. Decorators may stack in either order.
-fn strip_decorator_markers(body: &mut TypedBlock) -> (Vec<String>, Vec<String>) {
+/// Consume the leading `__stateful_view__` / `__fsm_view__` /
+/// `__with_deps__` marker statements the grammar folded into the block,
+/// returning their arguments as `(signals, fsms, unclassified)`.
+/// Decorators may stack in either order.
+fn strip_decorator_markers(body: &mut TypedBlock) -> (Vec<String>, Vec<String>, Vec<String>) {
     use zyntax_typed_ast::typed_ast::{TypedExpression, TypedLiteral};
 
     fn marker(stmt: &zyntax_typed_ast::TypedNode<TypedStatement>) -> Option<(String, Vec<String>)> {
@@ -280,7 +288,7 @@ fn strip_decorator_markers(body: &mut TypedBlock) -> (Vec<String>, Vec<String>) 
             return None;
         };
         let name = callee.resolve_global()?.to_string();
-        if name != "__stateful_view__" && name != "__fsm_view__" {
+        if name != "__stateful_view__" && name != "__fsm_view__" && name != "__with_deps__" {
             return None;
         }
         let args = call
@@ -299,15 +307,16 @@ fn strip_decorator_markers(body: &mut TypedBlock) -> (Vec<String>, Vec<String>) 
 
     let mut signal_deps = Vec::new();
     let mut fsms = Vec::new();
+    let mut named_deps = Vec::new();
     while let Some((name, args)) = body.statements.first().and_then(marker) {
-        if name == "__stateful_view__" {
-            signal_deps.extend(args);
-        } else {
-            fsms.extend(args);
+        match name.as_str() {
+            "__stateful_view__" => signal_deps.extend(args),
+            "__fsm_view__" => fsms.extend(args),
+            _ => named_deps.extend(args),
         }
         body.statements.remove(0);
     }
-    (signal_deps, fsms)
+    (signal_deps, fsms, named_deps)
 }
 
 /// The data half of the synthetic component. `validate_component_calls`
@@ -340,6 +349,78 @@ fn synthetic_class(
 }
 
 /// The inherent `impl <region> { fn view() }` — the same shape
+/// A region has to hand back a widget handle: the builtin takes it as
+/// an argument, so a body that produces nothing leaves a Unit value in
+/// an i64 argument slot, which trips Cranelift's value map rather than
+/// failing anywhere legible.
+///
+/// A body that already ends in a widget call is left alone, so the
+/// common `with @fsm([Play]) { Div { … } }` keeps exactly the boxes it
+/// had. Anything else — a bare `if`, a loop, a body ending in a `.set()`
+/// — is wrapped in a `Div`, which also gives its branches a child list
+/// to push onto.
+fn ensure_widget_returning(body: TypedBlock) -> TypedBlock {
+    use zyntax_typed_ast::typed_ast::TypedExpression;
+
+    let produces_widget = body.statements.last().is_some_and(|stmt| {
+        let TypedStatement::Expression(e) = &stmt.node else {
+            return false;
+        };
+        let TypedExpression::Call(call) = &e.node else {
+            return false;
+        };
+        let TypedExpression::Variable(callee) = &call.callee.node else {
+            return false;
+        };
+        callee
+            .resolve_global()
+            .is_some_and(|n| n == "__component_call__" || n.ends_with("$view"))
+    });
+    if produces_widget {
+        return body;
+    }
+
+    let span = body.span;
+    let inner = typed_node(
+        TypedExpression::Block(body),
+        Type::Primitive(PrimitiveType::Unit),
+        span,
+    );
+    let wrapped = typed_node(
+        TypedExpression::Call(zyntax_typed_ast::TypedCall {
+            callee: Box::new(typed_node(
+                TypedExpression::Variable(zyntax_typed_ast::InternedString::new_global(
+                    "__component_call__",
+                )),
+                Type::Any,
+                span,
+            )),
+            positional_args: vec![
+                typed_node(
+                    TypedExpression::Literal(zyntax_typed_ast::TypedLiteral::String(
+                        zyntax_typed_ast::InternedString::new_global("Div"),
+                    )),
+                    Type::Primitive(PrimitiveType::String),
+                    span,
+                ),
+                inner,
+            ],
+            named_args: vec![],
+            type_args: vec![],
+        }),
+        Type::Primitive(PrimitiveType::I64),
+        span,
+    );
+    TypedBlock {
+        statements: vec![typed_node(
+            TypedStatement::Expression(Box::new(wrapped)),
+            Type::Primitive(PrimitiveType::Unit),
+            span,
+        )],
+        span,
+    }
+}
+
 /// `component_folded` emits, which is what gives the `<name>$view`
 /// mangling `render_component` resolves against.
 fn synthetic_impl(
@@ -349,6 +430,7 @@ fn synthetic_impl(
     use zyntax_typed_ast::typed_ast::{TypedDeclaration, TypedMethod, TypedTraitImpl};
 
     let span = body.span;
+    let body = ensure_widget_returning(body);
     typed_node(
         TypedDeclaration::Impl(TypedTraitImpl {
             // Empty trait name marks an INHERENT impl, which is what

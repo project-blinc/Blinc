@@ -1321,16 +1321,42 @@ impl BlincDsl {
             .into_iter()
             .map(|(name, _)| name)
             .collect();
+        let declared_fsms = self.declared_fsms();
 
         for region in regions {
-            let signal_names: Vec<String> = if !region.signal_deps.is_empty() {
-                region
-                    .signal_deps
+            // The bare `with count, Play { … }` form names its
+            // dependencies without saying what they are. Sort them here,
+            // where both declaration lists exist, rather than guessing
+            // from capitalisation at parse time.
+            let mut signal_deps = region.signal_deps.clone();
+            let mut fsms = region.fsms.clone();
+            for name in &region.named_deps {
+                if declared_fsms.contains(name) {
+                    if !fsms.contains(name) {
+                        fsms.push(name.clone());
+                    }
+                } else if declared.contains(name) {
+                    if !signal_deps.contains(name) {
+                        signal_deps.push(name.clone());
+                    }
+                } else {
+                    tracing::warn!(
+                        dep = %name,
+                        region = %region.name,
+                        "`with` names a dependency that is neither a declared \
+                         signal nor a declared FSM — the region will not \
+                         re-render for it"
+                    );
+                }
+            }
+
+            let signal_names: Vec<String> = if !signal_deps.is_empty() {
+                signal_deps
                     .iter()
                     .filter(|name| declared.contains(name))
                     .cloned()
                     .collect()
-            } else if !region.fsms.is_empty() {
+            } else if !fsms.is_empty() {
                 // A self transition leaves the state value unchanged, so
                 // the context writes are what actually signal a change.
                 // Only the fields read as values: a field passed as a
@@ -1342,9 +1368,7 @@ impl BlincDsl {
                     .iter()
                     .filter_map(|dotted| {
                         let (fsm, field) = dotted.split_once('.')?;
-                        region
-                            .fsms
-                            .iter()
+                        fsms.iter()
                             .any(|f| f == fsm)
                             .then(|| crate::fsm_registry::mangle_ctx_signal(fsm, field))
                     })
@@ -1360,8 +1384,8 @@ impl BlincDsl {
                     name: region.name.clone(),
                     signal_names,
                     // First listed wins: a Stateful exposes one shared
-                    // state. No `@fsm` means no shared state to bind.
-                    fsm: region.fsms.first().cloned(),
+                    // state. No FSM named means no shared state to bind.
+                    fsm: fsms.first().cloned(),
                 },
             );
         }

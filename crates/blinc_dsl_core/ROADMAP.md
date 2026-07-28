@@ -128,6 +128,15 @@ an inline form:
         if Play.busy.get() { ... } else { ... }
     }
 
+Bare names work too, and are what a region usually wants:
+
+    with count { ... }
+    with count, Play { ... }
+
+They are classified at registration against the declared signals and
+FSMs, NOT by capitalisation — guessing there would leave a misjudged
+region silently subscribed to nothing. A name matching neither warns.
+
 A reactive region placed directly in a parent view, no component
 needed, and only that region rebuilds when a listed dependency changes.
 The playground's `BusyPanel` was exactly the shape this replaces: a
@@ -155,6 +164,12 @@ body inline:
 Neither recorded stall applies: there is no existing call site to
 rewrite, and the id is minted process-wide so it is unique per block and
 across recompiles.
+
+A body that does not itself end in a widget call — a bare `if`, a loop
+— is wrapped in a container, which both gives the region something to
+return and gives the branches a child list to push onto. A body that
+already ends in one is left alone, so existing regions keep exactly the
+boxes they had.
 
 Two limits worth knowing. A `with` nested inside another `with` does
 not lift — the synthetic views are appended after the walk, and an inner

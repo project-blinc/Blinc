@@ -203,6 +203,150 @@ fn a_write_re_renders_the_region_and_not_the_view_around_it() {
     );
 }
 
+/// The bare form: `with count { … }`, no decorator. Same region, same
+/// subscription — the name is classified against the declared signals
+/// rather than spelled out.
+#[test]
+fn a_bare_signal_name_subscribes_the_region() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dsl = compile(
+        r#"
+signal count: i32 = 0
+view {
+    Div {
+        Probe(tag = "outside")
+        with count {
+            Probe(tag = "inside")
+        }
+    }
+}
+"#,
+    );
+
+    let host = blinc_layout::div::div()
+        .w(400.0)
+        .h(300.0)
+        .child_box(dsl.view_widget());
+    let mut tree = blinc_layout::renderer::RenderTree::from_element(&host);
+    tree.compute_layout(400.0, 300.0);
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 300.0);
+
+    BUILT.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    dsl.set_signal_i32("count", 1);
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 300.0);
+
+    let built = BUILT.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    assert!(
+        built.iter().any(|t| t == "inside"),
+        "`with count` must subscribe the region to `count`: built {built:?}"
+    );
+    assert!(
+        !built.iter().any(|t| t == "outside"),
+        "and still scope the rebuild: built {built:?}"
+    );
+}
+
+/// Several names at once, comma separated. A write to EITHER re-renders
+/// the region, so the second signal is not silently dropped.
+#[test]
+fn a_bare_form_takes_several_names() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dsl = compile(
+        r#"
+signal first: i32 = 0
+signal second: i32 = 0
+view {
+    Div {
+        Probe(tag = "outside")
+        with first, second {
+            Probe(tag = "inside")
+        }
+    }
+}
+"#,
+    );
+
+    let host = blinc_layout::div::div()
+        .w(400.0)
+        .h(300.0)
+        .child_box(dsl.view_widget());
+    let mut tree = blinc_layout::renderer::RenderTree::from_element(&host);
+    tree.compute_layout(400.0, 300.0);
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 300.0);
+
+    // The SECOND name — the one a first-only implementation drops.
+    BUILT.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    dsl.set_signal_i32("second", 7);
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 300.0);
+
+    let built = BUILT.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    assert!(
+        built.iter().any(|t| t == "inside"),
+        "a write to the second name must re-render too: built {built:?}"
+    );
+}
+
+/// A bare name that is an FSM routes to the FSM path, which subscribes
+/// to the context fields the body reads as values rather than to a
+/// signal of that name (there is none).
+#[test]
+fn a_bare_fsm_name_binds_the_fsm() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dsl = compile(
+        r#"
+fsm Play {
+    context { busy: bool = false }
+    state Idle
+    initial Idle
+
+    on Idle.Toggle -> Idle {
+        ctx.busy = true
+    }
+}
+view {
+    Div {
+        Probe(tag = "outside")
+        with Play {
+            if Play.busy.get() {
+                Probe(tag = "busy")
+            } else {
+                Probe(tag = "idle")
+            }
+        }
+    }
+}
+"#,
+    );
+
+    let host = blinc_layout::div::div()
+        .w(400.0)
+        .h(300.0)
+        .child_box(dsl.view_widget());
+    let mut tree = blinc_layout::renderer::RenderTree::from_element(&host);
+    tree.compute_layout(400.0, 300.0);
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 300.0);
+
+    BUILT.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    blinc_runtime::fsm::dispatch_default("Play", "Toggle").expect("Toggle dispatches");
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 300.0);
+
+    let built = BUILT.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    assert!(
+        built.iter().any(|t| t == "busy"),
+        "the region must swap to the busy branch: built {built:?}"
+    );
+    assert!(
+        !built.iter().any(|t| t == "outside"),
+        "and still scope the rebuild: built {built:?}"
+    );
+}
+
 /// Two regions in one view get distinct ids, so neither mounts against
 /// the other's body.
 #[test]
@@ -223,5 +367,37 @@ view {
     assert!(
         built.iter().any(|t| t == "first") && built.iter().any(|t| t == "second"),
         "both regions must render their own body: built {built:?}"
+    );
+}
+
+/// A region body that produces no widget on its own — a bare `if`, a
+/// loop — must still work: the lift wraps it in a container, which also
+/// gives the branches a child list to push onto. Without the wrap the
+/// region's view returns Unit into an i64 argument slot and Cranelift
+/// trips on its value map.
+#[test]
+fn a_region_body_that_is_a_bare_branch_still_renders() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dsl = compile(
+        r#"
+signal flag: bool = false
+view {
+    Div {
+        Probe(tag = "outside")
+        with flag {
+            if flag.get() {
+                Probe(tag = "yes")
+            } else {
+                Probe(tag = "no")
+            }
+        }
+    }
+}
+"#,
+    );
+    let built = render(&dsl);
+    assert!(
+        built.iter().any(|t| t == "no"),
+        "the else branch must render: built {built:?}"
     );
 }
