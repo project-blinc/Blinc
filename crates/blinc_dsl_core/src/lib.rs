@@ -447,7 +447,14 @@ impl BlincDsl {
         let mut typed_program = self
             .grammar
             .parse_with_signatures(source, filename, runtime.plugin_signatures())
-            .map_err(|e| BlincDslError::Compile(e.to_string()))?;
+            // A parse failure carries the source it came from, so it
+            // renders as a snippet with the offending token underlined
+            // rather than a line:column pair the reader has to go and
+            // look up. Colour is off: this string is logged, asserted
+            // on in tests, and shown in-window, none of which is a tty.
+            .map_err(|e| {
+                BlincDslError::Compile(e.render(false).unwrap_or_else(|| e.to_string()))
+            })?;
 
         // Apply the module-namespace prefix to local components
         // BEFORE import-extern injection so cross-module references
@@ -1144,7 +1151,14 @@ impl BlincDsl {
         let mut program = self
             .grammar
             .parse_with_signatures(source, filename, runtime.plugin_signatures())
-            .map_err(|e| BlincDslError::Compile(e.to_string()))?;
+            // A parse failure carries the source it came from, so it
+            // renders as a snippet with the offending token underlined
+            // rather than a line:column pair the reader has to go and
+            // look up. Colour is off: this string is logged, asserted
+            // on in tests, and shown in-window, none of which is a tty.
+            .map_err(|e| {
+                BlincDslError::Compile(e.render(false).unwrap_or_else(|| e.to_string()))
+            })?;
 
         // Post-parse passes — no-op on programs without the matching shapes.
         inject_fsm_context_markers(&mut program);

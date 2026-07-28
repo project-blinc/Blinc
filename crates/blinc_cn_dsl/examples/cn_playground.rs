@@ -88,22 +88,33 @@ fn main() -> Result<()> {
                 match build(&root) {
                     Ok(fresh) => {
                         *dsl.borrow_mut() = fresh;
+                        blinc_app::hot_reload::set_reload_error(None);
                         tracing::info!("hot-reload: reloaded");
                     }
                     // Source is unparseable for most of the time it is
                     // being typed. The running program has to survive
                     // that, so a failed compile is discarded and the
-                    // window keeps rendering what it has.
+                    // window keeps rendering what it has -- with the
+                    // reason banner-ed over it, since otherwise a save
+                    // that did nothing looks like a save that worked.
                     Err(e) => {
+                        blinc_app::hot_reload::set_reload_error(Some(e.to_string()));
                         tracing::warn!(error = %e, "hot-reload: keeping the running program")
                     }
                 }
             }
-            div()
+            #[allow(unused_mut)]
+            let mut root_div = div()
                 .w(ctx.width)
                 .h(ctx.height)
+                .relative()
                 .bg(ThemeState::get().colors().background)
-                .child_box(dsl.borrow().view_widget())
+                .child_box(dsl.borrow().view_widget());
+            #[cfg(feature = "hot-reload")]
+            {
+                root_div = root_div.child(blinc_app::hot_reload::error_banner(ctx.width));
+            }
+            root_div
         },
     )
 }

@@ -19,8 +19,9 @@ component MediaWidgets {
             cn.Label("card: container with children")
             cn.Card {
                 cn.Label("card content")
-                cn.Badge("nested", variant = "secondary")
-                cn.Badge("Another")
+                cn.Badge("A nested content", variant = "secondary")
+                //cn.Badge("Another nested content with primary badge")
+                //cn.Badge("Hot reloading FTW!", variant = "success")
             }
 
             cn.Label("separator + static skeleton")
