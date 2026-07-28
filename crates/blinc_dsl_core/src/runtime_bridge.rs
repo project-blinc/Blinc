@@ -108,6 +108,19 @@ impl blinc_runtime::view::ViewRenderer for JitViewRenderer {
             let user_view_takes_instance_id = symbol != "render_view"
                 && !symbol.starts_with("$Blinc$")
                 && symbol.ends_with("$view");
+            // Release the runtime BEFORE entering JIT code. The lock
+            // guards the runtime's own tables, which the lookup above
+            // has finished with; the compiled function needs none of
+            // them. Holding it across the call made every nested render
+            // a deadlock -- `std::sync::Mutex` is not reentrant -- which
+            // is what stopped a component from mounting its own
+            // `Stateful` whose callback renders that component.
+            //
+            // Safe for the same reason the lock exists at all: the
+            // runtime is `!Send` and only ever driven from the main
+            // thread, so dropping the guard early widens no window that
+            // was closed before.
+            drop(runtime);
             if user_view_takes_instance_id {
                 let view: extern "C" fn(u64) -> i64 = unsafe { std::mem::transmute(ptr) };
                 Ok(ZyntaxValue::Int(view(0)))
