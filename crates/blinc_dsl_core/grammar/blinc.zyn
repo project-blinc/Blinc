@@ -1892,7 +1892,8 @@ postfix_expr = { base:primary_expr ~ suffixes:postfix_suffix* }
 
 // Order matters: `suffix_method` first so `obj.foo(args)` doesn't
 // get split into `Field(obj.foo)` + an unconsumed `(args)` token.
-postfix_suffix = { suffix_method | suffix_field }
+// `suffix_index` is unambiguous against both — it leads with `[`.
+postfix_suffix = { suffix_method | suffix_field | suffix_index }
 
 suffix_method = { "." ~ method:identifier ~ "(" ~ args:call_args_list? ~ ")" }
   -> SuffixMethod {
@@ -1903,6 +1904,17 @@ suffix_method = { "." ~ method:identifier ~ "(" ~ args:call_args_list? ~ ")" }
 suffix_field = { "." ~ field:identifier }
   -> SuffixField {
       field: intern(field),
+  }
+
+// `xs[i]` — element access. Lowers to `TypedExpression::Index`, which
+// Zyntax compiles to a GEP off the list's `data` pointer, so the
+// stride follows the element type the compiler inferred rather than
+// anything declared here.
+//
+// The index is a full `expr`, so `xs[i + 1]` and `xs[f()]` work.
+suffix_index = { "[" ~ index:expr ~ "]" }
+  -> SuffixIndex {
+      index: index,
   }
 
 // Argument list, comma-or-newline separated. `prepend_list` is

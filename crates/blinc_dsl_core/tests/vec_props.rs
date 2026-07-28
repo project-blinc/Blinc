@@ -13,12 +13,19 @@ use std::sync::Mutex;
 static SEEN_LABELS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static SEEN_SIZES: Mutex<Vec<f64>> = Mutex::new(Vec::new());
 static SEEN_FLAGS: Mutex<Vec<bool>> = Mutex::new(Vec::new());
+/// Single values, for the `xs[i]` cases.
+static SEEN_PICK: Mutex<String> = Mutex::new(String::new());
+static SEEN_PICK_SIZE: Mutex<f64> = Mutex::new(0.0);
+static SEEN_PICK_FLAG: Mutex<bool> = Mutex::new(false);
 
 #[extern_widget(name = "ListProbe")]
 pub struct ListProbe {
     pub labels: Vec<String>,
     pub sizes: Vec<f64>,
     pub flags: Vec<bool>,
+    pub picked: String,
+    pub picked_size: f64,
+    pub picked_flag: bool,
     #[skip]
     inner: std::cell::OnceCell<blinc_layout::div::Div>,
 }
@@ -29,6 +36,9 @@ impl ListProbe {
             *SEEN_LABELS.lock().unwrap() = self.labels.clone();
             *SEEN_SIZES.lock().unwrap() = self.sizes.clone();
             *SEEN_FLAGS.lock().unwrap() = self.flags.clone();
+            *SEEN_PICK.lock().unwrap() = self.picked.clone();
+            *SEEN_PICK_SIZE.lock().unwrap() = self.picked_size;
+            *SEEN_PICK_FLAG.lock().unwrap() = self.picked_flag;
             blinc_layout::div::div()
         })
     }
@@ -102,4 +112,58 @@ fn a_bool_list_reads_at_the_right_stride() {
     *SEEN_FLAGS.lock().unwrap() = Vec::new();
     run("view { ListProbe(flags = [true, false, true, true]) }");
     assert_eq!(*SEEN_FLAGS.lock().unwrap(), vec![true, false, true, true]);
+}
+
+// ─── `xs[i]` ─────────────────────────────────────────────────────────
+//
+// Zyntax compiles an index to a GEP off the list's `data` pointer, so
+// these read the same buffers the `Vec<T>` props do, but from the
+// language side. They are the cross-check on the stride table: if the
+// element size were wrong, the value returned would be garbage rather
+// than the neighbouring element.
+
+#[test]
+fn indexing_a_string_list_returns_the_element() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    *SEEN_PICK.lock().unwrap() = String::new();
+    run(r#"view { ListProbe(picked = ["alpha", "beta", "gamma"][1]) }"#);
+    assert_eq!(*SEEN_PICK.lock().unwrap(), "beta");
+}
+
+#[test]
+fn indexing_reaches_the_last_element() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    *SEEN_PICK.lock().unwrap() = String::new();
+    run(r#"view { ListProbe(picked = ["alpha", "beta", "gamma"][2]) }"#);
+    assert_eq!(*SEEN_PICK.lock().unwrap(), "gamma");
+}
+
+/// Eight-byte stride, read directly rather than through a pointer.
+#[test]
+fn indexing_an_f64_list_returns_the_element() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    *SEEN_PICK_SIZE.lock().unwrap() = 0.0;
+    run("view { ListProbe(picked_size = [1.5, 2.5, 3.5][2]) }");
+    assert_eq!(*SEEN_PICK_SIZE.lock().unwrap(), 3.5);
+}
+
+/// The stride that a uniform assumption gets wrong. `[true, false,
+/// true][1]` is `false`; an eight-byte GEP would land three elements
+/// past it, outside the buffer.
+#[test]
+fn indexing_a_bool_list_returns_the_element() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    *SEEN_PICK_FLAG.lock().unwrap() = true;
+    run("view { ListProbe(picked_flag = [true, false, true][1]) }");
+    assert!(!*SEEN_PICK_FLAG.lock().unwrap(), "element 1 is false");
+}
+
+/// A signal-driven index: the offset is only known at run time, so the
+/// GEP has to multiply by the stride rather than fold to a constant.
+#[test]
+fn indexing_with_a_runtime_value_returns_the_element() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    *SEEN_PICK_SIZE.lock().unwrap() = 0.0;
+    run("signal idx: i32 = 1\nview { ListProbe(picked_size = [10.0, 20.0, 30.0][idx.get()]) }");
+    assert_eq!(*SEEN_PICK_SIZE.lock().unwrap(), 20.0);
 }
