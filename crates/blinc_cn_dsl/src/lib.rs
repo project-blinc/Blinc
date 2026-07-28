@@ -50,6 +50,7 @@
 pub mod alert;
 pub mod avatar;
 pub mod badge;
+pub mod breadcrumb;
 pub mod bridge;
 pub mod button;
 pub mod card;
@@ -71,6 +72,7 @@ pub(crate) mod color;
 pub use alert::CnAlert;
 pub use avatar::CnAvatar;
 pub use badge::CnBadge;
+pub use breadcrumb::CnBreadcrumb;
 pub use button::CnButton;
 pub use card::CnCard;
 pub use checkbox::CnCheckbox;
@@ -125,6 +127,7 @@ pub fn register_all(dsl: &BlincDsl) -> BlincDslResult<()> {
 pub fn register_basics(dsl: &BlincDsl) -> BlincDslResult<()> {
     dsl.register_extern_widget::<CnButton>()?;
     dsl.register_extern_widget::<CnBadge>()?;
+    dsl.register_extern_widget::<CnBreadcrumb>()?;
     dsl.register_extern_widget::<CnAlert>()?;
     dsl.register_extern_widget::<CnLabel>()?;
     dsl.register_extern_widget::<CnSeparator>()?;

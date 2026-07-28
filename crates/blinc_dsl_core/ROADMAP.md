@@ -15,6 +15,14 @@ block and a later block cannot use it.
 by walking the import graph from the entry file. Only `compile_project`
 does that resolution; `compile_source` and `compile_file` see one file.
 
+**Collections.** `[a, b, c]` literals and `xs[i]` indexing, plus
+`Vec<T>` props on extern widgets for String / bool / i32 / i64 / f64.
+Zyntax lowers a literal to `List<T> { data, len, capacity }`, so a prop
+crosses as one pointer and nothing marshals per element. The stride
+follows the element type — `bool` is one byte, `i32` four — so the
+decoder is selected from the declared `Vec<T>` rather than assumed. A
+list of structs needs the element layout and is not supported yet.
+
 **Reactive bindings.** Three mechanisms, deliberately distinguishable:
 
 - an in-place property write, for props with a property writer
@@ -130,15 +138,15 @@ or two, L is a week or more and usually hides a design question.
 | ✅ | Reactive props on the four exposed-but-static widgets | Done. Kbd + Avatar bindable from the DSL, Spinner from Rust, Card has no scalar props. |
 | S each | Expose a container-shaped widget | Dialog, Popover, Tooltip, Sheet, Drawer, Collapsible, Accordion, ScrollArea, AspectRatio, Toggle. Children blocks and named slots already work, so these are wrappers plus scalars. |
 | M | `while` with children | The child list belongs to the entry block and a later block cannot use it. A lowering change, not a widget change. |
-| S–M | A collection type across the FFI | The gate on roughly half the remaining surface. Props today are String, i32, i64, f64, `Reactive<T>` or a non-generic custom type. Zyntax already lowers an array literal to `List<T> { data, len, capacity }`, so the prop crosses as one pointer and no marshalling pass is needed — a grammar rule, a `Vec<T>` arm in the macro, one widget. |
+| ✅ | A collection type across the FFI | Done. `[a, b, c]` literals, `xs[i]` indexing, `Vec<T>` props for String / bool / i32 / i64 / f64, and `cn.Breadcrumb` as the first consumer. A list of structs still needs the element layout. |
 | M | Module system | Export lists and a manifest. Composes with hot reload, so worth doing after it. |
 | L | Item-driven widgets | Select, Combobox, DropdownMenu, Menubar, ContextMenu, NavigationMenu, Breadcrumb, Pagination, ToggleGroup, Table, Tree, Chart. Each is large on its own and every one waits on the collection type. Chart is the biggest single surface in cn. |
 | L | Scoped `@stateful` | A decorated component must mount its own `Stateful` at its call site. Two attempts stalled, on call-site key injection ordering and on re-entering the JIT during the first render. |
 | L | Router | Route declarations, params, nested outlets, and how a route change interacts with subtree rebuilds. |
 | L | Standard library | Open-ended by nature; scope it against what view bodies actually reach for. |
 
-**Suggested order.** Hot reload and the four exposed-but-static widgets
-are done. Next the collection type,
-since it gates more of the remaining surface than anything else. `while`
+**Suggested order.** Hot reload, the four exposed-but-static widgets and
+the collection type are done. The item-driven widgets are unblocked and
+can land one at a time. `while`
 with children and scoped `@stateful` are independent and can slot in
 whenever the compiler work is worth the context switch.

@@ -24,6 +24,17 @@ component MediaWidgets {
                 //cn.Badge("Hot reloading FTW!", variant = "success")
             }
 
+            // The first collection prop: a list literal crosses as one
+            // pointer to Zyntax's `List<T>`, and the last entry is the
+            // current page.
+            cn.Label("breadcrumb: items is a list literal")
+            Div(class = "row") {
+                cn.Breadcrumb(items = ["Home", "Components", "Breadcrumb"])
+            }
+            Div(class = "row") {
+                cn.Breadcrumb(items = ["Docs", "Guide"], separator = "/")
+            }
+
             cn.Label("separator + static skeleton")
             cn.Separator()
             cn.Skeleton(w = 140.0, h = 140.0, rounded = 6.0)
