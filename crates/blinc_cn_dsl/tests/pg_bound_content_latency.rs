@@ -109,3 +109,62 @@ view {
         "every bound widget follows on the same frame: {after:?}"
     );
 }
+
+/// The same thing again, but driven the way the window drives it: a
+/// synthesized pointer-up on the button, so the DSL's `on_click`
+/// callback runs the FSM trigger inside event dispatch rather than the
+/// test calling `dispatch_default` directly.
+#[test]
+fn a_click_moves_bound_content_on_the_same_frame() {
+    init();
+    let dsl = BlincDsl::new().expect("dsl init");
+    blinc_cn_dsl::register_all(&dsl).expect("register");
+    dsl.compile_source(
+        r#"
+fsm Clicked {
+    context { clicked_caption: string = "Save" }
+    state Idle
+    initial Idle
+    on Idle.Busy -> Idle { ctx.clicked_caption = "Saving..." }
+}
+view {
+    Div {
+        cn.Kbd(text = Clicked.clicked_caption)
+        cn.Button("Go", on_click = || { Clicked.trigger("Busy") })
+    }
+}
+"#,
+        "click_latency.blinc",
+    )
+    .expect("compile");
+
+    let host = div().w(720.0).h(820.0).child_box(dsl.view_widget());
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(720.0, 820.0);
+    assert!(
+        texts(&tree).contains(&"Save".to_string()),
+        "starts on the initial value: {:?}",
+        texts(&tree)
+    );
+
+    // Every node gets the event; only the one carrying the handler
+    // acts on it. Cheaper than reproducing the hit-test, and the
+    // handler path being exercised is the same one.
+    let mut stack = vec![tree.root().unwrap()];
+    let mut all = Vec::new();
+    while let Some(id) = stack.pop() {
+        all.push(id);
+        stack.extend(tree.layout_tree.children(id));
+    }
+    for id in all {
+        tree.dispatch_event(id, blinc_core::events::event_types::POINTER_UP, 0.0, 0.0);
+    }
+
+    frame(&mut tree);
+    let after = texts(&tree);
+    println!("AFTER CLICK {after:?}");
+    assert!(
+        after.contains(&"Saving...".to_string()),
+        "a click must move bound content on the same frame: {after:?}"
+    );
+}

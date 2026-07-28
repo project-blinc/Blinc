@@ -181,10 +181,7 @@ component Playground {
             // Content, so it takes the deps() rebuild path -- same as
             // the button label above and for the same reason. Sharing
             // the signal means Busy moves both at once.
-            //
-            // The avatar's fallback is bindable too, but it isn't shown
-            // here: a fallback is two initials in a 32px circle, and
-            // the only signal at hand is a button caption.
+
             cn.Label("kbd: content bound (deps rebuild)")
             Div(class = "row") {
                 cn.Kbd(text = Play.caption)

@@ -2788,12 +2788,24 @@ impl WindowedApp {
                 Arc::clone(&reactive),
                 Arc::clone(&hooks),
                 Arc::clone(&ref_dirty_flag),
-                stateful_callback.clone(),
+                stateful_callback,
             );
-            // Install the same callback as the process-global
-            // stateful-deps notifier so bare `Signal<T>::set` fires
-            // `Stateful` deps the same way `State<T>::set` does.
-            blinc_core::reactive::set_stateful_deps_notifier(move |ids| stateful_callback(ids));
+        }
+
+        // Outside the init guard on purpose. Anything that builds a
+        // widget before the window opens initialises the context state
+        // itself -- `BlincDsl` does, through `ensure_context_state` --
+        // and the guard above then skips, leaving no notifier. A bare
+        // `Signal::set` would mark the signal dirty and reach no
+        // `Stateful`, so a bound widget only caught up when some
+        // unrelated interaction rebuilt it.
+        {
+            #[allow(clippy::type_complexity)]
+            let notifier: std::sync::Arc<dyn Fn(&[SignalId]) + Send + Sync> =
+                Arc::new(|signal_ids| {
+                    blinc_layout::check_stateful_deps(signal_ids);
+                });
+            blinc_core::reactive::set_stateful_deps_notifier(move |ids| notifier(ids));
         }
 
         // Shared animation scheduler for spring/keyframe animations
@@ -6528,6 +6540,11 @@ impl WindowedApp {
                                 Some(interval) => elapsed_since_paint >= interval,
                             };
                             if !should_render {
+                                tracing::debug!(
+                                    target: "blinc_app::paint_probe",
+                                    elapsed_since_paint,
+                                    "paint SKIPPED by the cap gate",
+                                );
                                 // Schedule the next Frame for exactly the
                                 // moment the cap interval elapses. `wake_at`
                                 // routes through the platform shim's timer
