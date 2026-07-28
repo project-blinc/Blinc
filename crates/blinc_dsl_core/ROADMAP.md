@@ -132,13 +132,33 @@ the `Stateful`'s first content. Later refreshes call
 Nothing re-enters the JIT during build, and it is a plain nested call —
 no `Block`-as-expression, so neither stall applies to it.
 
-Remaining to build: the `__scoped_stateful__` builtin (adopt the handle,
-mount a `Stateful` with the component's deps, re-render on refresh), one
-rewrite in `lower_component_calls` for names in `stateful_components`,
-and gating `view_widget`'s whole-program wrap so it only fires for a
-decorated ENTRY view. Detection is done: `stateful_components` records
-which components carry the decorator, attributed by stripping `$view`
-from the owning function.
+Remaining to build: the `__scoped_stateful__` builtin (mount a
+`Stateful` with the component's deps, re-render on refresh), one rewrite
+in `lower_component_calls` for names in `stateful_components`, and
+gating `view_widget`'s whole-program wrap so it only fires for a
+decorated ENTRY view.
+
+An attempt got all four pieces compiling and hit one wall, recorded
+here so the next one starts past it:
+
+- **Attribution.** `detect_and_strip_stateful_views` sees a component
+  view as an `impl <Component> { fn view() }` — the owner name is
+  `"view"`, NOT `"<Component>$view"`. Take the component from
+  `imp.for_type` (`Type::Unresolved(name)`) and match the method named
+  `view`. Stripping a `$view` suffix from the method name silently
+  matches nothing, and the entry-view fallback then swallows every
+  decoration.
+- **The wall.** With the call-site rewrite active, compiling
+  `view { Root() }` fails with *"Call to undefined function
+  'Root$view'"* — an UNRELATED component. Replacing the decorated
+  component's call appears to stop some later pass from emitting view
+  functions for other components. Whatever emits `<Name>$view` needs
+  understanding before the rewrite can land; the rewrite itself is
+  three lines.
+- **Testing it.** "The sibling's node survived" passes vacuously when
+  nothing re-renders at all — which is exactly the state the gating
+  change produces if the rewrite is inert. Any test here must first
+  assert the decorated component DID re-render.
 
 First cut can key the `Stateful` on the component name, which is
 sufficient while a decorated component appears once, and leaves
