@@ -78,11 +78,22 @@ values outlive the instance that declared them.
    accumulators, so there is nothing to deduplicate. The registry
    questions go with it.
 3. *State preservation.* **Done for signals**, which is what an editing
-   session mostly cares about. Scroll offset, focus and text buffers are
-   worth confirming under real use.
-4. *Ergonomics.* Still open: an entry point that wires watching and
-   swapping, so a host does not hand-roll the flag, and parse errors
-   surfaced in-window rather than only in the log.
+   session mostly cares about. The reload now goes through the same
+   incremental update every other frame does rather than throwing the
+   tree away, so scroll offsets, focus and node identity survive too.
+   A stylesheet edit is the one thing the diff can't see — it changes
+   no element hash — so a reload forces one stylesheet pass.
+4. *Ergonomics.* **Mostly done.** `watch_sources` settles a save on the
+   watcher thread and raises one flag, so a host drains a flag and
+   recompiles instead of hand-rolling debounce and retry. Still open:
+   parse errors surfaced in-window rather than only in the log.
+
+Two bugs this shook out, both worth knowing about outside hot reload:
+queued subtree rebuilds outlive the tree that queued them, since a full
+build restarts the layout slotmap and hands the same ids out again (now
+dropped by build epoch); and mixed int/float arithmetic reached
+Cranelift with an integer operand under a float instruction, which the
+verifier rejected, silently dropping the function.
 
 **Scoped `@stateful`.** A decorated component mounts one `Stateful` at
 the view root, so any transition re-renders the whole program. Anything
@@ -110,8 +121,8 @@ or two, L is a week or more and usually hides a design question.
 | Size | Item | Notes |
 | --- | --- | --- |
 | ✅ | Hot reload, the loop | Done. Fresh instance per reload, swapped in by the host. |
-| S | Hot reload, state checks | Signals survive. Confirm scroll offsets, focus, keyed text buffers under real use. |
-| S | Hot reload, ergonomics | One entry point that wires watching and swapping, and parse errors in-window. |
+| ✅ | Hot reload, state checks | Done. Signals survive, and the reload updates the tree incrementally rather than replacing it. |
+| S | Hot reload, ergonomics | `watch_sources` settles the save and raises one flag. Parse errors in-window still open. |
 | S | Reactive props on the four exposed-but-static widgets | Card, Kbd, Spinner are mechanical. Avatar needs its content enum to carry a boxed builder. |
 | S each | Expose a container-shaped widget | Dialog, Popover, Tooltip, Sheet, Drawer, Collapsible, Accordion, ScrollArea, AspectRatio, Toggle. Children blocks and named slots already work, so these are wrappers plus scalars. |
 | M | `while` with children | The child list belongs to the entry block and a later block cannot use it. A lowering change, not a widget change. |
