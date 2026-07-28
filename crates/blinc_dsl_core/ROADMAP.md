@@ -130,7 +130,7 @@ or two, L is a week or more and usually hides a design question.
 | ✅ | Reactive props on the four exposed-but-static widgets | Done. Kbd + Avatar bindable from the DSL, Spinner from Rust, Card has no scalar props. |
 | S each | Expose a container-shaped widget | Dialog, Popover, Tooltip, Sheet, Drawer, Collapsible, Accordion, ScrollArea, AspectRatio, Toggle. Children blocks and named slots already work, so these are wrappers plus scalars. |
 | M | `while` with children | The child list belongs to the entry block and a later block cannot use it. A lowering change, not a widget change. |
-| M | A collection type across the FFI | The gate on roughly half the remaining surface. Props today are String, i32, i64, f64, `Reactive<T>` or a non-generic custom type; a list of items is not expressible. |
+| S–M | A collection type across the FFI | The gate on roughly half the remaining surface. Props today are String, i32, i64, f64, `Reactive<T>` or a non-generic custom type. Zyntax already lowers an array literal to `List<T> { data, len, capacity }`, so the prop crosses as one pointer and no marshalling pass is needed — a grammar rule, a `Vec<T>` arm in the macro, one widget. |
 | M | Module system | Export lists and a manifest. Composes with hot reload, so worth doing after it. |
 | L | Item-driven widgets | Select, Combobox, DropdownMenu, Menubar, ContextMenu, NavigationMenu, Breadcrumb, Pagination, ToggleGroup, Table, Tree, Chart. Each is large on its own and every one waits on the collection type. Chart is the biggest single surface in cn. |
 | L | Scoped `@stateful` | A decorated component must mount its own `Stateful` at its call site. Two attempts stalled, on call-site key injection ordering and on re-entering the JIT during the first render. |

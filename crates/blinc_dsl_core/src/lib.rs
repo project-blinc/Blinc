@@ -70,8 +70,8 @@ pub use blinc_runtime::Reactive;
 /// asking the DSL author for a name.
 pub use widget_ffi::current_call_id;
 pub use widget_ffi::{
-    __extern_widget_internals, BlincListValue, BlincStructFieldValue, BlincStructValue,
-    ExternWidget, ExternWidgetSpec, RenderPropsOverlay, Styled, WidgetBox, materialize_overlay,
+    __extern_widget_internals, BlincStructFieldValue, BlincStructValue, ExternWidget,
+    ExternWidgetSpec, RenderPropsOverlay, Styled, WidgetBox, materialize_overlay,
     materialize_widget,
 };
 pub use zyntax_embed::ZyntaxValue;
