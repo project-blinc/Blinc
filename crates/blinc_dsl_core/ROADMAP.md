@@ -57,7 +57,8 @@ Two rules have to hold for every widget converted:
 
 ## Next
 
-**Hot reload for `.blinc` files.** Edit a file and see it in the running
+**Hot reload for `.blinc` files** — *the loop and state preservation are
+done; recompile hygiene turned out to be moot.* Edit a file and see it in the running
 app, so widget and CSS iteration costs seconds rather than a rebuild.
 
 Zyntax's `hot_reload` is not the mechanism: it swaps one function's
@@ -68,20 +69,20 @@ that make it viable are already true and pinned by tests: a live
 instance can compile again, the recompile swaps what renders, and signal
 values outlive the instance that declared them.
 
-1. *The loop.* Recompile on file change, keeping the previous program if
-   the new one fails to parse. The app already has a recursive file
-   watcher, an invalidation queue, and a wake path for a window parked
-   in `ControlFlow::Wait`.
-2. *Idempotent recompiles.* Declared signals, declared FSMs and compiled
-   stylesheets accumulate per compile, so a reload duplicates them and
-   keeps stale entries. They need replacing per compile, and an edited
-   `style { }` block must replace its previous sheet rather than append
-   a second copy. Open: whether a deleted component leaves the registry,
-   and whether re-registering an FSM keeps its current state.
-3. *State preservation.* Signals already survive. Scroll offsets, focus
-   and keyed text buffers need checking.
-4. *Ergonomics.* An entry point that wires watching and recompiling, and
-   parse errors surfaced in-window rather than only in the log.
+1. *The loop.* **Done.** A reload builds a fresh instance and the host
+   swaps it in; a failure keeps the running one. Compiling into a live
+   runtime is not an option: it re-runs the changed module, but the
+   entry's call to `<Module>$view` keeps binding to the symbol
+   registered first, so only entry-file edits ever appeared to reload.
+2. *Idempotent recompiles.* **Moot.** A fresh instance starts with empty
+   accumulators, so there is nothing to deduplicate. The registry
+   questions go with it.
+3. *State preservation.* **Done for signals**, which is what an editing
+   session mostly cares about. Scroll offset, focus and text buffers are
+   worth confirming under real use.
+4. *Ergonomics.* Still open: an entry point that wires watching and
+   swapping, so a host does not hand-roll the flag, and parse errors
+   surfaced in-window rather than only in the log.
 
 **Scoped `@stateful`.** A decorated component mounts one `Stateful` at
 the view root, so any transition re-renders the whole program. Anything
@@ -108,12 +109,11 @@ or two, L is a week or more and usually hides a design question.
 
 | Size | Item | Notes |
 | --- | --- | --- |
-| S | Hot reload, the loop | Recompile on change, keep the last good program. The watcher, invalidation queue and wake path already exist. |
-| S | Hot reload, state checks | Signals already survive. Confirm scroll offsets, focus, keyed text buffers. |
-| S | Hot reload, ergonomics | One entry point that wires watching, and parse errors in-window. |
+| ✅ | Hot reload, the loop | Done. Fresh instance per reload, swapped in by the host. |
+| S | Hot reload, state checks | Signals survive. Confirm scroll offsets, focus, keyed text buffers under real use. |
+| S | Hot reload, ergonomics | One entry point that wires watching and swapping, and parse errors in-window. |
 | S | Reactive props on the four exposed-but-static widgets | Card, Kbd, Spinner are mechanical. Avatar needs its content enum to carry a boxed builder. |
 | S each | Expose a container-shaped widget | Dialog, Popover, Tooltip, Sheet, Drawer, Collapsible, Accordion, ScrollArea, AspectRatio, Toggle. Children blocks and named slots already work, so these are wrappers plus scalars. |
-| M | Hot reload, idempotent recompiles | The real work: declared signals, declared FSMs and compiled stylesheets accumulate per compile. Also registry hygiene for deleted components and re-registered FSMs. |
 | M | `while` with children | The child list belongs to the entry block and a later block cannot use it. A lowering change, not a widget change. |
 | M | A collection type across the FFI | The gate on roughly half the remaining surface. Props today are String, i32, i64, f64, `Reactive<T>` or a non-generic custom type; a list of items is not expressible. |
 | M | Module system | Export lists and a manifest. Composes with hot reload, so worth doing after it. |
