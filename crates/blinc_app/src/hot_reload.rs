@@ -104,6 +104,41 @@ fn enqueue_invalidations(paths: impl IntoIterator<Item = PathBuf>) {
     }
 }
 
+/// Ask the running app to rebuild its tree on the next tick.
+///
+/// The frame loop drops its cached tree and re-invokes the UI builder,
+/// so whatever the builder now returns is what renders. Callers that
+/// regenerate the UI from outside the builder -- a recompiled `.blinc`
+/// program, say -- use this to make the result visible.
+///
+/// Also nudges a window parked in `ControlFlow::Wait` awake; without
+/// that the rebuild lands but nothing shows until the next input event.
+pub fn request_rebuild() {
+    REBUILD_PENDING.store(true, Ordering::Release);
+    if let Some(wake) = WAKE_FN.get() {
+        wake();
+    }
+}
+
+/// Watch a directory and run `on_change` before the rebuild is queued.
+///
+/// [`watch_dir`] invalidates cached assets and asks for a rebuild,
+/// which is all a changed PNG needs. A changed source file needs
+/// something to happen first -- recompiling it -- and that has to
+/// complete before the builder runs again, hence a callback rather
+/// than a second queue the frame loop would have to drain in the right
+/// order.
+///
+/// The callback runs on the watcher thread. Keep it short, and expect
+/// it to be called several times for one save: editors write through
+/// temp files, and `notify` reports every step.
+pub fn watch_dir_with<F>(dir: impl AsRef<std::path::Path>, on_change: F) -> Option<WatcherHandle>
+where
+    F: Fn(&[PathBuf]) + Send + Sync + 'static,
+{
+    watch_dir_inner(dir, Some(Box::new(on_change)))
+}
+
 /// Watch a directory for asset changes. The watcher runs on its own
 /// background thread, watches `dir` recursively, and pushes any file
 /// that changes onto the same queue [`take_invalidations`] drains.
@@ -134,6 +169,15 @@ fn enqueue_invalidations(paths: impl IntoIterator<Item = PathBuf>) {
 /// let it drop, in which case the watcher thread exits). The handle
 /// is `Send + Sync` so storing it in a static / `Arc` works fine.
 pub fn watch_dir(dir: impl AsRef<std::path::Path>) -> Option<WatcherHandle> {
+    watch_dir_inner(dir, None)
+}
+
+type ChangeFn = Box<dyn Fn(&[PathBuf]) + Send + Sync + 'static>;
+
+fn watch_dir_inner(
+    dir: impl AsRef<std::path::Path>,
+    on_change: Option<ChangeFn>,
+) -> Option<WatcherHandle> {
     use notify::{RecursiveMode, Watcher};
 
     let dir = dir.as_ref().to_path_buf();
@@ -143,7 +187,7 @@ pub fn watch_dir(dir: impl AsRef<std::path::Path>) -> Option<WatcherHandle> {
     }
 
     let mut watcher =
-        match notify::recommended_watcher(|res: notify::Result<notify::Event>| match res {
+        match notify::recommended_watcher(move |res: notify::Result<notify::Event>| match res {
             Ok(event) => {
                 // Only fire on data-change kinds — `Create`, `Modify`,
                 // `Remove`. `Access` events are noise (open / close /
@@ -155,6 +199,12 @@ pub fn watch_dir(dir: impl AsRef<std::path::Path>) -> Option<WatcherHandle> {
                     event.kind,
                     EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
                 ) {
+                    // Before the rebuild is queued, not after: the
+                    // callback is what makes the next build produce
+                    // something different.
+                    if let Some(cb) = &on_change {
+                        cb(&event.paths);
+                    }
                     enqueue_invalidations(event.paths);
                 }
             }

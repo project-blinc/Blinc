@@ -971,6 +971,66 @@ impl BlincDsl {
         Ok(aggregated)
     }
 
+    /// Compile a project again over a live instance, for a hot reload.
+    ///
+    /// Differs from [`Self::compile_project`] in two ways that only
+    /// matter the second time round:
+    ///
+    /// - the per-compile accumulators (declared signals, declared FSMs,
+    ///   collected stylesheets) are CLEARED first. They extend on every
+    ///   compile, so without this a reload would see each signal twice
+    ///   and queue a second copy of every stylesheet.
+    /// - a failure leaves the previous program running. Source is
+    ///   edited a character at a time and is unparseable for most of
+    ///   that, so a reload that killed the view on the first stray
+    ///   keystroke would be unusable.
+    ///
+    /// Signal VALUES survive regardless: the registry is process-global
+    /// and keyed by name, and a declared default applies only when a
+    /// signal is first minted.
+    pub fn recompile_project(
+        &self,
+        entry: &Path,
+        source_root: &Path,
+    ) -> BlincDslResult<Vec<String>> {
+        let previous = self.snapshot_accumulators();
+        self.clear_accumulators();
+        match self.compile_project(entry, source_root) {
+            Ok(views) => Ok(views),
+            Err(e) => {
+                self.restore_accumulators(previous);
+                Err(e)
+            }
+        }
+    }
+
+    fn snapshot_accumulators(&self) -> (Vec<(String, Type)>, Vec<String>, Vec<String>, usize) {
+        (
+            self.declared_signals.lock().expect("poisoned").clone(),
+            self.declared_fsms.lock().expect("poisoned").clone(),
+            self.compiled_stylesheets.lock().expect("poisoned").clone(),
+            *self.stylesheets_queued_up_to.lock().expect("poisoned"),
+        )
+    }
+
+    fn clear_accumulators(&self) {
+        self.declared_signals.lock().expect("poisoned").clear();
+        self.declared_fsms.lock().expect("poisoned").clear();
+        self.compiled_stylesheets.lock().expect("poisoned").clear();
+        // Back to zero as well: the cursor tracks how much of the
+        // stylesheet list has been handed to the context, and the list
+        // it indexes into just went away.
+        *self.stylesheets_queued_up_to.lock().expect("poisoned") = 0;
+    }
+
+    fn restore_accumulators(&self, state: (Vec<(String, Type)>, Vec<String>, Vec<String>, usize)) {
+        let (signals, fsms, sheets, cursor) = state;
+        *self.declared_signals.lock().expect("poisoned") = signals;
+        *self.declared_fsms.lock().expect("poisoned") = fsms;
+        *self.compiled_stylesheets.lock().expect("poisoned") = sheets;
+        *self.stylesheets_queued_up_to.lock().expect("poisoned") = cursor;
+    }
+
     fn compile_project_inner(
         &self,
         entry: &Path,

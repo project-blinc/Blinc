@@ -74,3 +74,74 @@ fn recompile_swaps_the_view() {
     println!("view nodes before={before} after={after}");
     assert!(after > before, "a recompile must swap the rendered view");
 }
+
+/// A reload must not leave the instance holding two of everything.
+#[test]
+fn recompile_replaces_rather_than_accumulates() {
+    use std::io::Write;
+    let dir = std::env::temp_dir().join("blinc_reload_accum");
+    std::fs::create_dir_all(&dir).unwrap();
+    let entry = dir.join("main.blinc");
+    let write = |body: &str| {
+        let mut f = std::fs::File::create(&entry).unwrap();
+        f.write_all(body.as_bytes()).unwrap();
+    };
+
+    write(
+        r#"
+        signal r_a: i32 = 1
+        component App { style { .r { gap: 4px } } view { Div(class = "r") { } } }
+        view { App() }
+        "#,
+    );
+    let dsl = BlincDsl::new().unwrap();
+    dsl.compile_project(&entry, &dir).expect("first compile");
+    let signals_once = dsl.declared_signals().len();
+    let sheets_once = dsl.compiled_stylesheets().len();
+
+    dsl.recompile_project(&entry, &dir).expect("recompile");
+    assert_eq!(
+        dsl.declared_signals().len(),
+        signals_once,
+        "a reload must not declare every signal twice"
+    );
+    assert_eq!(
+        dsl.compiled_stylesheets().len(),
+        sheets_once,
+        "a reload must not queue a second copy of every stylesheet"
+    );
+}
+
+/// Unparseable source keeps the running program: a file is
+/// unparseable for most of the time it is being edited.
+#[test]
+fn a_failed_recompile_keeps_the_previous_program() {
+    use std::io::Write;
+    let dir = std::env::temp_dir().join("blinc_reload_broken");
+    std::fs::create_dir_all(&dir).unwrap();
+    let entry = dir.join("main.blinc");
+    let write = |body: &str| {
+        let mut f = std::fs::File::create(&entry).unwrap();
+        f.write_all(body.as_bytes()).unwrap();
+    };
+
+    write(
+        r#"signal r_ok: i32 = 3
+             view { Div { } }"#,
+    );
+    let dsl = BlincDsl::new().unwrap();
+    dsl.compile_project(&entry, &dir).expect("first compile");
+    let signals = dsl.declared_signals().len();
+
+    write(r#"signal r_ok: i32 = "#);
+    assert!(
+        dsl.recompile_project(&entry, &dir).is_err(),
+        "half-typed source must not compile"
+    );
+    assert_eq!(
+        dsl.declared_signals().len(),
+        signals,
+        "a failed reload must leave the previous program intact"
+    );
+    assert_eq!(dsl.get_signal_i32("r_ok"), Some(3), "and its state");
+}

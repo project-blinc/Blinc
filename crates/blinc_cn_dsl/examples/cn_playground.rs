@@ -45,10 +45,32 @@ fn main() -> Result<()> {
     // `compile_project`, not `compile_source`: the gallery modules are
     // only resolved by walking the import graph from the entry file.
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/playground");
-    let dsl = BlincDsl::new().expect("BlincDsl::new");
+    let dsl = std::sync::Arc::new(BlincDsl::new().expect("BlincDsl::new"));
     blinc_cn_dsl::register_all(&dsl).expect("register cn.* widgets");
     dsl.compile_project(&root.join("main.blinc"), &root)
         .expect("compile");
+
+    // Edit any `.blinc` file under `examples/playground` and the window
+    // follows, with signal values intact -- the registry is keyed by
+    // name and a declared default only applies on first mint.
+    //
+    // `cargo run -p blinc_cn_dsl --example cn_playground --features hot-reload`
+    //
+    // The watcher thread only raises a flag. `BlincDsl` owns JIT
+    // function pointers and is not `Send`, so the recompile itself has
+    // to happen where the view is built: on the main thread, at the top
+    // of the UI builder, before anything reads the program.
+    #[cfg(feature = "hot-reload")]
+    static SOURCES_DIRTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    #[cfg(feature = "hot-reload")]
+    let _watch = blinc_app::hot_reload::watch_dir_with(&root, |paths| {
+        if paths
+            .iter()
+            .any(|p| p.extension().is_some_and(|e| e == "blinc"))
+        {
+            SOURCES_DIRTY.store(true, std::sync::atomic::Ordering::Release);
+        }
+    });
 
     WindowedApp::run_with_theme(
         WindowConfig {
@@ -61,6 +83,17 @@ fn main() -> Result<()> {
         hybrid::HybridTheme::bundle().with_css(CN_STYLES),
         blinc_theme::ColorScheme::Dark,
         move |ctx| {
+            #[cfg(feature = "hot-reload")]
+            if SOURCES_DIRTY.swap(false, std::sync::atomic::Ordering::AcqRel) {
+                match dsl.recompile_project(&root.join("main.blinc"), &root) {
+                    Ok(_) => tracing::info!("hot-reload: recompiled"),
+                    // Keep the previous program: source is unparseable
+                    // for most of the time it is being typed.
+                    Err(e) => {
+                        tracing::warn!(error = %e, "hot-reload: keeping the previous program")
+                    }
+                }
+            }
             div()
                 .w(ctx.width)
                 .h(ctx.height)

@@ -62,3 +62,9 @@ blinc_core = { path = "../blinc_core", version = "0.5.1" }
 # Logging — unknown-variant / unknown-size diagnostics surface as
 # `tracing::warn!` so DSL typos show up without breaking the build.
 tracing.workspace = true
+
+[features]
+# Recompile the playground's `.blinc` files while it runs. Opt-in: it
+# pulls a filesystem watcher into the dep tree, and a shipped app has
+# no reason to watch its own sources.
+hot-reload = ["blinc_app/hot-reload"]
