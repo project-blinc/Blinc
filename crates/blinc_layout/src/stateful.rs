@@ -439,6 +439,29 @@ pub enum RebuildKind {
     Structural,
 }
 
+/// Monotonic counter of whole-tree builds, bumped by
+/// `RenderTree::build_element`.
+///
+/// A `LayoutNodeId` only means something within the build that minted
+/// it: a full rebuild starts a fresh slotmap and hands the same ids out
+/// again. An entry queued against the previous build therefore names a
+/// live node in the new one, and applying it replaces that node's
+/// children with content from the tree it came from. Under `.blinc` hot
+/// reload that reads as a reloaded literal reverting to its old text
+/// one frame after it appeared, inside the box the new text sized.
+static BUILD_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Start a new build epoch and return it. Called once per whole-tree
+/// build, before anything can queue.
+pub fn begin_build_epoch() -> u64 {
+    BUILD_EPOCH.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1
+}
+
+/// The epoch queued rebuilds are stamped with.
+pub fn current_build_epoch() -> u64 {
+    BUILD_EPOCH.load(std::sync::atomic::Ordering::Acquire)
+}
+
 /// A pending subtree rebuild operation
 pub struct PendingSubtreeRebuild {
     /// The parent node whose children should be rebuilt
@@ -447,6 +470,8 @@ pub struct PendingSubtreeRebuild {
     pub new_child: crate::div::Div,
     /// What kind of rebuild this is. See [`RebuildKind`].
     pub kind: RebuildKind,
+    /// Build epoch `parent_id` was minted in. See [`BUILD_EPOCH`].
+    pub epoch: u64,
 }
 
 impl PendingSubtreeRebuild {
@@ -473,6 +498,7 @@ pub fn queue_subtree_rebuild(parent_id: LayoutNodeId, new_child: crate::div::Div
             parent_id,
             new_child,
             kind: RebuildKind::Structural,
+            epoch: current_build_epoch(),
         });
 }
 
@@ -488,6 +514,7 @@ pub fn queue_visual_subtree_rebuild(parent_id: LayoutNodeId, new_child: crate::d
             parent_id,
             new_child,
             kind: RebuildKind::Visual,
+            epoch: current_build_epoch(),
         });
 }
 
@@ -506,6 +533,7 @@ pub fn queue_layout_prop_subtree_rebuild(parent_id: LayoutNodeId, new_child: cra
             parent_id,
             new_child,
             kind: RebuildKind::LayoutProps,
+            epoch: current_build_epoch(),
         });
 }
 

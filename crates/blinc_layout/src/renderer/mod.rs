@@ -919,6 +919,11 @@ pub struct RenderTree {
     /// the replacement for today's blanket `remove_subtree_nodes`
     /// wipe. Saturates harmlessly after 2⁶⁴ builds.
     build_generation: u64,
+    /// Process-global build epoch this tree's `LayoutNodeId`s were
+    /// minted in. Queued subtree rebuilds carry the epoch they were
+    /// queued in, and an older one names a node in a tree that no
+    /// longer exists. See `crate::stateful::begin_build_epoch`.
+    build_epoch: u64,
 }
 
 /// Result of an incremental update attempt
@@ -1011,6 +1016,7 @@ impl RenderTree {
             stable_to_layout: HashMap::new(),
             layout_to_stable: HashMap::new(),
             build_generation: 0,
+            build_epoch: 0,
         }
     }
 
@@ -2885,6 +2891,45 @@ mod tests {
 
         assert_eq!(bounds.width, 200.0);
         assert_eq!(bounds.height, 200.0);
+    }
+
+    /// A rebuild queued against a tree that has since been replaced
+    /// must not be applied to the tree that replaced it.
+    ///
+    /// The layout slotmap starts over on a full build, so the entry's
+    /// `LayoutNodeId` names a live node and `node_exists` waves it
+    /// through. Under `.blinc` hot reload that showed up as a reloaded
+    /// literal reverting to its old text one frame after it appeared,
+    /// in the box the new text had sized.
+    #[test]
+    fn a_rebuild_queued_against_a_replaced_tree_is_dropped() {
+        let _guard = crate::stateful::PENDING_QUEUE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _ = crate::stateful::take_pending_subtree_rebuilds();
+
+        let old_tree = RenderTree::from_element(&div().child(crate::text::text("old")));
+        let old_root = old_tree.root().unwrap();
+        crate::stateful::queue_subtree_rebuild(
+            old_root,
+            div().child(crate::text::text("from the old tree")),
+        );
+
+        // The reload: same element shape, one changed literal.
+        let mut tree = RenderTree::from_element(&div().child(crate::text::text("new")));
+        assert_eq!(
+            tree.root(),
+            Some(old_root),
+            "the ids have to collide for this test to mean anything"
+        );
+        tree.process_pending_subtree_rebuilds();
+
+        let child = tree.layout_tree.children(tree.root().unwrap())[0];
+        let content = match &tree.render_nodes.get(&child).unwrap().element_type {
+            ElementType::Text(t) => t.content.clone(),
+            _ => panic!("expected a text node"),
+        };
+        assert_eq!(content, "new", "the stale rebuild must not have applied");
     }
 
     #[test]

@@ -56,6 +56,10 @@ impl RenderTree {
     /// `project_stable_node_id_design` (memory) for the migration
     /// plan.
     pub(crate) fn build_element<E: ElementBuilder>(&mut self, element: &E) -> LayoutNodeId {
+        // Before anything can queue: a rebuild queued during this walk
+        // belongs to it, one queued against the previous build names a
+        // node id this build is about to reuse for something else.
+        self.build_epoch = crate::stateful::begin_build_epoch();
         let root_id = element.build(&mut self.layout_tree);
         self.root = Some(root_id);
         // CRITICAL ordering: `mint_stable_ids_walk` derives each

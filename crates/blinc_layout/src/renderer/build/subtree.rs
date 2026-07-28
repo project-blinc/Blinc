@@ -342,6 +342,21 @@ impl RenderTree {
             .collect();
 
         for (idx, rebuild) in pending.into_iter().enumerate() {
+            // Drop work queued against a tree this one replaced.
+            // `node_exists` can't catch it: the layout slotmap starts
+            // over on a full rebuild, so the entry's id names a live
+            // node that has nothing to do with the one that queued it.
+            if rebuild.epoch < self.build_epoch {
+                tracing::debug!(
+                    "Subtree rebuild: node {:?} queued in epoch {} (tree is at {}), dropping",
+                    rebuild.parent_id,
+                    rebuild.epoch,
+                    self.build_epoch,
+                );
+                stale_rebuilds += 1;
+                continue;
+            }
+
             // Skip stale rebuilds. This can happen when multiple statefuls queue
             // work in one input cycle and a parent subtree rebuild removes a child
             // that also queued its own hover/press refresh.

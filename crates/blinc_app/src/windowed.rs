@@ -381,6 +381,10 @@ pub(crate) struct WindowState {
     pub needs_rebuild: bool,
     /// Whether layout needs recomputing
     pub needs_relayout: bool,
+    /// A hot reload landed: re-run the stylesheet passes on the next
+    /// update regardless of what the diff reports, since an edited CSS
+    /// rule changes no element hash.
+    pub hot_reload_restyle: bool,
     /// Last frame timestamp for CSS animation delta
     pub last_frame_time_ms: u64,
     /// Timestamp of the last frame that actually ran Phase 4 (render +
@@ -479,6 +483,7 @@ impl WindowState {
             shared_motion_states,
             needs_rebuild: true,
             needs_relayout: false,
+            hot_reload_restyle: false,
             last_frame_time_ms: 0,
             last_paint_time_ms: 0,
             active_touch_ids: std::collections::HashSet::new(),
@@ -6043,24 +6048,25 @@ impl WindowedApp {
                                 if crate::hot_reload::take_rebuild_pending() {
                                     tracing::info!("hot-reload: forcing tree rebuild");
                                     ws.needs_rebuild = true;
-                                    // Drop the cached tree so the rebuild path takes the
-                                    // "no existing tree" branch — that one calls
-                                    // `apply_all_stylesheet_styles()` which actually
-                                    // re-runs CSS application against the freshly-parsed
-                                    // sheet. The incremental-update branch only diffs
-                                    // visual props on the existing tree and would skip
-                                    // CSS rule re-application entirely, so an edit to a
-                                    // CSS string would land in the stylesheet but never
-                                    // surface visually.
-                                    ws.render_tree = None;
+                                    // The builder runs again and the diff
+                                    // carries the edit into the live tree.
+                                    // Keeping the tree keeps scroll offsets,
+                                    // focus and node identity, and costs one
+                                    // incremental update instead of a full
+                                    // build of the whole window.
+                                    //
+                                    // CSS is the part the diff can't see: an
+                                    // edited stylesheet string is re-parsed
+                                    // into `windowed_ctx.stylesheet`, but the
+                                    // rules only reach nodes when a stylesheet
+                                    // pass runs, and `NoChanges` / `VisualOnly`
+                                    // don't run one. Flag it for the pass below.
+                                    ws.hot_reload_restyle = true;
                                     windowed_ctx.reset_for_hot_reload();
-                                    // The tree is rebuilt but the
-                                    // renderer's cached scene is not,
-                                    // so a reloaded literal composited
-                                    // under the glyphs of the string it
-                                    // replaced: both drawn at once, the
-                                    // box sized for one and filled with
-                                    // the other.
+                                    // The tree updates but the renderer's cached
+                                    // scene doesn't, so a reloaded literal would
+                                    // composite under the glyphs of the string
+                                    // it replaced.
                                     blinc_app.invalidate_render_cache_tagged("hot-reload");
                                 }
                             }
@@ -6210,6 +6216,19 @@ impl WindowedApp {
                                         }
 
                                         let update_result = existing_tree.incremental_update(&ui);
+
+                                        // An edited stylesheet leaves every
+                                        // element hash untouched, so the diff
+                                        // reports NoChanges and no pass runs.
+                                        // Re-apply the rules the reload just
+                                        // re-parsed, then let the match below
+                                        // handle whatever else changed.
+                                        let restyle = std::mem::take(&mut ws.hot_reload_restyle);
+                                        if restyle {
+                                            existing_tree.apply_all_stylesheet_styles();
+                                            existing_tree.compute_layout(windowed_ctx.width, windowed_ctx.height);
+                                            existing_tree.update_flip_bounds();
+                                        }
 
                                         match update_result {
                                             UpdateResult::NoChanges => {
