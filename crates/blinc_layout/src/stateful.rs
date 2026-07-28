@@ -265,6 +265,55 @@ impl KeyframeHandle {
 static PERSISTED_ANIMATED_VALUES: LazyLock<RwLock<HashMap<String, SharedAnimatedValue>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
+/// Look up a persisted animated value WITHOUT creating one.
+///
+/// [`persisted_animated_value`] creates on miss, which makes it useless
+/// for asking "did the widget register this?" — the question a test
+/// needs so it observes the widget's spring rather than one it minted
+/// itself.
+pub fn try_persisted_animated_value(key: &str) -> Option<SharedAnimatedValue> {
+    PERSISTED_ANIMATED_VALUES
+        .read()
+        .unwrap()
+        .get(key)
+        .map(Arc::clone)
+}
+
+/// Fetch (or create) an animated value that survives rebuilds, keyed by
+/// a caller-chosen string.
+///
+/// [`StatefulContext::use_animated_value`] is the same store reached
+/// through a stateful's own key. This is for widgets that build outside
+/// a stateful context and have their own stable identity -- a bound
+/// `State`'s signal id, say. Without it a widget rebuilt by a `deps()`
+/// refresh gets a brand-new spring each time, and one constructed at
+/// its destination never animates: the thumb jumps.
+///
+/// `initial` applies only on first creation. A later call returns the
+/// live value wherever it currently is, which is what lets
+/// `set_target` animate from there.
+pub fn persisted_animated_value(
+    key: &str,
+    initial: f32,
+    config: blinc_animation::SpringConfig,
+) -> SharedAnimatedValue {
+    {
+        let values = PERSISTED_ANIMATED_VALUES.read().unwrap();
+        if let Some(existing) = values.get(key) {
+            return Arc::clone(existing);
+        }
+    }
+    let handle = blinc_animation::get_scheduler();
+    let shared = Arc::new(Mutex::new(blinc_animation::AnimatedValue::new(
+        handle, initial, config,
+    )));
+    PERSISTED_ANIMATED_VALUES
+        .write()
+        .unwrap()
+        .insert(key.to_string(), Arc::clone(&shared));
+    shared
+}
+
 /// Global storage for persisted animated timelines keyed by stateful context
 #[allow(clippy::incompatible_msrv)]
 static PERSISTED_ANIMATED_TIMELINES: LazyLock<RwLock<HashMap<String, SharedAnimatedTimeline>>> =

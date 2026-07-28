@@ -121,6 +121,27 @@ impl Switch {
         let thumb_travel = track_width - thumb_size - (padding * 2.0);
         let radius = track_height / 2.0; // Fully rounded track
 
+        // Aim the springs at wherever the state now is, rather than
+        // assuming they are already there. A click sets these too, but
+        // only the click path did -- so a switch driven from elsewhere
+        // (another control writing the same signal, an FSM transition)
+        // rebuilt with no target set and simply appeared at the other
+        // end. `set_target` is a no-op when the spring is already
+        // settled there, so the mount case still doesn't animate.
+        {
+            let on_now = config.on_state.get();
+            config
+                .thumb_anim
+                .lock()
+                .unwrap()
+                .set_target(if on_now { thumb_travel } else { 0.0 });
+            config
+                .color_anim
+                .lock()
+                .unwrap()
+                .set_target(if on_now { 1.0 } else { 0.0 });
+        }
+
         // Get colors
         let on_bg = config
             .on_color
@@ -347,19 +368,31 @@ impl SwitchConfig {
         let initial_x = if is_on { thumb_travel } else { 0.0 };
         let initial_color_t = if is_on { 1.0 } else { 0.0 };
 
-        let scheduler = get_scheduler();
-
         let spring_config = SpringConfig::snappy();
-        let thumb_anim: SharedAnimatedValue = Arc::new(Mutex::new(AnimatedValue::new(
-            scheduler.clone(),
+        // Keyed on the bound state, so the springs survive a rebuild.
+        //
+        // A bound `checked` takes the deps() rebuild path -- the value
+        // gates the whole style branch -- so every toggle reconstructs
+        // the switch. Fresh springs built at `initial_x` would already
+        // be at their destination, and the thumb would jump: once
+        // because the in-flight spring from the click was discarded,
+        // and again when something else writes the signal and no click
+        // handler ran at all.
+        //
+        // `initial_*` applies on first build only; after that the live
+        // value is returned wherever it is, and `set_target` below
+        // animates from there.
+        let anim_key = on_state.signal_id().to_raw();
+        let thumb_anim = blinc_layout::stateful::persisted_animated_value(
+            &format!("cn-switch:{anim_key}:thumb"),
             initial_x,
             spring_config,
-        )));
-        let color_anim: SharedAnimatedValue = Arc::new(Mutex::new(AnimatedValue::new(
-            scheduler,
+        );
+        let color_anim = blinc_layout::stateful::persisted_animated_value(
+            &format!("cn-switch:{anim_key}:color"),
             initial_color_t,
             spring_config,
-        )));
+        );
 
         Self {
             on_state,
