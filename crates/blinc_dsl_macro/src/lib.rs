@@ -55,6 +55,90 @@ fn classify_reactive_field(ty: &syn::Type) -> Option<syn::Ident> {
     Some(inner_seg.ident.clone())
 }
 
+/// Recognise `Vec<T>` — returns `Some(T_ident)` for a collection prop.
+///
+/// Matched on the rightmost segment, like [`classify_reactive_field`],
+/// so `Vec<String>` and `std::vec::Vec<String>` both match.
+fn classify_vec_field(ty: &syn::Type) -> Option<syn::Ident> {
+    let syn::Type::Path(p) = ty else {
+        return None;
+    };
+    let segment = p.path.segments.last()?;
+    if segment.ident != "Vec" {
+        return None;
+    }
+    let syn::PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return None;
+    };
+    if args.args.len() != 1 {
+        return None;
+    }
+    let syn::GenericArgument::Type(inner) = &args.args[0] else {
+        return None;
+    };
+    let syn::Type::Path(inner_path) = inner else {
+        return None;
+    };
+    let inner_seg = inner_path.path.segments.last()?;
+    if !matches!(inner_seg.arguments, syn::PathArguments::None) {
+        return None;
+    }
+    Some(inner_seg.ident.clone())
+}
+
+/// The FFI shape for a `Vec<T>` prop.
+///
+/// One `i64` slot: a pointer to Zyntax's `List<T> { data, len,
+/// capacity }`. The element stride is NOT uniform — `bool` is one byte,
+/// `i32` four, `i64` / `f64` / any pointer eight — so the decoder is
+/// picked from `T` rather than assumed. `String` needs two
+/// indirections: an 8-byte element pointer, then a length-prefixed
+/// buffer.
+fn vec_param_kind(inner: &syn::Ident) -> Result<ParamKind, String> {
+    let decode = match inner.to_string().as_str() {
+        "String" => quote! {
+            unsafe {
+                ::blinc_dsl_core::__extern_widget_internals::read_string_list(
+                    ::blinc_dsl_core::__extern_widget_internals::decode_list(__arg)
+                )
+            }
+        },
+        // Stride comes from the Rust element type, which has to match
+        // what the compiler inferred on the DSL side.
+        "bool" | "i32" | "i64" | "f64" => quote! {
+            unsafe {
+                ::blinc_dsl_core::__extern_widget_internals::read_list_elements::<#inner>(
+                    ::blinc_dsl_core::__extern_widget_internals::decode_list(__arg)
+                )
+            }
+        },
+        other => {
+            return Err(format!(
+                "#[extern_widget] Vec<{other}> isn't supported yet — only Vec<String>, \
+                 Vec<bool>, Vec<i32>, Vec<i64> and Vec<f64>. A list of structs needs the \
+                 element layout, which is a follow-up."
+            ));
+        }
+    };
+    Ok(ParamKind {
+        ffi_ty: quote! { i64 },
+        decode,
+        // The DSL side is inferred: the compiler types the literal from
+        // its elements, so the prop advertises a list of the matching
+        // primitive rather than pinning a nominal type here.
+        prop_type_expr: quote! {
+            ::blinc_dsl_core::__extern_widget_internals::Type::Primitive(
+                ::blinc_dsl_core::__extern_widget_internals::PrimitiveType::I64
+            )
+        },
+        param_type_expr: quote! {
+            ::blinc_dsl_core::__extern_widget_internals::Type::Primitive(
+                ::blinc_dsl_core::__extern_widget_internals::PrimitiveType::I64
+            )
+        },
+    })
+}
+
 fn classify_param_type(ty: &syn::Type) -> Option<ParamKind> {
     let syn::Type::Path(p) = ty else {
         return None;
@@ -537,6 +621,41 @@ pub fn extern_widget(attr: TokenStream, item: TokenStream) -> TokenStream {
         // Single registry prop entry — the lowering pass uses the
         // `Type::Reactive(...)` discriminator to know to emit two
         // values into the arg list.
+        // `Vec<T>` props occupy ONE slot: a pointer to Zyntax's
+        // `List<T> { data, len, capacity }`. The compiler already
+        // lowers an array literal to that, so there is nothing to
+        // marshal — the thunk reads the header and copies the elements
+        // out, at the stride `T` implies.
+        if let Some(inner_ty) = classify_vec_field(&field.ty) {
+            let kind = match vec_param_kind(&inner_ty) {
+                Ok(kind) => kind,
+                Err(msg) => {
+                    return syn::Error::new_spanned(&field.ty, msg)
+                        .to_compile_error()
+                        .into();
+                }
+            };
+            let arg_ident = syn::Ident::new(&format!("__arg_{idx}"), field_ident.span());
+            let ffi_ty = kind.ffi_ty;
+            let decode = kind.decode;
+            let prop_type_expr = kind.prop_type_expr;
+            let param_type_expr = kind.param_type_expr;
+            thunk_params.push(quote! { #arg_ident: #ffi_ty });
+            thunk_decodes.push(quote! {
+                let #field_ident = { let __arg = #arg_ident; #decode };
+            });
+            struct_inits.push(quote! { #field_ident });
+            prop_defs.push(quote! {
+                ::blinc_dsl_core::__extern_widget_internals::PropDef {
+                    name: ::std::sync::Arc::from(#field_name),
+                    ty: #prop_type_expr,
+                    reactive_inner: None,
+                }
+            });
+            param_types.push(param_type_expr);
+            continue;
+        }
+
         if let Some(inner_ty) = classify_reactive_field(&field.ty) {
             let tag_arg_ident = syn::Ident::new(&format!("__arg_{idx}_tag"), field_ident.span());
             let inner_name = inner_ty.to_string();

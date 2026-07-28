@@ -651,6 +651,79 @@ pub mod __extern_widget_internals {
         Box::into_raw(Box::new(WidgetBox::Custom(widget))) as i64
     }
 
+    /// A Zyntax list, as the compiler lays it out.
+    ///
+    /// An array literal lowers to `List<T> { data, len, capacity }`
+    /// (see `prelude.zynml`), so a collection prop crosses as one
+    /// pointer to this struct. Nothing marshals per element.
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct ZynList {
+        /// Pointer to the element buffer.
+        pub data: i64,
+        pub len: i64,
+        pub capacity: i64,
+    }
+
+    /// Read a list header. A null pointer reads as empty, which is what
+    /// an omitted collection prop arrives as.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must be a pointer to a Zyntax `List<T>`.
+    pub unsafe fn decode_list(ptr: i64) -> ZynList {
+        if ptr == 0 {
+            return ZynList {
+                data: 0,
+                len: 0,
+                capacity: 0,
+            };
+        }
+        unsafe { *(ptr as *const ZynList) }
+    }
+
+    /// Copy `len` elements of type `T` out of a list's buffer.
+    ///
+    /// The stride is `size_of::<T>()`, which has to match Zyntax's
+    /// `hir_ty_size` for the element type the compiler inferred: 1 for
+    /// `bool`, 4 for `i32`, 8 for `i64` / `f64` / any pointer. Reading
+    /// a packed `bool` buffer at an 8-byte stride yields garbage, so
+    /// the caller picks `T` to match, and `#[extern_widget]` derives it
+    /// from the declared `Vec<T>`.
+    ///
+    /// Copies rather than borrows: the buffer is `Alloca`'d in the JIT
+    /// caller's frame and dies when the call returns.
+    ///
+    /// # Safety
+    ///
+    /// `T` must be the element type the compiler used, and `list` must
+    /// describe a live buffer.
+    pub unsafe fn read_list_elements<T: Copy>(list: ZynList) -> Vec<T> {
+        if list.data == 0 || list.len <= 0 {
+            return Vec::new();
+        }
+        let base = list.data as *const T;
+        (0..list.len as usize)
+            .map(|i| unsafe { std::ptr::read_unaligned(base.add(i)) })
+            .collect()
+    }
+
+    /// Copy a list of DSL strings out.
+    ///
+    /// Two indirections: the element is a pointer (stride 8, since
+    /// `string` converts to `Ptr(U8)`), and the pointed-to value is a
+    /// length-prefixed buffer rather than a C string.
+    ///
+    /// # Safety
+    ///
+    /// `list` must describe a live buffer of DSL string pointers.
+    pub unsafe fn read_string_list(list: ZynList) -> Vec<String> {
+        unsafe { read_list_elements::<i64>(list) }
+            .into_iter()
+            .map(|p| unsafe { decode_string(p as *const i32) })
+            .collect()
+    }
+
     /// Decode a Zyntax-FFI string argument (length-prefixed
     /// UTF-8 buffer) to an owned `String`. Empty for null.
     ///
