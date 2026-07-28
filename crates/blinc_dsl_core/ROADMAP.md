@@ -100,3 +100,31 @@ composes with hot reload.
 
 **Standard library.** Formatting, collections and math beyond what the
 view body needs today.
+
+## Sizing
+
+Ordered smallest first. Sizes are relative: S is a sitting, M is a day
+or two, L is a week or more and usually hides a design question.
+
+| Size | Item | Notes |
+| --- | --- | --- |
+| S | Hot reload, the loop | Recompile on change, keep the last good program. The watcher, invalidation queue and wake path already exist. |
+| S | Hot reload, state checks | Signals already survive. Confirm scroll offsets, focus, keyed text buffers. |
+| S | Hot reload, ergonomics | One entry point that wires watching, and parse errors in-window. |
+| S | Reactive props on the four exposed-but-static widgets | Card, Kbd, Spinner are mechanical. Avatar needs its content enum to carry a boxed builder. |
+| S each | Expose a container-shaped widget | Dialog, Popover, Tooltip, Sheet, Drawer, Collapsible, Accordion, ScrollArea, AspectRatio, Toggle. Children blocks and named slots already work, so these are wrappers plus scalars. |
+| M | Hot reload, idempotent recompiles | The real work: declared signals, declared FSMs and compiled stylesheets accumulate per compile. Also registry hygiene for deleted components and re-registered FSMs. |
+| M | `while` with children | The child list belongs to the entry block and a later block cannot use it. A lowering change, not a widget change. |
+| M | A collection type across the FFI | The gate on roughly half the remaining surface. Props today are String, i32, i64, f64, `Reactive<T>` or a non-generic custom type; a list of items is not expressible. |
+| M | Module system | Export lists and a manifest. Composes with hot reload, so worth doing after it. |
+| L | Item-driven widgets | Select, Combobox, DropdownMenu, Menubar, ContextMenu, NavigationMenu, Breadcrumb, Pagination, ToggleGroup, Table, Tree, Chart. Each is large on its own and every one waits on the collection type. Chart is the biggest single surface in cn. |
+| L | Scoped `@stateful` | A decorated component must mount its own `Stateful` at its call site. Two attempts stalled, on call-site key injection ordering and on re-entering the JIT during the first render. |
+| L | Router | Route declarations, params, nested outlets, and how a route change interacts with subtree rebuilds. |
+| L | Standard library | Open-ended by nature; scope it against what view bodies actually reach for. |
+
+**Suggested order.** Hot reload first: it is the only item that makes
+every later item cheaper to test, and three of its four phases are S.
+Then the four exposed-but-static widgets, then the collection type,
+since it gates more of the remaining surface than anything else. `while`
+with children and scoped `@stateful` are independent and can slot in
+whenever the compiler work is worth the context switch.
