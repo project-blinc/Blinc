@@ -42,8 +42,11 @@ first minted, so it never overwrites a live value.
 ## In progress
 
 **Reactive props across the cn surface.** Button, Progress, Skeleton,
-Separator, Badge, Label, Alert, Input, Textarea, Switch and Checkbox
-accept bound values. The rest of the cn widgets still take plain values.
+Separator, Badge, Label, Alert, Input, Textarea, Switch, Checkbox, Kbd
+and Avatar accept bound values. Spinner's colours are bindable from
+Rust but not from the DSL, where the prop is a hex string and no colour
+type crosses the FFI. Card has no scalar props to bind. The rest of the
+cn widgets still take plain values.
 
 Two rules have to hold for every widget converted:
 
@@ -124,7 +127,7 @@ or two, L is a week or more and usually hides a design question.
 | ✅ | Hot reload, the loop | Done. Fresh instance per reload, swapped in by the host. |
 | ✅ | Hot reload, state checks | Done. Signals survive, and the reload updates the tree incrementally rather than replacing it. |
 | ✅ | Hot reload, ergonomics | Done. `watch_sources` settles the save; parse errors render as snippets and banner over the UI. |
-| S | Reactive props on the four exposed-but-static widgets | Card, Kbd, Spinner are mechanical. Avatar needs its content enum to carry a boxed builder. |
+| ✅ | Reactive props on the four exposed-but-static widgets | Done. Kbd + Avatar bindable from the DSL, Spinner from Rust, Card has no scalar props. |
 | S each | Expose a container-shaped widget | Dialog, Popover, Tooltip, Sheet, Drawer, Collapsible, Accordion, ScrollArea, AspectRatio, Toggle. Children blocks and named slots already work, so these are wrappers plus scalars. |
 | M | `while` with children | The child list belongs to the entry block and a later block cannot use it. A lowering change, not a widget change. |
 | M | A collection type across the FFI | The gate on roughly half the remaining surface. Props today are String, i32, i64, f64, `Reactive<T>` or a non-generic custom type; a list of items is not expressible. |
@@ -134,8 +137,8 @@ or two, L is a week or more and usually hides a design question.
 | L | Router | Route declarations, params, nested outlets, and how a route change interacts with subtree rebuilds. |
 | L | Standard library | Open-ended by nature; scope it against what view bodies actually reach for. |
 
-**Suggested order.** Hot reload is done. Next the four
-exposed-but-static widgets, then the collection type,
+**Suggested order.** Hot reload and the four exposed-but-static widgets
+are done. Next the collection type,
 since it gates more of the remaining surface than anything else. `while`
 with children and scoped `@stateful` are independent and can slot in
 whenever the compiler work is worth the context switch.
