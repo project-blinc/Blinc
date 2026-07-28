@@ -120,6 +120,36 @@ where nothing rebuilds it. Widgets can defend themselves by persisting
 state across rebuilds, and the switch now does, but every animated
 widget would have to.
 
+**`with` blocks — the sugar to build first.** A decorated component is
+the right tool when there is real state behaviour to name. For the
+common case there should be an inline form:
+
+    with @fsm([Play, Change]) {
+        if Play.busy.get() { ... } else { ... }
+    }
+
+A reactive region placed directly in a parent view, no component
+needed. It is also the easier thing to implement, because it has no
+existing call site to rewrite — which is exactly what broke the
+component-scoped attempt. Desugaring:
+
+- lift the block into a generated view function, `__blinc_with_<n>$view`,
+  registered like any component view so `render_component` can call it
+  by name;
+- emit `__scoped_stateful__("__blinc_with_<n>")` where the block stood,
+  with the `@fsm` / `@stateful` lists as its deps.
+
+Nothing about user component lowering changes, so the `Root$view` wall
+below does not apply. The generated name is unique per block, so
+call-site keying is not needed either — both recorded stalls are
+side-stepped rather than solved.
+
+Worth settling while designing it: whether a bare `Play.busy` inside a
+`with` should read as a value. Everywhere else the distinction between
+`Play.busy` (binding handle) and `Play.busy.get()` (value) is load
+bearing, and a block that declares its deps up front is the one place
+the shorthand could be unambiguous.
+
 **The shape the fix takes.** A component call lowers to
 `<Name>$view(...)`. Wrapping a decorated one as
 
@@ -210,7 +240,8 @@ or two, L is a week or more and usually hides a design question.
 | ✅ | A collection type across the FFI | Done. `[a, b, c]` literals, `xs[i]` indexing, `Vec<T>` props for String / bool / i32 / i64 / f64, and `cn.Breadcrumb` as the first consumer. A list of structs still needs the element layout. |
 | M | Module system | Export lists and a manifest. Composes with hot reload, so worth doing after it. |
 | L | Item-driven widgets | Select, Combobox, DropdownMenu, Menubar, ContextMenu, NavigationMenu, Breadcrumb, Pagination, ToggleGroup, Table, Tree, Chart. Each is large on its own and every one waits on the collection type. Chart is the biggest single surface in cn. |
-| L | Scoped `@stateful` | One `@stateful` anywhere rebuilds the whole program on every signal write, which also kills in-flight animation. Two stalls, both with a candidate route — see the section above. |
+| M | `with @fsm([…]) { … }` blocks | An inline reactive region: no component, no call site to rewrite, so neither scoped-`@stateful` stall applies. Desugars to a generated view + `__scoped_stateful__`. Do this before the component-scoped form. |
+| L | Scoped `@stateful` | One `@stateful` anywhere rebuilds the whole program on every signal write, which also kills in-flight animation. Blocked on the `Root$view` wall — see the section above. `with` blocks deliver most of the benefit without it. |
 | L | Router | Route declarations, params, nested outlets, and how a route change interacts with subtree rebuilds. |
 | L | Standard library | Open-ended by nature; scope it against what view bodies actually reach for. |
 
