@@ -312,6 +312,42 @@ impl RenderTree {
         &mut self,
         router: Option<&crate::event_router::EventRouter>,
     ) -> bool {
+        // Drain until the queue stays empty. Rebuilding a subtree
+        // rebuilds the statefuls inside it, and one whose deps already
+        // fired queues its own refresh as it mounts -- after this
+        // frame's drain has taken the queue. That entry then sat until
+        // some unrelated input produced another frame, which is the
+        // "it only updates when I click something else" symptom.
+        //
+        // Bounded: a stateful that queues itself every rebuild would
+        // otherwise spin the frame. Four passes covers legitimate
+        // nesting depth; anything beyond it is a cycle, and leaving the
+        // remainder queued means the next frame picks it up rather than
+        // this one hanging.
+        const MAX_PASSES: usize = 4;
+        let mut any = false;
+        for pass in 0..MAX_PASSES {
+            if !crate::stateful::has_pending_subtree_rebuilds() {
+                break;
+            }
+            if pass + 1 == MAX_PASSES && crate::stateful::has_pending_subtree_rebuilds() {
+                tracing::debug!(
+                    "process_pending_subtree_rebuilds: still queued after {MAX_PASSES} passes, \
+                     deferring the rest to the next frame"
+                );
+            }
+            any |= self.process_pending_subtree_rebuilds_pass(router);
+        }
+        any
+    }
+
+    /// One drain of the pending-rebuild queue. See
+    /// [`Self::process_pending_subtree_rebuilds_routed`] for why the
+    /// caller loops.
+    fn process_pending_subtree_rebuilds_pass(
+        &mut self,
+        router: Option<&crate::event_router::EventRouter>,
+    ) -> bool {
         let pending = crate::stateful::take_pending_subtree_rebuilds();
         if pending.is_empty() {
             return false;
