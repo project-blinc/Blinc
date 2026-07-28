@@ -510,6 +510,83 @@ fn handle_text(text: &str) {
     }
 }
 
+// ─── reload errors, in the window ────────────────────────────────────
+
+/// Text of the last failed reload, or `None` once one succeeds.
+static RELOAD_ERROR: Mutex<Option<String>> = Mutex::new(None);
+
+/// Record why the last reload failed, or clear it with `None`.
+///
+/// A host that reloads source calls this on both arms: the running
+/// program survives a broken file, so without something on screen the
+/// only signal that a save did nothing is the log.
+pub fn set_reload_error(message: Option<String>) {
+    if let Ok(mut slot) = RELOAD_ERROR.lock() {
+        *slot = message;
+    }
+}
+
+/// The last recorded reload error, if it hasn't been cleared.
+pub fn reload_error() -> Option<String> {
+    RELOAD_ERROR.lock().ok().and_then(|s| s.clone())
+}
+
+/// A banner showing [`reload_error`], or an empty element when there is
+/// none. Compose it over the UI:
+///
+/// ```ignore
+/// div().w(ctx.width).h(ctx.height).relative()
+///     .child_box(app_ui)
+///     .child(blinc_app::hot_reload::error_banner(ctx.width))
+/// ```
+///
+/// Monospace and line-per-line, because the text is a rendered
+/// diagnostic: its gutters and carets only line up in a fixed pitch.
+pub fn error_banner(width: f32) -> blinc_layout::div::Div {
+    use blinc_layout::div::div;
+    use blinc_layout::text::text;
+
+    let Some(message) = reload_error() else {
+        return div();
+    };
+    const FONT_SIZE: f32 = 12.0;
+    /// Multiplier, not pixels — `Text::line_height` scales the font size.
+    const LINE_HEIGHT: f32 = 1.35;
+    const PADDING: f32 = 12.0;
+
+    let lines: Vec<&str> = message.lines().collect();
+    // Explicit height rather than hugging: an absolutely-positioned box
+    // has no parent to size against, and a zero-height one draws no
+    // background at all -- the report then reads straight over the UI
+    // underneath it.
+    let height = lines.len() as f32 * (FONT_SIZE * LINE_HEIGHT).ceil() + PADDING * 2.0;
+
+    let mut panel = div()
+        .absolute()
+        .top(0.0)
+        .left(0.0)
+        .w(width)
+        .h(height)
+        .flex_col()
+        .p(3.0)
+        // Opaque. The point of the banner is that the text is legible,
+        // and a diagnostic over a live UI is unreadable at any alpha
+        // below 1.
+        .bg(blinc_core::Color::rgba(0.09, 0.02, 0.04, 1.0))
+        .border_bottom(1.5, blinc_core::Color::rgba(0.85, 0.25, 0.30, 1.0));
+    for line in lines {
+        panel = panel.child(
+            text(line)
+                .size(FONT_SIZE)
+                .line_height(LINE_HEIGHT)
+                .monospace()
+                .no_wrap()
+                .color(blinc_core::Color::rgba(0.98, 0.82, 0.84, 1.0)),
+        );
+    }
+    panel
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -562,63 +639,4 @@ mod tests {
         );
         assert!(REBUILD_PENDING.load(Ordering::Acquire));
     }
-}
-
-// ─── reload errors, in the window ────────────────────────────────────
-
-/// Text of the last failed reload, or `None` once one succeeds.
-static RELOAD_ERROR: Mutex<Option<String>> = Mutex::new(None);
-
-/// Record why the last reload failed, or clear it with `None`.
-///
-/// A host that reloads source calls this on both arms: the running
-/// program survives a broken file, so without something on screen the
-/// only signal that a save did nothing is the log.
-pub fn set_reload_error(message: Option<String>) {
-    if let Ok(mut slot) = RELOAD_ERROR.lock() {
-        *slot = message;
-    }
-}
-
-/// The last recorded reload error, if it hasn't been cleared.
-pub fn reload_error() -> Option<String> {
-    RELOAD_ERROR.lock().ok().and_then(|s| s.clone())
-}
-
-/// A banner showing [`reload_error`], or an empty element when there is
-/// none. Compose it over the UI:
-///
-/// ```ignore
-/// div().w(ctx.width).h(ctx.height).relative()
-///     .child_box(app_ui)
-///     .child(blinc_app::hot_reload::error_banner(ctx.width))
-/// ```
-///
-/// Monospace and line-per-line, because the text is a rendered
-/// diagnostic: its gutters and carets only line up in a fixed pitch.
-pub fn error_banner(width: f32) -> blinc_layout::div::Div {
-    use blinc_layout::div::div;
-    use blinc_layout::text::text;
-
-    let Some(message) = reload_error() else {
-        return div();
-    };
-    let mut panel = div()
-        .absolute()
-        .top(0.0)
-        .left(0.0)
-        .w(width)
-        .flex_col()
-        .p(3.0)
-        .bg(blinc_core::Color::rgba(0.10, 0.02, 0.04, 0.96))
-        .border_bottom(1.0, blinc_core::Color::rgba(0.85, 0.25, 0.30, 1.0));
-    for line in message.lines() {
-        panel = panel.child(
-            text(line)
-                .size(12.0)
-                .monospace()
-                .color(blinc_core::Color::rgba(0.98, 0.82, 0.84, 1.0)),
-        );
-    }
-    panel
 }
