@@ -13,9 +13,7 @@ use crate::widget_ffi::{
     blinc_cell_view, blinc_checkbox_view, blinc_code_view, blinc_div_view, blinc_h1_view,
     blinc_h2_view, blinc_h3_view, blinc_h4_view, blinc_h5_view, blinc_h6_view, blinc_hr_view,
     blinc_image_view, blinc_inline_code_view, blinc_label_view, blinc_li_view, blinc_link_view,
-    blinc_list_push_bool, blinc_list_push_f64, blinc_list_push_i32, blinc_list_push_i64,
-    blinc_list_push_list, blinc_list_push_string, blinc_list_push_struct, blinc_motion_view,
-    blinc_muted_view, blinc_new_child_list, blinc_new_list_value, blinc_new_struct_value,
+    blinc_motion_view, blinc_muted_view, blinc_new_child_list, blinc_new_struct_value,
     blinc_new_style_overlay, blinc_notch_view, blinc_ol_view, blinc_p_view, blinc_pre_view,
     blinc_push_child, blinc_rich_text_view, blinc_set_overlay_bg, blinc_set_overlay_bg_computed,
     blinc_set_overlay_bg_signal, blinc_set_overlay_border_color,
@@ -25,11 +23,11 @@ use crate::widget_ffi::{
     blinc_set_overlay_corner_radius_computed, blinc_set_overlay_corner_radius_signal,
     blinc_set_overlay_opacity, blinc_set_overlay_opacity_computed,
     blinc_set_overlay_opacity_signal, blinc_set_struct_bool, blinc_set_struct_f64,
-    blinc_set_struct_handle, blinc_set_struct_i32, blinc_set_struct_i64, blinc_set_struct_list,
-    blinc_set_struct_string, blinc_small_view, blinc_span_view, blinc_stack_view,
-    blinc_strong_view, blinc_svg_view, blinc_table_view, blinc_task_item_view, blinc_tbody_view,
-    blinc_td_view, blinc_text_area_view, blinc_text_input_view, blinc_text_view, blinc_tfoot_view,
-    blinc_th_view, blinc_thead_view, blinc_tr_view, blinc_ul_view,
+    blinc_set_struct_handle, blinc_set_struct_i32, blinc_set_struct_i64, blinc_set_struct_string,
+    blinc_small_view, blinc_span_view, blinc_stack_view, blinc_strong_view, blinc_svg_view,
+    blinc_table_view, blinc_task_item_view, blinc_tbody_view, blinc_td_view, blinc_text_area_view,
+    blinc_text_input_view, blinc_text_view, blinc_tfoot_view, blinc_th_view, blinc_thead_view,
+    blinc_tr_view, blinc_ul_view,
 };
 
 /// Pairs a DSL-visible symbol name with an `extern "C"` fn pointer and signature.
@@ -804,89 +802,6 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             ],
             return_type: Type::Primitive(PrimitiveType::Unit),
             ptr: blinc_set_struct_handle as *const u8,
-        },
-        BuiltinDescriptor {
-            name: "__set_struct_list__",
-            param_types: &[
-                Type::Primitive(PrimitiveType::I64),
-                Type::Primitive(PrimitiveType::String),
-                Type::Primitive(PrimitiveType::I64),
-            ],
-            return_type: Type::Primitive(PrimitiveType::Unit),
-            ptr: blinc_set_struct_list as *const u8,
-        },
-        // List-value builders — collection props cross the extern ABI
-        // as i64 handles, same as struct values. A list literal lowers
-        // to one `__new_list_value__` plus a push per element, and the
-        // widget thunk takes ownership of the handle.
-        BuiltinDescriptor {
-            name: "__new_list_value__",
-            param_types: &[],
-            return_type: Type::Primitive(PrimitiveType::I64),
-            ptr: blinc_new_list_value as *const u8,
-        },
-        BuiltinDescriptor {
-            name: "__list_push_i32__",
-            param_types: &[
-                Type::Primitive(PrimitiveType::I64),
-                Type::Primitive(PrimitiveType::I32),
-            ],
-            return_type: Type::Primitive(PrimitiveType::Unit),
-            ptr: blinc_list_push_i32 as *const u8,
-        },
-        BuiltinDescriptor {
-            name: "__list_push_bool__",
-            param_types: &[
-                Type::Primitive(PrimitiveType::I64),
-                Type::Primitive(PrimitiveType::I32),
-            ],
-            return_type: Type::Primitive(PrimitiveType::Unit),
-            ptr: blinc_list_push_bool as *const u8,
-        },
-        BuiltinDescriptor {
-            name: "__list_push_i64__",
-            param_types: &[
-                Type::Primitive(PrimitiveType::I64),
-                Type::Primitive(PrimitiveType::I64),
-            ],
-            return_type: Type::Primitive(PrimitiveType::Unit),
-            ptr: blinc_list_push_i64 as *const u8,
-        },
-        BuiltinDescriptor {
-            name: "__list_push_f64__",
-            param_types: &[
-                Type::Primitive(PrimitiveType::I64),
-                Type::Primitive(PrimitiveType::F64),
-            ],
-            return_type: Type::Primitive(PrimitiveType::Unit),
-            ptr: blinc_list_push_f64 as *const u8,
-        },
-        BuiltinDescriptor {
-            name: "__list_push_string__",
-            param_types: &[
-                Type::Primitive(PrimitiveType::I64),
-                Type::Primitive(PrimitiveType::String),
-            ],
-            return_type: Type::Primitive(PrimitiveType::Unit),
-            ptr: blinc_list_push_string as *const u8,
-        },
-        BuiltinDescriptor {
-            name: "__list_push_struct__",
-            param_types: &[
-                Type::Primitive(PrimitiveType::I64),
-                Type::Primitive(PrimitiveType::I64),
-            ],
-            return_type: Type::Primitive(PrimitiveType::Unit),
-            ptr: blinc_list_push_struct as *const u8,
-        },
-        BuiltinDescriptor {
-            name: "__list_push_list__",
-            param_types: &[
-                Type::Primitive(PrimitiveType::I64),
-                Type::Primitive(PrimitiveType::I64),
-            ],
-            return_type: Type::Primitive(PrimitiveType::Unit),
-            ptr: blinc_list_push_list as *const u8,
         },
         // Style-overlay builders — mirror the child-list pattern.
         BuiltinDescriptor {
