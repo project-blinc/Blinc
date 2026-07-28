@@ -310,6 +310,20 @@ pub(crate) extern "C" fn blinc_dsl_effect(closure_ptr: i64) {
     blinc_core::reactive::effect(move |_graph| func());
 }
 
+/// `__blinc_with__(region_id, child_handle)` — mount a `with` region's
+/// widget under a `Stateful` bound to the region's dependencies.
+///
+/// # Safety
+///
+/// `child_handle` must be a widget handle from the region's own view
+/// call (or `0`), not yet materialised.
+pub(crate) extern "C" fn blinc_dsl_with_region(region_id: i64, child_handle: i64) -> i64 {
+    // SAFETY: see fn-level doc — the lowering pass emits this call with
+    // the region's view as the second argument and nothing else reads
+    // that handle.
+    unsafe { crate::with_regions::mount(region_id, child_handle) }
+}
+
 /// `__fsm_subscribe__("<FsmName>", "<From.Event>", closure_ptr)` — registers a
 /// path-filtered subscriber closure for the FSM's default-instance transitions.
 ///

@@ -311,7 +311,10 @@ pub(crate) fn detect_and_strip_stateful_views(
 ///
 /// `computed { … }` bodies are skipped: reads in there feed a derived,
 /// and the derived is what the prop binds to.
-fn collect_ctx_value_reads(body: &zyntax_typed_ast::typed_ast::TypedBlock, out: &mut Vec<String>) {
+pub(crate) fn collect_ctx_value_reads(
+    body: &zyntax_typed_ast::typed_ast::TypedBlock,
+    out: &mut Vec<String>,
+) {
     use zyntax_typed_ast::TypedNode;
     use zyntax_typed_ast::typed_ast::TypedExpression;
 

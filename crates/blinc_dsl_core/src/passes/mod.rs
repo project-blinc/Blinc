@@ -23,6 +23,7 @@ mod structs;
 mod styling;
 mod view;
 mod widgets;
+mod with_blocks;
 
 pub(crate) use args::*;
 pub(crate) use components::*;
@@ -37,3 +38,4 @@ pub(crate) use structs::*;
 pub(crate) use styling::*;
 pub(crate) use view::*;
 pub(crate) use widgets::*;
+pub(crate) use with_blocks::*;

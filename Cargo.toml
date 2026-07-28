@@ -250,3 +250,45 @@ blinc_theme = { path = "crates/blinc_theme" }
 # for SvgDocument / Path conversion; without this they'd resolve to
 # the pinned git rev.
 blinc_svg = { path = "crates/blinc_svg" }
+
+# Local-dev redirects for the /packages/* sibling crates.
+#
+# This block is NOT part of the committed Cargo.toml. It is appended by
+# `scripts/use-local-packages.sh` when you want to iterate on the sibling
+# crates from local checkouts under `packages/*`, and removed again by
+# `scripts/use-published-packages.sh` (a.k.a. `ci-strip-local-patch.sh`).
+#
+# The committed Cargo.toml resolves these crates from their published git
+# pins so a fresh clone builds every example with zero setup. Enabling
+# this block redirects the git URLs to the local `packages/*` checkouts,
+# so every consumer (the workspace example AND the path-dep'd sibling
+# crates) resolves to the SAME local source and their types unify.
+#
+# DO NOT commit Cargo.toml with this block present — CI's
+# `scripts/check-no-local-patch.sh` guard will fail the build.
+
+# Zyntax — the DSL's grammar + JIT. Redirects to a sibling checkout at
+# `../zyntax` so DSL work builds against local zyntax fixes instead of the
+# git pin. Local zyntax is well ahead of `origin/main` and its HEAD is
+# unpushed, so a git rev can't point at it; a path patch is the only way.
+#
+# Keep Blinc source compatible with BOTH this and the git pin: construct
+# upstream structs with `..Default::default()` rather than naming every
+# field, so a field added locally (e.g. `TypedFunction.is_fiber`) doesn't
+# break the pinned build that CI uses after stripping this block.
+[patch."https://github.com/darmie/zyntax"]
+zyntax_embed = { path = "../zyntax/crates/zyntax_embed" }
+zyntax_typed_ast = { path = "../zyntax/crates/typed_ast" }
+zrtl = { path = "../zyntax/sdk/zrtl" }
+
+[patch."https://github.com/project-blinc/blinc_canvas_kit.git"]
+blinc_canvas_kit = { path = "packages/blinc_canvas_kit" }
+
+[patch."https://github.com/project-blinc/blinc_portal_ui.git"]
+blinc_portal_ui = { path = "packages/blinc_portal_ui" }
+
+[patch."https://github.com/project-blinc/blinc_node_editor.git"]
+blinc_node_editor = { path = "packages/blinc_node_editor" }
+
+[patch."https://github.com/project-blinc/blinc_game_kit.git"]
+blinc_game_kit = { path = "packages/blinc_game_kit" }

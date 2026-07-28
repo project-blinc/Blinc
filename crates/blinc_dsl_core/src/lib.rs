@@ -29,6 +29,7 @@ mod host;
 mod passes;
 mod runtime_bridge;
 mod widget_ffi;
+mod with_regions;
 
 use abi::{register_builtins, type_to_native, type_to_tag};
 pub use fsm_registry::{
@@ -45,7 +46,7 @@ use passes::{
     inject_fsm_context_markers, lower_bare_call_named_args, lower_children_arrays_to_blocks,
     lower_component_calls, lower_match_blocks, lower_reactive_args, lower_struct_literals,
     lower_struct_widget_props_to_handles, lower_styling_args_to_overlays,
-    lower_view_to_value_returning, materialize_view, module_namespace_from_path,
+    lower_view_to_value_returning, lower_with_blocks, materialize_view, module_namespace_from_path,
     populate_fsm_registry_pass, resolve_const_references, resolve_dotted_fsm_field_access,
     resolve_extern_widget_named_args, resolve_fsm_subscribe_calls, resolve_fsm_trigger_calls,
     resolve_signal_calls, rewrite_component_calls_in_program, synthesize_fsm_context_and_actions,
@@ -478,6 +479,13 @@ impl BlincDsl {
         // lowering sees them as known symbols.
         self.inject_imported_view_externs(&mut typed_program, filename);
 
+        // Lift `with @fsm([…]) { … }` regions into synthetic component
+        // views. MUST precede the decorator sweep below: the markers a
+        // `with` block carries belong to its region, and left in place
+        // the sweep would read them as a decoration on the enclosing
+        // view — the whole-program wrap `with` exists to avoid.
+        let with_regions = lower_with_blocks(&mut typed_program);
+
         // Detect and strip `@stateful` / `@fsm` markers. Accumulate explicit deps.
         {
             let (saw_stateful, explicit_deps, explicit_fsms, ctx_value_reads, components) =
@@ -568,6 +576,9 @@ impl BlincDsl {
                 .expect("declared_fsms mutex poisoned")
                 .extend(fsms);
         }
+        // Regions can only resolve their deps once the declared signals
+        // are known, so file them here rather than at lift time.
+        self.register_with_regions(&with_regions);
         lower_match_blocks(&mut typed_program);
         // MUST run before `resolve_const_references` so const-group
         // members are hoisted into individual `__blinc_const__`
@@ -1280,11 +1291,80 @@ impl BlincDsl {
     }
 
     /// Backend-agnostic view renderer backed by this `BlincDsl`'s Cranelift runtime.
+    ///
+    /// Also installs the renderer process-wide. A `with` region
+    /// re-renders from inside a layout rebuild, with no host in scope to
+    /// hand it one.
     pub fn view_renderer(&self) -> std::sync::Arc<dyn blinc_runtime::view::ViewRenderer> {
-        std::sync::Arc::new(JitViewRenderer {
-            runtime: self.runtime.clone(),
-            value_returning_views: self.value_returning_views.clone(),
-        })
+        let renderer: std::sync::Arc<dyn blinc_runtime::view::ViewRenderer> =
+            std::sync::Arc::new(JitViewRenderer {
+                runtime: self.runtime.clone(),
+                value_returning_views: self.value_returning_views.clone(),
+            });
+        blinc_runtime::view::set_global_renderer(renderer.clone());
+        renderer
+    }
+
+    /// Resolve each lifted `with` region's declared dependencies to
+    /// signal names and file them for [`crate::with_regions::mount`].
+    ///
+    /// The three cases mirror the whole-program `@stateful` path:
+    /// explicit signals win; an `@fsm` list narrows to that FSM's own
+    /// context fields the body reads as VALUES; a bare region falls back
+    /// to every declared signal.
+    fn register_with_regions(&self, regions: &[passes::WithRegion]) {
+        if regions.is_empty() {
+            return;
+        }
+        let declared: Vec<String> = self
+            .declared_signals()
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect();
+
+        for region in regions {
+            let signal_names: Vec<String> = if !region.signal_deps.is_empty() {
+                region
+                    .signal_deps
+                    .iter()
+                    .filter(|name| declared.contains(name))
+                    .cloned()
+                    .collect()
+            } else if !region.fsms.is_empty() {
+                // A self transition leaves the state value unchanged, so
+                // the context writes are what actually signal a change.
+                // Only the fields read as values: a field passed as a
+                // binding handle updates through the property channel,
+                // and subscribing to it would buy a full re-render for a
+                // frame that was already correct.
+                region
+                    .ctx_value_reads
+                    .iter()
+                    .filter_map(|dotted| {
+                        let (fsm, field) = dotted.split_once('.')?;
+                        region
+                            .fsms
+                            .iter()
+                            .any(|f| f == fsm)
+                            .then(|| crate::fsm_registry::mangle_ctx_signal(fsm, field))
+                    })
+                    .filter(|name| declared.contains(name))
+                    .collect()
+            } else {
+                declared.clone()
+            };
+
+            with_regions::register(
+                region.id,
+                with_regions::MountedRegion {
+                    name: region.name.clone(),
+                    signal_names,
+                    // First listed wins: a Stateful exposes one shared
+                    // state. No `@fsm` means no shared state to bind.
+                    fsm: region.fsms.first().cloned(),
+                },
+            );
+        }
     }
 
     /// Every declared `signal <name>: <T>` across all compiled sources.
@@ -1293,6 +1373,27 @@ impl BlincDsl {
             .lock()
             .expect("declared_signals mutex poisoned")
             .clone()
+    }
+
+    /// Whether any compiled view carried `@stateful` / `@fsm`. True
+    /// means [`Self::view_widget`] wraps the whole program in one
+    /// `Stateful`; a `with` region does not set it.
+    pub fn has_stateful_view(&self) -> bool {
+        *self
+            .has_stateful_view
+            .lock()
+            .expect("has_stateful_view mutex poisoned")
+    }
+
+    /// View symbols promoted to return a widget handle. Includes the
+    /// synthetic `__blinc_with_<n>$view` a `with` region lifts to.
+    pub fn value_returning_views(&self) -> Vec<String> {
+        self.value_returning_views
+            .lock()
+            .expect("value_returning_views mutex poisoned")
+            .iter()
+            .cloned()
+            .collect()
     }
 
     /// Components carrying `@stateful`, by name. These are the ones a

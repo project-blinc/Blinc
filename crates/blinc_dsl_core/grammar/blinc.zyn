@@ -56,6 +56,11 @@
     // The DSL grammar's `effect_stmt` rule wraps the body into a
     // zero-arg lambda and passes it as the single arg.
     __blinc_effect__: "__blinc_effect__",
+    // `with @fsm([…]) { … }` — mounts the region's already-rendered
+    // widget under a `Stateful` bound to the deps written on the
+    // block. Takes `(region_id, child_handle)`; `lower_with_blocks`
+    // fills both in, so the shape here is what the grammar emits.
+    __blinc_with__: "__blinc_with__",
     // `computed { expr } : T` (or `derived { expr } : T` alias) —
     // creates a `Computed<T>` against the process-global graph and
     // returns its `DerivedId.to_raw()` as i64. One extern per typed
@@ -1215,7 +1220,7 @@ statements = { stmt:statement* }
 // — interpolate via `text(f"{count}")` instead. f-string parts now
 // accept full expressions (see `f_string_expr` below).
 statement = {
-    text_string_stmt | text_int_stmt | match_stmt | effect_stmt | if_stmt | while_stmt | loop_stmt | break_stmt | continue_stmt | return_stmt | let_stmt | component_call_stmt | bare_call_stmt | compound_assign_stmt | ctx_field_assign_stmt | assign_stmt | method_call_stmt
+    text_string_stmt | text_int_stmt | match_stmt | effect_stmt | with_stmt | if_stmt | while_stmt | loop_stmt | break_stmt | continue_stmt | return_stmt | let_stmt | component_call_stmt | bare_call_stmt | compound_assign_stmt | ctx_field_assign_stmt | assign_stmt | method_call_stmt
 }
 
 // `name(args)` as a bare statement — a top-level / module-level
@@ -1281,6 +1286,31 @@ effect_stmt = { "effect" ~ "{" ~ stmts:statement* ~ "}" }
           args: [TypedExpression::Lambda {
               params: [],
               body: TypedExpression::Block { statements: stmts },
+          }],
+      },
+  }
+
+// `with @fsm([Play, Change]) { … }` — an inline reactive region.
+//
+// A decorated component is the right tool when there is state
+// behaviour worth naming. This is the sugar for the common case: a
+// slice of a view that re-renders on its own, written where it
+// renders, with no component and no call site to wire up. Only the
+// region rebuilds when a listed dependency changes, so animation and
+// scroll state outside it survive.
+//
+// The decorator markers ride INSIDE the lambda body, in the position a
+// decorated view carries them, so `lower_with_blocks` reads deps with
+// the same marker-stripping the view path uses. The lambda is only a
+// transport: the lift pass takes its statements into a synthetic
+// component view and discards the lambda itself.
+with_stmt = { "with" ~ attrs:view_attr* ~ "{" ~ stmts:statement* ~ "}" }
+  -> TypedStatement::Expression {
+      expr: TypedExpression::Call {
+          callee: Box::new(TypedExpression::Variable { name: intern("__blinc_with__") }),
+          args: [TypedExpression::Lambda {
+              params: [],
+              body: TypedExpression::Block { statements: concat_list(attrs, stmts) },
           }],
       },
   }

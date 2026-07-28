@@ -119,6 +119,29 @@ pub fn render_component(
     renderer.render_named(&symbol)
 }
 
+/// Process-wide renderer, for callers that have no `BlincDsl` in hand.
+///
+/// A `with` region's `Stateful` re-renders from inside a layout build,
+/// long after the host that compiled the source has gone out of scope,
+/// so it resolves the renderer here rather than capturing one. Same
+/// trade the FSM `GuardDispatcher` makes: two coexisting DSL instances
+/// would share this slot, and the last one installed wins.
+static GLOBAL_RENDERER: std::sync::Mutex<Option<Arc<dyn ViewRenderer>>> =
+    std::sync::Mutex::new(None);
+
+/// Install the process-wide renderer, replacing any previous one.
+pub fn set_global_renderer(renderer: Arc<dyn ViewRenderer>) {
+    *GLOBAL_RENDERER.lock().unwrap_or_else(|e| e.into_inner()) = Some(renderer);
+}
+
+/// The process-wide renderer, if one was installed.
+pub fn global_renderer() -> Option<Arc<dyn ViewRenderer>> {
+    GLOBAL_RENDERER
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

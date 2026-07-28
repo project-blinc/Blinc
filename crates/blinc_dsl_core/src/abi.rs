@@ -1,12 +1,12 @@
 use super::*;
 use crate::host::{
     blinc_dsl_computed_bool, blinc_dsl_computed_f64, blinc_dsl_computed_i32,
-    blinc_dsl_computed_string, blinc_dsl_effect, blinc_format_int, blinc_fsm_runtime_trigger,
-    blinc_fsm_subscribe, blinc_fsm_subscribe_all, blinc_signal_get_by_id_bool,
-    blinc_signal_get_by_id_f64, blinc_signal_get_by_id_i32, blinc_signal_get_by_id_i64,
-    blinc_signal_get_by_id_string, blinc_signal_set_by_id_bool, blinc_signal_set_by_id_f64,
-    blinc_signal_set_by_id_i32, blinc_signal_set_by_id_i64, blinc_signal_set_by_id_string,
-    blinc_string_concat, blinc_text, blinc_text_int,
+    blinc_dsl_computed_string, blinc_dsl_effect, blinc_dsl_with_region, blinc_format_int,
+    blinc_fsm_runtime_trigger, blinc_fsm_subscribe, blinc_fsm_subscribe_all,
+    blinc_signal_get_by_id_bool, blinc_signal_get_by_id_f64, blinc_signal_get_by_id_i32,
+    blinc_signal_get_by_id_i64, blinc_signal_get_by_id_string, blinc_signal_set_by_id_bool,
+    blinc_signal_set_by_id_f64, blinc_signal_set_by_id_i32, blinc_signal_set_by_id_i64,
+    blinc_signal_set_by_id_string, blinc_string_concat, blinc_text, blinc_text_int,
 };
 use crate::widget_ffi::{
     blinc_b_view, blinc_blockquote_view, blinc_button_view, blinc_canvas_view, blinc_caption_view,
@@ -193,6 +193,19 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             param_types: &[Type::Primitive(PrimitiveType::I64)],
             return_type: Type::Primitive(PrimitiveType::Unit),
             ptr: blinc_dsl_effect as *const u8,
+        },
+        BuiltinDescriptor {
+            // `with @fsm([…]) { … }` — `(region_id, child_handle)` in,
+            // the mounted `Stateful`'s handle out. The child is the
+            // region's view already rendered: argument order runs it
+            // before this call, so nothing re-enters the JIT here.
+            name: "__blinc_with__",
+            param_types: &[
+                Type::Primitive(PrimitiveType::I64),
+                Type::Primitive(PrimitiveType::I64),
+            ],
+            return_type: Type::Primitive(PrimitiveType::I64),
+            ptr: blinc_dsl_with_region as *const u8,
         },
         BuiltinDescriptor {
             // `computed { expr } : i32` — closure ptr in, DerivedId.to_raw()

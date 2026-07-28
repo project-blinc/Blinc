@@ -42,6 +42,11 @@ pub(crate) fn lower_view_to_value_returning(
         if s.starts_with("$Blinc$") && s.ends_with("$view") {
             return true;
         }
+        // A `with` region's builtin hands back the mounted `Stateful`'s
+        // handle, so a view ending in one is value-returning too.
+        if s == "__blinc_with__" {
+            return true;
+        }
         // User components: only if promoted by an earlier pass.
         value_returning_symbols.contains(s)
     }
@@ -418,9 +423,9 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
                 let TypedExpression::Variable(callee) = &c.callee.node else {
                     return false;
                 };
-                callee
-                    .resolve_global()
-                    .is_some_and(|n| n.ends_with("$view") || n == "__component_call__")
+                callee.resolve_global().is_some_and(|n| {
+                    n.ends_with("$view") || n == "__component_call__" || n == "__blinc_with__"
+                })
             }
             TypedExpression::Block(b) => b.statements.last().is_some_and(|s| match &s.node {
                 TypedStatement::Expression(e) => is_widget_producing_expr(e),
