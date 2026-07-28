@@ -22,6 +22,11 @@
 //     including one value over two signals. A derived binding fires
 //     when either dependency sets.
 //
+//   scoped re-render         `with Play { ... }`, the alert/spinner
+//     block. A branch swap is structural, so it needs a re-render --
+//     the region confines that to its own subtree instead of the
+//     program, which is what `@stateful` on a view would cost.
+//
 // The f64 props also cover the numeric-width path: the DSL types every
 // number as f64 while layout stores f32, and the narrowing happens
 // inside the binding layer, not at the call site.
@@ -145,10 +150,10 @@ component Playground {
             }
 
             // Two-way: the toggles read Play.busy AND write it, so
-            // clicking either one flips the BusyPanel above and the
-            // button below, exactly as the Busy action does. Both
-            // toggles track each other for the same reason -- one
-            // signal, two views of it.
+            // clicking either one flips the `with Play` region below
+            // and the button under them, exactly as the Busy action
+            // does. Both toggles track each other for the same reason
+            // -- one signal, two views of it.
             cn.Label("toggles: two-way bound to Play.busy")
             Div(class = "row") {
                 cn.Switch(checked = Play.busy, label = "busy")
@@ -170,16 +175,25 @@ component Playground {
             }
 
             // Swapping a branch is structural, which a redraw cannot
-            // do, so this slice needs to re-render. `with` scopes that
-            // to the slice: the region subscribes to `Play`, and a
-            // transition rebuilds these two nodes rather than the
-            // program. The decorated-component form (`component X {
-            // @stateful @fsm([Play]) view { ... } }`) still works and
-            // is the right tool when there is state behaviour worth
-            // naming, but it sets a global flag -- every signal write
-            // then tears down and rebuilds every node, which is also
-            // what discards any animation mid-flight.
-            with @fsm([Play]) {
+            // do, so this slice has to re-render. `with` scopes that to
+            // the slice: a transition rebuilds these nodes and nothing
+            // else, so the switch's thumb spring and the toggles above
+            // keep whatever they had in flight.
+            //
+            // `with Play` is the bare form -- name the dependency and
+            // let the compiler classify it against the declared signals
+            // and FSMs. `with @fsm([Play])` spells the mechanism out and
+            // lowers identically; use it when a reader would otherwise
+            // have to go and look up which kind `Play` is.
+            //
+            // The decorated-component form (`component X { @stateful
+            // @fsm([Play]) view { ... } }`) still works and is the right
+            // tool when the state behaviour deserves a name. It sets a
+            // global flag, though: every signal write then rebuilds
+            // every node in the program, which is what this region
+            // avoids. `BusyPanel` used to be exactly that -- a component
+            // whose only job was to carry the decoration.
+            with Play {
                 Div(class = "row") {
                     if Play.busy.get() {
                         cn.Alert("busy - work in flight", variant = "warning")
