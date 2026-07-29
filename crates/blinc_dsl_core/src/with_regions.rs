@@ -87,7 +87,24 @@ pub(crate) unsafe fn mount(id: i64, child: i64) -> i64 {
             .collect()
     };
 
+    // Logged because a region's `Stateful` is created at ONE source
+    // location, so every region shares `InstanceKey`'s per-location
+    // call counter. That counter only resets at a frame boundary. If
+    // this logs repeatedly, or the key changes between logs for the
+    // same region, each render is getting fresh key-derived storage and
+    // the old entries are never reclaimed — which is what a CPU figure
+    // that grows without input looks like.
     let mut builder = blinc_layout::stateful::stateful::<FsmStateId>();
+    {
+        static MOUNTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = MOUNTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        tracing::debug!(
+            region = %region.name,
+            mount = n,
+            deps = signal_ids.len(),
+            "with region: mounting a Stateful"
+        );
+    }
     if let Some(fsm) = region.fsm.as_deref()
         && let Some(shared) = blinc_runtime::fsm::default_state(fsm)
     {

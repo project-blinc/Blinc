@@ -1451,6 +1451,25 @@ impl BlincDsl {
     /// ```
     pub fn view_widget(&self) -> Box<dyn blinc_layout::div::ElementBuilder> {
         use blinc_core::reactive::SignalId;
+
+        // Every call re-runs the whole JIT program and mounts fresh
+        // `Stateful`s. Their registry keys are `Arc::as_ptr`, so each
+        // call registers under a NEW key while the previous entries
+        // stay — eight per call on the playground, every one of which
+        // still fires on every future signal write.
+        //
+        // A host that calls this once at startup pays nothing. One that
+        // calls it per frame, or per resize event, compounds. Logged so
+        // "the builder only runs once" is checkable rather than assumed.
+        {
+            static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            let n = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+            tracing::debug!(
+                call = n,
+                stateful_deps_registered = blinc_layout::stateful::stateful_deps_registered(),
+                "view_widget: rebuilding the whole DSL tree"
+            );
+        }
         use blinc_runtime::fsm::FsmStateId;
         use zyntax_embed::ZyntaxValue;
 

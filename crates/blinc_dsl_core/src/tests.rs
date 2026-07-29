@@ -7792,6 +7792,11 @@ view {
     )
     .expect("compile");
 
+    // Observed failing ONCE, in a full four-crate run, and never in
+    // ~15 runs since. Not explained: `opened_count` is process-global,
+    // but a concurrent test rendering a region would only push the
+    // count UP, and the failure was no-increase. Recorded rather than
+    // papered over with a lock that would not address it.
     let before = crate::read_scope::opened_count();
     let host = blinc_layout::div::div()
         .w(200.0)

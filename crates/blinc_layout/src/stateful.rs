@@ -925,6 +925,28 @@ pub fn has_animating_statefuls() -> bool {
 /// in `check_stateful_animations` (which still needs to walk every
 /// entry regardless of visibility, otherwise settled off-screen
 /// statefuls would never get unregistered).
+/// Diagnostic: how many statefuls are registered for dep-driven
+/// refresh. Keys are `Arc::as_ptr`, so a host that re-mounts its tree
+/// rather than diffing it registers a NEW entry each time and the old
+/// ones are never reclaimed — every one of them still fires on a write.
+pub fn stateful_deps_registered() -> usize {
+    STATEFUL_DEPS.lock().unwrap().len()
+}
+
+/// Diagnostic: every stateful currently registered for animation-driven
+/// refresh, as `(animation_keys, node_id)`. A `None` node id is what
+/// [`has_visible_animating_statefuls`] treats as unconditionally
+/// visible, so an entry that never resolves pins the frame loop
+/// regardless of what is on screen.
+pub fn animating_statefuls_snapshot() -> Vec<(Vec<String>, Option<LayoutNodeId>)> {
+    STATEFUL_ANIMATIONS
+        .lock()
+        .unwrap()
+        .values()
+        .map(|(keys, _, node_id_fn)| (keys.clone(), node_id_fn()))
+        .collect()
+}
+
 pub fn has_visible_animating_statefuls(painted: &std::collections::HashSet<LayoutNodeId>) -> bool {
     let registry = STATEFUL_ANIMATIONS.lock().unwrap();
     registry
