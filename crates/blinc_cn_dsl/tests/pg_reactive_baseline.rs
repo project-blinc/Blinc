@@ -136,9 +136,25 @@ fn playground_interaction_cost() {
         let total = RENDERS.load(Ordering::Relaxed);
 
         let nodes = node_count(&tree);
+        // Whether a spring is still travelling. Reads false throughout
+        // here — nothing ticks the scheduler in a headless run — which
+        // rules the animation OUT as the explanation for the settle
+        // times below, and is why it is printed rather than assumed.
+        //
+        // The switch's thumb travel IS what a delay looks like in the
+        // running app, where the scheduler drives it. That is the
+        // intended behaviour, not lag.
+        //
+        // Unexplained and reproducible on both sides of this branch: a
+        // `Busy` that changes nothing (busy already true) settles ~50%
+        // slower than one that flips the branch, despite producing an
+        // identical tree. Pre-existing; noted so it is not read as a
+        // regression from observed deps.
+        let animating = tree.visible_anim_active();
         println!(
             "{action:>6}: {total} re-render(s) ({during} during dispatch), \
-             dispatch {dispatch:?}, settle {settle:?}, {nodes} nodes"
+             dispatch {dispatch:?}, settle {settle:?}, {nodes} nodes, \
+             animating={animating}"
         );
         assert!(
             nodes > 50,
