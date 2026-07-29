@@ -303,10 +303,18 @@ whether one runs.
    `Resume<T>` sentinel) and `CaptureContinuation`, which the backend
    logs as unimplemented. So the non-resumable, non-capturing path is
    the only one with evidence behind it.
-2. Then cost: time that call against the same function with the
-   operation inlined, at a call count that matters for a signal read.
-   A handler per read is only viable if the overhead is small against a
-   `HashMap` lookup, which is what the read costs today.
+2. **Answered: a perform is about a call.** Release build, 2M
+   iterations: direct call 1.57ns, perform 2.64ns, `HashMap` lookup
+   9.89ns. So the dispatch check costs ~1.7x a direct call and ~0.27x
+   what a signal read costs today. Cost is not the objection to a
+   handler per read.
+
+   Measured with the loop in Rust, not in the JIT: both variants pay an
+   identical Rust->native call per iteration, so the difference isolates
+   the perform overhead. Run it in RELEASE — the perform-vs-call ratio
+   holds either way, but a debug `HashMap` is ~20x slower than it should
+   be and makes a perform look far cheaper against a signal read than it
+   is.
 3. Then composition across the JIT boundary. Less of a risk than it
    first looks: a handler need not BE the reactive boundary, it can
    delegate to whatever `Stateful` is active, or to nothing when there
