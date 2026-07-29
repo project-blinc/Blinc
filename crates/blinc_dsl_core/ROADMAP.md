@@ -349,9 +349,12 @@ is never recorded. It also makes one hazard unreachable rather than
 merely avoided: a closure built during a render but invoked later finds
 no scope open and cannot pollute the render's dep set.
 
-What it costs: subscriptions have to be re-registered per render rather
-than at mount, because an exact dep set changes with the branch taken.
-Writes stay as they are for now.
+What it costs: little. Subscriptions are re-registered per render rather
+than at mount, because an exact dep set changes with the branch taken —
+but `Stateful` already registers after its callback runs, and the
+registry already tolerates re-entry from a refresh, so this is one hash
+insert per region render on a path that exists. Writes stay as they are
+for now.
 
 
 **Module system.** Export lists, a manifest, and a watcher story that

@@ -107,10 +107,18 @@ cannot happen.
 ## Consequences to design against
 
 **Deps change per render.** A body that reads one signal on one render
-and another on the next is correctly tracked, which is the improvement —
-but it means the `Stateful`'s subscription must be re-registered on every
-render, not just at mount. Today's mount-time registration is a
-simplification that only worked because the dep list was static.
+and another on the next is correctly tracked, which is the improvement.
+It means the subscription is re-registered on every render rather than
+once at mount — which is not a new burden: `Stateful` already registers
+after its callback runs, because `use_signal` can add deps during it,
+and the dep registry already releases its lock before invoking refresh
+callbacks so they can re-enter registration. The cost is one hash-map
+insert per region render, against a render that runs a JIT'd view,
+builds widgets and lays out a subtree. It is not per-frame; an idle
+frame renders nothing.
+
+What actually changes is that the dep list stops being static. That is
+a correctness property, not a performance one.
 
 **Derived bodies need their own scope.** Reads inside `computed { }`
 belong to the derived, not to the enclosing region: the region binds to
