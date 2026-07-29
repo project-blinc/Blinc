@@ -331,13 +331,27 @@ one with evidence behind it. `Resume<T>` and `CaptureContinuation`
 would only come up for a handler that wants to run the body more than
 once or abandon it — neither of which a dependency-tracking read does.
 
-All three questions are now answered, and none of them is the reason
-not to do this. What remains is design, not feasibility: which
-operations the effect declares (read, write, batch), where the handler
-scope is installed relative to a `with` region or a `Stateful`, and
-what happens to a read performed with no handler installed. The payoff
-if it holds: reactivity stops being bolted onto the language and starts
-being expressed in it.
+All three questions are answered, and none of them is the reason not to
+do this. **The design is written up in `docs/effects-reactivity.md`.**
+
+In short: `Reactive` declares one read operation per bridged signal
+type; a scope is one render of one region, opened in an argument of the
+`with` call site so it precedes the region's view and closes when the
+`Stateful` is mounted with exactly the ids that were read; scopes stack
+and the innermost records; a read with no scope open falls to a static
+handler that reads and records nothing, so everything outside a region
+behaves as it does today.
+
+What it removes: the AST scrape for context-field value reads, dep
+lists as a correctness requirement, and the rule that deps must exclude
+bound props — a bound prop is passed as a handle and never read, so it
+is never recorded. It also makes one hazard unreachable rather than
+merely avoided: a closure built during a render but invoked later finds
+no scope open and cannot pollute the render's dep set.
+
+What it costs: subscriptions have to be re-registered per render rather
+than at mount, because an exact dep set changes with the branch taken.
+Writes stay as they are for now.
 
 
 **Module system.** Export lists, a manifest, and a watcher story that
