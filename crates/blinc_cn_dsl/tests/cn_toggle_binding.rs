@@ -240,3 +240,162 @@ fn setting_the_signal_moves_the_checkbox() {
         "ticking the signal must add the checkmark ({unchecked} -> {checked} nodes)"
     );
 }
+
+// ── Two widgets, one signal ──────────────────────────────────────────
+//
+// The playground binds `cn.Switch` and `cn.Checkbox` to the same
+// `Play.busy`. An FSM transition moves both; clicking one reportedly
+// does not move the other. These pin which direction breaks.
+//
+// Every test here uses its OWN signal name. The signal registry is
+// keyed by name and process-wide, and the switch's spring key derives
+// from the signal id, so a shared name lets one test read another's
+// spring — which is exactly how the first run of these read 0.0 for a
+// switch that had in fact moved.
+
+/// The switch's persisted thumb spring — the observable for "did the
+/// switch follow". Non-creating: if the switch never built one this is
+/// `None` and the test fails rather than measuring a spring it minted.
+fn thumb_target(signal_name: &str) -> f32 {
+    let (raw, _) = blinc_runtime::signal::lookup(signal_name).expect("signal declared");
+    let key = format!("cn-switch:{raw}:thumb");
+    blinc_layout::stateful::try_persisted_animated_value(&key)
+        .expect("the switch must persist a thumb spring")
+        .lock()
+        .unwrap()
+        .target()
+}
+
+/// Every element in the tree carrying a click handler, in source order.
+fn clickables(el: &dyn ElementBuilder) -> Vec<&blinc_layout::event_handler::EventHandlers> {
+    let mut out = Vec::new();
+    fn walk<'a>(
+        el: &'a dyn ElementBuilder,
+        out: &mut Vec<&'a blinc_layout::event_handler::EventHandlers>,
+    ) {
+        if let Some(handlers) = el.event_handlers()
+            && handlers.has_handler(POINTER_UP)
+        {
+            out.push(handlers);
+        }
+        for child in el.children_builders() {
+            walk(child.as_ref(), out);
+        }
+    }
+    walk(el, &mut out);
+    out
+}
+
+fn click(handlers: &blinc_layout::event_handler::EventHandlers) {
+    handlers.dispatch(&EventContext::new(
+        POINTER_UP,
+        blinc_layout::LayoutNodeId::default(),
+    ));
+}
+
+fn pair_source(signal: &str) -> String {
+    format!(
+        r#"
+signal {signal}: bool
+view {{
+    Div {{
+        cn.Switch(checked = {signal}, label = "busy")
+        cn.Checkbox(checked = {signal}, label = "busy")
+    }}
+}}
+"#
+    )
+}
+
+/// Build the pair and lay it out once, settled.
+fn build_pair(
+    dsl: &BlincDsl,
+    signal: &str,
+) -> (blinc_layout::div::Div, blinc_layout::renderer::RenderTree) {
+    dsl.compile_source(&pair_source(signal), "pair.blinc")
+        .expect("compile");
+    let host = blinc_layout::div::div()
+        .w(400.0)
+        .h(200.0)
+        .child_box(dsl.view_widget());
+    let mut tree = blinc_layout::renderer::RenderTree::from_element(&host);
+    tree.compute_layout(400.0, 200.0);
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 200.0);
+    (host, tree)
+}
+
+/// Baseline: the FSM-style path. A write straight to the signal is what
+/// `Busy` / `Reset` do, and both widgets follow it today.
+#[test]
+fn a_direct_signal_write_moves_the_switch() {
+    let dsl = dsl();
+    let (_host, mut tree) = build_pair(&dsl, "pair_direct");
+
+    let before = thumb_target("pair_direct");
+    dsl.set_signal_bool("pair_direct", true);
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 200.0);
+
+    let after = thumb_target("pair_direct");
+    assert_ne!(
+        before, after,
+        "a direct signal write must move the switch's thumb target"
+    );
+}
+
+/// The reported bug: clicking the CHECKBOX writes the same signal
+/// through `State::set`, and the switch is supposed to follow.
+#[test]
+fn clicking_the_checkbox_moves_the_switch() {
+    let dsl = dsl();
+    let (host, mut tree) = build_pair(&dsl, "pair_checkbox");
+
+    let before = thumb_target("pair_checkbox");
+    let targets = clickables(&host);
+    // Last clickable is the checkbox; the switch comes first in source.
+    click(targets.last().expect("a clickable toggle"));
+    assert_eq!(
+        dsl.get_signal_bool("pair_checkbox"),
+        Some(true),
+        "the click must reach the shared signal at all"
+    );
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 200.0);
+
+    let after = thumb_target("pair_checkbox");
+    assert_ne!(
+        before, after,
+        "clicking the checkbox must move the switch's thumb target"
+    );
+}
+
+/// The other direction, which splits the diagnosis: if this passes and
+/// the one above fails, the notification path is fine and something
+/// about the switch's own refresh is what is missing.
+#[test]
+fn clicking_the_switch_writes_the_shared_signal() {
+    let dsl = dsl();
+    let (host, _tree) = build_pair(&dsl, "pair_switch");
+
+    let targets = clickables(&host);
+    click(targets.first().expect("a clickable toggle"));
+    assert_eq!(
+        dsl.get_signal_bool("pair_switch"),
+        Some(true),
+        "the switch must write the shared signal"
+    );
+}
+
+/// How many toggles the tree actually exposes, so the index-based picks
+/// above are not quietly clicking the same widget twice.
+#[test]
+fn the_pair_exposes_two_toggles() {
+    let dsl = dsl();
+    let (host, _tree) = build_pair(&dsl, "pair_count");
+    assert_eq!(
+        clickables(&host).len(),
+        2,
+        "one clickable per toggle; if this changes the picks above are wrong"
+    );
+}
