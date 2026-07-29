@@ -67,6 +67,16 @@ fn reconstruct_signal<T>(id_raw: i64) -> blinc_core::reactive::Signal<T> {
     blinc_core::reactive::Signal::<T>::from_id(id)
 }
 
+// Every DSL read lands in one of the five getters below, because
+// `resolve_signal_calls` bakes the id and routes reads here — FSM
+// context fields included, since those are mangled signals. That makes
+// this the choke point where a read can be OBSERVED, which is why
+// dependency tracking does not need an algebraic effect: a `perform`
+// would exist to let a handler intercept the read, and there is exactly
+// one interception, with one behaviour. `read_scope::record` is a no-op
+// unless a region is rendering, so reads from event handlers, `init`
+// blocks and host calls cost a branch and record nothing.
+
 /// `__signal_get_by_id_i32(id_raw)` — read an i32 signal by its
 /// process-global `SignalId.to_raw()`. The DSL lowering pass
 /// (`resolve_signal_calls`) bakes the id into the JIT code at compile
@@ -74,6 +84,7 @@ fn reconstruct_signal<T>(id_raw: i64) -> blinc_core::reactive::Signal<T> {
 /// lookup, no parallel storage. Returns `0` if the id no longer
 /// resolves in the graph (graph reset between tests, etc.).
 pub(crate) extern "C" fn blinc_signal_get_by_id_i32(id_raw: i64) -> i32 {
+    crate::read_scope::record(id_raw as u64);
     reconstruct_signal::<i32>(id_raw).try_get().unwrap_or(0)
 }
 
@@ -82,11 +93,13 @@ pub(crate) extern "C" fn blinc_signal_get_by_id_i32(id_raw: i64) -> i32 {
 /// `reconstruct_signal::<i32>` on that id would read the wrong slot
 /// type.
 pub(crate) extern "C" fn blinc_signal_get_by_id_i64(id_raw: i64) -> i64 {
+    crate::read_scope::record(id_raw as u64);
     reconstruct_signal::<i64>(id_raw).try_get().unwrap_or(0)
 }
 
 /// `__signal_get_by_id_f64(id_raw)` — f64 mirror.
 pub(crate) extern "C" fn blinc_signal_get_by_id_f64(id_raw: i64) -> f64 {
+    crate::read_scope::record(id_raw as u64);
     reconstruct_signal::<f64>(id_raw).try_get().unwrap_or(0.0)
 }
 
@@ -94,6 +107,7 @@ pub(crate) extern "C" fn blinc_signal_get_by_id_f64(id_raw: i64) -> f64 {
 /// Zyntax length-prefixed pointer; the buffer leaks via
 /// `blinc_string_alloc`.
 pub(crate) extern "C" fn blinc_signal_get_by_id_string(id_raw: i64) -> *const i32 {
+    crate::read_scope::record(id_raw as u64);
     let value = reconstruct_signal::<String>(id_raw)
         .try_get()
         .unwrap_or_default();
@@ -107,6 +121,7 @@ pub(crate) extern "C" fn blinc_signal_get_by_id_string(id_raw: i64) -> *const i3
 /// pass treats DSL `bool` as `i32` everywhere a value flows across
 /// the FFI seam.
 pub(crate) extern "C" fn blinc_signal_get_by_id_bool(id_raw: i64) -> i32 {
+    crate::read_scope::record(id_raw as u64);
     if reconstruct_signal::<bool>(id_raw)
         .try_get()
         .unwrap_or(false)

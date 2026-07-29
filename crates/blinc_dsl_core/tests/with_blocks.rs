@@ -401,3 +401,66 @@ view {
         "the else branch must render: built {built:?}"
     );
 }
+
+/// The point of observing reads instead of declaring them.
+///
+/// A bare `with { … }` names no dependencies, so the declared-deps
+/// fallback subscribes it to EVERY signal in the program. Observation
+/// subscribes it to the one signal its body actually read — so a write
+/// to an unrelated signal must not re-render it.
+///
+/// Both halves matter: the first proves the region is still live, so
+/// the second cannot pass by the region being subscribed to nothing.
+#[test]
+fn a_region_subscribes_to_what_it_read_not_what_was_declared() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dsl = compile(
+        r#"
+signal shown: i32 = 0
+signal unrelated: i32 = 0
+view {
+    Div {
+        Probe(tag = "outside")
+        with {
+            Div {
+                Text(f"{shown.get()}")
+                Probe(tag = "inside")
+            }
+        }
+    }
+}
+"#,
+    );
+
+    let host = blinc_layout::div::div()
+        .w(400.0)
+        .h(300.0)
+        .child_box(dsl.view_widget());
+    let mut tree = blinc_layout::renderer::RenderTree::from_element(&host);
+    tree.compute_layout(400.0, 300.0);
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 300.0);
+
+    // The signal the body read: the region must follow it.
+    BUILT.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    dsl.set_signal_i32("shown", 1);
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 300.0);
+    let after_read_dep = BUILT.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    assert!(
+        after_read_dep.iter().any(|t| t == "inside"),
+        "the region must re-render for the signal it read: {after_read_dep:?}"
+    );
+
+    // The signal it never touched: the region must ignore it.
+    BUILT.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    dsl.set_signal_i32("unrelated", 1);
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 300.0);
+    let after_unrelated = BUILT.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    assert!(
+        after_unrelated.is_empty(),
+        "a signal the body never read must not re-render it — declaring \
+         no deps used to mean subscribing to all of them: {after_unrelated:?}"
+    );
+}
