@@ -18,27 +18,36 @@ handler, it costs about what a direct call costs (well under a signal
 read), and a handler can delegate to host state. What follows is design,
 not exploration.
 
-## The operations
+## The operations, and why reads did not need one
 
-`Reactive` declares read operations only, one per bridged signal type,
-mirroring the getters the DSL already lowers to:
+The original plan declared a `Reactive` effect with one read operation
+per bridged signal type. **Building it showed that reads do not need
+it.**
 
-    read_i32(id) -> i32
-    read_i64(id) -> i64
-    read_f64(id) -> f64
-    read_bool(id) -> bool
-    read_string(id) -> ptr
+Every DSL read already funnels through five `__signal_get_by_id_<T>`
+externs: the signal-resolution pass bakes the id and routes reads
+there, FSM context fields included, since those are mangled signals. A
+`perform` exists so that a *handler* can intercept a read — and here
+there is exactly one interception point with exactly one behaviour,
+"record if a scope is open". The effect would have added a declaration,
+per-type static handlers, a perform lowering and a dispatch check on
+every read, all to reach the function the read already calls.
 
-One op per type rather than a single untyped one, because the existing
-signal FFI is already split that way and a uniform `i64` payload would
-put a cast on both sides of every read.
+So reads record at that choke point instead. The scope stack IS the
+handler.
 
-**Writes stay as they are.** The write path already notifies correctly;
-making it an effect would buy batching and transactional semantics, not
-correctness. It is the natural second increment, not part of this one.
-Deferring it also keeps the first version to a handler that cannot
-change observable behaviour: recording is a side effect on host state,
-and the value returned is the value that would have been read anyway.
+This does not retire the effects work. It answered the question it was
+asked — a perform reaches its handler, costs about what a call costs,
+and can delegate to host state — and that is what made it safe to
+conclude the machinery is not load-bearing for reads.
+
+**Writes are where an effect would earn its place.** Batching and
+transactional semantics are a real handler behaviour: a batching
+handler accumulates writes and flushes on scope exit, and a different
+handler could defer, coalesce or roll them back. That is more than one
+interception with one behaviour, which is precisely the case reads
+turned out not to be. Writes stay as they are for now, and this is the
+shape to reach for when they change.
 
 ## Where a scope begins and ends
 
