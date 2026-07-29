@@ -180,11 +180,17 @@ component Playground {
             // else, so the switch's thumb spring and the toggles above
             // keep whatever they had in flight.
             //
-            // `with Play` is the bare form -- name the dependency and
-            // let the compiler classify it against the declared signals
-            // and FSMs. `with @fsm([Play])` spells the mechanism out and
-            // lowers identically; use it when a reader would otherwise
-            // have to go and look up which kind `Play` is.
+            // No dependency named at all. The region's deps are
+            // whatever its body READ while rendering -- here just
+            // `Play.busy`, via the `.get()` below. Grow writes five
+            // other context fields and this region ignores every one of
+            // them, because it never read them.
+            //
+            // Naming them still works: `with Play` classifies the name
+            // against the declared signals and FSMs, and
+            // `with @fsm([Play])` spells the mechanism out. Both lower
+            // identically. They are documentation now rather than the
+            // mechanism that finds the dependencies.
             //
             // The decorated-component form (`component X { @stateful
             // @fsm([Play]) view { ... } }`) still works and is the right
@@ -193,7 +199,7 @@ component Playground {
             // every node in the program, which is what this region
             // avoids. `BusyPanel` used to be exactly that -- a component
             // whose only job was to carry the decoration.
-            with Play {
+            with {
                 Div(class = "row") {
                     if Play.busy.get() {
                         cn.Alert("busy - work in flight", variant = "warning")
