@@ -61,6 +61,10 @@
     // block. Takes `(region_id, child_handle)`; `lower_with_blocks`
     // fills both in, so the shape here is what the grammar emits.
     __blinc_with__: "__blinc_with__",
+    // Opens the read scope a `with` region renders under. Emitted by
+    // `lower_with_blocks` in argument position, so it runs before the
+    // region's view and every read inside lands in that scope.
+    __blinc_scope_enter__: "__blinc_scope_enter__",
     // `computed { expr } : T` (or `derived { expr } : T` alias) —
     // creates a `Computed<T>` against the process-global graph and
     // returns its `DerivedId.to_raw()` as i64. One extern per typed

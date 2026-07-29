@@ -7753,3 +7753,56 @@ fn example_reactive_dsl_compiles() {
     )
     .expect("reactive_dsl.blinc should compile");
 }
+
+/// The `with` call site must actually open a read scope.
+///
+/// Until reads perform, an unopened scope and an open-but-empty one both
+/// mount from the registered fallback, so every behavioural test passes
+/// either way. This is the one thing that distinguishes them, and it
+/// lives inside the crate because the counter is `pub(crate)`.
+#[test]
+fn a_with_site_opens_a_read_scope() {
+    fn init() {
+        blinc_theme::ThemeState::init_default();
+        if !blinc_core::BlincContextState::is_initialized() {
+            blinc_core::BlincContextState::init(
+                blinc_core::reactive::global_graph(),
+                std::sync::Arc::new(std::sync::Mutex::new(
+                    blinc_core::context_state::HookState::new(),
+                )),
+                std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            );
+        }
+    }
+    init();
+
+    let dsl = BlincDsl::new().expect("dsl");
+    dsl.compile_source(
+        r#"
+signal scope_probe: i32 = 0
+view {
+    Div {
+        with scope_probe {
+            Div {}
+        }
+    }
+}
+"#,
+        "scope_probe.blinc",
+    )
+    .expect("compile");
+
+    let before = crate::read_scope::opened_count();
+    let host = blinc_layout::div::div()
+        .w(200.0)
+        .h(100.0)
+        .child_box(dsl.view_widget());
+    let mut tree = blinc_layout::renderer::RenderTree::from_element(&host);
+    tree.compute_layout(200.0, 100.0);
+
+    assert!(
+        crate::read_scope::opened_count() > before,
+        "rendering a `with` region must open a scope; the call site is \
+         what emits `__blinc_scope_enter__`"
+    );
+}

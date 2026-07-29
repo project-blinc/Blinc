@@ -310,6 +310,17 @@ pub(crate) extern "C" fn blinc_dsl_effect(closure_ptr: i64) {
     blinc_core::reactive::effect(move |_graph| func());
 }
 
+/// `__blinc_scope_enter__(region_id)` — open a read scope for a region
+/// about to render, and return the id.
+///
+/// Returning the id lets the call sit in argument position at a `with`
+/// site, where evaluation order runs it before the region's view. The
+/// matching close happens host-side in `__blinc_with__`, which is the
+/// point that needs the accumulated set.
+pub(crate) extern "C" fn blinc_scope_enter(region_id: i64) -> i64 {
+    crate::read_scope::enter(region_id)
+}
+
 /// `__blinc_with__(region_id, child_handle)` — mount a `with` region's
 /// widget under a `Stateful` bound to the region's dependencies.
 ///

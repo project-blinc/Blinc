@@ -257,8 +257,29 @@ fn rewrite_expr(
             span,
         )),
         positional_args: vec![
+            // The region's read scope opens HERE, in argument position,
+            // because arguments evaluate left to right: the scope is
+            // open before the view call beside it runs, so every read
+            // the body makes lands in it. `__blinc_with__` closes it.
             typed_node(
-                TypedExpression::Literal(zyntax_typed_ast::TypedLiteral::Integer(id.into())),
+                TypedExpression::Call(zyntax_typed_ast::TypedCall {
+                    callee: Box::new(typed_node(
+                        TypedExpression::Variable(zyntax_typed_ast::InternedString::new_global(
+                            "__blinc_scope_enter__",
+                        )),
+                        Type::Any,
+                        span,
+                    )),
+                    positional_args: vec![typed_node(
+                        TypedExpression::Literal(zyntax_typed_ast::TypedLiteral::Integer(
+                            id.into(),
+                        )),
+                        i64_ty.clone(),
+                        span,
+                    )],
+                    named_args: vec![],
+                    type_args: vec![],
+                }),
                 i64_ty.clone(),
                 span,
             ),

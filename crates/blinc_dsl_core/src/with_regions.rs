@@ -55,6 +55,13 @@ pub(crate) unsafe fn mount(id: i64, child: i64) -> i64 {
     use blinc_core::reactive::SignalId;
     use blinc_runtime::fsm::FsmStateId;
 
+    // Close the scope the call site opened. Whatever the body read
+    // while rendering is in here — exact, rather than inferred from the
+    // source. Empty means either nothing was read or reads do not yet
+    // perform, so fall back to the registered set rather than mounting
+    // a region that subscribes to nothing.
+    let observed = crate::read_scope::exit(id).unwrap_or_default();
+
     let Some(region) = lookup(id) else {
         // No entry: render the body, just not reactively. Losing the
         // subscription is a bug; losing the content would be a blank
@@ -66,12 +73,19 @@ pub(crate) unsafe fn mount(id: i64, child: i64) -> i64 {
         return child;
     };
 
-    let signal_ids: Vec<SignalId> = region
-        .signal_names
-        .iter()
-        .filter_map(|name| blinc_runtime::signal::lookup(name))
-        .map(|(raw, _ty)| SignalId::from_raw(raw))
-        .collect();
+    let signal_ids: Vec<SignalId> = if observed.is_empty() {
+        region
+            .signal_names
+            .iter()
+            .filter_map(|name| blinc_runtime::signal::lookup(name))
+            .map(|(raw, _ty)| SignalId::from_raw(raw))
+            .collect()
+    } else {
+        observed
+            .iter()
+            .map(|raw| SignalId::from_raw(*raw))
+            .collect()
+    };
 
     let mut builder = blinc_layout::stateful::stateful::<FsmStateId>();
     if let Some(fsm) = region.fsm.as_deref()

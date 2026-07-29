@@ -2,7 +2,7 @@ use super::*;
 use crate::host::{
     blinc_dsl_computed_bool, blinc_dsl_computed_f64, blinc_dsl_computed_i32,
     blinc_dsl_computed_string, blinc_dsl_effect, blinc_dsl_with_region, blinc_format_int,
-    blinc_fsm_runtime_trigger, blinc_fsm_subscribe, blinc_fsm_subscribe_all,
+    blinc_fsm_runtime_trigger, blinc_fsm_subscribe, blinc_fsm_subscribe_all, blinc_scope_enter,
     blinc_signal_get_by_id_bool, blinc_signal_get_by_id_f64, blinc_signal_get_by_id_i32,
     blinc_signal_get_by_id_i64, blinc_signal_get_by_id_string, blinc_signal_set_by_id_bool,
     blinc_signal_set_by_id_f64, blinc_signal_set_by_id_i32, blinc_signal_set_by_id_i64,
@@ -193,6 +193,14 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             param_types: &[Type::Primitive(PrimitiveType::I64)],
             return_type: Type::Primitive(PrimitiveType::Unit),
             ptr: blinc_dsl_effect as *const u8,
+        },
+        BuiltinDescriptor {
+            // Opens the read scope a `with` region renders under. Sits
+            // in argument position so it runs before the region's view.
+            name: "__blinc_scope_enter__",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::I64),
+            ptr: blinc_scope_enter as *const u8,
         },
         BuiltinDescriptor {
             // `with @fsm([…]) { … }` — `(region_id, child_handle)` in,

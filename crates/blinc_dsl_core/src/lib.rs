@@ -27,6 +27,7 @@ mod abi;
 mod fsm_registry;
 mod host;
 mod passes;
+mod read_scope;
 mod runtime_bridge;
 mod widget_ffi;
 mod with_regions;

@@ -112,7 +112,10 @@ fn playground_interaction_cost() {
     tree.compute_layout(720.0, 820.0);
 
     let mounted = node_count(&tree);
-    assert!(mounted > 50, "the playground must actually mount: {mounted}");
+    assert!(
+        mounted > 50,
+        "the playground must actually mount: {mounted}"
+    );
     println!("mounted nodes: {mounted}");
 
     // Grow drives bound props only. Busy swaps a branch. Reset restores
