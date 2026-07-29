@@ -102,7 +102,7 @@ pub(crate) unsafe fn mount(id: i64, child: i64) -> i64 {
     // with no view in flight.
     let pending = Mutex::new(child);
     let name = region.name.clone();
-    let stateful = builder.on_state(move |_ctx| {
+    let stateful = builder.on_state(move |ctx| {
         let handle = {
             let mut slot = pending.lock().unwrap_or_else(|e| e.into_inner());
             std::mem::replace(&mut *slot, 0)
@@ -114,7 +114,23 @@ pub(crate) unsafe fn mount(id: i64, child: i64) -> i64 {
                 return blinc_layout::div::div().child_box(widget.into_element_builder());
             }
         }
-        render_region(&name)
+
+        // Every later render re-observes. A body that branches reads
+        // different signals on different renders, so the deps have to
+        // follow it: what mattered last time may not this time. The
+        // set is replaced, not extended — `set_deps` skips the registry
+        // write when nothing moved, which is the common case.
+        crate::read_scope::enter(id);
+        let rendered = render_region(&name);
+        if let Some(observed) = crate::read_scope::exit(id) {
+            ctx.set_deps(
+                observed
+                    .iter()
+                    .map(|raw| SignalId::from_raw(*raw))
+                    .collect(),
+            );
+        }
+        rendered
     });
 
     Box::into_raw(Box::new(crate::widget_ffi::WidgetBox::Custom(Box::new(

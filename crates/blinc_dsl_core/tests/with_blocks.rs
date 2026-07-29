@@ -464,3 +464,88 @@ view {
          no deps used to mean subscribing to all of them: {after_unrelated:?}"
     );
 }
+
+/// Deps have to follow a body that branches.
+///
+/// This region reads `toggle` always, and then reads EITHER `left` or
+/// `right` depending on it. After flipping to the right branch, a write
+/// to `right` must re-render it and a write to `left` must not — the
+/// exact reverse of the first render's dependency set.
+///
+/// Registering deps once at mount cannot express that: the mount-time
+/// set would keep `left` forever and never gain `right`.
+#[test]
+fn deps_follow_a_body_that_branches() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dsl = compile(
+        r#"
+signal toggle: bool = false
+signal left: i32 = 0
+signal right: i32 = 0
+view {
+    Div {
+        Probe(tag = "outside")
+        with {
+            Div {
+                if toggle.get() {
+                    Text(f"{right.get()}")
+                } else {
+                    Text(f"{left.get()}")
+                }
+                Probe(tag = "inside")
+            }
+        }
+    }
+}
+"#,
+    );
+
+    let host = blinc_layout::div::div()
+        .w(400.0)
+        .h(300.0)
+        .child_box(dsl.view_widget());
+    let mut tree = blinc_layout::renderer::RenderTree::from_element(&host);
+    tree.compute_layout(400.0, 300.0);
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(400.0, 300.0);
+
+    let mut settle = |dsl: &BlincDsl, tree: &mut blinc_layout::renderer::RenderTree| {
+        let _ = dsl;
+        tree.process_pending_subtree_rebuilds();
+        tree.compute_layout(400.0, 300.0);
+        BUILT.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    };
+
+    // First render took the else branch, so `left` is a dep.
+    BUILT.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    dsl.set_signal_i32("left", 1);
+    assert!(
+        settle(&dsl, &mut tree).iter().any(|t| t == "inside"),
+        "the branch it rendered reads `left`, so `left` must re-render it"
+    );
+
+    // Flip to the other branch. That render reads `right`, not `left`.
+    BUILT.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    dsl.set_signal_bool("toggle", true);
+    assert!(
+        settle(&dsl, &mut tree).iter().any(|t| t == "inside"),
+        "flipping the condition must re-render — `toggle` was read too"
+    );
+
+    // Now the reversal: `right` matters and `left` does not.
+    BUILT.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    dsl.set_signal_i32("right", 2);
+    assert!(
+        settle(&dsl, &mut tree).iter().any(|t| t == "inside"),
+        "the live branch reads `right`, so `right` must re-render it"
+    );
+
+    BUILT.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    dsl.set_signal_i32("left", 9);
+    let after_left = settle(&dsl, &mut tree);
+    assert!(
+        after_left.is_empty(),
+        "`left` is no longer read, so it must no longer re-render it — \
+         a mount-time dep set would still be subscribed: {after_left:?}"
+    );
+}

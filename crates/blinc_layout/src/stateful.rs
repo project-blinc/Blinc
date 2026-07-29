@@ -2699,6 +2699,37 @@ impl<S: StateTransitions> StateContext<S> {
         }
     }
 
+    /// Replace this stateful's dependency set and re-register it.
+    ///
+    /// [`Self::subscribe`] only ever adds, which is right when deps
+    /// accumulate as a body calls `use_signal`. Observed dependency
+    /// tracking needs the other shape: the set is whatever the render
+    /// just read, so a signal read last time and not this time must
+    /// STOP triggering a refresh. Adding cannot express that.
+    ///
+    /// Callers that mix this with `use_signal` would lose the signals
+    /// `use_signal` registered, so a stateful should use one or the
+    /// other.
+    pub fn set_deps(&self, deps: Vec<blinc_core::reactive::SignalId>) {
+        let mut inner = self.shared_state.lock().unwrap();
+        if inner.deps == deps {
+            // Nothing moved: skip the registry write entirely. A body
+            // that reads the same signals every render is the common
+            // case, and re-registering identical deps is pure churn.
+            return;
+        }
+        inner.deps = deps.clone();
+        let refresh_callback = inner.refresh_callback.clone();
+        drop(inner);
+
+        let Some(callback) = refresh_callback else {
+            tracing::warn!("set_deps: no refresh_callback available");
+            return;
+        };
+        let stateful_key = Arc::as_ptr(&self.shared_state) as u64;
+        register_stateful_deps(stateful_key, deps, Arc::new(move || callback()));
+    }
+
     /// Query a motion container by name within this stateful's scope
     ///
     /// The motion key is automatically derived from the stateful's full key,
