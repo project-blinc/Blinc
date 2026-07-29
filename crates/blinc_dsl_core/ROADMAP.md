@@ -315,19 +315,29 @@ whether one runs.
    holds either way, but a debug `HashMap` is ~20x slower than it should
    be and makes a perform look far cheaper against a signal read than it
    is.
-3. Then composition across the JIT boundary. Less of a risk than it
-   first looks: a handler need not BE the reactive boundary, it can
-   delegate to whatever `Stateful` is active, or to nothing when there
-   is none. `set_stateful_deps_notifier` is already that shape in the
-   other direction — a process-global hook the boundary registers and
-   compiled code reaches through without knowing `Stateful` exists. A
-   read handler accumulates the reads in its scope and hands the set
-   over on exit, which is what `check_stateful_deps` receives today,
-   except exact instead of inferred.
+3. **Answered: a handler can delegate to host state.** JIT'd code
+   performs two reads, a host-side handler records both ids and returns
+   their values, and the computation sums what it got back. That is the
+   shape a reactive read takes: the handler sees every read in its
+   scope, exactly, instead of the write side inferring it — which is
+   what `check_stateful_deps` does today.
 
-Whether continuations are needed at all, or only the handler-scope
-part, falls out of (1). The payoff if it holds: reactivity stops being
-bolted onto the language and starts being expressed in it.
+**Continuations are not needed for the read case**, which was the open
+risk after (1). A read handler is TAIL-RESUMPTIVE: `perform read(id)`
+lowers to a plain call that returns the value and lets execution
+continue, and that is "resume with a value" without capturing anything.
+So the read path sits entirely on the non-resumable lowering, the only
+one with evidence behind it. `Resume<T>` and `CaptureContinuation`
+would only come up for a handler that wants to run the body more than
+once or abandon it — neither of which a dependency-tracking read does.
+
+All three questions are now answered, and none of them is the reason
+not to do this. What remains is design, not feasibility: which
+operations the effect declares (read, write, batch), where the handler
+scope is installed relative to a `with` region or a `Stateful`, and
+what happens to a read performed with no handler installed. The payoff
+if it holds: reactivity stops being bolted onto the language and starts
+being expressed in it.
 
 
 **Module system.** Export lists, a manifest, and a watcher story that
