@@ -283,15 +283,26 @@ effect analysis, handler resolution and emission, and stop at the IR.
 So the runtime behaviour of a perform/handle round-trip is, as far as
 the test suite goes, unverified.
 
-That reorders the spike. Before asking what a handler costs, ask
-whether one runs:
+That reordered the spike: before asking what a handler costs, ask
+whether one runs.
 
-1. Build an HIR function that performs an operation under a handler,
-   JIT it, call it, assert the returned value. The existing
-   `create_simple_effect` / `create_simple_handler` helpers in
-   `effect_compilation_tests.rs` give the IR shape; what is missing is
-   `compile_function` + `get_function_ptr` + a transmuted call, the
-   pattern `cranelift_backend_tests.rs` already uses.
+1. **Answered: it runs.** `effect_execution_tests.rs` JITs a module and
+   calls it, and a `perform` dispatches to its handler and returns the
+   handler's value. Two things came out of writing it. Tier 1 lowers a
+   perform to a direct call to `<Handler>$<op>`, so the handler BODY has
+   to exist as an ordinary function under that mangled name — the
+   `HirEffectHandler` entry declares the dispatch, it does not supply
+   the code. And even a purely static handler needs the effect-runtime
+   symbols registered, because regional dispatch lowers the site to
+   `select(lookup_op(..) != 0, dyn, static)`; without them
+   `finalize_definitions` panics on the unresolved relocation rather
+   than failing the compile, which reads as a Cranelift crash rather
+   than a missing host dependency.
+
+   What is NOT proven: resumable handlers (Tier 3 pads the call with a
+   `Resume<T>` sentinel) and `CaptureContinuation`, which the backend
+   logs as unimplemented. So the non-resumable, non-capturing path is
+   the only one with evidence behind it.
 2. Then cost: time that call against the same function with the
    operation inlined, at a call count that matters for a signal read.
    A handler per read is only viable if the overhead is small against a
