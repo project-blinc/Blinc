@@ -160,3 +160,36 @@ fn an_unknown_receiver_is_left_untouched() {
     )
     .expect("still parses; the call is simply not expanded");
 }
+
+/// The closure body needs no braces for a single expression. The
+/// grammar has a bare single-statement lambda form, and the expansion
+/// treats a one-expression body the same either way.
+#[test]
+fn the_closure_body_needs_no_braces() {
+    assert_eq!(
+        count_of(
+            r#"fn Tag(l: string): View { Div(class="t") { Text(l) } }
+               view { let tags = ["a", "b"] Div(class="p") { tags.map(|t| Tag(t)) } }"#,
+            "map_bare.blinc",
+        ),
+        6,
+        "identical to the braced spelling"
+    );
+}
+
+/// Braced and bare produce the same tree, so neither spelling is a
+/// different code path in disguise.
+#[test]
+fn braced_and_bare_closures_agree() {
+    let bare = count_of(
+        r#"fn Tag(l: string): View { Div(class="t") { Text(l) } }
+           view { let tags = ["a", "b"] Div(class="p") { tags.map(|t| Tag(t)) } }"#,
+        "map_agree_bare.blinc",
+    );
+    let braced = count_of(
+        r#"fn Tag(l: string): View { Div(class="t") { Text(l) } }
+           view { let tags = ["a", "b"] Div(class="p") { tags.map(|t| { Tag(t) }) } }"#,
+        "map_agree_braced.blinc",
+    );
+    assert_eq!(bare, braced, "the two spellings must agree");
+}

@@ -130,6 +130,16 @@ component Playground {
             FeedbackWidgets()
             MediaWidgets()
 
+            // List rendering: the list binds in the view body, and
+            // `map` puts one child per element in the widget body. The
+            // row is a `: View` function, so its body is a scope that
+            // can hold a binding -- a widget body cannot, being a
+            // children list rather than a statement list.
+            cn.Label("map: one child per element, via a `: View` fn")
+            Div(class = "row") {
+                tags.map(|t| Tag(t))
+            }
+
             cn.Label("progress: value = pct (in-place)")
             Div(class = "row") {
                 cn.Progress(value = Play.pct, size = "medium")
@@ -168,7 +178,7 @@ component Playground {
                 cn.Checkbox(checked = Play.busy, label = "busy")
             }
 
-        cn.Label("button: label AND disabled both bound (deps rebuild)")
+            cn.Label("button: label AND disabled both bound (deps rebuild)")
             Div(class = "row") {
                 cn.Button(label = Play.caption, disabled = Play.busy)
             }
@@ -176,17 +186,6 @@ component Playground {
             // Content, so it takes the deps() rebuild path -- same as
             // the button label above and for the same reason. Sharing
             // the signal means Busy moves both at once.
-
-            // List rendering: the list binds in the view body, and
-            // `map` puts one child per element in the widget body. The
-            // row is a `: View` function, so its body is a scope that
-            // can hold a binding -- a widget body cannot, being a
-            // children list rather than a statement list.
-            cn.Label("map: one child per element, via a `: View` fn")
-            Div(class = "row") {
-                tags.map(|t| { Tag(t) })
-            }
-
             cn.Label("kbd: content bound (deps rebuild)")
             Div(class = "row") {
                 cn.Kbd(text = Play.caption)
