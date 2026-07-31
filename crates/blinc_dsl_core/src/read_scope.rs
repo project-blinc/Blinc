@@ -42,6 +42,7 @@ thread_local! {
 static OPENED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 /// Total scopes opened since process start.
+#[cfg(test)]
 pub(crate) fn opened_count() -> usize {
     OPENED.load(std::sync::atomic::Ordering::Relaxed)
 }

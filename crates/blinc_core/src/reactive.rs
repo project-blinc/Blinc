@@ -1213,7 +1213,7 @@ impl<T: Clone + Send + 'static> State<T> {
     }
 
     /// Build a `State<T>` that subscribes to `source` but reads through
-    /// `read`. See [`State::read_adapter`].
+    /// `read`, via the private `read_adapter` field.
     pub fn mapped(
         source: SignalId,
         read: Arc<dyn Fn() -> Option<T> + Send + Sync>,
@@ -1481,7 +1481,7 @@ impl<T: Clone + Send + 'static> Computed<T> {
     }
 
     /// Build a `Computed<T>` that subscribes to `source` but reads
-    /// through `read`. See [`Computed::read_adapter`].
+    /// through `read`, via the private `read_adapter` field.
     pub fn mapped(
         source: DerivedId,
         read: Arc<dyn Fn() -> Option<T> + Send + Sync>,

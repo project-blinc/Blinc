@@ -75,7 +75,7 @@ fn an_incremental_reload_updates_both_the_box_and_the_glyphs() {
     };
 
     write_part("Another");
-    let a = BlincDsl::reload_project(&entry, &dir, |d| blinc_cn_dsl::register_all(d)).unwrap();
+    let a = BlincDsl::reload_project(&entry, &dir, blinc_cn_dsl::register_all).unwrap();
     let host = div().w(600.0).h(200.0).child_box(a.view_widget());
     let mut tree = RenderTree::from_element(&host);
     tree.compute_layout(600.0, 200.0);
@@ -83,7 +83,7 @@ fn an_incremental_reload_updates_both_the_box_and_the_glyphs() {
 
     // Same edit the user makes: extend the literal, save, reload.
     write_part("Another content");
-    let b = BlincDsl::reload_project(&entry, &dir, |d| blinc_cn_dsl::register_all(d)).unwrap();
+    let b = BlincDsl::reload_project(&entry, &dir, blinc_cn_dsl::register_all).unwrap();
     let host2 = div().w(600.0).h(200.0).child_box(b.view_widget());
     let result = tree.incremental_update(&host2);
     tree.compute_layout(600.0, 200.0);

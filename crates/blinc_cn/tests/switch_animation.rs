@@ -53,8 +53,7 @@ fn thumb(checked: &State<bool>) -> blinc_layout::motion::SharedAnimatedValue {
 }
 
 fn thumb_position(checked: &State<bool>) -> f32 {
-    let v = thumb(checked).lock().unwrap().get();
-    v
+    thumb(checked).lock().unwrap().get()
 }
 
 #[test]

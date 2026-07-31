@@ -138,9 +138,9 @@ pub(crate) fn detect_and_strip_stateful_views(
     let mut signal_deps: Vec<String> = Vec::new();
     let mut fsms: Vec<String> = Vec::new();
     let mut ctx_value_reads: Vec<String> = Vec::new();
-    /// Components carrying `@stateful`, by name. The entry `view { }`
-    /// compiles to `render_view` and is not one — it has no call site
-    /// to scope to.
+    // Components carrying `@stateful`, by name. The entry `view { }`
+    // compiles to `render_view` and is not one — it has no call site
+    // to scope to.
     let mut decorated_components: Vec<String> = Vec::new();
 
     for decl in program.declarations.iter_mut() {

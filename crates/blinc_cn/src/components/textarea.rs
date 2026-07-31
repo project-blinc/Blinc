@@ -75,7 +75,7 @@ impl TextareaSize {
 struct TextareaConfig {
     state: SharedTextAreaState,
     /// Called after every edit with the new text.
-    on_change: Option<std::sync::Arc<dyn Fn(&str) + Send + Sync>>,
+    on_change: Option<blinc_layout::widgets::TextCallback>,
     size: TextareaSize,
     rows: Option<usize>,
     cols: Option<usize>,

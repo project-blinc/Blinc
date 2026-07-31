@@ -31,6 +31,16 @@
 //! }
 //! ```
 
+/// Handler for a widget that reports its text as it changes.
+///
+/// Shared by the text-bearing widgets so the `Arc<dyn Fn>` shape is
+/// spelled once.
+pub type TextCallback = std::sync::Arc<dyn Fn(&str) + Send + Sync>;
+
+/// Handler that inspects text and reports a verdict, as in a paste
+/// override deciding whether it consumed the input.
+pub type TextPredicate = std::sync::Arc<dyn Fn(&str) -> bool + Send + Sync>;
+
 pub mod blockquote;
 pub mod button;
 pub mod checkbox;

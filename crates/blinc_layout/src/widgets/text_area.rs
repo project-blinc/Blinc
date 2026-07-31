@@ -447,7 +447,7 @@ pub struct TextAreaState {
     /// Invoked with the new text after an edit. Runs OUTSIDE the state
     /// lock -- a callback that writes a signal can end up back in this
     /// widget, and holding the lock across that deadlocks.
-    pub(crate) on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
+    pub(crate) on_change: Option<crate::widgets::TextCallback>,
     /// Layout bounds storage - updated after layout to get actual rendered dimensions
     pub layout_bounds_storage: crate::renderer::LayoutBoundsStorage,
     /// CSS element ID for stylesheet matching (set via TextArea::id())
@@ -3182,12 +3182,12 @@ impl TextArea {
 /// Split from firing it on purpose: the callback commonly writes a
 /// signal, which can refresh a stateful that locks this same state, so
 /// it must run only after the lock is released.
-fn changed_text(d: &TextAreaState) -> Option<(Arc<dyn Fn(&str) + Send + Sync>, String)> {
+fn changed_text(d: &TextAreaState) -> Option<(crate::widgets::TextCallback, String)> {
     d.on_change.as_ref().map(|cb| (Arc::clone(cb), d.value()))
 }
 
 /// Fire what [`changed_text`] captured, now that the lock is gone.
-fn fire_on_change(edited: Option<(Arc<dyn Fn(&str) + Send + Sync>, String)>) {
+fn fire_on_change(edited: Option<(crate::widgets::TextCallback, String)>) {
     if let Some((cb, text)) = edited {
         cb(&text);
     }

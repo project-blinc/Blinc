@@ -74,11 +74,11 @@ fn a_reloaded_literal_measures_as_its_new_text() {
     };
 
     write_part("nested");
-    let a = BlincDsl::reload_project(&entry, &dir, |d| blinc_cn_dsl::register_all(d)).unwrap();
+    let a = BlincDsl::reload_project(&entry, &dir, blinc_cn_dsl::register_all).unwrap();
     let short = measure(&a);
 
     write_part("nested content that is much longer");
-    let b = BlincDsl::reload_project(&entry, &dir, |d| blinc_cn_dsl::register_all(d)).unwrap();
+    let b = BlincDsl::reload_project(&entry, &dir, blinc_cn_dsl::register_all).unwrap();
     let long = measure(&b);
 
     println!("RELOADED TEXT widths: {short} -> {long}");

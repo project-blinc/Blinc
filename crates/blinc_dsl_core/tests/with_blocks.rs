@@ -509,7 +509,7 @@ view {
     tree.process_pending_subtree_rebuilds();
     tree.compute_layout(400.0, 300.0);
 
-    let mut settle = |dsl: &BlincDsl, tree: &mut blinc_layout::renderer::RenderTree| {
+    let settle = |dsl: &BlincDsl, tree: &mut blinc_layout::renderer::RenderTree| {
         let _ = dsl;
         tree.process_pending_subtree_rebuilds();
         tree.compute_layout(400.0, 300.0);

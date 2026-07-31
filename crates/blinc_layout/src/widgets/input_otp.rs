@@ -29,8 +29,8 @@ pub struct InputOtpConfig {
     /// When `true`, non-digit characters are filtered out of both
     /// typed input and pasted text.
     pub numeric_only: bool,
-    on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
-    on_complete: Option<Arc<dyn Fn(&str) + Send + Sync>>,
+    on_change: Option<crate::widgets::TextCallback>,
+    on_complete: Option<crate::widgets::TextCallback>,
 }
 
 fn joined_value(slots: &[SharedTextInputData]) -> String {
@@ -85,8 +85,8 @@ pub fn wire_otp_slot(
     slots: &Arc<Vec<SharedTextInputData>>,
     numeric_only: bool,
     value: &State<String>,
-    on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
-    on_complete: Option<Arc<dyn Fn(&str) + Send + Sync>>,
+    on_change: Option<crate::widgets::TextCallback>,
+    on_complete: Option<crate::widgets::TextCallback>,
 ) -> TextInput {
     let length = slots.len();
     let mut field = field;
@@ -832,7 +832,7 @@ mod tests {
 
         let complete_calls = Arc::new(Mutex::new(Vec::new()));
         let spy = Arc::clone(&complete_calls);
-        let on_complete: Arc<dyn Fn(&str) + Send + Sync> =
+        let on_complete: crate::widgets::TextCallback =
             Arc::new(move |v: &str| spy.lock().unwrap().push(v.to_string()));
 
         let field = wire_otp_slot(
@@ -866,7 +866,7 @@ mod tests {
 
         let complete_calls = Arc::new(Mutex::new(Vec::new()));
         let spy = Arc::clone(&complete_calls);
-        let on_complete: Arc<dyn Fn(&str) + Send + Sync> =
+        let on_complete: crate::widgets::TextCallback =
             Arc::new(move |v: &str| spy.lock().unwrap().push(v.to_string()));
 
         let _field = wire_otp_slot(

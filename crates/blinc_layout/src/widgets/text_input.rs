@@ -1217,7 +1217,7 @@ pub struct TextInputData {
     /// Hook for composite inputs that need empty-Backspace behavior.
     pub(crate) on_backspace_empty_callback: Option<Arc<dyn Fn() + Send + Sync>>,
     /// Hook for composite inputs that need to own paste handling.
-    pub(crate) on_paste_override_callback: Option<Arc<dyn Fn(&str) -> bool + Send + Sync>>,
+    pub(crate) on_paste_override_callback: Option<crate::widgets::TextPredicate>,
     /// Hook for composite inputs that need to redirect focus before the
     /// field becomes active.
     pub(crate) on_focus_request_callback: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
@@ -3674,7 +3674,7 @@ mod tests {
         // Typing case: no flag, stays guarded.
         let is_focused = data.visual.is_focused();
         let force = std::mem::take(&mut data.force_sync_once);
-        assert!(!(force || !is_focused));
+        assert!(!force && is_focused);
 
         // Step case: flag forces the sync through despite focus, then
         // resets so it doesn't leak into the next one.

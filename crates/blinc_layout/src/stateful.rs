@@ -282,7 +282,7 @@ pub fn try_persisted_animated_value(key: &str) -> Option<SharedAnimatedValue> {
 /// Fetch (or create) an animated value that survives rebuilds, keyed by
 /// a caller-chosen string.
 ///
-/// [`StatefulContext::use_animated_value`] is the same store reached
+/// [`StateContext::use_animated_value`] is the same store reached
 /// through a stateful's own key. This is for widgets that build outside
 /// a stateful context and have their own stable identity -- a bound
 /// `State`'s signal id, say. Without it a widget rebuilt by a `deps()`
@@ -519,7 +519,8 @@ pub struct PendingSubtreeRebuild {
     pub new_child: crate::div::Div,
     /// What kind of rebuild this is. See [`RebuildKind`].
     pub kind: RebuildKind,
-    /// Build epoch `parent_id` was minted in. See [`BUILD_EPOCH`].
+    /// Build epoch `parent_id` was minted in, per the crate-private
+    /// `BUILD_EPOCH` counter.
     pub epoch: u64,
 }
 

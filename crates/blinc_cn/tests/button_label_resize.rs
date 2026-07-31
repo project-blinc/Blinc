@@ -164,7 +164,7 @@ fn successive_renders_track_the_current_label() {
 
     let registry = StdArc::new(ElementRegistry::default());
 
-    let mut width_for = |label: &str| {
+    let width_for = |label: &str| {
         let host = div().w(800.0).h(200.0).child(button(label));
         let mut tree = blinc_layout::renderer::RenderTree::from_element_with_registry(
             &host,

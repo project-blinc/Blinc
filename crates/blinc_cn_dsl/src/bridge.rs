@@ -1,11 +1,12 @@
 //! Helpers for threading DSL reactive props into cn builders.
 //!
-//! Numeric narrowing is *not* here: the layout setters are generic
-//! over [`blinc_layout::binding::IntoF32`], so a DSL `Reactive<f64>`
-//! reaches an f32-backed property directly and the cast happens once,
-//! inside the binding layer. Call sites need a `::<f64>` turbofish
-//! only because `Reactive<T>` satisfies both `IntoReactive<T>` and the
-//! blanket `IntoReactive<Reactive<T>>`, which leaves `N` ambiguous.
+//! Numeric narrowing is *not* here: the layout setters take
+//! [`blinc_layout::binding::IntoReactive<f32>`], which an f64 signal
+//! satisfies, so a DSL `Reactive<f64>` reaches an f32-backed property
+//! directly and the cast happens once, inside the binding layer. Call
+//! sites need a `::<f64>` turbofish only because `Reactive<T>` satisfies
+//! both `IntoReactive<T>` and the blanket `IntoReactive<Reactive<T>>`,
+//! which leaves `N` ambiguous.
 
 use blinc_dsl_core::Reactive;
 

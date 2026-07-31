@@ -189,6 +189,47 @@ impl<T: Clone + Send + Default + 'static> Default for Reactive<T> {
     }
 }
 
+// Bridge the DSL's `Reactive<T>` onto the cn/layout builder channel.
+//
+// The two enums carry the same three cases with different payloads:
+// this one holds a raw `Signal<T>`, the layout one holds a `State<T>`
+// (a signal plus the graph and dirty flag it belongs to). `Signal<T>`
+// and `Computed<T>` already have `IntoReactive` impls that supply the
+// process-global graph, so each arm just delegates.
+//
+// With this in place a `#[reactive] Reactive<T>` prop can be handed
+// straight to a cn builder that takes `impl IntoReactive<T>`, and the
+// binding stays live instead of snapshotting at build time.
+impl<T: Clone + Send + 'static> blinc_layout::binding::IntoReactive<T> for Reactive<T> {
+    fn into_reactive(self) -> blinc_layout::binding::Reactive<T> {
+        match self {
+            Self::Literal(v) => blinc_layout::binding::Reactive::Const(v),
+            Self::Signal(s) => s.into_reactive(),
+            Self::Computed(c) => c.into_reactive(),
+        }
+    }
+}
+
+// `Reactive<f64>` -> an f32-backed layout property.
+//
+// The DSL types every number as f64, its only float, while layout
+// stores f32. This mirrors the f64 source impls in
+// `blinc_layout::binding`: literals cast once, and signal / computed
+// shapes narrow per read so the binding stays live instead of freezing
+// at its build-time value.
+//
+// Without this a DSL wrapper would have to snapshot the value to hand
+// it to a cn builder, which silently drops reactivity.
+impl blinc_layout::binding::IntoReactive<f32> for Reactive<f64> {
+    fn into_reactive(self) -> blinc_layout::binding::Reactive<f32> {
+        match self {
+            Self::Literal(v) => blinc_layout::binding::Reactive::Const(v as f32),
+            Self::Signal(s) => s.into_reactive(),
+            Self::Computed(c) => c.into_reactive(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,47 +309,5 @@ mod tests {
         assert_eq!(sig.id(), s.id());
         // Sanity: the reconstructed handle can read the current value.
         assert_eq!(sig.try_get(), Some(123));
-    }
-}
-
-// Bridge the DSL's `Reactive<T>` onto the cn/layout builder channel.
-//
-// The two enums carry the same three cases with different payloads:
-// this one holds a raw `Signal<T>`, the layout one holds a `State<T>`
-// (a signal plus the graph and dirty flag it belongs to). `Signal<T>`
-// and `Computed<T>` already have `IntoReactive` impls that supply the
-// process-global graph, so each arm just delegates.
-//
-// With this in place a `#[reactive] Reactive<T>` prop can be handed
-// straight to a cn builder that takes `impl IntoReactive<T>`, and the
-// binding stays live instead of snapshotting at build time.
-impl<T: Clone + Send + 'static> blinc_layout::binding::IntoReactive<T> for Reactive<T> {
-    fn into_reactive(self) -> blinc_layout::binding::Reactive<T> {
-        match self {
-            Self::Literal(v) => blinc_layout::binding::Reactive::Const(v),
-            Self::Signal(s) => s.into_reactive(),
-            Self::Computed(c) => c.into_reactive(),
-        }
-    }
-}
-
-// `Reactive<f64>` -> an f32-backed layout property.
-//
-// The DSL types every number as f64, its only float, while layout
-// stores f32. This mirrors the f64 source impls in
-// `blinc_layout::binding`: literals cast once, and signal / computed
-// shapes narrow per read so the binding stays live instead of freezing
-// at its build-time value.
-//
-// Without this a DSL wrapper would have to snapshot the value to hand
-// it to a cn builder, which silently drops reactivity.
-impl blinc_layout::binding::IntoReactive<f32> for Reactive<f64> {
-    fn into_reactive(self) -> blinc_layout::binding::Reactive<f32> {
-        use blinc_layout::binding::IntoReactive as _;
-        match self {
-            Self::Literal(v) => blinc_layout::binding::Reactive::Const(v as f32),
-            Self::Signal(s) => s.into_reactive(),
-            Self::Computed(c) => c.into_reactive(),
-        }
     }
 }

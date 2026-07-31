@@ -2,7 +2,6 @@
 //! all resolve. A truncated "Could not resolve import:" warning with an
 //! empty path suggested only some were being picked up.
 use blinc_dsl_core::BlincDsl;
-use std::path::Path;
 
 #[test]
 fn three_import_lines_all_resolve() {
