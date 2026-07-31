@@ -22,6 +22,12 @@ fn init() {
         if !blinc_animation::is_scheduler_initialized() {
             let s = blinc_animation::AnimationScheduler::new();
             blinc_animation::set_global_scheduler(s.handle());
+            // Two globals hold a scheduler: this one, and
+            // `blinc_layout::render_state`'s, which a real app fills
+            // from `RenderState::new`. Widgets that animate read the
+            // second, so a test that sets only the first panics with a
+            // message naming neither.
+            blinc_layout::render_state::set_global_scheduler(s.handle());
             Box::leak(Box::new(s));
         }
         if !blinc_core::BlincContextState::is_initialized() {

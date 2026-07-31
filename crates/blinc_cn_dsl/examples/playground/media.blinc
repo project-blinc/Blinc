@@ -1,5 +1,7 @@
 // Avatars, cards, separators, and the static skeleton shape.
 
+signal details: bool = false
+
 component MediaWidgets {
     style {
         .group { gap: 16px; flex-direction: column }
@@ -55,6 +57,16 @@ component MediaWidgets {
                 cn.Label("row four")
                 cn.Label("row five")
                 cn.Label("row six")
+            }
+
+            // Driven by a signal rather than an internal toggle, so
+            // any control that writes `details` folds the section —
+            // here the switch, but a button or an FSM action would do.
+            cn.Label("collapsible: folded by a bound signal")
+            cn.Switch(checked = details, label = "details")
+            cn.Collapsible(open = details) {
+                cn.Label("hidden until the switch is on")
+                cn.Label("and folds away when it is off")
             }
 
             cn.Label("separator + static skeleton")

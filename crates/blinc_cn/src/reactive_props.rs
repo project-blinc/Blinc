@@ -144,3 +144,86 @@ where
     use blinc_layout::text::text;
     reactive_node(src, move |s| Box::new(style(text(s))))
 }
+
+// =====================================================================
+// Binding animated values to a bound bool
+// =====================================================================
+
+/// Signals already bound, so N widgets sharing one signal register one
+/// effect rather than N. Keyed by raw `SignalId` plus a per-widget
+/// discriminator, since two DIFFERENT widget kinds on the same signal
+/// each need their own targets.
+static BOUND: std::sync::Mutex<Option<std::collections::HashSet<(u64, u64)>>> =
+    std::sync::Mutex::new(None);
+
+/// One animated value and where it should sit when the bound bool is
+/// true or false.
+pub struct BoolTarget {
+    pub anim: blinc_layout::motion::SharedAnimatedValue,
+    pub on: f32,
+    pub off: f32,
+}
+
+impl BoolTarget {
+    /// The common case: 0 when false, `on` when true.
+    pub fn to(anim: &blinc_layout::motion::SharedAnimatedValue, on: f32) -> Self {
+        Self {
+            anim: anim.clone(),
+            on,
+            off: 0.0,
+        }
+    }
+}
+
+/// Drive animated values from a bound `bool`, so a widget follows a
+/// signal written anywhere rather than only its own toggle.
+///
+/// A widget that samples its state once at construction animates only
+/// when something calls its own `set_*` method. Bound to a signal that
+/// a switch, a button or an FSM action writes, it changes the signal
+/// and stays put — which looks like the binding is ignored. Every
+/// animated widget taking a `State<bool>` needs this, so it lives here
+/// rather than being written per widget.
+///
+/// `kind` distinguishes widget types sharing a signal: a switch and a
+/// collapsible bound to the same bool each want their own targets, but
+/// two switches want one registration between them. Pass a constant per
+/// widget kind.
+///
+/// The read inside the effect is what subscribes it; the graph tracks
+/// reads, so it re-fires on every write to that signal.
+pub fn bind_bool_targets(
+    kind: u64,
+    state: &blinc_core::reactive::State<bool>,
+    targets: Vec<BoolTarget>,
+) {
+    let signal = state.signal();
+    {
+        let mut guard = BOUND.lock().unwrap_or_else(|e| e.into_inner());
+        let seen = guard.get_or_insert_with(std::collections::HashSet::new);
+        if !seen.insert((signal.id().to_raw(), kind)) {
+            return;
+        }
+    }
+
+    blinc_core::reactive::effect(move |graph| {
+        // Read through the PASSED graph, not `State::get`. The first
+        // run happens inside `create_effect` with the global graph
+        // mutex already held, so the global path deadlocks on a
+        // non-reentrant lock. The argument exists for this and tracks
+        // the read the same way.
+        let on = graph.get(signal).unwrap_or(false);
+        for t in &targets {
+            t.anim
+                .lock()
+                .unwrap()
+                .set_target(if on { t.on } else { t.off });
+        }
+    });
+}
+
+/// Widget-kind discriminators for [`bind_bool_targets`].
+pub mod bool_binding {
+    pub const SWITCH: u64 = 1;
+    pub const COLLAPSIBLE: u64 = 2;
+}

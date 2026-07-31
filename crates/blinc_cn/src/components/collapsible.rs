@@ -120,6 +120,11 @@ impl CollapsibleBuilder {
     /// Create a new collapsible builder with open state
     ///
     /// Uses global animation scheduler - no context needed.
+    /// `#[track_caller]` so `InstanceKey` is minted against the CALLER,
+    /// not this line. Without it every collapsible in a program shares
+    /// one key, since `InstanceKey::new` would see this function body
+    /// as the location.
+    #[track_caller]
     pub fn new(is_open: &State<bool>) -> Self {
         Self::with_key(InstanceKey::new("collapsible"), is_open)
     }
@@ -146,6 +151,15 @@ impl CollapsibleBuilder {
             initial_opacity,
             spring_config,
         )));
+
+        crate::reactive_props::bind_bool_targets(
+            crate::reactive_props::bool_binding::COLLAPSIBLE,
+            is_open,
+            vec![
+                crate::reactive_props::BoolTarget::to(&scale_anim, 1.0),
+                crate::reactive_props::BoolTarget::to(&opacity_anim, 1.0),
+            ],
+        );
 
         Self {
             is_open: is_open.clone(),
@@ -472,6 +486,7 @@ impl ElementBuilder for CollapsibleTrigger {
 ///             .child(text("This content can be hidden"))
 ///     })
 /// ```
+#[track_caller]
 pub fn collapsible(is_open: &State<bool>) -> CollapsibleBuilder {
     CollapsibleBuilder::new(is_open)
 }

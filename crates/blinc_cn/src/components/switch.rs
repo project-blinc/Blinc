@@ -367,56 +367,30 @@ struct SwitchConfig {
 /// `Stateful` refreshes.
 static RETARGETED: Mutex<Option<std::collections::HashSet<u64>>> = Mutex::new(None);
 
-/// Aim the springs at the state whenever the bound signal is written.
+/// Move the thumb and colour springs whenever the bound state changes.
 ///
-/// The thumb and track are live spring bindings, so the switch moves
-/// with no rebuild at all — but only if something retargets them. The
-/// click handler does. A write from anywhere else did not: another
-/// control bound to the same signal, or an FSM transition, left the
-/// switch sitting still while every other bound widget followed. Unlike
-/// `cn::checkbox`, the switch has no `deps()` subscription that would
-/// rebuild it, and it does not need one — retargeting is enough, and
-/// keeps the travel animated rather than snapping.
-///
-/// The read inside the effect is what subscribes it: the reactive graph
-/// tracks reads, so this re-fires on every write to that signal.
+/// Thin wrapper over the shared binding primitive: every animated
+/// widget taking a `State<bool>` needs this, so the mechanism lives in
+/// `reactive_props` and each widget names its own targets.
 ///
 /// `thumb_travel` comes from whichever switch registered first. Two
 /// switches of DIFFERENT sizes bound to one signal would share the
 /// larger's travel — but they already share a spring, which is keyed on
 /// the signal alone, so this adds no case that was not already wrong.
 fn retarget_on_write(
-    anim_key: u64,
     on_state: &State<bool>,
     thumb_anim: &SharedAnimatedValue,
     color_anim: &SharedAnimatedValue,
     thumb_travel: f32,
 ) {
-    {
-        let mut guard = RETARGETED.lock().unwrap_or_else(|e| e.into_inner());
-        let seen = guard.get_or_insert_with(std::collections::HashSet::new);
-        if !seen.insert(anim_key) {
-            return;
-        }
-    }
-
-    let signal = on_state.signal();
-    let thumb = thumb_anim.clone();
-    let color = color_anim.clone();
-    blinc_core::reactive::effect(move |graph| {
-        // Read through the PASSED graph, not `State::get`. The effect's
-        // first run happens inside `create_effect` with the global graph
-        // mutex already held, so a read through the global path
-        // deadlocks on a non-reentrant lock. The `&ReactiveGraph`
-        // argument exists for exactly this, and tracks the read the
-        // same way.
-        let on = graph.get(signal).unwrap_or(false);
-        thumb
-            .lock()
-            .unwrap()
-            .set_target(if on { thumb_travel } else { 0.0 });
-        color.lock().unwrap().set_target(if on { 1.0 } else { 0.0 });
-    });
+    crate::reactive_props::bind_bool_targets(
+        crate::reactive_props::bool_binding::SWITCH,
+        on_state,
+        vec![
+            crate::reactive_props::BoolTarget::to(thumb_anim, thumb_travel),
+            crate::reactive_props::BoolTarget::to(color_anim, 1.0),
+        ],
+    );
 }
 
 impl SwitchConfig {
@@ -453,7 +427,7 @@ impl SwitchConfig {
             initial_color_t,
             spring_config,
         );
-        retarget_on_write(anim_key, &on_state, &thumb_anim, &color_anim, thumb_travel);
+        retarget_on_write(&on_state, &thumb_anim, &color_anim, thumb_travel);
 
         Self {
             on_state,
