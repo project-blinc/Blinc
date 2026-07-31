@@ -1668,6 +1668,26 @@ impl SchedulerHandle {
         result
     }
 
+    /// Read a timeline without waking the scheduler.
+    ///
+    /// The `&mut` sibling has to assume the closure re-armed the
+    /// timeline, so it wakes on every successful access. Routing a pure
+    /// read through it makes the read itself a redraw signal: the paint
+    /// walk samples a spinner's rotation, the wake callback sets
+    /// `frame_dirty`, and the next frame is guaranteed — a loop that no
+    /// visibility gate or FPS cap can break, because it is re-armed by
+    /// the act of drawing. Queries that only observe state take this
+    /// path; anything that seeks, starts, or mutates keeps the waking
+    /// one.
+    pub fn with_timeline_read<F, R>(&self, id: TimelineId, f: F) -> Option<R>
+    where
+        F: FnOnce(&Timeline) -> R,
+    {
+        self.inner
+            .upgrade()
+            .and_then(|inner| inner.lock().unwrap().timelines.get(id).map(f))
+    }
+
     /// Check if the scheduler is still alive
     pub fn is_alive(&self) -> bool {
         self.inner.strong_count() > 0
@@ -2503,7 +2523,7 @@ impl AnimatedTimeline {
     pub fn get(&self, entry_id: crate::timeline::TimelineEntryId) -> Option<f32> {
         if let Some(id) = self.timeline_id {
             self.handle
-                .with_timeline(id, |timeline| timeline.value(entry_id))
+                .with_timeline_read(id, |timeline| timeline.value(entry_id))
                 .flatten()
         } else {
             None
@@ -2523,7 +2543,7 @@ impl AnimatedTimeline {
     pub fn progress(&self) -> f32 {
         if let Some(id) = self.timeline_id {
             self.handle
-                .with_timeline(id, |timeline| timeline.progress())
+                .with_timeline_read(id, |timeline| timeline.progress())
                 .unwrap_or(0.0)
         } else {
             0.0
@@ -2534,7 +2554,7 @@ impl AnimatedTimeline {
     pub fn entry_progress(&self, entry_id: crate::timeline::TimelineEntryId) -> Option<f32> {
         if let Some(id) = self.timeline_id {
             self.handle
-                .with_timeline(id, |timeline| timeline.entry_progress(entry_id))
+                .with_timeline_read(id, |timeline| timeline.entry_progress(entry_id))
                 .flatten()
         } else {
             None
@@ -2548,7 +2568,7 @@ impl AnimatedTimeline {
     pub fn has_entries(&self) -> bool {
         if let Some(id) = self.timeline_id {
             self.handle
-                .with_timeline(id, |timeline| timeline.entry_count() > 0)
+                .with_timeline_read(id, |timeline| timeline.entry_count() > 0)
                 .unwrap_or(false)
         } else {
             false
@@ -2561,7 +2581,7 @@ impl AnimatedTimeline {
     pub fn entry_ids(&self) -> Vec<crate::timeline::TimelineEntryId> {
         if let Some(id) = self.timeline_id {
             self.handle
-                .with_timeline(id, |timeline| timeline.entry_ids())
+                .with_timeline_read(id, |timeline| timeline.entry_ids())
                 .unwrap_or_default()
         } else {
             Vec::new()
