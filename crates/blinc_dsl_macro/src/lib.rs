@@ -536,7 +536,18 @@ pub fn extern_widget(attr: TokenStream, item: TokenStream) -> TokenStream {
                 ::blinc_dsl_core::__extern_widget_internals::decode_children(#ffi_arg_ident)
             };
         });
-        struct_inits.push(quote! { #field_ident });
+        // `From::from` rather than a direct move so the field may be
+        // `Vec<Box<dyn ElementBuilder>>` OR `RefCell<Vec<…>>`. The
+        // identity `From<T> for T` covers the first, `From<T> for
+        // RefCell<T>` the second.
+        //
+        // A widget with internal structure needs the second: it has to
+        // hand the body to the cn builder so the body ends up INSIDE
+        // the widget, and `ElementBuilder::build`/`children_builders`
+        // both take `&self`, which cannot move out of a plain Vec.
+        // Without that the body becomes the wrapper's own layout
+        // children and the widget's structure is flattened away.
+        struct_inits.push(quote! { #field_ident: ::core::convert::From::from(#field_ident) });
         prop_defs.push(quote! {
             ::blinc_dsl_core::__extern_widget_internals::PropDef {
                 name: ::std::sync::Arc::from("children"),
