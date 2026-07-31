@@ -202,7 +202,7 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             name: "__blinc_map_children__",
             param_types: &[
                 Type::Primitive(PrimitiveType::I64),
-                Type::Primitive(PrimitiveType::I64),
+                Type::Primitive(PrimitiveType::String),
                 Type::Primitive(PrimitiveType::I64),
             ],
             return_type: Type::Primitive(PrimitiveType::Unit),

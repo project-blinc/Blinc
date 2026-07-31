@@ -441,7 +441,7 @@ pub(crate) fn lower_children_arrays_to_blocks(
             ));
 
             // for each child: __push_child__(__list, child)
-            for child_expr in child_exprs {
+            for mut child_expr in child_exprs {
                 // `__cf_children__(Block)` is the control-flow carrier planted
                 // by `collect_children_into` (`if` / `while` in a widget
                 // body). Splice its statements into the prelude with the
@@ -461,6 +461,23 @@ pub(crate) fn lower_children_arrays_to_blocks(
                         prelude.extend(carrier.statements);
                     }
                     continue;
+                }
+                // `__blinc_map_children__(0, "name", closure)` was
+                // planted by `expand_map_calls` for a list whose
+                // elements are only known at runtime. The leading `0`
+                // is a placeholder for this widget's child list, which
+                // did not exist when the call was emitted; patch it now.
+                //
+                // It falls through to the side-effect branch below
+                // afterwards, which is correct: the extern pushes onto
+                // the list itself rather than returning a handle.
+                if let TypedExpression::Call(map_call) = &mut child_expr.node
+                    && let TypedExpression::Variable(callee) = &map_call.callee.node
+                    && callee.resolve_global().as_deref() == Some("__blinc_map_children__")
+                    && let Some(first) = map_call.positional_args.first_mut()
+                {
+                    first.node = TypedExpression::Variable(list_ident);
+                    first.ty = i64_ty.clone();
                 }
                 // Not every statement in a widget body produces a child.
                 // `sig.set(v)` and friends are side effects: emit them as

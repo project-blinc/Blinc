@@ -182,11 +182,19 @@ fn try_expand(
     }
 
     // Receiver: a literal, or a name bound to one earlier in scope.
+    //
+    // A name this pass cannot see is assumed to be a list SIGNAL and
+    // lowered to the runtime walk instead. That is the only other thing
+    // it can be -- a list has no other spelling -- and getting it wrong
+    // costs a warning at render rather than a dropped child.
     let elements: Vec<TypedNode<TypedExpression>> = match &object.node {
         TypedExpression::Array(items) => items.clone(),
         TypedExpression::Variable(name) => {
             let key = name.resolve_global()?;
-            arrays.get(&key as &str)?.clone()
+            match arrays.get(&key as &str) {
+                Some(found) => found.clone(),
+                None => return Some(vec![runtime_map_call(expr, &key, call)?]),
+            }
         }
         _ => return None,
     };
@@ -299,4 +307,48 @@ fn substitute_in_expr(
         TypedExpression::Field(f) => substitute_in_expr(&mut f.object, param, value),
         _ => {}
     }
+}
+
+/// `<name>.map(|x| body)` where `<name>` is not a compile-time list:
+/// `__blinc_map_children__(0, "<name>", |x| body)`.
+///
+/// The leading `0` is a placeholder for the child list, which does not
+/// exist yet -- `lower_children_arrays_to_blocks` mints it later and
+/// patches this argument. Emitting the call now keeps the lambda in a
+/// position the rest of the pipeline lowers normally; deferring it
+/// until the list ident exists would mean rewriting a lambda body after
+/// component lowering has already skipped it.
+fn runtime_map_call(
+    expr: &TypedNode<TypedExpression>,
+    name: &str,
+    call: &zyntax_typed_ast::TypedCall,
+) -> Option<TypedNode<TypedExpression>> {
+    let span = expr.span;
+    let arg = |node, ty| TypedNode::new(node, ty, span);
+    Some(arg(
+        TypedExpression::Call(zyntax_typed_ast::TypedCall {
+            callee: Box::new(arg(
+                TypedExpression::Variable(zyntax_typed_ast::InternedString::new_global(
+                    "__blinc_map_children__",
+                )),
+                Type::Any,
+            )),
+            positional_args: vec![
+                arg(
+                    TypedExpression::Literal(zyntax_typed_ast::TypedLiteral::Integer(0)),
+                    Type::Primitive(PrimitiveType::I64),
+                ),
+                arg(
+                    TypedExpression::Literal(zyntax_typed_ast::TypedLiteral::String(
+                        zyntax_typed_ast::InternedString::new_global(name),
+                    )),
+                    Type::Primitive(PrimitiveType::String),
+                ),
+                call.positional_args.first()?.clone(),
+            ],
+            named_args: vec![],
+            type_args: vec![],
+        }),
+        Type::Primitive(PrimitiveType::Unit),
+    ))
 }

@@ -523,8 +523,7 @@ pub(crate) extern "C" fn blinc_string_concat(a: *const i32, b: *const i32) -> *c
 /// `extern "C" fn(*const i32) -> i64` taking an allocated string and
 /// returning a widget handle, which is what the DSL's one-parameter
 /// lambda lowers to.
-pub(crate) extern "C" fn blinc_dsl_map_children(list: i64, signal_id: i64, closure_ptr: i64) {
-    crate::read_scope::record(signal_id as u64);
+pub(crate) extern "C" fn blinc_dsl_map_children(list: i64, name_ptr: *const i32, closure_ptr: i64) {
     if list == 0 || closure_ptr == 0 {
         tracing::warn!(
             list,
@@ -533,9 +532,21 @@ pub(crate) extern "C" fn blinc_dsl_map_children(list: i64, signal_id: i64, closu
         );
         return;
     }
-    let Some(items) = blinc_runtime::signal::get_string_list_by_id(signal_id as u64) else {
-        // Undeclared or minted as another type: no children rather than
-        // a fabricated one.
+    let Some(name) = decode_signal_name(name_ptr) else {
+        tracing::warn!("__blinc_map_children__ could not decode its signal name");
+        return;
+    };
+    // Record the read against the signal's id so a `with` region
+    // containing this map re-renders when the list is set. Looked up by
+    // name because the call site has the name: ids are baked later in
+    // the pipeline than this call is emitted.
+    if let Some((id_raw, _)) = blinc_runtime::signal::lookup(name) {
+        crate::read_scope::record(id_raw);
+    }
+    let Some(items) = blinc_runtime::signal::get_string_list(name) else {
+        // Undeclared, or minted as another type: no children rather
+        // than a fabricated one.
+        tracing::warn!(name, "map over a name that is not a list signal");
         return;
     };
     type MapFn = extern "C" fn(*const i32) -> i64;

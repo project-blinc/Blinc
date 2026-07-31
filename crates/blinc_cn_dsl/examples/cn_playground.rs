@@ -57,6 +57,15 @@ fn main() -> Result<()> {
     };
     let dsl = std::cell::RefCell::new(build(&root).expect("compile"));
 
+    // Seed the `feed` list signal the playground maps over. This is the
+    // half a `const` list cannot do: the elements come from the host, so
+    // in a real app they would be fetched, filtered or computed rather
+    // than written here.
+    blinc_runtime::signal::set_string_list(
+        "feed",
+        vec!["from rust".into(), "set at runtime".into()],
+    );
+
     // Edit any `.blinc` file under `examples/playground` and the window
     // follows, with signal values intact -- the registry is keyed by
     // name and a declared default only applies on first mint.

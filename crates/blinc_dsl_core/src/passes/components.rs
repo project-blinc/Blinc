@@ -301,6 +301,22 @@ pub(crate) fn lower_component_calls(program: &mut TypedProgram, filename: &str) 
                 }
             }
             TypedExpression::Block(b) => rewrite_block(b, filename, view_fns),
+            // Descend into a lambda body. Most closures in the DSL are
+            // lifted elsewhere before they reach here -- a `with`
+            // region becomes a synthetic component precisely because
+            // this pass used to skip lambdas -- but a `map` closure
+            // stays a closure by design: it is handed to the runtime as
+            // a fn ptr and called per element. Without this, a widget
+            // call inside it keeps its `__component_call__` marker and
+            // reaches the JIT unlowered.
+            TypedExpression::Lambda(l) => match &mut l.body {
+                zyntax_typed_ast::typed_ast::TypedLambdaBody::Expression(inner) => {
+                    rewrite_expr(inner, filename, view_fns)
+                }
+                zyntax_typed_ast::typed_ast::TypedLambdaBody::Block(b) => {
+                    rewrite_block(b, filename, view_fns)
+                }
+            },
             TypedExpression::If(if_expr) => {
                 rewrite_expr(&mut if_expr.condition, filename, view_fns);
                 rewrite_expr(&mut if_expr.then_branch, filename, view_fns);

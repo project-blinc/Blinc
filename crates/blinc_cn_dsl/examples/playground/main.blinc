@@ -109,6 +109,18 @@ fsm Play {
 //
 // `: View` is optional -- a body ending in a widget call is inferred to
 // produce one -- but stating it documents the intent at the call site.
+// Two list sources, side by side below.
+//
+// A `const` list is compile-time: `expand_map_calls` turns each element
+// into its own child, so this costs nothing at render and is fixed for
+// the life of the program.
+const tags = ["alpha", "beta", "gamma"]
+
+// A `list` signal is the opposite: contents live in the signal, the
+// host walks them at render, and setting it re-renders whatever read
+// it. Populated from Rust in `cn_playground.rs`; empty until then.
+signal feed: list
+
 fn Tag(label: string): View {
     cn.Badge(label, variant = "secondary")
 }
@@ -127,7 +139,6 @@ component Playground {
     }
 
     view {
-        let tags = ["alpha", "beta", "gamma"]
         Div(class = "page") {
             FormWidgets()
             FeedbackWidgets()
@@ -141,6 +152,15 @@ component Playground {
             cn.Label("map: one child per element, via a `: View` fn")
             Div(class = "row") {
                 tags.map(|t| Tag(t))
+            }
+
+            // The other list source: a `list` signal, set from Rust.
+            // `tags` above is a compile-time literal and expands into
+            // three children at parse time; this one is walked at render
+            // by the host, so whatever the app last set is what shows.
+            cn.Label("map: over a `list` signal set from Rust")
+            Div(class = "row") {
+                feed.map(|f| Tag(f))
             }
 
             cn.Label("progress: value = pct (in-place)")
