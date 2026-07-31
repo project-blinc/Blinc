@@ -143,13 +143,24 @@ fn a_view_fn_can_be_the_entire_view() {
 /// The annotation is optional. An unannotated function whose body ends
 /// in a widget call is inferred to produce one.
 ///
-/// The inference is Blinc's, not Zyntax's. Zyntax has a Hindley-Milner
-/// engine with unification variables, but it is driven by `TypeChecker`
-/// and the compile path Blinc uses runs no type-checking phase --
-/// `compile_typed_program` goes straight to `LoweringContext::lower_
-/// program`. Lowering does notice a body that returns a value with no
-/// annotation and emits a warning for it, so the condition is
-/// recognised there; nothing acts on it.
+/// The inference is Blinc's, and it has to be, though not for the
+/// reason it first appears. Zyntax's `TypeChecker` DOES run on this
+/// program: `LoweringContext::lower_program` calls `run_type_checking`
+/// unless `SKIP_TYPE_CHECK` is set, and that runs `check_program` then
+/// `apply_inferred_types`.
+///
+/// What it cannot do is infer a return type the grammar has already
+/// decided. A missing annotation becomes `Type::Unit` at parse time, and
+/// `apply_inferred_types` propagates `Type::Any` resolutions, not `Unit`
+/// ones. Spelling it `Type::Any` in the grammar instead is not
+/// available -- the action language rejects it as an unknown variant --
+/// and `Type::Unresolved` is a pending NAME lookup rather than an
+/// inference variable.
+///
+/// ZynML hits the same wall and answers it by convention: its own
+/// unannotated `fn_def_generic` is `Type::Unit` too, and lowering emits
+/// W0002 to nudge the author into annotating. This inference is the
+/// Blinc-specific convenience on top of that.
 #[test]
 fn an_unannotated_widget_returning_fn_is_inferred() {
     assert_eq!(
