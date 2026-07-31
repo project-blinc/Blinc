@@ -27,7 +27,7 @@ blinc_layout = { path = "../blinc_layout", version = "0.5.1" }
 # without dragging in any backend. The substrate uses `Type` as
 # the canonical representation for prop types, signal types,
 # event payloads, etc.
-zyntax_typed_ast = { git = "https://github.com/darmie/zyntax", rev = "3039f8698730e57a8a0c1295ac1bb9f796bfc3c7" }
+zyntax_typed_ast = { git = "https://github.com/darmie/zyntax", rev = "48428c6ef04c735b98316d82b5a494b0479e03d8" }
 
 # Zyntax embedding SDK — used as a thin substrate dep for
 # `ZyntaxValue` (the runtime value enum). Both JIT and AOT-
@@ -53,7 +53,7 @@ zyntax_typed_ast = { git = "https://github.com/darmie/zyntax", rev = "3039f86987
 # - `ZyntaxRuntime` / `TieredRuntime` (JIT runtime entry points)
 # - `.zrtl` dynamic plugin loading
 # - LLVM codegen
-zyntax_embed = { git = "https://github.com/darmie/zyntax", rev = "3039f8698730e57a8a0c1295ac1bb9f796bfc3c7", default-features = false }
+zyntax_embed = { git = "https://github.com/darmie/zyntax", rev = "48428c6ef04c735b98316d82b5a494b0479e03d8", default-features = false }
 
 blinc_core = { path = "../blinc_core", version = "0.5.1" }
 blinc_animation = { path = "../blinc_animation", version = "0.5.1", optional = true }

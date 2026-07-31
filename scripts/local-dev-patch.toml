@@ -15,9 +15,10 @@
 # `scripts/check-no-local-patch.sh` guard will fail the build.
 
 # Zyntax — the DSL's grammar + JIT. Redirects to a sibling checkout at
-# `../zyntax` so DSL work builds against local zyntax fixes instead of the
-# git pin. Local zyntax is well ahead of `origin/main` and its HEAD is
-# unpushed, so a git rev can't point at it; a path patch is the only way.
+# `../zyntax` so DSL work builds against UNCOMMITTED local zyntax edits.
+# Only needed while those edits are in the working tree: once they are
+# pushed, bump the `rev` in blinc_dsl_core / blinc_runtime / blinc_cn_dsl
+# instead, which keeps CI and local builds on the same source.
 #
 # Keep Blinc source compatible with BOTH this and the git pin: construct
 # upstream structs with `..Default::default()` rather than naming every
