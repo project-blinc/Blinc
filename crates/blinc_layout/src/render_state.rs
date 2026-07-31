@@ -1335,6 +1335,18 @@ impl RenderState {
             .unwrap_or(false)
     }
 
+    /// Diagnostic: how many per-node render states exist. Walked every
+    /// frame by the redraw predicate, so unbounded growth here shows up
+    /// directly as rising idle CPU.
+    pub fn node_state_count(&self) -> usize {
+        self.node_states.len()
+    }
+
+    /// Diagnostic: how many stable-keyed motions exist. Same reasoning.
+    pub fn stable_motion_count(&self) -> usize {
+        self.stable_motions.len()
+    }
+
     /// Active motion animations on nodes that were actually PAINTED.
     ///
     /// The visibility-gated counterpart to [`Self::has_active_motions`].

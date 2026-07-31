@@ -37,7 +37,8 @@ fn main() -> Result<()> {
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
                 tracing_subscriber::EnvFilter::new(
                     "warn,blinc_runtime::fsm=debug,blinc_dsl_core=debug,blinc_cn_dsl=debug,\
-                     blinc_layout::renderer::animation=debug",
+                     blinc_layout::renderer::animation=debug,\
+                     blinc_layout::renderer::build=debug,blinc_layout::stateful=debug",
                 )
             }),
         )

@@ -569,6 +569,13 @@ impl RenderTree {
                     t_visual = self.has_active_visible_visual_animations(painted),
                     t_layout = self.has_active_layout_animations(),
                     t_flip = self.has_active_visible_flip_animations(painted),
+                    // Sizes of the collections this predicate walks every
+                    // frame. Monotonic growth here IS the leak: the cost
+                    // of the frame rises with the collection, which is
+                    // what CPU climbing 10 -> 15 -> 27% looks like.
+                    n_bindings = self.motion_bindings.len(),
+                    n_node_states = render_state.node_state_count(),
+                    n_stable_motions = render_state.stable_motion_count(),
                     t_css = self
                         .css_anim_store
                         .lock()
