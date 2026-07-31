@@ -48,6 +48,7 @@
 //! shape gets wired.
 
 pub mod alert;
+pub mod aspect_ratio;
 pub mod avatar;
 pub mod badge;
 pub mod breadcrumb;
@@ -71,6 +72,7 @@ pub mod textarea;
 pub(crate) mod color;
 
 pub use alert::CnAlert;
+pub use aspect_ratio::CnAspectRatio;
 pub use avatar::CnAvatar;
 pub use badge::CnBadge;
 pub use breadcrumb::CnBreadcrumb;
@@ -135,6 +137,7 @@ pub fn register_basics(dsl: &BlincDsl) -> BlincDslResult<()> {
     dsl.register_extern_widget::<CnScrollArea>()?;
     dsl.register_extern_widget::<CnSeparator>()?;
     dsl.register_extern_widget::<CnSpinner>()?;
+    dsl.register_extern_widget::<CnAspectRatio>()?;
     dsl.register_extern_widget::<CnCard>()?;
     dsl.register_extern_widget::<CnProgress>()?;
     dsl.register_extern_widget::<CnAvatar>()?;

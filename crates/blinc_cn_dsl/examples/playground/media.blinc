@@ -35,8 +35,20 @@ component MediaWidgets {
                 cn.Breadcrumb(items = ["Docs", "Guide"], separator = "/")
             }
 
+            // The box holds its ratio regardless of what the content
+            // measures — the skeleton inside is deliberately smaller.
+            cn.Label("aspect ratio: 16:9 and 1:1 at the same width")
+            Div(class = "row") {
+                cn.AspectRatio(preset = "widescreen", w = 200.0) {
+                    cn.Skeleton(w = 60.0, h = 20.0, rounded = 4.0)
+                }
+                cn.AspectRatio(preset = "square", w = 120.0) {
+                    cn.Skeleton(w = 40.0, h = 20.0, rounded = 4.0)
+                }
+            }
+
             cn.Label("scroll area: six rows in a 60px box")
-            cn.ScrollArea(direction = "vertical", scrollbar = "hover", h = 60.0, w = 240.0) {
+            cn.ScrollArea(direction = "vertical", scrollbar = "hover", h = 60.0, w = 100.0) {
                 cn.Label("row one")
                 cn.Label("row two")
                 cn.Label("row three")
