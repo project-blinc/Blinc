@@ -2,7 +2,33 @@
 
 use crate::*;
 
-/// Names of functions declared `: View`.
+/// Does this body end in a call that produces a widget?
+///
+/// Runs at two different stages, so it accepts both spellings: the
+/// `__component_call__` marker before component lowering, and the
+/// `<X>$view` symbol after it.
+fn ends_in_a_widget_call(body: &zyntax_typed_ast::typed_ast::TypedBlock) -> bool {
+    use zyntax_typed_ast::TypedExpression;
+    let Some(last) = body.statements.last() else {
+        return false;
+    };
+    let TypedStatement::Expression(expr) = &last.node else {
+        return false;
+    };
+    let TypedExpression::Call(call) = &expr.node else {
+        return false;
+    };
+    let TypedExpression::Variable(callee) = &call.callee.node else {
+        return false;
+    };
+    callee.resolve_global().is_some_and(|n| {
+        let n: &str = n.as_ref();
+        n == "__component_call__" || n.ends_with("$view") || n == "__blinc_with__"
+    })
+}
+
+/// Names of functions that produce a widget: declared `: View`, or
+/// unannotated with a body that ends in a widget call.
 ///
 /// Read from the return-type annotation, so it is available before
 /// `lower_view_to_value_returning` has promoted anything. Component-call
@@ -28,7 +54,14 @@ pub(crate) fn view_returning_fn_names(program: &TypedProgram) -> std::collection
                 .map(|s| s.to_string()),
             _ => None,
         };
-        if named.as_deref() == Some("View")
+        // Unannotated means `Type::Unit` -- the grammar commits to it
+        // rather than leaving anything for inference to resolve -- so a
+        // function that ends in a widget call is inferred to produce
+        // one. An explicit non-View annotation is left alone: only the
+        // absence of a choice is inferred, never a stated one.
+        let inferred = matches!(func.return_type, Type::Primitive(PrimitiveType::Unit))
+            && func.body.as_ref().is_some_and(|b| ends_in_a_widget_call(b));
+        if (named.as_deref() == Some("View") || inferred)
             && let Some(name) = func.name.resolve_global()
         {
             out.insert(name.to_string());
@@ -194,8 +227,14 @@ pub(crate) fn lower_view_to_value_returning(
             if already {
                 continue;
             }
+            // Unannotated (`Type::Unit`) functions are candidates too:
+            // `try_convert_trailing` only converts a body that actually
+            // ends in a widget call, so a plain helper is untouched.
+            // An explicit non-View annotation is never overridden.
+            let unannotated = matches!(func.return_type, Type::Primitive(PrimitiveType::Unit));
             if !is_view_name(func.name)
                 && !returns_view_marker(&func.return_type, &program.type_registry)
+                && !unannotated
             {
                 continue;
             }

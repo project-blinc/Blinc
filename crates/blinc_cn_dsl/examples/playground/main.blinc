@@ -106,6 +106,9 @@ fsm Play {
 // A view-returning function: one row of the mapped list. Its body is an
 // ordinary statement scope, which is what lets `map`'s closure do work
 // before naming a widget.
+//
+// `: View` is optional -- a body ending in a widget call is inferred to
+// produce one -- but stating it documents the intent at the call site.
 fn Tag(label: string): View {
     cn.Badge(label, variant = "secondary")
 }

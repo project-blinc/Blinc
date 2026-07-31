@@ -140,55 +140,57 @@ fn a_view_fn_can_be_the_entire_view() {
     );
 }
 
-/// The return type is the opt-in. A function without it is left alone,
-/// so helpers that build a widget for their own reasons keep whatever
-/// they return.
+/// The annotation is optional. An unannotated function whose body ends
+/// in a widget call is inferred to produce one.
+///
+/// The inference is Blinc's, not Zyntax's. Zyntax has a Hindley-Milner
+/// engine with unification variables, but it is driven by `TypeChecker`
+/// and the compile path Blinc uses runs no type-checking phase --
+/// `compile_typed_program` goes straight to `LoweringContext::lower_
+/// program`. Lowering does notice a body that returns a value with no
+/// annotation and emits a warning for it, so the condition is
+/// recognised there; nothing acts on it.
 #[test]
-fn without_the_view_return_type_nothing_is_promoted() {
+fn an_unannotated_widget_returning_fn_is_inferred() {
     assert_eq!(
         count_of(
             r#"fn myRow() { Div(class="r") { Text("x") } }
                view { Div(class="a") { myRow() } }"#,
-            "vr_optin.blinc",
-        ),
-        2,
-        "root + Div.a only — myRow is not a view fn"
-    );
-}
-
-/// A view fn may be capitalised. A capital-leading call parses as a
-/// component reference, so both the validator and the call-site
-/// lowering consult the set of `: View` functions: the validator so it
-/// is not rejected as undeclared, and the lowering so it is called by
-/// its own name rather than a `<Name>$view` symbol that was never
-/// defined.
-///
-/// Capitalised is the natural spelling for something that renders, so
-/// the alternative was a naming rule users had to learn.
-#[test]
-fn a_capitalised_view_fn_works() {
-    assert_eq!(
-        count_of(
-            r#"fn Row(): View { Div(class="r") { Text("x") } }
-               view { Div(class="a") { Row() } }"#,
-            "vr_caps.blinc",
+            "vr_infer.blinc",
         ),
         4,
-        "identical to the lower-case spelling"
+        "same as writing `: View`"
     );
 }
 
-/// Capitalised, with parameters, mapped over a list — the spelling the
-/// playground uses.
+/// Only the ABSENCE of an annotation is inferred, never a stated one. A
+/// function that declares it returns something else keeps that, so a
+/// helper which happens to end in a widget call is not silently
+/// rewritten into a view.
 #[test]
-fn a_capitalised_view_fn_maps_over_a_list() {
+fn an_explicit_non_view_return_type_is_not_overridden() {
     assert_eq!(
         count_of(
-            r#"fn Tag(label: string): View { Div(class="t") { Text(label) } }
-               view { let tags = ["a", "b"] Div(class="p") { tags.map(|t| { Tag(t) }) } }"#,
-            "vr_caps_map.blinc",
+            r#"fn myRow(): i32 { Div(class="r") { Text("x") } }
+               view { Div(class="a") { myRow() } }"#,
+            "vr_explicit.blinc",
         ),
-        6,
-        "root + Div.p + 2x(Div.t + Text)"
+        2,
+        "root + Div.a only — the declared i32 return is respected"
+    );
+}
+
+/// A function with no widget call at the end is left alone, so the
+/// inference cannot capture ordinary helpers.
+#[test]
+fn a_non_widget_fn_is_not_inferred_as_a_view() {
+    assert_eq!(
+        count_of(
+            r#"fn helper() { let x = 1 }
+               view { Div(class="a") { Text("x") } }"#,
+            "vr_helper.blinc",
+        ),
+        3,
+        "root + Div.a + Text; helper is untouched"
     );
 }
