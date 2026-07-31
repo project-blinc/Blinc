@@ -191,7 +191,7 @@ top_level_items = { item:top_level_item* }
 // `component_decl`. Falling through handles standalone struct-only
 // `component { fields }` decls, standalone `impl` blocks, and the
 // bare `view { ... }` quick-test shape.
-top_level_item = { import_stmt | style_decl | signal_decl_init | signal_decl | const_group | const_decl | struct_decl | component_folded | component_decl | fsm_decl | impl_block | fn_decl | bare_view_item }
+top_level_item = { import_stmt | style_decl | signal_decl_init | signal_decl | const_group | const_list_decl | const_decl | struct_decl | component_folded | component_decl | fsm_decl | impl_block | fn_decl | bare_view_item }
 
 // `style { ...CSS... }` — block-form CSS declaration. Author
 // writes raw CSS between the braces; balanced nested braces
@@ -318,16 +318,29 @@ signal_decl = { "signal" ~ name:identifier ~ ":" ~ ty:state_type }
 // is informational; no compile-time type-check yet (the registered
 // expression carries the literal's own type).
 const_decl = { "const" ~ name:identifier ~ ":" ~ ty:state_type ~ "=" ~ value:const_literal }
-  -> TypedDeclaration::Function {
-      name: intern("__blinc_const__"),
-      params: [],
-      return_type: ty,
-      body: Some(TypedBlock { statements: [
-          TypedStatement::Expression { expr:
-              TypedExpression::StringLiteral { value: name }
-          },
-          TypedStatement::Expression { expr: value },
-      ] }),
+  -> TypedDeclaration::Variable {
+      name: intern(name),
+      ty: ty,
+      initializer: value,
+  }
+
+// `const items = ["a", "b"]` — a module-scope list.
+//
+// No type annotation: `state_type` has no list spelling, and the
+// elements carry their own types. Kept separate from `const_decl`
+// rather than widening `const_literal`, because the two are consumed
+// differently — a scalar const is substituted at its reference sites by
+// `resolve_const_references`, while a list is consumed at compile time
+// by `expand_map_calls` and never reaches the JIT.
+//
+// That difference is deliberate. An array survives to runtime as a
+// `List<T>` whose indexing faults, so a list that escapes into a
+// non-`map` position should fail to resolve loudly rather than compile
+// into a segfault.
+const_list_decl = { "const" ~ name:identifier ~ "=" ~ value:array_literal }
+  -> TypedDeclaration::Variable {
+      name: intern(name),
+      initializer: value,
   }
 
 // Literals accepted on the RHS of `const`. PEG-ordered: `float`

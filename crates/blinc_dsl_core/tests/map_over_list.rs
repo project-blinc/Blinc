@@ -67,21 +67,36 @@ fn a_list_binds_in_the_view_body() {
     .expect("a list binds in the view body");
 }
 
-/// There is no module-scope list yet. `const_decl` requires `: type` and
-/// takes only `const_literal` (float / integer / bool / string), and
-/// there is no top-level `let`, so a list shared across components has
-/// nowhere to live above the view.
+/// A list can live at module scope, above every view in the file.
 #[test]
-fn there_is_no_module_scope_list() {
-    assert!(
-        parses(
-            r#"const items = ["a", "b"]
-               view { Div(class="a") { Text("x") } }"#,
-            "map_const.blinc",
-        )
-        .is_err(),
-        "if this starts passing, const grew array support and the map \
-         idiom should move its list up there"
+fn a_const_list_binds_at_module_scope() {
+    assert_eq!(
+        count_of(
+            r#"const scoped_items = ["a", "b"]
+               fn ScopedTag(l: string): View { Div(class="t") { Text(l) } }
+               view { Div(class="p") { scoped_items.map(|t| ScopedTag(t)) } }"#,
+            "map_const_scope.blinc",
+        ),
+        6,
+        "root + Div.p + 2x(Div.t + Text)"
+    );
+}
+
+/// The same list serves more than one view, which is the reason to
+/// hoist it out of a view body in the first place.
+#[test]
+fn a_module_scope_list_is_shared_across_views() {
+    assert_eq!(
+        count_of(
+            r#"const shared_items = ["a", "b"]
+               fn SharedTag(l: string): View { Div(class="t") { Text(l) } }
+               component SharedA { view { Div(class="a") { shared_items.map(|t| SharedTag(t)) } } }
+               component SharedB { view { Div(class="b") { shared_items.map(|t| SharedTag(t)) } } }
+               view { Div(class="p") { SharedA() SharedB() } }"#,
+            "map_const_shared.blinc",
+        ),
+        12,
+        "root + Div.p + each component's Div + 2x(Div.t + Text) per component"
     );
 }
 

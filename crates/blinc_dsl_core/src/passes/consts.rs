@@ -5,7 +5,7 @@ use crate::*;
 /// Rewrite `<sig>.get()` / `<sig>.set(v)` / `<sig> = v` into `__signal_<get|set>_<T>` calls.
 /// One entry in the per-compile signal map: the declared type plus the
 /// Walk every `__blinc_const_group__` decl, hoist each contained
-/// member into its own `__blinc_const__` marker, substitute the
+/// member into its own `const` Variable declaration, substitute the
 /// member's zero-based index in place of any `__iota__` placeholder
 /// in the value expression, then strip the group decl. After this
 /// pass runs, `resolve_const_references` sees a flat sequence of
@@ -24,7 +24,7 @@ use crate::*;
 /// substituted; explicit literals pass through unchanged.
 ///
 /// MUST run before [`resolve_const_references`] so the hoisted
-/// `__blinc_const__` markers are visible when references are
+/// the hoisted Variable declarations are visible when references are
 /// resolved.
 pub(crate) fn expand_const_groups(program: &mut TypedProgram) {
     use zyntax_typed_ast::TypedNode;
@@ -102,53 +102,22 @@ pub(crate) fn expand_const_groups(program: &mut TypedProgram) {
             let mut value = call.positional_args[1].clone();
             substitute_iota(&mut value, index as i128);
 
-            // Synthesise a `__blinc_const__` marker decl with the
-            // same body shape `resolve_const_references` expects.
-            // `needless_update` fires against the git pin, where every field
-            // is already named; the rest-default is there for local zyntax
-            // checkouts that have added fields. Intentional on both.
-            #[allow(clippy::needless_update)]
-            let const_func = zyntax_typed_ast::typed_ast::TypedFunction {
-                name: zyntax_typed_ast::InternedString::new_global("__blinc_const__"),
-                annotations: Vec::new(),
-                effects: Vec::new(),
-                with_handlers: Vec::new(),
-                type_params: Vec::new(),
-                params: Vec::new(),
-                return_type: Type::Any,
-                body: Some(zyntax_typed_ast::typed_ast::TypedBlock {
-                    statements: vec![
-                        TypedNode::new(
-                            TypedStatement::Expression(Box::new(TypedNode::new(
-                                TypedExpression::Literal(TypedLiteral::String(*name)),
-                                Type::Primitive(PrimitiveType::String),
-                                decl.span,
-                            ))),
-                            Type::Primitive(PrimitiveType::Unit),
-                            decl.span,
-                        ),
-                        TypedNode::new(
-                            TypedStatement::Expression(Box::new(value)),
-                            Type::Primitive(PrimitiveType::Unit),
-                            decl.span,
-                        ),
-                    ],
-                    span: decl.span,
-                }),
+            // A const is a Variable declaration, not a function. The
+            // typed AST has `TypedDeclaration::Variable` for exactly
+            // this, and it carries the name, the initializer and a
+            // visibility that a future `export` can set -- none of which
+            // a marker function models without the reader knowing the
+            // encoding.
+            let const_var = zyntax_typed_ast::typed_ast::TypedVariable {
+                name: *name,
+                ty: Type::Any,
+                mutability: zyntax_typed_ast::Mutability::Immutable,
+                initializer: Some(Box::new(value)),
                 visibility: zyntax_typed_ast::type_registry::Visibility::Private,
-                is_async: false,
-                is_pure: false,
-                is_external: false,
-                calling_convention: Default::default(),
-                link_name: None,
-                // Rest-default so fields added upstream (e.g. `is_fiber`)
-                // don't break this literal. Keeps the source compiling
-                // against both the git pin and a local zyntax checkout.
-                ..Default::default()
             };
             let _ = name_arc;
             hoisted.push(TypedNode::new(
-                TypedDeclaration::Function(const_func),
+                TypedDeclaration::Variable(const_var),
                 Type::Primitive(PrimitiveType::Unit),
                 decl.span,
             ));
@@ -181,38 +150,29 @@ pub(crate) fn resolve_const_references(program: &mut TypedProgram) {
     use zyntax_typed_ast::TypedNode;
     use zyntax_typed_ast::typed_ast::{TypedDeclaration, TypedExpression, TypedLiteral};
 
-    // Step 1: collect every `__blinc_const__` decl into a name→value
+    // Step 1: collect every scalar `const` Variable decl into a name→value
     // map, then strip those decls from the program. The marker
     // function's body is `[Expression(StringLiteral(name)),
     // Expression(<value-literal>)]` — see `const_decl` in
     // `grammar/blinc.zyn`.
     let mut consts: HashMap<String, TypedNode<TypedExpression>> = HashMap::new();
     program.declarations.retain(|decl| {
-        let TypedDeclaration::Function(func) = &decl.node else {
+        let TypedDeclaration::Variable(var) = &decl.node else {
             return true;
         };
-        if func.name.resolve_global().as_deref() != Some("__blinc_const__") {
+        let Some(init) = var.initializer.as_ref() else {
+            return true;
+        };
+        // A list const is left in place: `expand_map_calls` consumes it,
+        // and substituting an array into reference sites would put a
+        // runtime `List<T>` where indexing faults.
+        if matches!(init.node, TypedExpression::Array(_)) {
             return true;
         }
-        let Some(body) = &func.body else {
-            return false;
+        let Some(name_str) = var.name.resolve_global() else {
+            return true;
         };
-        if body.statements.len() < 2 {
-            return false;
-        }
-        let TypedStatement::Expression(name_expr) = &body.statements[0].node else {
-            return false;
-        };
-        let TypedExpression::Literal(TypedLiteral::String(name)) = &name_expr.node else {
-            return false;
-        };
-        let Some(name_str) = name.resolve_global() else {
-            return false;
-        };
-        let TypedStatement::Expression(value_expr) = &body.statements[1].node else {
-            return false;
-        };
-        consts.insert(name_str.to_string(), (**value_expr).clone());
+        consts.insert(name_str.to_string(), (**init).clone());
         false
     });
 

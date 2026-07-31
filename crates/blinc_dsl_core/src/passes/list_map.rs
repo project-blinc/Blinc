@@ -22,23 +22,57 @@ use zyntax_typed_ast::{TypedDeclaration, TypedExpression, TypedNode, TypedStatem
 type ArrayBindings = std::collections::HashMap<String, Vec<TypedNode<TypedExpression>>>;
 
 pub(crate) fn expand_map_calls(program: &mut TypedProgram) {
+    // Module-scope lists first: `const items = [...]` parses to a
+    // `__blinc_const_list__` marker carrying its name and elements, and
+    // is in scope for every body in the file.
+    let module_lists = collect_module_lists(program);
+
     for decl in program.declarations.iter_mut() {
         match &mut decl.node {
             TypedDeclaration::Function(func) => {
                 if let Some(body) = func.body.as_mut() {
-                    expand_block(body, &mut ArrayBindings::new());
+                    expand_block(body, &mut module_lists.clone());
                 }
             }
             TypedDeclaration::Impl(imp) => {
                 for method in imp.methods.iter_mut() {
                     if let Some(body) = method.body.as_mut() {
-                        expand_block(body, &mut ArrayBindings::new());
+                        expand_block(body, &mut module_lists.clone());
                     }
                 }
             }
             _ => {}
         }
     }
+}
+
+/// Read `const <name> = [...]` markers into bindings, and drop the
+/// marker declarations.
+///
+/// They are compile-time only: nothing downstream knows the shape, and
+/// an array that reached the JIT would be a `List<T>` whose indexing
+/// faults, so leaving one behind would trade a clean "unresolved name"
+/// for a segfault.
+fn collect_module_lists(program: &mut TypedProgram) -> ArrayBindings {
+    use zyntax_typed_ast::TypedDeclaration;
+    let mut out = ArrayBindings::new();
+    program.declarations.retain(|decl| {
+        let TypedDeclaration::Variable(var) = &decl.node else {
+            return true;
+        };
+        let Some(init) = var.initializer.as_ref() else {
+            return true;
+        };
+        let TypedExpression::Array(elements) = &init.node else {
+            return true;
+        };
+        let Some(name) = var.name.resolve_global() else {
+            return true;
+        };
+        out.insert(name.to_string(), elements.clone());
+        false
+    });
+    out
 }
 
 /// Rewrite a statement list in place, splicing each map expansion where

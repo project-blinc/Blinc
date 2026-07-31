@@ -582,7 +582,7 @@ impl BlincDsl {
         self.register_with_regions(&with_regions);
         lower_match_blocks(&mut typed_program);
         // MUST run before `resolve_const_references` so const-group
-        // members are hoisted into individual `__blinc_const__`
+        // members are hoisted into individual `const` Variable
         // markers that the const-resolution pass can see.
         expand_const_groups(&mut typed_program);
         // MUST run before `resolve_signal_calls` and the FSM passes so
