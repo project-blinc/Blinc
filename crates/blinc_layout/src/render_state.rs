@@ -1335,6 +1335,31 @@ impl RenderState {
             .unwrap_or(false)
     }
 
+    /// Active motion animations on nodes that were actually PAINTED.
+    ///
+    /// The visibility-gated counterpart to [`Self::has_active_motions`].
+    /// The redraw predicate gates its other terms on the painted set —
+    /// visual animations, flip animations and CSS animations all have
+    /// `_visible` variants — but motions did not, so an enter/exit
+    /// animation on a node scrolled far out of view kept the redraw
+    /// chain alive at full frame rate with nothing on screen moving.
+    ///
+    /// Stable-keyed motions (overlays) are NOT filtered: they are
+    /// positioned outside the scrolled tree and their node ids are not
+    /// in the painted set even when the overlay is plainly visible.
+    pub fn has_active_motions_visible(
+        &self,
+        painted: &std::collections::HashSet<LayoutNodeId>,
+    ) -> bool {
+        self.node_states
+            .iter()
+            .any(|(id, s)| painted.contains(id) && s.has_active_motion())
+            || self
+                .stable_motions
+                .values()
+                .any(|m| !matches!(m.state, MotionState::Visible | MotionState::Removed))
+    }
+
     /// Check if any nodes have active motion animations
     pub fn has_active_motions(&self) -> bool {
         self.node_states.values().any(|s| s.has_active_motion())
@@ -2138,6 +2163,54 @@ mod tests {
             state
                 .get_stable_motion_values("motion:navmenu_test")
                 .is_some()
+        );
+    }
+}
+
+#[cfg(test)]
+mod motion_visibility_tests {
+    use super::*;
+    use crate::element::MotionAnimation;
+    use std::collections::HashSet;
+
+    /// An enter/exit motion on a node that was not painted must not
+    /// report as active.
+    ///
+    /// This is what keeps a scrolled-away animation from pinning the
+    /// redraw chain: the windowed runner ORs this into the signal that
+    /// decides whether to request another frame, so an ungated `true`
+    /// here means vsync forever with nothing on screen moving.
+    #[test]
+    fn an_unpainted_motion_does_not_report_active() {
+        let scheduler = std::sync::Arc::new(std::sync::Mutex::new(
+            blinc_animation::AnimationScheduler::new(),
+        ));
+        let mut rs = RenderState::new(scheduler);
+        let node = LayoutNodeId::default();
+        // A delay is enough to put the motion in `Waiting`, which counts
+        // as active. `default()` lands straight on `Visible`, which does
+        // not — and would make every assertion below vacuous.
+        let config = MotionAnimation {
+            enter_delay_ms: 5_000,
+            ..Default::default()
+        };
+        rs.start_enter_motion(node, config);
+
+        assert!(
+            rs.has_active_motions(),
+            "the ungated view still sees it — that is what it is for"
+        );
+
+        let nothing_painted: HashSet<LayoutNodeId> = HashSet::new();
+        assert!(
+            !rs.has_active_motions_visible(&nothing_painted),
+            "but a node that was never painted must not keep frames coming"
+        );
+
+        let painted: HashSet<LayoutNodeId> = [node].into_iter().collect();
+        assert!(
+            rs.has_active_motions_visible(&painted),
+            "and a painted one still must, or entry animations would not run"
         );
     }
 }

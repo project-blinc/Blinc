@@ -586,7 +586,11 @@ impl RenderTree {
         {
             return true;
         }
-        if render_state.has_active_motions() {
+        // Painted-gated, matching every other term in THIS predicate.
+        // The ungated form kept the redraw chain alive for enter/exit
+        // motions on nodes scrolled far out of view — nothing on screen
+        // moving, frames at vsync regardless.
+        if render_state.has_active_motions_visible(painted) {
             return true;
         }
         if self.has_active_visible_visual_animations(painted) {
