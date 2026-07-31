@@ -118,7 +118,9 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
             Type::Primitive(PrimitiveType::F64) => blinc_runtime::signal::SignalType::F64,
             Type::Primitive(PrimitiveType::String) => blinc_runtime::signal::SignalType::String,
             Type::Primitive(PrimitiveType::Bool) => blinc_runtime::signal::SignalType::Bool,
-            other if is_string_list_type(other) => blinc_runtime::signal::SignalType::StringList,
+            other if is_string_list_type(other, &program.type_registry) => {
+                blinc_runtime::signal::SignalType::StringList
+            }
             _ => continue,
         };
         let Some(name_str) = func.name.resolve_global() else {
@@ -136,6 +138,17 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
         // recompile of unchanged source leaves the live value alone.
         let is_new = blinc_runtime::signal::lookup(name_str.as_ref()).is_none();
         let id_raw_u64 = blinc_runtime::signal::mint_or_get(name_str.as_ref(), sig_ty);
+
+        // `signal feed = ["a", "b"]` — seed the elements on first mint.
+        // Only on first mint, matching the scalar rule: the registry
+        // outlives a compile, so re-applying would throw away whatever
+        // the program has since written.
+        if sig_ty == blinc_runtime::signal::SignalType::StringList {
+            if is_new && let Some(elements) = declared_list_elements(func) {
+                blinc_runtime::signal::set_string_list(name_str.as_ref(), elements);
+            }
+            continue;
+        }
         if let Some(lit) = crate::passes::signal_initial_literal(func) {
             // Recorded unconditionally, BEFORE the `is_new` test: `||`
             // short-circuits, so folding this into the condition meant
@@ -625,14 +638,54 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
     });
 }
 
-/// Is this the `list` spelling from `state_type_list`?
+/// Is this the `List` spelling from `state_type_list`?
 ///
-/// It reaches here as `Named` or `Unresolved` depending on whether a
-/// type of that name is registered, and none is, so both are accepted.
-pub(crate) fn is_string_list_type(ty: &Type) -> bool {
-    match ty {
-        Type::Unresolved(n) => n.resolve_global().as_deref() == Some("BlincStringList"),
-        Type::Named { .. } => false,
-        _ => false,
-    }
+/// The grammar emits it by name, and by the time this pass runs the
+/// name has usually been interned into the type registry, so it arrives
+/// as `Named { id }` rather than `Unresolved`. Both are accepted: the
+/// id form is resolved back through the registry.
+pub(crate) fn is_string_list_type(
+    ty: &Type,
+    registry: &zyntax_typed_ast::type_registry::TypeRegistry,
+) -> bool {
+    let name = match ty {
+        Type::Unresolved(n) => n.resolve_global().map(|s| s.to_string()),
+        Type::Named { id, .. } => registry
+            .get_type_by_id(*id)
+            .and_then(|t| t.name.resolve_global())
+            .map(|s| s.to_string()),
+        _ => None,
+    };
+    name.as_deref() == Some("BlincStringList")
+}
+
+/// Elements of a `signal x = ["a", "b"]` declaration.
+///
+/// Only string literals are taken: a list holds strings today, and a
+/// non-string element is dropped rather than coerced, so a mistake
+/// shows up as a missing row instead of a surprising one.
+fn declared_list_elements(
+    func: &zyntax_typed_ast::typed_ast::TypedFunction,
+) -> Option<Vec<String>> {
+    use zyntax_typed_ast::typed_ast::{TypedExpression, TypedLiteral};
+    let [stmt] = func.body.as_ref()?.statements.as_slice() else {
+        return None;
+    };
+    let TypedStatement::Expression(e) = &stmt.node else {
+        return None;
+    };
+    let TypedExpression::Array(elements) = &e.node else {
+        return None;
+    };
+    Some(
+        elements
+            .iter()
+            .filter_map(|el| match &el.node {
+                TypedExpression::Literal(TypedLiteral::String(s)) => {
+                    s.resolve_global().map(|s| s.to_string())
+                }
+                _ => None,
+            })
+            .collect(),
+    )
 }

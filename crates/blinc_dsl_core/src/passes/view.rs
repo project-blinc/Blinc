@@ -8,12 +8,35 @@ pub(crate) fn is_signal_decl(func: &zyntax_typed_ast::typed_ast::TypedFunction) 
     func.is_external
         && func.params.is_empty()
         && func.link_name.is_none()
-        && matches!(func.return_type, Type::Primitive(_))
+        // A list signal's type is Named (`List`) rather than a
+        // primitive -- deliberately, since a list has no inline
+        // representation. Nothing else emits an external, param-less,
+        // link-name-less decl with a named return type.
+        && matches!(
+            func.return_type,
+            Type::Primitive(_) | Type::Named { .. } | Type::Unresolved(_)
+        )
         // A body is allowed: `signal x: T = <literal>` parks its initial
-        // value there. Everything else about the shape still has to
-        // match, and the signals pass strips these decls before
-        // lowering, so the body never reaches Cranelift.
-        && func.body.as_ref().is_none_or(is_single_literal_body)
+        // value there, and `signal x = [...]` parks its elements.
+        // Everything else about the shape still has to match, and the
+        // signals pass strips these decls before lowering, so the body
+        // never reaches Cranelift.
+        && func
+            .body
+            .as_ref()
+            .is_none_or(|b| is_single_literal_body(b) || is_single_array_body(b))
+}
+
+/// The one-statement array body a `signal x = [...]` carries.
+fn is_single_array_body(body: &zyntax_typed_ast::typed_ast::TypedBlock) -> bool {
+    use zyntax_typed_ast::typed_ast::TypedExpression;
+    matches!(
+        body.statements.as_slice(),
+        [stmt] if matches!(
+            &stmt.node,
+            TypedStatement::Expression(e) if matches!(&e.node, TypedExpression::Array(_))
+        )
+    )
 }
 
 /// The one-statement literal body a `signal … = <literal>` carries.

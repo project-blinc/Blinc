@@ -38,7 +38,7 @@ const ROW: &str = r#"fn Row(l: string): View { Div(class="r") { Text(l) } }"#;
 fn init_can_seed_a_list_the_view_maps_over() {
     let dsl = compile(
         &format!(
-            r#"signal w_seed: list
+            r#"signal w_seed: List
                {ROW}
                component C {{
                  init {{ w_seed.set(["one", "two"]) }}
@@ -65,7 +65,7 @@ fn set_replaces_the_previous_contents() {
     blinc_runtime::signal::set_string_list("w_replace", vec!["stale".into()]);
     let dsl = compile(
         &format!(
-            r#"signal w_replace: list
+            r#"signal w_replace: List
                {ROW}
                component C {{
                  init {{ w_replace.set(["fresh"]) }}
@@ -89,7 +89,7 @@ fn push_appends_one_element() {
     blinc_runtime::signal::set_string_list("w_push", vec!["first".into()]);
     let dsl = compile(
         &format!(
-            r#"signal w_push: list
+            r#"signal w_push: List
                {ROW}
                component C {{
                  init {{ w_push.push("second") }}
@@ -112,7 +112,7 @@ fn clear_empties_the_list() {
     blinc_runtime::signal::set_string_list("w_clear", vec!["a".into(), "b".into()]);
     let dsl = compile(
         &format!(
-            r#"signal w_clear: list
+            r#"signal w_clear: List
                {ROW}
                component C {{
                  init {{ w_clear.clear() }}
@@ -171,7 +171,7 @@ fn component_clause_order_is_free() {
     for (i, component) in orders.iter().enumerate() {
         blinc_runtime::signal::set_string_list("w_order", Vec::new());
         let dsl = compile(
-            &format!("signal w_order: list\n{component}\nview {{ C() }}"),
+            &format!("signal w_order: List\n{component}\nview {{ C() }}"),
             &format!("w_order_{i}.blinc"),
         );
         let _ = node_count(&dsl);
@@ -181,4 +181,48 @@ fn component_clause_order_is_free() {
             "ordering {i} must behave identically"
         );
     }
+}
+
+/// `signal feed = [...]` — the annotation is optional when an
+/// initializer says what it is, and the elements are the starting
+/// contents.
+#[test]
+fn a_list_signal_can_be_declared_by_its_initializer() {
+    let dsl = compile(
+        &format!(
+            r#"signal w_inferred = ["a", "b"]
+               {ROW}
+               view {{ Div(class="p") {{ w_inferred.map(|t| Row(t)) }} }}"#
+        ),
+        "w_inferred.blinc",
+    );
+    assert_eq!(node_count(&dsl), 6, "root + Div.p + 2x(Div.r + Text)");
+    assert_eq!(
+        blinc_runtime::signal::get_string_list("w_inferred"),
+        Some(vec!["a".to_string(), "b".to_string()])
+    );
+}
+
+/// `signal feed = []` — an empty list still declares the signal, so a
+/// view can map over it before anything has been written.
+#[test]
+fn an_empty_initializer_declares_the_signal() {
+    let dsl = compile(
+        &format!(
+            r#"signal w_empty_init = []
+               {ROW}
+               component C {{
+                 init {{ w_empty_init.push("later") }}
+                 view {{ Div(class="p") {{ w_empty_init.map(|t| Row(t)) }} }}
+               }}
+               view {{ C() }}"#
+        ),
+        "w_empty_init.blinc",
+    );
+    let _ = node_count(&dsl);
+    assert_eq!(
+        blinc_runtime::signal::get_string_list("w_empty_init"),
+        Some(vec!["later".to_string()]),
+        "declared empty, then written by init"
+    );
 }

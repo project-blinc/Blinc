@@ -198,7 +198,7 @@ top_level_items = { item:top_level_item* }
 // `component_decl`. Falling through handles standalone struct-only
 // `component { fields }` decls, standalone `impl` blocks, and the
 // bare `view { ... }` quick-test shape.
-top_level_item = { import_stmt | style_decl | signal_decl_init | signal_decl | const_group | const_list_decl | const_decl | struct_decl | component_folded | component_decl | fsm_decl | impl_block | fn_decl | bare_view_item }
+top_level_item = { import_stmt | style_decl | signal_decl_list_init | signal_decl_init | signal_decl | const_group | const_list_decl | const_decl | struct_decl | component_folded | component_decl | fsm_decl | impl_block | fn_decl | bare_view_item }
 
 // `style { ...CSS... }` — block-form CSS declaration. Author
 // writes raw CSS between the braces; balanced nested braces
@@ -290,6 +290,25 @@ import_path_chars = @{ (!("\"" | "\\") ~ ANY)* }
 // Ordered before the bare form: PEG takes the first matching arm, and
 // the bare rule would otherwise match the prefix and leave `= …`
 // unconsumed.
+// `signal feed = ["a", "b"]` / `signal feed = []` — a list signal whose
+// type is evident from its initializer, so the annotation is optional.
+// `: List` is still accepted, and is the only spelling for a list that
+// starts empty AND wants the annotation for documentation.
+//
+// Ordered before `signal_decl_init` because that rule requires a `:`
+// and would not match anyway; leading with this one keeps the intent
+// obvious at the alternation site.
+signal_decl_list_init = { "signal" ~ name:identifier ~ "=" ~ value:array_literal }
+  -> TypedDeclaration::Function {
+      name: intern(name),
+      params: [],
+      return_type: Type::Named { name: intern("BlincStringList"), type_args: [] },
+      body: Some(TypedBlock { statements: [
+          TypedStatement::Expression { expr: value },
+      ] }),
+      is_external: true,
+  }
+
 signal_decl_init = { "signal" ~ name:identifier ~ ":" ~ ty:state_type ~ "=" ~ value:const_literal }
   -> TypedDeclaration::Function {
       name: intern(name),
@@ -879,15 +898,18 @@ plain_field = { name:identifier ~ ":" ~ ty:state_type }
 // right tag. Extend as the prototype grows.
 state_type = { state_type_bool | state_type_f64 | state_type_i32 | state_type_string | state_type_list | state_type_named }
 
-// `list` — a list of strings, the source for `map` over data that
-// changes at runtime. Spelled without an element type because that is
-// the only element type a list signal holds today; widening it means a
-// real generic spelling rather than a second keyword.
+// `List` — a list of strings, the source for `map` over data that
+// changes while the app runs. Capitalised to match `View`: named types
+// lead with a capital, primitives (`i32`, `f64`, `string`, `bool`) do
+// not.
 //
-// Named rather than primitive: no JIT-side representation exists for a
-// list, so nothing may try to read one inline. The value is reached
-// only host-side, by the extern that turns it into children.
-state_type_list = { "list" }
+// No element type in the spelling because strings are the only element
+// a list signal holds today; widening it means a real generic form
+// (`List<T>`) rather than a second keyword.
+//
+// Named rather than primitive on purpose: a list has no inline
+// representation, so nothing should try to read one as a value.
+state_type_list = { "List" }
   -> Type::Named { name: intern("BlincStringList"), type_args: [] }
 
 state_type_bool = { "bool" }

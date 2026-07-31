@@ -1,7 +1,7 @@
 //! `map` over a list that changes while the app runs.
 //!
 //! The literal case is expanded at compile time (see
-//! `map_over_list.rs`). This is the other source: a `signal x: list`
+//! `map_over_list.rs`). This is the other source: a `signal x: List`
 //! whose contents are set from Rust, walked host-side by
 //! `__blinc_map_children__` because a `Vec<String>` has no
 //! representation the JIT can hold.
@@ -38,7 +38,7 @@ fn a_list_signal_renders_one_child_per_element() {
     blinc_runtime::signal::set_string_list("rt_items", vec!["a".into(), "b".into(), "c".into()]);
     let dsl = compile(
         &format!(
-            r#"signal rt_items: list
+            r#"signal rt_items: List
                {ROW}
                view {{ Div(class="p") {{ rt_items.map(|t| Row(t)) }} }}"#
         ),
@@ -54,7 +54,7 @@ fn setting_the_list_changes_the_next_render() {
     blinc_runtime::signal::set_string_list("rt_grow", vec!["only".into()]);
     let dsl = compile(
         &format!(
-            r#"signal rt_grow: list
+            r#"signal rt_grow: List
                {ROW}
                view {{ Div(class="p") {{ rt_grow.map(|t| Row(t)) }} }}"#
         ),
@@ -75,7 +75,7 @@ fn an_empty_list_signal_renders_no_children() {
     blinc_runtime::signal::set_string_list("rt_empty", Vec::new());
     let dsl = compile(
         &format!(
-            r#"signal rt_empty: list
+            r#"signal rt_empty: List
                {ROW}
                view {{ Div(class="p") {{ rt_empty.map(|t| Row(t)) }} }}"#
         ),
@@ -90,7 +90,7 @@ fn runtime_mapped_children_keep_source_order() {
     blinc_runtime::signal::set_string_list("rt_order", vec!["x".into(), "y".into()]);
     let dsl = compile(
         &format!(
-            r#"signal rt_order: list
+            r#"signal rt_order: List
                {ROW}
                view {{ Div(class="p") {{ Text("before") rt_order.map(|t| Row(t)) Text("after") }} }}"#
         ),

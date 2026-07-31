@@ -116,10 +116,12 @@ fsm Play {
 // compiled, so it costs nothing to render and never changes.
 const tags = ["alpha", "beta", "gamma"]
 
-// A `list` signal is the opposite: its contents can change while the
-// app runs, and setting it re-renders whatever mapped over it. Seeded
-// in `init { }` below; an FSM action could `push` to it just as well.
-signal feed: list
+// A list signal is the opposite: its contents can change while the app
+// runs, and setting it re-renders whatever mapped over it. The
+// initializer says what it is, so the `: List` annotation is optional.
+// `init { }` below replaces these; an FSM action could `push` to it
+// just as well.
+signal feed = ["waiting"]
 
 fn Tag(label: string): View {
     cn.Badge(label, variant = "secondary")
