@@ -167,9 +167,15 @@ component Playground {
             // life of the program; this one shows whatever was last
             // written to it, so it is the shape to reach for when the
             // data changes.
-            cn.Label("map: over a `list` signal, seeded in init")
-            Div(class = "row") {
-                feed.map(|f| Tag(f))
+            cn.Label("map: over a list signal, seeded in init")
+            // Wrapped in `with` on purpose. A map records which list it
+            // read, but only a region is listening -- outside one, a
+            // later write to `feed` would change nothing on screen.
+            // Inside, the region re-renders itself and nothing else.
+            with {
+                Div(class = "row") {
+                    feed.map(|f| Tag(f))
+                }
             }
 
             cn.Label("progress: value = pct (in-place)")
@@ -260,9 +266,9 @@ component Playground {
             }
 
             Div(class = "row") {
-                cn.Button("Grow", on_click = || { Play.trigger("Grow") })
-                cn.Button("Busy", variant = "secondary", on_click = || { Play.trigger("Busy") })
-                cn.Button("Reset", variant = "destructive", on_click = || { Play.trigger("Reset") })
+                cn.Button("Grow", on_click = || Play.trigger("Grow"))
+                cn.Button("Busy", variant = "secondary", on_click = || Play.trigger("Busy"))
+                cn.Button("Reset", variant = "destructive", on_click = || Play.trigger("Reset"))
             }
         }
     }

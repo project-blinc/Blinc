@@ -2266,10 +2266,27 @@ bare_call_expr = { name:identifier ~ "(" ~ args:bare_call_args_list? ~ ")" }
 // when the parser sees `|` followed by an identifier.
 lambda_expr = { lambda_no_param | lambda_one_param }
 
-lambda_no_param = { "||" ~ "{" ~ stmts:statement* ~ "}" }
+lambda_no_param = { lambda_no_param_block | lambda_no_param_bare }
+
+lambda_no_param_block = { "||" ~ "{" ~ stmts:statement* ~ "}" }
   -> TypedExpression::Lambda {
       params: [],
       body: TypedExpression::Block { statements: stmts },
+  }
+
+// `|| doThing()` — braces optional for a single statement, matching
+// `lambda_one_param_bare`. Handlers are overwhelmingly one call
+// (`on_click = || Play.trigger("Grow")`), and requiring braces for the
+// zero-arg form while the one-param form goes without is an
+// inconsistency with no reason behind it.
+//
+// Ordered after the braced form so `|| { … }` still takes that arm: a
+// block is also a valid single statement, and this one would otherwise
+// swallow it and change what the body means.
+lambda_no_param_bare = { "||" ~ s:statement }
+  -> TypedExpression::Lambda {
+      params: [],
+      body: TypedExpression::Block { statements: prepend_list(s, []) },
   }
 
 // `|name| { stmts }` — single-param closure. The param's type is
