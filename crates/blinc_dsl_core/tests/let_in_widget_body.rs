@@ -1,16 +1,23 @@
-//! What a `for` desugar can and cannot stand on today.
+//! `let` in a widget body is dropped, so the binding reads as zero.
 //!
-//! `for x in xs` is the one unshipped P0 in the DSL feature table. The
-//! grammar comment blames Zyntax's `process_for_loop`, which builds an
-//! init/header/body/exit skeleton and emits no instructions at all
-//! (both `pattern` and `iterator` are unused parameters), so the header
-//! branches on nothing.
+//! `collect_children_into` partitions a widget body into its `children`
+//! array. `Expression` statements become children; `If` / `While` are
+//! carried through wrapped in a `__cf_children__` marker. Everything
+//! else hits `_ => continue` and is discarded, including `Let`.
 //!
-//! Desugaring to the `while` that already works would sidestep that
-//! entirely -- `while` in a view body does produce N children. These
-//! tests pin why it is not that simple: the substrate a desugar needs
-//! (a loop-carried counter, indexing) is itself broken, in ways that
-//! have nothing to do with `for`.
+//! The comment there justifies it with "bindings are hoisted by earlier
+//! passes". Nothing does. The only hoisting pass is `consts.rs`, which
+//! lifts `const` declarations out of `__blinc_const_group__` markers and
+//! never touches `let`. So a `let` written inside a widget body reaches
+//! the JIT as nothing at all, and later reads of that name resolve to an
+//! undefined slot, which reads zero.
+//!
+//! This was originally mis-filed as four Zyntax codegen bugs -- missing
+//! loop-header phis, a bad `let` initialiser, array indexing. Zyntax
+//! reproduced all of them in plain ZynML and found none: `while` and
+//! `let` are fine there. Every symptom came from this one pass, and the
+//! shapes below are the same ones that pointed the wrong way, kept so
+//! they cannot again.
 //!
 //! Node counts include the view root the DSL mounts under, so a body
 //! with one Text is 3: root + Div + Text.
@@ -50,7 +57,8 @@ fn baseline_one_text_child() {
     );
 }
 
-/// A `let` in a view body does not disturb the children around it.
+/// A `let` does not disturb the widgets around it -- it is dropped, and
+/// dropping it is invisible until something reads the binding.
 #[test]
 fn a_let_does_not_swallow_sibling_widgets() {
     assert_eq!(
@@ -64,9 +72,10 @@ fn a_let_does_not_swallow_sibling_widgets() {
     );
 }
 
-/// The shape a desugar would target: a `while` in a view body emits one
-/// child per iteration. Counter is a signal, which is the only counter
-/// that advances (see the two tests below).
+/// A signal-driven `while` emits one child per iteration. Signals are
+/// process-global rather than bindings in the body, so the dropped-`let`
+/// bug cannot reach them -- which is exactly why every working loop in
+/// the corpus is written this way.
 #[test]
 fn a_signal_driven_while_emits_one_child_per_iteration() {
     assert_eq!(
@@ -81,9 +90,15 @@ fn a_signal_driven_while_emits_one_child_per_iteration() {
     );
 }
 
-/// GAP: a local read after a reassignment store is correct...
+/// Passes today, but for the wrong reason, and it is the trap that sent
+/// this to the wrong repo.
+///
+/// The `let` is dropped here too. `i` therefore starts at the undefined
+/// slot's zero, which is the value the `let` was going to give it, and
+/// the surviving assignment takes it to 3. Reading this as "stores work,
+/// initialisers do not" is what produced a bogus SSA diagnosis.
 #[test]
-fn a_local_reads_correctly_after_a_store() {
+fn a_local_appears_to_work_when_its_initialiser_is_zero() {
     assert_eq!(
         count_of(
             r#"component C { view { Div(class="a") { let i = 0 i = i + 3 if i == 3 { Text("x") } } } }
@@ -91,21 +106,16 @@ fn a_local_reads_correctly_after_a_store() {
             "gap_store.blinc",
         ),
         3,
-        "i == 3 holds, so the Text renders"
+        "i == 3 holds, because 0 happened to be the intended initial value"
     );
 }
 
-/// GAP: ...but the same local read straight from its literal
-/// initialiser does not. `let i = 3` then `if i == 3` finds the guard
-/// false, so nothing renders. The initialiser appears not to be
-/// materialised into the slot the comparison reads.
-///
-/// Together with the test above this is the reason a `for` cannot
-/// simply desugar to `let i = 0` + `while`: the desugar's own counter
-/// would be unreadable until something else wrote to it.
+/// THE BUG. Identical to the test above except the initialiser is 3
+/// rather than 0, so the dropped `let` is observable: `i` reads zero and
+/// the guard is false.
 #[test]
-#[ignore = "known gap: a let initialiser is not visible to a later read"]
-fn a_local_read_from_its_initialiser_is_wrong() {
+#[ignore = "known bug: collect_children_into drops `let` from a widget body"]
+fn a_let_initialiser_survives_into_the_body() {
     assert_eq!(
         count_of(
             r#"component C { view { Div(class="a") { let i = 3 if i == 3 { Text("x") } } } }
@@ -117,14 +127,12 @@ fn a_local_read_from_its_initialiser_is_wrong() {
     );
 }
 
-/// GAP: a local incremented inside a loop does not carry its value
-/// across iterations. The loop is bounded by a signal so it always
-/// terminates; the trailing `if` reports whether the local kept up.
-///
-/// Reads as missing phi nodes for loop-carried values at the header.
+/// The same bug reached through a loop, which is what a desugared
+/// `for` would need: the counter's `let` is dropped, so the binding the
+/// loop body increments is not the one the guard reads.
 #[test]
-#[ignore = "known gap: a local does not carry across loop iterations"]
-fn a_local_carries_across_loop_iterations() {
+#[ignore = "known bug: collect_children_into drops `let` from a widget body"]
+fn a_local_counter_survives_a_loop() {
     assert_eq!(
         count_of(
             r#"signal gc: i32 = 0
@@ -145,12 +153,11 @@ fn a_local_carries_across_loop_iterations() {
     );
 }
 
-/// GAP: indexing an array literal SIGSEGVs the JIT, so it cannot be the
-/// element source for a desugared loop. Ignored rather than asserted --
-/// a segfault takes the whole test binary with it, so this one is run
-/// by hand.
+/// Unrelated to the dropped `let`, and still open: indexing an array
+/// faults. Ignored rather than asserted because a SIGSEGV takes the
+/// whole test binary with it.
 #[test]
-#[ignore = "known gap: array indexing SIGSEGVs the JIT"]
+#[ignore = "separate open bug: array indexing SIGSEGVs; run alone"]
 fn an_array_can_be_indexed() {
     assert_eq!(
         count_of(
@@ -164,30 +171,6 @@ fn an_array_can_be_indexed() {
                }
                view { C() }"#,
             "gap_index.blinc",
-        ),
-        3,
-    );
-}
-
-/// GAP: `.len()` on an array resolves to nothing. The diagnostic names
-/// the ENCLOSING function ("Call to undefined function 'C$view'")
-/// rather than the missing method, which is the standard Zyntax failure
-/// mode for an unresolved call: the enclosing function is dropped.
-#[test]
-#[ignore = "known gap: no length operation on an array"]
-fn an_array_has_a_length() {
-    assert_eq!(
-        count_of(
-            r#"component C {
-                 view {
-                   Div(class="a") {
-                     let xs = ["a", "b"]
-                     if xs.len() == 2 { Text("x") }
-                   }
-                 }
-               }
-               view { C() }"#,
-            "gap_len.blinc",
         ),
         3,
     );
