@@ -319,23 +319,38 @@ Hot-reload is JIT-only by construction. iOS users always restart for code change
 
 ### 3.8 Features
 
-| Feature | Priority | Notes |
-|---------|----------|-------|
-| Component definitions | P0 | `component Name { state, view, style }` |
-| Reactive state | P0 | DSL declares; `BlincContextState` owns the actual `State<T>` keyed by `(InstanceKey, field)` |
-| Template expressions | P0 | `{variable}` interpolation lowered to `Call("$Blinc$concat", …)` |
-| Scoped CSS | P0 | `style` block lowered to `Call("$Blinc$add_css", "…")` at instantiation |
-| Props / inputs | P0 | Typed component parameters; map to Rust function args at the host boundary |
-| Conditional rendering | P0 | `if/else` blocks lower to Zyntax `TypedStatement::If` |
-| List rendering | P0 | `for x in xs` lowers to Zyntax iterator pattern |
-| Event handlers | P0 | Each `on_click: { … }` becomes a named function `Component$handler_N`; host wires `Div::on_click(move \|_\| runtime.call::<()>("Component$handler_N", &args))` |
-| Slot / children | P1 | Component composition via host-side child arrays |
-| Animation declarations | P1 | `animate`, `transition` lowered to existing Blinc animation builders |
-| Import system | P1 | Cross-file component references via Zyntax's import resolver |
-| Hot reload | P0 (dev) / N/A (mobile) | `.blinc` watcher → `runtime.hot_reload()`; reuses CSS/asset hot-reload infra |
-| Standalone CLI build | P1 | `blinc build --target` produces deployable binaries without cargo |
-| LSP server | P2 | Autocomplete, diagnostics, go-to-definition |
-| VS Code extension | P2 | Syntax highlighting, inline preview |
+| Feature | Priority | Status | Notes |
+|---------|----------|--------|-------|
+| Component definitions | P0 | Shipped | `component Name { style, init, view }`, clause order free |
+| Reactive state | P0 | Shipped | `signal x: T = v`; FSM `context` fields become signals |
+| Template expressions | P0 | Shipped | f-string interpolation lowered to `string_concat` chains |
+| Scoped CSS | P0 | Shipped | `style` block extracted and flushed into the context |
+| Props / inputs | P0 | Shipped | Typed component parameters bound by `bind_component_props` |
+| Conditional rendering | P0 | Shipped | `if/else` in view bodies, carried through `__cf_children__` |
+| List rendering | P0 | Shipped | `items.map(\|x\| Row(x))` over a `const` list (expanded at compile time) or a `signal x: List` (walked at render). NOT `for x in xs` — see below |
+| View-returning fns | P0 | Shipped | `fn Row(l: string): View { … }`; annotation optional, inferred from a body ending in a widget call |
+| Event handlers | P0 | Shipped | `on_click = \|\| expr`, braces optional |
+| Scoped re-render | P0 | Shipped | `with { … }` regions, deps observed from what the body actually read |
+| Slot / children | P1 | Shipped | `slot Name { … }` partitions a widget body into named args |
+| Import system | P1 | Partial | Named imports (`import { X } from "./m"`) work, with per-module symbol mangling so same-named components across files do not collide. Alias / glob / namespace / default forms need upstream work |
+| Hot reload | P0 (dev) | Shipped | `reload_project` builds a fresh instance; signal values survive by name |
+| Animation declarations | P1 | Not started | `animate` / `transition` have no DSL surface; CSS animations work |
+| `for` loops | P1 | Blocked | A widget body drops `let`, so a desugared counter has nowhere to live. `map` covers list rendering, which was the motivating case |
+| Visibility / `export` | P1 | Not started | `TypedVariable` carries the field; imports flat-merge, so enforcement has no layer yet |
+| Standalone CLI build | P1 | Partial | `blinc_cli` has `init` / `dev` / `build`, but the AOT backend it would call does not exist |
+| AOT pipeline | P0 (mobile) | Not started | `blinc_dsl_codegen` absent. Blocks iOS and Android, which forbid JIT |
+| LSP server | P2 | Not started | Autocomplete, diagnostics, go-to-definition |
+| VS Code extension | P2 | Not started | Syntax highlighting, inline preview |
+
+Status verified against the tree rather than carried forward; several rows
+here were stale for months. Two corrections worth stating outright:
+
+- **List rendering does not use `for x in xs`.** Zyntax's `for` CFG
+  construction is a stub, but that is not the blocker — a widget body
+  drops `let` statements, so a desugared loop counter has nowhere to
+  live. `map` sidesteps both and is the idiom.
+- **Cross-file name collisions are already solved** by per-module symbol
+  mangling. `export` would add encapsulation, not collision safety.
 
 ### 3.9 Implementation sequencing
 
