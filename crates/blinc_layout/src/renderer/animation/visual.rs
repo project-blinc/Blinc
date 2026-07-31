@@ -529,6 +529,35 @@ impl RenderTree {
         painted: &HashSet<LayoutNodeId>,
         painted_stable: &HashSet<crate::tree::StableNodeId>,
     ) -> bool {
+        // Culling diagnostic. An animating binding that is NOT in the
+        // painted set is one the visibility gate just saved us from; an
+        // animating binding that IS painted legitimately drives frames.
+        // If a scrolled-away spinner still shows up as painted, the
+        // painted set is the thing that is wrong, not this predicate.
+        {
+            let animating = self
+                .motion_bindings
+                .iter()
+                .filter(|(_, b)| b.is_any_animating())
+                .count();
+            // Rate-limited: this runs per frame, and one line per frame
+            // at 60Hz buries everything else.
+            static TICK: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            if animating > 0 && TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 120 == 0 {
+                let visible = self
+                    .motion_bindings
+                    .iter()
+                    .filter(|(n, b)| painted.contains(n) && b.is_any_animating())
+                    .count();
+                tracing::debug!(
+                    animating,
+                    visible,
+                    painted = painted.len(),
+                    "motion culling: animating bindings, of which painted"
+                );
+            }
+        }
+
         if self
             .motion_bindings
             .iter()
