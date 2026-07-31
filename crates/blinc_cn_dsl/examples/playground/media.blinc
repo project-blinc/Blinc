@@ -35,6 +35,24 @@ component MediaWidgets {
                 cn.Breadcrumb(items = ["Docs", "Guide"], separator = "/")
             }
 
+            cn.Label("aspect ratio: a box that holds its shape")
+            Div(class = "row") {
+                cn.AspectRatio(preset = "widescreen") {
+                    cn.Skeleton(w = 213.0, h = 120.0, rounded = 6.0)
+                }
+                cn.AspectRatio(ratio = 1.0) {
+                    cn.Skeleton(w = 120.0, h = 120.0, rounded = 6.0)
+                }
+            }
+
+            cn.Label("scroll area: content taller than its box")
+            cn.ScrollArea(direction = "vertical", scrollbar = "hover") {
+                cn.Label("row one")
+                cn.Label("row two")
+                cn.Label("row three")
+                cn.Label("row four")
+            }
+
             cn.Label("separator + static skeleton")
             cn.Separator()
             cn.Skeleton(w = 140.0, h = 140.0, rounded = 6.0)
