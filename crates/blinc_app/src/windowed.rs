@@ -6539,6 +6539,28 @@ impl WindowedApp {
                                 Some(_) if needs_vsync => true,
                                 Some(interval) => elapsed_since_paint >= interval,
                             };
+                            // Is layout being marked dirty every frame? Either
+                            // `did_rebuild` or `needs_relayout` makes
+                            // `should_render` true unconditionally, bypassing
+                            // the FPS cap — an idle window that keeps setting
+                            // one of them renders at vsync forever no matter
+                            // what the animation-visibility gate says.
+                            {
+                                static T: std::sync::atomic::AtomicUsize =
+                                    std::sync::atomic::AtomicUsize::new(0);
+                                if T.fetch_add(1, Ordering::Relaxed) % 120 == 0 {
+                                    tracing::debug!(
+                                        did_rebuild,
+                                        needs_relayout = ws.needs_relayout,
+                                        needs_vsync,
+                                        should_render,
+                                        cap_interval_ms = ?cap_interval_ms,
+                                        elapsed_since_paint,
+                                        "frame gate: why are we rendering"
+                                    );
+                                }
+                            }
+
                             if !should_render {
                                 // Schedule the next Frame for exactly the
                                 // moment the cap interval elapses. `wake_at`
@@ -7224,6 +7246,31 @@ impl WindowedApp {
                                     && !overlay_css_needs_redraw
                                     && !pointer_query_active
                                     && !flow_needs_redraw;
+
+                                // Which signal is actually keeping the frame
+                                // pacer alive. Every one of these ORs into the
+                                // decision to schedule another wake, so exactly
+                                // one line here ends the guessing about why an
+                                // idle window never parks.
+                                {
+                                    static T: std::sync::atomic::AtomicUsize =
+                                        std::sync::atomic::AtomicUsize::new(0);
+                                    if T.fetch_add(1, Ordering::Relaxed) % 120 == 0 {
+                                        tracing::debug!(
+                                            needs_animation_redraw,
+                                            needs_motion_redraw,
+                                            scroll_animating,
+                                            needs_overlay_redraw,
+                                            theme_animating,
+                                            css_needs_redraw,
+                                            overlay_css_needs_redraw,
+                                            pointer_query_active,
+                                            flow_needs_redraw,
+                                            needs_cursor_redraw,
+                                            "frame pacing: which signal is live"
+                                        );
+                                    }
+                                }
 
                                 if cursor_only {
                                     // Cursor blink toggles every ~400 ms
