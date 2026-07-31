@@ -191,17 +191,20 @@ impl CollapsibleBuilder {
     /// Get or build the inner Collapsible
     fn get_or_build(&self) -> &Collapsible {
         self.built.get_or_init(|| {
-            // Build content or use empty div
-            let content: Box<dyn ElementBuilder> = Box::new(div());
-
-            let content_container = div().w_full().child_box(content);
-
-            let animated_content = motion()
-                .scale_y(self.scale_anim.clone())
-                .opacity(self.opacity_anim.clone())
-                .child(content_container);
-
-            let inner = div().w_full().overflow_clip().child(animated_content);
+            // No content set: an empty shell, animated the same way so
+            // the two paths agree.
+            let anim_key = format!("cn-collapsible-{}", self.is_open.signal_id().to_raw());
+            let inner = div()
+                .w_full()
+                .flex_col()
+                .overflow_clip()
+                .animate_bounds(
+                    blinc_layout::visual_animation::VisualAnimationConfig::height()
+                        .with_key(&anim_key)
+                        .clip_to_animated()
+                        .snappy(),
+                )
+                .when(!self.is_open.get(), |d| d.h(0.0));
 
             Collapsible { inner }
         })
@@ -327,14 +330,31 @@ where
     /// Build into a Collapsible, consuming self
     pub fn build_collapsible(self) -> Collapsible {
         let content = (self.content)();
-        let content_container = div().w_full().child(content);
+        let is_open = self.is_open.get();
 
-        let animated_content = motion()
-            .scale_y(self.scale_anim)
-            .opacity(self.opacity_anim)
-            .child(content_container);
-
-        let inner = div().w_full().overflow_clip().child(animated_content);
+        // Height animation rather than `scale_y`, matching
+        // `cn::accordion`. Scaling squashes the content and fades it as
+        // a block; animating the bound reveals it, and the surrounding
+        // layout follows because taffy sees the final size while the
+        // animation tracks the visual offset from it.
+        //
+        // Content is ALWAYS rendered: a collapse animates from the open
+        // bounds, so removing it would leave nothing to shrink. It is
+        // `overflow_clip` plus an explicit zero height that hide it when
+        // shut.
+        let anim_key = format!("cn-collapsible-{}", self.is_open.signal_id().to_raw());
+        let inner = div()
+            .w_full()
+            .flex_col()
+            .overflow_clip()
+            .animate_bounds(
+                blinc_layout::visual_animation::VisualAnimationConfig::height()
+                    .with_key(&anim_key)
+                    .clip_to_animated()
+                    .snappy(),
+            )
+            .child(content)
+            .when(!is_open, |d| d.h(0.0));
 
         Collapsible { inner }
     }
