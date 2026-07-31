@@ -104,21 +104,21 @@ fsm Play {
 // context on the first `view_widget()` -- but the component form is
 // the convention the other examples follow.
 // A view-returning function: one row of the mapped list. Its body is an
-// ordinary statement scope, which is what lets `map`'s closure do work
-// before naming a widget.
+// ordinary statement scope, so unlike a widget body it can hold `let`
+// bindings -- which is what lets a `map` closure do work before naming
+// a widget.
 //
 // `: View` is optional -- a body ending in a widget call is inferred to
 // produce one -- but stating it documents the intent at the call site.
 // Two list sources, side by side below.
 //
-// A `const` list is compile-time: `expand_map_calls` turns each element
-// into its own child, so this costs nothing at render and is fixed for
-// the life of the program.
+// A `const` list is fixed: its elements are known when the program is
+// compiled, so it costs nothing to render and never changes.
 const tags = ["alpha", "beta", "gamma"]
 
-// A `list` signal is the opposite: contents live in the signal, the
-// host walks them at render, and setting it re-renders whatever read
-// it. Populated from Rust in `cn_playground.rs`; empty until then.
+// A `list` signal is the opposite: its contents can change while the
+// app runs, and setting it re-renders whatever mapped over it. Seeded
+// in `init { }` below; an FSM action could `push` to it just as well.
 signal feed: list
 
 fn Tag(label: string): View {
@@ -138,6 +138,13 @@ component Playground {
         .row { gap: 8px; flex-direction: row; align-items: center; flex-wrap: wrap }
     }
 
+    // Runs once, when the component first mounts. Clause order inside
+    // a component is free -- this could sit above `style` or below
+    // `view` and mean the same thing.
+    init {
+        feed.set(["seeded", "from init"])
+    }
+
     view {
         Div(class = "page") {
             FormWidgets()
@@ -154,11 +161,11 @@ component Playground {
                 tags.map(|t| Tag(t))
             }
 
-            // The other list source: a `list` signal, set from Rust.
-            // `tags` above is a compile-time literal and expands into
-            // three children at parse time; this one is walked at render
-            // by the host, so whatever the app last set is what shows.
-            cn.Label("map: over a `list` signal set from Rust")
+            // The other list source. `tags` above is fixed for the
+            // life of the program; this one shows whatever was last
+            // written to it, so it is the shape to reach for when the
+            // data changes.
+            cn.Label("map: over a `list` signal, seeded in init")
             Div(class = "row") {
                 feed.map(|f| Tag(f))
             }

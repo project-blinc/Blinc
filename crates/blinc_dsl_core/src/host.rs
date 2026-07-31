@@ -558,3 +558,34 @@ pub(crate) extern "C" fn blinc_dsl_map_children(list: i64, name_ptr: *const i32,
         crate::widget_ffi::push_child_handle(list, handle);
     }
 }
+
+/// `__blinc_list_push__("<name>", value)` — append to a list signal.
+///
+/// The write half of list rendering. A list never crosses the FFI: a
+/// `set([a, b])` is expanded at compile time into a clear plus one push
+/// per element, so only strings move.
+///
+/// # Safety
+///
+/// Both pointers must be DSL-allocated strings.
+pub(crate) extern "C" fn blinc_dsl_list_push(name_ptr: *const i32, value_ptr: *const i32) {
+    let Some(name) = decode_signal_name(name_ptr) else {
+        tracing::warn!("__blinc_list_push__ could not decode its signal name");
+        return;
+    };
+    let value = decode_signal_name(value_ptr).unwrap_or("");
+    blinc_runtime::signal::push_string_list(name, value.to_string());
+}
+
+/// `__blinc_list_clear__("<name>")` — empty a list signal.
+///
+/// # Safety
+///
+/// `name_ptr` must be a DSL-allocated string.
+pub(crate) extern "C" fn blinc_dsl_list_clear(name_ptr: *const i32) {
+    let Some(name) = decode_signal_name(name_ptr) else {
+        tracing::warn!("__blinc_list_clear__ could not decode its signal name");
+        return;
+    };
+    blinc_runtime::signal::clear_string_list(name);
+}

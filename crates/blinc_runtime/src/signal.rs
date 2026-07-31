@@ -280,3 +280,23 @@ pub fn get_string_list(name: &str) -> Option<Vec<String>> {
 pub fn get_string_list_by_id(id_raw: u64) -> Option<Vec<String>> {
     Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).try_get()
 }
+
+/// Append one element to a string-list signal. Auto-mints if absent.
+///
+/// The DSL writes a list this way rather than handing one across the
+/// FFI: only the element crosses, and a string already has a
+/// representation on both sides.
+pub fn push_string_list(name: &str, value: String) {
+    let id_raw = mint_or_get(name, SignalType::StringList);
+    let sig = Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw));
+    let mut items = sig.try_get().unwrap_or_default();
+    items.push(value);
+    sig.set(items);
+}
+
+/// Empty a string-list signal. Auto-mints if absent, so clearing an
+/// undeclared list is a no-op rather than an error.
+pub fn clear_string_list(name: &str) {
+    let id_raw = mint_or_get(name, SignalType::StringList);
+    Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).set(Vec::new());
+}

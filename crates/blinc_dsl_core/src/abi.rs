@@ -195,6 +195,25 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             ptr: blinc_dsl_effect as *const u8,
         },
         BuiltinDescriptor {
+            // Append to a list signal. A `set([...])` expands into a
+            // clear plus one of these per element, so a list never
+            // crosses the FFI.
+            name: "__blinc_list_push__",
+            param_types: &[
+                Type::Primitive(PrimitiveType::String),
+                Type::Primitive(PrimitiveType::String),
+            ],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: crate::host::blinc_dsl_list_push as *const u8,
+        },
+        BuiltinDescriptor {
+            // Empty a list signal.
+            name: "__blinc_list_clear__",
+            param_types: &[Type::Primitive(PrimitiveType::String)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: crate::host::blinc_dsl_list_clear as *const u8,
+        },
+        BuiltinDescriptor {
             // `items.map(|x| Row(x))` over a list signal. Takes the
             // child list, the signal id, and the lambda as a fn ptr;
             // the host walks the list because a `Vec<String>` has no

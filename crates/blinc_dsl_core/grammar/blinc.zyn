@@ -61,6 +61,10 @@
     // block. Takes `(region_id, child_handle)`; `lower_with_blocks`
     // fills both in, so the shape here is what the grammar emits.
     __blinc_with__: "__blinc_with__",
+    // Writing a list signal: `set([...])` expands to a clear plus one
+    // push per element, so only strings cross the FFI.
+    __blinc_list_push__: "__blinc_list_push__",
+    __blinc_list_clear__: "__blinc_list_clear__",
     // `items.map(|x| Row(x))` over a list signal -- the runtime half of
     // list rendering, for elements that only exist while the app runs.
     __blinc_map_children__: "__blinc_map_children__",
@@ -533,12 +537,26 @@ bare_view_item = { attrs:view_attr* ~ "view" ~ "{" ~ stmts:statements ~ "}" }
 // decorator markers. Emitted unconditionally (like
 // `__blinc_struct_type__`) since the action language has no
 // conditional; an undecorated component carries a name and no markers.
+// Clause order inside the braces is free. `style` and `init` may each
+// appear before or after the other and on either side of `view`, and
+// the action folds them together, so nothing about the ORDER survives
+// into the output -- `init` and `view` are both just methods on the
+// emitted impl.
+//
+// Spelled as duplicated optional slots rather than a single
+// `component_member*` because the action language cannot partition a
+// heterogeneous list back into its kinds; each clause has to arrive in
+// a slot the action can name. The keywords are disjoint (`style`,
+// `init`, `view`, `fn`), so the repetition is unambiguous.
 component_folded = {
     attrs:view_attr* ~ "component" ~ name:identifier ~ props:component_props? ~ "{"
     ~ fields:struct_field_list?
-    ~ styles:style_decl*
-    ~ init:init_block?
+    ~ styles_a:style_decl*
+    ~ init_a:init_block?
+    ~ styles_b:style_decl*
     ~ view:view_member
+    ~ styles_c:style_decl*
+    ~ init_b:init_block?
     ~ extra:impl_fn*
     ~ "}"
 }
@@ -567,7 +585,10 @@ component_folded = {
                   }),
               }],
           ),
-          styles.unwrap_or([]),
+          concat_list(
+              concat_list(styles_a.unwrap_or([]), styles_b.unwrap_or([])),
+              styles_c.unwrap_or([]),
+          ),
       ),
       [TypedDeclaration::Impl {
           // Empty trait_name marks this as an INHERENT impl
@@ -614,7 +635,7 @@ component_folded = {
                   body: Some(TypedBlock { statements: [] }),
               }],
               concat_list(
-                  init.unwrap_or([]),
+                  concat_list(init_a.unwrap_or([]), init_b.unwrap_or([])),
                   prepend_list(view, extra),
               ),
           ),

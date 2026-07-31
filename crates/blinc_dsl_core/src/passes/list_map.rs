@@ -95,6 +95,23 @@ fn expand_block(block: &mut zyntax_typed_ast::typed_ast::TypedBlock, arrays: &mu
             arrays.insert(name.to_string(), elements.clone());
         }
 
+        // `feed.set([...])` / `.push(v)` / `.clear()` — writing a list.
+        // Rewritten in place, before the map handling below, because a
+        // write is a statement rather than a child.
+        if let TypedStatement::Expression(expr) = &stmt.node
+            && let Some(rewritten) = try_expand_list_write(expr)
+        {
+            for w in rewritten {
+                let span = w.span;
+                out.push(TypedNode::new(
+                    TypedStatement::Expression(Box::new(w)),
+                    Type::Primitive(PrimitiveType::Unit),
+                    span,
+                ));
+            }
+            continue;
+        }
+
         // A map call standing alone as a statement is the child-position
         // case; expand it into one statement per element.
         if let TypedStatement::Expression(expr) = &stmt.node
@@ -351,4 +368,82 @@ fn runtime_map_call(
         }),
         Type::Primitive(PrimitiveType::Unit),
     ))
+}
+
+/// `<name>.set([...])` / `<name>.push(v)` / `<name>.clear()` on a list
+/// signal.
+///
+/// `set` with an array literal expands to a clear plus one push per
+/// element: a list itself never crosses the FFI, only its strings.
+///
+/// `set` is only claimed when the argument is an array literal, because
+/// every scalar signal also has one and those belong to
+/// `resolve_signal_calls`. `push` and `clear` have no scalar meaning, so
+/// they are taken outright.
+fn try_expand_list_write(
+    expr: &TypedNode<TypedExpression>,
+) -> Option<Vec<TypedNode<TypedExpression>>> {
+    let TypedExpression::Call(call) = &expr.node else {
+        return None;
+    };
+    let TypedExpression::Field(f) = &call.callee.node else {
+        return None;
+    };
+    let TypedExpression::Variable(target) = &f.object.node else {
+        return None;
+    };
+    let name = target.resolve_global()?;
+    let method = f.field.resolve_global()?;
+    let span = expr.span;
+
+    let name_arg = || {
+        TypedNode::new(
+            TypedExpression::Literal(zyntax_typed_ast::TypedLiteral::String(
+                zyntax_typed_ast::InternedString::new_global(&name),
+            )),
+            Type::Primitive(PrimitiveType::String),
+            span,
+        )
+    };
+    let extern_call = |symbol: &str, args: Vec<TypedNode<TypedExpression>>| {
+        TypedNode::new(
+            TypedExpression::Call(zyntax_typed_ast::TypedCall {
+                callee: Box::new(TypedNode::new(
+                    TypedExpression::Variable(zyntax_typed_ast::InternedString::new_global(symbol)),
+                    Type::Any,
+                    span,
+                )),
+                positional_args: args,
+                named_args: vec![],
+                type_args: vec![],
+            }),
+            Type::Primitive(PrimitiveType::Unit),
+            span,
+        )
+    };
+
+    match method.as_ref() {
+        "clear" if call.positional_args.is_empty() => {
+            Some(vec![extern_call("__blinc_list_clear__", vec![name_arg()])])
+        }
+        "push" if call.positional_args.len() == 1 => Some(vec![extern_call(
+            "__blinc_list_push__",
+            vec![name_arg(), call.positional_args[0].clone()],
+        )]),
+        "set" if call.positional_args.len() == 1 => {
+            let TypedExpression::Array(elements) = &call.positional_args[0].node else {
+                // A scalar `set`; leave it to `resolve_signal_calls`.
+                return None;
+            };
+            let mut out = vec![extern_call("__blinc_list_clear__", vec![name_arg()])];
+            for element in elements {
+                out.push(extern_call(
+                    "__blinc_list_push__",
+                    vec![name_arg(), element.clone()],
+                ));
+            }
+            Some(out)
+        }
+        _ => None,
+    }
 }
