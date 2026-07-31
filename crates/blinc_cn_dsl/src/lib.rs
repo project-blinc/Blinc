@@ -48,7 +48,6 @@
 //! shape gets wired.
 
 pub mod alert;
-pub mod aspect_ratio;
 pub mod avatar;
 pub mod badge;
 pub mod breadcrumb;
@@ -60,7 +59,6 @@ pub mod input;
 pub mod kbd;
 pub mod label;
 pub mod progress;
-pub mod scroll_area;
 pub mod separator;
 pub mod skeleton;
 pub mod spinner;
@@ -72,7 +70,6 @@ pub mod textarea;
 pub(crate) mod color;
 
 pub use alert::CnAlert;
-pub use aspect_ratio::CnAspectRatio;
 pub use avatar::CnAvatar;
 pub use badge::CnBadge;
 pub use breadcrumb::CnBreadcrumb;
@@ -83,7 +80,6 @@ pub use input::CnInput;
 pub use kbd::CnKbd;
 pub use label::CnLabel;
 pub use progress::CnProgress;
-pub use scroll_area::CnScrollArea;
 pub use separator::CnSeparator;
 pub use skeleton::CnSkeleton;
 pub use spinner::CnSpinner;
@@ -134,10 +130,8 @@ pub fn register_basics(dsl: &BlincDsl) -> BlincDslResult<()> {
     dsl.register_extern_widget::<CnBreadcrumb>()?;
     dsl.register_extern_widget::<CnAlert>()?;
     dsl.register_extern_widget::<CnLabel>()?;
-    dsl.register_extern_widget::<CnScrollArea>()?;
     dsl.register_extern_widget::<CnSeparator>()?;
     dsl.register_extern_widget::<CnSpinner>()?;
-    dsl.register_extern_widget::<CnAspectRatio>()?;
     dsl.register_extern_widget::<CnCard>()?;
     dsl.register_extern_widget::<CnProgress>()?;
     dsl.register_extern_widget::<CnAvatar>()?;
