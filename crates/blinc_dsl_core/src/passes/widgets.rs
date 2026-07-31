@@ -59,6 +59,14 @@ pub(crate) fn view_returning_fn_names(program: &TypedProgram) -> std::collection
         // function that ends in a widget call is inferred to produce
         // one. An explicit non-View annotation is left alone: only the
         // absence of a choice is inferred, never a stated one.
+        //
+        // INTERIM. Zyntax is growing a `Type::Infer` marker for exactly
+        // this. Once it lands, the grammar emits it for a missing return
+        // type, `unify` binds it against the body, and the checker's
+        // `func.return_type != Unit` guard stops excluding the case --
+        // at which point this heuristic and its `ends_in_a_widget_call`
+        // helper come out, and the annotation becomes optional for every
+        // return type rather than just widgets.
         let inferred = matches!(func.return_type, Type::Primitive(PrimitiveType::Unit))
             && func.body.as_ref().is_some_and(|b| ends_in_a_widget_call(b));
         if (named.as_deref() == Some("View") || inferred)
