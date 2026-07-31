@@ -559,6 +559,21 @@ impl RenderTree {
                         .load(std::sync::atomic::Ordering::Relaxed),
                     scroll_y = crate::renderer::paint::motion::LAST_ANIMATING_SCROLL_Y
                         .load(std::sync::atomic::Ordering::Relaxed),
+                    // WHICH term keeps the gate true. The motion-binding
+                    // term is painted-gated and reads false here, but
+                    // `has_active_motions` and `has_active_layout_animations`
+                    // are NOT gated by visibility at all — either one
+                    // returning true pins the redraw chain regardless of
+                    // what is on screen.
+                    t_motions = render_state.has_active_motions(),
+                    t_visual = self.has_active_visible_visual_animations(painted),
+                    t_layout = self.has_active_layout_animations(),
+                    t_flip = self.has_active_visible_flip_animations(painted),
+                    t_css = self
+                        .css_anim_store
+                        .lock()
+                        .map(|s| s.has_visible_active(painted_stable))
+                        .unwrap_or(false),
                     "motion culling: animating bindings, of which painted"
                 );
             }
