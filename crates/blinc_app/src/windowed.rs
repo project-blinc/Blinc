@@ -6389,6 +6389,20 @@ impl WindowedApp {
                             // not allowed to settle" symptom. Capturing pre-tick
                             // ensures the paint of the settled state still ships.
                             let motion_was_active_pre_tick = rs.has_active_motions();
+                            // Same snapshot, restricted to nodes the last paint
+                            // actually walked. `motion_was_active_pre_tick` has to
+                            // stay unfiltered for the settle detection below (it is
+                            // compared against an equally unfiltered post-tick
+                            // read), but the cap-bypass gate wants the visible form
+                            // — an enter/exit motion on a node scrolled out of view
+                            // has nothing to stair-step, so paying vsync for it is
+                            // pure idle burn.
+                            let motion_was_visible_pre_tick = ws
+                                .render_tree
+                                .as_ref()
+                                .is_some_and(|t| {
+                                    rs.has_active_motions_visible(&t.painted_node_ids())
+                                });
 
                             // Tick render state (handles cursor blink, color animations, etc.)
                             // This updates dynamic properties without touching tree structure
@@ -6521,8 +6535,21 @@ impl WindowedApp {
                             // FSM from Entering → Visible still counts as
                             // vsync-class and the cap gate doesn't skip
                             // the paint that displays the settled state.
-                            let needs_vsync = motion_was_active_pre_tick
-                                || rs.has_active_motions()
+                            //
+                            // Every term is painted-gated, matching
+                            // `has_any_active_animation_visible`. The ungated form
+                            // let a single off-screen looping motion hold
+                            // `should_render` true forever: the cap never applied,
+                            // the self-driving Frame loop rendered at vsync, and an
+                            // idle window sat at 25-40% CPU with nothing moving on
+                            // screen.
+                            let needs_vsync = motion_was_visible_pre_tick
+                                || ws
+                                    .render_tree
+                                    .as_ref()
+                                    .is_some_and(|t| {
+                                        rs.has_active_motions_visible(&t.painted_node_ids())
+                                    })
                                 || ws
                                     .render_tree
                                     .as_ref()
@@ -7021,11 +7048,16 @@ impl WindowedApp {
                             let needs_cursor_redraw = blinc_layout::widgets::has_focused_text_input();
                             let _ = blinc_layout::widgets::take_needs_continuous_redraw();
 
-                            // Check if motion animations are active (enter/exit animations)
-                            let needs_motion_redraw = if let Some(ref rs) = ws.render_state {
-                                rs.has_active_motions()
-                            } else {
-                                false
+                            // Check if motion animations are active (enter/exit
+                            // animations). Painted-gated for the same reason as
+                            // `needs_vsync`: this term feeds `any_redraw_signal`,
+                            // so an off-screen motion re-arms the redraw chain
+                            // every frame and the loop never parks.
+                            let needs_motion_redraw = match (&ws.render_state, &ws.render_tree) {
+                                (Some(rs), Some(tree)) => {
+                                    rs.has_active_motions_visible(&tree.painted_node_ids())
+                                }
+                                _ => false,
                             };
 
                             // Check if overlays changed (modal opened/closed, toast
