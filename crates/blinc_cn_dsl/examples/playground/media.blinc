@@ -39,11 +39,11 @@ component MediaWidgets {
             // measures — the skeleton inside is deliberately smaller.
             cn.Label("aspect ratio: 16:9 and 1:1 at the same width")
             Div(class = "row") {
-                cn.AspectRatio(preset = "widescreen", w = 200.0) {
-                    cn.Skeleton(w = 60.0, h = 20.0, rounded = 4.0)
+                cn.AspectRatio(preset = "widescreen", w = 200.0, bg = "#2A3050", rounded = 6.0) {
+                    cn.Label("16:9")
                 }
-                cn.AspectRatio(preset = "square", w = 120.0) {
-                    cn.Skeleton(w = 40.0, h = 20.0, rounded = 4.0)
+                cn.AspectRatio(preset = "square", w = 120.0, bg = "#2A3050", rounded = 6.0) {
+                    cn.Label("1:1")
                 }
             }
 

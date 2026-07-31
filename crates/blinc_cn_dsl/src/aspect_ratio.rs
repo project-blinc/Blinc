@@ -38,6 +38,12 @@ pub struct CnAspectRatio {
     pub w: f64,
     /// Box height; the width follows from the ratio. Omitted is zero.
     pub h: f64,
+    /// Fill colour as a hex string. Empty leaves the box transparent,
+    /// which is the useful default for holding a shape around an image
+    /// but shows nothing on its own.
+    pub bg: String,
+    /// Corner radius. Omitted is zero.
+    pub rounded: f64,
     #[children]
     pub children: RefCell<Vec<Box<dyn ElementBuilder>>>,
     /// Built once, consuming `children`.
@@ -66,6 +72,12 @@ impl CnAspectRatio {
             }
             if self.h > 0.0 {
                 b = b.h(self.h as f32);
+            }
+            if let Some(color) = crate::color::parse_color_prop("cn.AspectRatio", "bg", &self.bg) {
+                b = b.bg(color);
+            }
+            if self.rounded > 0.0 {
+                b = b.rounded(self.rounded as f32);
             }
             // One content child holding the whole body: the builder
             // takes a single element, and it is that wrapper which
