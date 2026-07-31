@@ -155,3 +155,25 @@ fn without_the_view_return_type_nothing_is_promoted() {
         "root + Div.a only — myRow is not a view fn"
     );
 }
+
+/// A view fn must be lower-case named. A capital-leading call is a
+/// COMPONENT reference, validated against the component registry in
+/// `lower_component_calls`, which runs before view fns are promoted --
+/// so a capitalised one is rejected as an undeclared component rather
+/// than silently doing nothing.
+#[test]
+fn a_capitalised_view_fn_is_rejected_as_a_component() {
+    let dsl = BlincDsl::new().expect("runtime init");
+    let err = dsl
+        .compile_source(
+            r#"fn Row(): View { Div(class="r") { Text("x") } }
+               view { Div(class="a") { Row() } }"#,
+            "vr_caps.blinc",
+        )
+        .expect_err("a capitalised view fn reads as a component reference");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("unknown component"),
+        "expected the component diagnostic, got: {msg}"
+    );
+}

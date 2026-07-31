@@ -103,6 +103,17 @@ fsm Play {
 // extracted by `extract_and_strip_stylesheets` and flushed into the
 // context on the first `view_widget()` -- but the component form is
 // the convention the other examples follow.
+// A view-returning function: one row of the mapped list. Its body is an
+// ordinary statement scope, which is what lets `map`'s closure do work
+// before naming a widget.
+//
+// Lower-case on purpose. A capital-leading call is a COMPONENT
+// reference, checked against the component registry before view fns are
+// promoted, so `Tag(...)` would be rejected as an undeclared component.
+fn tag(label: string): View {
+    cn.Badge(label, variant = "secondary")
+}
+
 component Playground {
     style {
         .page {
@@ -117,6 +128,7 @@ component Playground {
     }
 
     view {
+        let tags = ["alpha", "beta", "gamma"]
         Div(class = "page") {
             FormWidgets()
             FeedbackWidgets()
@@ -168,6 +180,16 @@ component Playground {
             // Content, so it takes the deps() rebuild path -- same as
             // the button label above and for the same reason. Sharing
             // the signal means Busy moves both at once.
+
+            // List rendering: the list binds in the view body, and
+            // `map` puts one child per element in the widget body. The
+            // row is a `: View` function, so its body is a scope that
+            // can hold a binding -- a widget body cannot, being a
+            // children list rather than a statement list.
+            cn.Label("map: one child per element, via a `: View` fn")
+            Div(class = "row") {
+                tags.map(|t| { tag(t) })
+            }
 
             cn.Label("kbd: content bound (deps rebuild)")
             Div(class = "row") {

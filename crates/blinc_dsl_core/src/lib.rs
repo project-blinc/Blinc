@@ -43,7 +43,7 @@ use passes::inject_user_view_instance_id_params;
 use passes::{
     annotate_computed_lambda_types, apply_module_namespace_prefix, bind_component_props,
     collect_declared, desugar_compound_assigns, detect_and_strip_stateful_views,
-    ensure_unit_return, expand_const_groups, extract_and_strip_stylesheets,
+    ensure_unit_return, expand_const_groups, expand_map_calls, extract_and_strip_stylesheets,
     inject_fsm_context_markers, lower_bare_call_named_args, lower_children_arrays_to_blocks,
     lower_component_calls, lower_match_blocks, lower_reactive_args, lower_struct_literals,
     lower_struct_widget_props_to_handles, lower_styling_args_to_overlays,
@@ -647,6 +647,11 @@ impl BlincDsl {
         // prop list.
         publish_components_to_runtime_registry(&typed_program);
 
+        // MUST run BEFORE the children passes: each element becomes an
+        // ordinary child expression, so everything downstream sees what
+        // the author would have written by hand.
+        expand_map_calls(&mut typed_program);
+
         // MUST run BEFORE `ensure_unit_return` so its defensive `Return(None)`
         // doesn't override the value-bearing one.
         {
@@ -1226,6 +1231,8 @@ impl BlincDsl {
 
         bind_component_props(&mut program);
         inject_user_view_instance_id_params(&mut program);
+
+        expand_map_calls(&mut program);
 
         // Local set; `parse_to_typed_ast` doesn't touch the JIT renderer.
         let mut local_vrv = std::collections::HashSet::new();

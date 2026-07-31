@@ -88,7 +88,6 @@ fn there_is_no_module_scope_list() {
 /// NOT IMPLEMENTED. `map` parses but nothing lowers it, so the call
 /// produces no children and the row never renders.
 #[test]
-#[ignore = "not implemented: map has no lowering, so it emits no children"]
 fn map_emits_one_child_per_element() {
     assert_eq!(
         count_of(
@@ -99,4 +98,65 @@ fn map_emits_one_child_per_element() {
         6,
         "root + Div.a + two Div.r each with a Text"
     );
+}
+
+/// Mapped children keep source order against static siblings.
+#[test]
+fn mapped_children_keep_source_order() {
+    assert_eq!(
+        count_of(
+            r#"fn row(l: string): View { Div(class="r") { Text(l) } }
+               view {
+                 let items = ["a", "b"]
+                 Div(class="a") { Text("before") items.map(|it| { row(it) }) Text("after") }
+               }"#,
+            "map_order.blinc",
+        ),
+        8,
+        "root + Div.a + Text + 2x(Div.r + Text) + Text"
+    );
+}
+
+/// The closure body is a scope, so it can hold a binding the widget
+/// body could not.
+#[test]
+fn the_closure_body_can_hold_a_binding() {
+    assert_eq!(
+        count_of(
+            r#"fn row(l: string): View { Div(class="r") { Text(l) } }
+               view {
+                 let items = ["a"]
+                 Div(class="a") { items.map(|it| { let label = it row(label) }) }
+               }"#,
+            "map_binding.blinc",
+        ),
+        4,
+        "root + Div.a + Div.r + Text"
+    );
+}
+
+/// An empty list contributes nothing rather than failing.
+#[test]
+fn an_empty_list_maps_to_no_children() {
+    assert_eq!(
+        count_of(
+            r#"fn row(l: string): View { Div(class="r") { Text(l) } }
+               view { let items = [] Div(class="a") { items.map(|it| { row(it) }) } }"#,
+            "map_empty.blinc",
+        ),
+        2,
+        "root + Div.a only"
+    );
+}
+
+/// A map whose list this pass cannot see is left alone rather than
+/// dropped, so it fails visibly rather than rendering a silent blank.
+#[test]
+fn an_unknown_receiver_is_left_untouched() {
+    parses(
+        r#"fn row(l: string): View { Div(class="r") { Text(l) } }
+           view { Div(class="a") { unknown.map(|it| { row(it) }) } }"#,
+        "map_unknown.blinc",
+    )
+    .expect("still parses; the call is simply not expanded");
 }
