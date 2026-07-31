@@ -35,12 +35,14 @@ component MediaWidgets {
                 cn.Breadcrumb(items = ["Docs", "Guide"], separator = "/")
             }
 
-            cn.Label("scroll area: content taller than its box")
-            cn.ScrollArea(direction = "vertical", scrollbar = "hover", h = 80.0, w = 240.0) {
+            cn.Label("scroll area: six rows in a 60px box")
+            cn.ScrollArea(direction = "vertical", scrollbar = "hover", h = 60.0, w = 240.0) {
                 cn.Label("row one")
                 cn.Label("row two")
                 cn.Label("row three")
                 cn.Label("row four")
+                cn.Label("row five")
+                cn.Label("row six")
             }
 
             cn.Label("separator + static skeleton")

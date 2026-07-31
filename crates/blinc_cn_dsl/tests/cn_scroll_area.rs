@@ -148,3 +148,48 @@ fn the_viewport_honours_its_height() {
         "the scroll box must stay at its declared height, got {h}"
     );
 }
+
+/// Content has to be TALLER than the viewport, or there is nothing to
+/// scroll however correct the box looks. Measures the content div
+/// against the box that holds it.
+#[test]
+fn content_overflows_the_viewport() {
+    let dsl = compiled(
+        r#"view { cn.ScrollArea(h = 60.0, w = 240.0) { cn.Label("a") cn.Label("b") cn.Label("c") cn.Label("d") } }"#,
+        "sa_overflowing.blinc",
+    );
+    let host = div().w(400.0).h(600.0).child_box(dsl.view_widget());
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(400.0, 600.0);
+
+    let root = tree.root().expect("root");
+    let view_root = *tree.layout_tree.children(root).first().expect("view root");
+    let shell = *tree
+        .layout_tree
+        .children(view_root)
+        .first()
+        .expect("scroll area");
+    let box_h = tree
+        .layout_tree
+        .get_layout(shell)
+        .expect("laid out")
+        .size
+        .height;
+
+    // Deepest content: total height of the rows inside.
+    let mut content_h = 0.0f32;
+    let mut stack = vec![shell];
+    while let Some(id) = stack.pop() {
+        for &c in tree.layout_tree.children(id).iter() {
+            if let Some(l) = tree.layout_tree.get_layout(c) {
+                content_h = content_h.max(l.size.height);
+            }
+            stack.push(c);
+        }
+    }
+    assert!(
+        content_h > box_h,
+        "content ({content_h}) must exceed the box ({box_h}) for there \
+         to be anything to scroll"
+    );
+}
