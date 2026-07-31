@@ -106,11 +106,7 @@ fsm Play {
 // A view-returning function: one row of the mapped list. Its body is an
 // ordinary statement scope, which is what lets `map`'s closure do work
 // before naming a widget.
-//
-// Lower-case on purpose. A capital-leading call is a COMPONENT
-// reference, checked against the component registry before view fns are
-// promoted, so `Tag(...)` would be rejected as an undeclared component.
-fn tag(label: string): View {
+fn Tag(label: string): View {
     cn.Badge(label, variant = "secondary")
 }
 
@@ -188,7 +184,7 @@ component Playground {
             // children list rather than a statement list.
             cn.Label("map: one child per element, via a `: View` fn")
             Div(class = "row") {
-                tags.map(|t| { tag(t) })
+                tags.map(|t| { Tag(t) })
             }
 
             cn.Label("kbd: content bound (deps rebuild)")

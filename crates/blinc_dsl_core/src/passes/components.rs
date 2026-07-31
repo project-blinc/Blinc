@@ -27,6 +27,12 @@ pub(crate) fn validate_component_calls(program: &TypedProgram) -> Result<(), Vec
             }
         }
     }
+    // A `fn Row(): View` is a legitimate widget-producing callee even
+    // though it is not a component. Capital-leading calls parse as
+    // component references, so without this the validator rejects one
+    // as undeclared and the author is pushed into naming it lower-case.
+    known.extend(super::view_returning_fn_names(program));
+
     // Pull pre-registered primitives (`Div`, `Text`, …) from the substrate registry.
     blinc_runtime::component::with_component_registry(|r| {
         for (_, def) in r.iter() {
@@ -239,6 +245,7 @@ pub(crate) fn call_site_path_id(
 /// MUST run after `validate_component_calls`. Slot markers inside body Blocks
 /// are left alone.
 pub(crate) fn lower_component_calls(program: &mut TypedProgram, filename: &str) {
+    let view_fns = super::view_returning_fn_names(program);
     use zyntax_typed_ast::typed_ast::{
         TypedCall, TypedDeclaration, TypedExpression, TypedLiteral, TypedNamedArg,
     };
@@ -251,49 +258,53 @@ pub(crate) fn lower_component_calls(program: &mut TypedProgram, filename: &str) 
     // tripping Zyntax's SSA value-map on `TypedExpression::Block`-as-
     // expression at the trailing-statement position.
 
-    fn rewrite_expr(expr: &mut zyntax_typed_ast::TypedNode<TypedExpression>, filename: &str) {
+    fn rewrite_expr(
+        expr: &mut zyntax_typed_ast::TypedNode<TypedExpression>,
+        filename: &str,
+        view_fns: &std::collections::HashSet<String>,
+    ) {
         // Recurse bottom-up so nested marker calls also lower.
         match &mut expr.node {
             TypedExpression::Binary(b) => {
-                rewrite_expr(&mut b.left, filename);
-                rewrite_expr(&mut b.right, filename);
+                rewrite_expr(&mut b.left, filename, view_fns);
+                rewrite_expr(&mut b.right, filename, view_fns);
             }
-            TypedExpression::Unary(u) => rewrite_expr(&mut u.operand, filename),
+            TypedExpression::Unary(u) => rewrite_expr(&mut u.operand, filename, view_fns),
             TypedExpression::Call(c) => {
-                rewrite_expr(&mut c.callee, filename);
+                rewrite_expr(&mut c.callee, filename, view_fns);
                 for a in &mut c.positional_args {
-                    rewrite_expr(a, filename);
+                    rewrite_expr(a, filename, view_fns);
                 }
                 for n in &mut c.named_args {
-                    rewrite_expr(&mut n.value, filename);
+                    rewrite_expr(&mut n.value, filename, view_fns);
                 }
             }
-            TypedExpression::Field(f) => rewrite_expr(&mut f.object, filename),
+            TypedExpression::Field(f) => rewrite_expr(&mut f.object, filename, view_fns),
             TypedExpression::Index(idx) => {
-                rewrite_expr(&mut idx.object, filename);
-                rewrite_expr(&mut idx.index, filename);
+                rewrite_expr(&mut idx.object, filename, view_fns);
+                rewrite_expr(&mut idx.index, filename, view_fns);
             }
             TypedExpression::Array(items) | TypedExpression::Tuple(items) => {
                 for it in items {
-                    rewrite_expr(it, filename);
+                    rewrite_expr(it, filename, view_fns);
                 }
             }
             TypedExpression::Struct(s) => {
                 for field in &mut s.fields {
-                    rewrite_expr(&mut field.value, filename);
+                    rewrite_expr(&mut field.value, filename, view_fns);
                 }
             }
             TypedExpression::MethodCall(mc) => {
-                rewrite_expr(&mut mc.receiver, filename);
+                rewrite_expr(&mut mc.receiver, filename, view_fns);
                 for a in &mut mc.positional_args {
-                    rewrite_expr(a, filename);
+                    rewrite_expr(a, filename, view_fns);
                 }
             }
-            TypedExpression::Block(b) => rewrite_block(b, filename),
+            TypedExpression::Block(b) => rewrite_block(b, filename, view_fns),
             TypedExpression::If(if_expr) => {
-                rewrite_expr(&mut if_expr.condition, filename);
-                rewrite_expr(&mut if_expr.then_branch, filename);
-                rewrite_expr(&mut if_expr.else_branch, filename);
+                rewrite_expr(&mut if_expr.condition, filename, view_fns);
+                rewrite_expr(&mut if_expr.then_branch, filename, view_fns);
+                rewrite_expr(&mut if_expr.else_branch, filename, view_fns);
             }
             _ => {}
         }
@@ -369,11 +380,20 @@ pub(crate) fn lower_component_calls(program: &mut TypedProgram, filename: &str) 
         let component_name_str = component_name.resolve_global().unwrap_or_default();
         let component_name_str: &str = component_name_str.as_ref();
         let registry_key = component_name_str.replace('.', "_");
-        let view_symbol = blinc_runtime::component::with_component_registry(|r| {
-            r.get_by_name(&registry_key)
-                .map(|def| def.view_symbol.as_ref().to_string())
-        })
-        .unwrap_or_else(|| format!("{registry_key}$view"));
+        // A `: View` function is called by its own name. It has no
+        // `$view`-suffixed symbol -- that mangling belongs to component
+        // and impl-method views -- so appending one would emit a call to
+        // a symbol that was never defined, and the enclosing function
+        // would be dropped with a diagnostic naming ITS caller.
+        let view_symbol = if view_fns.contains(&registry_key) {
+            registry_key.clone()
+        } else {
+            blinc_runtime::component::with_component_registry(|r| {
+                r.get_by_name(&registry_key)
+                    .map(|def| def.view_symbol.as_ref().to_string())
+            })
+            .unwrap_or_else(|| format!("{registry_key}$view"))
+        };
         let new_callee = zyntax_typed_ast::TypedNode::new(
             TypedExpression::Variable(zyntax_typed_ast::InternedString::new_global(&view_symbol)),
             Type::Any,
@@ -394,12 +414,16 @@ pub(crate) fn lower_component_calls(program: &mut TypedProgram, filename: &str) 
         let _instance_id = call_site_instance_id(filename, span.start);
     }
 
-    fn rewrite_block(block: &mut zyntax_typed_ast::typed_ast::TypedBlock, filename: &str) {
+    fn rewrite_block(
+        block: &mut zyntax_typed_ast::typed_ast::TypedBlock,
+        filename: &str,
+        view_fns: &std::collections::HashSet<String>,
+    ) {
         let old_stmts = std::mem::take(&mut block.statements);
         let mut new_stmts: Vec<zyntax_typed_ast::TypedNode<TypedStatement>> =
             Vec::with_capacity(old_stmts.len());
         for mut stmt in old_stmts {
-            rewrite_stmt(&mut stmt, filename);
+            rewrite_stmt(&mut stmt, filename, view_fns);
             collect_children_into(&mut new_stmts, stmt);
         }
         block.statements = new_stmts;
@@ -633,27 +657,31 @@ pub(crate) fn lower_component_calls(program: &mut TypedProgram, filename: &str) 
         )
     }
 
-    fn rewrite_stmt(stmt: &mut zyntax_typed_ast::TypedNode<TypedStatement>, filename: &str) {
+    fn rewrite_stmt(
+        stmt: &mut zyntax_typed_ast::TypedNode<TypedStatement>,
+        filename: &str,
+        view_fns: &std::collections::HashSet<String>,
+    ) {
         match &mut stmt.node {
-            TypedStatement::Expression(e) => rewrite_expr(e, filename),
+            TypedStatement::Expression(e) => rewrite_expr(e, filename, view_fns),
             TypedStatement::Let(l) => {
                 if let Some(init) = &mut l.initializer {
-                    rewrite_expr(init, filename);
+                    rewrite_expr(init, filename, view_fns);
                 }
             }
-            TypedStatement::Return(Some(e)) => rewrite_expr(e, filename),
+            TypedStatement::Return(Some(e)) => rewrite_expr(e, filename, view_fns),
             TypedStatement::If(if_stmt) => {
-                rewrite_expr(&mut if_stmt.condition, filename);
-                rewrite_block(&mut if_stmt.then_block, filename);
+                rewrite_expr(&mut if_stmt.condition, filename, view_fns);
+                rewrite_block(&mut if_stmt.then_block, filename, view_fns);
                 if let Some(else_block) = &mut if_stmt.else_block {
-                    rewrite_block(else_block, filename);
+                    rewrite_block(else_block, filename, view_fns);
                 }
             }
             TypedStatement::While(w) => {
-                rewrite_expr(&mut w.condition, filename);
-                rewrite_block(&mut w.body, filename);
+                rewrite_expr(&mut w.condition, filename, view_fns);
+                rewrite_block(&mut w.body, filename, view_fns);
             }
-            TypedStatement::Block(b) => rewrite_block(b, filename),
+            TypedStatement::Block(b) => rewrite_block(b, filename, view_fns),
             _ => {}
         }
     }
@@ -662,13 +690,13 @@ pub(crate) fn lower_component_calls(program: &mut TypedProgram, filename: &str) 
         match &mut decl.node {
             TypedDeclaration::Function(func) => {
                 if let Some(body) = &mut func.body {
-                    rewrite_block(body, filename);
+                    rewrite_block(body, filename, &view_fns);
                 }
             }
             TypedDeclaration::Impl(imp) => {
                 for method in &mut imp.methods {
                     if let Some(body) = &mut method.body {
-                        rewrite_block(body, filename);
+                        rewrite_block(body, filename, &view_fns);
                     }
                 }
             }

@@ -156,24 +156,39 @@ fn without_the_view_return_type_nothing_is_promoted() {
     );
 }
 
-/// A view fn must be lower-case named. A capital-leading call is a
-/// COMPONENT reference, validated against the component registry in
-/// `lower_component_calls`, which runs before view fns are promoted --
-/// so a capitalised one is rejected as an undeclared component rather
-/// than silently doing nothing.
+/// A view fn may be capitalised. A capital-leading call parses as a
+/// component reference, so both the validator and the call-site
+/// lowering consult the set of `: View` functions: the validator so it
+/// is not rejected as undeclared, and the lowering so it is called by
+/// its own name rather than a `<Name>$view` symbol that was never
+/// defined.
+///
+/// Capitalised is the natural spelling for something that renders, so
+/// the alternative was a naming rule users had to learn.
 #[test]
-fn a_capitalised_view_fn_is_rejected_as_a_component() {
-    let dsl = BlincDsl::new().expect("runtime init");
-    let err = dsl
-        .compile_source(
+fn a_capitalised_view_fn_works() {
+    assert_eq!(
+        count_of(
             r#"fn Row(): View { Div(class="r") { Text("x") } }
                view { Div(class="a") { Row() } }"#,
             "vr_caps.blinc",
-        )
-        .expect_err("a capitalised view fn reads as a component reference");
-    let msg = format!("{err:?}");
-    assert!(
-        msg.contains("unknown component"),
-        "expected the component diagnostic, got: {msg}"
+        ),
+        4,
+        "identical to the lower-case spelling"
+    );
+}
+
+/// Capitalised, with parameters, mapped over a list — the spelling the
+/// playground uses.
+#[test]
+fn a_capitalised_view_fn_maps_over_a_list() {
+    assert_eq!(
+        count_of(
+            r#"fn Tag(label: string): View { Div(class="t") { Text(label) } }
+               view { let tags = ["a", "b"] Div(class="p") { tags.map(|t| { Tag(t) }) } }"#,
+            "vr_caps_map.blinc",
+        ),
+        6,
+        "root + Div.p + 2x(Div.t + Text)"
     );
 }

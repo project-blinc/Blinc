@@ -2,6 +2,41 @@
 
 use crate::*;
 
+/// Names of functions declared `: View`.
+///
+/// Read from the return-type annotation, so it is available before
+/// `lower_view_to_value_returning` has promoted anything. Component-call
+/// lowering needs it that early: a capital-leading call parses as a
+/// component reference, and without this a `fn Row(): View` would be
+/// rejected as an undeclared component.
+pub(crate) fn view_returning_fn_names(program: &TypedProgram) -> std::collections::HashSet<String> {
+    use zyntax_typed_ast::TypedDeclaration;
+    let mut out = std::collections::HashSet::new();
+    for decl in &program.declarations {
+        let TypedDeclaration::Function(func) = &decl.node else {
+            continue;
+        };
+        if func.is_external {
+            continue;
+        }
+        let named = match &func.return_type {
+            Type::Unresolved(n) => n.resolve_global().map(|s| s.to_string()),
+            Type::Named { id, .. } => program
+                .type_registry
+                .get_type_by_id(*id)
+                .and_then(|t| t.name.resolve_global())
+                .map(|s| s.to_string()),
+            _ => None,
+        };
+        if named.as_deref() == Some("View")
+            && let Some(name) = func.name.resolve_global()
+        {
+            out.insert(name.to_string());
+        }
+    }
+    out
+}
+
 /// Rewrite view fns to value-returning (`I64` widget handle) when their body
 /// ends in a `$Blinc$<X>$view` call. MUST run before [`ensure_unit_return`].
 /// Pinning return to a concrete `I64` (not `Any`) keeps Zyntax's body

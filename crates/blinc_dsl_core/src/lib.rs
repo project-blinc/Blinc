@@ -624,6 +624,13 @@ impl BlincDsl {
         lower_struct_literals(&mut typed_program)
             .map_err(|errors| BlincDslError::Compile(errors.join("\n")))?;
 
+        // MUST run BEFORE component-call lowering. That pass does not
+        // descend into lambda bodies, so a widget call inside the map
+        // closure would keep its `__component_call__` marker and reach
+        // the JIT unlowered. Expanding first puts each element's call in
+        // an ordinary position where the marker is rewritten normally.
+        expand_map_calls(&mut typed_program);
+
         // MUST validate BEFORE lower_component_calls — validator reads the marker shape.
         validate_component_calls(&typed_program)
             .map_err(|errors| BlincDslError::Compile(errors.join("\n")))?;
@@ -646,11 +653,6 @@ impl BlincDsl {
         // ([runtime_bridge.rs]) so it doesn't leak into the user-visible
         // prop list.
         publish_components_to_runtime_registry(&typed_program);
-
-        // MUST run BEFORE the children passes: each element becomes an
-        // ordinary child expression, so everything downstream sees what
-        // the author would have written by hand.
-        expand_map_calls(&mut typed_program);
 
         // MUST run BEFORE `ensure_unit_return` so its defensive `Return(None)`
         // doesn't override the value-bearing one.
@@ -1227,12 +1229,12 @@ impl BlincDsl {
             .map_err(|errors| BlincDslError::Compile(errors.join("\n")))?;
 
         // MUST run after validation — validator reads the marker shape.
+        expand_map_calls(&mut program);
+
         lower_component_calls(&mut program, filename);
 
         bind_component_props(&mut program);
         inject_user_view_instance_id_params(&mut program);
-
-        expand_map_calls(&mut program);
 
         // Local set; `parse_to_typed_ast` doesn't touch the JIT renderer.
         let mut local_vrv = std::collections::HashSet::new();
