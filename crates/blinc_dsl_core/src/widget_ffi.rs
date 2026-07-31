@@ -1490,6 +1490,10 @@ pub(crate) extern "C" fn blinc_new_child_list() -> i64 {
 /// # Safety
 ///
 /// `list` must come from `__new_child_list__` and remain live (reclaimed by the container).
+pub(crate) fn push_child_handle(list: i64, child: WidgetHandle) {
+    blinc_push_child(list, child);
+}
+
 pub(crate) extern "C" fn blinc_push_child(list: i64, child: WidgetHandle) {
     if list == 0 {
         return;

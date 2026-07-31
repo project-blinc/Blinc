@@ -61,6 +61,9 @@
     // block. Takes `(region_id, child_handle)`; `lower_with_blocks`
     // fills both in, so the shape here is what the grammar emits.
     __blinc_with__: "__blinc_with__",
+    // `items.map(|x| Row(x))` over a list signal -- the runtime half of
+    // list rendering, for elements that only exist while the app runs.
+    __blinc_map_children__: "__blinc_map_children__",
     // Opens the read scope a `with` region renders under. Emitted by
     // `lower_with_blocks` in argument position, so it runs before the
     // region's view and every read inside lands in that scope.
@@ -853,7 +856,18 @@ plain_field = { name:identifier ~ ":" ~ ty:state_type }
 // `prim_*` shape: each primitive is its own rule so the action
 // constructs `Type::Primitive { name: intern("...") }` with the
 // right tag. Extend as the prototype grows.
-state_type = { state_type_bool | state_type_f64 | state_type_i32 | state_type_string | state_type_named }
+state_type = { state_type_bool | state_type_f64 | state_type_i32 | state_type_string | state_type_list | state_type_named }
+
+// `list` — a list of strings, the source for `map` over data that
+// changes at runtime. Spelled without an element type because that is
+// the only element type a list signal holds today; widening it means a
+// real generic spelling rather than a second keyword.
+//
+// Named rather than primitive: no JIT-side representation exists for a
+// list, so nothing may try to read one inline. The value is reached
+// only host-side, by the extern that turns it into children.
+state_type_list = { "list" }
+  -> Type::Named { name: intern("BlincStringList"), type_args: [] }
 
 state_type_bool = { "bool" }
   -> Type::Primitive { name: intern("bool") }

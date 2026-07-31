@@ -195,6 +195,20 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             ptr: blinc_dsl_effect as *const u8,
         },
         BuiltinDescriptor {
+            // `items.map(|x| Row(x))` over a list signal. Takes the
+            // child list, the signal id, and the lambda as a fn ptr;
+            // the host walks the list because a `Vec<String>` has no
+            // JIT-side representation.
+            name: "__blinc_map_children__",
+            param_types: &[
+                Type::Primitive(PrimitiveType::I64),
+                Type::Primitive(PrimitiveType::I64),
+                Type::Primitive(PrimitiveType::I64),
+            ],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: crate::host::blinc_dsl_map_children as *const u8,
+        },
+        BuiltinDescriptor {
             // Opens the read scope a `with` region renders under. Sits
             // in argument position so it runs before the region's view.
             name: "__blinc_scope_enter__",

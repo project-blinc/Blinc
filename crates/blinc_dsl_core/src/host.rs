@@ -501,3 +501,49 @@ pub(crate) extern "C" fn blinc_string_concat(a: *const i32, b: *const i32) -> *c
     out.push_str(b_str);
     blinc_string_alloc(&out)
 }
+
+/// `__blinc_map_children__(list, signal_id, closure)` — one child per
+/// element of a string-list signal.
+///
+/// The runtime half of `items.map(|x| Row(x))`. A list whose elements
+/// are known at parse time is expanded by `expand_map_calls` and never
+/// reaches here; this is the path for a list that changes while the app
+/// runs, so the elements only exist host-side.
+///
+/// The list is walked here rather than in JIT code because a
+/// `Vec<String>` has no representation the JIT can hold, and because
+/// indexing a JIT-side array faults.
+///
+/// Records the read, so a `with` region containing the map re-renders
+/// when the list is set — same mechanism as any scalar signal read.
+///
+/// # Safety
+///
+/// `list` must come from `__new_child_list__`. `closure` must be an
+/// `extern "C" fn(*const i32) -> i64` taking an allocated string and
+/// returning a widget handle, which is what the DSL's one-parameter
+/// lambda lowers to.
+pub(crate) extern "C" fn blinc_dsl_map_children(list: i64, signal_id: i64, closure_ptr: i64) {
+    crate::read_scope::record(signal_id as u64);
+    if list == 0 || closure_ptr == 0 {
+        tracing::warn!(
+            list,
+            closure_ptr,
+            "__blinc_map_children__ called with a null argument"
+        );
+        return;
+    }
+    let Some(items) = blinc_runtime::signal::get_string_list_by_id(signal_id as u64) else {
+        // Undeclared or minted as another type: no children rather than
+        // a fabricated one.
+        return;
+    };
+    type MapFn = extern "C" fn(*const i32) -> i64;
+    // SAFETY: see fn-level doc.
+    let func: MapFn = unsafe { std::mem::transmute(closure_ptr) };
+    for item in items {
+        let arg = blinc_string_alloc(&item);
+        let handle = func(arg);
+        crate::widget_ffi::push_child_handle(list, handle);
+    }
+}

@@ -38,6 +38,14 @@ pub enum SignalType {
     F64,
     String,
     Bool,
+    /// A list of strings, for list rendering.
+    ///
+    /// The scalar variants each have a `__signal_get_by_id_<T>` extern
+    /// so the JIT can read them inline. This one deliberately does not:
+    /// a `Vec<String>` has no representation the JIT can hold, so it is
+    /// read only host-side, by the extern that walks it to produce
+    /// children.
+    StringList,
 }
 
 #[derive(Clone, Copy)]
@@ -89,6 +97,9 @@ pub fn mint_or_get(name: &str, ty: SignalType) -> u64 {
             .id()
             .to_raw(),
         SignalType::Bool => blinc_core::reactive::signal::<bool>(false).id().to_raw(),
+        SignalType::StringList => blinc_core::reactive::signal::<Vec<String>>(Vec::new())
+            .id()
+            .to_raw(),
     };
     registry()
         .write()
@@ -237,4 +248,35 @@ mod tests {
         set_str("title_t", "hello");
         assert_eq!(get_str("title_t").as_deref(), Some("hello"));
     }
+}
+
+// =====================================================================
+// String-list accessors.
+//
+// The source for `items.map(|x| Row(x))` over a list that changes at
+// runtime. Set from Rust; the DSL reads it only through the
+// child-producing extern, never as a value.
+// =====================================================================
+
+/// Replace a string-list signal's contents. Auto-mints if absent.
+///
+/// Fires the same subscriber path as any other `set`, so a region that
+/// rendered from this list re-renders.
+pub fn set_string_list(name: &str, value: Vec<String>) {
+    let id_raw = mint_or_get(name, SignalType::StringList);
+    Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).set(value);
+}
+
+/// Read a string-list signal. `None` if undeclared or minted as another
+/// type.
+pub fn get_string_list(name: &str) -> Option<Vec<String>> {
+    let (id_raw, SignalType::StringList) = lookup(name)? else {
+        return None;
+    };
+    Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).try_get()
+}
+
+/// Read by raw signal id, for the extern that only has the baked id.
+pub fn get_string_list_by_id(id_raw: u64) -> Option<Vec<String>> {
+    Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).try_get()
 }

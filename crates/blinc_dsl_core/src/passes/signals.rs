@@ -109,15 +109,16 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
         if !is_signal_decl(func) {
             continue;
         }
-        let Type::Primitive(prim) = &func.return_type else {
-            continue;
-        };
-        let sig_ty = match prim {
-            PrimitiveType::I32 => blinc_runtime::signal::SignalType::I32,
-            PrimitiveType::I64 => blinc_runtime::signal::SignalType::I64,
-            PrimitiveType::F64 => blinc_runtime::signal::SignalType::F64,
-            PrimitiveType::String => blinc_runtime::signal::SignalType::String,
-            PrimitiveType::Bool => blinc_runtime::signal::SignalType::Bool,
+        // `signal items: list` arrives as a Named/Unresolved type rather
+        // than a primitive -- there is no primitive for it, on purpose:
+        // nothing may try to read a list inline in the JIT.
+        let sig_ty = match &func.return_type {
+            Type::Primitive(PrimitiveType::I32) => blinc_runtime::signal::SignalType::I32,
+            Type::Primitive(PrimitiveType::I64) => blinc_runtime::signal::SignalType::I64,
+            Type::Primitive(PrimitiveType::F64) => blinc_runtime::signal::SignalType::F64,
+            Type::Primitive(PrimitiveType::String) => blinc_runtime::signal::SignalType::String,
+            Type::Primitive(PrimitiveType::Bool) => blinc_runtime::signal::SignalType::Bool,
+            other if is_string_list_type(other) => blinc_runtime::signal::SignalType::StringList,
             _ => continue,
         };
         let Some(name_str) = func.name.resolve_global() else {
@@ -622,4 +623,16 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
         };
         !is_signal_decl(func)
     });
+}
+
+/// Is this the `list` spelling from `state_type_list`?
+///
+/// It reaches here as `Named` or `Unresolved` depending on whether a
+/// type of that name is registered, and none is, so both are accepted.
+pub(crate) fn is_string_list_type(ty: &Type) -> bool {
+    match ty {
+        Type::Unresolved(n) => n.resolve_global().as_deref() == Some("BlincStringList"),
+        Type::Named { .. } => false,
+        _ => false,
+    }
 }
