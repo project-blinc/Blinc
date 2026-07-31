@@ -19,6 +19,32 @@ pub(crate) fn lower_view_to_value_returning(
         )
     }
 
+    /// `fn row(label: string): View { … }` — a user function that hands
+    /// back a widget.
+    ///
+    /// The declared return type is the opt-in rather than the trailing
+    /// statement's shape: promoting any function that happens to end in
+    /// a widget call would rewrite the return type of helpers that build
+    /// a widget for their own reasons and return something else.
+    ///
+    /// The marker resolves as `Named` or `Unresolved` depending on
+    /// whether a type of that name exists, and neither is registered, so
+    /// both spellings are accepted.
+    fn returns_view_marker(
+        ty: &Type,
+        registry: &zyntax_typed_ast::type_registry::TypeRegistry,
+    ) -> bool {
+        let name = match ty {
+            Type::Unresolved(n) => n.resolve_global().map(|s| s.to_string()),
+            Type::Named { id, .. } => registry
+                .get_type_by_id(*id)
+                .and_then(|t| t.name.resolve_global())
+                .map(|s| s.to_string()),
+            _ => None,
+        };
+        name.as_deref() == Some("View")
+    }
+
     /// Match `Expression(Call(Variable("<X>$view"), ...))` where `<X>` is a
     /// substrate primitive or a user component whose own view is value-returning.
     fn is_primitive_view_call_stmt(
@@ -108,24 +134,49 @@ pub(crate) fn lower_view_to_value_returning(
         }
     }
 
-    for decl in program.declarations.iter_mut() {
-        let TypedDeclaration::Function(func) = &mut decl.node else {
-            continue;
-        };
-        if func.is_external {
-            continue;
-        }
-        if !is_view_name(func.name) {
-            continue;
-        }
-        let Some(body) = func.body.as_mut() else {
-            continue;
-        };
-        if try_convert_trailing(body, value_returning_symbols) {
-            func.return_type = widget_handle_type.clone();
-            if let Some(name) = func.name.resolve_global() {
-                value_returning_symbols.insert(name.to_string());
+    // Free functions: the `view` / `render_view` entry points, plus any
+    // user function declared `: View`.
+    //
+    // To a fixpoint, because a view function may call another one and
+    // `is_primitive_view_call_stmt` only recognises a callee already in
+    // `value_returning_symbols`. A single pass would promote them only
+    // when they happen to be declared callee-first. Each round promotes
+    // at least one or stops, so this terminates in at most one round per
+    // function.
+    loop {
+        let mut promoted_this_round = false;
+        for decl in program.declarations.iter_mut() {
+            let TypedDeclaration::Function(func) = &mut decl.node else {
+                continue;
+            };
+            if func.is_external {
+                continue;
             }
+            let already = func
+                .name
+                .resolve_global()
+                .is_some_and(|n| value_returning_symbols.contains(&n as &str));
+            if already {
+                continue;
+            }
+            if !is_view_name(func.name)
+                && !returns_view_marker(&func.return_type, &program.type_registry)
+            {
+                continue;
+            }
+            let Some(body) = func.body.as_mut() else {
+                continue;
+            };
+            if try_convert_trailing(body, value_returning_symbols) {
+                func.return_type = widget_handle_type.clone();
+                if let Some(name) = func.name.resolve_global() {
+                    value_returning_symbols.insert(name.to_string());
+                }
+                promoted_this_round = true;
+            }
+        }
+        if !promoted_this_round {
+            break;
         }
     }
 }
@@ -134,7 +185,10 @@ pub(crate) fn lower_view_to_value_returning(
 /// arrays) into Block expansions backed by `__new_child_list__` / `__push_child__`.
 /// Post-order recursive. MUST run after `lower_view_to_value_returning` and
 /// before `ensure_unit_return`.
-pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
+pub(crate) fn lower_children_arrays_to_blocks(
+    program: &mut TypedProgram,
+    value_returning_symbols: &std::collections::HashSet<String>,
+) {
     use zyntax_typed_ast::{TypedCall, TypedDeclaration, TypedExpression, TypedNamedArg};
 
     /// Counter for unique `__blinc_children_<N>` idents.
@@ -145,23 +199,27 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
     }
 
     /// Walk a statement and rewrite any nested primitive calls.
-    fn walk_stmt(stmt: &mut zyntax_typed_ast::TypedNode<TypedStatement>, counter: &mut u32) {
+    fn walk_stmt(
+        stmt: &mut zyntax_typed_ast::TypedNode<TypedStatement>,
+        counter: &mut u32,
+        vrs: &std::collections::HashSet<String>,
+    ) {
         match &mut stmt.node {
-            TypedStatement::Expression(e) => rewrite_expr(e, counter),
-            TypedStatement::Return(Some(e)) => rewrite_expr(e, counter),
+            TypedStatement::Expression(e) => rewrite_expr(e, counter, vrs),
+            TypedStatement::Return(Some(e)) => rewrite_expr(e, counter, vrs),
             TypedStatement::Let(l) => {
                 if let Some(init) = &mut l.initializer {
-                    rewrite_expr(init, counter);
+                    rewrite_expr(init, counter, vrs);
                 }
             }
             TypedStatement::If(if_stmt) => {
-                rewrite_expr(&mut if_stmt.condition, counter);
+                rewrite_expr(&mut if_stmt.condition, counter, vrs);
                 for s in &mut if_stmt.then_block.statements {
-                    walk_stmt(s, counter);
+                    walk_stmt(s, counter, vrs);
                 }
                 if let Some(else_block) = &mut if_stmt.else_block {
                     for s in &mut else_block.statements {
-                        walk_stmt(s, counter);
+                        walk_stmt(s, counter, vrs);
                     }
                 }
             }
@@ -170,14 +228,14 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
             // `children` Array that never became a child list, so the
             // nested widget rendered childless.
             TypedStatement::While(w) => {
-                rewrite_expr(&mut w.condition, counter);
+                rewrite_expr(&mut w.condition, counter, vrs);
                 for s in &mut w.body.statements {
-                    walk_stmt(s, counter);
+                    walk_stmt(s, counter, vrs);
                 }
             }
             TypedStatement::Block(b) => {
                 for s in &mut b.statements {
-                    walk_stmt(s, counter);
+                    walk_stmt(s, counter, vrs);
                 }
             }
             _ => {}
@@ -185,30 +243,34 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
     }
 
     /// Post-order — recurse before rewriting `expr`.
-    fn rewrite_expr(expr: &mut zyntax_typed_ast::TypedNode<TypedExpression>, counter: &mut u32) {
+    fn rewrite_expr(
+        expr: &mut zyntax_typed_ast::TypedNode<TypedExpression>,
+        counter: &mut u32,
+        vrs: &std::collections::HashSet<String>,
+    ) {
         match &mut expr.node {
             TypedExpression::Call(call) => {
-                rewrite_expr(&mut call.callee, counter);
+                rewrite_expr(&mut call.callee, counter, vrs);
                 for arg in &mut call.positional_args {
-                    rewrite_expr(arg, counter);
+                    rewrite_expr(arg, counter, vrs);
                 }
                 for named in &mut call.named_args {
-                    rewrite_expr(&mut named.value, counter);
+                    rewrite_expr(&mut named.value, counter, vrs);
                 }
             }
             TypedExpression::Array(items) => {
                 for item in items {
-                    rewrite_expr(item, counter);
+                    rewrite_expr(item, counter, vrs);
                 }
             }
             TypedExpression::Block(block) => {
                 for stmt in &mut block.statements {
-                    walk_stmt(stmt, counter);
+                    walk_stmt(stmt, counter, vrs);
                 }
             }
             TypedExpression::Binary(b) => {
-                rewrite_expr(&mut b.left, counter);
-                rewrite_expr(&mut b.right, counter);
+                rewrite_expr(&mut b.left, counter, vrs);
+                rewrite_expr(&mut b.right, counter, vrs);
             }
             _ => {}
         }
@@ -312,7 +374,7 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
                         carrier_call.positional_args.remove(0).node
                     {
                         for stmt in &mut carrier.statements {
-                            rewrite_child_pushes_in_stmt(stmt, list_ident);
+                            rewrite_child_pushes_in_stmt(stmt, list_ident, vrs);
                         }
                         prelude.extend(carrier.statements);
                     }
@@ -324,7 +386,7 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
                 // `__push_child__` a void argument, which codegen cannot
                 // resolve. Same rule the control-flow carrier applies to
                 // statements inside a branch or loop body.
-                if !is_widget_producing_expr(&child_expr) {
+                if !is_widget_producing_expr(&child_expr, vrs) {
                     let ty = child_expr.ty.clone();
                     prelude.push(typed_node(
                         TypedStatement::Expression(Box::new(child_expr)),
@@ -417,19 +479,34 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
     /// `__signal_set_by_id_*` call — same shape, but a VOID result.
     /// Wrapping that in `__push_child__` feeds codegen a void value as an
     /// argument, which dies in Cranelift with "arg not in value_map".
-    fn is_widget_producing_expr(expr: &zyntax_typed_ast::TypedNode<TypedExpression>) -> bool {
+    fn is_widget_producing_expr(
+        expr: &zyntax_typed_ast::TypedNode<TypedExpression>,
+        value_returning_symbols: &std::collections::HashSet<String>,
+    ) -> bool {
         match &expr.node {
             TypedExpression::Call(c) => {
                 let TypedExpression::Variable(callee) = &c.callee.node else {
                     return false;
                 };
                 callee.resolve_global().is_some_and(|n| {
-                    n.ends_with("$view") || n == "__component_call__" || n == "__blinc_with__"
+                    // A user `fn row(): View` carries no marker in its
+                    // name, so the set of symbols promoted by
+                    // `lower_view_to_value_returning` is what identifies
+                    // it. Without this it fails the suffix test and its
+                    // child is silently dropped.
+                    n.ends_with("$view")
+                        || n == "__component_call__"
+                        || n == "__blinc_with__"
+                        || value_returning_symbols.contains(&n as &str)
                 })
             }
             TypedExpression::Block(b) => b.statements.last().is_some_and(|s| match &s.node {
-                TypedStatement::Expression(e) => is_widget_producing_expr(e),
-                TypedStatement::Return(Some(e)) => is_widget_producing_expr(e),
+                TypedStatement::Expression(e) => {
+                    is_widget_producing_expr(e, value_returning_symbols)
+                }
+                TypedStatement::Return(Some(e)) => {
+                    is_widget_producing_expr(e, value_returning_symbols)
+                }
                 _ => false,
             }),
             _ => false,
@@ -448,11 +525,12 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
     fn rewrite_child_pushes_in_stmt(
         stmt: &mut zyntax_typed_ast::TypedNode<TypedStatement>,
         list_ident: zyntax_typed_ast::InternedString,
+        vrs: &std::collections::HashSet<String>,
     ) {
         let span = stmt.span;
         match &mut stmt.node {
             TypedStatement::Expression(e) => {
-                if !is_widget_producing_expr(e) {
+                if !is_widget_producing_expr(e, vrs) {
                     return;
                 }
                 let placeholder = typed_node(
@@ -487,22 +565,22 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
             }
             TypedStatement::If(if_stmt) => {
                 for s in &mut if_stmt.then_block.statements {
-                    rewrite_child_pushes_in_stmt(s, list_ident);
+                    rewrite_child_pushes_in_stmt(s, list_ident, vrs);
                 }
                 if let Some(else_block) = &mut if_stmt.else_block {
                     for s in &mut else_block.statements {
-                        rewrite_child_pushes_in_stmt(s, list_ident);
+                        rewrite_child_pushes_in_stmt(s, list_ident, vrs);
                     }
                 }
             }
             TypedStatement::While(w) => {
                 for s in &mut w.body.statements {
-                    rewrite_child_pushes_in_stmt(s, list_ident);
+                    rewrite_child_pushes_in_stmt(s, list_ident, vrs);
                 }
             }
             TypedStatement::Block(b) => {
                 for s in &mut b.statements {
-                    rewrite_child_pushes_in_stmt(s, list_ident);
+                    rewrite_child_pushes_in_stmt(s, list_ident, vrs);
                 }
             }
             _ => {}
@@ -565,7 +643,7 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
             TypedDeclaration::Function(func) => {
                 if let Some(body) = func.body.as_mut() {
                     for stmt in &mut body.statements {
-                        walk_stmt(stmt, &mut counter);
+                        walk_stmt(stmt, &mut counter, value_returning_symbols);
                     }
                 }
             }
@@ -573,7 +651,7 @@ pub(crate) fn lower_children_arrays_to_blocks(program: &mut TypedProgram) {
                 for method in &mut imp.methods {
                     if let Some(body) = method.body.as_mut() {
                         for stmt in &mut body.statements {
-                            walk_stmt(stmt, &mut counter);
+                            walk_stmt(stmt, &mut counter, value_returning_symbols);
                         }
                     }
                 }

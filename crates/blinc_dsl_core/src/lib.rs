@@ -658,7 +658,13 @@ impl BlincDsl {
         }
 
         // MUST run AFTER `lower_view_to_value_returning` and BEFORE `ensure_unit_return`.
-        lower_children_arrays_to_blocks(&mut typed_program);
+        {
+            let vrv = self
+                .value_returning_views
+                .lock()
+                .expect("value_returning_views mutex poisoned");
+            lower_children_arrays_to_blocks(&mut typed_program, &vrv);
+        }
 
         // MUST run BEFORE `resolve_extern_widget_named_args` so it sees uniform `__style`.
         lower_styling_args_to_overlays(&mut typed_program);
@@ -1225,7 +1231,7 @@ impl BlincDsl {
         let mut local_vrv = std::collections::HashSet::new();
         lower_view_to_value_returning(&mut program, &mut local_vrv);
 
-        lower_children_arrays_to_blocks(&mut program);
+        lower_children_arrays_to_blocks(&mut program, &local_vrv);
         annotate_computed_lambda_types(&mut program);
         lower_styling_args_to_overlays(&mut program);
         lower_struct_widget_props_to_handles(&mut program)
