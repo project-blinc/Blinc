@@ -284,6 +284,13 @@ impl Switch {
                 theme.color(ColorToken::TextPrimary)
             };
 
+            // The label toggles too, matching a checkbox and radio and
+            // what a pointer cursor on this row already promises. The
+            // row carried `cursor_pointer` without a handler, so the
+            // cursor said clickable and only the track was.
+            let state_for_label = config.on_state.clone();
+            let on_change_for_label = config.on_change.clone();
+
             div()
                 .flex_row()
                 .gap(theme.spacing().space_1)
@@ -295,6 +302,16 @@ impl Switch {
                         .size(theme.typography().text_sm)
                         .color(label_color),
                 )
+                .on_click(move |_| {
+                    if disabled {
+                        return;
+                    }
+                    let next = !state_for_label.get();
+                    state_for_label.set(next);
+                    if let Some(ref callback) = on_change_for_label {
+                        callback(next);
+                    }
+                })
         } else {
             // Wrap single switch in a div for consistent behavior
             div().child(switch)

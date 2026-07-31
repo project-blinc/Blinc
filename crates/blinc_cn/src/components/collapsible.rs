@@ -137,20 +137,25 @@ impl CollapsibleBuilder {
 
         let spring_config = SpringConfig::snappy();
 
-        // Get scheduler from global - set by RenderState::new()
-        let scheduler = get_global_scheduler()
-            .expect("Animation scheduler not initialized - call this after app starts");
-
-        let scale_anim: SharedAnimatedValue = Arc::new(Mutex::new(AnimatedValue::new(
-            scheduler.clone(),
+        // Persisted, keyed on the bound signal. Fresh springs on every
+        // build would leave the effect registered against the FIRST
+        // build's, so a rebuilt section would sit at whatever the new
+        // springs started at and never move — visible as content that
+        // needs a second interaction to appear.
+        //
+        // `initial_*` applies on first build only; afterwards the live
+        // value is returned wherever it is.
+        let anim_key = is_open.signal_id().to_raw();
+        let scale_anim = blinc_layout::stateful::persisted_animated_value(
+            &format!("cn-collapsible:{anim_key}:scale"),
             initial_scale,
             spring_config,
-        )));
-        let opacity_anim: SharedAnimatedValue = Arc::new(Mutex::new(AnimatedValue::new(
-            scheduler,
+        );
+        let opacity_anim = blinc_layout::stateful::persisted_animated_value(
+            &format!("cn-collapsible:{anim_key}:opacity"),
             initial_opacity,
             spring_config,
-        )));
+        );
 
         crate::reactive_props::bind_bool_targets(
             crate::reactive_props::bool_binding::COLLAPSIBLE,
