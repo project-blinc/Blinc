@@ -31,6 +31,23 @@ use crate::tree::LayoutNodeId;
 
 use super::super::{ElementType, RenderTree};
 
+/// Nodes recorded as painted only because their absolute bounds could
+/// not be resolved — the conservative branch in the viewport gate.
+/// Non-zero at idle means the visibility filter is failing open.
+use std::sync::atomic::Ordering;
+
+/// Nodes recorded as painted only because their absolute bounds could
+pub static UNRESOLVED_BOUNDS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// On-screen Y of the last animating node recorded as painted, and the
+/// scroll offset used to compute it. If a scrolled-away spinner reports
+/// a Y inside the viewport, the scroll term never reached the gate.
+pub static LAST_ANIMATING_ON_SCREEN_Y: std::sync::atomic::AtomicI64 =
+    std::sync::atomic::AtomicI64::new(i64::MIN);
+pub static LAST_ANIMATING_SCROLL_Y: std::sync::atomic::AtomicI64 =
+    std::sync::atomic::AtomicI64::new(0);
+
 impl RenderTree {
     /// Render with motion animations from RenderState
     ///
@@ -431,10 +448,34 @@ impl RenderTree {
                 // No absolute bounds resolved — conservatively include
                 // the node rather than filtering it out. Same posture
                 // as the `viewport_known == false` branch above.
-                None => true,
+                //
+                // Counted: this fails OPEN, so a node whose bounds
+                // never resolve is permanently "on screen" and any
+                // animation on it pins the redraw chain regardless of
+                // where the user has scrolled. If this count is
+                // non-zero at idle, that is the culling bypass.
+                None => {
+                    UNRESOLVED_BOUNDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    true
+                }
             };
         if intersects_viewport {
             self.painted_node_ids.borrow_mut().insert(node);
+            // Record the on-screen Y of any node whose motion bindings
+            // are mid-flight. Bounds resolve for every DSL node
+            // (measured), so if an animating node is being recorded as
+            // painted while scrolled away, the scroll term is what is
+            // wrong — this reports the value actually used.
+            if self
+                .motion_bindings
+                .get(&node)
+                .is_some_and(|b| b.is_any_animating())
+                && let Some(abs) = self.layout_tree.get_absolute_bounds(node)
+            {
+                LAST_ANIMATING_ON_SCREEN_Y
+                    .store((abs.y + cumulative_scroll.1) as i64, Ordering::Relaxed);
+                LAST_ANIMATING_SCROLL_Y.store(cumulative_scroll.1 as i64, Ordering::Relaxed);
+            }
         }
 
         // Get motion values from RenderState (for entry/exit animations)

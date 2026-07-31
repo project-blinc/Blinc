@@ -553,6 +553,12 @@ impl RenderTree {
                     animating,
                     visible,
                     painted = painted.len(),
+                    unresolved_bounds = crate::renderer::paint::motion::UNRESOLVED_BOUNDS
+                        .swap(0, std::sync::atomic::Ordering::Relaxed),
+                    anim_on_screen_y = crate::renderer::paint::motion::LAST_ANIMATING_ON_SCREEN_Y
+                        .load(std::sync::atomic::Ordering::Relaxed),
+                    scroll_y = crate::renderer::paint::motion::LAST_ANIMATING_SCROLL_Y
+                        .load(std::sync::atomic::Ordering::Relaxed),
                     "motion culling: animating bindings, of which painted"
                 );
             }
