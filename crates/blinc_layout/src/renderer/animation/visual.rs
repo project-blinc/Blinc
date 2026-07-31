@@ -576,6 +576,15 @@ impl RenderTree {
                     n_bindings = self.motion_bindings.len(),
                     n_node_states = render_state.node_state_count(),
                     n_stable_motions = render_state.stable_motion_count(),
+                    // The wake path: a Stateful registered for
+                    // animation-driven refresh re-runs its callback on
+                    // every tick. For the DSL that callback re-renders
+                    // through the JIT and mounts FRESH Statefuls, whose
+                    // registry keys are Arc::as_ptr — so each wake
+                    // permanently grows the dep registry, and every
+                    // later frame and write walks a bigger one.
+                    n_anim_statefuls = crate::stateful::animating_statefuls_snapshot().len(),
+                    n_dep_registry = crate::stateful::stateful_deps_registered(),
                     t_css = self
                         .css_anim_store
                         .lock()
