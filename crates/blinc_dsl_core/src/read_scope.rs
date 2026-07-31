@@ -61,6 +61,15 @@ pub(crate) fn enter(region_id: i64) -> i64 {
     region_id
 }
 
+/// Is any scope currently open?
+///
+/// A read taken with none open is recorded nowhere, so whatever
+/// rendered from it will not re-render when it changes. Callers that
+/// can say something useful about that use this to warn.
+pub(crate) fn has_open_scope() -> bool {
+    SCOPES.with(|scopes| !scopes.borrow().is_empty())
+}
+
 /// Record a read against the innermost open scope. A no-op when none is
 /// open, which is the common case: most reads happen outside any region.
 pub(crate) fn record(signal_raw: u64) {

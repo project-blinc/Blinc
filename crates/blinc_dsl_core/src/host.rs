@@ -543,6 +543,35 @@ pub(crate) extern "C" fn blinc_dsl_map_children(list: i64, name_ptr: *const i32,
     if let Some((id_raw, _)) = blinc_runtime::signal::lookup(name) {
         crate::read_scope::record(id_raw);
     }
+
+    // With no scope open the read lands nowhere, so this map renders
+    // once and then never again -- a later write changes nothing on
+    // screen. Nothing is wrong at the call site, which is what makes it
+    // hard to spot, so say so.
+    //
+    // Runtime rather than compile time because enclosure cannot be seen
+    // statically: a `with` body is lifted into its own component before
+    // the map is lowered, and a map inside a `: View` fn CALLED from a
+    // region is enclosed at run time while looking free-standing in the
+    // source. Here the answer is exact.
+    //
+    // Once per list, since this runs every render.
+    if !crate::read_scope::has_open_scope() {
+        use std::collections::HashSet;
+        use std::sync::Mutex;
+        static WARNED: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+        if let Ok(mut guard) = WARNED.lock() {
+            let seen = guard.get_or_insert_with(HashSet::new);
+            if seen.insert(name.to_string()) {
+                tracing::warn!(
+                    list = name,
+                    "`{name}.map(…)` is not inside a `with` region, so it renders \
+                     once and will not follow later writes. Wrap it: \
+                     `with {{ … {name}.map(…) … }}`"
+                );
+            }
+        }
+    }
     let Some(items) = blinc_runtime::signal::get_string_list(name) else {
         // Undeclared, or minted as another type: no children rather
         // than a fabricated one.
