@@ -157,6 +157,19 @@ impl CollapsibleBuilder {
             spring_config,
         );
 
+        // Re-assert the target on every build, the same as `cn::switch`.
+        // The persisted springs keep their value across a rebuild, and
+        // `initial_*` above applies only on first mint, so without this
+        // a section rebuilt while folded holds whatever the previous
+        // build left and never moves to where the state now says it
+        // belongs. A no-op when the spring already sits there, so a
+        // plain mount still does not animate.
+        {
+            let target = if is_currently_open { 1.0 } else { 0.0 };
+            scale_anim.lock().unwrap().set_target(target);
+            opacity_anim.lock().unwrap().set_target(target);
+        }
+
         crate::reactive_props::bind_bool_targets(
             crate::reactive_props::bool_binding::COLLAPSIBLE,
             is_open,

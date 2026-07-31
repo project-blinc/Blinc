@@ -577,6 +577,27 @@ impl RenderTree {
         {
             return true;
         }
+        // Springs are NOT painted-gated, unlike everything else here.
+        //
+        // A node can be unpainted precisely BECAUSE it is animating: a
+        // section opening from `scale_y: 0`, a panel sliding in from
+        // outside the viewport. Gating those on being painted is
+        // circular — they can only become visible by advancing, and
+        // advancing needs the frames the gate is withholding. The
+        // symptom is an animation that moves one frame and then waits
+        // for an unrelated click to continue.
+        //
+        // Safe to leave ungated because a spring settles: it stops
+        // asking for frames on its own. The gate exists for looping
+        // timelines (`cn::spinner`), which never settle and which
+        // `is_any_position_animating` deliberately excludes.
+        if self
+            .motion_bindings
+            .values()
+            .any(|b| b.is_any_position_animating())
+        {
+            return true;
+        }
         // Painted-gated, matching every other term in THIS predicate.
         // The ungated form kept the redraw chain alive for enter/exit
         // motions on nodes scrolled far out of view — nothing on screen
