@@ -125,6 +125,6 @@ this look like a compiler or JIT problem. It is not:
   `div().bind_transform_from(computed_f32_wrapping_a_computed_f64)`.
 - Zyntax CI is green on `main`.
 
-Zyntax does own a separate, unrelated set of gaps blocking the DSL `for`
-loop. Those are written up in `zyntax-loop-substrate.md` and share
-nothing with this issue.
+Zyntax does own a separate, unrelated defect blocking the DSL `for`
+loop. That is written up in the Zyntax repo as
+`ZYNTAX_LOOP_SUBSTRATE_BUG.md` and shares nothing with this issue.
