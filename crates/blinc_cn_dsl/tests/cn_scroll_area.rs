@@ -115,3 +115,36 @@ fn scalar_props_and_their_fallbacks() {
         "a typo costs the styling, not the content"
     );
 }
+
+/// The viewport honours `h`. Content taller than it must not stretch
+/// the box: if it does, nothing overflows and nothing scrolls.
+#[test]
+fn the_viewport_honours_its_height() {
+    let dsl = compiled(
+        r#"view { cn.ScrollArea(h = 80.0, w = 240.0) { Text("a") Text("b") Text("c") Text("d") Text("e") Text("f") } }"#,
+        "sa_bounded.blinc",
+    );
+    let host = div().w(400.0).h(600.0).child_box(dsl.view_widget());
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(400.0, 600.0);
+
+    // Tallest node that is not the host or the view root: the scroll
+    // area's own box.
+    let root = tree.root().expect("root");
+    let view_root = *tree.layout_tree.children(root).first().expect("view root");
+    let shell = *tree
+        .layout_tree
+        .children(view_root)
+        .first()
+        .expect("scroll area");
+    let h = tree
+        .layout_tree
+        .get_layout(shell)
+        .expect("laid out")
+        .size
+        .height;
+    assert!(
+        (h - 80.0).abs() < 1.0,
+        "the scroll box must stay at its declared height, got {h}"
+    );
+}

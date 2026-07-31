@@ -15,9 +15,10 @@ use blinc_layout::div::{ElementBuilder, div};
 /// }
 /// ```
 ///
-/// The box needs a height for there to be anything to scroll; that
-/// rides the universal `Div`-style overlay surface rather than a
-/// per-widget prop, matching every other cn wrapper.
+/// `w` / `h` size the VIEWPORT, and they are real props rather than
+/// the usual `Div` overlay: the overlay would size the outer wrapper
+/// and leave the viewport at its 300x400 default, so the content would
+/// never overflow and nothing would scroll. Omitted means that default.
 ///
 /// Unknown values for the string props fall back to the cn default and
 /// warn: a typo should cost the styling, not the content.
@@ -44,6 +45,11 @@ pub struct CnScrollArea {
     pub scrollbar: String,
     /// Scrollbar thickness: `small` / `medium` (default) / `large`.
     pub size: String,
+    /// Viewport width. Omitted (zero) keeps the cn default.
+    pub w: f64,
+    /// Viewport height — the bound that makes content scroll. Omitted
+    /// (zero) keeps the cn default.
+    pub h: f64,
     #[children]
     pub children: RefCell<Vec<Box<dyn ElementBuilder>>>,
     /// Built once, consuming `children`. Also keeps `build()` and
@@ -64,6 +70,14 @@ impl CnScrollArea {
             }
             if let Some(size) = self.size() {
                 b = b.size(size);
+            }
+            // Zero is what an omitted prop reads as, and a zero-sized
+            // viewport has no meaning, so it defers to the cn default.
+            if self.w > 0.0 {
+                b = b.w(self.w as f32);
+            }
+            if self.h > 0.0 {
+                b = b.h(self.h as f32);
             }
             // One content child holding the whole body: the builder
             // takes a single `Div`, so the rows have to share a parent
