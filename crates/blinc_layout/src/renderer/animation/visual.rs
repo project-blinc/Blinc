@@ -529,69 +529,44 @@ impl RenderTree {
         painted: &HashSet<LayoutNodeId>,
         painted_stable: &HashSet<crate::tree::StableNodeId>,
     ) -> bool {
-        // Culling diagnostic. An animating binding that is NOT in the
-        // painted set is one the visibility gate just saved us from; an
-        // animating binding that IS painted legitimately drives frames.
-        // If a scrolled-away spinner still shows up as painted, the
-        // painted set is the thing that is wrong, not this predicate.
+        // Culling diagnostic, rate-limited FIRST so it costs a single
+        // atomic increment on the frames it does not log. An earlier
+        // version counted animating bindings on every frame and only
+        // throttled the `debug!` — that walked the whole binding map
+        // 60x/s and inflated the very measurement it was taking.
         {
-            let animating = self
-                .motion_bindings
-                .iter()
-                .filter(|(_, b)| b.is_any_animating())
-                .count();
-            // Rate-limited: this runs per frame, and one line per frame
-            // at 60Hz buries everything else.
             static TICK: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-            if animating > 0 && TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 120 == 0 {
-                let visible = self
+            if TICK.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 120 == 0
+                && tracing::enabled!(tracing::Level::DEBUG)
+            {
+                let animating = self
                     .motion_bindings
                     .iter()
-                    .filter(|(n, b)| painted.contains(n) && b.is_any_animating())
+                    .filter(|(_, b)| b.is_any_animating())
                     .count();
-                tracing::debug!(
-                    animating,
-                    visible,
-                    painted = painted.len(),
-                    unresolved_bounds = crate::renderer::paint::motion::UNRESOLVED_BOUNDS
-                        .swap(0, std::sync::atomic::Ordering::Relaxed),
-                    anim_on_screen_y = crate::renderer::paint::motion::LAST_ANIMATING_ON_SCREEN_Y
-                        .load(std::sync::atomic::Ordering::Relaxed),
-                    scroll_y = crate::renderer::paint::motion::LAST_ANIMATING_SCROLL_Y
-                        .load(std::sync::atomic::Ordering::Relaxed),
-                    // WHICH term keeps the gate true. The motion-binding
-                    // term is painted-gated and reads false here, but
-                    // `has_active_motions` and `has_active_layout_animations`
-                    // are NOT gated by visibility at all — either one
-                    // returning true pins the redraw chain regardless of
-                    // what is on screen.
-                    t_motions = render_state.has_active_motions(),
-                    t_visual = self.has_active_visible_visual_animations(painted),
-                    t_layout = self.has_active_layout_animations(),
-                    t_flip = self.has_active_visible_flip_animations(painted),
-                    // Sizes of the collections this predicate walks every
-                    // frame. Monotonic growth here IS the leak: the cost
-                    // of the frame rises with the collection, which is
-                    // what CPU climbing 10 -> 15 -> 27% looks like.
-                    n_bindings = self.motion_bindings.len(),
-                    n_node_states = render_state.node_state_count(),
-                    n_stable_motions = render_state.stable_motion_count(),
-                    // The wake path: a Stateful registered for
-                    // animation-driven refresh re-runs its callback on
-                    // every tick. For the DSL that callback re-renders
-                    // through the JIT and mounts FRESH Statefuls, whose
-                    // registry keys are Arc::as_ptr — so each wake
-                    // permanently grows the dep registry, and every
-                    // later frame and write walks a bigger one.
-                    n_anim_statefuls = crate::stateful::animating_statefuls_snapshot().len(),
-                    n_dep_registry = crate::stateful::stateful_deps_registered(),
-                    t_css = self
-                        .css_anim_store
-                        .lock()
-                        .map(|s| s.has_visible_active(painted_stable))
-                        .unwrap_or(false),
-                    "motion culling: animating bindings, of which painted"
-                );
+                if animating > 0 {
+                    let visible = self
+                        .motion_bindings
+                        .iter()
+                        .filter(|(n, b)| painted.contains(n) && b.is_any_animating())
+                        .count();
+                    tracing::debug!(
+                        animating,
+                        visible,
+                        painted = painted.len(),
+                        unresolved_bounds = crate::renderer::paint::motion::UNRESOLVED_BOUNDS
+                            .swap(0, std::sync::atomic::Ordering::Relaxed),
+                        scroll_y = crate::renderer::paint::motion::LAST_ANIMATING_SCROLL_Y
+                            .load(std::sync::atomic::Ordering::Relaxed),
+                        t_motions = render_state.has_active_motions(),
+                        t_layout = self.has_active_layout_animations(),
+                        n_bindings = self.motion_bindings.len(),
+                        n_node_states = render_state.node_state_count(),
+                        n_anim_statefuls = crate::stateful::animating_statefuls_snapshot().len(),
+                        n_dep_registry = crate::stateful::stateful_deps_registered(),
+                        "motion culling"
+                    );
+                }
             }
         }
 
