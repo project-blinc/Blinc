@@ -110,6 +110,27 @@ fn a_local_appears_to_work_when_its_initialiser_is_zero() {
     );
 }
 
+/// The same `let`, one scope up: in the view body rather than the
+/// widget body. It survives, and the widget body's `if` reads it
+/// correctly.
+///
+/// This is the scope `collect_children_into` never touches, and it is
+/// where a binding belongs anyway. Anything needing a local -- a
+/// desugared `for` counter, a named subexpression -- can live here and
+/// works today.
+#[test]
+fn a_let_in_the_view_body_survives() {
+    assert_eq!(
+        count_of(
+            r#"component C { view { let i = 3 Div(class="a") { if i == 3 { Text("x") } } } }
+               view { C() }"#,
+            "gap_scope.blinc",
+        ),
+        3,
+        "the widget body reads the view body's binding"
+    );
+}
+
 /// THE BUG. Identical to the test above except the initialiser is 3
 /// rather than 0, so the dropped `let` is observable: `i` reads zero and
 /// the guard is false.
