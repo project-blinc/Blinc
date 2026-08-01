@@ -50,6 +50,12 @@ blinc_dsl_core = { path = "../blinc_dsl_core", version = "0.5.1" }
 # delegates construction to a `blinc_cn::<name>` builder.
 blinc_cn = { path = "../blinc_cn", version = "0.5.1" }
 
+# Icon names as data: a `.blinc` source names an icon in a string prop,
+# so the lookup cannot be a const reference and needs the registry.
+blinc_icons = { path = "../blinc_icons", version = "0.5.1", features = [
+    "registry",
+] }
+
 # `ElementBuilder` is the trait every widget returns; the wrappers
 # need it in scope so the macro can box the build result.
 blinc_layout = { path = "../blinc_layout", version = "0.5.1" }

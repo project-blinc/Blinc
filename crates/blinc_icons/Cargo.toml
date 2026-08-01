@@ -15,6 +15,11 @@ build = "build.rs"
 walkdir = "2"
 roxmltree = "0.20"
 
+[features]
+# Name-keyed icon lookup. Off by default: the generated match
+# references every constant, so it keeps the whole set in the binary.
+registry = []
+
 [dependencies]
 # No runtime dependencies - pure static data
 # DCE handles binary size optimization automatically

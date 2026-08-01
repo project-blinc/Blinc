@@ -37,7 +37,7 @@ fn main() {
     );
 
     // Collect all icons
-    let mut icons: Vec<(String, String, String)> = Vec::new(); // (const_name, path_data, doc_comment)
+    let mut icons: Vec<(String, String, String, String)> = Vec::new(); // (const_name, path_data, doc_comment, lucide_name)
 
     for entry in walkdir::WalkDir::new(icons_dir)
         .into_iter()
@@ -55,7 +55,7 @@ fn main() {
 
         if let Some((const_name, path_data)) = parse_svg(&content, file_name) {
             let doc = format!("/// {}", file_name.replace('-', " "));
-            icons.push((const_name, path_data, doc));
+            icons.push((const_name, path_data, doc, file_name.to_string()));
         }
     }
 
@@ -65,7 +65,7 @@ fn main() {
     println!("cargo:warning=Generated {} icon constants", icons.len());
 
     // Generate const declarations
-    for (const_name, path_data, doc) in &icons {
+    for (const_name, path_data, doc, _) in &icons {
         output.push_str(doc);
         output.push('\n');
         output.push_str(&format!(
@@ -73,6 +73,43 @@ fn main() {
             const_name, path_data
         ));
     }
+
+    // Name lookup, behind a feature: the match references every
+    // constant, so enabling it keeps the whole set in the binary and
+    // gives up the DCE the plain consts are there for. Worth it only
+    // when icon names arrive as data — a DSL prop, a config file — and
+    // the call site cannot name a const.
+    output.push_str(
+        "/// Look an icon up by its Lucide name, as in `by_name(\"house\")`.
+///
+/// Names are the kebab-case Lucide file names. Returns the same path
+/// data as the matching constant, for wrapping with [`crate::to_svg`].
+///
+/// Enabling the `registry` feature that gates this pulls every icon
+/// into the binary. Name a constant directly where you can.
+#[cfg(feature = \"registry\")]
+pub fn by_name(name: &str) -> Option<&'static str> {
+    Some(match name {
+",
+    );
+    for (const_name, _, _, lucide_name) in &icons {
+        output.push_str(&format!("        \"{lucide_name}\" => {const_name},\n"));
+    }
+    output.push_str(
+        "        _ => return None,
+    })
+}
+
+/// Every Lucide name this crate ships, sorted. Same feature trade-off
+/// as [`by_name`].
+#[cfg(feature = \"registry\")]
+pub const NAMES: &[&str] = &[
+",
+    );
+    for (_, _, _, lucide_name) in &icons {
+        output.push_str(&format!("    \"{lucide_name}\",\n"));
+    }
+    output.push_str("];\n");
 
     fs::write(out_path, output).expect("Failed to write icons.rs");
 }
