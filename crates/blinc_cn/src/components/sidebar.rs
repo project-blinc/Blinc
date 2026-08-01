@@ -116,8 +116,11 @@ impl Sidebar {
         let show_toggle = builder.show_toggle;
         let content_builder = builder.content_builder.clone();
 
-        // Single source of truth: the collapsed state from parent
-        let is_collapsed = builder.is_collapsed.get();
+        // Single source of truth: the caller's state, used directly.
+        // A copy held inside the stateful would take the toggle's write
+        // and never pass it on, leaving the caller's signal saying the
+        // rail was open while it was shut.
+        let collapsed = builder.is_collapsed.clone();
 
         // Create stateful container that rebuilds when collapsed state changes
         let container_key = format!("{}_container", key.clone());
@@ -126,7 +129,7 @@ impl Sidebar {
         let stateful_container = stateful_with_key::<NoState>(&container_key)
             .deps([builder.is_collapsed.signal_id()])
             .on_state(move |ctx| {
-                let collapsed = ctx.use_signal("collapsed", || is_collapsed);
+                let collapsed = collapsed.clone();
 
                 let mut sections = sections.clone();
 
@@ -488,7 +491,7 @@ impl SidebarBuilder {
 
     /// Get or build the component
     fn get_or_build(&self) -> &Sidebar {
-        self.built.get_or_init(|| Sidebar::from_builder(self))
+        ::blinc_layout::build_once::build_once(&self.built, || Sidebar::from_builder(self))
     }
 
     /// Set the collapsed width
