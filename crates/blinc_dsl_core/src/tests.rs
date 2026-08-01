@@ -1775,8 +1775,8 @@ fn parse_primitive_call_with_body_lowers_to_children_block_expansion() {
     );
     assert_eq!(
         div_call.positional_args.len(),
-        5,
-        "Div takes (children, __style, class, on_click, overflow_scroll)"
+        6,
+        "Div takes (children, __style, class, on_click, overflow_scroll, ref)"
     );
     let TypedExpression::Variable(div_list_arg) = &div_call.positional_args[0].node else {
         panic!("Div arg 0 should be the list ident Variable");

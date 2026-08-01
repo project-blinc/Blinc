@@ -54,7 +54,18 @@ impl DivRef {
 
     /// Point this ref at `node_id`. Called by the renderer while
     /// building, the same moment a `ScrollRef` is resolved.
+    ///
+    /// Gives the element an id if it has none. Focus and scroll-into-view
+    /// are keyed by string id in the context callbacks, so a bound
+    /// element without one would accept every command and perform none.
+    /// The id is derived from the node, so it cannot collide with one
+    /// the author chose.
     pub fn bind_to_node(&self, node_id: LayoutNodeId, registry: Weak<ElementRegistry>) {
+        if let Some(registry) = registry.upgrade()
+            && registry.get_id(node_id).is_none()
+        {
+            registry.register(format!("__blinc_ref_{node_id:?}"), node_id);
+        }
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner.node_id = Some(node_id);
         inner.registry = Some(registry);
@@ -118,9 +129,7 @@ impl DivRef {
     }
 
     /// The element's string id, which is what the focus and scroll
-    /// callbacks are keyed by.
-    ///
-    /// An element bound to a ref is given one at bind time if it has
+    /// callbacks are keyed by. Assigned at bind time if the element had
     /// none, so this only fails when the ref points at nothing yet.
     fn with_string_id(&self, action: &str, f: impl FnOnce(&str)) {
         let Some((node_id, registry)) = self.resolved() else {
@@ -133,6 +142,15 @@ impl DivRef {
         }
     }
 }
+
+/// A ref is handed to builders and captured by handlers, and a
+/// `Stateful` callback is `Send + Sync`, so this has to hold for a ref
+/// to be usable from one.
+const _: fn() = || {
+    fn assert<T: Send + Sync>() {}
+    assert::<DivRef>();
+    assert::<super::ScrollRef>();
+};
 
 #[cfg(test)]
 mod tests {
@@ -180,12 +198,3 @@ mod tests {
         assert_eq!(b.node_id(), Some(LayoutNodeId::default()));
     }
 }
-
-/// A ref is handed to builders and captured by handlers, and a
-/// `Stateful` callback is `Send + Sync`, so this has to hold for a ref
-/// to be usable from one.
-const _: fn() = || {
-    fn assert<T: Send + Sync>() {}
-    assert::<DivRef>();
-    assert::<super::ScrollRef>();
-};

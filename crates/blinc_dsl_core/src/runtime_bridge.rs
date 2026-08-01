@@ -175,6 +175,8 @@ pub(crate) fn register_blinc_layout_primitives() {
             prop("on_click", i64_ty.clone()),
             // `overflow_scroll = true` — use Div's built-in scroll physics.
             prop("overflow_scroll", bool_ty.clone()),
+            // `ref = card` — a `ref x: Div` / `ref x: Scroll` handle.
+            prop("ref", i64_ty.clone()),
         ],
     };
 

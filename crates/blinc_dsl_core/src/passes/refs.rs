@@ -119,7 +119,6 @@ pub(crate) fn resolve_ref_calls(program: &mut TypedProgram, filename: &str) {
             (RefKind::Element, "focus", 0) => Some("__ref_focus_by_id"),
             (RefKind::Element, "blur", 0) => Some("__ref_blur_by_id"),
             (RefKind::Element, "scroll_into_view", 0) => Some("__ref_scroll_into_view_by_id"),
-            (RefKind::Element, "click", 0) => Some("__ref_click_by_id"),
             _ => None,
         }
     }
@@ -286,7 +285,6 @@ pub(crate) fn resolve_ref_calls(program: &mut TypedProgram, filename: &str) {
         ("__ref_focus_by_id", 0),
         ("__ref_blur_by_id", 0),
         ("__ref_scroll_into_view_by_id", 0),
-        ("__ref_click_by_id", 0),
     ] {
         let mut params = vec![zyntax_typed_ast::typed_ast::TypedParameter {
             name: InternedString::new_global("id"),

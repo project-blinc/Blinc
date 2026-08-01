@@ -62,3 +62,42 @@ fn separate_refs_resolve_to_separate_elements() {
         20.0
     );
 }
+
+/// A bound element gets an id if it had none, because that is what the
+/// focus and scroll callbacks are keyed by — without it a ref would
+/// accept every command and perform none.
+#[test]
+fn binding_gives_the_element_an_id_to_be_addressed_by() {
+    let card = DivRef::new();
+    let host = div()
+        .w(100.0)
+        .h(100.0)
+        .child(div().bind(&card).w(10.0).h(10.0));
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(100.0, 100.0);
+
+    let node = card.node_id().expect("bound");
+    assert!(
+        tree.element_registry().get_id(node).is_some(),
+        "the bound element is addressable"
+    );
+}
+
+/// An author-supplied id is left alone: binding must not rename an
+/// element something else already refers to.
+#[test]
+fn binding_keeps_an_id_the_author_chose() {
+    let card = DivRef::new();
+    let host = div()
+        .w(100.0)
+        .h(100.0)
+        .child(div().id("chosen").bind(&card).w(10.0).h(10.0));
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(100.0, 100.0);
+
+    let node = card.node_id().expect("bound");
+    assert_eq!(
+        tree.element_registry().get_id(node).as_deref(),
+        Some("chosen")
+    );
+}

@@ -64,11 +64,6 @@ pub(crate) extern "C" fn blinc_ref_scroll_into_view(id: i64) {
     crate::refs::scroll_into_view(id);
 }
 
-/// `card.click()`.
-pub(crate) extern "C" fn blinc_ref_click(id: i64) {
-    crate::refs::click(id);
-}
-
 pub(crate) extern "C" fn blinc_text(s_ptr: *const i32) {
     if s_ptr.is_null() {
         tracing::warn!("$Blinc$text called with null pointer");

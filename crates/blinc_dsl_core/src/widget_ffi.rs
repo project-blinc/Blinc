@@ -622,6 +622,14 @@ impl<W: blinc_layout::div::ElementBuilder> blinc_layout::div::ElementBuilder for
     fn scroll_physics(&self) -> Option<blinc_layout::scroll::SharedScrollPhysics> {
         self.inner.scroll_physics()
     }
+    // MUST forward — every DSL widget is wrapped here, so a ref bound
+    // by `ref = …` would never reach the renderer that resolves it.
+    fn bound_scroll_ref(&self) -> Option<&blinc_layout::selector::ScrollRef> {
+        self.inner.bound_scroll_ref()
+    }
+    fn bound_element_ref(&self) -> Option<&blinc_layout::selector::DivRef> {
+        self.inner.bound_element_ref()
+    }
     fn visual_animation_config(
         &self,
     ) -> Option<blinc_layout::visual_animation::VisualAnimationConfig> {
@@ -1359,6 +1367,7 @@ pub(crate) extern "C" fn blinc_div_view(
     class_str: *const i32,
     on_click_closure: i64,
     overflow_scroll: i32,
+    element_ref: i64,
 ) -> WidgetHandle {
     let mut widget = blinc_layout::div::Div::new();
     for child in materialize_children(children) {
@@ -1380,6 +1389,11 @@ pub(crate) extern "C" fn blinc_div_view(
     }
     if overflow_scroll != 0 {
         widget = widget.overflow_scroll();
+    }
+    // A ref binds to this element; which kind decides what binding
+    // means, and the handle knows its own kind.
+    if element_ref != 0 {
+        crate::refs::bind_div(element_ref, &mut widget);
     }
     let overlay = unsafe { materialize_overlay(style) };
     leak_custom(Styled::new(widget, overlay))

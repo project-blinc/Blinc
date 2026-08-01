@@ -11,15 +11,15 @@
 //!
 //! ## Kinds
 //!
-//! `Scroll` carries a [`ScrollRef`], which the renderer resolves to the
-//! node that bound it. `Div` carries nothing: the element takes an id
-//! derived from the handle, and the methods reach it through the
-//! element registry, which is where `ctx.query(...)` already looks.
+//! `Scroll` carries a [`ScrollRef`] and `Div` a [`DivRef`]. Both are
+//! resolved to their node by the renderer when the element that bound
+//! them is built, so this module only has to hand the right handle to
+//! the right binder.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock};
 
-use blinc_layout::selector::{ElementHandle, ElementRegistry, ScrollRef};
+use blinc_layout::selector::{DivRef, ScrollRef};
 
 /// What a declared ref points at.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -33,47 +33,12 @@ pub enum RefKind {
 #[derive(Clone)]
 enum Handle {
     Scroll(ScrollRef),
-    /// The element carries an id derived from the handle's own, so
-    /// nothing has to be stored here to find it again.
-    Element,
+    Element(DivRef),
 }
 
 fn registry() -> &'static Mutex<HashMap<u64, Handle>> {
     static REGISTRY: OnceLock<Mutex<HashMap<u64, Handle>>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-/// The element registry the host is currently rendering into.
-///
-/// A host function called from a DSL closure has no context in scope —
-/// the closure runs long after the frame that built it — so the build
-/// closure, which does receive one, leaves the registry here. Same
-/// bridge the `with` regions use for the view renderer.
-fn element_registry() -> &'static Mutex<Option<Arc<ElementRegistry>>> {
-    static BRIDGE: OnceLock<Mutex<Option<Arc<ElementRegistry>>>> = OnceLock::new();
-    BRIDGE.get_or_init(|| Mutex::new(None))
-}
-
-/// Install the registry to resolve element refs against. Call once per
-/// frame from the build closure: `refs::set_element_registry(ctx.element_registry().clone())`.
-pub fn set_element_registry(registry: Arc<ElementRegistry>) {
-    *element_registry().lock().expect("registry bridge") = Some(registry);
-}
-
-/// The element id a `Div` ref stamps on whatever it binds to.
-///
-/// Derived rather than author-supplied, so it cannot collide with an
-/// id the source chose or with another ref's.
-pub fn element_id_for(id: i64) -> String {
-    format!("__blinc_ref_{id}")
-}
-
-fn handle_for(id: i64) -> Option<ElementHandle<()>> {
-    let registry = element_registry()
-        .lock()
-        .expect("registry bridge")
-        .clone()?;
-    Some(ElementHandle::new(element_id_for(id), registry))
 }
 
 /// Ensure a handle exists for `id`, keeping any already minted.
@@ -88,7 +53,7 @@ pub(crate) fn mint(id: u64, kind: RefKind) {
         .entry(id)
         .or_insert_with(|| match kind {
             RefKind::Scroll => Handle::Scroll(ScrollRef::new()),
-            RefKind::Element => Handle::Element,
+            RefKind::Element => Handle::Element(DivRef::new()),
         });
 }
 
@@ -100,13 +65,29 @@ pub fn scroll_ref_by_id(id: i64) -> Option<ScrollRef> {
     }
 }
 
-/// Whether `id` names an element ref, so a builder knows to stamp its
-/// id rather than bind a scroller.
-pub fn is_element_ref(id: i64) -> bool {
-    matches!(
-        registry().lock().expect("ref registry").get(&(id as u64)),
-        Some(Handle::Element)
-    )
+/// The element handle for `id`.
+pub fn div_ref_by_id(id: i64) -> Option<DivRef> {
+    match registry().lock().expect("ref registry").get(&(id as u64)) {
+        Some(Handle::Element(r)) => Some(r.clone()),
+        _ => None,
+    }
+}
+
+/// Bind whatever handle `id` names to a `Div` being built.
+///
+/// Which kind it is decides what binding means, and only the handle
+/// knows — the call site passes an opaque id.
+pub fn bind_div(id: i64, widget: &mut blinc_layout::div::Div) {
+    let handle = registry()
+        .lock()
+        .expect("ref registry")
+        .get(&(id as u64))
+        .cloned();
+    match handle {
+        Some(Handle::Element(r)) => *widget = std::mem::take(widget).bind(&r),
+        Some(Handle::Scroll(r)) => *widget = std::mem::take(widget).bind_scroll(&r),
+        None => tracing::warn!(id, "no handle for this ref"),
+    }
 }
 
 fn with_scroll(id: i64, action: &str, f: impl FnOnce(&ScrollRef)) {
@@ -116,15 +97,10 @@ fn with_scroll(id: i64, action: &str, f: impl FnOnce(&ScrollRef)) {
     }
 }
 
-fn with_element(id: i64, action: &str, f: impl FnOnce(&ElementHandle<()>)) {
-    match handle_for(id) {
-        Some(h) => f(&h),
-        None => tracing::warn!(
-            id,
-            action,
-            "no element registry installed — the host has to call \
-             `refs::set_element_registry` from its build closure",
-        ),
+fn with_element(id: i64, action: &str, f: impl FnOnce(&DivRef)) {
+    match div_ref_by_id(id) {
+        Some(r) => f(&r),
+        None => tracing::warn!(id, action, "not a Div ref"),
     }
 }
 
@@ -156,11 +132,6 @@ pub fn blur(id: i64) {
 /// `card.scroll_into_view()`.
 pub fn scroll_into_view(id: i64) {
     with_element(id, "scroll_into_view", |h| h.scroll_into_view());
-}
-
-/// `card.click()`.
-pub fn click(id: i64) {
-    with_element(id, "click", |h| h.click());
 }
 
 #[cfg(test)]
@@ -199,15 +170,24 @@ mod tests {
         focus(999_999);
     }
 
+    /// An element ref carries a real handle, so a builder has something
+    /// to bind and a method something to act on.
+    #[test]
+    fn an_element_ref_carries_a_div_handle() {
+        mint(4001, RefKind::Element);
+        let handle = div_ref_by_id(4001).expect("minted");
+        assert!(!handle.exists(), "nothing bound it yet");
+    }
+
     /// A kind is fixed at declaration: a Scroll method on an element ref
     /// finds nothing rather than acting on some other handle.
     #[test]
     fn kinds_do_not_answer_for_each_other() {
         mint(3001, RefKind::Element);
         assert!(scroll_ref_by_id(3001).is_none());
-        assert!(is_element_ref(3001));
+        assert!(div_ref_by_id(3001).is_some());
 
         mint(3002, RefKind::Scroll);
-        assert!(!is_element_ref(3002));
+        assert!(div_ref_by_id(3002).is_none());
     }
 }

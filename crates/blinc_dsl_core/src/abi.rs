@@ -3,8 +3,8 @@ use crate::host::{
     blinc_dsl_computed_bool, blinc_dsl_computed_f64, blinc_dsl_computed_i32,
     blinc_dsl_computed_string, blinc_dsl_effect, blinc_dsl_with_region, blinc_format_int,
     blinc_fsm_runtime_trigger, blinc_fsm_subscribe, blinc_fsm_subscribe_all, blinc_ref_blur,
-    blinc_ref_click, blinc_ref_focus, blinc_ref_scroll_into_view, blinc_scope_enter,
-    blinc_scroll_by, blinc_scroll_to_bottom, blinc_scroll_to_top, blinc_signal_get_by_id_bool,
+    blinc_ref_focus, blinc_ref_scroll_into_view, blinc_scope_enter, blinc_scroll_by,
+    blinc_scroll_to_bottom, blinc_scroll_to_top, blinc_signal_get_by_id_bool,
     blinc_signal_get_by_id_f64, blinc_signal_get_by_id_i32, blinc_signal_get_by_id_i64,
     blinc_signal_get_by_id_string, blinc_signal_set_by_id_bool, blinc_signal_set_by_id_f64,
     blinc_signal_set_by_id_i32, blinc_signal_set_by_id_i64, blinc_signal_set_by_id_string,
@@ -131,12 +131,6 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             param_types: &[Type::Primitive(PrimitiveType::I64)],
             return_type: Type::Primitive(PrimitiveType::Unit),
             ptr: blinc_ref_scroll_into_view as *const u8,
-        },
-        BuiltinDescriptor {
-            name: "__ref_click_by_id",
-            param_types: &[Type::Primitive(PrimitiveType::I64)],
-            return_type: Type::Primitive(PrimitiveType::Unit),
-            ptr: blinc_ref_click as *const u8,
         },
         BuiltinDescriptor {
             name: "__signal_set_by_id_i32",
@@ -540,8 +534,14 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             ptr: blinc_text_view as *const u8,
         },
         BuiltinDescriptor {
-            // `Div(children, style, class, on_click, overflow_scroll)`. `class` = whitespace-sep names,
-            // `on_click` = raw fn ptr as i64 (0 = none).
+            // `Div(children, style, class, on_click, overflow_scroll, ref)`.
+            // `class` = whitespace-sep names, `on_click` = raw fn ptr as
+            // i64 (0 = none), `ref` = a ref handle's id (0 = none).
+            //
+            // This list, the `ComponentDefinition` props in
+            // `runtime_bridge`, and `blinc_div_view`'s signature are one
+            // ABI: change one without the others and every `Div` in the
+            // program calls through a mismatched signature.
             name: "$Blinc$Div$view",
             param_types: &[
                 Type::Primitive(PrimitiveType::I64),
@@ -549,6 +549,7 @@ fn builtins() -> Vec<BuiltinDescriptor> {
                 Type::Primitive(PrimitiveType::String),
                 Type::Primitive(PrimitiveType::I64),
                 Type::Primitive(PrimitiveType::I32),
+                Type::Primitive(PrimitiveType::I64),
             ],
             return_type: Type::Primitive(PrimitiveType::I64),
             ptr: blinc_div_view as *const u8,
