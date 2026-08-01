@@ -30,6 +30,22 @@ component FeedbackWidgets {
                 cn.Spinner(size = "medium")
                 cn.Spinner(size = "large")
             }
+
+            // The body IS the trigger: the tooltip hangs off whatever
+            // is inside it.
+            cn.Label("tooltip: hover the trigger")
+            Div(class = "row") {
+                cn.Tooltip(text = "Removes the row") {
+                    cn.Button("Delete", variant = "destructive", size = "small")
+                }
+                cn.Tooltip(text = "Below, aligned to the start", side = "bottom",
+                           align = "start") {
+                    cn.Badge("bottom start", variant = "secondary")
+                }
+                cn.Tooltip(text = "Opens after a beat", open_delay = 800.0) {
+                    cn.Label("slow tip")
+                }
+            }
         }
     }
 }
