@@ -179,6 +179,34 @@ mod tests {
         assert!(!handle.exists(), "nothing bound it yet");
     }
 
+    /// A hot reload recompiles the same source, so the span-derived id
+    /// is the same and the handle is kept. Whatever it was bound to and
+    /// whatever state it carries survives the reload; a fresh handle
+    /// would drop a scroll position on every edit.
+    ///
+    /// Only holds while the declaration keeps its offset: an edit that
+    /// moves it mints a different id, and the old handle is orphaned.
+    #[test]
+    fn a_recompile_of_the_same_source_keeps_the_handle() {
+        let id = crate::passes::call_site_instance_id("app.blinc", 120);
+        mint(id, RefKind::Element);
+        let first = div_ref_by_id(id as i64).expect("minted");
+
+        // Same file, same offset — what a reload of unchanged source
+        // computes.
+        let again = crate::passes::call_site_instance_id("app.blinc", 120);
+        assert_eq!(again, id, "the id is derived, not generated");
+        mint(again, RefKind::Element);
+        assert!(std::sync::Arc::ptr_eq(
+            &div_ref_by_id(again as i64).expect("minted").inner(),
+            &first.inner()
+        ));
+
+        // A declaration that moved is a different ref.
+        let moved = crate::passes::call_site_instance_id("app.blinc", 121);
+        assert_ne!(moved, id);
+    }
+
     /// A kind is fixed at declaration: a Scroll method on an element ref
     /// finds nothing rather than acting on some other handle.
     #[test]

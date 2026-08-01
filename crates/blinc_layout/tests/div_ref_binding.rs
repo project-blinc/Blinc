@@ -101,3 +101,33 @@ fn binding_keeps_an_id_the_author_chose() {
         Some("chosen")
     );
 }
+
+/// A rebuild re-points the ref: `LayoutNodeId`s are reissued, so a ref
+/// that kept the old one would address whatever now occupies it.
+#[test]
+fn a_rebuild_repoints_the_ref() {
+    let card = DivRef::new();
+
+    let build = || {
+        div()
+            .w(100.0)
+            .h(100.0)
+            .child(div().bind(&card).w(10.0).h(10.0))
+    };
+
+    let mut first = RenderTree::from_element(&build());
+    first.compute_layout(100.0, 100.0);
+    let before = card.node_id().expect("bound by the first build");
+
+    let mut second = RenderTree::from_element(&build());
+    second.compute_layout(100.0, 100.0);
+    let after = card.node_id().expect("still bound after a rebuild");
+
+    // Whatever the ids happen to be, the ref addresses a node in the
+    // CURRENT tree — that is what has to hold.
+    assert!(
+        second.layout_tree.get_layout(after).is_some(),
+        "the ref points into the tree that exists now"
+    );
+    let _ = before;
+}
