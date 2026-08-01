@@ -74,6 +74,8 @@ impl TextareaSize {
 #[derive(Clone)]
 struct TextareaConfig {
     state: SharedTextAreaState,
+    /// Caller's handle onto this field, if bound.
+    textarea_ref: Option<blinc_layout::selector::TextareaRef>,
     /// Called after every edit with the new text.
     on_change: Option<blinc_layout::widgets::TextCallback>,
     size: TextareaSize,
@@ -98,6 +100,7 @@ impl TextareaConfig {
     fn new(state: SharedTextAreaState) -> Self {
         Self {
             state,
+            textarea_ref: None,
             size: TextareaSize::default(),
             rows: None,
             cols: None,
@@ -136,7 +139,11 @@ impl Textarea {
             .corner_radius
             .unwrap_or_else(|| theme.radius(RadiusToken::Md));
 
-        let mut ta = text_area(&config.state)
+        let mut ta = text_area(&config.state);
+        if let Some(textarea_ref) = &config.textarea_ref {
+            ta = ta.bind(textarea_ref);
+        }
+        let mut ta = ta
             .font_size(config.size.font_size(&typography))
             .rounded(radius)
             .disabled(config.disabled)
@@ -323,6 +330,15 @@ impl TextareaBuilder {
     }
 
     /// Set number of visible rows (like HTML textarea)
+    /// Bind a [`blinc_layout::selector::TextareaRef`] to this field.
+    ///
+    /// The ref reads and writes the same state the field is built from,
+    /// so its value methods work without waiting for a render.
+    pub fn bind(mut self, textarea_ref: &blinc_layout::selector::TextareaRef) -> Self {
+        self.config.textarea_ref = Some(textarea_ref.clone());
+        self
+    }
+
     pub fn rows(mut self, rows: usize) -> Self {
         self.config.rows = Some(rows);
         self

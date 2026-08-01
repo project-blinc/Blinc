@@ -45,6 +45,9 @@ pub struct CnTextarea {
     /// Zero when the user omitted `on_change`. Same zero-arg
     /// `extern "C" fn()` pointer convention as `cn.Button`'s `on_click`.
     pub on_change: i64,
+    /// Handle from a `ref name: Textarea` declaration: `ref = bio`.
+    /// Zero when omitted.
+    pub r#ref: i64,
     /// Call-site identity, captured while the FFI builds the struct.
     #[skip]
     call_site: CallSiteId,
@@ -107,6 +110,15 @@ impl CnTextarea {
         }
         if self.required {
             t = t.required();
+        }
+        if self.r#ref != 0 {
+            match blinc_dsl_core::refs::textarea_ref_by_id(self.r#ref) {
+                Some(textarea_ref) => t = t.bind(&textarea_ref),
+                None => tracing::warn!(
+                    "cn.Textarea: `ref` is not a Textarea handle — declare it as \
+                     `ref name: Textarea`",
+                ),
+            }
         }
         t.build_component()
     }

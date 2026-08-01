@@ -83,6 +83,7 @@
 - [Theming](./core/theming.md)
 - [Event Handling](./core/events.md)
 - [State Management](./core/state.md)
+- [Element Refs](./core/refs.md)
 
 # Animation
 

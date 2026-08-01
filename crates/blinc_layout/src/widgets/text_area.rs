@@ -1605,9 +1605,22 @@ pub struct TextArea {
     state: SharedTextAreaState,
     /// Text area configuration
     config: Arc<Mutex<TextAreaConfig>>,
+    /// Caller's handle onto this field, if bound.
+    element_ref: Option<crate::selector::DivRef>,
 }
 
 impl TextArea {
+    /// Bind a [`crate::selector::TextareaRef`] to this field.
+    ///
+    /// The state half is handed over now — the field is built from
+    /// state its caller already holds — and the element half is
+    /// resolved by the renderer when the field is built.
+    pub fn bind(mut self, textarea_ref: &crate::selector::TextareaRef) -> Self {
+        textarea_ref.bind_state(&self.state);
+        self.element_ref = Some(textarea_ref.element().clone());
+        self
+    }
+
     /// Create a new text area with shared state
     pub fn new(state: &SharedTextAreaState) -> Self {
         let config = Arc::new(Mutex::new(TextAreaConfig::default()));
@@ -1769,6 +1782,7 @@ impl TextArea {
             inner,
             state: Arc::clone(state),
             config,
+            element_ref: None,
         };
 
         // Initialize scroll dimensions from default config
@@ -3214,6 +3228,10 @@ pub fn text_area(state: &SharedTextAreaState) -> TextArea {
 }
 
 impl ElementBuilder for TextArea {
+    fn bound_element_ref(&self) -> Option<&crate::selector::DivRef> {
+        self.element_ref.as_ref()
+    }
+
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
         // Set base render props and layout style for incremental updates
         // Note: callback and handlers are registered in new() so they're available for incremental diff

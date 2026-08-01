@@ -84,6 +84,26 @@ pub(crate) extern "C" fn blinc_input_select_all(id: i64) {
     crate::refs::input_select_all(id);
 }
 
+/// `bio.focus()`.
+pub(crate) extern "C" fn blinc_textarea_focus(id: i64) {
+    crate::refs::textarea_focus(id);
+}
+
+/// `bio.blur()`.
+pub(crate) extern "C" fn blinc_textarea_blur(id: i64) {
+    crate::refs::textarea_blur(id);
+}
+
+/// `bio.clear()`.
+pub(crate) extern "C" fn blinc_textarea_clear(id: i64) {
+    crate::refs::textarea_clear(id);
+}
+
+/// `bio.select_all()`.
+pub(crate) extern "C" fn blinc_textarea_select_all(id: i64) {
+    crate::refs::textarea_select_all(id);
+}
+
 pub(crate) extern "C" fn blinc_text(s_ptr: *const i32) {
     if s_ptr.is_null() {
         tracing::warn!("$Blinc$text called with null pointer");

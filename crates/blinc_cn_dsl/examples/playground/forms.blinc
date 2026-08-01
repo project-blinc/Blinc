@@ -16,6 +16,9 @@ signal form_bio: string
 // without anything having to re-render.
 ref search: Input
 
+// The same handle shape for the multi-line field below.
+ref bio: Textarea
+
 component FormWidgets {
     style {
         .group { width: 100%; padding: 24px; gap: 16px; flex-direction: column }
@@ -53,7 +56,13 @@ component FormWidgets {
                 )
             }
             
-            cn.Textarea(value = form_bio, label = "Bio", placeholder = "a few words", rows = 3)
+            cn.Textarea(ref = bio, value = form_bio, label = "Bio",
+                        placeholder = "a few words", rows = 3)
+            Div(class = "row") {
+                cn.Button("Focus bio", size = "small", on_click = || bio.focus())
+                cn.Button("Clear bio", variant = "destructive", size = "small",
+                          on_click = || bio.clear())
+            }
 
             // `ref` drives the field directly: no signal in the middle,
             // and nothing re-renders to make it happen.

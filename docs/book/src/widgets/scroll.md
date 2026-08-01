@@ -189,6 +189,10 @@ fn nested_scroll_example() -> impl ElementBuilder {
 
 Blinc provides a powerful selector API for programmatic scroll control through `ScrollRef`. This allows you to scroll to specific elements, positions, or the top/bottom of content.
 
+`ScrollRef` is one of several element handles — see
+[Element Refs](../core/refs.md) for the shared contract they follow, and
+for the handles onto fields and ordinary elements.
+
 ### Creating a ScrollRef
 
 Use `ctx.use_scroll_ref()` to create a persistent scroll reference:

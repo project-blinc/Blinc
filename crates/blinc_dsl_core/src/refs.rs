@@ -19,7 +19,7 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use blinc_layout::selector::{DivRef, InputRef, ScrollRef};
+use blinc_layout::selector::{DivRef, InputRef, ScrollRef, TextareaRef};
 
 /// What a declared ref points at.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -30,6 +30,8 @@ pub enum RefKind {
     Element,
     /// `ref x: Input`
     Input,
+    /// `ref x: Textarea`
+    Textarea,
 }
 
 #[derive(Clone)]
@@ -37,6 +39,7 @@ enum Handle {
     Scroll(ScrollRef),
     Element(DivRef),
     Input(InputRef),
+    Textarea(TextareaRef),
 }
 
 fn registry() -> &'static Mutex<HashMap<u64, Handle>> {
@@ -58,6 +61,7 @@ pub(crate) fn mint(id: u64, kind: RefKind) {
             RefKind::Scroll => Handle::Scroll(ScrollRef::new()),
             RefKind::Element => Handle::Element(DivRef::new()),
             RefKind::Input => Handle::Input(InputRef::new()),
+            RefKind::Textarea => Handle::Textarea(TextareaRef::new()),
         });
 }
 
@@ -85,6 +89,14 @@ pub fn input_ref_by_id(id: i64) -> Option<InputRef> {
     }
 }
 
+/// The multi-line field handle for `id`.
+pub fn textarea_ref_by_id(id: i64) -> Option<TextareaRef> {
+    match registry().lock().expect("ref registry").get(&(id as u64)) {
+        Some(Handle::Textarea(r)) => Some(r.clone()),
+        _ => None,
+    }
+}
+
 /// Every `Input` handle this program declared.
 ///
 /// The ids are span-derived, so a caller that did not compile the
@@ -96,6 +108,19 @@ pub fn declared_input_refs() -> Vec<InputRef> {
         .values()
         .filter_map(|h| match h {
             Handle::Input(r) => Some(r.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Every `Textarea` handle this program declared.
+pub fn declared_textarea_refs() -> Vec<TextareaRef> {
+    registry()
+        .lock()
+        .expect("ref registry")
+        .values()
+        .filter_map(|h| match h {
+            Handle::Textarea(r) => Some(r.clone()),
             _ => None,
         })
         .collect()
@@ -117,6 +142,7 @@ pub fn bind_div(id: i64, widget: &mut blinc_layout::div::Div) {
         // A field handle on a plain Div still binds the element half,
         // so `focus()` works; only the value methods need the field.
         Some(Handle::Input(r)) => *widget = std::mem::take(widget).bind(r.element()),
+        Some(Handle::Textarea(r)) => *widget = std::mem::take(widget).bind(r.element()),
         None => tracing::warn!(id, "no handle for this ref"),
     }
 }
@@ -133,6 +159,33 @@ fn with_element(id: i64, action: &str, f: impl FnOnce(&DivRef)) {
         Some(r) => f(&r),
         None => tracing::warn!(id, action, "not a Div ref"),
     }
+}
+
+fn with_textarea(id: i64, action: &str, f: impl FnOnce(&TextareaRef)) {
+    match textarea_ref_by_id(id) {
+        Some(r) => f(&r),
+        None => tracing::warn!(id, action, "not a Textarea ref"),
+    }
+}
+
+/// `bio.clear()`.
+pub fn textarea_clear(id: i64) {
+    with_textarea(id, "clear", |r| r.clear());
+}
+
+/// `bio.select_all()`.
+pub fn textarea_select_all(id: i64) {
+    with_textarea(id, "select_all", |r| r.select_all());
+}
+
+/// `bio.focus()`.
+pub fn textarea_focus(id: i64) {
+    with_textarea(id, "focus", |r| r.focus());
+}
+
+/// `bio.blur()`.
+pub fn textarea_blur(id: i64) {
+    with_textarea(id, "blur", |r| r.blur());
 }
 
 fn with_input(id: i64, action: &str, f: impl FnOnce(&InputRef)) {

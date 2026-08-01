@@ -38,6 +38,7 @@ mod handle;
 mod input_ref;
 mod registry;
 mod scroll_ref;
+mod textarea_ref;
 
 use std::sync::Arc;
 
@@ -47,6 +48,7 @@ pub use div_ref::{DivRef, DivRefInner};
 pub use handle::{ElementEvent, ElementHandle, MotionHandle};
 pub use input_ref::InputRef;
 pub use registry::ElementRegistry;
+pub use textarea_ref::TextareaRef;
 
 /// Shared element registry for thread-safe access
 pub type SharedElementRegistry = Arc<ElementRegistry>;

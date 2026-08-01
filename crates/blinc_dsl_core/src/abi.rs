@@ -9,7 +9,8 @@ use crate::host::{
     blinc_signal_get_by_id_i32, blinc_signal_get_by_id_i64, blinc_signal_get_by_id_string,
     blinc_signal_set_by_id_bool, blinc_signal_set_by_id_f64, blinc_signal_set_by_id_i32,
     blinc_signal_set_by_id_i64, blinc_signal_set_by_id_string, blinc_string_concat, blinc_text,
-    blinc_text_int,
+    blinc_text_int, blinc_textarea_blur, blinc_textarea_clear, blinc_textarea_focus,
+    blinc_textarea_select_all,
 };
 use crate::widget_ffi::{
     blinc_b_view, blinc_blockquote_view, blinc_button_view, blinc_canvas_view, blinc_caption_view,
@@ -156,6 +157,30 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             param_types: &[Type::Primitive(PrimitiveType::I64)],
             return_type: Type::Primitive(PrimitiveType::Unit),
             ptr: blinc_input_select_all as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__textarea_focus_by_id",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_textarea_focus as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__textarea_blur_by_id",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_textarea_blur as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__textarea_clear_by_id",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_textarea_clear as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__textarea_select_all_by_id",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_textarea_select_all as *const u8,
         },
         BuiltinDescriptor {
             name: "__signal_set_by_id_i32",

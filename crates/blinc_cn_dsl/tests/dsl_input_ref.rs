@@ -79,3 +79,47 @@ fn an_input_ref_reads_and_writes_the_field_it_binds() {
     assert_eq!(handle.value().as_deref(), Some(""), "and clear empties it");
     let _ = tree;
 }
+
+/// A `Textarea` ref reaches the multi-line field's own state, and
+/// newlines survive the round trip as lines.
+#[test]
+fn a_textarea_ref_reads_and_writes_the_field_it_binds() {
+    init();
+    let dsl = BlincDsl::new().expect("runtime init");
+    blinc_cn_dsl::register_all(&dsl).expect("register");
+    dsl.compile_source(
+        r#"ref bio: Textarea
+
+           view {
+             cn.Textarea(ref = bio, label = "Bio", rows = 3)
+           }"#,
+        "textarea_ref.blinc",
+    )
+    .expect("compile");
+
+    let host = div().w(400.0).h(300.0).child_box(dsl.view_widget());
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(400.0, 300.0);
+
+    let handle = blinc_dsl_core::refs::declared_textarea_refs()
+        .into_iter()
+        .find(|r| r.is_bound())
+        .expect("the field bound its ref");
+
+    handle.set_value("first line\nsecond line");
+    let host = div().w(400.0).h(300.0).child_box(dsl.view_widget());
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(400.0, 300.0);
+    let found = texts(&tree);
+    assert!(
+        found.iter().any(|t| t == "first line"),
+        "the field shows what the ref wrote: {found:?}"
+    );
+    assert!(
+        found.iter().any(|t| t == "second line"),
+        "including the line after the newline: {found:?}"
+    );
+
+    handle.clear();
+    assert_eq!(handle.value().as_deref(), Some(""));
+}
