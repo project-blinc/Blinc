@@ -74,3 +74,50 @@ fn declared_div_refs_bind_their_elements() {
     ref_ids.dedup();
     assert_eq!(ref_ids.len(), 2, "and they are distinct: {ref_ids:?}");
 }
+
+/// Every ref kind parses, binds where it can, and only answers to its
+/// own methods.
+#[test]
+fn each_kind_declares_and_binds() {
+    init();
+    let dsl = BlincDsl::new().expect("runtime init");
+    blinc_cn_dsl::register_all(&dsl).expect("register");
+    dsl.compile_source(
+        r#"ref panel: Div
+           ref email: Input
+
+           view {
+             Div {
+               Div(ref = panel, on_click = || panel.scroll_into_view()) {
+                 Text("a panel")
+               }
+               Div(ref = email, on_click = || email.select_all()) {
+                 Text("a field")
+               }
+             }
+           }"#,
+        "kinds.blinc",
+    )
+    .expect("every kind compiles, and each method belongs to its kind");
+
+    let host = div().w(300.0).h(300.0).child_box(dsl.view_widget());
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(300.0, 300.0);
+
+    // Both bound their element: an Input ref binds the element half on
+    // a plain Div too, so `focus()` lands even where the value half has
+    // no field behind it.
+    let registry = tree.element_registry();
+    let mut bound = 0;
+    let mut stack = vec![tree.root().expect("root")];
+    while let Some(id) = stack.pop() {
+        if registry
+            .get_id(id)
+            .is_some_and(|s| s.starts_with("__blinc_ref_"))
+        {
+            bound += 1;
+        }
+        stack.extend(tree.layout_tree.children(id).iter().copied());
+    }
+    assert_eq!(bound, 2, "one element per declaration");
+}

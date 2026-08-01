@@ -20,6 +20,7 @@ use crate::*;
 const REF_MARKERS: &[(&str, crate::refs::RefKind)] = &[
     ("BlincScrollRef", crate::refs::RefKind::Scroll),
     ("BlincDivRef", crate::refs::RefKind::Element),
+    ("BlincInputRef", crate::refs::RefKind::Input),
 ];
 
 /// Is this the declaration a `ref` lowered to?
@@ -119,6 +120,10 @@ pub(crate) fn resolve_ref_calls(program: &mut TypedProgram, filename: &str) {
             (RefKind::Element, "focus", 0) => Some("__ref_focus_by_id"),
             (RefKind::Element, "blur", 0) => Some("__ref_blur_by_id"),
             (RefKind::Element, "scroll_into_view", 0) => Some("__ref_scroll_into_view_by_id"),
+            (RefKind::Input, "focus", 0) => Some("__input_focus_by_id"),
+            (RefKind::Input, "blur", 0) => Some("__input_blur_by_id"),
+            (RefKind::Input, "clear", 0) => Some("__input_clear_by_id"),
+            (RefKind::Input, "select_all", 0) => Some("__input_select_all_by_id"),
             _ => None,
         }
     }
@@ -285,6 +290,10 @@ pub(crate) fn resolve_ref_calls(program: &mut TypedProgram, filename: &str) {
         ("__ref_focus_by_id", 0),
         ("__ref_blur_by_id", 0),
         ("__ref_scroll_into_view_by_id", 0),
+        ("__input_focus_by_id", 0),
+        ("__input_blur_by_id", 0),
+        ("__input_clear_by_id", 0),
+        ("__input_select_all_by_id", 0),
     ] {
         let mut params = vec![zyntax_typed_ast::typed_ast::TypedParameter {
             name: InternedString::new_global("id"),

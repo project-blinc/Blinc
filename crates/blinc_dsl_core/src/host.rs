@@ -64,6 +64,26 @@ pub(crate) extern "C" fn blinc_ref_scroll_into_view(id: i64) {
     crate::refs::scroll_into_view(id);
 }
 
+/// `email.focus()`.
+pub(crate) extern "C" fn blinc_input_focus(id: i64) {
+    crate::refs::input_focus(id);
+}
+
+/// `email.blur()`.
+pub(crate) extern "C" fn blinc_input_blur(id: i64) {
+    crate::refs::input_blur(id);
+}
+
+/// `email.clear()`.
+pub(crate) extern "C" fn blinc_input_clear(id: i64) {
+    crate::refs::input_clear(id);
+}
+
+/// `email.select_all()`.
+pub(crate) extern "C" fn blinc_input_select_all(id: i64) {
+    crate::refs::input_select_all(id);
+}
+
 pub(crate) extern "C" fn blinc_text(s_ptr: *const i32) {
     if s_ptr.is_null() {
         tracing::warn!("$Blinc$text called with null pointer");

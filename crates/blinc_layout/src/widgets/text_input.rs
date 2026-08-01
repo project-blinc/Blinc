@@ -2166,9 +2166,23 @@ pub struct TextInput {
     stateful_state: SharedState<TextFieldState>,
     /// Callback invoked when text value changes
     on_change_callback: Option<OnChangeCallback>,
+    /// Caller's handle onto this field, if bound.
+    element_ref: Option<crate::selector::DivRef>,
 }
 
 impl TextInput {
+    /// Bind an [`crate::selector::InputRef`] to this field.
+    ///
+    /// The value half is handed over now — the field is built from
+    /// state its caller already holds, so nothing has to wait for a
+    /// render. The element half is resolved by the renderer when the
+    /// field is built, the same as any other bound ref.
+    pub fn bind(mut self, input_ref: &crate::selector::InputRef) -> Self {
+        input_ref.bind_data(&self.data);
+        self.element_ref = Some(input_ref.element().clone());
+        self
+    }
+
     /// Create a text input with externally-managed data state
     pub fn new(data: SharedTextInputData) -> Self {
         let config = Arc::new(Mutex::new(TextInputConfig::default()));
@@ -2347,6 +2361,7 @@ impl TextInput {
             config,
             stateful_state,
             on_change_callback: None,
+            element_ref: None,
         }
     }
 
@@ -3531,6 +3546,10 @@ pub fn text_input(data: &SharedTextInputData) -> TextInput {
 }
 
 impl ElementBuilder for TextInput {
+    fn bound_element_ref(&self) -> Option<&crate::selector::DivRef> {
+        self.element_ref.as_ref()
+    }
+
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
         // Set base render props and layout style for incremental updates
         // Note: callback and handlers are registered in new() so they're available for incremental diff

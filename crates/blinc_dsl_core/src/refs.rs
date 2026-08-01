@@ -19,7 +19,7 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use blinc_layout::selector::{DivRef, ScrollRef};
+use blinc_layout::selector::{DivRef, InputRef, ScrollRef};
 
 /// What a declared ref points at.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -28,12 +28,15 @@ pub enum RefKind {
     Scroll,
     /// `ref x: Div`
     Element,
+    /// `ref x: Input`
+    Input,
 }
 
 #[derive(Clone)]
 enum Handle {
     Scroll(ScrollRef),
     Element(DivRef),
+    Input(InputRef),
 }
 
 fn registry() -> &'static Mutex<HashMap<u64, Handle>> {
@@ -54,6 +57,7 @@ pub(crate) fn mint(id: u64, kind: RefKind) {
         .or_insert_with(|| match kind {
             RefKind::Scroll => Handle::Scroll(ScrollRef::new()),
             RefKind::Element => Handle::Element(DivRef::new()),
+            RefKind::Input => Handle::Input(InputRef::new()),
         });
 }
 
@@ -73,6 +77,14 @@ pub fn div_ref_by_id(id: i64) -> Option<DivRef> {
     }
 }
 
+/// The field handle for `id`.
+pub fn input_ref_by_id(id: i64) -> Option<InputRef> {
+    match registry().lock().expect("ref registry").get(&(id as u64)) {
+        Some(Handle::Input(r)) => Some(r.clone()),
+        _ => None,
+    }
+}
+
 /// Bind whatever handle `id` names to a `Div` being built.
 ///
 /// Which kind it is decides what binding means, and only the handle
@@ -86,6 +98,9 @@ pub fn bind_div(id: i64, widget: &mut blinc_layout::div::Div) {
     match handle {
         Some(Handle::Element(r)) => *widget = std::mem::take(widget).bind(&r),
         Some(Handle::Scroll(r)) => *widget = std::mem::take(widget).bind_scroll(&r),
+        // A field handle on a plain Div still binds the element half,
+        // so `focus()` works; only the value methods need the field.
+        Some(Handle::Input(r)) => *widget = std::mem::take(widget).bind(r.element()),
         None => tracing::warn!(id, "no handle for this ref"),
     }
 }
@@ -102,6 +117,33 @@ fn with_element(id: i64, action: &str, f: impl FnOnce(&DivRef)) {
         Some(r) => f(&r),
         None => tracing::warn!(id, action, "not a Div ref"),
     }
+}
+
+fn with_input(id: i64, action: &str, f: impl FnOnce(&InputRef)) {
+    match input_ref_by_id(id) {
+        Some(r) => f(&r),
+        None => tracing::warn!(id, action, "not an Input ref"),
+    }
+}
+
+/// `email.clear()`.
+pub fn input_clear(id: i64) {
+    with_input(id, "clear", |r| r.clear());
+}
+
+/// `email.select_all()`.
+pub fn input_select_all(id: i64) {
+    with_input(id, "select_all", |r| r.select_all());
+}
+
+/// `email.focus()`.
+pub fn input_focus(id: i64) {
+    with_input(id, "focus", |r| r.focus());
+}
+
+/// `email.blur()`.
+pub fn input_blur(id: i64) {
+    with_input(id, "blur", |r| r.blur());
 }
 
 /// `pages.scroll_to_top()`.

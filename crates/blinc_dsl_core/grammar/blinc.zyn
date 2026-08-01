@@ -340,7 +340,7 @@ ref_decl = { "ref" ~ name:identifier ~ ":" ~ kind:ref_kind }
       is_external: true,
   }
 
-ref_kind = { k:ref_kind_scroll | k:ref_kind_div }
+ref_kind = { k:ref_kind_scroll | k:ref_kind_div | k:ref_kind_input }
   -> k
 
 ref_kind_scroll = { "Scroll" }
@@ -348,6 +348,9 @@ ref_kind_scroll = { "Scroll" }
 
 ref_kind_div = { "Div" }
   -> Type::Named { name: intern("BlincDivRef"), type_args: [] }
+
+ref_kind_input = { "Input" }
+  -> Type::Named { name: intern("BlincInputRef"), type_args: [] }
 
 signal_decl = { "signal" ~ name:identifier ~ ":" ~ ty:state_type }
   -> TypedDeclaration::Function {

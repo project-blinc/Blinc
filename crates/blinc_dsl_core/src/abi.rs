@@ -2,13 +2,14 @@ use super::*;
 use crate::host::{
     blinc_dsl_computed_bool, blinc_dsl_computed_f64, blinc_dsl_computed_i32,
     blinc_dsl_computed_string, blinc_dsl_effect, blinc_dsl_with_region, blinc_format_int,
-    blinc_fsm_runtime_trigger, blinc_fsm_subscribe, blinc_fsm_subscribe_all, blinc_ref_blur,
-    blinc_ref_focus, blinc_ref_scroll_into_view, blinc_scope_enter, blinc_scroll_by,
-    blinc_scroll_to_bottom, blinc_scroll_to_top, blinc_signal_get_by_id_bool,
-    blinc_signal_get_by_id_f64, blinc_signal_get_by_id_i32, blinc_signal_get_by_id_i64,
-    blinc_signal_get_by_id_string, blinc_signal_set_by_id_bool, blinc_signal_set_by_id_f64,
-    blinc_signal_set_by_id_i32, blinc_signal_set_by_id_i64, blinc_signal_set_by_id_string,
-    blinc_string_concat, blinc_text, blinc_text_int,
+    blinc_fsm_runtime_trigger, blinc_fsm_subscribe, blinc_fsm_subscribe_all, blinc_input_blur,
+    blinc_input_clear, blinc_input_focus, blinc_input_select_all, blinc_ref_blur, blinc_ref_focus,
+    blinc_ref_scroll_into_view, blinc_scope_enter, blinc_scroll_by, blinc_scroll_to_bottom,
+    blinc_scroll_to_top, blinc_signal_get_by_id_bool, blinc_signal_get_by_id_f64,
+    blinc_signal_get_by_id_i32, blinc_signal_get_by_id_i64, blinc_signal_get_by_id_string,
+    blinc_signal_set_by_id_bool, blinc_signal_set_by_id_f64, blinc_signal_set_by_id_i32,
+    blinc_signal_set_by_id_i64, blinc_signal_set_by_id_string, blinc_string_concat, blinc_text,
+    blinc_text_int,
 };
 use crate::widget_ffi::{
     blinc_b_view, blinc_blockquote_view, blinc_button_view, blinc_canvas_view, blinc_caption_view,
@@ -131,6 +132,30 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             param_types: &[Type::Primitive(PrimitiveType::I64)],
             return_type: Type::Primitive(PrimitiveType::Unit),
             ptr: blinc_ref_scroll_into_view as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__input_focus_by_id",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_input_focus as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__input_blur_by_id",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_input_blur as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__input_clear_by_id",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_input_clear as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__input_select_all_by_id",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_input_select_all as *const u8,
         },
         BuiltinDescriptor {
             name: "__signal_set_by_id_i32",

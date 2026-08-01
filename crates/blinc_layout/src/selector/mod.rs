@@ -35,6 +35,7 @@
 
 mod div_ref;
 mod handle;
+mod input_ref;
 mod registry;
 mod scroll_ref;
 
@@ -44,6 +45,7 @@ use blinc_core::BlincContextState;
 
 pub use div_ref::{DivRef, DivRefInner};
 pub use handle::{ElementEvent, ElementHandle, MotionHandle};
+pub use input_ref::InputRef;
 pub use registry::ElementRegistry;
 
 /// Shared element registry for thread-safe access

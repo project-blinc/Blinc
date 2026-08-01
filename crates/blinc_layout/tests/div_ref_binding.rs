@@ -163,3 +163,38 @@ fn a_ref_whose_node_is_reused_goes_dead() {
     card.focus();
     card.scroll_into_view();
 }
+
+/// `InputRef` binds both halves: the value immediately, the element
+/// when the field is built.
+#[test]
+fn an_input_ref_binds_its_field_and_its_element() {
+    use blinc_layout::selector::InputRef;
+    use blinc_layout::widgets::text_input::{text_input, text_input_data};
+
+    blinc_theme::ThemeState::init_default();
+
+    let email = InputRef::new();
+    let data = text_input_data();
+
+    let host = div()
+        .w(300.0)
+        .h(100.0)
+        .child(text_input(&data).bind(&email).w(200.0));
+
+    // The value half is live before anything renders.
+    assert!(email.is_bound(), "the field's state is handed over at bind");
+    email.set_value("typed@example.com");
+    assert_eq!(data.lock().unwrap().value, "typed@example.com");
+
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(300.0, 100.0);
+
+    assert!(
+        email.exists(),
+        "and the element half resolves once the field is built"
+    );
+    assert!(
+        email.element().node_id().is_some(),
+        "so focus and scroll-into-view have somewhere to land"
+    );
+}
