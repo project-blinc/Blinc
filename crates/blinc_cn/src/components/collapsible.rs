@@ -219,7 +219,21 @@ impl CollapsibleBuilder {
 
     /// Get or build the inner Collapsible
     fn get_or_build(&self) -> &Collapsible {
-        self.built.get_or_init(|| {
+        // Built OUTSIDE the cell rather than in `get_or_init`.
+        // `Stateful` runs its callback during construction, and that
+        // path can reach back here — inside `get_or_init` that is a
+        // "reentrant init" panic, whereas here the inner call simply
+        // builds its own and loses the `set` race harmlessly.
+        if let Some(built) = self.built.get() {
+            return built;
+        }
+        let built = self.make();
+        let _ = self.built.set(built);
+        return self.built.get().expect("just set");
+    }
+
+    fn make(&self) -> Collapsible {
+        {
             let anim_key = format!("cn-collapsible-{}", self.is_open.signal_id().to_raw());
             let is_open = self.is_open.clone();
             let content = self.content.clone();
@@ -246,7 +260,7 @@ impl CollapsibleBuilder {
             Collapsible {
                 inner: div().w_full().child(inner),
             }
-        })
+        }
     }
 
     /// Set the content, as a builder called on every rebuild.
