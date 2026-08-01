@@ -106,8 +106,14 @@ impl ElementBuilder for Collapsible {
 }
 
 /// Builder for creating Collapsible components with fluent API
+/// Content builder, cloneable and re-callable — the same shape
+/// `cn::accordion` uses. A `Stateful` rebuilds its subtree, so content
+/// has to be a recipe rather than an already-built element.
+type ContentBuilderFn = std::sync::Arc<dyn Fn() -> Div + Send + Sync>;
+
 pub struct CollapsibleBuilder {
     is_open: State<bool>,
+    content: Option<ContentBuilderFn>,
     scale_anim: SharedAnimatedValue,
     opacity_anim: SharedAnimatedValue,
     #[allow(dead_code)]
@@ -181,6 +187,7 @@ impl CollapsibleBuilder {
 
         Self {
             is_open: is_open.clone(),
+            content: None,
             scale_anim,
             opacity_anim,
             spring_config,
@@ -191,43 +198,63 @@ impl CollapsibleBuilder {
     /// Get or build the inner Collapsible
     fn get_or_build(&self) -> &Collapsible {
         self.built.get_or_init(|| {
-            // No content set: an empty shell, animated the same way so
-            // the two paths agree.
             let anim_key = format!("cn-collapsible-{}", self.is_open.signal_id().to_raw());
-            let inner = div()
-                .w_full()
-                .flex_col()
-                .overflow_clip()
-                .animate_bounds(
-                    blinc_layout::visual_animation::VisualAnimationConfig::height()
-                        .with_key(&anim_key)
-                        .clip_to_animated()
-                        .snappy(),
-                )
-                .when(!self.is_open.get(), |d| d.h(0.0));
+            let is_open = self.is_open.clone();
+            let content = self.content.clone();
 
-            Collapsible { inner }
+            // Wrapped in a `Stateful` bound to the state. Open and shut
+            // differ by an explicit zero height, and height is decided
+            // when the element is BUILT, so without a rebuild the
+            // section keeps whatever it was first built with and only
+            // moves when something unrelated rebuilds it.
+            let inner =
+                blinc_layout::stateful::stateful_with_key::<()>(&format!("{anim_key}-container"))
+                    .deps([self.is_open.signal_id()])
+                    .on_state(move |_ctx| {
+                        // Content is ALWAYS rendered: the collapse animates
+                        // down FROM the open bounds, so removing it would
+                        // leave the animation nothing to measure or shrink.
+                        let body = match &content {
+                            Some(f) => f(),
+                            None => div(),
+                        };
+                        div()
+                            .w_full()
+                            .flex_col()
+                            .overflow_clip()
+                            .animate_bounds(
+                                blinc_layout::visual_animation::VisualAnimationConfig::height()
+                                    .with_key(&anim_key)
+                                    .clip_to_animated()
+                                    .snappy(),
+                            )
+                            // Always rendered so the collapse has something to
+                            // clip, matching `cn::accordion`.
+                            .child(body)
+                            // Width is re-asserted on the collapsed branch: the
+                            // element still occupies its row while its height
+                            // animates to nothing, and any VERTICAL padding
+                            // would keep it occupying space even at `h(0)`,
+                            // which is why none is applied here.
+                            .when(!is_open.get(), |d| d.w_full().h(0.0))
+                    });
+
+            Collapsible {
+                inner: div().w_full().child(inner),
+            }
         })
     }
 
-    /// Set the content of the collapsible
-    ///
-    /// The content builder is called once to create the expandable content.
-    pub fn content<F, E>(self, content: F) -> CollapsibleWithContent<F, E>
+    /// Set the content, as a builder called on every rebuild.
+    pub fn content<F>(mut self, content: F) -> Self
     where
-        F: FnOnce() -> E,
-        E: ElementBuilder + 'static,
+        F: Fn() -> Div + Send + Sync + 'static,
     {
-        CollapsibleWithContent {
-            is_open: self.is_open,
-            scale_anim: self.scale_anim,
-            opacity_anim: self.opacity_anim,
-            #[allow(dead_code)]
-            spring_config: self.spring_config,
-            content,
-            built: std::cell::OnceCell::new(),
-        }
+        self.content = Some(std::sync::Arc::new(content));
+        self
     }
+
+    /// Set the content of the collapsible
 
     /// Toggle the collapsible state
     pub fn toggle(&self) {
