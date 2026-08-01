@@ -59,6 +59,7 @@ pub mod button;
 pub mod card;
 pub mod checkbox;
 pub mod collapsible;
+pub mod dialog;
 pub mod icon;
 pub mod input;
 pub mod kbd;
@@ -95,6 +96,7 @@ pub use button::CnButton;
 pub use card::CnCard;
 pub use checkbox::CnCheckbox;
 pub use collapsible::CnCollapsible;
+pub use dialog::CnDialog;
 pub use icon::CnIcon;
 pub use input::CnInput;
 pub use kbd::CnKbd;
@@ -185,5 +187,6 @@ pub fn register_basics(dsl: &BlincDsl) -> BlincDslResult<()> {
     dsl.register_extern_widget::<CnPopover>()?;
     dsl.register_extern_widget::<CnPopoverTrigger>()?;
     dsl.register_extern_widget::<CnPopoverContent>()?;
+    dsl.register_extern_widget::<CnDialog>()?;
     Ok(())
 }

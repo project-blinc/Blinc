@@ -1,5 +1,8 @@
 // Status / feedback widgets: badges, alerts, spinners.
 
+// The signal is the dialog's handle: set it and the modal appears.
+signal confirm_delete: bool = false
+
 component FeedbackWidgets {
     style {
         .group { width: 100%; padding: 24px; gap: 16px; flex-direction: column }
@@ -62,6 +65,17 @@ component FeedbackWidgets {
                     cn.PopoverTrigger { cn.Badge("to the right") }
                     cn.PopoverContent { cn.Label("opens sideways") }
                 }
+            }
+
+            cn.Label("dialog: a modal the signal opens")
+            Div(class = "row") {
+                cn.Button("Delete row", variant = "destructive", size = "small",
+                          on_click = || confirm_delete.set(true))
+            }
+            cn.Dialog(open = confirm_delete, title = "Delete this row?",
+                      description = "This cannot be undone.",
+                      confirm_text = "Delete", destructive = true) {
+                cn.Label("The row and its history go with it.")
             }
         }
     }
