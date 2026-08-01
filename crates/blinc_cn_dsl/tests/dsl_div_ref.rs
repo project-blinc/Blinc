@@ -104,20 +104,24 @@ fn each_kind_declares_and_binds() {
     let mut tree = RenderTree::from_element(&host);
     tree.compute_layout(300.0, 300.0);
 
-    // Both bound their element: an Input ref binds the element half on
-    // a plain Div too, so `focus()` lands even where the value half has
-    // no field behind it.
+    // A `Div` ref addresses its element through the registry, so it
+    // takes an id. An `Input` ref routes through the field's own focus
+    // path and leaves the element as it was built — binding must not
+    // change an element that is already handling its own input.
     let registry = tree.element_registry();
-    let mut bound = 0;
+    let mut stamped = 0;
     let mut stack = vec![tree.root().expect("root")];
     while let Some(id) = stack.pop() {
         if registry
             .get_id(id)
             .is_some_and(|s| s.starts_with("__blinc_ref_"))
         {
-            bound += 1;
+            stamped += 1;
         }
         stack.extend(tree.layout_tree.children(id).iter().copied());
     }
-    assert_eq!(bound, 2, "one element per declaration");
+    assert_eq!(
+        stamped, 1,
+        "the Div ref stamps an id, the Input ref does not"
+    );
 }
