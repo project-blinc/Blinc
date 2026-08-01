@@ -1,6 +1,7 @@
 // Avatars, cards, separators, and the static skeleton shape.
 
 signal details: bool = false
+signal warranty: bool = false
 
 component MediaWidgets {
     style {
@@ -64,6 +65,34 @@ component MediaWidgets {
             cn.Collapsible(open = details) {
                 cn.Label("hidden until the switch is on")
                 cn.Label("and folds away when it is off")
+            }
+
+            // Each section names itself, so a label and the body under
+            // it are declared together and cannot drift apart.
+            cn.Label("accordion: one section open at a time")
+            cn.Accordion {
+                cn.AccordionItem(label = "Shipping", open = true) {
+                    Div { Text("Ships in two to three days.") }
+                }
+                cn.AccordionItem(label = "Returns") {
+                    Div { Text("Thirty days, unopened.") }
+                }
+                cn.AccordionItem(label = "Warranty") {
+                    Div { Text("One year against defects.") }
+                }
+            }
+
+            // `open` binds both ways: the switch folds the section, and
+            // clicking the header moves the switch.
+            cn.Label("accordion: multi = true, second section bound")
+            cn.Switch(checked = warranty, label = "bound section")
+            cn.Accordion(multi = true) {
+                cn.AccordionItem(label = "Unbound") {
+                    Div { Text("opening another leaves this one open") }
+                }
+                cn.AccordionItem(label = "Bound", open = warranty) {
+                    Div { Text("the switch above folds this section") }
+                }
             }
 
             cn.Label("separator + static skeleton")

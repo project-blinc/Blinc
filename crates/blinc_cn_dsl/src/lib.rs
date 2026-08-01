@@ -47,6 +47,8 @@
 //! `Table`, …) lands incrementally as each widget's prop / slot
 //! shape gets wired.
 
+pub mod accordion;
+pub mod accordion_item;
 pub mod alert;
 pub mod aspect_ratio;
 pub mod avatar;
@@ -73,6 +75,8 @@ pub mod textarea;
 // re-exported; widgets pull what they need via `crate::color::…`.
 pub(crate) mod color;
 
+pub use accordion::CnAccordion;
+pub use accordion_item::CnAccordionItem;
 pub use alert::CnAlert;
 pub use aspect_ratio::CnAspectRatio;
 pub use avatar::CnAvatar;
@@ -135,6 +139,8 @@ pub fn register_basics(dsl: &BlincDsl) -> BlincDslResult<()> {
     dsl.register_extern_widget::<CnButton>()?;
     dsl.register_extern_widget::<CnBadge>()?;
     dsl.register_extern_widget::<CnBreadcrumb>()?;
+    dsl.register_extern_widget::<CnAccordion>()?;
+    dsl.register_extern_widget::<CnAccordionItem>()?;
     dsl.register_extern_widget::<CnAlert>()?;
     dsl.register_extern_widget::<CnLabel>()?;
     dsl.register_extern_widget::<CnScrollArea>()?;
