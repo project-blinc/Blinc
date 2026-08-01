@@ -128,7 +128,14 @@ pub(crate) unsafe fn mount(id: i64, child: i64) -> i64 {
             // SAFETY: the handle came from the region's own view call
             // and this is the only place it is materialised.
             if let Some(widget) = unsafe { crate::widget_ffi::materialize_widget(handle) } {
-                return blinc_layout::div::div().child_box(widget.into_element_builder());
+                // A region holds view content, so it stacks. The
+                // default row stretches what it holds to the row's own
+                // height, which inside a bounded parent pinned a tall
+                // page to that height and collapsed its trailing rows
+                // to zero rather than letting them overflow.
+                return blinc_layout::div::div()
+                    .flex_col()
+                    .child_box(widget.into_element_builder());
             }
         }
 
