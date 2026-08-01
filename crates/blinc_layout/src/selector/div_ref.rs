@@ -13,6 +13,12 @@ use std::sync::{Arc, Mutex, Weak};
 
 use crate::tree::LayoutNodeId;
 
+/// Serial for auto-assigned element ids, so each ref's id is its own.
+fn next_serial() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 use super::ScrollOptions;
 use super::registry::ElementRegistry;
 
@@ -23,6 +29,14 @@ pub struct DivRefInner {
     node_id: Option<LayoutNodeId>,
     /// Weak: the registry owns the tree, not the other way round.
     registry: Option<Weak<ElementRegistry>>,
+    /// The element's id as of the last bind.
+    ///
+    /// A `LayoutNodeId` alone cannot say whether the binding still
+    /// holds: ids are reissued on rebuild, so an element that stopped
+    /// binding this ref leaves the old id pointing at whatever now
+    /// occupies that slot. Checking the id back is what separates "the
+    /// element I bound" from "some element".
+    element_id: Option<String>,
 }
 
 /// A handle onto an element.
@@ -61,30 +75,41 @@ impl DivRef {
     /// The id is derived from the node, so it cannot collide with one
     /// the author chose.
     pub fn bind_to_node(&self, node_id: LayoutNodeId, registry: Weak<ElementRegistry>) {
-        if let Some(registry) = registry.upgrade()
-            && registry.get_id(node_id).is_none()
-        {
-            registry.register(format!("__blinc_ref_{node_id:?}"), node_id);
+        let mut element_id = None;
+        if let Some(registry) = registry.upgrade() {
+            let id = registry.get_id(node_id).unwrap_or_else(|| {
+                // Derived from this ref, not from the node: a node id is
+                // reissued, so a node-derived id would match again after
+                // recycling and defeat the staleness check below.
+                let fresh = format!("__blinc_ref_{}", next_serial());
+                registry.register(fresh.clone(), node_id);
+                fresh
+            });
+            element_id = Some(id);
         }
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner.node_id = Some(node_id);
+        inner.element_id = element_id;
         inner.registry = Some(registry);
     }
 
-    /// The node this ref is bound to, if it has been built.
+    /// The node this ref is bound to, while the binding holds.
     pub fn node_id(&self) -> Option<LayoutNodeId> {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).node_id
+        self.resolved().map(|(node_id, _, _)| node_id)
     }
 
-    /// Whether the element exists in the current tree.
+    /// Whether the element this ref was bound to is still in the tree.
+    ///
+    /// False once it stops being built, rather than true against
+    /// whatever inherited its node id.
     pub fn exists(&self) -> bool {
-        self.node_id().is_some()
+        self.resolved().is_some()
     }
 
     /// This element's laid-out bounds, once layout has run.
     pub fn bounds(&self) -> Option<blinc_core::context_state::Bounds> {
-        let (node_id, registry) = self.resolved()?;
-        registry.get_bounds(&registry.get_id(node_id)?)
+        let (_, registry, element_id) = self.resolved()?;
+        registry.get_bounds(&element_id)
     }
 
     /// Give this element keyboard focus.
@@ -121,24 +146,27 @@ impl DivRef {
         });
     }
 
-    fn resolved(&self) -> Option<(LayoutNodeId, Arc<ElementRegistry>)> {
+    /// The binding, if it still holds.
+    ///
+    /// The id check is the whole point: a rebuild that stops binding
+    /// this ref leaves the node id in place, and that id is reissued to
+    /// some other element. Without this, a command would land on it.
+    fn resolved(&self) -> Option<(LayoutNodeId, Arc<ElementRegistry>, String)> {
         let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let node_id = inner.node_id?;
         let registry = inner.registry.as_ref()?.upgrade()?;
-        Some((node_id, registry))
+        let element_id = inner.element_id.clone()?;
+        (registry.get_id(node_id).as_deref() == Some(element_id.as_str()))
+            .then_some((node_id, registry, element_id))
     }
 
     /// The element's string id, which is what the focus and scroll
     /// callbacks are keyed by. Assigned at bind time if the element had
     /// none, so this only fails when the ref points at nothing yet.
     fn with_string_id(&self, action: &str, f: impl FnOnce(&str)) {
-        let Some((node_id, registry)) = self.resolved() else {
-            tracing::warn!(action, "DivRef is not bound to a built element yet");
-            return;
-        };
-        match registry.get_id(node_id) {
-            Some(id) => f(&id),
-            None => tracing::warn!(action, ?node_id, "the bound element carries no id"),
+        match self.resolved() {
+            Some((_, _, element_id)) => f(&element_id),
+            None => tracing::warn!(action, "DivRef is not bound to a live element"),
         }
     }
 }
@@ -155,6 +183,15 @@ const _: fn() = || {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A ref bound while its tree is gone is not bound: the weak
+    /// registry cannot upgrade, so there is nothing to check against.
+    #[test]
+    fn a_binding_against_a_dropped_tree_does_not_hold() {
+        let r = DivRef::new();
+        r.bind_to_node(LayoutNodeId::default(), Weak::new());
+        assert!(!r.exists());
+    }
 
     #[test]
     fn an_unbound_ref_reports_nothing_and_does_nothing() {
@@ -183,7 +220,10 @@ mod tests {
         // what a handler firing before its element exists needs.
         handler();
 
-        card.bind_to_node(LayoutNodeId::default(), Weak::new());
+        // A real registry: binding against a dead one is not a binding,
+        // which is what keeps a ref from outliving its tree.
+        let registry = Arc::new(ElementRegistry::new());
+        card.bind_to_node(LayoutNodeId::default(), Arc::downgrade(&registry));
         handler();
         assert!(card.exists(), "the binding outlived the capture");
     }
@@ -194,7 +234,8 @@ mod tests {
     fn clones_share_the_binding() {
         let a = DivRef::new();
         let b = a.clone();
-        a.bind_to_node(LayoutNodeId::default(), Weak::new());
+        let registry = Arc::new(ElementRegistry::new());
+        a.bind_to_node(LayoutNodeId::default(), Arc::downgrade(&registry));
         assert_eq!(b.node_id(), Some(LayoutNodeId::default()));
     }
 }

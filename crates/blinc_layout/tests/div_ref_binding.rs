@@ -131,3 +131,35 @@ fn a_rebuild_repoints_the_ref() {
     );
     let _ = before;
 }
+
+/// A ref whose node is taken over by another element goes dead, rather
+/// than addressing the newcomer.
+///
+/// `LayoutNodeId`s are reissued across rebuilds, so this is what a ref
+/// outliving its element looks like from inside one registry — the id
+/// stays valid and starts pointing at something else entirely.
+#[test]
+fn a_ref_whose_node_is_reused_goes_dead() {
+    let card = DivRef::new();
+    let mut tree = RenderTree::from_element(
+        &div()
+            .w(100.0)
+            .h(100.0)
+            .child(div().bind(&card).w(10.0).h(10.0)),
+    );
+    tree.compute_layout(100.0, 100.0);
+
+    let node = card.node_id().expect("bound");
+    assert!(card.exists());
+
+    // What a rebuild does when a different element lands on that node.
+    tree.element_registry().register("someone-else", node);
+
+    assert!(!card.exists(), "the ref does not claim the newcomer");
+    assert_eq!(card.node_id(), None);
+    assert_eq!(card.bounds(), None, "and reports no stale geometry");
+
+    // Every command is a no-op rather than acting on the wrong element.
+    card.focus();
+    card.scroll_into_view();
+}
