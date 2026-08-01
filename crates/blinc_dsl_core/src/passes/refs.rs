@@ -12,9 +12,15 @@
 
 use crate::*;
 
-/// The marker type `ref_kind` emits. Distinguishes a ref declaration
-/// from `signal x: T`, which is otherwise the same shape.
-pub(crate) const REF_MARKER: &str = "BlincScrollRef";
+/// The marker types `ref_kind` emits, and the kind each denotes.
+///
+/// A marker is what separates a ref declaration from `signal x: T`,
+/// since both are external, param-less decls; the author writes
+/// `Scroll` or `Div` and the AST carries a name nothing else can spell.
+const REF_MARKERS: &[(&str, crate::refs::RefKind)] = &[
+    ("BlincScrollRef", crate::refs::RefKind::Scroll),
+    ("BlincDivRef", crate::refs::RefKind::Element),
+];
 
 /// Is this the declaration a `ref` lowered to?
 ///
@@ -26,26 +32,39 @@ pub(crate) fn is_ref_decl(
     func: &zyntax_typed_ast::typed_ast::TypedFunction,
     registry: &zyntax_typed_ast::type_registry::TypeRegistry,
 ) -> bool {
-    func.is_external
-        && func.params.is_empty()
-        && func.body.is_none()
-        && type_name_is(&func.return_type, REF_MARKER, registry)
+    ref_kind_of(func, registry).is_some()
 }
 
-fn type_name_is(
-    ty: &Type,
-    want: &str,
+/// The kind this declaration denotes, or `None` if it is not a ref.
+fn ref_kind_of(
+    func: &zyntax_typed_ast::typed_ast::TypedFunction,
     registry: &zyntax_typed_ast::type_registry::TypeRegistry,
-) -> bool {
-    let name = match ty {
+) -> Option<crate::refs::RefKind> {
+    if !(func.is_external && func.params.is_empty() && func.body.is_none()) {
+        return None;
+    }
+    let name = type_name(&func.return_type, registry)?;
+    REF_MARKERS
+        .iter()
+        .find(|(marker, _)| *marker == name)
+        .map(|(_, kind)| *kind)
+}
+
+/// The marker resolves as `Unresolved` or as a registered `Named`
+/// depending on whether anything else claimed the name, so both
+/// spellings are read — the same latitude the `View` return marker needs.
+fn type_name(
+    ty: &Type,
+    registry: &zyntax_typed_ast::type_registry::TypeRegistry,
+) -> Option<String> {
+    match ty {
         Type::Unresolved(n) => n.resolve_global().map(|s| s.to_string()),
         Type::Named { id, .. } => registry
             .get_type_by_id(*id)
             .and_then(|t| t.name.resolve_global())
             .map(|s| s.to_string()),
         _ => None,
-    };
-    name.as_deref() == Some(want)
+    }
 }
 
 /// Rewrite every use of a declared ref, and strip the declarations.
@@ -61,17 +80,17 @@ pub(crate) fn resolve_ref_calls(program: &mut TypedProgram, filename: &str) {
     // Declaration site → handle id. `call_site_instance_id` is what the
     // component pass already keys per-call-site state on, so a ref is
     // stable across rebuilds and distinct per declaration for free.
-    let mut refs: HashMap<InternedString, u64> = HashMap::new();
+    let mut refs: HashMap<InternedString, (u64, crate::refs::RefKind)> = HashMap::new();
     for decl in &program.declarations {
         let TypedDeclaration::Function(func) = &decl.node else {
             continue;
         };
-        if !is_ref_decl(func, &program.type_registry) {
+        let Some(kind) = ref_kind_of(func, &program.type_registry) else {
             continue;
-        }
+        };
         let id = crate::passes::call_site_instance_id(filename, decl.span.start);
-        crate::refs::mint(id);
-        refs.insert(func.name, id);
+        crate::refs::mint(id, kind);
+        refs.insert(func.name, (id, kind));
     }
     if refs.is_empty() {
         return;
@@ -87,18 +106,27 @@ pub(crate) fn resolve_ref_calls(program: &mut TypedProgram, filename: &str) {
 
     /// The extern a method on a scroll handle lowers to, and how many
     /// arguments it takes beyond the id.
-    fn scroll_extern(method: &str, argc: usize) -> Option<&'static str> {
-        match (method, argc) {
-            ("scroll_to_top", 0) => Some("__scroll_to_top_by_id"),
-            ("scroll_to_bottom", 0) => Some("__scroll_to_bottom_by_id"),
-            ("scroll_by", 2) => Some("__scroll_by_id"),
+    fn method_extern(
+        kind: crate::refs::RefKind,
+        method: &str,
+        argc: usize,
+    ) -> Option<&'static str> {
+        use crate::refs::RefKind;
+        match (kind, method, argc) {
+            (RefKind::Scroll, "scroll_to_top", 0) => Some("__scroll_to_top_by_id"),
+            (RefKind::Scroll, "scroll_to_bottom", 0) => Some("__scroll_to_bottom_by_id"),
+            (RefKind::Scroll, "scroll_by", 2) => Some("__scroll_by_id"),
+            (RefKind::Element, "focus", 0) => Some("__ref_focus_by_id"),
+            (RefKind::Element, "blur", 0) => Some("__ref_blur_by_id"),
+            (RefKind::Element, "scroll_into_view", 0) => Some("__ref_scroll_into_view_by_id"),
+            (RefKind::Element, "click", 0) => Some("__ref_click_by_id"),
             _ => None,
         }
     }
 
     fn rewrite_expr(
         expr: &mut zyntax_typed_ast::TypedNode<TypedExpression>,
-        refs: &HashMap<InternedString, u64>,
+        refs: &HashMap<InternedString, (u64, crate::refs::RefKind)>,
     ) {
         let span = expr.span;
         // Two shapes reach here for `pages.scroll_to_top()`: a
@@ -124,7 +152,7 @@ pub(crate) fn resolve_ref_calls(program: &mut TypedProgram, filename: &str) {
             _ => None,
         };
         if let Some((receiver, method, mut args)) = receiver_and_method
-            && let Some(id) = refs.get(&receiver).copied()
+            && let Some((id, kind)) = refs.get(&receiver).copied()
         {
             for arg in &mut args {
                 rewrite_expr(arg, refs);
@@ -132,8 +160,13 @@ pub(crate) fn resolve_ref_calls(program: &mut TypedProgram, filename: &str) {
             let Some(name) = method.resolve_global() else {
                 return;
             };
-            let Some(extern_name) = scroll_extern(name.as_ref(), args.len()) else {
-                tracing::warn!(method = %name, args = args.len(), "no such method on a Scroll ref");
+            let Some(extern_name) = method_extern(kind, name.as_ref(), args.len()) else {
+                tracing::warn!(
+                    method = %name,
+                    args = args.len(),
+                    ?kind,
+                    "no such method on this ref",
+                );
                 return;
             };
             let mut positional_args = vec![id_literal(id, span)];
@@ -155,7 +188,7 @@ pub(crate) fn resolve_ref_calls(program: &mut TypedProgram, filename: &str) {
         match &mut expr.node {
             // `ref = pages` — the prop takes the handle itself.
             TypedExpression::Variable(name) => {
-                if let Some(id) = refs.get(name).copied() {
+                if let Some((id, _)) = refs.get(name).copied() {
                     *expr = id_literal(id, span);
                 }
             }
@@ -189,7 +222,7 @@ pub(crate) fn resolve_ref_calls(program: &mut TypedProgram, filename: &str) {
 
     fn rewrite_block(
         block: &mut zyntax_typed_ast::typed_ast::TypedBlock,
-        refs: &HashMap<InternedString, u64>,
+        refs: &HashMap<InternedString, (u64, crate::refs::RefKind)>,
     ) {
         for stmt in &mut block.statements {
             rewrite_stmt(stmt, refs);
@@ -198,7 +231,7 @@ pub(crate) fn resolve_ref_calls(program: &mut TypedProgram, filename: &str) {
 
     fn rewrite_stmt(
         stmt: &mut zyntax_typed_ast::TypedNode<TypedStatement>,
-        refs: &HashMap<InternedString, u64>,
+        refs: &HashMap<InternedString, (u64, crate::refs::RefKind)>,
     ) {
         match &mut stmt.node {
             TypedStatement::Expression(e) => rewrite_expr(e, refs),
@@ -250,6 +283,10 @@ pub(crate) fn resolve_ref_calls(program: &mut TypedProgram, filename: &str) {
         ("__scroll_to_top_by_id", 0usize),
         ("__scroll_to_bottom_by_id", 0),
         ("__scroll_by_id", 2),
+        ("__ref_focus_by_id", 0),
+        ("__ref_blur_by_id", 0),
+        ("__ref_scroll_into_view_by_id", 0),
+        ("__ref_click_by_id", 0),
     ] {
         let mut params = vec![zyntax_typed_ast::typed_ast::TypedParameter {
             name: InternedString::new_global("id"),

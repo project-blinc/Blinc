@@ -2,7 +2,8 @@ use super::*;
 use crate::host::{
     blinc_dsl_computed_bool, blinc_dsl_computed_f64, blinc_dsl_computed_i32,
     blinc_dsl_computed_string, blinc_dsl_effect, blinc_dsl_with_region, blinc_format_int,
-    blinc_fsm_runtime_trigger, blinc_fsm_subscribe, blinc_fsm_subscribe_all, blinc_scope_enter,
+    blinc_fsm_runtime_trigger, blinc_fsm_subscribe, blinc_fsm_subscribe_all, blinc_ref_blur,
+    blinc_ref_click, blinc_ref_focus, blinc_ref_scroll_into_view, blinc_scope_enter,
     blinc_scroll_by, blinc_scroll_to_bottom, blinc_scroll_to_top, blinc_signal_get_by_id_bool,
     blinc_signal_get_by_id_f64, blinc_signal_get_by_id_i32, blinc_signal_get_by_id_i64,
     blinc_signal_get_by_id_string, blinc_signal_set_by_id_bool, blinc_signal_set_by_id_f64,
@@ -112,6 +113,30 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             ],
             return_type: Type::Primitive(PrimitiveType::Unit),
             ptr: blinc_scroll_by as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__ref_focus_by_id",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_ref_focus as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__ref_blur_by_id",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_ref_blur as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__ref_scroll_into_view_by_id",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_ref_scroll_into_view as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__ref_click_by_id",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_ref_click as *const u8,
         },
         BuiltinDescriptor {
             name: "__signal_set_by_id_i32",

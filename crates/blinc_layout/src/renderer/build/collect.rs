@@ -229,6 +229,11 @@ impl RenderTree {
             self.register_scroll_ref(node_id, scroll_ref);
         }
 
+        // Same for a plain element handle.
+        if let Some(element_ref) = element.bound_element_ref() {
+            element_ref.bind_to_node(node_id, std::sync::Arc::downgrade(&self.element_registry));
+        }
+
         // Get child node IDs from the layout tree
         let child_node_ids = self.layout_tree.children(node_id);
         let child_builders = element.children_builders();
@@ -461,6 +466,11 @@ impl RenderTree {
         // Bind ScrollRef if present (for scroll containers)
         if let Some(scroll_ref) = element.bound_scroll_ref() {
             self.register_scroll_ref(node_id, scroll_ref);
+        }
+
+        // Same for a plain element handle.
+        if let Some(element_ref) = element.bound_element_ref() {
+            element_ref.bind_to_node(node_id, std::sync::Arc::downgrade(&self.element_registry));
         }
 
         // Get child node IDs from the layout tree
@@ -759,6 +769,11 @@ impl RenderTree {
         // Bind ScrollRef if present (for scroll containers)
         if let Some(scroll_ref) = element.bound_scroll_ref() {
             self.register_scroll_ref(node_id, scroll_ref);
+        }
+
+        // Same for a plain element handle.
+        if let Some(element_ref) = element.bound_element_ref() {
+            element_ref.bind_to_node(node_id, std::sync::Arc::downgrade(&self.element_registry));
         }
 
         // Recursively process children (without motion - motion only applies to direct children)

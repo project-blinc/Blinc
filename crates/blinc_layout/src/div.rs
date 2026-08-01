@@ -461,6 +461,8 @@ pub struct Div {
     pub(crate) scroll_physics: Option<crate::scroll::SharedScrollPhysics>,
     /// Caller's handle for programmatic scroll control, if bound.
     pub(crate) scroll_ref: Option<crate::selector::ScrollRef>,
+    /// Caller's handle onto this element, if bound.
+    pub(crate) element_ref: Option<crate::selector::DivRef>,
     /// Layout animation configuration for FLIP-style bounds animation
     pub(crate) layout_animation: Option<crate::layout_animation::LayoutAnimationConfig>,
     /// Visual animation configuration (new FLIP-style system, read-only layout)
@@ -537,6 +539,7 @@ impl Div {
             z_index: 0,
             scroll_physics: None,
             scroll_ref: None,
+            element_ref: None,
             layout_animation: None,
             visual_animation: None,
             stateful_context_key: None,
@@ -599,6 +602,7 @@ impl Div {
             z_index: 0,
             scroll_physics: None,
             scroll_ref: None,
+            element_ref: None,
             layout_animation: None,
             visual_animation: None,
             stateful_context_key: None,
@@ -2587,6 +2591,17 @@ impl Div {
     pub fn overflow_visible(mut self) -> Self {
         self.style.overflow.x = Overflow::Visible;
         self.style.overflow.y = Overflow::Visible;
+        self
+    }
+
+    /// Bind a [`crate::selector::DivRef`] to this element.
+    ///
+    /// The renderer resolves the ref to this node while building, after
+    /// which `focus`, `scroll_into_view` and the rest act on it. The
+    /// identity is the binding — unlike `ctx.query(id)`, nothing has to
+    /// invent a name and keep it unique.
+    pub fn bind(mut self, element_ref: &crate::selector::DivRef) -> Self {
+        self.element_ref = Some(element_ref.clone());
         self
     }
 
@@ -4818,6 +4833,12 @@ pub trait ElementBuilder {
         None
     }
 
+    /// Get the bound [`crate::selector::DivRef`], if the builder was
+    /// given one. The renderer resolves it to this element's node.
+    fn bound_element_ref(&self) -> Option<&crate::selector::DivRef> {
+        None
+    }
+
     /// Get the on_ready callback for this motion container
     ///
     /// Motion containers can register a callback that fires once after the
@@ -4964,6 +4985,10 @@ impl<T: ?Sized + ElementBuilder> ElementBuilder for Box<T> {
     fn bound_scroll_ref(&self) -> Option<&crate::selector::ScrollRef> {
         (**self).bound_scroll_ref()
     }
+
+    fn bound_element_ref(&self) -> Option<&crate::selector::DivRef> {
+        (**self).bound_element_ref()
+    }
     fn motion_on_ready_callback(
         &self,
     ) -> Option<std::sync::Arc<dyn Fn(crate::element::ElementBounds) + Send + Sync>> {
@@ -4980,6 +5005,10 @@ impl<T: ?Sized + ElementBuilder> ElementBuilder for Box<T> {
 impl ElementBuilder for Div {
     fn bound_scroll_ref(&self) -> Option<&crate::selector::ScrollRef> {
         self.scroll_ref.as_ref()
+    }
+
+    fn bound_element_ref(&self) -> Option<&crate::selector::DivRef> {
+        self.element_ref.as_ref()
     }
 
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {

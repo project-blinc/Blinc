@@ -49,6 +49,26 @@ pub(crate) extern "C" fn blinc_scroll_by(id: i64, dx: f64, dy: f64) {
     crate::refs::scroll_by(id, dx, dy);
 }
 
+/// `card.focus()`.
+pub(crate) extern "C" fn blinc_ref_focus(id: i64) {
+    crate::refs::focus(id);
+}
+
+/// `card.blur()`.
+pub(crate) extern "C" fn blinc_ref_blur(id: i64) {
+    crate::refs::blur(id);
+}
+
+/// `card.scroll_into_view()`.
+pub(crate) extern "C" fn blinc_ref_scroll_into_view(id: i64) {
+    crate::refs::scroll_into_view(id);
+}
+
+/// `card.click()`.
+pub(crate) extern "C" fn blinc_ref_click(id: i64) {
+    crate::refs::click(id);
+}
+
 pub(crate) extern "C" fn blinc_text(s_ptr: *const i32) {
     if s_ptr.is_null() {
         tracing::warn!("$Blinc$text called with null pointer");

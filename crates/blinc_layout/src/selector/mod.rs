@@ -33,6 +33,7 @@
 //! })
 //! ```
 
+mod div_ref;
 mod handle;
 mod registry;
 mod scroll_ref;
@@ -41,6 +42,7 @@ use std::sync::Arc;
 
 use blinc_core::BlincContextState;
 
+pub use div_ref::{DivRef, DivRefInner};
 pub use handle::{ElementEvent, ElementHandle, MotionHandle};
 pub use registry::ElementRegistry;
 
