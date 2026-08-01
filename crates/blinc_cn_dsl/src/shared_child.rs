@@ -92,12 +92,18 @@ pub fn body_recipe(children: Vec<Box<dyn ElementBuilder>>) -> impl Fn() -> Div +
 ///
 /// Built here rather than left to a CSS class on the DSL side for the
 /// same reason it has to be this node: the caller cannot reach it.
+/// `scroll_ref` is the handle a `ref = …` prop carried in, or zero.
 pub fn filling_body_recipe(
     children: Vec<Box<dyn ElementBuilder>>,
+    scroll_ref: i64,
 ) -> impl Fn() -> Div + Send + Sync {
     let shared: Vec<SharedChild> = children.into_iter().map(SharedChild::new).collect();
+    let handle = blinc_dsl_core::refs::scroll_ref_by_id(scroll_ref);
     move || {
         let mut d = div().w_full().h_full().flex_col().overflow_scroll();
+        if let Some(handle) = &handle {
+            d = d.bind_scroll(handle);
+        }
         for child in &shared {
             d = d.child(child.clone());
         }

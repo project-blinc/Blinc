@@ -120,6 +120,7 @@ impl CnSidebar {
             } else if let Some(content) = any.downcast_ref::<CnSidebarContent>() {
                 b = b.content(crate::shared_child::filling_body_recipe(
                     content.take_children(),
+                    content.r#ref,
                 ));
             } else {
                 warn_loose_child();

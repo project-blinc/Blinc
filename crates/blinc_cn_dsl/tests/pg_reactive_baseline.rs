@@ -134,7 +134,9 @@ fn playground_interaction_cost() {
     for action in ["Grow", "Grow", "Busy", "Reset", "Busy", "Busy"] {
         RENDERS.store(0, Ordering::Relaxed);
         let start = std::time::Instant::now();
-        blinc_runtime::fsm::dispatch_default("Play", action)
+        // `reactive$Play`, not `Play`: an imported module compiles under a
+        // namespace derived from its path, and only the entry is unnamespaced.
+        blinc_runtime::fsm::dispatch_default("reactive$Play", action)
             .unwrap_or_else(|| panic!("{action} must dispatch"));
         let dispatch = start.elapsed();
         let during = RENDERS.load(Ordering::Relaxed);

@@ -76,7 +76,7 @@ fn main() -> Result<()> {
 
     WindowedApp::run_with_theme(
         WindowConfig {
-            title: "Blinc DSL — reactive cn.* props".to_string(),
+            title: "Blinc DSL — cn Playground".to_string(),
             width: 720,
             height: 820,
             resizable: true,

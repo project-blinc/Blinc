@@ -98,7 +98,9 @@ fn grow_does_not_re_render_the_program() {
 
     RENDERS.store(0, Ordering::Relaxed);
     let t0 = std::time::Instant::now();
-    blinc_runtime::fsm::dispatch_default("Play", "Grow").expect("Grow dispatches");
+    // `reactive$Play`, not `Play`: an imported module compiles under a
+    // namespace derived from its path, and only the entry is unnamespaced.
+    blinc_runtime::fsm::dispatch_default("reactive$Play", "Grow").expect("Grow dispatches");
     let dispatch = t0.elapsed();
     let renders_after_dispatch = RENDERS.load(Ordering::Relaxed);
 
@@ -138,11 +140,11 @@ fn busy_still_re_renders() {
     tree.compute_layout(720.0, 820.0);
     tree.process_pending_subtree_rebuilds();
 
-    blinc_runtime::fsm::dispatch_default("Play", "Reset").expect("Reset dispatches");
+    blinc_runtime::fsm::dispatch_default("reactive$Play", "Reset").expect("Reset dispatches");
     tree.process_pending_subtree_rebuilds();
     RENDERS.store(0, Ordering::Relaxed);
 
-    blinc_runtime::fsm::dispatch_default("Play", "Busy").expect("Busy dispatches");
+    blinc_runtime::fsm::dispatch_default("reactive$Play", "Busy").expect("Busy dispatches");
     let renders = RENDERS.load(Ordering::Relaxed);
     println!("BUSY re-renders: {renders}");
     assert!(

@@ -34,6 +34,21 @@ pub fn take_scene_ops() -> Vec<DslOp> {
 ///
 /// Called by Zyntax's JIT via [`ZyntaxRuntime::register_function`]; `s_ptr`
 /// points at a `ZyntaxString` (`[i32 len][utf8 bytes…]`).
+/// `pages.scroll_to_top()` — `id` is the handle the ref lowered to.
+pub(crate) extern "C" fn blinc_scroll_to_top(id: i64) {
+    crate::refs::scroll_to_top(id);
+}
+
+/// `pages.scroll_to_bottom()`.
+pub(crate) extern "C" fn blinc_scroll_to_bottom(id: i64) {
+    crate::refs::scroll_to_bottom(id);
+}
+
+/// `pages.scroll_by(dx, dy)`.
+pub(crate) extern "C" fn blinc_scroll_by(id: i64, dx: f64, dy: f64) {
+    crate::refs::scroll_by(id, dx, dy);
+}
+
 pub(crate) extern "C" fn blinc_text(s_ptr: *const i32) {
     if s_ptr.is_null() {
         tracing::warn!("$Blinc$text called with null pointer");

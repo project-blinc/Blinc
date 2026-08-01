@@ -608,7 +608,15 @@ pub fn extern_widget(attr: TokenStream, item: TokenStream) -> TokenStream {
             .ident
             .as_ref()
             .expect("named fields always have idents");
+        // A raw identifier keeps its `r#` when stringified, so a field
+        // named for a Rust keyword — `r#ref`, `r#type` — would register
+        // under a name no DSL source can spell, and the prop would be
+        // silently ignored at every call site.
         let field_name = field_ident.to_string();
+        let field_name = field_name
+            .strip_prefix("r#")
+            .unwrap_or(&field_name)
+            .to_string();
 
         if !matches!(field.vis, syn::Visibility::Public(_)) {
             return syn::Error::new_spanned(

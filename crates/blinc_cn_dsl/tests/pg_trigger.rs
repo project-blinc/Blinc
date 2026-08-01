@@ -2,7 +2,7 @@
 //!
 //! `compile_project` used to namespace every file including the entry,
 //! so `fsm Play` registered as `main$Play`. Nothing looking it up by
-//! `"Play"` could find it: not the host, and not a `Play.trigger(...)`
+//! `"reactive$Play"` could find it: not the host, and not a `Play.trigger(...)`
 //! handler in the entry's own view. Buttons did nothing.
 //!
 //! Also serves as a headless trigger probe -- firing each transition and
@@ -58,7 +58,9 @@ fn entry_fsm_is_addressable_by_source_name() {
     dsl.set_signal_string("page", "reactive");
 
     for ev in ["Grow", "Grow", "Busy", "Reset"] {
-        let dispatched = blinc_runtime::fsm::dispatch_default("Play", ev);
+        // `reactive$Play`, not `Play`: an imported module compiles under a
+        // namespace derived from its path, and only the entry is unnamespaced.
+        let dispatched = blinc_runtime::fsm::dispatch_default("reactive$Play", ev);
         assert!(
             dispatched.is_some(),
             "`{ev}` must dispatch against the unmangled entry FSM name"

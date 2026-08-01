@@ -68,7 +68,9 @@ fn a_bound_size_prop_moves_the_layout_box() {
     // Grow five times: bar_w/bar_h/radius are bound props, written in
     // place. Does the LAYOUT follow?
     for _ in 0..5 {
-        blinc_runtime::fsm::dispatch_default("Play", "Grow").expect("Grow");
+        // `reactive$Play`, not `Play`: an imported module compiles under a
+        // namespace derived from its path, and only the entry is unnamespaced.
+        blinc_runtime::fsm::dispatch_default("reactive$Play", "Grow").expect("Grow");
     }
     tree.process_pending_subtree_rebuilds();
     tree.compute_layout(720.0, 820.0);

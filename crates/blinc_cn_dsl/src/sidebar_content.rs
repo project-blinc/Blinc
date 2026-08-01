@@ -32,6 +32,12 @@ use blinc_layout::div::{ElementBuilder, div};
 /// whatever they had in flight.
 #[extern_widget(namespace = "cn", name = "SidebarContent")]
 pub struct CnSidebarContent {
+    /// Handle for this area's scroller, from a `ref name: Scroll`
+    /// declaration: `ref = pages`. Zero when omitted.
+    ///
+    /// The handle itself, not a name to look one up by, so two of these
+    /// cannot collide however they are spelled.
+    pub r#ref: i64,
     #[children]
     pub children: Mutex<Vec<Box<dyn ElementBuilder>>>,
 }

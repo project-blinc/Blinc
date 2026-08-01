@@ -459,6 +459,8 @@ pub struct Div {
     pub(crate) z_index: i32,
     /// Scroll physics for overflow:scroll containers
     pub(crate) scroll_physics: Option<crate::scroll::SharedScrollPhysics>,
+    /// Caller's handle for programmatic scroll control, if bound.
+    pub(crate) scroll_ref: Option<crate::selector::ScrollRef>,
     /// Layout animation configuration for FLIP-style bounds animation
     pub(crate) layout_animation: Option<crate::layout_animation::LayoutAnimationConfig>,
     /// Visual animation configuration (new FLIP-style system, read-only layout)
@@ -534,6 +536,7 @@ impl Div {
             sticky_top: None,
             z_index: 0,
             scroll_physics: None,
+            scroll_ref: None,
             layout_animation: None,
             visual_animation: None,
             stateful_context_key: None,
@@ -595,6 +598,7 @@ impl Div {
             sticky_top: None,
             z_index: 0,
             scroll_physics: None,
+            scroll_ref: None,
             layout_animation: None,
             visual_animation: None,
             stateful_context_key: None,
@@ -2583,6 +2587,17 @@ impl Div {
     pub fn overflow_visible(mut self) -> Self {
         self.style.overflow.x = Overflow::Visible;
         self.style.overflow.y = Overflow::Visible;
+        self
+    }
+
+    /// Bind a [`crate::selector::ScrollRef`] for programmatic control.
+    ///
+    /// The same contract as the `scroll()` widget's `bind`: the renderer
+    /// resolves the ref to this node once it is built, and pending
+    /// commands (`scroll_to_top`, `scroll_to`, …) apply from the next
+    /// frame. Only meaningful on a scroll container.
+    pub fn bind_scroll(mut self, scroll_ref: &crate::selector::ScrollRef) -> Self {
+        self.scroll_ref = Some(scroll_ref.clone());
         self
     }
 
@@ -4963,6 +4978,10 @@ impl<T: ?Sized + ElementBuilder> ElementBuilder for Box<T> {
 }
 
 impl ElementBuilder for Div {
+    fn bound_scroll_ref(&self) -> Option<&crate::selector::ScrollRef> {
+        self.scroll_ref.as_ref()
+    }
+
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
         let node = tree.create_node(self.style.clone());
 

@@ -28,6 +28,7 @@ mod fsm_registry;
 mod host;
 mod passes;
 mod read_scope;
+pub mod refs;
 mod runtime_bridge;
 mod widget_ffi;
 mod with_regions;
@@ -595,6 +596,9 @@ impl BlincDsl {
         // so it then handles `.get()` / `.set()` / direct assignment
         // uniformly.
         resolve_dotted_fsm_field_access(&mut typed_program);
+        // BEFORE `resolve_signal_calls`: a ref declaration is the same
+        // shape as a signal's, so its uses have to be claimed first.
+        crate::passes::resolve_ref_calls(&mut typed_program, filename);
         resolve_signal_calls(&mut typed_program);
         // Module hardcoded to "main" here — same key
         // `populate_fsm_registry_pass` uses below. Both FSM-call
@@ -1216,6 +1220,7 @@ impl BlincDsl {
         expand_const_groups(&mut program);
         resolve_const_references(&mut program);
         resolve_dotted_fsm_field_access(&mut program);
+        crate::passes::resolve_ref_calls(&mut program, filename);
         resolve_signal_calls(&mut program);
         let fsm_lookup_module = zyntax_typed_ast::InternedString::new_global("main");
         resolve_fsm_trigger_calls(&mut program, fsm_lookup_module);

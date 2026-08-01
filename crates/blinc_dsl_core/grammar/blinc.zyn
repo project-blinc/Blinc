@@ -198,7 +198,7 @@ top_level_items = { item:top_level_item* }
 // `component_decl`. Falling through handles standalone struct-only
 // `component { fields }` decls, standalone `impl` blocks, and the
 // bare `view { ... }` quick-test shape.
-top_level_item = { import_stmt | style_decl | signal_decl_list_init | signal_decl_init | signal_decl | const_group | const_list_decl | const_decl | struct_decl | component_folded | component_decl | fsm_decl | impl_block | fn_decl | bare_view_item }
+top_level_item = { import_stmt | style_decl | ref_decl | signal_decl_list_init | signal_decl_init | signal_decl | const_group | const_list_decl | const_decl | struct_decl | component_folded | component_decl | fsm_decl | impl_block | fn_decl | bare_view_item }
 
 // `style { ...CSS... }` — block-form CSS declaration. Author
 // writes raw CSS between the braces; balanced nested braces
@@ -319,6 +319,32 @@ signal_decl_init = { "signal" ~ name:identifier ~ ":" ~ ty:state_type ~ "=" ~ va
       ] }),
       is_external: true,
   }
+
+// `ref pages: Scroll` — a handle onto an element, bound with `ref =`
+// and driven by method calls: `pages.scroll_to_top()`.
+//
+// No key: the identity comes from the declaration's own source span,
+// the same way a call site already keys per-instance state. Two
+// instances of a component holding this declaration get two handles,
+// which is what a user-chosen name could not guarantee.
+//
+// The marker return type is what separates this from `signal x: T`,
+// since both are external, param-less decls; the author writes `Scroll`
+// and the AST carries a name nothing else can spell.
+ref_decl = { "ref" ~ name:identifier ~ ":" ~ kind:ref_kind }
+  -> TypedDeclaration::Function {
+      name: intern(name),
+      params: [],
+      return_type: kind,
+      body: None,
+      is_external: true,
+  }
+
+ref_kind = { k:ref_kind_scroll }
+  -> k
+
+ref_kind_scroll = { "Scroll" }
+  -> Type::Named { name: intern("BlincScrollRef"), type_args: [] }
 
 signal_decl = { "signal" ~ name:identifier ~ ":" ~ ty:state_type }
   -> TypedDeclaration::Function {

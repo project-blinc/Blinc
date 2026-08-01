@@ -1,0 +1,235 @@
+// The Bindings page: every reactive mechanism side by side, so a
+// regression in one shows up against the others.
+//
+//
+//   in-place property write  cn.Skeleton(w/h/rounded),
+//     cn.Separator(opacity), cn.Progress(value). Bindable properties, so
+//     a set patches RenderProps -- no rebuild, no compute_layout.
+//
+//   deps() subtree rebuild   cn.Button(label/disabled), cn.Kbd(text).
+//     Text content has no property writer, and `disabled` gates the
+//     whole style branch plus the FSM start state.
+//
+//   derived                  cn.Progress(value = computed { ... }),
+//     including one value over two signals. A derived binding fires when
+//     either dependency sets.
+//
+//   scoped re-render         the `with` region holding the alert and
+//     spinner. A branch swap is structural, so it needs a re-render --
+//     the region confines that to its own subtree instead of the whole
+//     program, which is what `@stateful` on a view would cost.
+//
+//   list rendering           `map` over a const list and over a list
+//     signal.
+//
+// The f64 props also cover the numeric-width path: the DSL types every
+// number as f64 while layout stores f32, and the narrowing happens
+// inside the binding layer, not at the call site.
+
+// State lives in the FSM's `context` block, co-located with the
+// actions that mutate it and the view that reads it.
+fsm Play {
+    context {
+        pct: f64 = 0.0
+        bar_w: f64 = 90.0
+        bar_h: f64 = 90.0
+        radius: f64 = 4.0
+        fade: f64 = 1.0
+        busy: bool = false
+        caption: string = "Save"
+    }
+    state Idle
+    initial Idle
+
+    on Idle.Grow -> Idle {
+        ctx.pct += 10.0          // cn.Progress expects 0..=100
+        // Small increments: the skeleton is demonstrating that w / h /
+        // rounded patch in place, and large steps turn it into a blob
+        // within a few clicks rather than showing the binding.
+        ctx.bar_w += 12.0
+        ctx.bar_h += 2.0
+        ctx.radius += 1.0
+        ctx.fade -= 0.12         // Div::opacity clamps, so this may undershoot
+    }
+
+    // Flips both Button props at once: label and disabled come from
+    // different signals, one deps() rebuild covers both.
+    on Idle.Busy -> Idle {
+        ctx.busy = true
+        ctx.caption = "Saving..."
+    }
+
+    on Idle.Reset -> Idle {
+        ctx.pct = 0.0
+        ctx.bar_w = 90.0
+        ctx.bar_h = 90.0
+        ctx.radius = 4.0
+        ctx.fade = 1.0
+        ctx.busy = false
+        ctx.caption = "Save"
+    }
+}
+
+// Two list sources, rendered the same way below.
+//
+// A `const` list is fixed: its elements are known when the program is
+// compiled, so it costs nothing to render and never changes.
+const tags = ["alpha", "beta", "gamma"]
+
+// A list signal is the opposite: its contents can change while the app
+// runs, and setting it re-renders whatever mapped over it. The
+// initializer says what it is, so the `: List` annotation is optional.
+// `init { }` below replaces these; an FSM action could `push` to it just
+// as well.
+signal feed = ["waiting"]
+
+// A view-returning function: one row of a mapped list. Its body is an
+// ordinary statement scope, so unlike a widget body it can hold `let`
+// bindings -- which is what lets a `map` closure do work before naming a
+// widget.
+//
+// `: View` is optional -- a body ending in a widget call is inferred to
+// produce one -- but stating it documents the intent at the call site.
+fn Tag(label: string): View {
+    cn.Badge(label, variant = "secondary")
+}
+
+// Two ways to read an FSM context field, and they are not
+// interchangeable:
+//
+//   `Play.busy`        the binding handle -- what a prop wants
+//                      (`disabled = Play.busy`). The property binding
+//                      redraws on set; nothing is rebuilt.
+//   `Play.busy.get()`  the value -- what an expression wants, as in
+//                      counter_dsl's `f"{CounterFsm.count.get()}"`.
+//
+// Both appear below: the props take handles, the `if` takes a value.
+component ReactivePage {
+    style {
+        .page { width: 100%; padding: 24px; gap: 16px; flex-direction: column }
+        .row { gap: 8px; flex-direction: row; align-items: center; flex-wrap: wrap }
+    }
+
+    // Runs once, when the component first mounts. Clause order inside a
+    // component is free -- this could sit above `style` or below `view`
+    // and mean the same thing.
+    init {
+        feed.set(["seeded", "from init"])
+    }
+
+    view {
+        Div(class = "page") {
+            // List rendering: the list binds in the view body, and `map`
+            // puts one child per element in the widget body.
+            cn.Label("map: one child per element, via a `: View` fn")
+            Div(class = "row") {
+                tags.map(|t| Tag(t))
+            }
+
+            // The other list source. `tags` above is fixed for the life
+            // of the program; this one shows whatever was last written
+            // to it, so it is the shape to reach for when the data
+            // changes.
+            cn.Label("map: over a list signal, seeded in init")
+            // Wrapped in `with` on purpose. A map records which list it
+            // read, but only a region is listening -- outside one, a
+            // later write to `feed` would change nothing on screen.
+            // Inside, the region re-renders itself and nothing else.
+            with {
+                Div(class = "row") {
+                    feed.map(|f| Tag(f))
+                }
+            }
+
+            cn.Label("progress: value = pct (in-place)")
+            Div(class = "row") {
+                cn.Progress(value = Play.pct, size = "medium")
+            }
+
+            cn.Label("skeleton: w / h / rounded all bound (in-place)")
+            Div(class = "row") {
+                cn.Skeleton(w = Play.bar_w, h = Play.bar_h, rounded = Play.radius)
+            }
+
+            cn.Label("separator: opacity bound (clamped by Div::opacity)")
+            Div(class = "row") {
+                cn.Separator(opacity = Play.fade)
+            }
+
+            // Derived values bind to the upstream derived itself, so
+            // these track like the signal-bound props above.
+            cn.Label("progress: computed { pct / 2 }")
+            Div(class = "row") {
+                cn.Progress(value = computed { Play.pct / 2.0 } : f64)
+            }
+
+            cn.Label("progress: computed over TWO signals")
+            Div(class = "row") {
+                cn.Progress(value = computed { Play.pct + Play.radius } : f64)
+            }
+
+            // Two-way: the toggles read Play.busy AND write it, so
+            // clicking either one flips the region below and the button
+            // under them, exactly as the Busy action does. Both toggles
+            // track each other for the same reason -- one signal, two
+            // views of it.
+            cn.Label("toggles: two-way bound to Play.busy")
+            Div(class = "row") {
+                cn.Switch(checked = Play.busy, label = "busy")
+                cn.Checkbox(checked = Play.busy, label = "busy")
+            }
+
+            cn.Label("button: label AND disabled both bound (deps rebuild)")
+            Div(class = "row") {
+                cn.Button(label = Play.caption, disabled = Play.busy)
+            }
+
+            // Content, so it takes the deps() rebuild path -- same as
+            // the button label above and for the same reason. Sharing
+            // the signal means Busy moves both at once.
+            cn.Label("kbd: content bound (deps rebuild)")
+            Div(class = "row") {
+                cn.Kbd(text = Play.caption)
+            }
+
+            // Swapping a branch is structural, which a redraw cannot do,
+            // so this slice has to re-render. `with` scopes that to the
+            // slice: a transition rebuilds these nodes and nothing else,
+            // so the switch's thumb spring and the toggles above keep
+            // whatever they had in flight.
+            //
+            // No dependency named at all. The region's deps are whatever
+            // its body READ while rendering -- here just `Play.busy`,
+            // via the `.get()` below. Grow writes five other context
+            // fields and this region ignores every one of them, because
+            // it never read them.
+            //
+            // Naming them still works: `with Play` classifies the name
+            // against the declared signals and FSMs, and
+            // `with @fsm([Play])` spells the mechanism out. Both lower
+            // identically, so they document rather than drive.
+            //
+            // The decorated-component form (`component X { @stateful
+            // @fsm([Play]) view { ... } }`) is the right tool when the
+            // state behaviour deserves a name. It sets a global flag,
+            // though: every signal write then rebuilds every node in the
+            // program, which is what this region avoids.
+            with {
+                Div(class = "row") {
+                    if Play.busy.get() {
+                        cn.Alert("busy - work in flight", variant = "warning")
+                        cn.Spinner(size = "small")
+                    } else {
+                        cn.Alert("idle - press Busy", variant = "success")
+                    }
+                }
+            }
+
+            Div(class = "row") {
+                cn.Button("Grow", on_click = || Play.trigger("Grow"))
+                cn.Button("Busy", variant = "secondary", on_click = || Play.trigger("Busy"))
+                cn.Button("Reset", variant = "destructive", on_click = || Play.trigger("Reset"))
+            }
+        }
+    }
+}

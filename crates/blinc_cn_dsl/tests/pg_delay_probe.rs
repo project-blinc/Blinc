@@ -148,7 +148,9 @@ fn playground_split(label: &str, actions: &[&str]) {
             LINES.lock().unwrap_or_else(|e| e.into_inner()).clear();
             CAPTURE.store(true, std::sync::atomic::Ordering::Relaxed);
         }
-        blinc_runtime::fsm::dispatch_default("Play", action);
+        // `reactive$Play`, not `Play`: an imported module compiles under a
+        // namespace derived from its path, and only the entry is unnamespaced.
+        blinc_runtime::fsm::dispatch_default("reactive$Play", action);
         PROCESSED.store(0, std::sync::atomic::Ordering::Relaxed);
         DRAINS.store(0, std::sync::atomic::Ordering::Relaxed);
         STALE.store(0, std::sync::atomic::Ordering::Relaxed);
