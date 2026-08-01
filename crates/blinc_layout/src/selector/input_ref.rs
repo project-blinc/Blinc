@@ -27,7 +27,7 @@ use super::DivRef;
 /// email.select_all();
 /// let typed = email.value();
 /// ```
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct InputRef {
     /// Everything an ordinary element can do.
     element: DivRef,
@@ -35,10 +35,22 @@ pub struct InputRef {
     data: Arc<Mutex<Option<SharedTextInputData>>>,
 }
 
+impl Default for InputRef {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InputRef {
     /// A ref bound to nothing yet.
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            // The field's own focus path does the routing, so the
+            // element half never reads an id — and assigning one would
+            // change an element that was working.
+            element: DivRef::without_id_assignment(),
+            data: Arc::default(),
+        }
     }
 
     /// The element half, for a builder that binds the node.

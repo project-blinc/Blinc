@@ -198,3 +198,36 @@ fn an_input_ref_binds_its_field_and_its_element() {
         "so focus and scroll-into-view have somewhere to land"
     );
 }
+
+/// An `InputRef` leaves the field's element exactly as it was built.
+///
+/// Binding used to give every element an id, and a text field is not an
+/// inert box: it routes its own focus and keystrokes, and an id it never
+/// asked for is a change to something that was working.
+#[test]
+fn an_input_ref_does_not_touch_the_fields_id() {
+    use blinc_layout::selector::InputRef;
+    use blinc_layout::widgets::text_input::{text_input, text_input_data};
+
+    blinc_theme::ThemeState::init_default();
+
+    let email = InputRef::new();
+    let data = text_input_data();
+    let host = div()
+        .w(300.0)
+        .h(100.0)
+        .child(text_input(&data).bind(&email).w(200.0));
+
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(300.0, 100.0);
+
+    let node = email.element().node_id().expect("bound");
+    assert!(
+        !tree
+            .element_registry()
+            .get_id(node)
+            .is_some_and(|id| id.starts_with("__blinc_ref_")),
+        "no id was invented for it"
+    );
+    assert!(email.exists(), "and the binding still holds");
+}

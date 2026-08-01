@@ -53,12 +53,33 @@ pub struct DivRefInner {
 #[derive(Clone, Default)]
 pub struct DivRef {
     inner: Arc<Mutex<DivRefInner>>,
+    /// Whether binding should give the element an id when it has none.
+    ///
+    /// True for a ref that addresses the element through the registry.
+    /// False when something else drives it — an `InputRef` routes focus
+    /// through the field's own path, so an id it never reads would be
+    /// an unasked-for change to an element that was working.
+    assigns_id: bool,
 }
 
 impl DivRef {
     /// A ref bound to nothing yet.
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            inner: Arc::default(),
+            assigns_id: true,
+        }
+    }
+
+    /// A ref that leaves the element's id alone.
+    ///
+    /// For a composite ref whose commands do not go through the
+    /// registry, so the element is left exactly as it was built.
+    pub fn without_id_assignment() -> Self {
+        Self {
+            inner: Arc::default(),
+            assigns_id: false,
+        }
     }
 
     /// Shared state, for holding a ref across rebuilds.
@@ -77,14 +98,29 @@ impl DivRef {
     pub fn bind_to_node(&self, node_id: LayoutNodeId, registry: Weak<ElementRegistry>) {
         let mut element_id = None;
         if let Some(registry) = registry.upgrade() {
-            let id = registry.get_id(node_id).unwrap_or_else(|| {
-                // Derived from this ref, not from the node: a node id is
-                // reissued, so a node-derived id would match again after
-                // recycling and defeat the staleness check below.
-                let fresh = format!("__blinc_ref_{}", next_serial());
-                registry.register(fresh.clone(), node_id);
-                fresh
-            });
+            let existing = registry.get_id(node_id);
+            let id = match (existing, self.assigns_id) {
+                (Some(id), _) => id,
+                (None, false) => {
+                    // Nothing to check the binding against, so it stays
+                    // node-only: `exists()` follows the node's life and
+                    // the element is left untouched.
+                    let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+                    inner.node_id = Some(node_id);
+                    inner.element_id = None;
+                    inner.registry = Some(Arc::downgrade(&registry));
+                    return;
+                }
+                (None, true) => {
+                    // Derived from this ref, not from the node: a node
+                    // id is reissued, so a node-derived id would match
+                    // again after recycling and defeat the staleness
+                    // check below.
+                    let fresh = format!("__blinc_ref_{}", next_serial());
+                    registry.register(fresh.clone(), node_id);
+                    fresh
+                }
+            };
             element_id = Some(id);
         }
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -95,7 +131,7 @@ impl DivRef {
 
     /// The node this ref is bound to, while the binding holds.
     pub fn node_id(&self) -> Option<LayoutNodeId> {
-        self.resolved().map(|(node_id, _, _)| node_id)
+        self.exists().then(|| self.parts().map(|(n, _, _)| n))?
     }
 
     /// Whether the element this ref was bound to is still in the tree.
@@ -103,7 +139,14 @@ impl DivRef {
     /// False once it stops being built, rather than true against
     /// whatever inherited its node id.
     pub fn exists(&self) -> bool {
-        self.resolved().is_some()
+        match self.parts() {
+            // With an id, the binding holds only while the element
+            // still carries it; without one, the node's life is all
+            // there is to go on.
+            Some((node_id, registry, Some(id))) => registry.get_id(node_id).as_deref() == Some(&id),
+            Some((_, _, None)) => true,
+            None => false,
+        }
     }
 
     /// This element's laid-out bounds, once layout has run.
@@ -152,12 +195,18 @@ impl DivRef {
     /// this ref leaves the node id in place, and that id is reissued to
     /// some other element. Without this, a command would land on it.
     fn resolved(&self) -> Option<(LayoutNodeId, Arc<ElementRegistry>, String)> {
+        let (node_id, registry, element_id) = self.parts()?;
+        let element_id = element_id?;
+        (registry.get_id(node_id).as_deref() == Some(element_id.as_str()))
+            .then_some((node_id, registry, element_id))
+    }
+
+    /// The binding without the id check, for a ref that never took one.
+    fn parts(&self) -> Option<(LayoutNodeId, Arc<ElementRegistry>, Option<String>)> {
         let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let node_id = inner.node_id?;
         let registry = inner.registry.as_ref()?.upgrade()?;
-        let element_id = inner.element_id.clone()?;
-        (registry.get_id(node_id).as_deref() == Some(element_id.as_str()))
-            .then_some((node_id, registry, element_id))
+        Some((node_id, registry, inner.element_id.clone()))
     }
 
     /// The element's string id, which is what the focus and scroll
