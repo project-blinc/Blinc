@@ -11,6 +11,10 @@ signal form_name: string = "Change this value"
 // IS the field's identity, and its contents survive a rebuild.
 signal form_bio: string
 
+// Toolbar toggles: buttons that stay down, bound like a switch.
+signal fmt_bold: bool = false
+signal fmt_italic: bool = false
+
 // A handle onto the field below. Unlike a signal, which carries the
 // value, a ref carries the element: it focuses, selects and clears
 // without anything having to re-render.
@@ -66,6 +70,14 @@ component FormWidgets {
 
             // `ref` drives the field directly: no signal in the middle,
             // and nothing re-renders to make it happen.
+            cn.Label("toggle: a button that stays down")
+            Div(class = "row") {
+                cn.Toggle(pressed = fmt_bold, icon = "bold", aria_label = "bold")
+                cn.Toggle(pressed = fmt_italic, icon = "italic", aria_label = "italic")
+                cn.Toggle(pressed = fmt_bold, label = "Bold", variant = "outline")
+                cn.Switch(checked = fmt_bold, label = "same signal")
+            }
+
             cn.Label("ref: drive a field without a signal")
             Div(class = "row") {
                 cn.Input(ref = search, key = "pg_search", placeholder = "search")

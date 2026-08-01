@@ -101,7 +101,7 @@ pub mod cn {
     pub use crate::components::toast::{
         toast, toast_custom, toast_error, toast_success, toast_warning,
     };
-    pub use crate::components::toggle::{ToggleSize, ToggleVariant, toggle};
+    pub use crate::components::toggle::{Toggle, ToggleBuilder, ToggleSize, ToggleVariant, toggle};
     pub use crate::components::toggle_group::{ToggleItem, toggle_group, toggle_item};
     pub use crate::components::tooltip::tooltip;
     pub use crate::components::tree::tree_view;

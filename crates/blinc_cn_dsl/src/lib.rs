@@ -75,6 +75,7 @@ pub mod skeleton;
 pub mod spinner;
 pub mod switch;
 pub mod textarea;
+pub mod toggle;
 
 // Internal — shared helpers used by per-widget modules. Not
 // re-exported; widgets pull what they need via `crate::color::…`.
@@ -106,6 +107,7 @@ pub use skeleton::CnSkeleton;
 pub use spinner::CnSpinner;
 pub use switch::CnSwitch;
 pub use textarea::CnTextarea;
+pub use toggle::CnToggle;
 
 use blinc_dsl_core::{BlincDsl, BlincDslResult};
 
@@ -172,5 +174,6 @@ pub fn register_basics(dsl: &BlincDsl) -> BlincDslResult<()> {
     dsl.register_extern_widget::<CnTextarea>()?;
     dsl.register_extern_widget::<CnSwitch>()?;
     dsl.register_extern_widget::<CnCheckbox>()?;
+    dsl.register_extern_widget::<CnToggle>()?;
     Ok(())
 }
