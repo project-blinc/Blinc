@@ -23,6 +23,10 @@ use blinc_layout::div::{ElementBuilder, div};
 /// animation lands. Content placed beside `cn.Sidebar` in an ordinary
 /// row still works and still reflows, it just does not animate with it.
 ///
+/// It is built once, outside the rail's own rebuilds, so clicking a row
+/// or collapsing the rail leaves it alone. Only a write it actually
+/// reads moves it.
+///
 /// Put the page switch in a `with` region, as above: the region confines
 /// the re-render to the content area, so the sidebar's own springs keep
 /// whatever they had in flight.

@@ -81,3 +81,26 @@ pub fn body_recipe(children: Vec<Box<dyn ElementBuilder>>) -> impl Fn() -> Div +
         d
     }
 }
+
+/// Like [`body_recipe`], but the wrapper fills its parent and scrolls.
+///
+/// For a body that IS the area rather than sitting inside one. The
+/// sidebar's content area is the only node in that chain with a definite
+/// height — every wrapper between it and the page is auto-sized, so a
+/// percentage height further down has nothing to resolve against and a
+/// scroll container declared there can never be bounded.
+///
+/// Built here rather than left to a CSS class on the DSL side for the
+/// same reason it has to be this node: the caller cannot reach it.
+pub fn filling_body_recipe(
+    children: Vec<Box<dyn ElementBuilder>>,
+) -> impl Fn() -> Div + Send + Sync {
+    let shared: Vec<SharedChild> = children.into_iter().map(SharedChild::new).collect();
+    move || {
+        let mut d = div().w_full().h_full().flex_col().overflow_scroll();
+        for child in &shared {
+            d = d.child(child.clone());
+        }
+        d
+    }
+}

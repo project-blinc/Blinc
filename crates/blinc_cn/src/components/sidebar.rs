@@ -34,7 +34,6 @@
 //! ```
 
 use std::cell::OnceCell;
-use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use blinc_core::State;
@@ -99,7 +98,9 @@ pub struct SidebarSection {
 
 /// Sidebar component with animated expand/collapse
 pub struct Sidebar {
-    inner: Stateful<NoState>,
+    /// The rail alone, or the rail beside a content area. Boxed because
+    /// those are different shapes and only the rail is a `Stateful`.
+    inner: Box<dyn ElementBuilder>,
 }
 
 impl Sidebar {
@@ -114,13 +115,14 @@ impl Sidebar {
         let key = builder.key.get().to_string();
         let sections = builder.sections.clone();
         let show_toggle = builder.show_toggle;
-        let content_builder = builder.content_builder.clone();
 
         // Single source of truth: the caller's state, used directly.
         // A copy held inside the stateful would take the toggle's write
         // and never pass it on, leaving the caller's signal saying the
         // rail was open while it was shut.
         let collapsed = builder.is_collapsed.clone();
+
+        let content_anim_key = format!("{key}_content");
 
         // Create stateful container that rebuilds when collapsed state changes
         let container_key = format!("{}_container", key.clone());
@@ -135,7 +137,6 @@ impl Sidebar {
 
                 // Layout animation keys for smooth width transitions
                 let layout_anim_key = format!("{}_layout", key.clone());
-                let content_anim_key = format!("{}_content", key.clone());
                 let sidebar_anim_key = format!("{}_sidebar_container", key.clone());
 
                 let sidebar_content = div().flex_col().h_full().overflow_clip().animate_bounds(
@@ -344,67 +345,53 @@ impl Sidebar {
                     }
                 }
 
-                let sidebar_menu = sidebar_content.child(items_container);
+                sidebar_content.child(items_container)
+            });
 
-                // If content builder is provided, wrap both in a flex-row container
-                if let Some(ref content_fn) = content_builder {
-                    let active = active_menu.get();
-                    let main_content = content_fn(active);
-                    // Wrap main content with flex_1 and animate_bounds for smooth expansion
-                    // Use all() to animate both position (x changes when sidebar shrinks)
-                    // and size (width grows when sidebar shrinks)
-                    let content_wrapper = div()
-                        .flex_1()
-                        .h_full()
-                        .overflow_clip()
-                        .animate_bounds(
-                            VisualAnimationConfig::all()
-                                .with_key(&content_anim_key)
-                                .clip_to_animated()
-                                .snappy(),
-                        )
-                        .child(main_content);
+        // Apply user classes and id
+        let mut rail = stateful_container;
+        for c in &builder.classes {
+            rail = rail.class(c);
+        }
+        if let Some(ref id) = builder.user_id {
+            rail = rail.id(id);
+        }
 
-                    // Outer container just needs flex-row layout
-                    // (no animation needed - its bounds are w_full/h_full and don't change)
+        // The content area sits BESIDE the rail's stateful, never inside
+        // it. Built into the rebuild, it was torn down and remade every
+        // time the rail changed — on a toggle, and on every click,
+        // since selecting a row is rail state too. Anything the content
+        // owned went with it: scroll offsets, springs, and the state of
+        // whatever region it holds.
+        let inner: Box<dyn ElementBuilder> = match &builder.content_builder {
+            None => Box::new(rail),
+            Some(content_fn) => {
+                let content_wrapper = div()
+                    .flex_1()
+                    .h_full()
+                    .overflow_clip()
+                    // Position and size both move as the rail's width
+                    // changes, so the content tracks it rather than
+                    // jumping once the rail's own animation lands.
+                    .animate_bounds(
+                        VisualAnimationConfig::all()
+                            .with_key(&content_anim_key)
+                            .clip_to_animated()
+                            .snappy(),
+                    )
+                    .child(content_fn());
+                Box::new(
                     div()
                         .flex_row()
                         .w_full()
                         .h_full()
-                        .child(sidebar_menu)
-                        .child(content_wrapper)
-                } else {
-                    sidebar_menu
-                }
-            });
+                        .child(rail)
+                        .child(content_wrapper),
+                )
+            }
+        };
 
-        // Apply user classes and id
-        let mut inner = stateful_container;
-        for c in &builder.classes {
-            inner = inner.class(c);
-        }
-        if let Some(ref id) = builder.user_id {
-            inner = inner.id(id);
-        }
-
-        Self {
-            // Use flex_shrink_0 to prevent sidebar from being compressed in flex containers
-            inner,
-        }
-    }
-}
-
-impl Deref for Sidebar {
-    type Target = Stateful<NoState>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for Sidebar {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
+        Self { inner }
     }
 }
 
@@ -449,7 +436,7 @@ impl ElementBuilder for Sidebar {
 }
 
 /// Content builder function type
-type ContentBuilderFn = Arc<dyn Fn(Option<SidebarItem>) -> Div + Send + Sync>;
+type ContentBuilderFn = Arc<dyn Fn() -> Div + Send + Sync>;
 
 /// Builder for sidebar component
 pub struct SidebarBuilder {
@@ -574,8 +561,14 @@ impl SidebarBuilder {
     /// Set the main content area that sits next to the sidebar
     ///
     /// When provided, the sidebar wraps both the sidebar menu and the main content
-    /// in a shared container, enabling smooth coordinated animations during
-    /// collapse/expand transitions.
+    /// in a shared container, so the content tracks the rail's width as it
+    /// animates rather than jumping once the animation lands.
+    ///
+    /// The content is built once, outside the rail's own rebuilds, and so
+    /// keeps its state when a row is clicked or the rail collapses. It
+    /// takes no argument for that reason: nothing outside the rebuild can
+    /// react to which row is selected. Drive the content from a signal
+    /// the click handlers write.
     ///
     /// # Example
     ///
@@ -591,7 +584,7 @@ impl SidebarBuilder {
     /// ```
     pub fn content<F>(mut self, builder: F) -> Self
     where
-        F: Fn(Option<SidebarItem>) -> Div + Send + Sync + 'static,
+        F: Fn() -> Div + Send + Sync + 'static,
     {
         self.content_builder = Some(Arc::new(builder));
         self

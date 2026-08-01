@@ -118,11 +118,9 @@ impl CnSidebar {
                     }
                 }
             } else if let Some(content) = any.downcast_ref::<CnSidebarContent>() {
-                let body = crate::shared_child::body_recipe(content.take_children());
-                // The slot passes the selected item; the DSL drives its
-                // page from an item's `on_click` instead, so the body
-                // does not need it.
-                b = b.content(move |_selected| body());
+                b = b.content(crate::shared_child::filling_body_recipe(
+                    content.take_children(),
+                ));
             } else {
                 warn_loose_child();
             }
