@@ -655,8 +655,9 @@ impl ButtonBuilder {
 
     /// Get or build the inner Button
     fn get_or_build(&self) -> &Button {
-        self.built
-            .get_or_init(|| Button::from_config(self.key.get(), self.config.clone()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            Button::from_config(self.key.get(), self.config.clone())
+        })
     }
 
     /// Set the button variant

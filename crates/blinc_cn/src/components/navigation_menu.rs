@@ -471,8 +471,7 @@ impl NavigationMenuBuilder {
 
     /// Get or build the component
     fn get_or_build(&self) -> &NavigationMenu {
-        self.built
-            .get_or_init(|| NavigationMenu::from_builder(self))
+        ::blinc_layout::build_once::build_once(&self.built, || NavigationMenu::from_builder(self))
     }
 
     /// Add a simple link item
@@ -705,8 +704,7 @@ impl NavigationLinkBuilder {
 
     /// Get or build the component
     fn get_or_build(&self) -> &NavigationLink {
-        self.built
-            .get_or_init(|| NavigationLink::from_builder(self))
+        ::blinc_layout::build_once::build_once(&self.built, || NavigationLink::from_builder(self))
     }
 
     /// Set description text

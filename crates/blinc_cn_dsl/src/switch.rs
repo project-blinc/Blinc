@@ -35,7 +35,7 @@ pub struct CnSwitch {
 
 impl CnSwitch {
     fn get_or_build(&self) -> &blinc_cn::Switch {
-        self.built.get_or_init(|| self.to_cn_widget())
+        ::blinc_layout::build_once::build_once(&self.built, || self.to_cn_widget())
     }
 
     fn to_cn_widget(&self) -> blinc_cn::Switch {

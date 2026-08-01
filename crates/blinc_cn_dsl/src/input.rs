@@ -64,7 +64,7 @@ pub struct CnInput {
 
 impl CnInput {
     fn get_or_build(&self) -> &blinc_cn::Input {
-        self.built.get_or_init(|| self.to_cn_widget())
+        ::blinc_layout::build_once::build_once(&self.built, || self.to_cn_widget())
     }
 
     fn to_cn_widget(&self) -> blinc_cn::Input {

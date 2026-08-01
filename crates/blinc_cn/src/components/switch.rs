@@ -480,8 +480,9 @@ impl SwitchBuilder {
 
     /// Get or build the inner Switch
     fn get_or_build(&self) -> &Switch {
-        self.built
-            .get_or_init(|| Switch::with_config(self.config.clone()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            Switch::with_config(self.config.clone())
+        })
     }
 
     /// Set the switch size

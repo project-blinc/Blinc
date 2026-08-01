@@ -364,8 +364,9 @@ impl CheckboxBuilder {
 
     /// Get or build the inner Checkbox
     fn get_or_build(&self) -> &Checkbox {
-        self.built
-            .get_or_init(|| Checkbox::with_config(self.config.clone()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            Checkbox::with_config(self.config.clone())
+        })
     }
 
     /// Set the checkbox size

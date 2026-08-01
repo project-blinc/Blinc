@@ -315,8 +315,9 @@ impl ToggleGroupBuilder {
     }
 
     fn get_or_build(&self) -> &ToggleGroup {
-        self.built
-            .get_or_init(|| ToggleGroup::with_config(&self.key, self.clone_config()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            ToggleGroup::with_config(&self.key, self.clone_config())
+        })
     }
 
     fn clone_config(&self) -> ToggleGroupConfig {

@@ -36,7 +36,7 @@ pub struct CnCollapsible {
 
 impl CnCollapsible {
     fn get_or_build(&self) -> &blinc_cn::CollapsibleBuilder {
-        self.shell.get_or_init(|| {
+        ::blinc_layout::build_once::build_once(&self.shell, || {
             let state = crate::bridge::bool_state(&self.open);
             let children = std::mem::take(&mut *self.children.lock().expect("children mutex"));
             blinc_cn::collapsible(&state).content(crate::shared_child::body_recipe(children))

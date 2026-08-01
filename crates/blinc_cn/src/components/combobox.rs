@@ -535,8 +535,9 @@ impl ComboboxBuilder {
 
     /// Get or build the inner Combobox
     fn get_or_build(&self) -> &Combobox {
-        self.built
-            .get_or_init(|| Combobox::from_config(self.key.get(), self.config.clone()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            Combobox::from_config(self.key.get(), self.config.clone())
+        })
     }
 
     /// Add an option with value and label

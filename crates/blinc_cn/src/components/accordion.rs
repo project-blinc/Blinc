@@ -164,7 +164,7 @@ impl AccordionBuilder {
 
     /// Get or build the accordion
     fn get_or_build(&self) -> &Accordion {
-        self.built.get_or_init(|| self.build_component())
+        ::blinc_layout::build_once::build_once(&self.built, || self.build_component())
     }
 
     /// Set to multi-open mode (multiple sections can be open at once)

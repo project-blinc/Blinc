@@ -172,8 +172,9 @@ impl LabelBuilder {
 
     /// Get or build the inner Label
     fn get_or_build(&self) -> &Label {
-        self.built
-            .get_or_init(|| Label::with_config(self.config.clone()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            Label::with_config(self.config.clone())
+        })
     }
 
     /// Set the label size

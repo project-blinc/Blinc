@@ -249,8 +249,9 @@ impl ToggleBuilder {
     }
 
     fn get_or_build(&self) -> &Toggle {
-        self.built
-            .get_or_init(|| Toggle::from_config(self.clone_config()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            Toggle::from_config(self.clone_config())
+        })
     }
 
     fn clone_config(&self) -> ToggleConfig {

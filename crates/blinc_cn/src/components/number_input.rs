@@ -87,8 +87,9 @@ impl NumberInputBuilder {
     }
 
     fn get_or_build(&self) -> &NumberInput {
-        self.built
-            .get_or_init(|| NumberInput::from_config(&self.key, self.clone_config()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            NumberInput::from_config(&self.key, self.clone_config())
+        })
     }
 
     fn clone_config(&self) -> Config {

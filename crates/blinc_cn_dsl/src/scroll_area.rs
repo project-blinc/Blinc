@@ -60,7 +60,7 @@ pub struct CnScrollArea {
 
 impl CnScrollArea {
     fn get_or_build(&self) -> &blinc_cn::ScrollArea {
-        self.shell.get_or_init(|| {
+        ::blinc_layout::build_once::build_once(&self.shell, || {
             let mut b = blinc_cn::scroll_area();
             if let Some(direction) = self.direction() {
                 b = b.direction(direction);

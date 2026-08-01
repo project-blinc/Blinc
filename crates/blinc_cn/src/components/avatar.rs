@@ -377,7 +377,7 @@ impl AvatarBuilder {
     }
 
     fn get_or_build(&self) -> &Avatar {
-        self.built.get_or_init(|| {
+        ::blinc_layout::build_once::build_once(&self.built, || {
             let config = self.config.take();
             let built = BuiltAvatar::from_config(config);
             Avatar { inner: built.inner }
@@ -771,7 +771,7 @@ impl AvatarGroupBuilder {
     }
 
     fn get_or_build(&self) -> &AvatarGroup {
-        self.built.get_or_init(|| {
+        ::blinc_layout::build_once::build_once(&self.built, || {
             let config = self.config.take();
             let built = BuiltAvatarGroup::from_config(config);
             AvatarGroup { inner: built.inner }

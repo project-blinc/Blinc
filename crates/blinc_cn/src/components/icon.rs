@@ -187,7 +187,7 @@ impl IconBuilder {
 
     /// Get or lazily build the Icon
     fn get_or_build(&self) -> &Icon {
-        self.built.get_or_init(|| Icon::from_config(&self.config))
+        ::blinc_layout::build_once::build_once(&self.built, || Icon::from_config(&self.config))
     }
 
     /// Set icon size preset

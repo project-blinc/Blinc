@@ -851,8 +851,9 @@ impl SliderBuilder {
     /// `ElementBuilder` access; subsequent builder method calls
     /// after this point are no-ops because the inner is cached.
     fn get_or_build(&self) -> &Slider {
-        self.built
-            .get_or_init(|| Slider::with_config(self.key.clone(), self.config.clone()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            Slider::with_config(self.key.clone(), self.config.clone())
+        })
     }
 
     /// Set the minimum value (default: 0.0)

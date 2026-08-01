@@ -61,8 +61,9 @@ impl InputOtpBuilder {
     }
 
     fn get_or_build(&self) -> &InputOtp {
-        self.built
-            .get_or_init(|| InputOtp::from_config(&self.key, self.clone_config()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            InputOtp::from_config(&self.key, self.clone_config())
+        })
     }
 
     fn clone_config(&self) -> Config {

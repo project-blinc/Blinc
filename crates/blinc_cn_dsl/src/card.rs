@@ -44,7 +44,7 @@ pub struct CnCard {
 
 impl CnCard {
     fn get_or_build(&self) -> &blinc_cn::Card {
-        self.shell.get_or_init(blinc_cn::Card::new)
+        ::blinc_layout::build_once::build_once(&self.shell, blinc_cn::Card::new)
     }
 }
 

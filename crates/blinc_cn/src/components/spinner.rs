@@ -314,7 +314,7 @@ impl SpinnerBuilder {
     }
 
     fn get_or_build(&self) -> &Spinner {
-        self.built.get_or_init(|| {
+        ::blinc_layout::build_once::build_once(&self.built, || {
             let config = self.config.take();
             Spinner::with_config(self.key.clone(), config)
         })

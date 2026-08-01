@@ -311,8 +311,9 @@ impl TextareaBuilder {
 
     /// Get or build the inner Textarea
     fn get_or_build(&self) -> &Textarea {
-        self.built
-            .get_or_init(|| Textarea::from_config(self.config.clone()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            Textarea::from_config(self.config.clone())
+        })
     }
 
     /// Set the textarea size preset

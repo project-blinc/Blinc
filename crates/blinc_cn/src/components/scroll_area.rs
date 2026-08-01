@@ -270,7 +270,7 @@ impl ScrollAreaBuilder {
     }
 
     fn get_or_build(&self) -> &ScrollArea {
-        self.built.get_or_init(|| {
+        ::blinc_layout::build_once::build_once(&self.built, || {
             // Take ownership of config, replacing with default
             let config = self.config.take();
             let built = BuiltScrollArea::from_config(config);

@@ -287,7 +287,7 @@ impl DropdownMenuBuilder {
 
     /// Get or build the component
     fn get_or_build(&self) -> &DropdownMenu {
-        self.built.get_or_init(|| self.build_component())
+        ::blinc_layout::build_once::build_once(&self.built, || self.build_component())
     }
 
     /// Build the dropdown menu component

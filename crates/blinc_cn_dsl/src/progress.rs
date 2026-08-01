@@ -49,8 +49,9 @@ pub struct CnProgress {
 
 impl CnProgress {
     fn get_or_build(&self) -> &blinc_cn::Progress {
-        self.built
-            .get_or_init(|| self.to_cn_builder().build_component())
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            self.to_cn_builder().build_component()
+        })
     }
 
     fn to_cn_builder(&self) -> blinc_cn::components::progress::ProgressBuilder {

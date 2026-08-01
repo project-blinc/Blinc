@@ -467,8 +467,9 @@ impl SelectBuilder {
 
     /// Get or build the inner Select
     fn get_or_build(&self) -> &Select {
-        self.built
-            .get_or_init(|| Select::from_config(self.key.get(), self.config.clone()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            Select::from_config(self.key.get(), self.config.clone())
+        })
     }
 
     /// Add an option with value and label

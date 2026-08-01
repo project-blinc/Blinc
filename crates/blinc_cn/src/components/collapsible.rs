@@ -353,7 +353,7 @@ where
     fn get_or_build(&self) -> &Collapsible {
         // We can't call content() multiple times since it's FnOnce
         // The OnceCell ensures we only build once
-        self.built.get_or_init(|| {
+        ::blinc_layout::build_once::build_once(&self.built, || {
             // SAFETY: We only call this once due to OnceCell
             // We need to use unsafe to move out of self
             // Actually, let's just build with a placeholder since we can't move content

@@ -496,8 +496,9 @@ impl RadioGroupBuilder {
 
     /// Get or build the inner RadioGroup
     fn get_or_build(&self) -> &RadioGroup {
-        self.built
-            .get_or_init(|| RadioGroup::with_config(self.config.clone()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            RadioGroup::with_config(self.config.clone())
+        })
     }
 
     /// Add a CSS class for selector matching

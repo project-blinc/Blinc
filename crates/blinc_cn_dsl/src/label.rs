@@ -26,7 +26,7 @@ pub struct CnLabel {
 
 impl CnLabel {
     fn get_or_build(&self) -> &blinc_cn::LabelBuilder {
-        self.built.get_or_init(|| self.to_cn_builder())
+        ::blinc_layout::build_once::build_once(&self.built, || self.to_cn_builder())
     }
 
     fn to_cn_builder(&self) -> blinc_cn::LabelBuilder {

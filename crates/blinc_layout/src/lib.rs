@@ -30,6 +30,7 @@
 //! ```
 
 pub mod animated;
+pub mod build_once;
 pub mod canvas;
 pub mod diff;
 pub mod div;

@@ -567,7 +567,7 @@ impl PaginationBuilder {
 
     /// Get or build the pagination
     fn get_or_build(&self) -> &Pagination {
-        self.built.get_or_init(|| Pagination::from_builder(self))
+        ::blinc_layout::build_once::build_once(&self.built, || Pagination::from_builder(self))
     }
 
     /// Set the number of visible page buttons

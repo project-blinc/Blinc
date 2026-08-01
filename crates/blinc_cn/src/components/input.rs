@@ -428,8 +428,9 @@ impl InputBuilder {
 
     /// Get or build the inner Input
     fn get_or_build(&self) -> &Input {
-        self.built
-            .get_or_init(|| Input::with_config(self.config.clone()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            Input::with_config(self.config.clone())
+        })
     }
 
     /// Set the input size

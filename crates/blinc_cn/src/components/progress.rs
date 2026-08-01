@@ -305,8 +305,9 @@ impl ProgressBuilder {
 
     /// Get or build the inner Progress
     fn get_or_build(&self) -> &Progress {
-        self.built
-            .get_or_init(|| Progress::from_config(self.config.clone()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            Progress::from_config(self.config.clone())
+        })
     }
 
     /// Set the progress bar size
@@ -530,8 +531,9 @@ impl AnimatedProgressBuilder {
     }
 
     fn get_or_build(&self) -> &AnimatedProgress {
-        self.built
-            .get_or_init(|| AnimatedProgress::from_config(self.config.clone()))
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            AnimatedProgress::from_config(self.config.clone())
+        })
     }
 
     /// Set the progress bar size

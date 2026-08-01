@@ -53,7 +53,7 @@ pub struct CnAspectRatio {
 
 impl CnAspectRatio {
     fn get_or_build(&self) -> &blinc_cn::AspectRatio {
-        self.shell.get_or_init(|| {
+        ::blinc_layout::build_once::build_once(&self.shell, || {
             let mut b = match self.preset.as_str() {
                 "" => blinc_cn::aspect_ratio(self.ratio_or_default()),
                 name => match preset_from_name(name) {

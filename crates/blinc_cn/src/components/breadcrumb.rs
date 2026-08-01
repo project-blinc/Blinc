@@ -353,7 +353,7 @@ impl BreadcrumbBuilder {
 
     /// Get or build the breadcrumb
     fn get_or_build(&self) -> &Breadcrumb {
-        self.built.get_or_init(|| Breadcrumb::from_builder(self))
+        ::blinc_layout::build_once::build_once(&self.built, || Breadcrumb::from_builder(self))
     }
 
     /// Add a breadcrumb item

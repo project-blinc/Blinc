@@ -724,7 +724,7 @@ impl ResizableGroupBuilder {
     }
 
     fn get_or_build(&self) -> &ResizableGroup {
-        self.built.get_or_init(|| {
+        ::blinc_layout::build_once::build_once(&self.built, || {
             // We need to take ownership of config, but can't mutate self
             // This is a limitation - we'll clone what we can
             let config = ResizableGroupConfig {
