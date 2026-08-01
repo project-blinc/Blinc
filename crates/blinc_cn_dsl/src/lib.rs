@@ -63,6 +63,8 @@ pub mod icon;
 pub mod input;
 pub mod kbd;
 pub mod label;
+pub mod popover;
+pub mod popover_slots;
 pub mod progress;
 pub mod scroll_area;
 pub mod separator;
@@ -97,6 +99,8 @@ pub use icon::CnIcon;
 pub use input::CnInput;
 pub use kbd::CnKbd;
 pub use label::CnLabel;
+pub use popover::CnPopover;
+pub use popover_slots::{CnPopoverContent, CnPopoverTrigger};
 pub use progress::CnProgress;
 pub use scroll_area::CnScrollArea;
 pub use separator::CnSeparator;
@@ -178,5 +182,8 @@ pub fn register_basics(dsl: &BlincDsl) -> BlincDslResult<()> {
     dsl.register_extern_widget::<CnCheckbox>()?;
     dsl.register_extern_widget::<CnToggle>()?;
     dsl.register_extern_widget::<CnTooltip>()?;
+    dsl.register_extern_widget::<CnPopover>()?;
+    dsl.register_extern_widget::<CnPopoverTrigger>()?;
+    dsl.register_extern_widget::<CnPopoverContent>()?;
     Ok(())
 }

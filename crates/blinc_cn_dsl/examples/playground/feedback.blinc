@@ -46,6 +46,23 @@ component FeedbackWidgets {
                     cn.Label("slow tip")
                 }
             }
+
+            // Two named slots: which child is the panel is not
+            // something to infer from position.
+            cn.Label("popover: a panel anchored to its trigger")
+            Div(class = "row") {
+                cn.Popover(side = "bottom", align = "start") {
+                    cn.PopoverTrigger { cn.Button("Options", size = "small") }
+                    cn.PopoverContent {
+                        cn.Label("Anything at all")
+                        cn.Badge("even a badge", variant = "secondary")
+                    }
+                }
+                cn.Popover(side = "right", align = "center") {
+                    cn.PopoverTrigger { cn.Badge("to the right") }
+                    cn.PopoverContent { cn.Label("opens sideways") }
+                }
+            }
         }
     }
 }
