@@ -116,6 +116,9 @@ struct AccordionItem {
     key: String,
     label: String,
     content: ContentBuilderFn,
+    /// Caller-owned open state. `None` means the accordion keeps its
+    /// own, keyed by instance and section so it survives rebuilds.
+    state: Option<State<bool>>,
 }
 
 /// Runtime state for an accordion item (created during build)
@@ -197,6 +200,36 @@ impl AccordionBuilder {
             key: self.instance_key.derive(&key.into()),
             label: label.into(),
             content: Arc::new(content),
+            state: None,
+        });
+        self
+    }
+
+    /// Add a section whose open state the caller owns.
+    ///
+    /// The accordion reads and writes that `State` instead of its own,
+    /// so a section folds when the state is written from outside and
+    /// the state reflects a click on the header. Use this to drive a
+    /// section from a signal; [`item`](Self::item) keeps the state
+    /// internal, which is what you want when nothing outside cares.
+    ///
+    /// [`default_open`](Self::default_open) does not apply to a section
+    /// added this way: the state already carries the initial value.
+    pub fn item_with_state<F>(
+        mut self,
+        key: impl Into<String>,
+        label: impl Into<String>,
+        state: State<bool>,
+        content: F,
+    ) -> Self
+    where
+        F: Fn() -> Div + Send + Sync + 'static,
+    {
+        self.items.push(AccordionItem {
+            key: self.instance_key.derive(&key.into()),
+            label: label.into(),
+            content: Arc::new(content),
+            state: Some(state),
         });
         self
     }
@@ -227,13 +260,26 @@ impl AccordionBuilder {
         // Build combined item data with runtime state - no mutex needed, just Vec
         let mut items_with_state: Vec<(AccordionItem, AccordionItemState)> = Vec::new();
 
-        for item in &self.items {
-            let is_initially_open = self.initial_open.as_ref() == Some(&item.key);
+        // `item()` namespaces each key to this instance, so the caller's
+        // `default_open` key has to be namespaced the same way before it
+        // can match anything.
+        let initial_open_key = self
+            .initial_open
+            .as_deref()
+            .map(|key| self.instance_key.derive(key));
 
-            // Create State<bool> using BlincContextState for reactivity
-            let state_key = format!("{}_{}_open", self.instance_key.get(), item.key);
-            let is_open: State<bool> =
-                BlincContextState::get().use_state_keyed(&state_key, || is_initially_open);
+        for item in &self.items {
+            let is_initially_open = initial_open_key.as_ref() == Some(&item.key);
+
+            // A caller-owned state carries its own initial value; only
+            // an internal one needs seeding from `default_open`.
+            let is_open: State<bool> = match &item.state {
+                Some(state) => state.clone(),
+                None => {
+                    let state_key = format!("{}_{}_open", self.instance_key.get(), item.key);
+                    BlincContextState::get().use_state_keyed(&state_key, || is_initially_open)
+                }
+            };
 
             // Collect signal ID for container deps
             all_signal_ids.push(is_open.signal_id());
