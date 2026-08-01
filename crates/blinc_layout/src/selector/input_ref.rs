@@ -81,6 +81,7 @@ impl InputRef {
             d.selection_start = None;
             d.value = value.clone();
         });
+        self.refresh();
     }
 
     /// Empty the field.
@@ -91,21 +92,41 @@ impl InputRef {
     /// Select everything in the field.
     pub fn select_all(&self) {
         self.with_data("select_all", |d| d.select_all());
+        self.refresh();
     }
 
     /// Give the field keyboard focus.
+    ///
+    /// Routed through the field's own focus path rather than the
+    /// element's: a text field's focus is a visual state flip, a
+    /// focus-count bump and a cursor animation, none of which the
+    /// generic element focus knows to do.
     pub fn focus(&self) {
-        self.element.focus();
+        match self.data_handle() {
+            Some(data) => crate::widgets::text_input::focus_text_input(&data),
+            None => self.element.focus(),
+        }
     }
 
     /// Drop focus, if this field holds it.
     pub fn blur(&self) {
-        self.element.blur();
+        match self.data_handle() {
+            Some(data) => crate::widgets::text_input::blur_text_input(&data),
+            None => self.element.blur(),
+        }
     }
 
     /// Bring the field into view inside its scroll container.
     pub fn scroll_into_view(&self) {
         self.element.scroll_into_view();
+    }
+
+    fn data_handle(&self) -> Option<SharedTextInputData> {
+        self.data
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(Arc::clone)
     }
 
     fn with_data<T>(
@@ -118,8 +139,26 @@ impl InputRef {
             tracing::warn!(action, "InputRef is not bound to a field");
             return None;
         };
-        let mut data = data.lock().unwrap_or_else(|e| e.into_inner());
-        Some(f(&mut data))
+        let result = {
+            let mut data = data.lock().unwrap_or_else(|e| e.into_inner());
+            f(&mut data)
+        };
+        result.into()
+    }
+
+    /// Writing the field's state changes nothing on screen by itself.
+    ///
+    /// A keystroke repaints because the event that carried it drives a
+    /// frame; a signal write repaints because the write notifies. A ref
+    /// reaches past both and mutates the state directly, so it has to
+    /// run the field's own refresh — which re-runs the callback that
+    /// builds the visible text, not merely request a frame. Asking for
+    /// a redraw alone leaves the field holding the new value and
+    /// showing the old one.
+    fn refresh(&self) {
+        if let Some(data) = self.data_handle() {
+            crate::widgets::text_input::refresh_text_input(&data);
+        }
     }
 }
 
@@ -179,6 +218,26 @@ mod tests {
             d.cursor,
             d.value
         );
+    }
+
+    /// Focus flips the field's visual state, which is what draws the
+    /// ring and starts the cursor. The generic element focus does not
+    /// know to do any of that.
+    #[test]
+    fn focus_flips_the_fields_visual_state() {
+        let data = text_input_data();
+        let r = InputRef::new();
+        r.bind_data(&data);
+        assert!(!data.lock().unwrap().visual.is_focused());
+
+        r.focus();
+        assert!(
+            data.lock().unwrap().visual.is_focused(),
+            "the field itself knows it is focused"
+        );
+
+        r.blur();
+        assert!(!data.lock().unwrap().visual.is_focused());
     }
 
     /// The state outlives the element: a field scrolled out of the tree
