@@ -122,6 +122,28 @@ pub struct CollapsibleBuilder {
     built: std::cell::OnceCell<Collapsible>,
 }
 
+/// The folding body: content under a height animation, clipped.
+///
+/// Shared by both entry points so they cannot drift. Content is ALWAYS
+/// rendered — the collapse animates down FROM the open bounds, so
+/// removing it leaves nothing to measure or shrink — and the collapsed
+/// branch re-asserts width while adding no vertical padding, which
+/// would keep the element occupying space even at `h(0)`.
+fn fold_body(content: impl ElementBuilder + 'static, anim_key: &str, open: bool) -> Div {
+    div()
+        .w_full()
+        .flex_col()
+        .overflow_clip()
+        .animate_bounds(
+            blinc_layout::visual_animation::VisualAnimationConfig::height()
+                .with_key(anim_key)
+                .clip_to_animated()
+                .snappy(),
+        )
+        .child(content)
+        .when(!open, |d| d.w_full().h(0.0))
+}
+
 impl CollapsibleBuilder {
     /// Create a new collapsible builder with open state
     ///
@@ -218,25 +240,7 @@ impl CollapsibleBuilder {
                             Some(f) => f(),
                             None => div(),
                         };
-                        div()
-                            .w_full()
-                            .flex_col()
-                            .overflow_clip()
-                            .animate_bounds(
-                                blinc_layout::visual_animation::VisualAnimationConfig::height()
-                                    .with_key(&anim_key)
-                                    .clip_to_animated()
-                                    .snappy(),
-                            )
-                            // Always rendered so the collapse has something to
-                            // clip, matching `cn::accordion`.
-                            .child(body)
-                            // Width is re-asserted on the collapsed branch: the
-                            // element still occupies its row while its height
-                            // animates to nothing, and any VERTICAL padding
-                            // would keep it occupying space even at `h(0)`,
-                            // which is why none is applied here.
-                            .when(!is_open.get(), |d| d.w_full().h(0.0))
+                        fold_body(body, &anim_key, is_open.get())
                     });
 
             Collapsible {
