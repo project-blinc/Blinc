@@ -4563,6 +4563,23 @@ pub trait ElementBuilder {
     /// Get children builders (for recursive traversal)
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>];
 
+    /// Downcast handle, for a container that must read typed structure
+    /// from its own children rather than just render them.
+    ///
+    /// An accordion is the motivating case: its sections pair a label
+    /// with a body, and the pairing lives on the child. Without this a
+    /// parent can only see `dyn ElementBuilder` and the two halves have
+    /// to be passed as parallel lists, which puts the burden of keeping
+    /// them aligned on the caller.
+    ///
+    /// `None` by default, since most elements are opaque to their parent
+    /// and should stay that way. Override only when a parent genuinely
+    /// needs the child's type, and have that parent degrade gracefully
+    /// when the downcast fails: any child may be some other element.
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        None
+    }
+
     /// Get the element type identifier
     fn element_type_id(&self) -> ElementTypeId {
         ElementTypeId::Div
@@ -4840,6 +4857,13 @@ impl<T: ?Sized + ElementBuilder> ElementBuilder for Box<T> {
     }
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
         (**self).children_builders()
+    }
+    /// Reaches the boxed element, not the box: children are held as
+    /// `Box<dyn ElementBuilder>`, so without this every downcast a
+    /// parent attempts through its children would see the blanket
+    /// default and fail.
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        (**self).as_any()
     }
     fn element_type_id(&self) -> ElementTypeId {
         (**self).element_type_id()

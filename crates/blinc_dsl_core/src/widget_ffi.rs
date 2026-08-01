@@ -609,6 +609,12 @@ impl<W: blinc_layout::div::ElementBuilder> blinc_layout::div::ElementBuilder for
     fn element_type_id(&self) -> blinc_layout::div::ElementTypeId {
         self.inner.element_type_id()
     }
+    // MUST forward — every DSL widget is wrapped here, so a container
+    // reading typed structure from its children (`cn.Accordion` looking
+    // for `cn.AccordionItem`) would otherwise only ever see `Styled`.
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        self.inner.as_any()
+    }
     // MUST forward — without this, on_click/on_hover on the inner Div never fire.
     fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
         self.inner.event_handlers()
