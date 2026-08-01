@@ -123,18 +123,26 @@ const tags = ["alpha", "beta", "gamma"]
 // just as well.
 signal feed = ["waiting"]
 
+// Which page the rail is showing. A string rather than an index so the
+// match arms name what they render.
+signal page: string = "forms"
+
+// The rail's own state. Bound rather than left internal so anything
+// else could collapse it too.
+signal nav_shut: bool = false
+
 fn Tag(label: string): View {
     cn.Badge(label, variant = "secondary")
 }
 
-component Playground {
+component ReactivePage {
     style {
         .page {
             padding: 24px;
             gap: 16px;
             flex-direction: column;
             width: 100%;
-            height: 100vh;
+            height: 100%;
             overflow: scroll;
         }
         .row { gap: 8px; flex-direction: row; align-items: center; flex-wrap: wrap }
@@ -149,9 +157,6 @@ component Playground {
 
     view {
         Div(class = "page") {
-            FormWidgets()
-            FeedbackWidgets()
-            MediaWidgets()
 
             // List rendering: the list binds in the view body, and
             // `map` puts one child per element in the widget body. The
@@ -274,4 +279,52 @@ component Playground {
     }
 }
 
-view { Playground() }
+// The kitchen sink: a rail down the left, one page at a time on the
+// right.
+//
+// `match` rather than an if/else chain: the arms read as a list of
+// pages, and adding one is a line rather than another `else if`. It
+// sits inside `cn.SidebarContent`, whose body is a widget body, so the
+// arms become that body's children.
+//
+// Wrapped in `with` so a page swap re-renders the content area alone.
+// Without it the write would reach no region and nothing would move.
+component KitchenSink {
+    style {
+        .shell { width: 100%; height: 100vh; flex-direction: row }
+        .fill { width: 100%; height: 100% }
+    }
+
+    view {
+        Div(class = "shell") {
+            cn.Sidebar(collapsed = nav_shut, expanded_w = 200.0) {
+                cn.SidebarSection(title = "Widgets") {
+                    cn.SidebarItem(label = "Forms", icon = "square-pen", active = true,
+                                   on_click = || page.set("forms"))
+                    cn.SidebarItem(label = "Feedback", icon = "bell",
+                                   on_click = || page.set("feedback"))
+                    cn.SidebarItem(label = "Media", icon = "image",
+                                   on_click = || page.set("media"))
+                }
+                cn.SidebarSection(title = "Reactivity") {
+                    cn.SidebarItem(label = "Bindings", icon = "zap",
+                                   on_click = || page.set("reactive"))
+                }
+                cn.SidebarContent {
+                    with {
+                        Div(class = "fill") {
+                            match page.get() {
+                                "forms" -> FormWidgets(),
+                                "feedback" -> FeedbackWidgets(),
+                                "media" -> MediaWidgets(),
+                                _ -> ReactivePage(),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+view { KitchenSink() }

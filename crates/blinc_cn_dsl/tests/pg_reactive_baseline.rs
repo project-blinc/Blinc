@@ -105,6 +105,10 @@ fn playground_interaction_cost() {
     blinc_cn_dsl::register_all(&dsl).unwrap();
     dsl.compile_project(&root_dir.join("main.blinc"), &root_dir)
         .unwrap();
+    // The rail starts on the forms page; everything measured here
+    // lives on the reactive one, so navigate before building or the
+    // assertions run against a page that was never mounted.
+    dsl.set_signal_string("page", "reactive");
 
     let css: String = blinc_core::BlincContextState::get()
         .drain_stylesheets()

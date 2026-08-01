@@ -52,6 +52,10 @@ fn entry_fsm_is_addressable_by_source_name() {
     blinc_cn_dsl::register_all(&dsl).expect("register cn.*");
     dsl.compile_project(&root.join("main.blinc"), &root)
         .expect("compile");
+    // The rail starts on the forms page; everything measured here
+    // lives on the reactive one, so navigate before building or the
+    // assertions run against a page that was never mounted.
+    dsl.set_signal_string("page", "reactive");
 
     for ev in ["Grow", "Grow", "Busy", "Reset"] {
         let dispatched = blinc_runtime::fsm::dispatch_default("Play", ev);
