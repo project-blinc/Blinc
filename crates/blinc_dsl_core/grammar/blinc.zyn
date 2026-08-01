@@ -1445,6 +1445,11 @@ with_dep_name = { name:identifier }
 // matching with string-literal patterns + `_` wildcard. Each arm body
 // is a single expression or a brace-block. Emits marker statements
 // the `lower_match_blocks` pass rewrites into an if/else-if chain.
+//
+// Inside a widget body the arms become that widget's children, which is
+// the shape a navigation view uses. Directly under `view { … }` with no
+// container around it, the arms run but the widget handle does not come
+// back, so nothing mounts: wrap the match in a container.
 match_stmt = {
     "match" ~ scrutinee:expr ~ "{" ~ arms:match_arm+ ~ "}"
 }

@@ -501,12 +501,16 @@ pub(crate) fn lower_component_calls(program: &mut TypedProgram, filename: &str) 
                         // trailing-expression Block, so a bare Block in child
                         // position is ambiguous. In-place wrapping keeps source
                         // order between static and conditional children.
-                        // `let` is deliberately not carried (bindings are
+                        // A `Block` is carried for the same reason:
+                        // `match` lowers to one, and its arms are the
+                        // children. `let` is deliberately not carried (bindings are
                         // hoisted by earlier passes; wrapping would change
                         // their scope).
                         let e = match s.node {
                             TypedStatement::Expression(e) => e,
-                            node @ (TypedStatement::If(_) | TypedStatement::While(_)) => {
+                            node @ (TypedStatement::If(_)
+                            | TypedStatement::While(_)
+                            | TypedStatement::Block(_)) => {
                                 let span = s.span;
                                 let block = zyntax_typed_ast::TypedNode::new(
                                     TypedExpression::Block(

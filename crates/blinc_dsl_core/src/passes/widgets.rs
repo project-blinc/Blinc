@@ -486,12 +486,24 @@ pub(crate) fn lower_children_arrays_to_blocks(
                 // resolve. Same rule the control-flow carrier applies to
                 // statements inside a branch or loop body.
                 if !is_widget_producing_expr(&child_expr, vrs) {
-                    let ty = child_expr.ty.clone();
-                    prelude.push(typed_node(
-                        TypedStatement::Expression(Box::new(child_expr)),
-                        ty,
-                        span,
-                    ));
+                    // Same reason as in `rewrite_child_pushes_in_stmt`:
+                    // a `match` arrives here as an expression-form `if`
+                    // chain whose arms are the actual children.
+                    // …and it has to end up in statement form to emit
+                    // them, same as in `rewrite_child_pushes_in_stmt`.
+                    rewrite_child_pushes_in_expr(&mut child_expr, list_ident, vrs);
+                    let stmt = match as_statement_if(&child_expr) {
+                        Some(if_stmt) => typed_node(
+                            TypedStatement::If(if_stmt),
+                            Type::Primitive(PrimitiveType::Unit),
+                            span,
+                        ),
+                        None => {
+                            let ty = child_expr.ty.clone();
+                            typed_node(TypedStatement::Expression(Box::new(child_expr)), ty, span)
+                        }
+                    };
+                    prelude.push(stmt);
                     continue;
                 }
                 let push_call = TypedExpression::Call(TypedCall {
@@ -630,6 +642,13 @@ pub(crate) fn lower_children_arrays_to_blocks(
         match &mut stmt.node {
             TypedStatement::Expression(e) => {
                 if !is_widget_producing_expr(e, vrs) {
+                    // Not a child itself, but it may hold some: an
+                    // expression-form `if` chain is what `match` lowers
+                    // to, and its arms live in branch blocks.
+                    rewrite_child_pushes_in_expr(e, list_ident, vrs);
+                    if let Some(if_stmt) = as_statement_if(e) {
+                        stmt.node = TypedStatement::If(if_stmt);
+                    }
                     return;
                 }
                 let placeholder = typed_node(
@@ -683,6 +702,81 @@ pub(crate) fn lower_children_arrays_to_blocks(
                 }
             }
             _ => {}
+        }
+    }
+
+    /// Rewrite child-producing calls inside an expression that holds
+    /// statements rather than being one.
+    ///
+    /// `match` lowers to an expression-form `if` chain — the statement
+    /// form skips both branches inside a closure body, so
+    /// `lower_match_blocks` cannot use it. That leaves the arms' widget
+    /// calls sitting in branch blocks, which the statement walker alone
+    /// never reaches.
+    fn rewrite_child_pushes_in_expr(
+        expr: &mut zyntax_typed_ast::TypedNode<TypedExpression>,
+        list_ident: zyntax_typed_ast::InternedString,
+        vrs: &std::collections::HashSet<String>,
+    ) {
+        match &mut expr.node {
+            TypedExpression::If(if_expr) => {
+                rewrite_child_pushes_in_expr(&mut if_expr.then_branch, list_ident, vrs);
+                rewrite_child_pushes_in_expr(&mut if_expr.else_branch, list_ident, vrs);
+            }
+            TypedExpression::Block(b) => {
+                for s in &mut b.statements {
+                    rewrite_child_pushes_in_stmt(s, list_ident, vrs);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Rebuild an expression-form `if` chain as the statement form.
+    ///
+    /// `lower_match_blocks` emits the expression form because the
+    /// statement form skips both branches inside a closure body. In a
+    /// widget body the opposite holds: the branches now end in
+    /// `__push_child__` calls, which produce no value, and an
+    /// expression-form `if` in statement position never emits them.
+    ///
+    /// `None` when the shape is not an `if` over two blocks, which
+    /// leaves the expression untouched.
+    fn as_statement_if(
+        expr: &zyntax_typed_ast::TypedNode<TypedExpression>,
+    ) -> Option<zyntax_typed_ast::typed_ast::TypedIf> {
+        let TypedExpression::If(if_expr) = &expr.node else {
+            return None;
+        };
+        let then_block = as_block(&if_expr.then_branch)?;
+        // The else arm is either another `if` in the chain or the final
+        // block, and a chained one has to become a nested statement `if`
+        // for its branches to emit too.
+        let else_block = match as_statement_if(&if_expr.else_branch) {
+            Some(nested) => Some(zyntax_typed_ast::typed_ast::TypedBlock {
+                statements: vec![typed_node(
+                    TypedStatement::If(nested),
+                    Type::Primitive(PrimitiveType::Unit),
+                    if_expr.else_branch.span,
+                )],
+                span: if_expr.else_branch.span,
+            }),
+            None => as_block(&if_expr.else_branch),
+        };
+        Some(zyntax_typed_ast::typed_ast::TypedIf {
+            condition: if_expr.condition.clone(),
+            then_block,
+            else_block,
+            span: expr.span,
+        })
+    }
+
+    fn as_block(
+        expr: &zyntax_typed_ast::TypedNode<TypedExpression>,
+    ) -> Option<zyntax_typed_ast::typed_ast::TypedBlock> {
+        match &expr.node {
+            TypedExpression::Block(b) => Some(b.clone()),
+            _ => None,
         }
     }
 
