@@ -150,6 +150,26 @@ mod tests {
         r.scroll_into_view();
     }
 
+    /// The shape a handler takes: captured by value into a `Send +
+    /// Sync` closure, called later, acting on what it is bound to.
+    #[test]
+    fn a_ref_survives_capture_into_a_send_sync_closure() {
+        let card = DivRef::new();
+        let captured = card.clone();
+        let handler: Box<dyn Fn() + Send + Sync> = Box::new(move || {
+            captured.focus();
+            captured.scroll_into_view();
+        });
+
+        // Unbound: the calls are no-ops rather than panics, which is
+        // what a handler firing before its element exists needs.
+        handler();
+
+        card.bind_to_node(LayoutNodeId::default(), Weak::new());
+        handler();
+        assert!(card.exists(), "the binding outlived the capture");
+    }
+
     /// Clones share one binding, so a ref handed to a builder and kept
     /// by the caller are the same handle.
     #[test]
@@ -160,3 +180,12 @@ mod tests {
         assert_eq!(b.node_id(), Some(LayoutNodeId::default()));
     }
 }
+
+/// A ref is handed to builders and captured by handlers, and a
+/// `Stateful` callback is `Send + Sync`, so this has to hold for a ref
+/// to be usable from one.
+const _: fn() = || {
+    fn assert<T: Send + Sync>() {}
+    assert::<DivRef>();
+    assert::<super::ScrollRef>();
+};
