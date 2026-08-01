@@ -52,6 +52,9 @@ pub struct CnInput {
     /// Zero when the user omitted `on_change`. Same zero-arg
     /// `extern "C" fn()` pointer convention as `cn.Button`'s `on_click`.
     pub on_change: i64,
+    /// Handle from a `ref name: Input` declaration: `ref = email`.
+    /// Zero when omitted.
+    pub r#ref: i64,
     /// Call-site identity, captured while the FFI builds the struct --
     /// `current_call_id()` reads correctly only inside that bracket.
     #[skip]
@@ -131,6 +134,17 @@ impl CnInput {
         }
         if self.width > 0.0 {
             i = i.w(self.width as f32);
+        }
+        // Bound before building: the ref reads and writes the same
+        // state the field is built from, so its value methods work
+        // without waiting for a render.
+        if self.r#ref != 0 {
+            match blinc_dsl_core::refs::input_ref_by_id(self.r#ref) {
+                Some(input_ref) => i = i.bind(&input_ref),
+                None => tracing::warn!(
+                    "cn.Input: `ref` is not an Input handle — declare it as `ref name: Input`",
+                ),
+            }
         }
         i.build_component()
     }

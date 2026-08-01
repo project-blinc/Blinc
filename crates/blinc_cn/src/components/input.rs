@@ -228,7 +228,11 @@ impl Input {
             .corner_radius
             .unwrap_or_else(|| theme.radius(RadiusToken::Md));
 
-        let mut input = blinc_layout::widgets::text_input::text_input(&config.data)
+        let mut input = blinc_layout::widgets::text_input::text_input(&config.data);
+        if let Some(input_ref) = &config.input_ref {
+            input = input.bind(input_ref);
+        }
+        let mut input = input
             .h(config.size.height(theme))
             .text_size(config.size.font_size(typography))
             .rounded(radius)
@@ -355,6 +359,8 @@ impl ElementBuilder for Input {
 #[derive(Clone)]
 struct InputConfig {
     data: SharedTextInputData,
+    /// Caller's handle onto this field, if bound.
+    input_ref: Option<blinc_layout::selector::InputRef>,
     size: InputSize,
     label: Option<String>,
     description: Option<String>,
@@ -381,6 +387,7 @@ impl Default for InputConfig {
     fn default() -> Self {
         Self {
             data: blinc_layout::widgets::text_input::text_input_data(),
+            input_ref: None,
             size: InputSize::default(),
             label: None,
             description: None,
@@ -458,6 +465,15 @@ impl InputBuilder {
     }
 
     /// Set the input type for validation
+    /// Bind an [`blinc_layout::selector::InputRef`] to this field.
+    ///
+    /// The ref reads and writes the same state the field is built from,
+    /// so `value()` and `set_value()` work without waiting for a render.
+    pub fn bind(mut self, input_ref: &blinc_layout::selector::InputRef) -> Self {
+        self.config.input_ref = Some(input_ref.clone());
+        self
+    }
+
     pub fn input_type(mut self, input_type: InputType) -> Self {
         self.config.input_type = input_type;
         self

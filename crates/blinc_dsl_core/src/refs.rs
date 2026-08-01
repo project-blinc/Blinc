@@ -85,6 +85,22 @@ pub fn input_ref_by_id(id: i64) -> Option<InputRef> {
     }
 }
 
+/// Every `Input` handle this program declared.
+///
+/// The ids are span-derived, so a caller that did not compile the
+/// source cannot name one; this is how a host or a test reaches them.
+pub fn declared_input_refs() -> Vec<InputRef> {
+    registry()
+        .lock()
+        .expect("ref registry")
+        .values()
+        .filter_map(|h| match h {
+            Handle::Input(r) => Some(r.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
 /// Bind whatever handle `id` names to a `Div` being built.
 ///
 /// Which kind it is decides what binding means, and only the handle
