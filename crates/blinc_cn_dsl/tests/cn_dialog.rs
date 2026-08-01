@@ -12,6 +12,12 @@ fn init() {
         blinc_animation::set_global_scheduler(s.handle());
         blinc_layout::render_state::set_global_scheduler(s.handle());
         Box::leak(Box::new(s));
+        // The app installs this; without it a signal write reaches
+        // property bindings but never the statefuls that declared deps
+        // on it, so a subscribed widget looks unsubscribed.
+        blinc_core::reactive::set_stateful_deps_notifier(|ids| {
+            blinc_layout::check_stateful_deps(ids);
+        });
         if !blinc_core::BlincContextState::is_initialized() {
             blinc_core::BlincContextState::init(
                 blinc_core::reactive::global_graph(),
@@ -22,10 +28,29 @@ fn init() {
     });
 }
 
-fn build(dsl: &BlincDsl) {
-    let host = div().w(600.0).h(400.0).child_box(dsl.view_widget());
-    let mut tree = RenderTree::from_element(&host);
-    tree.compute_layout(600.0, 400.0);
+/// One tree, rebuilt in place — what a running app does.
+///
+/// Building a FRESH tree on every check hides the bug the app hit: the
+/// watcher would run on the new build regardless of whether anything
+/// subscribed to the signal, so a dialog that never subscribes still
+/// looked like it opened.
+struct Harness {
+    tree: RenderTree,
+}
+
+impl Harness {
+    fn new(dsl: &BlincDsl) -> Self {
+        let host = div().w(600.0).h(400.0).child_box(dsl.view_widget());
+        let mut tree = RenderTree::from_element(&host);
+        tree.compute_layout(600.0, 400.0);
+        Self { tree }
+    }
+
+    /// Apply whatever a signal write queued, as a frame would.
+    fn frame(&mut self) {
+        self.tree.process_pending_subtree_rebuilds();
+        self.tree.compute_layout(600.0, 400.0);
+    }
 }
 
 /// Opening happens from inside a build, which reaches into the overlay
@@ -64,25 +89,28 @@ fn the_signal_drives_the_modal_and_building_twice_does_not_stack_it() {
             .unwrap_or(0)
     };
 
-    build(&dsl);
+    let mut app = Harness::new(&dsl);
     assert_eq!(open_count(), 0, "a closed dialog puts nothing up");
 
+    // The write alone has to reach the watcher — nothing else in this
+    // view depends on `confirm`, so if the dialog does not subscribe,
+    // no rebuild happens and no modal appears.
     dsl.set_signal_bool("confirm", true);
-    build(&dsl);
+    app.frame();
     let after_open = open_count();
     assert!(after_open > 0, "setting the signal raised the modal");
 
-    // The watcher runs on every build, so this is the shape that would
-    // stack a second copy behind the first.
-    build(&dsl);
-    build(&dsl);
+    // The watcher re-renders on every frame, so this is the shape that
+    // would stack a second copy behind the first.
+    app.frame();
+    app.frame();
     assert_eq!(
         open_count(),
         after_open,
-        "building again does not stack another copy"
+        "later frames do not stack another copy"
     );
 
     dsl.set_signal_bool("confirm", false);
-    build(&dsl);
+    app.frame();
     assert_eq!(open_count(), 0, "clearing the signal takes it down");
 }

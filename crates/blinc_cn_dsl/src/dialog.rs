@@ -63,6 +63,24 @@ pub struct CnDialog {
     call_site: CallSiteId,
 }
 
+/// Everything the watcher needs to raise the modal, owned rather than
+/// borrowed: the callback outlives the widget struct that made it.
+#[derive(Clone)]
+struct DialogProps {
+    call_site: u64,
+    open: blinc_core::reactive::State<bool>,
+    title: String,
+    description: String,
+    size: Option<blinc_cn::DialogSize>,
+    confirm_text: String,
+    cancel_text: String,
+    destructive: bool,
+    hide_cancel: bool,
+    on_confirm: i64,
+    on_cancel: i64,
+    content: Option<std::sync::Arc<dyn Fn() -> Div + Send + Sync>>,
+}
+
 /// Open modals, by the call site that opened them.
 ///
 /// Outside the widget because the widget does not outlive a frame, and
@@ -74,19 +92,70 @@ fn open_modals() -> &'static Mutex<HashMap<u64, OverlayHandle>> {
 
 impl CnDialog {
     /// The watcher. Renders nothing; exists to follow the signal.
-    fn to_element(&self) -> Div {
+    ///
+    /// A `Stateful` subscribed to the signal rather than a bare `Div`:
+    /// nothing else in the tree depends on `open`, so a plain element
+    /// would be built once and never again, and writing the signal
+    /// would raise no modal. The subscription is the whole point of
+    /// this element.
+    fn to_element(&self) -> blinc_layout::stateful::Stateful<()> {
         let state = crate::bridge::bool_state(&self.open);
-        let should_be_open = state.try_get().unwrap_or(false);
-        self.sync(should_be_open);
-        div()
+        let key = format!("cn_dialog_{}", self.call_site.0);
+        let props = self.watch_props();
+        blinc_layout::stateful::stateful_with_key::<()>(&key)
+            .deps([state.signal_id()])
+            .on_state(move |_ctx| {
+                props.sync(state.try_get().unwrap_or(false));
+                div()
+            })
     }
 
+    fn watch_props(&self) -> DialogProps {
+        let children = std::mem::take(&mut *self.children.lock().expect("children mutex"));
+        DialogProps {
+            call_site: self.call_site.0,
+            open: crate::bridge::bool_state(&self.open),
+            title: self.title.clone(),
+            description: self.description.clone(),
+            size: self.size(),
+            confirm_text: self.confirm_text.clone(),
+            cancel_text: self.cancel_text.clone(),
+            destructive: self.destructive,
+            hide_cancel: self.hide_cancel,
+            on_confirm: self.on_confirm,
+            on_cancel: self.on_cancel,
+            content: (!children.is_empty()).then(
+                || -> std::sync::Arc<dyn Fn() -> Div + Send + Sync> {
+                    std::sync::Arc::new(crate::shared_child::body_recipe(children))
+                },
+            ),
+        }
+    }
+
+    fn size(&self) -> Option<blinc_cn::DialogSize> {
+        use blinc_cn::DialogSize as S;
+        match self.size.as_str() {
+            "" => None,
+            "small" | "sm" => Some(S::Small),
+            "medium" | "md" => Some(S::Medium),
+            "large" | "lg" => Some(S::Large),
+            "full" => Some(S::Full),
+            other => {
+                tracing::warn!(size = %other, "cn.Dialog: unknown size");
+                None
+            }
+        }
+    }
+}
+
+impl DialogProps {
     /// Bring the modal into line with the signal.
     ///
-    /// Called on every build, so it has to be idempotent: showing an
-    /// already-open dialog would stack a second copy behind the first.
+    /// Called on every render of the watcher, so it has to be
+    /// idempotent: showing an already-open dialog would stack a second
+    /// copy behind the first.
     fn sync(&self, should_be_open: bool) {
-        let key = self.call_site.0;
+        let key = self.call_site;
         let mut modals = open_modals().lock().expect("open modals");
         let live = modals.get(&key).is_some_and(|h| h.is_live());
         match (should_be_open, live) {
@@ -113,7 +182,7 @@ impl CnDialog {
         if !self.description.is_empty() {
             d = d.description(self.description.clone());
         }
-        if let Some(size) = self.size() {
+        if let Some(size) = self.size {
             d = d.size(size);
         }
         if !self.confirm_text.is_empty() {
@@ -129,15 +198,14 @@ impl CnDialog {
             d = d.hide_cancel();
         }
 
-        let children = std::mem::take(&mut *self.children.lock().expect("children mutex"));
-        if !children.is_empty() {
-            d = d.content(crate::shared_child::body_recipe(children));
+        if let Some(content) = self.content.clone() {
+            d = d.content(move || content());
         }
 
         // Either button clears the signal as well as running the
         // handler: the modal closes itself, and a signal left set would
         // reopen it on the next build.
-        let state = crate::bridge::bool_state(&self.open);
+        let state = self.open.clone();
         let confirm = closure(self.on_confirm);
         let confirm_state = state.clone();
         d = d.on_confirm(move || {
@@ -151,21 +219,6 @@ impl CnDialog {
         });
 
         d.show()
-    }
-
-    fn size(&self) -> Option<blinc_cn::DialogSize> {
-        use blinc_cn::DialogSize as S;
-        match self.size.as_str() {
-            "" => None,
-            "small" | "sm" => Some(S::Small),
-            "medium" | "md" => Some(S::Medium),
-            "large" | "lg" => Some(S::Large),
-            "full" => Some(S::Full),
-            other => {
-                tracing::warn!(size = %other, "cn.Dialog: unknown size");
-                None
-            }
-        }
     }
 }
 
