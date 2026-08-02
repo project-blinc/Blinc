@@ -26,6 +26,33 @@ use crate::tree::LayoutNodeId;
 
 use super::super::{ElementType, RenderTree};
 
+/// The text properties a child takes from its ancestors when it says
+/// nothing itself.
+#[derive(Clone, Copy, Default)]
+struct InheritedText {
+    decoration: Option<crate::element_style::TextDecoration>,
+    decoration_color: Option<[f32; 4]>,
+    decoration_thickness: Option<f32>,
+    white_space: Option<crate::element_style::WhiteSpace>,
+    overflow: Option<crate::element_style::TextOverflow>,
+    color: Option<[f32; 4]>,
+    align: Option<crate::div::TextAlign>,
+}
+
+impl InheritedText {
+    fn from_node(node: &super::super::RenderNode) -> Self {
+        Self {
+            decoration: node.props.text_decoration,
+            decoration_color: node.props.text_decoration_color,
+            decoration_thickness: node.props.text_decoration_thickness,
+            white_space: node.props.white_space,
+            overflow: node.props.text_overflow,
+            color: node.props.text_color,
+            align: node.props.text_align,
+        }
+    }
+}
+
 impl RenderTree {
     /// Apply base stylesheet styles to all registered elements.
     ///
@@ -473,55 +500,23 @@ impl RenderTree {
             }
         }
 
-        // Propagate inherited text properties (color, text-decoration, etc.)
-        // from parent to child nodes within the rebuilt subtree.
-        for &node_id in &subtree_nodes {
-            let parent_id = match self.element_registry.get_parent(node_id) {
-                Some(id) => id,
-                None => continue,
-            };
-            let parent_text_props = self.render_nodes.get(&parent_id).map(|n| {
-                (
-                    n.props.text_decoration,
-                    n.props.text_decoration_color,
-                    n.props.text_decoration_thickness,
-                    n.props.white_space,
-                    n.props.text_overflow,
-                    n.props.text_color,
-                    n.props.text_align,
-                )
-            });
-            if let Some((td, td_color, td_thick, ws, to, tc, ta)) = parent_text_props {
-                if let Some(node) = self.render_nodes.get_mut(&node_id) {
-                    if node.props.text_decoration.is_none() {
-                        node.props.text_decoration = td;
-                    }
-                    if node.props.text_decoration_color.is_none() {
-                        node.props.text_decoration_color = td_color;
-                    }
-                    if node.props.text_decoration_thickness.is_none() {
-                        node.props.text_decoration_thickness = td_thick;
-                    }
-                    if node.props.white_space.is_none() {
-                        node.props.white_space = ws;
-                    }
-                    if node.props.text_overflow.is_none() {
-                        node.props.text_overflow = to;
-                    }
-                    if node.props.text_color.is_none() {
-                        node.props.text_color = tc;
-                    }
-                    if node.props.text_align.is_none() {
-                        if let Some(ta) = ta {
-                            node.props.text_align = Some(ta);
-                            if let ElementType::Text(ref mut text_data) = node.element_type {
-                                text_data.align = ta;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // Propagate inherited text properties (color, text-decoration,
+        // etc.) down the rebuilt subtree, seeded from what the subtree's
+        // parent resolved to.
+        //
+        // Carried down rather than read per node from the element
+        // registry: a rebuilt node's registry parent can name a node
+        // that is not its layout parent, and the flat form then found
+        // nothing to inherit and left the value unset. Text under a
+        // rebuilt subtree fell back to black on a dark scheme, and only
+        // after the swap that rebuilt it.
+        let seed = self
+            .element_registry
+            .get_parent(parent_id)
+            .and_then(|p| self.render_nodes.get(&p))
+            .map(InheritedText::from_node)
+            .unwrap_or_default();
+        self.propagate_inherited_text(parent_id, seed);
 
         // Apply matching `:hover`, `:active`, `:focus` rules on top
         // of the base CSS we just wrote, restricted to the rebuilt
@@ -545,6 +540,41 @@ impl RenderTree {
     }
 
     /// Collect all node IDs in a subtree (the node itself + all descendants).
+    /// Fill a node's unset text properties from what it inherits, then
+    /// carry the result to its layout children.
+    fn propagate_inherited_text(&mut self, node_id: LayoutNodeId, inherited: InheritedText) {
+        let carried = match self.render_nodes.get_mut(&node_id) {
+            Some(node) => {
+                let p = &mut node.props;
+                p.text_decoration = p.text_decoration.or(inherited.decoration);
+                p.text_decoration_color = p.text_decoration_color.or(inherited.decoration_color);
+                p.text_decoration_thickness = p
+                    .text_decoration_thickness
+                    .or(inherited.decoration_thickness);
+                p.white_space = p.white_space.or(inherited.white_space);
+                p.text_overflow = p.text_overflow.or(inherited.overflow);
+                p.text_color = p.text_color.or(inherited.color);
+                if p.text_align.is_none()
+                    && let Some(align) = inherited.align
+                {
+                    p.text_align = Some(align);
+                    // TextData is baked before this pass, so the
+                    // renderer reads the inherited alignment from there.
+                    if let ElementType::Text(ref mut text_data) = node.element_type {
+                        text_data.align = align;
+                    }
+                }
+                InheritedText::from_node(node)
+            }
+            // A layout node with no render node inherits nothing of its
+            // own, but must not break the chain to its children.
+            None => inherited,
+        };
+        for child_id in self.layout_tree.children(node_id) {
+            self.propagate_inherited_text(child_id, carried);
+        }
+    }
+
     pub(crate) fn collect_subtree_ids(&self, node_id: LayoutNodeId, out: &mut Vec<LayoutNodeId>) {
         out.push(node_id);
         for child_id in self.layout_tree.children(node_id) {

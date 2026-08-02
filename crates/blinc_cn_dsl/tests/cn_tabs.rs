@@ -156,3 +156,65 @@ fn a_loose_child_is_dropped_not_drawn() {
         h.texts()
     );
 }
+
+/// Inherited text colour has to survive the panel swap.
+///
+/// The colour comes from a `color:` on an ancestor, which the full
+/// stylesheet pass propagates down. A tab swap rebuilds only the panel,
+/// so if the subtree pass does not re-propagate, the new text falls back
+/// to the layout default — black, and invisible on a dark scheme.
+#[test]
+fn panel_text_keeps_its_inherited_colour_across_a_swap() {
+    init();
+    let dsl = BlincDsl::new().expect("runtime init");
+    blinc_cn_dsl::register_all(&dsl).expect("register");
+    dsl.compile_source(
+        r#"signal swap_probe: string = "one"
+           view {
+             Div(class = "page") {
+               cn.Tabs(value = swap_probe) {
+                 cn.Tab(value = "one", label = "One") { Div { Text("first body") } }
+                 cn.Tab(value = "two", label = "Two") { Div { Text("second body") } }
+               }
+             }
+           }"#,
+        "swap_probe.blinc",
+    )
+    .expect("compile");
+
+    let host = div().w(600.0).h(400.0).child_box(dsl.view_widget());
+    let mut tree = RenderTree::from_element(&host);
+    tree.set_stylesheet(
+        blinc_layout::css_parser::Stylesheet::parse(".page { color: #ff0000 }").expect("css"),
+    );
+    tree.apply_stylesheet_layout_overrides();
+    tree.apply_stylesheet_base_styles();
+    tree.compute_layout(600.0, 400.0);
+
+    let painted = |tree: &RenderTree, needle: &str| -> Option<[f32; 4]> {
+        let mut stack = vec![tree.root()?];
+        while let Some(id) = stack.pop() {
+            if let Some(node) = tree.get_render_node(id)
+                && let ElementType::Text(t) = &node.element_type
+                && t.content.contains(needle)
+            {
+                return Some(node.props.text_color.unwrap_or(t.color));
+            }
+            stack.extend(tree.layout_tree.children(id).iter().copied());
+        }
+        None
+    };
+
+    let red = [1.0, 0.0, 0.0, 1.0];
+    assert_eq!(painted(&tree, "first body"), Some(red), "inherited at build");
+
+    dsl.set_signal_string("swap_probe", "two");
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(600.0, 400.0);
+
+    assert_eq!(
+        painted(&tree, "second body"),
+        Some(red),
+        "and still inherited after the swap"
+    );
+}
