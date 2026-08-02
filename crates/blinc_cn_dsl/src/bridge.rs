@@ -79,6 +79,25 @@ pub fn f64_state(r: &Reactive<f64>) -> blinc_core::reactive::State<f64> {
     )
 }
 
+/// `String` mirror of [`bool_state`], for a widget that owns a word:
+/// which tab is showing, which option is picked.
+pub fn string_state(r: &Reactive<String>) -> blinc_core::reactive::State<String> {
+    use blinc_core::reactive::{Signal, State, global_dirty_flag, global_graph, signal};
+    let sig: Signal<String> = match r {
+        Reactive::Signal(s) => *s,
+        Reactive::Literal(v) => signal::<String>(v.clone()),
+        Reactive::Computed(c) => signal::<String>(c.try_get().unwrap_or_default()),
+    };
+    State::with_stateful_callback(
+        sig,
+        global_graph(),
+        global_dirty_flag(),
+        std::sync::Arc::new(|ids: &[blinc_core::reactive::SignalId]| {
+            blinc_layout::check_stateful_deps(ids);
+        }),
+    )
+}
+
 /// Per-key `SharedTextInputData`, so a DSL text field keeps what the
 /// user typed across rebuilds.
 ///

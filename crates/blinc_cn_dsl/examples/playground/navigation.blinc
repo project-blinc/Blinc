@@ -1,0 +1,55 @@
+// Tabs: panels that swap, driven by a signal either side.
+
+signal section: string = "account"
+signal pane: string = "one"
+
+component NavigationWidgets {
+    style {
+        .group { width: 100%; padding: 24px; gap: 16px; flex-direction: column }
+        .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
+    }
+
+    view {
+        Div(class = "group") {
+            // Each tab names itself, so its label and its panel are
+            // declared together and cannot drift apart.
+            cn.Label("tabs: a strip of labelled panels")
+            cn.Tabs(value = section) {
+                cn.Tab(value = "account", label = "Account", icon = "user") {
+                    Div { Text("Name, email, and how we reach you.") }
+                }
+                cn.Tab(value = "alerts", label = "Alerts", badge = "3") {
+                    Div { Text("Three unread notices.") }
+                }
+                cn.Tab(value = "billing", label = "Billing") {
+                    Div { Text("Card ending 4242.") }
+                }
+                cn.Tab(value = "archive", label = "Archive", disabled = true) {
+                    Div { Text("Nothing here yet.") }
+                }
+            }
+
+            // `value` binds both ways: the buttons move the strip, and
+            // clicking the strip writes the signal back.
+            cn.Label("the same signal, driven from outside")
+            Div(class = "row") {
+                cn.Button("Account", size = "small", variant = "outline",
+                          on_click = || section.set("account"))
+                cn.Button("Alerts", size = "small", variant = "outline",
+                          on_click = || section.set("alerts"))
+                cn.Button("Billing", size = "small", variant = "outline",
+                          on_click = || section.set("billing"))
+            }
+
+            cn.Label("small tabs, sliding rather than fading")
+            cn.Tabs(value = pane, size = "small", transition = "slide_left") {
+                cn.Tab(value = "one", label = "One") {
+                    Div { Text("First panel.") }
+                }
+                cn.Tab(value = "two", label = "Two") {
+                    Div { Text("Second panel.") }
+                }
+            }
+        }
+    }
+}

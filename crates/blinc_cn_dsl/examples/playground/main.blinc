@@ -13,6 +13,7 @@
 // `compile_source` / `compile_file` alone do not do.
 
 import { FormWidgets } from "./forms"
+import { NavigationWidgets } from "./navigation"
 import { FeedbackWidgets } from "./feedback"
 import { MediaWidgets } from "./media"
 import { ReactivePage } from "./reactive"
@@ -48,6 +49,8 @@ component KitchenSink {
                                    on_click = || { page.set("feedback") pages.scroll_to_top() })
                     cn.SidebarItem(label = "Media", icon = "image",
                                    on_click = || { page.set("media") pages.scroll_to_top() })
+                    cn.SidebarItem(label = "Navigation", icon = "panels-top-left",
+                                   on_click = || { page.set("navigation") pages.scroll_to_top() })
                 }
                 cn.SidebarSection(title = "Reactivity") {
                     cn.SidebarItem(label = "Bindings", icon = "zap",
@@ -60,6 +63,7 @@ component KitchenSink {
                                 "forms" -> FormWidgets(),
                                 "feedback" -> FeedbackWidgets(),
                                 "media" -> MediaWidgets(),
+                                "navigation" -> NavigationWidgets(),
                                 _ -> ReactivePage(),
                             }
                         }
