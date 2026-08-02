@@ -387,6 +387,11 @@ impl Slider {
         let slider_state_key = format!("{}_state", instance_key);
         let slider_container = stateful_with_key::<SliderThumbState>(&slider_state_key)
             .initial(SliderThumbState::Idle)
+            // The track and thumb are laid out from the value, so they
+            // have to rebuild when it changes. Without this only the
+            // printed number subscribed: a write from outside moved the
+            // text and left the thumb where it was.
+            .deps([config.value_state.signal_id()])
             .on_state(move |sctx| {
                 let state = sctx.state();
 
@@ -681,12 +686,15 @@ impl Slider {
             let spacing = theme.spacing_value(blinc_theme::SpacingToken::Space2);
             let mut outer = div().h_fit().flex_col().gap_px(spacing);
 
-            // Apply width to container
-            if let Some(w) = width {
-                outer = outer.w(w);
-            } else {
-                outer = outer.w_full();
-            }
+            // Apply width to container.
+            //
+            // The fallback is `track_width`, not `w_full`: the thumb
+            // travel and the fill are laid out against `track_width`,
+            // while the background track pins `left(0).right(0)` and
+            // takes whatever the container gives it. Stretching the
+            // container drew a track longer than the range it maps —
+            // the thumb hit its maximum well short of the end.
+            outer = outer.w(width.unwrap_or(track_width));
 
             // Header row with label and optional value
             if config.label.is_some() || config.show_value {
@@ -732,8 +740,12 @@ impl Slider {
             outer = outer.child(slider_container);
             outer
         } else {
-            // Wrap container in a div for consistent return type
-            div().h_fit().child(slider_container)
+            // Same sizing rule as the labelled branch: the track is
+            // only as wide as the travel the thumb is laid out against.
+            div()
+                .h_fit()
+                .w(width.unwrap_or(track_width))
+                .child(slider_container)
         };
 
         Self {

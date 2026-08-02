@@ -58,6 +58,51 @@ pub fn bool_state(r: &Reactive<bool>) -> blinc_core::reactive::State<bool> {
     )
 }
 
+/// `f64` mirror of [`bool_state`], for a widget that owns a number.
+///
+/// The DSL types every number as `f64`; a widget wanting `f32` narrows
+/// at the boundary rather than at the call site.
+pub fn f64_state(r: &Reactive<f64>) -> blinc_core::reactive::State<f64> {
+    use blinc_core::reactive::{Signal, State, global_dirty_flag, global_graph, signal};
+    let sig: Signal<f64> = match r {
+        Reactive::Signal(s) => *s,
+        Reactive::Literal(v) => signal::<f64>(*v),
+        Reactive::Computed(c) => signal::<f64>(c.try_get().unwrap_or_default()),
+    };
+    State::with_stateful_callback(
+        sig,
+        global_graph(),
+        global_dirty_flag(),
+        std::sync::Arc::new(|ids: &[blinc_core::reactive::SignalId]| {
+            blinc_layout::check_stateful_deps(ids);
+        }),
+    )
+}
+
+/// A widget-owned `f32` state seeded from a bound `f64` signal.
+///
+/// `cn::slider` keeps its value in an `f32` `State` it owns, while the
+/// DSL types every number as `f64`. Rather than mirror the two with an
+/// effect — where reading state inside the closure deadlocks — the
+/// widget's own change callback writes back, and this seeds the
+/// starting value.
+pub fn f32_state_from(r: &Reactive<f64>) -> blinc_core::reactive::State<f32> {
+    use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+    let start = match r {
+        Reactive::Signal(s) => s.try_get().unwrap_or_default(),
+        Reactive::Literal(v) => *v,
+        Reactive::Computed(c) => c.try_get().unwrap_or_default(),
+    };
+    State::with_stateful_callback(
+        signal::<f32>(start as f32),
+        global_graph(),
+        global_dirty_flag(),
+        std::sync::Arc::new(|ids: &[blinc_core::reactive::SignalId]| {
+            blinc_layout::check_stateful_deps(ids);
+        }),
+    )
+}
+
 /// Per-key `SharedTextInputData`, so a DSL text field keeps what the
 /// user typed across rebuilds.
 ///

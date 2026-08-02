@@ -116,7 +116,7 @@ pub use sheet::{
 };
 pub use sidebar::{Sidebar, SidebarBuilder, SidebarItem, SidebarSection, sidebar};
 pub use skeleton::{Skeleton, skeleton, skeleton_circle};
-pub use slider::{Slider, SliderSize, slider};
+pub use slider::{Slider, SliderBuilder, SliderSize, slider};
 pub use spinner::{Spinner, SpinnerBuilder, SpinnerSize, spinner};
 pub use switch::{Switch, SwitchSize, switch};
 pub use table::{

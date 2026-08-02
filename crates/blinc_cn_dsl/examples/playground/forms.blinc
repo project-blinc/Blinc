@@ -15,6 +15,9 @@ signal form_bio: string
 signal fmt_bold: bool = false
 signal fmt_italic: bool = false
 
+// A number picked by dragging; the progress bar reads the same signal.
+signal volume: f64 = 40.0
+
 // A handle onto the field below. Unlike a signal, which carries the
 // value, a ref carries the element: it focuses, selects and clears
 // without anything having to re-render.
@@ -27,6 +30,9 @@ component FormWidgets {
     style {
         .group { width: 100%; padding: 24px; gap: 16px; flex-direction: column }
         .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
+        // Stacking inside a section. `.group` is the page root and
+        // carries its padding, so nesting it indents every level.
+        .col { gap: 8px; flex-direction: column }
     }
 
     view {
@@ -70,6 +76,13 @@ component FormWidgets {
 
             // `ref` drives the field directly: no signal in the middle,
             // and nothing re-renders to make it happen.
+            cn.Label("slider: drag writes the signal")
+            Div(class = "col") {
+                cn.Slider(value = volume, min = 0.0, max = 100.0, step = 5.0,
+                          w = 320.0, label = "Volume", show_value = true)
+                cn.Progress(value = volume, size = "small")
+            }
+
             cn.Label("toggle: a button that stays down")
             Div(class = "row") {
                 cn.Toggle(pressed = fmt_bold, icon = "bold", aria_label = "bold")
