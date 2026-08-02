@@ -15,14 +15,14 @@ use blinc_layout::div::ElementBuilder;
 ///           label = "Volume", show_value = true)
 /// ```
 ///
-/// `value` binds two ways: dragging writes the signal, and setting the
-/// signal is read the next time the slider is built.
+/// `value` binds both ways: dragging writes the signal, and writing the
+/// signal moves the thumb. A number input bound to the same signal and
+/// the slider stay in step.
 ///
-/// The widget keeps its position in an `f32` state of its own while the
-/// DSL types every number as `f64`, so the bound signal is seeded at
-/// build time and written back on every change. That is why a drag
-/// shows up in the signal at once, and why a write from elsewhere lands
-/// on the next build rather than mid-drag.
+/// The widget is handed the bound signal itself rather than a copy in
+/// its own precision, so there is one number and one identity. Neither
+/// direction rebuilds the track: the thumb animation is retargeted, and
+/// the value label re-renders on its own.
 #[extern_widget(namespace = "cn", name = "Slider")]
 pub struct CnSlider {
     /// The chosen number.
@@ -57,7 +57,10 @@ impl CnSlider {
     }
 
     fn to_cn_widget(&self) -> blinc_cn::SliderBuilder {
-        let state = crate::bridge::f32_state_from(&self.value);
+        // The bound signal itself, not a narrowed copy: `cn::slider`
+        // takes either precision, so the DSL's `f64` is what the widget
+        // reads and writes. One value, one id, nothing to keep in step.
+        let state = crate::bridge::f64_state(&self.value);
         let mut s = blinc_cn::slider(&state).size(self.size());
 
         // Zero is what an omitted number prop reads as, and zero is a
@@ -82,22 +85,7 @@ impl CnSlider {
             s = s.disabled(true);
         }
 
-        // The widget writes its own `f32` state; the signal the source
-        // declared is what everything else reads, so a drag has to
-        // reach it too.
-        if let Some(bound) = self.bound_signal() {
-            s = s.on_change(move |v| bound.set(v as f64));
-        }
         s
-    }
-
-    /// The signal behind `value`, when one was bound. A literal has
-    /// nothing to write back to.
-    fn bound_signal(&self) -> Option<blinc_core::reactive::Signal<f64>> {
-        match &self.value {
-            Reactive::Signal(s) => Some(*s),
-            Reactive::Literal(_) | Reactive::Computed(_) => None,
-        }
     }
 
     fn size(&self) -> blinc_cn::SliderSize {

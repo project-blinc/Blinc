@@ -39,7 +39,7 @@
 //!     .disabled(true)
 //! ```
 
-use blinc_animation::{AnimationContext, SpringConfig, get_scheduler};
+use blinc_animation::{AnimationContext, SpringConfig};
 use blinc_core::events::event_types;
 use blinc_core::{BlincContext, BlincContextState, Color, State};
 use blinc_layout::div::ElementTypeId;
@@ -217,10 +217,10 @@ impl Slider {
     /// cn::slider(&volume)
     /// ```
     #[track_caller]
-    pub fn new(value_state: &State<f32>) -> Self {
+    pub fn new(value_state: impl Into<crate::reactive_props::NumberValue>) -> Self {
         Self::with_config(
             InstanceKey::new("slider"),
-            SliderConfig::new(value_state.clone()),
+            SliderConfig::new(value_state.into()),
         )
     }
 
@@ -276,13 +276,38 @@ impl Slider {
         let instance_key = key.get().to_string();
 
         let ctx = BlincContextState::get();
-        let scheduler = get_scheduler();
 
-        let thumb_offset = Arc::new(Mutex::new(AnimatedValue::new(
-            scheduler.clone(),
+        // Persisted, and keyed by the bound signal rather than by the
+        // instance: the retarget below registers once for that signal,
+        // so the animation it holds has to be the one a later build
+        // paints. A fresh spring per build would leave the effect
+        // driving a value nothing reads.
+        let travel = track_width - thumb_size;
+        let thumb_offset = blinc_layout::stateful::persisted_animated_value(
+            &format!(
+                "cn-slider:{}:thumb",
+                config.value_state.signal_id().to_raw()
+            ),
             initial_offset,
             SpringConfig::snappy(),
-        )));
+        );
+        // A write from anywhere else -- a number input bound to the same
+        // signal, an FSM action -- moves the thumb without rebuilding
+        // the track. The pointer handlers set the offset themselves and
+        // then write the value, so this fires behind them with the
+        // position they already chose.
+        config.value_state.bind_target(
+            crate::reactive_props::num_binding::SLIDER,
+            &thumb_offset,
+            move |v| {
+                let norm = if (max - min).abs() > f32::EPSILON {
+                    ((v - min) / (max - min)).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                norm * travel
+            },
+        );
         let drag_start_x = ctx.use_state_keyed(&format!("{}_drag_start_x", instance_key), || 0.0);
         let drag_start_offset =
             ctx.use_state_keyed(&format!("{}_drag_start_offset", instance_key), || 0.0);
@@ -786,7 +811,7 @@ impl ElementBuilder for Slider {
 /// Internal configuration for building a Slider
 #[derive(Clone)]
 struct SliderConfig {
-    value_state: State<f32>,
+    value_state: crate::reactive_props::NumberValue,
     min: f32,
     max: f32,
     step: Option<f32>,
@@ -802,7 +827,7 @@ struct SliderConfig {
 }
 
 impl SliderConfig {
-    fn new(value_state: State<f32>) -> Self {
+    fn new(value_state: crate::reactive_props::NumberValue) -> Self {
         Self {
             value_state,
             min: 0.0,
@@ -837,19 +862,22 @@ impl SliderBuilder {
     ///
     /// Uses `#[track_caller]` to generate a unique instance key based on the call site.
     #[track_caller]
-    pub fn new(value_state: &State<f32>) -> Self {
+    pub fn new(value_state: impl Into<crate::reactive_props::NumberValue>) -> Self {
         Self {
             key: InstanceKey::new("slider"),
-            config: SliderConfig::new(value_state.clone()),
+            config: SliderConfig::new(value_state.into()),
             built: std::cell::OnceCell::new(),
         }
     }
 
     /// Create a slider builder with an explicit key
-    pub fn with_key(key: impl Into<String>, value_state: &State<f32>) -> Self {
+    pub fn with_key(
+        key: impl Into<String>,
+        value_state: impl Into<crate::reactive_props::NumberValue>,
+    ) -> Self {
         Self {
             key: InstanceKey::explicit(key),
-            config: SliderConfig::new(value_state.clone()),
+            config: SliderConfig::new(value_state.into()),
             built: std::cell::OnceCell::new(),
         }
     }
@@ -986,7 +1014,7 @@ impl ElementBuilder for SliderBuilder {
 /// }
 /// ```
 #[track_caller]
-pub fn slider(state: &State<f32>) -> SliderBuilder {
+pub fn slider(state: impl Into<crate::reactive_props::NumberValue>) -> SliderBuilder {
     SliderBuilder::new(state)
 }
 

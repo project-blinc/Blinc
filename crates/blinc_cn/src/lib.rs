@@ -47,6 +47,7 @@ pub mod reactive_props;
 pub mod theme;
 
 pub use components::*;
+pub use reactive_props::NumberValue;
 pub use theme::cn_bundle;
 
 // Re-export InstanceKey from blinc_layout (the canonical location)
@@ -224,6 +225,7 @@ pub mod prelude {
     pub use crate::components::tree::{
         TreeNodeConfig, TreeNodeDiff, TreeView, TreeViewBuilder, tree_view,
     };
+    pub use crate::reactive_props::NumberValue;
     // Typography helpers (label excluded - use Label component instead)
     pub use crate::components::typography::{
         b, caption, chained_text, h1, h2, h3, h4, h5, h6, heading, inline_code, muted, p, small,

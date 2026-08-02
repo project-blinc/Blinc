@@ -76,7 +76,7 @@ component FormWidgets {
 
             // `ref` drives the field directly: no signal in the middle,
             // and nothing re-renders to make it happen.
-            cn.Label("slider: drag writes the signal")
+            cn.Label("slider: drag writes the signal, a write moves the thumb")
             Div(class = "col") {
                 cn.Slider(value = volume, min = 0.0, max = 100.0, step = 5.0,
                           w = 320.0, label = "Volume", show_value = true)
@@ -87,7 +87,7 @@ component FormWidgets {
             Div(class = "row") {
                 cn.NumberInput(value = quantity, min = 1.0, max = 99.0, step = 1.0,
                                w = 140.0)
-                cn.Label("same signal, two views")
+                cn.Label("type here, the slider follows")
                 cn.Slider(value = quantity, min = 1.0, max = 99.0, w = 200.0)
             }
 
