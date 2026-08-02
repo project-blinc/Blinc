@@ -1,12 +1,10 @@
 //! `cn.Dialog` — a modal, opened by a signal rather than by a call.
 
-use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 use blinc_dsl_core::{Reactive, extern_widget};
 
-use crate::bridge::CallSiteId;
-use blinc_layout::div::{Div, ElementBuilder, div};
+use blinc_layout::div::{Div, ElementBuilder};
 use blinc_layout::widgets::overlay_stack::OverlayHandle;
 
 /// `cn.Dialog(open = signal, title = "…") { …body… }` — a modal that
@@ -54,20 +52,12 @@ pub struct CnDialog {
     pub on_cancel: i64,
     #[children]
     pub children: Mutex<Vec<Box<dyn ElementBuilder>>>,
-    /// Call-site identity, captured while the FFI builds the struct.
-    ///
-    /// The struct itself is rebuilt every frame, so it cannot hold the
-    /// open modal's handle — a field on it would be empty on the next
-    /// build and the dialog would be shown again, once per frame.
-    #[skip]
-    call_site: CallSiteId,
 }
 
 /// Everything the watcher needs to raise the modal, owned rather than
 /// borrowed: the callback outlives the widget struct that made it.
 #[derive(Clone)]
 struct DialogProps {
-    call_site: u64,
     open: blinc_core::reactive::State<bool>,
     title: String,
     description: String,
@@ -81,39 +71,16 @@ struct DialogProps {
     content: Option<std::sync::Arc<dyn Fn() -> Div + Send + Sync>>,
 }
 
-/// Open modals, by the call site that opened them.
-///
-/// Outside the widget because the widget does not outlive a frame, and
-/// a modal outlives many.
-fn open_modals() -> &'static Mutex<HashMap<u64, OverlayHandle>> {
-    static MODALS: OnceLock<Mutex<HashMap<u64, OverlayHandle>>> = OnceLock::new();
-    MODALS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
 impl CnDialog {
-    /// The watcher. Renders nothing; exists to follow the signal.
-    ///
-    /// A `Stateful` subscribed to the signal rather than a bare `Div`:
-    /// nothing else in the tree depends on `open`, so a plain element
-    /// would be built once and never again, and writing the signal
-    /// would raise no modal. The subscription is the whole point of
-    /// this element.
     fn to_element(&self) -> blinc_layout::stateful::Stateful<()> {
-        let state = crate::bridge::bool_state(&self.open);
-        let key = format!("cn_dialog_{}", self.call_site.0);
-        let props = self.watch_props();
-        blinc_layout::stateful::stateful_with_key::<()>(&key)
-            .deps([state.signal_id()])
-            .on_state(move |_ctx| {
-                props.sync(state.try_get().unwrap_or(false));
-                div()
-            })
+        let open = crate::bridge::bool_state(&self.open);
+        let props = self.props();
+        crate::modal::watcher(open, move || props.show())
     }
 
-    fn watch_props(&self) -> DialogProps {
+    fn props(&self) -> DialogProps {
         let children = std::mem::take(&mut *self.children.lock().expect("children mutex"));
         DialogProps {
-            call_site: self.call_site.0,
             open: crate::bridge::bool_state(&self.open),
             title: self.title.clone(),
             description: self.description.clone(),
@@ -124,11 +91,7 @@ impl CnDialog {
             hide_cancel: self.hide_cancel,
             on_confirm: self.on_confirm,
             on_cancel: self.on_cancel,
-            content: (!children.is_empty()).then(
-                || -> std::sync::Arc<dyn Fn() -> Div + Send + Sync> {
-                    std::sync::Arc::new(crate::shared_child::body_recipe(children))
-                },
-            ),
+            content: crate::modal::content_recipe(children),
         }
     }
 
@@ -149,31 +112,6 @@ impl CnDialog {
 }
 
 impl DialogProps {
-    /// Bring the modal into line with the signal.
-    ///
-    /// Called on every render of the watcher, so it has to be
-    /// idempotent: showing an already-open dialog would stack a second
-    /// copy behind the first.
-    fn sync(&self, should_be_open: bool) {
-        let key = self.call_site;
-        let mut modals = open_modals().lock().expect("open modals");
-        let live = modals.get(&key).is_some_and(|h| h.is_live());
-        match (should_be_open, live) {
-            (true, false) => {
-                modals.insert(key, self.show());
-            }
-            (false, true) => {
-                // Removed before closing: `close` reaches back into the
-                // overlay stack, and a handle left behind would read as
-                // live on the next build.
-                if let Some(h) = modals.remove(&key) {
-                    h.close();
-                }
-            }
-            _ => {}
-        }
-    }
-
     fn show(&self) -> OverlayHandle {
         let mut d = blinc_cn::dialog();
         if !self.title.is_empty() {
@@ -197,39 +135,20 @@ impl DialogProps {
         if self.hide_cancel {
             d = d.hide_cancel();
         }
-
         if let Some(content) = self.content.clone() {
             d = d.content(move || content());
         }
-
-        // Either button clears the signal as well as running the
-        // handler: the modal closes itself, and a signal left set would
-        // reopen it on the next build.
-        let state = self.open.clone();
-        let confirm = closure(self.on_confirm);
-        let confirm_state = state.clone();
-        d = d.on_confirm(move || {
-            confirm_state.set(false);
-            confirm();
-        });
-        let cancel = closure(self.on_cancel);
-        d = d.on_cancel(move || {
-            state.set(false);
-            cancel();
-        });
-
+        // Either button clears the signal as well as running its
+        // handler, so the modal that closed itself stays closed.
+        d = d.on_confirm(crate::modal::closing_handler(
+            self.open.clone(),
+            self.on_confirm,
+        ));
+        d = d.on_cancel(crate::modal::closing_handler(
+            self.open.clone(),
+            self.on_cancel,
+        ));
         d.show()
-    }
-}
-
-/// A DSL closure pointer as something callable, or a no-op for zero.
-fn closure(ptr: i64) -> impl Fn() + Send + Sync + 'static {
-    move || {
-        if ptr != 0 {
-            type ClosureFn = extern "C" fn();
-            let func: ClosureFn = unsafe { std::mem::transmute(ptr) };
-            func();
-        }
     }
 }
 

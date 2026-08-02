@@ -1,4 +1,4 @@
-//! `cn.Dialog` — the signal is the handle.
+//! Signal-driven overlays: dialog, sheet, drawer.
 use blinc_dsl_core::BlincDsl;
 use blinc_layout::div::div;
 use blinc_layout::renderer::RenderTree;
@@ -53,6 +53,10 @@ impl Harness {
     }
 }
 
+/// Every signal-driven overlay, in one test: they share one process-wide
+/// overlay stack, so running them in parallel would have each one
+/// counting the others' modals.
+///
 /// Opening happens from inside a build, which reaches into the overlay
 /// stack. A closed dialog stays off, an open one goes up exactly once
 /// however many times the tree is built, and clearing the signal takes
@@ -113,4 +117,108 @@ fn the_signal_drives_the_modal_and_building_twice_does_not_stack_it() {
     dsl.set_signal_bool("confirm", false);
     app.frame();
     assert_eq!(open_count(), 0, "clearing the signal takes it down");
+
+    a_sheet_and_a_drawer_follow_their_own_signals();
+    an_unwound_overlay_does_not_reopen_itself();
+}
+
+/// A sheet and a drawer follow their signals the same way, and two
+/// overlays on two signals do not interfere.
+fn a_sheet_and_a_drawer_follow_their_own_signals() {
+    init();
+    let dsl = BlincDsl::new().expect("runtime init");
+    blinc_cn_dsl::register_all(&dsl).expect("register");
+    dsl.compile_source(
+        r#"signal filters: bool = false
+           signal nav: bool = false
+
+           view {
+             Div {
+               cn.Sheet(open = filters, side = "right", title = "Filters") {
+                 cn.Label("narrow it down")
+               }
+               cn.Drawer(open = nav, title = "Navigation") {
+                 cn.Label("go somewhere")
+               }
+             }
+           }"#,
+        "sheet_drawer.blinc",
+    )
+    .expect("compile");
+
+    let live = || {
+        blinc_layout::overlay_state::overlay_stack()
+            .lock()
+            .map(|s| s.iter_top_down().filter(|e| !e.exiting).count())
+            .unwrap_or(0)
+    };
+
+    let mut app = Harness::new(&dsl);
+    assert_eq!(live(), 0);
+
+    dsl.set_signal_bool("filters", true);
+    app.frame();
+    assert_eq!(live(), 1, "the sheet is out");
+
+    dsl.set_signal_bool("nav", true);
+    app.frame();
+    assert_eq!(live(), 2, "and the drawer joins it");
+
+    // Closing the TOP one leaves what is under it.
+    dsl.set_signal_bool("nav", false);
+    app.frame();
+    assert_eq!(live(), 1, "closing the drawer leaves the sheet");
+
+    dsl.set_signal_bool("filters", false);
+    app.frame();
+    assert_eq!(live(), 0);
+}
+
+/// Closing an overlay unwinds everything stacked above it — correct
+/// overlay semantics, and a problem for signal-driven ones: the
+/// unwound overlay's signal is still set, so it must not creep back on
+/// the next frame.
+fn an_unwound_overlay_does_not_reopen_itself() {
+    init();
+    let dsl = BlincDsl::new().expect("runtime init");
+    blinc_cn_dsl::register_all(&dsl).expect("register");
+    dsl.compile_source(
+        r#"signal lower: bool = false
+           signal upper: bool = false
+
+           view {
+             Div {
+               cn.Sheet(open = lower, title = "Lower") { cn.Label("under") }
+               cn.Drawer(open = upper, title = "Upper") { cn.Label("over") }
+             }
+           }"#,
+        "unwind.blinc",
+    )
+    .expect("compile");
+
+    let live = || {
+        blinc_layout::overlay_state::overlay_stack()
+            .lock()
+            .map(|s| s.iter_top_down().filter(|e| !e.exiting).count())
+            .unwrap_or(0)
+    };
+
+    let mut app = Harness::new(&dsl);
+    dsl.set_signal_bool("lower", true);
+    app.frame();
+    dsl.set_signal_bool("upper", true);
+    app.frame();
+    assert_eq!(live(), 2, "both are up");
+
+    // Closing the lower one takes the upper with it.
+    dsl.set_signal_bool("lower", false);
+    app.frame();
+    assert_eq!(live(), 0, "the unwind took both");
+
+    // The upper's signal was never written, so this is the frame where
+    // a naive watcher would see want=true, live=false, and raise it
+    // again on top of nothing.
+    app.frame();
+    app.frame();
+    assert_eq!(live(), 0, "and it stays down");
 }

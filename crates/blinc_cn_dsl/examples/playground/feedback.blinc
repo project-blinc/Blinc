@@ -2,6 +2,8 @@
 
 // The signal is the dialog's handle: set it and the modal appears.
 signal confirm_delete: bool = false
+signal filters_open: bool = false
+signal nav_open: bool = false
 
 component FeedbackWidgets {
     style {
@@ -76,6 +78,24 @@ component FeedbackWidgets {
                       description = "This cannot be undone.",
                       confirm_text = "Delete", destructive = true) {
                 cn.Label("The row and its history go with it.")
+            }
+
+            cn.Label("sheet + drawer: edge panels the signal opens")
+            Div(class = "row") {
+                cn.Button("Filters", size = "small",
+                          on_click = || filters_open.set(true))
+                cn.Button("Menu", variant = "secondary", size = "small",
+                          on_click = || nav_open.set(true))
+            }
+            cn.Sheet(open = filters_open, side = "right", title = "Filters",
+                     description = "Narrow the list down.") {
+                Div(class = "group") {
+                    cn.Label("Anything at all goes in here.")
+                    cn.Badge("even a badge", variant = "secondary")
+                }
+            }
+            cn.Drawer(open = nav_open, title = "Navigation") {
+                cn.Label("Wherever you like.")
             }
         }
     }
