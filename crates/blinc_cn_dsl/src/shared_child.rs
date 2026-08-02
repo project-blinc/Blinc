@@ -74,7 +74,12 @@ impl ElementBuilder for SharedChild {
 pub fn body_recipe(children: Vec<Box<dyn ElementBuilder>>) -> impl Fn() -> Div + Send + Sync {
     let shared: Vec<SharedChild> = children.into_iter().map(SharedChild::new).collect();
     move || {
-        let mut d = div().w_full().flex_col();
+        // `items_start`: a column stretches its children across the
+        // cross axis by default, which widened a badge in a sheet to
+        // the whole panel. A content slot holds whatever the source put
+        // in it, and a chip is not a banner — anything that wants the
+        // full width says so, as the page classes do with `width: 100%`.
+        let mut d = div().w_full().flex_col().items_start();
         for child in &shared {
             d = d.child(child.clone());
         }

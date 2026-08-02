@@ -2335,13 +2335,30 @@ fn calculate_position(original: &str, fragment: &str) -> (usize, usize, String) 
 fn ws<'a, E: NomParseError<&'a str>>(input: &'a str) -> IResult<&'a str, (), E> {
     value(
         (),
-        many0(alt((value((), multispace1), value((), parse_comment)))),
+        many0(alt((
+            value((), multispace1),
+            value((), parse_comment),
+            value((), parse_line_comment),
+        ))),
     )(input)
 }
 
 /// Parse a block comment /* ... */
 fn parse_comment<'a, E: NomParseError<&'a str>>(input: &'a str) -> IResult<&'a str, &'a str, E> {
     delimited(tag("/*"), take_until("*/"), tag("*/"))(input)
+}
+
+/// Parse a `//` line comment.
+///
+/// Not CSS, but `.blinc` `style { }` blocks are written in a file whose
+/// every other comment is `//`, and authors write them here too.
+/// Without this the `//` line parses as the start of a selector and
+/// swallows the rule after it — silently, so the rule simply never
+/// applies and nothing says why.
+fn parse_line_comment<'a, E: NomParseError<&'a str>>(
+    input: &'a str,
+) -> IResult<&'a str, &'a str, E> {
+    preceded(tag("//"), nom::bytes::complete::take_till(|c| c == '\n'))(input)
 }
 
 /// Parse an identifier (alphanumeric, hyphen, underscore)
@@ -10239,6 +10256,41 @@ fn approximate_arc(
 
 #[cfg(test)]
 mod tests {
+
+    /// A `//` line comment between two rules must not take the second
+    /// one with it.
+    ///
+    /// It used to parse as the start of a selector, so the rule after
+    /// it silently never applied — and a stylesheet that drops a rule
+    /// without complaining is indistinguishable from one whose author
+    /// mistyped a class name.
+    #[test]
+    fn a_line_comment_between_rules_keeps_both() {
+        let sheet = Stylesheet::parse(
+            ".row { flex-direction: row }\n             // stacking inside a section\n             .col { flex-direction: column }\n",
+        )
+        .expect("parses");
+
+        let row = sheet.get_class("row").expect("the rule before the comment");
+        let col = sheet.get_class("col").expect("and the one after it");
+        assert_eq!(row.flex_direction, Some(StyleFlexDirection::Row));
+        assert_eq!(col.flex_direction, Some(StyleFlexDirection::Column));
+    }
+
+    /// The same comment leading the block, which is where authors put
+    /// them most often.
+    #[test]
+    fn a_leading_line_comment_keeps_the_first_rule() {
+        let sheet =
+            Stylesheet::parse("// the shell\n.shell { flex-direction: row }\n").expect("parses");
+        assert_eq!(
+            sheet
+                .get_class("shell")
+                .expect("the first rule survives")
+                .flex_direction,
+            Some(StyleFlexDirection::Row)
+        );
+    }
     use super::*;
     use blinc_theme::ThemeState;
 

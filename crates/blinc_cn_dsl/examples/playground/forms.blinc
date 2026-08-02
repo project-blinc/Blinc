@@ -31,7 +31,7 @@ component FormWidgets {
         .group { width: 100%; padding: 24px; gap: 16px; flex-direction: column }
         .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
         // Stacking inside a section.
-        .col { gap: 8px; flex-direction: column }
+        .col { gap: 8px; flex-direction: column; align-items: flex-start }
     }
 
     view {
