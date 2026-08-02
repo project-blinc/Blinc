@@ -1,4 +1,4 @@
-//! `cn.Slider` — a bound number picked by dragging.
+//! Bound-number widgets: slider and number input.
 use blinc_dsl_core::BlincDsl;
 use blinc_layout::div::div;
 use blinc_layout::renderer::{ElementType, RenderTree};
@@ -135,5 +135,36 @@ fn the_track_is_as_wide_as_the_thumbs_travel() {
     assert!(
         first < 900.0,
         "and it is the slider's own width, not the container's: {first}"
+    );
+}
+
+/// `cn.NumberInput` shows the bound value, and a later write is read on
+/// the next build — the same contract as the slider, over a field.
+#[test]
+fn the_number_input_shows_the_bound_value() {
+    init();
+    let dsl = BlincDsl::new().expect("runtime init");
+    blinc_cn_dsl::register_all(&dsl).expect("register");
+    dsl.compile_source(
+        r#"signal quantity: f64 = 3.0
+
+           view {
+             cn.NumberInput(value = quantity, min = 1.0, max = 99.0, step = 1.0)
+           }"#,
+        "number_input.blinc",
+    )
+    .expect("compile");
+
+    let found = texts(&dsl);
+    assert!(
+        found.iter().any(|t| t.contains('3')),
+        "it opened at the bound value: {found:?}"
+    );
+
+    dsl.set_signal_f64("quantity", 12.0);
+    let found = texts(&dsl);
+    assert!(
+        found.iter().any(|t| t.contains("12")),
+        "and a later write is read on the next build: {found:?}"
     );
 }

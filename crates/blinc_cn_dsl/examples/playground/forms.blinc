@@ -17,6 +17,7 @@ signal fmt_italic: bool = false
 
 // A number picked by dragging; the progress bar reads the same signal.
 signal volume: f64 = 40.0
+signal quantity: f64 = 3.0
 
 // A handle onto the field below. Unlike a signal, which carries the
 // value, a ref carries the element: it focuses, selects and clears
@@ -80,6 +81,14 @@ component FormWidgets {
                 cn.Slider(value = volume, min = 0.0, max = 100.0, step = 5.0,
                           w = 320.0, label = "Volume", show_value = true)
                 cn.Progress(value = volume, size = "small")
+            }
+
+            cn.Label("number input: typed or stepped")
+            Div(class = "row") {
+                cn.NumberInput(value = quantity, min = 1.0, max = 99.0, step = 1.0,
+                               w = 140.0)
+                cn.Label("same signal, two views")
+                cn.Slider(value = quantity, min = 1.0, max = 99.0, w = 200.0)
             }
 
             cn.Label("toggle: a button that stays down")
