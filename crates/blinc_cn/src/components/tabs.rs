@@ -664,13 +664,22 @@ impl TabsBuilder {
                 // Note: We use motion_derived with explicit key rather than ctx.motion()
                 // because build_tab_trigger queries motion using motion_base_key from outside
                 // this stateful context, and the keys must match.
-                let build_tab_content = |tab_value: &str, is_exiting: bool| -> Option<Div> {
-                    tabs_for_content
-                        .iter()
-                        .find(|t| t.menu_item.value() == tab_value)
-                        .map(|tab| {
-                            let content = (tab.content)();
-                            if transition != TabsTransition::None {
+                //
+                // `stacked` is what the two panels of a cross-fade need:
+                // taken out of flow so they overlap each other. A panel
+                // on its own must stay IN flow, or the widget measures
+                // as its strip alone and the panel paints over whatever
+                // follows it.
+                let build_tab_content =
+                    |tab_value: &str, is_exiting: bool, stacked: bool| -> Option<Div> {
+                        tabs_for_content
+                            .iter()
+                            .find(|t| t.menu_item.value() == tab_value)
+                            .map(|tab| {
+                                let content = (tab.content)();
+                                if transition == TabsTransition::None {
+                                    return div().w_full().flex_grow().child(content);
+                                }
                                 // Use explicit key that matches query in build_tab_trigger
                                 let tab_motion_key = format!("{}:{}", motion_base_key, tab_value);
                                 let mut m = motion_derived(&tab_motion_key);
@@ -686,20 +695,14 @@ impl TabsBuilder {
                                     m = m.exit_animation(exit);
                                 }
 
-                                div()
-                                    .w_full()
-                                    .flex_grow()
-                                    .absolute()
-                                    .left(0.0)
-                                    .top(0.0)
-                                    .right(0.0)
-                                    .bottom(0.0)
-                                    .child(m.child(content))
-                            } else {
-                                div().w_full().flex_grow().child(content)
-                            }
-                        })
-                };
+                                let panel = div().w_full().flex_grow().child(m.child(content));
+                                if stacked {
+                                    panel.absolute().left(0.0).top(0.0).right(0.0).bottom(0.0)
+                                } else {
+                                    panel
+                                }
+                            })
+                    };
 
                 // Cross-fade: render both exiting and current tabs in a stack
                 if let Some(ref exiting) = exiting_tab {
@@ -707,12 +710,12 @@ impl TabsBuilder {
                     let mut content_stack = stack().w_full().flex_grow();
 
                     // Add exiting tab content (underneath, fading out)
-                    if let Some(exiting_content) = build_tab_content(exiting, true) {
+                    if let Some(exiting_content) = build_tab_content(exiting, true, true) {
                         content_stack = content_stack.child(exiting_content);
                     }
 
                     // Add current tab content (on top, fading in)
-                    if let Some(current_content) = build_tab_content(&active_value, false) {
+                    if let Some(current_content) = build_tab_content(&active_value, false, true) {
                         content_stack = content_stack.child(current_content);
                     }
 
@@ -724,7 +727,7 @@ impl TabsBuilder {
                         .child(content_stack)
                 } else {
                     // No transition - just render current tab
-                    if let Some(current_content) = build_tab_content(&active_value, false) {
+                    if let Some(current_content) = build_tab_content(&active_value, false, false) {
                         div()
                             .w_full()
                             .mt(content_margin)
@@ -797,7 +800,12 @@ fn build_tab_trigger(
         };
 
         // Build content
-        let mut content = div().flex_row().items_center().gap(theme.spacing().space_2);
+        // `gap_px`, not `gap`: a spacing token is already pixels, while
+        // `gap` takes 4px units and would space these four times apart.
+        let mut content = div()
+            .flex_row()
+            .items_center()
+            .gap_px(theme.spacing().space_2);
 
         // Add icon if present
         if let Some(ref icon) = icon_svg {
@@ -823,22 +831,12 @@ fn build_tab_trigger(
             );
         }
 
-        // Add badge if present
-        if let Some(ref badge) = badge_text {
-            let primary = theme.color(ColorToken::Primary);
+        // Add badge if present. The shared widget rather than a pill of
+        // its own, so a count in a tab reads like a count anywhere else.
+        if let Some(ref badge_label) = badge_text {
             content = content.child(
-                div()
-                    .px(theme.spacing().space_1_5)
-                    .py(1.0)
-                    .bg(primary)
-                    .rounded(theme.radius(RadiusToken::Full))
-                    .child(
-                        text(badge)
-                            .size(size.badge_font_size())
-                            .color(theme.color(ColorToken::PrimaryActive))
-                            .medium()
-                            .no_cursor(),
-                    ),
+                crate::components::badge::badge(badge_label)
+                    .variant(crate::components::badge::BadgeVariant::Default),
             );
         }
 

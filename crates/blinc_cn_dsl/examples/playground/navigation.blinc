@@ -5,7 +5,11 @@ signal pane: string = "one"
 
 component NavigationWidgets {
     style {
-        .group { width: 100%; padding: 24px; gap: 16px; flex-direction: column }
+        /* Bare `Text(...)` falls back to black, which is unreadable on a
+           dark scheme. Set once here and the panels inherit it; a widget
+           that colours its own label keeps it. */
+        .group { width: 100%; padding: 24px; gap: 16px; flex-direction: column;
+                 color: var(--text-primary) }
         .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
     }
 
