@@ -20,16 +20,16 @@ component NavigationWidgets {
             cn.Label("tabs: a strip of labelled panels")
             cn.Tabs(value = section) {
                 cn.Tab(value = "account", label = "Account", icon = "user") {
-                    Div { Text("Name, email, and how we reach you.") }
+                    cn.Card { cn.Label("Name, email, and how we reach you.") }
                 }
                 cn.Tab(value = "alerts", label = "Alerts", badge = "3") {
-                    Div { Text("Three unread notices.") }
+                    cn.Card { cn.Label("Three unread notices.") }
                 }
                 cn.Tab(value = "billing", label = "Billing") {
-                    Div { Text("Card ending 4242.") }
+                    cn.Card { cn.Label("Card ending 4242.") }
                 }
                 cn.Tab(value = "archive", label = "Archive", disabled = true) {
-                    Div { Text("Nothing here yet.") }
+                    cn.Card { cn.Label("Nothing here yet.") }
                 }
             }
 
