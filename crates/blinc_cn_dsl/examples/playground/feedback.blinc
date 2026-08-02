@@ -9,8 +9,7 @@ component FeedbackWidgets {
     style {
         .group { width: 100%; padding: 24px; gap: 16px; flex-direction: column }
         .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
-        // Stacking inside a section. `.group` is the page root and
-        // carries its padding, so nesting it indents every level.
+        // Stacking inside a section.
         .col { gap: 8px; flex-direction: column }
     }
 

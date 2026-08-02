@@ -93,9 +93,13 @@ fn the_track_is_as_wide_as_the_thumbs_travel() {
     let dsl = BlincDsl::new().expect("runtime init");
     blinc_cn_dsl::register_all(&dsl).expect("register");
     dsl.compile_source(
-        r#"signal volume: f64 = 100.0
+        // A signal name of its own: signals are process-global by name,
+        // so sharing one with the test above would have each seeing the
+        // other's value.
+        r#"signal track_width_probe: f64 = 100.0
            view {
-             cn.Slider(value = volume, min = 0.0, max = 100.0, label = "Volume")
+             cn.Slider(value = track_width_probe, min = 0.0, max = 100.0,
+                       label = "Volume")
            }"#,
         "slider_width.blinc",
     )
