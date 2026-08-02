@@ -206,7 +206,11 @@ fn panel_text_keeps_its_inherited_colour_across_a_swap() {
     };
 
     let red = [1.0, 0.0, 0.0, 1.0];
-    assert_eq!(painted(&tree, "first body"), Some(red), "inherited at build");
+    assert_eq!(
+        painted(&tree, "first body"),
+        Some(red),
+        "inherited at build"
+    );
 
     dsl.set_signal_string("swap_probe", "two");
     tree.process_pending_subtree_rebuilds();

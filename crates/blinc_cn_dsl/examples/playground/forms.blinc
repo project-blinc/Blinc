@@ -15,6 +15,9 @@ signal form_bio: string
 signal fmt_bold: bool = false
 signal fmt_italic: bool = false
 
+// One of a set. The buttons below write the same signal the dials do.
+signal plan: string = "free"
+
 // A number picked by dragging; the progress bar reads the same signal.
 signal volume: f64 = 40.0
 signal quantity: f64 = 3.0
@@ -89,6 +92,24 @@ component FormWidgets {
                                w = 140.0)
                 cn.Label("type here, the slider follows")
                 cn.Slider(value = quantity, min = 1.0, max = 99.0, w = 200.0)
+            }
+
+            // Each option names itself, so its value and its label are
+            // declared together.
+            cn.Label("radio: pick one of a set")
+            cn.RadioGroup(value = plan, label = "Plan") {
+                cn.Radio(value = "free", label = "Free")
+                cn.Radio(value = "pro", label = "Pro")
+                cn.Radio(value = "team", label = "Team", disabled = true)
+            }
+            Div(class = "row") {
+                cn.Label("horizontal, and driven from outside")
+                cn.Button("Pick Pro", size = "small", variant = "outline",
+                          on_click = || plan.set("pro"))
+            }
+            cn.RadioGroup(value = plan, layout = "horizontal", size = "small") {
+                cn.Radio(value = "free", label = "Free")
+                cn.Radio(value = "pro", label = "Pro")
             }
 
             cn.Label("toggle: a button that stays down")
