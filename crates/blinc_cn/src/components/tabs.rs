@@ -584,7 +584,10 @@ impl TabsBuilder {
             }
         }
 
-        let content_margin = theme.spacing().space_1;
+        // In 4px units, which is what `mt` takes. The token is already
+        // pixels, so passing it straight through spaced the panel four
+        // times further from the strip than the token asks for.
+        let content_margin = theme.spacing().space_1 / 4.0;
         let size = config.size;
 
         // ========================================
