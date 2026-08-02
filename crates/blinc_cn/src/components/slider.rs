@@ -387,11 +387,6 @@ impl Slider {
         let slider_state_key = format!("{}_state", instance_key);
         let slider_container = stateful_with_key::<SliderThumbState>(&slider_state_key)
             .initial(SliderThumbState::Idle)
-            // The track and thumb are laid out from the value, so they
-            // have to rebuild when it changes. Without this only the
-            // printed number subscribed: a write from outside moved the
-            // text and left the thumb where it was.
-            .deps([config.value_state.signal_id()])
             .on_state(move |sctx| {
                 let state = sctx.state();
 
