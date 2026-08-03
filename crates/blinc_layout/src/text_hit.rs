@@ -201,6 +201,66 @@ mod tests {
         assert!(spans().hit(0.0, 0.0, 900.0).is_none());
     }
 
+    /// A link whose own text is long enough to break gets one rect per
+    /// line it occupies, not one box spanning the gap between them.
+    fn long_link() -> TextHitSpans {
+        const TEXT: &str = "See the complete reference manual for keyboard shortcuts and \
+                            editing commands before filing an issue.";
+        let start = TEXT.find("complete").expect("link start");
+        let end = TEXT.find(" before").expect("link end");
+        TextHitSpans {
+            content: TEXT.into(),
+            font_size: 14.0,
+            line_height: 1.2,
+            options: TextLayoutOptions::new(),
+            spans: vec![TextHitSpan {
+                start,
+                end,
+                cursor: CursorStyle::Pointer,
+                url: Some("https://example.com".into()),
+            }]
+            .into(),
+        }
+    }
+
+    #[test]
+    fn a_link_spanning_lines_gets_one_rect_per_line() {
+        let hit = long_link();
+        let rects = hit.rects(200.0);
+        assert!(rects.len() > 1, "link crosses a wrap point: {rects:?}");
+
+        // Every rect belongs to the same span, and each sits on its own line.
+        assert!(rects.iter().all(|r| r.span == 0));
+        let mut rows: Vec<f32> = rects.iter().map(|r| r.y0).collect();
+        rows.dedup();
+        assert_eq!(rows.len(), rects.len(), "one rect per line: {rects:?}");
+    }
+
+    #[test]
+    fn every_line_of_a_multi_line_link_is_hoverable() {
+        let hit = long_link();
+        for rect in hit.rects(200.0) {
+            let x = (rect.x0 + rect.x1) / 2.0;
+            let y = (rect.y0 + rect.y1) / 2.0;
+            assert!(
+                hit.hit(x, y, 200.0).is_some(),
+                "{rect:?} is drawn but not hittable",
+            );
+        }
+    }
+
+    /// The continuation line starts at the left edge, so a rect that kept
+    /// the first line's x offset would leave the link's tail dead.
+    #[test]
+    fn a_continuation_line_starts_at_the_left_edge() {
+        let rects = long_link().rects(200.0);
+        let later = rects.iter().filter(|r| r.y0 > 0.0).collect::<Vec<_>>();
+        assert!(!later.is_empty(), "expected a wrapped continuation");
+        for rect in later {
+            assert_eq!(rect.x0, 0.0, "{rect:?} should begin the line");
+        }
+    }
+
     #[test]
     fn an_empty_span_list_places_nothing() {
         let mut hit = spans();
