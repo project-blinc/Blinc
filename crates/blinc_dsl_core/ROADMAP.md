@@ -198,6 +198,26 @@ Scoping needs an export — a deliberate way to make a symbol reachable
 from outside — or the host loses its grip on the program. Design it
 alongside, not after.
 
+**What is actually there (verified).** Zyntax's `SymbolTable` in
+`compiler/lowering` holds functions, globals, types, effects and
+handlers, each an `IndexMap` from `InternedString` to a `HirId` /
+`TypeId`. So the table is name-keyed too — but per compilation unit, and
+resolved BY THE COMPILER to an id. That is the difference that matters:
+identity becomes the `HirId`, and the string stops being what two
+declarations agree on at runtime. It also has `with`-scopes for effect
+handlers (`pending_with_scopes`, `lower_with_scopes`) and block scoping
+for locals in both backends.
+
+**Still to explore before this is a plan.** How a signal declaration
+should appear in that table (a global? an effect?); whether component
+bodies can introduce a scope in the table or only inside a function;
+what the FSM registry keys on and whether it can hold ids; how a
+resolved id survives hot reload, which today relies on values outliving
+an instance in a name-keyed registry; and what an export looks like so
+the ~74 host call sites keep a grip. None of that is settled here, and
+guessing it would produce the kind of plan that reads well and does not
+survive contact.
+
 Related: the algebraic-effects section below argues the same thing about
 reactivity, which is not a coincidence. Both come from the DSL treating
 Zyntax as a backend to emit into rather than a language with a semantics
