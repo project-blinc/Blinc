@@ -84,7 +84,7 @@ pub use zyntax_embed::ZyntaxValue;
 // =====================================================================
 
 /// Top-level error type for the embed API.
-#[derive(Debug, Error)]
+#[derive(Error)]
 pub enum BlincDslError {
     /// `Grammar2::from_source(BLINC_GRAMMAR)` failed (Blinc-internal bug).
     #[error("blinc grammar compile failed: {0}")]
@@ -101,6 +101,20 @@ pub enum BlincDslError {
     /// Reading the source file off disk failed.
     #[error("blinc source io error: {0}")]
     Io(#[from] std::io::Error),
+}
+
+/// Prints the same text `Display` does, verbatim.
+///
+/// The compile variant carries a rendered diagnostic — source excerpt,
+/// carets, ANSI colour. The derived `Debug` wrapped that in
+/// `Compile("…")` and escaped every newline and escape byte, so the one
+/// place it matters most (`.expect(..)` on a failed compile, which
+/// formats with `Debug`) printed an unreadable single line. A caller
+/// should not have to know to use `{}` to read their own error.
+impl std::fmt::Debug for BlincDslError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self, f)
+    }
 }
 
 pub type BlincDslResult<T> = std::result::Result<T, BlincDslError>;
