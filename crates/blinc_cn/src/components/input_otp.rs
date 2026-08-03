@@ -81,6 +81,17 @@ impl InputOtpBuilder {
         }
     }
 
+    /// Name this widget, so its group state is its own.
+    ///
+    /// The default identity is the call site, which is enough for two
+    /// OTPs written in different places. A caller that builds several
+    /// from ONE site -- a loop, or a DSL wrapper -- has to say which is
+    /// which, or their groups share one stateful entry.
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = InstanceKey::explicit(key);
+        self
+    }
+
     pub fn numeric_only(mut self, numeric_only: bool) -> Self {
         self.config.numeric_only = numeric_only;
         self

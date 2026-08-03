@@ -18,6 +18,9 @@ signal fmt_italic: bool = false
 // One of a set. The buttons below write the same signal the dials do.
 signal plan: string = "free"
 
+// The code fills one character per slot; the chip below reads it.
+signal otp_code: string = ""
+
 // A number picked by dragging; the progress bar reads the same signal.
 signal volume: f64 = 40.0
 signal quantity: f64 = 3.0
@@ -110,6 +113,17 @@ component FormWidgets {
             cn.RadioGroup(value = plan, layout = "horizontal", size = "small") {
                 cn.Radio(value = "free", label = "Free")
                 cn.Radio(value = "pro", label = "Pro")
+            }
+
+            cn.Label("otp: one slot per character, focus walks itself")
+            cn.InputOTP(value = otp_code, length = 6.0, numeric_only = true)
+            Div(class = "row") {
+                cn.Label("typed so far:")
+                cn.Badge(otp_code, variant = "secondary")
+                cn.Button("Prefill", size = "small", variant = "outline",
+                          on_click = || otp_code.set("1234"))
+                cn.Button("Clear", size = "small", variant = "outline",
+                          on_click = || otp_code.set(""))
             }
 
             cn.Label("toggle: a button that stays down")
