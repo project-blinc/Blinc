@@ -154,7 +154,8 @@ the case it was named for. Reach for a new child type only where the
 choice genuinely differs — a menu item is a command, not a value, so
 that family will need its own.
 
-**Module-local signals.** `signal page` in two modules is ONE signal.
+**Scoped signals.** `signal page` in two modules is ONE signal, and so
+is `signal page` in two components of one module.
 Declarations mint into a process-global registry keyed by the bare name
 (`mint_or_get`), so a name chosen in one file silently binds to a name
 chosen in another. It surfaced in the playground: `main.blinc` owns
@@ -172,11 +173,26 @@ longer keys: a module's signal stays addressable from anywhere, merely
 harder to hit by accident.
 
 Zyntax has block scoping in both the Cranelift and LLVM backends, and
-that is what a module-local signal should be — scoped by the language,
-so a name in one module is not reachable from another at all rather than
+that is what a scoped signal should be — scoped by the language, so a
+name in one scope is not reachable from another at all rather than
 reachable under a different spelling. The registry-by-name design
 reaches around the language it compiles to; every symptom in this
 section follows from that, not from the names being too short.
+
+**A module is only the coarsest scope.** If scoping follows blocks then
+a component body is one too: a signal declared inside a component should
+be that component's, not shared with the next component in the same
+file. Two components each wanting a `page` or an `open` is the same
+collision as two modules wanting one, and it is more likely, since a
+file's components are usually written together and reuse obvious names.
+Scoping by module alone would fix the case that happened to bite and
+leave the more probable one in place.
+
+That also changes what a signal declaration MEANS. Today every one is
+program-global, so "shared" is the default and privacy is impossible.
+Afterwards the default inverts: a signal belongs to the scope that
+declares it, and reaching it from outside — another component, another
+module, or the Rust host — is a thing you ask for.
 
 Still to account for:
 
