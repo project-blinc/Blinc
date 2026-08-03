@@ -561,6 +561,12 @@ pub const CN_STYLES: &str = r#"
 .cn-radio-dot {
     background: var(--cn-radio-dot, var(--primary));
     border-radius: var(--radius-full);
+    transition: transform var(--duration-fastest) var(--ease-state);
+}
+/* Press feedback. The widget used to do this from an FSM, which meant a
+   rebuild per pointer transition; here it costs nothing. */
+.cn-radio:active:not(.cn-radio--disabled) .cn-radio-dot {
+    transform: scale(0.8, 0.8);
 }
 .cn-radio--disabled {
     opacity: 0.5;

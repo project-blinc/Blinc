@@ -39,14 +39,14 @@
 //!     .option("b", "Option B")
 //! ```
 
-use blinc_core::{Color, State, Transform};
+use blinc_core::{Color, State};
 use blinc_layout::InstanceKey;
 use blinc_layout::css_parser::{ElementState, Stylesheet, active_stylesheet};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
 use blinc_layout::element_style::ElementStyle;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, stateful_with_key};
+use blinc_layout::stateful::{NoState, stateful_with_key};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, SpacingToken, ThemeState};
 use std::sync::Arc;
@@ -189,7 +189,7 @@ fn build_radio_button(
     option: &RadioOption,
     theme: &ThemeState,
     button_css_id: Option<String>,
-) -> Stateful<ButtonState> {
+) -> Stateful<NoState> {
     let outer_size = config.size.outer_size();
     let inner_size = config.size.inner_size();
     let border_width = config.size.border_width();
@@ -234,13 +234,20 @@ fn build_radio_button(
         || config.border_color.is_some()
         || config.hover_border_color.is_some();
 
-    let mut radio = stateful_with_key::<ButtonState>(&stateful_key)
+    // `NoState`, not `ButtonState`: hover and press belong to CSS
+    // (`.cn-radio:hover` / `:active`), so pointer movement must not
+    // reach an FSM here. It did, and every transition rebuilt the
+    // option — structurally, because selection decides whether the dot
+    // is a child. Five options subscribed to one signal then rebuilt
+    // together on a hover nobody clicked.
+    //
+    // What remains is a subscription: the dot appears and disappears
+    // with the bound value, and that IS a change of children.
+    let mut radio = stateful_with_key::<NoState>(&stateful_key)
         .deps([selected_state.signal_id()])
-        .on_state(move |ctx| {
-            let state = ctx.state();
+        .on_state(move |_ctx| {
             let theme = ThemeState::get();
             let is_selected = selected_state.get() == option_value;
-            let is_hovered = matches!(state, ButtonState::Hovered | ButtonState::Pressed);
 
             // Start with builder-configured colors for CSS override resolution
             let mut overrides = RadioStyleOverrides {
@@ -259,7 +266,6 @@ fn build_radio_button(
                         &stylesheet,
                         css_id,
                         is_selected,
-                        is_hovered,
                         option_disabled,
                         &mut overrides,
                     );
@@ -273,22 +279,8 @@ fn build_radio_button(
                 theme.color(ColorToken::BorderSecondary)
             } else if is_selected {
                 overrides.selected_color
-            } else if is_hovered {
-                overrides.hover_border_color
             } else {
                 overrides.border_color
-            };
-
-            let scale = if is_hovered && !option_disabled {
-                1.05
-            } else {
-                1.0
-            };
-
-            let inner_scale = if matches!(state, ButtonState::Pressed) && !option_disabled {
-                0.8
-            } else {
-                1.0
             };
 
             // Build the radio circle with builder properties + CSS classes
@@ -299,8 +291,7 @@ fn build_radio_button(
                 .rounded(outer_size / 2.0)
                 .border(border_width, border_color)
                 .items_center()
-                .justify_center()
-                .transform(Transform::scale(scale, scale));
+                .justify_center();
 
             if is_selected {
                 circle = circle.class("cn-radio--selected");
@@ -326,8 +317,7 @@ fn build_radio_button(
                     .w(inner_size)
                     .h(inner_size)
                     .rounded(inner_size / 2.0)
-                    .bg(overrides.selected_color)
-                    .transform(Transform::scale(inner_scale, inner_scale));
+                    .bg(overrides.selected_color);
                 circle = circle.child(inner_dot);
             }
 
@@ -409,12 +399,15 @@ impl RadioStyleOverrides {
 
 /// Apply CSS style overrides to radio button visual properties
 ///
-/// Cascading order: base → :checked → :hover → :disabled (highest priority)
+/// Cascading order: base → :checked → :disabled (highest priority).
+///
+/// `:hover` is absent on purpose. The stylesheet applies it directly to
+/// the element, so resolving it here too would mean rebuilding on every
+/// pointer enter and leave.
 fn apply_css_overrides_radio(
     stylesheet: &Stylesheet,
     element_id: &str,
     is_selected: bool,
-    is_hovered: bool,
     is_disabled: bool,
     overrides: &mut RadioStyleOverrides,
 ) {
@@ -428,13 +421,7 @@ fn apply_css_overrides_radio(
             overrides.apply(s);
         }
     }
-    // 3. :hover (layered after :checked)
-    if is_hovered {
-        if let Some(s) = stylesheet.get_with_state(element_id, ElementState::Hover) {
-            overrides.apply(s);
-        }
-    }
-    // 4. :disabled (highest priority)
+    // 3. :disabled (highest priority)
     if is_disabled {
         if let Some(s) = stylesheet.get_with_state(element_id, ElementState::Disabled) {
             overrides.apply(s);
