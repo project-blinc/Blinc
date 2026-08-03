@@ -71,6 +71,23 @@ component FeedbackWidgets {
                 }
             }
 
+            // Same two-slot shape as popover, raised by hovering
+            // rather than clicking.
+            cn.Label("hover card: linger on the handle")
+            Div(class = "row") {
+                cn.HoverCard(side = "bottom", open_delay = 300.0) {
+                    cn.HoverCardTrigger { cn.Badge("@ada", variant = "secondary") }
+                    cn.HoverCardContent {
+                        cn.Label("Ada Lovelace")
+                        cn.Label("wrote the first program")
+                    }
+                }
+                cn.HoverCard(side = "right", align = "center", open_delay = 300.0) {
+                    cn.HoverCardTrigger { cn.Label("hover me instead") }
+                    cn.HoverCardContent { cn.Label("cards open sideways too") }
+                }
+            }
+
             cn.Label("dialog: a modal the signal opens")
             Div(class = "row") {
                 cn.Button("Delete row", variant = "destructive", size = "small",
