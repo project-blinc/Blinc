@@ -98,6 +98,17 @@ pub fn string_state(r: &Reactive<String>) -> blinc_core::reactive::State<String>
     )
 }
 
+/// A stable name for whatever is behind a reactive prop, for widgets
+/// that need to tell one instance from another. A literal has no signal
+/// and reads as `lit`.
+pub fn signal_key<T: Clone + Send + 'static>(r: &Reactive<T>) -> String {
+    match r {
+        Reactive::Signal(s) => format!("sig{}", s.id().to_raw()),
+        Reactive::Computed(_) => "computed".to_string(),
+        Reactive::Literal(_) => "lit".to_string(),
+    }
+}
+
 /// Per-key `SharedTextInputData`, so a DSL text field keeps what the
 /// user typed across rebuilds.
 ///

@@ -6,7 +6,6 @@ use std::sync::Mutex;
 use blinc_dsl_core::{Reactive, extern_widget};
 use blinc_layout::div::ElementBuilder;
 
-use crate::bridge::CallSiteId;
 use crate::radio::CnRadio;
 
 /// `cn.RadioGroup(value = signal) { cn.Radio(label = "…") }` — pick one.
@@ -42,12 +41,10 @@ pub struct CnRadioGroup {
     pub disabled: bool,
     #[children]
     pub children: Mutex<Vec<Box<dyn ElementBuilder>>>,
-    /// Where this group was written, which is what tells one group's
-    /// options from another's. Every group is built from the one call
-    /// site inside this wrapper, so the widget's own call-site identity
-    /// would be the same for all of them.
-    #[skip]
-    call_site: CallSiteId,
+    /// Names this group when two of them would otherwise look
+    /// identical. Only needed for a genuine duplicate: see
+    /// [`Self::group_key`].
+    pub key: String,
     /// Built once, consuming `children`.
     #[skip]
     shell: OnceCell<blinc_cn::RadioGroup>,
@@ -58,12 +55,40 @@ impl CnRadioGroup {
         ::blinc_layout::build_once::build_once(&self.shell, || self.make())
     }
 
+    /// What tells this group's per-option state from another group's.
+    ///
+    /// Not the call site: the id the DSL would key on reads as zero for
+    /// a widget with children, because nothing pushes one around a
+    /// lowered component call yet. So the group is named by what the
+    /// author wrote instead, which is stable across rebuilds and
+    /// differs wherever two groups differ.
+    ///
+    /// Two groups identical in every one of these respects share their
+    /// options' hover state, and hovering one dial scales both. `key`
+    /// is the way out of that.
+    fn group_key(&self, options: &[String]) -> String {
+        group_key(
+            &self.key,
+            &crate::bridge::signal_key(&self.value),
+            &self.label,
+            &self.size,
+            &self.layout,
+            options,
+        )
+    }
+
     fn make(&self) -> blinc_cn::RadioGroup {
         let children = std::mem::take(&mut *self.children.lock().expect("children mutex"));
         let state = crate::bridge::string_state(&self.value);
 
+        let options: Vec<String> = children
+            .iter()
+            .filter_map(|c| c.as_any().and_then(|a| a.downcast_ref::<CnRadio>()))
+            .map(|o| o.option_value())
+            .collect();
+
         let mut b = blinc_cn::radio_group(&state)
-            .key(format!("cn-radio-group-{}", self.call_site.0))
+            .key(self.group_key(&options))
             .size(self.size())
             .layout(self.layout());
         if !self.label.is_empty() {
@@ -141,5 +166,74 @@ impl ElementBuilder for CnRadioGroup {
 
     fn element_type_id(&self) -> blinc_layout::div::ElementTypeId {
         self.get_or_build().element_type_id()
+    }
+}
+
+/// See [`CnRadioGroup::group_key`]. Free-standing so the naming can be
+/// checked without building a widget.
+fn group_key(
+    explicit: &str,
+    signal: &str,
+    label: &str,
+    size: &str,
+    layout: &str,
+    options: &[String],
+) -> String {
+    if !explicit.is_empty() {
+        return format!("cn-radio-group-{explicit}");
+    }
+    format!(
+        "cn-radio-group-{signal}-{label}-{size}-{layout}-{}",
+        options.join(",")
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::group_key;
+
+    fn opts(values: &[&str]) -> Vec<String> {
+        values.iter().map(|v| v.to_string()).collect()
+    }
+
+    /// The two groups from the playground: one signal, one option set,
+    /// different size and label. They must not land on one name.
+    ///
+    /// They did, twice. First keyed by option value alone, then by a
+    /// call-site id that reads as zero for a widget with children — so
+    /// hovering an option in one group drove the other's.
+    #[test]
+    fn groups_sharing_a_signal_are_still_told_apart() {
+        let a = group_key("", "sig7", "Plan", "", "", &opts(&["free", "pro"]));
+        let b = group_key(
+            "",
+            "sig7",
+            "",
+            "small",
+            "horizontal",
+            &opts(&["free", "pro"]),
+        );
+        assert_ne!(a, b);
+    }
+
+    /// Stable across rebuilds: the same group named the same way twice
+    /// keeps its options' state.
+    #[test]
+    fn the_same_group_keeps_its_name() {
+        let args = || group_key("", "sig7", "Plan", "", "", &opts(&["free", "pro"]));
+        assert_eq!(args(), args());
+    }
+
+    /// Groups alike in every respect share their options' hover state,
+    /// which is what `key` is for.
+    #[test]
+    fn an_explicit_key_separates_identical_groups() {
+        let same = opts(&["free", "pro"]);
+        let a = group_key("", "sig7", "Plan", "", "", &same);
+        let b = group_key("", "sig7", "Plan", "", "", &same);
+        assert_eq!(a, b, "identical groups do collide by default");
+
+        let named = group_key("left", "sig7", "Plan", "", "", &same);
+        assert_ne!(named, a, "and `key` is the way out");
     }
 }
