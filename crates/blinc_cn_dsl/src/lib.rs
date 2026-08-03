@@ -92,6 +92,7 @@ pub mod tabs;
 pub mod textarea;
 pub mod toggle;
 pub mod tooltip;
+pub mod typography;
 
 // Internal — shared helpers used by per-widget modules. Not
 // re-exported; widgets pull what they need via `crate::color::…`.
@@ -139,6 +140,7 @@ pub use tabs::CnTabs;
 pub use textarea::CnTextarea;
 pub use toggle::CnToggle;
 pub use tooltip::CnTooltip;
+pub use typography::{CnCaption, CnH1, CnH2, CnH3, CnH4, CnH5, CnH6, CnMuted, CnP};
 
 use blinc_dsl_core::{BlincDsl, BlincDslResult};
 
@@ -216,6 +218,15 @@ pub fn register_basics(dsl: &BlincDsl) -> BlincDslResult<()> {
     dsl.register_extern_widget::<CnTab>()?;
     dsl.register_extern_widget::<CnNumberInput>()?;
     dsl.register_extern_widget::<CnTooltip>()?;
+    dsl.register_extern_widget::<CnH1>()?;
+    dsl.register_extern_widget::<CnH2>()?;
+    dsl.register_extern_widget::<CnH3>()?;
+    dsl.register_extern_widget::<CnH4>()?;
+    dsl.register_extern_widget::<CnH5>()?;
+    dsl.register_extern_widget::<CnH6>()?;
+    dsl.register_extern_widget::<CnP>()?;
+    dsl.register_extern_widget::<CnMuted>()?;
+    dsl.register_extern_widget::<CnCaption>()?;
     dsl.register_extern_widget::<CnPopover>()?;
     dsl.register_extern_widget::<CnPopoverTrigger>()?;
     dsl.register_extern_widget::<CnPopoverContent>()?;

@@ -11,6 +11,13 @@ component MediaWidgets {
 
     view {
         Div(class = "group") {
+            // One constructor per rung, mirroring cn::h1(..) — cn::caption(..).
+            cn.H2("Typography")
+            cn.P("Six headings, a paragraph, and two quiet variants.")
+            cn.H4("h4 introduces a subsection")
+            cn.Muted("muted plays support")
+            cn.Caption("captions annotate")
+
             cn.Label("avatar: size x shape")
             Div(class = "row") {
                 cn.Avatar(fallback = "AB", size = "small")

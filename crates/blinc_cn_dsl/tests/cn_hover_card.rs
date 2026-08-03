@@ -96,3 +96,57 @@ fn a_stray_slot_renders_inline() {
         "the stray slot's body still shows: {found:?}"
     );
 }
+
+/// `cn.Typography` — the ramp renders, and a bound text follows its
+/// signal. Lives here to share the harness init.
+#[test]
+fn typography_renders_and_a_bound_text_follows() {
+    init();
+    let dsl = BlincDsl::new().expect("runtime init");
+    blinc_cn_dsl::register_all(&dsl).expect("register");
+    dsl.compile_source(
+        r#"signal type_probe: string = "before"
+           view {
+             Div {
+               cn.H2("A Heading")
+               cn.Muted(type_probe)
+             }
+           }"#,
+        "typography.blinc",
+    )
+    .expect("compile");
+
+    // One persistent tree, driven like a frame — a fresh tree per check
+    // would re-run every closure and hide a missing subscription.
+    let host = div().w(600.0).h(300.0).child_box(dsl.view_widget());
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(600.0, 300.0);
+
+    let collect = |tree: &RenderTree| -> Vec<String> {
+        let mut out = Vec::new();
+        let mut stack = vec![tree.root().expect("root")];
+        while let Some(id) = stack.pop() {
+            if let Some(node) = tree.get_render_node(id)
+                && let ElementType::Text(t) = &node.element_type
+            {
+                out.push(t.content.clone());
+            }
+            stack.extend(tree.layout_tree.children(id).iter().copied());
+        }
+        out
+    };
+
+    let found = collect(&tree);
+    assert!(found.iter().any(|t| t.contains("A Heading")), "{found:?}");
+    assert!(found.iter().any(|t| t.contains("before")), "{found:?}");
+
+    dsl.set_signal_string("type_probe", "after");
+    tree.process_pending_subtree_rebuilds();
+    tree.compute_layout(600.0, 300.0);
+
+    let found = collect(&tree);
+    assert!(
+        found.iter().any(|t| t.contains("after")),
+        "the bound text followed: {found:?}"
+    );
+}
