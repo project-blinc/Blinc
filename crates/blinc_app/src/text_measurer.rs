@@ -4,7 +4,9 @@
 //! as the renderer.
 
 use blinc_layout::GenericFont as LayoutGenericFont;
-use blinc_layout::text_measure::{LineSpan, TextLayoutOptions, TextMeasurer, TextMetrics};
+use blinc_layout::text_measure::{
+    EstimatedTextMeasurer, LineSpan, TextLayoutOptions, TextMeasurer, TextMetrics,
+};
 use blinc_text::{FontFace, FontRegistry, GenericFont, LayoutOptions, TextLayoutEngine};
 use std::sync::{Arc, Mutex};
 
@@ -256,31 +258,33 @@ impl TextMeasurer for FontTextMeasurer {
     }
 
     fn line_spans(&self, text: &str, font_size: f32, options: &TextLayoutOptions) -> Vec<LineSpan> {
-        let one_line = || {
-            vec![LineSpan {
-                start: 0,
-                end: text.len(),
-                width: self.measure_with_options(text, font_size, options).width,
-            }]
-        };
+        // Whatever wrapped the layout must wrap the hit geometry, so this
+        // falls back exactly as `measure_with_options` does. Reporting a
+        // single line here instead left link rects unwrapped while taffy
+        // had already broken the text across lines.
+        let fallback = || EstimatedTextMeasurer.line_spans(text, font_size, options);
 
         // Only a definite width produces wrap points. MinContent and MaxContent
         // (see `measure_with_options`) are sizing probes, not a layout.
         let Some(max_width) = options.max_width.filter(|w| *w > 0.0) else {
-            return one_line();
+            return fallback();
         };
 
-        let registry = self.font_registry.lock().unwrap();
-        let font = match registry.get_for_render_with_style(
-            options.font_name.as_deref(),
-            to_text_generic_font(options.generic_font),
-            options.font_weight,
-            options.italic,
-        ) {
-            Some(f) => f,
-            None => return one_line(),
+        // Scoped so the guard is gone before the fallback, which measures
+        // and so takes this same non-reentrant lock. Returning out of the
+        // guard's scope deadlocked instead of falling back.
+        let font = {
+            let registry = self.font_registry.lock().unwrap();
+            registry.get_for_render_with_style(
+                options.font_name.as_deref(),
+                to_text_generic_font(options.generic_font),
+                options.font_weight,
+                options.italic,
+            )
         };
-        drop(registry);
+        let Some(font) = font else {
+            return fallback();
+        };
 
         let layout_opts = LayoutOptions {
             line_height: options.line_height,

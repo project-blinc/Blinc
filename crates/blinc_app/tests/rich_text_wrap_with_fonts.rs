@@ -77,3 +77,41 @@ fn the_link_moves_to_a_later_line_when_narrowed() {
         assert!(*x1 <= narrow_w, "rect {x0}..{x1} escapes {narrow_w}px");
     }
 }
+
+/// A link whose own text is long enough to break must stay hoverable on
+/// every line it occupies.
+#[test]
+fn a_link_that_itself_wraps_is_hittable_on_each_line() {
+    with_fonts();
+    let markup = "See the <a href='https://example.com'>complete reference manual for \
+                  keyboard shortcuts and editing commands</a> before filing an issue.";
+    let host = div()
+        .w(240.0)
+        .h(600.0)
+        .flex_col()
+        .items_start()
+        .child(rich_text(markup));
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(240.0, 600.0);
+
+    let root = tree.root().expect("root");
+    let node = tree.layout_tree.children(root)[0];
+    let bounds = tree.get_absolute_bounds(node).expect("bounds");
+    let hit = tree
+        .get_render_node(node)
+        .and_then(|n| n.props.text_hit_spans.clone())
+        .expect("link publishes spans");
+
+    let rects = hit.rects(bounds.width);
+    assert!(rects.len() > 1, "the link crosses a wrap point: {rects:?}");
+
+    for rect in &rects {
+        let x = (rect.x0 + rect.x1) / 2.0;
+        let y = (rect.y0 + rect.y1) / 2.0;
+        assert!(
+            hit.hit(x, y, bounds.width).is_some(),
+            "{rect:?} is drawn but not hittable",
+        );
+        assert!(rect.x1 <= bounds.width, "{rect:?} escapes the container");
+    }
+}
