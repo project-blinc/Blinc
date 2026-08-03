@@ -615,6 +615,18 @@ impl<W: blinc_layout::div::ElementBuilder> blinc_layout::div::ElementBuilder for
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         self.inner.as_any()
     }
+    // MUST forward — this is what tells the renderer an element carries
+    // styled spans. Left at the `None` default, a wrapped `RichText`
+    // laid out at the right size and drew no glyphs. Widgets whose
+    // content is children (a Div, a markdown block) survive the
+    // omission, which is what made it look like a rich-text problem.
+    //
+    // `text_render_info` is deliberately NOT forwarded: a plain `Text`
+    // already reaches the renderer through the walk, and claiming the
+    // wrapper IS a text node cost the tab panel its content on a swap.
+    fn styled_text_render_info(&self) -> Option<blinc_layout::div::StyledTextRenderInfo> {
+        self.inner.styled_text_render_info()
+    }
     // MUST forward — without this, on_click/on_hover on the inner Div never fire.
     fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
         self.inner.event_handlers()
