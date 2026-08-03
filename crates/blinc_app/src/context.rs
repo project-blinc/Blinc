@@ -7213,79 +7213,124 @@ impl RenderContext {
                     // Use consistent ascender from element for baseline alignment
                     let scaled_ascender = styled_data.ascender * scale;
 
+                    // Where the text wraps at this node's laid-out width.
+                    // Segments are placed within a line, so a segment
+                    // straddling a wrap point is drawn as two runs rather
+                    // than one that overflows.
+                    let mut wrap_options = blinc_layout::text_measure::TextLayoutOptions::new();
+                    wrap_options.font_name = styled_data.font_family.name.clone();
+                    wrap_options.generic_font = styled_data.font_family.generic;
+                    wrap_options.font_weight = styled_data.weight.weight();
+                    wrap_options.italic = styled_data.italic;
+                    wrap_options.line_height = styled_data.line_height;
+                    wrap_options.max_width = (bounds.width > 0.0).then_some(bounds.width);
+                    let lines = blinc_layout::text_measure::text_line_spans(
+                        content,
+                        styled_data.font_size,
+                        &wrap_options,
+                    );
+                    // Measured, not `font_size * line_height`: the layout
+                    // sized this node from font metrics, and a run placed
+                    // on a different step would drift further off with
+                    // every line.
+                    let scaled_line_height = blinc_layout::text_measure::line_height_px(
+                        styled_data.font_size,
+                        &wrap_options,
+                    ) * scale
+                        * effective_motion_scale.1;
+
                     // Calculate x offsets for each segment and push as TextElements
-                    let mut x_offset = 0.0f32;
-                    for (start, end, color, bold, italic, underline, strikethrough) in segments {
-                        if start >= end || start >= content.len() {
-                            continue;
-                        }
-                        let segment_text = &content[start..end.min(content.len())];
-                        if segment_text.is_empty() {
-                            continue;
-                        }
+                    for (row, line) in lines.iter().enumerate() {
+                        let line_y = scaled_y + row as f32 * scaled_line_height;
+                        let mut x_offset = 0.0f32;
 
-                        // Measure segment width for positioning
-                        let mut options = blinc_layout::text_measure::TextLayoutOptions::new();
-                        options.font_name = styled_data.font_family.name.clone();
-                        options.generic_font = styled_data.font_family.generic;
-                        options.font_weight = if bold { 700 } else { 400 };
-                        options.italic = italic;
-                        let metrics = blinc_layout::text_measure::measure_text_with_options(
-                            segment_text,
-                            styled_data.font_size,
-                            &options,
-                        );
-                        // Apply both DPI scale and motion scale to segment width
-                        let segment_width = metrics.width * scale * effective_motion_scale.0;
+                        for &(start, end, color, bold, italic, underline, strikethrough) in
+                            &segments
+                        {
+                            // Clip the segment to the line it is being drawn on.
+                            let start = start.max(line.start);
+                            let end = end.min(line.end).min(content.len());
+                            if start >= end
+                                || !content.is_char_boundary(start)
+                                || !content.is_char_boundary(end)
+                            {
+                                continue;
+                            }
+                            let segment_text = &content[start..end];
+                            if segment_text.is_empty() {
+                                continue;
+                            }
 
-                        texts.push(TextElement {
-                            content: segment_text.to_string(),
-                            x: scaled_x + x_offset,
-                            y: scaled_y,
-                            width: segment_width,
-                            height: scaled_height,
-                            font_size: scaled_font_size,
-                            color,
-                            align: TextAlign::Left, // Always left-align segments
-                            weight: if bold {
-                                FontWeight::Bold
-                            } else {
-                                FontWeight::Normal
-                            },
-                            italic,
-                            v_align: styled_data.v_align,
-                            clip_bounds: scaled_clip,
-                            // Base-alpha contract: composite factor
-                            // applied live at dispatch.
-                            motion_opacity: effective_motion_opacity
-                                * render_node.props.opacity
-                                * inherited_css_opacity
-                                * if nearest_composite_ancestor.is_some() {
-                                    1.0
+                            // Measure segment width for positioning
+                            let mut options = blinc_layout::text_measure::TextLayoutOptions::new();
+                            options.font_name = styled_data.font_family.name.clone();
+                            options.generic_font = styled_data.font_family.generic;
+                            options.font_weight = if bold { 700 } else { 400 };
+                            options.italic = italic;
+                            let metrics = blinc_layout::text_measure::measure_text_with_options(
+                                segment_text,
+                                styled_data.font_size,
+                                &options,
+                            );
+                            // Apply both DPI scale and motion scale to segment width
+                            let segment_width = metrics.width * scale * effective_motion_scale.0;
+
+                            texts.push(TextElement {
+                                content: segment_text.to_string(),
+                                x: scaled_x + x_offset,
+                                y: line_y,
+                                width: segment_width,
+                                // One line keeps the node's full height so
+                                // existing vertical centring is untouched;
+                                // wrapped text bands each run to its own line.
+                                height: if lines.len() > 1 {
+                                    scaled_line_height
                                 } else {
-                                    effective_composite_layer_opacity
+                                    scaled_height
                                 },
-                            wrap: false, // Don't wrap individual segments
-                            line_height: styled_data.line_height,
-                            measured_width: segment_width,
-                            font_family: styled_data.font_family.clone(),
-                            word_spacing: 0.0,
-                            letter_spacing: render_node.props.letter_spacing.unwrap_or(0.0),
-                            z_index: *z_layer,
-                            ascender: scaled_ascender * effective_motion_scale.1, // Scale ascender with motion
-                            strikethrough,
-                            underline,
-                            decoration_color: render_node.props.text_decoration_color,
-                            decoration_thickness: render_node.props.text_decoration_thickness,
-                            css_affine: node_css_affine,
-                            text_shadow: render_node.props.text_shadow,
-                            transform_3d_layer: inside_3d_layer.clone(),
-                            is_foreground: children_inside_foreground,
-                            in_motion_subtree: inside_motion_subtree,
-                            composite_ancestor: nearest_composite_ancestor,
-                        });
+                                font_size: scaled_font_size,
+                                color,
+                                align: TextAlign::Left, // Always left-align segments
+                                weight: if bold {
+                                    FontWeight::Bold
+                                } else {
+                                    FontWeight::Normal
+                                },
+                                italic,
+                                v_align: styled_data.v_align,
+                                clip_bounds: scaled_clip,
+                                // Base-alpha contract: composite factor
+                                // applied live at dispatch.
+                                motion_opacity: effective_motion_opacity
+                                    * render_node.props.opacity
+                                    * inherited_css_opacity
+                                    * if nearest_composite_ancestor.is_some() {
+                                        1.0
+                                    } else {
+                                        effective_composite_layer_opacity
+                                    },
+                                wrap: false, // Don't wrap individual segments
+                                line_height: styled_data.line_height,
+                                measured_width: segment_width,
+                                font_family: styled_data.font_family.clone(),
+                                word_spacing: 0.0,
+                                letter_spacing: render_node.props.letter_spacing.unwrap_or(0.0),
+                                z_index: *z_layer,
+                                ascender: scaled_ascender * effective_motion_scale.1, // Scale ascender with motion
+                                strikethrough,
+                                underline,
+                                decoration_color: render_node.props.text_decoration_color,
+                                decoration_thickness: render_node.props.text_decoration_thickness,
+                                css_affine: node_css_affine,
+                                text_shadow: render_node.props.text_shadow,
+                                transform_3d_layer: inside_3d_layer.clone(),
+                                is_foreground: children_inside_foreground,
+                                in_motion_subtree: inside_motion_subtree,
+                                composite_ancestor: nearest_composite_ancestor,
+                            });
 
-                        x_offset += segment_width;
+                            x_offset += segment_width;
+                        }
                     }
                 }
             }

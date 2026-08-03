@@ -40,6 +40,7 @@ use crate::div::{
 use crate::element::{RenderLayer, RenderProps};
 use crate::event_handler::EventHandlers;
 use crate::styled_text::TextSpan;
+use crate::text_hit::{TextHitSpan, TextHitSpans};
 use crate::tree::{LayoutNodeId, LayoutTree};
 use crate::widgets::link::open_url;
 
@@ -60,21 +61,6 @@ fn link_covers_all(spans: &[TextSpan], content_len: usize) -> bool {
         covered_to = covered_to.max(span.end);
     }
     covered_to >= content_len
-}
-
-/// A clickable link region within rich text
-#[derive(Clone, Debug)]
-struct LinkRegion {
-    /// Start byte index in content
-    start: usize,
-    /// End byte index in content
-    end: usize,
-    /// URL to open when clicked
-    url: String,
-    /// X position where this link starts (relative to element)
-    x_start: f32,
-    /// X position where this link ends
-    x_end: f32,
 }
 
 /// A rich text element with inline formatting support
@@ -119,9 +105,9 @@ pub struct RichText {
     word_spacing: f32,
     /// Event handlers for interactivity (links)
     event_handlers: EventHandlers,
-    /// Link data for click handling: (start_byte, end_byte, url, x_start, x_end)
-    /// Pre-calculated during update_size_estimate for hit testing
-    link_regions: Arc<Vec<LinkRegion>>,
+    /// Pointer targets for the links, shared with the click handler.
+    /// Byte ranges, placed against a width only when one is known.
+    hit_spans: Option<Arc<TextHitSpans>>,
 }
 
 impl RichText {
@@ -168,7 +154,7 @@ impl RichText {
             cursor: has_links.then_some(crate::element::CursorStyle::Pointer),
             word_spacing: 0.0,
             event_handlers: EventHandlers::new(),
-            link_regions: Arc::new(Vec::new()),
+            hit_spans: None,
         };
         rich.update_size_estimate();
         rich.setup_link_handlers();
@@ -233,7 +219,7 @@ impl RichText {
             cursor: has_links.then_some(crate::element::CursorStyle::Pointer),
             word_spacing: 0.0,
             event_handlers: EventHandlers::new(),
-            link_regions: Arc::new(Vec::new()),
+            hit_spans: None,
         };
         rich.update_size_estimate();
         rich.setup_link_handlers();
@@ -525,110 +511,90 @@ impl RichText {
 
     /// Update size using text measurement
     fn update_size_estimate(&mut self) {
-        let mut options = crate::text_measure::TextLayoutOptions::new();
-        options.font_name = self.font_family.name.clone();
-        options.generic_font = self.font_family.generic;
-        options.font_weight = self.weight.weight();
-        options.italic = self.italic;
-
+        let options = self.measure_options();
         let metrics =
             crate::text_measure::measure_text_with_options(&self.content, self.font_size, &options);
 
         self.measured_width = metrics.width;
         self.ascender = metrics.ascender;
-
-        self.style.size.width = Dimension::Length(metrics.width);
-        let standardized_height = self.font_size * self.line_height;
-        self.style.size.height = Dimension::Length(standardized_height);
         self.style.max_size.width = Dimension::Percent(1.0);
 
-        if !self.wrap {
+        if self.wrap {
+            // Auto on both axes so taffy queries the measure function with
+            // the width actually available, and the node grows to however
+            // many lines that width produces.
+            self.style.size.width = Dimension::Auto;
+            self.style.size.height = Dimension::Auto;
+            self.style.flex_shrink = 1.0;
+        } else {
+            self.style.size.width = Dimension::Length(metrics.width);
+            self.style.size.height = Dimension::Length(self.font_size * self.line_height);
             self.style.flex_shrink = 0.0;
         }
     }
 
-    /// Calculate approximate x positions for link regions based on character widths
-    fn calculate_link_regions(&self) -> Vec<LinkRegion> {
-        let mut regions = Vec::new();
-        let content_len = self.content.len();
-
-        // Use monospace approximation or measure each segment
-        // For better accuracy, measure character by character up to each boundary
+    /// Layout options describing this element's font, minus any width
+    fn measure_options(&self) -> crate::text_measure::TextLayoutOptions {
         let mut options = crate::text_measure::TextLayoutOptions::new();
         options.font_name = self.font_family.name.clone();
         options.generic_font = self.font_family.generic;
         options.font_weight = self.weight.weight();
         options.italic = self.italic;
+        options.word_spacing = self.word_spacing;
+        options.line_height = self.line_height;
+        options
+    }
 
-        for span in &self.spans {
-            if let Some(ref url) = span.link_url {
+    /// Collect the link spans as pointer targets
+    ///
+    /// Byte ranges only: where each link lands depends on where the text
+    /// wrapped, and this element has no width yet.
+    fn collect_hit_spans(&self) -> Option<Arc<TextHitSpans>> {
+        let content_len = self.content.len();
+        let spans: Vec<TextHitSpan> = self
+            .spans
+            .iter()
+            .filter_map(|span| {
+                let url = span.link_url.as_ref()?;
                 let start = span.start.min(content_len);
                 let end = span.end.min(content_len);
-
-                if start >= end {
-                    continue;
-                }
-
-                // Measure width of text before this link
-                let x_start = if start > 0 {
-                    let prefix = &self.content[..start];
-                    let prefix_metrics = crate::text_measure::measure_text_with_options(
-                        prefix,
-                        self.font_size,
-                        &options,
-                    );
-                    prefix_metrics.width
-                } else {
-                    0.0
-                };
-
-                // Measure width up to end of link
-                let x_end = {
-                    let to_end = &self.content[..end];
-                    let to_end_metrics = crate::text_measure::measure_text_with_options(
-                        to_end,
-                        self.font_size,
-                        &options,
-                    );
-                    to_end_metrics.width
-                };
-
-                regions.push(LinkRegion {
+                (start < end).then(|| TextHitSpan {
                     start,
                     end,
-                    url: url.clone(),
-                    x_start,
-                    x_end,
-                });
-            }
+                    cursor: crate::element::CursorStyle::Pointer,
+                    url: Some(url.as_str().into()),
+                })
+            })
+            .collect();
+
+        if spans.is_empty() {
+            return None;
         }
 
-        regions
+        Some(Arc::new(TextHitSpans {
+            content: self.content.as_str().into(),
+            font_size: self.font_size,
+            line_height: self.line_height,
+            options: self.measure_options(),
+            spans: spans.into(),
+        }))
     }
 
     /// Set up click handlers for links
     fn setup_link_handlers(&mut self) {
-        // Calculate link regions with their x positions
-        let regions = self.calculate_link_regions();
-
-        if regions.is_empty() {
+        let Some(hit_spans) = self.collect_hit_spans() else {
             return;
-        }
+        };
+        self.hit_spans = Some(Arc::clone(&hit_spans));
 
-        // Store regions for hit testing
-        self.link_regions = Arc::new(regions);
-        let link_regions = Arc::clone(&self.link_regions);
-
-        // Register click handler
+        // Resolved through the same `hit` the cursor uses, at the width
+        // the event carries, so the pointer and the click cannot
+        // disagree about where a link is.
         self.event_handlers.on(event_types::POINTER_UP, move |ctx| {
-            let local_x = ctx.local_x;
-
-            // Find which link was clicked (if any)
-            for region in link_regions.iter() {
-                if local_x >= region.x_start && local_x <= region.x_end {
-                    open_url(&region.url);
-                    break;
-                }
+            if let Some(span) = hit_spans.hit(ctx.local_x, ctx.local_y, ctx.bounds_width)
+                && let Some(url) = &span.url
+            {
+                open_url(url);
             }
         });
     }
@@ -646,7 +612,25 @@ impl RichText {
 
 impl ElementBuilder for RichText {
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        tree.create_node(self.style.clone())
+        if !self.wrap {
+            return tree.create_node(self.style.clone());
+        }
+        // Measured as plain text: the markup only changes weight and
+        // colour per span, and taffy needs a height for the width it is
+        // considering, not a styled one.
+        tree.create_text_node(
+            self.style.clone(),
+            crate::tree::TextMeasureContext {
+                content: self.content.clone(),
+                font_size: self.font_size,
+                line_height: self.line_height,
+                wrap: true,
+                font_name: self.font_family.name.clone(),
+                generic_font: self.font_family.generic,
+                font_weight: self.weight.weight(),
+                italic: self.italic,
+            },
+        )
     }
 
     #[allow(deprecated)]
@@ -656,17 +640,9 @@ impl ElementBuilder for RichText {
             shadow: self.shadow.clone(),
             transform: self.transform.clone(),
             cursor: self.cursor,
-            // A pointer over each link's measured x-range. `link_regions`
-            // is already computed for click hit-testing, so the cursor
-            // and the click agree by construction.
-            cursor_regions: (!self.link_regions.is_empty()).then(|| {
-                std::sync::Arc::new(
-                    self.link_regions
-                        .iter()
-                        .map(|r| (r.x_start, r.x_end, crate::element::CursorStyle::Pointer))
-                        .collect::<Vec<_>>(),
-                )
-            }),
+            // The same spans the click handler closed over, so the
+            // cursor and the click agree by construction.
+            text_hit_spans: self.hit_spans.clone(),
             ..Default::default()
         }
     }
@@ -794,9 +770,9 @@ mod tests {
         assert!(rt.spans()[0].underline);
     }
 
-    /// The pointer lives on the link's x-range, not on the node, so a
+    /// The pointer lives on the link's byte range, not on the node, so a
     /// paragraph does not claim to be clickable while its link still
-    /// offers a pointer. The ranges are the ones the click handler
+    /// offers a pointer. The spans are the ones the click handler
     /// hit-tests, so cursor and click agree by construction.
     #[test]
     fn a_link_publishes_a_pointer_over_its_own_range() {
@@ -804,23 +780,38 @@ mod tests {
         let props = rt.render_props();
         assert_eq!(props.cursor, None, "the node claims no cursor");
 
-        let regions = props.cursor_regions.expect("link publishes a region");
-        assert_eq!(regions.len(), 1);
-        let (start, end, cursor) = regions[0];
-        assert_eq!(cursor, crate::element::CursorStyle::Pointer);
-        assert!(end > start, "the range has width: {start}..{end}");
-        assert!(start > 0.0, "and starts after the leading text");
+        let hit = props.text_hit_spans.expect("link publishes a span");
+        assert_eq!(hit.spans.len(), 1);
+        let span = &hit.spans[0];
+        assert_eq!(span.cursor, crate::element::CursorStyle::Pointer);
+        assert_eq!(&hit.content[span.start..span.end], "our website");
     }
 
     #[test]
-    fn test_link_regions_calculated() {
+    fn a_link_carries_its_url() {
         let rt = rich_text(r#"Click <a href="https://example.com">here</a>!"#);
-        // The link_regions should have been populated
-        assert!(!rt.link_regions.is_empty());
-        assert_eq!(rt.link_regions.len(), 1);
-        assert_eq!(rt.link_regions[0].url, "https://example.com");
-        // x positions should be > 0 for x_end
-        assert!(rt.link_regions[0].x_end > rt.link_regions[0].x_start);
+        let hit = rt.hit_spans.as_ref().expect("link publishes a span");
+        assert_eq!(hit.spans.len(), 1);
+        assert_eq!(hit.spans[0].url.as_deref(), Some("https://example.com"));
+    }
+
+    /// Rects are derived, never stored, so the same markup in two
+    /// containers puts its link in two places. The link sits late in the
+    /// text on purpose: one near the start lands on the first line at
+    /// every width, and would pass without proving anything.
+    #[test]
+    fn link_placement_follows_the_width_it_is_given() {
+        let rt = rich_text(
+            r#"Press Enter to accept the current selection, or Escape to cancel it, and read the <a href="https://example.com">manual</a> for the rest."#,
+        );
+        let hit = rt.hit_spans.as_ref().expect("link publishes a span");
+
+        let wide = hit.rects(900.0);
+        let narrow = hit.rects(200.0);
+        assert_ne!(wide, narrow);
+        for rect in &narrow {
+            assert!(rect.x1 <= 200.0, "{rect:?} escapes a 200px container");
+        }
     }
 
     #[test]

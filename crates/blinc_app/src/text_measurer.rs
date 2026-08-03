@@ -4,7 +4,7 @@
 //! as the renderer.
 
 use blinc_layout::GenericFont as LayoutGenericFont;
-use blinc_layout::text_measure::{TextLayoutOptions, TextMeasurer, TextMetrics};
+use blinc_layout::text_measure::{LineSpan, TextLayoutOptions, TextMeasurer, TextMetrics};
 use blinc_text::{FontFace, FontRegistry, GenericFont, LayoutOptions, TextLayoutEngine};
 use std::sync::{Arc, Mutex};
 
@@ -253,6 +253,57 @@ impl TextMeasurer for FontTextMeasurer {
             descender,
             line_count,
         }
+    }
+
+    fn line_spans(&self, text: &str, font_size: f32, options: &TextLayoutOptions) -> Vec<LineSpan> {
+        let one_line = || {
+            vec![LineSpan {
+                start: 0,
+                end: text.len(),
+                width: self.measure_with_options(text, font_size, options).width,
+            }]
+        };
+
+        // Only a definite width produces wrap points. MinContent and MaxContent
+        // (see `measure_with_options`) are sizing probes, not a layout.
+        let Some(max_width) = options.max_width.filter(|w| *w > 0.0) else {
+            return one_line();
+        };
+
+        let registry = self.font_registry.lock().unwrap();
+        let font = match registry.get_for_render_with_style(
+            options.font_name.as_deref(),
+            to_text_generic_font(options.generic_font),
+            options.font_weight,
+            options.italic,
+        ) {
+            Some(f) => f,
+            None => return one_line(),
+        };
+        drop(registry);
+
+        let layout_opts = LayoutOptions {
+            line_height: options.line_height,
+            letter_spacing: options.letter_spacing,
+            max_width: Some(max_width),
+            line_break: blinc_text::LineBreakMode::Word,
+            ..LayoutOptions::default()
+        };
+        let laid = self
+            .layout_engine
+            .lock()
+            .unwrap()
+            .layout(text, &font, font_size, &layout_opts);
+
+        laid.line_byte_ranges(text.len())
+            .into_iter()
+            .zip(laid.lines.iter())
+            .map(|(range, line)| LineSpan {
+                start: range.start,
+                end: range.end,
+                width: line.width,
+            })
+            .collect()
     }
 }
 

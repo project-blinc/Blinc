@@ -79,6 +79,8 @@ pub struct PositionedGlyph {
     pub y: f32,
     /// Character this glyph represents
     pub codepoint: char,
+    /// Byte offset of this glyph's cluster in the source string
+    pub byte_offset: usize,
 }
 
 /// A line of positioned glyphs
@@ -112,6 +114,39 @@ impl TextLayout {
     /// Get total glyph count
     pub fn glyph_count(&self) -> usize {
         self.lines.iter().map(|l| l.glyphs.len()).sum()
+    }
+
+    /// Byte range of the source string covered by each line.
+    ///
+    /// A line starts at its first glyph's cluster and runs to the start of the
+    /// next non-empty line, so whitespace consumed at a wrap point stays with
+    /// the line that preceded it. `text_len` closes the final range.
+    ///
+    /// Lines with no glyphs (a blank line between two newlines) collapse to an
+    /// empty range at the preceding line's end.
+    pub fn line_byte_ranges(&self, text_len: usize) -> Vec<std::ops::Range<usize>> {
+        let starts: Vec<Option<usize>> = self
+            .lines
+            .iter()
+            .map(|line| line.glyphs.first().map(|g| g.byte_offset))
+            .collect();
+
+        let mut ranges = Vec::with_capacity(self.lines.len());
+        let mut cursor = 0usize;
+        for (i, start) in starts.iter().enumerate() {
+            let start = start.unwrap_or(cursor);
+            // The next line that actually has glyphs bounds this one.
+            let end = starts[i + 1..]
+                .iter()
+                .flatten()
+                .copied()
+                .next()
+                .unwrap_or(text_len)
+                .max(start);
+            ranges.push(start..end);
+            cursor = end;
+        }
+        ranges
     }
 }
 
@@ -354,6 +389,7 @@ impl TextLayoutEngine {
                 x: x + x_offset,
                 y: baseline_y,
                 codepoint: glyph.codepoint,
+                byte_offset: glyph.cluster as usize,
             });
 
             x += advance;

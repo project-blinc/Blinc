@@ -60,6 +60,7 @@ pub mod styled_text;
 pub mod svg;
 pub mod syntax;
 pub mod text;
+pub mod text_hit;
 pub mod text_measure;
 pub mod text_selection;
 pub mod tree;
