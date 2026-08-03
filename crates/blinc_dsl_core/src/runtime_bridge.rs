@@ -180,7 +180,12 @@ pub(crate) fn register_blinc_layout_primitives() {
         ],
     };
 
-    // `Text("hi")` — text leaf.
+    // `Text("hi", italic = true)` — text leaf.
+    //
+    // The four style flags mirror the Rust builder. `font-weight`,
+    // `font-style` and `text-decoration` reach the same places from CSS,
+    // so a class can carry them instead; these exist for the one-off that
+    // does not deserve a rule.
     let text_widget = ComponentDefinition {
         name: std::sync::Arc::from("Text"),
         view_symbol: std::sync::Arc::from("$Blinc$Text$view"),
@@ -188,6 +193,10 @@ pub(crate) fn register_blinc_layout_primitives() {
             prop("content", string_ty.clone()),
             style_prop(),
             class_prop(),
+            prop("italic", bool_ty.clone()),
+            prop("bold", bool_ty.clone()),
+            prop("strikethrough", bool_ty.clone()),
+            prop("underline", bool_ty.clone()),
         ],
     };
 

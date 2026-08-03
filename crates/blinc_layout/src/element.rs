@@ -1100,6 +1100,8 @@ pub struct RenderProps {
     pub text_shadow: Option<Shadow>,
     /// Font weight override
     pub font_weight: Option<crate::div::FontWeight>,
+    /// Font style override (upright or italic)
+    pub font_style: Option<crate::element_style::FontStyle>,
     /// Text decoration override
     pub text_decoration: Option<crate::element_style::TextDecoration>,
     /// Line height multiplier override
@@ -1263,6 +1265,7 @@ impl Default for RenderProps {
             font_size: None,
             text_shadow: None,
             font_weight: None,
+            font_style: None,
             text_decoration: None,
             line_height: None,
             text_align: None,

@@ -8,6 +8,9 @@ component MediaWidgets {
         .group { width: 100%; padding: 24px; gap: 16px; flex-direction: column }
         .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
         .richtext-narrow { width: 280px; align-items: flex-start }
+        // font-style inherits, so this slants the Text inside it without
+        // the Text naming a style of its own.
+        .quote { font-style: italic; color: var(--text-secondary) }
     }
 
     view {
@@ -25,6 +28,20 @@ component MediaWidgets {
                 cn.InlineCode("code()")
                 cn.Span(", and ")
                 cn.Small("small print.")
+            }
+
+            // Two routes to the same flags. Props suit a one-off; a class
+            // suits a rule, and reaches the typography widgets too, which
+            // take a class but no style props.
+            cn.Label("text styles: as props, and as CSS")
+            Div(class = "row") {
+                Text("italic", italic = true)
+                Text("bold", bold = true)
+                Text("struck", strikethrough = true)
+                Text("underlined", underline = true)
+            }
+            Div(class = "quote") {
+                Text("inherited italic, from the container's font-style")
             }
 
             // Core widgets, no cn. prefix — same tier as Div and Text.

@@ -574,11 +574,21 @@ fn builtins() -> Vec<BuiltinDescriptor> {
         },
         BuiltinDescriptor {
             // `Text("hi")` → leaked `WidgetBox::Text(...)` as i64.
+            //
+            // Trailing i32s are italic, bold, strikethrough, underline.
+            // This list, the `ComponentDefinition` props in
+            // `runtime_bridge`, and `blinc_text_view`'s signature are one
+            // ABI: change one without the others and every `Text` in the
+            // program calls through a mismatched signature.
             name: "$Blinc$Text$view",
             param_types: &[
                 Type::Primitive(PrimitiveType::String),
                 Type::Primitive(PrimitiveType::I64),
                 Type::Primitive(PrimitiveType::String),
+                Type::Primitive(PrimitiveType::I32),
+                Type::Primitive(PrimitiveType::I32),
+                Type::Primitive(PrimitiveType::I32),
+                Type::Primitive(PrimitiveType::I32),
             ],
             return_type: Type::Primitive(PrimitiveType::I64),
             ptr: blinc_text_view as *const u8,

@@ -37,6 +37,7 @@ struct InheritedText {
     overflow: Option<crate::element_style::TextOverflow>,
     color: Option<[f32; 4]>,
     align: Option<crate::div::TextAlign>,
+    font_style: Option<crate::element_style::FontStyle>,
 }
 
 impl InheritedText {
@@ -49,6 +50,7 @@ impl InheritedText {
             overflow: node.props.text_overflow,
             color: node.props.text_color,
             align: node.props.text_align,
+            font_style: node.props.font_style,
         }
     }
 }
@@ -335,9 +337,10 @@ impl RenderTree {
                     n.props.fill,
                     n.props.stroke,
                     n.props.stroke_width,
+                    n.props.font_style,
                 )
             });
-            if let Some((td, td_color, td_thick, ws, to, tc, ta, fill, stroke, stroke_w)) =
+            if let Some((td, td_color, td_thick, ws, to, tc, ta, fill, stroke, stroke_w, fstyle)) =
                 parent_text_props
             {
                 if let Some(node) = self.render_nodes.get_mut(&node_id) {
@@ -378,6 +381,9 @@ impl RenderTree {
                     }
                     if node.props.stroke_width.is_none() {
                         node.props.stroke_width = stroke_w;
+                    }
+                    if node.props.font_style.is_none() {
+                        node.props.font_style = fstyle;
                     }
                 }
             }
@@ -554,6 +560,7 @@ impl RenderTree {
                 p.white_space = p.white_space.or(inherited.white_space);
                 p.text_overflow = p.text_overflow.or(inherited.overflow);
                 p.text_color = p.text_color.or(inherited.color);
+                p.font_style = p.font_style.or(inherited.font_style);
                 if p.text_align.is_none()
                     && let Some(align) = inherited.align
                 {

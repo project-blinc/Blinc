@@ -1059,7 +1059,8 @@ typography_view!(
     blinc_layout::typography::inline_code
 );
 
-/// `$Blinc$Text$view(content, style, class) -> WidgetHandle`
+/// `$Blinc$Text$view(content, style, class, italic, bold, strikethrough,
+/// underline) -> WidgetHandle`
 ///
 /// # Safety
 ///
@@ -1069,6 +1070,10 @@ pub(crate) extern "C" fn blinc_text_view(
     content_ptr: *const i32,
     style: i64,
     class_str: *const i32,
+    italic: i32,
+    bold: i32,
+    strikethrough: i32,
+    underline: i32,
 ) -> WidgetHandle {
     if content_ptr.is_null() {
         tracing::warn!("$Blinc$Text$view called with null content pointer");
@@ -1076,7 +1081,20 @@ pub(crate) extern "C" fn blinc_text_view(
     }
     // SAFETY: see fn-level doc.
     let content = unsafe { blinc_string_decode(content_ptr) };
-    finish_text_widget(blinc_layout::text::Text::new(content), style, class_str)
+    let mut widget = blinc_layout::text::Text::new(content);
+    if italic != 0 {
+        widget = widget.italic();
+    }
+    if bold != 0 {
+        widget = widget.bold();
+    }
+    if strikethrough != 0 {
+        widget = widget.strikethrough();
+    }
+    if underline != 0 {
+        widget = widget.underline();
+    }
+    finish_text_widget(widget, style, class_str)
 }
 
 pub(crate) extern "C" fn blinc_hr_view(

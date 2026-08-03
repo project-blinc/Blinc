@@ -244,6 +244,22 @@ pub enum TextDecoration {
     LineThrough,
 }
 
+/// CSS font-style
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FontStyle {
+    /// Upright
+    Normal,
+    /// Slanted
+    Italic,
+}
+
+impl FontStyle {
+    /// Whether this style renders italic
+    pub fn is_italic(self) -> bool {
+        matches!(self, Self::Italic)
+    }
+}
+
 /// CSS text-overflow behavior
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextOverflow {
@@ -430,6 +446,8 @@ pub struct ElementStyle {
     pub text_shadow: Option<Shadow>,
     /// Font weight (100-900)
     pub font_weight: Option<crate::div::FontWeight>,
+    /// Font style (upright or italic)
+    pub font_style: Option<FontStyle>,
     /// Text decoration (underline, line-through, etc.)
     pub text_decoration: Option<TextDecoration>,
     /// Line height multiplier
@@ -1490,6 +1508,12 @@ impl ElementStyle {
         self
     }
 
+    /// Set font style
+    pub fn font_style(mut self, style: FontStyle) -> Self {
+        self.font_style = Some(style);
+        self
+    }
+
     /// Set text decoration
     pub fn text_decoration(mut self, decoration: TextDecoration) -> Self {
         self.text_decoration = Some(decoration);
@@ -1770,6 +1794,7 @@ impl ElementStyle {
             font_size: other.font_size.or(self.font_size),
             text_shadow: other.text_shadow.or(self.text_shadow),
             font_weight: other.font_weight.or(self.font_weight),
+            font_style: other.font_style.or(self.font_style),
             text_decoration: other.text_decoration.or(self.text_decoration),
             line_height: other.line_height.or(self.line_height),
             text_align: other.text_align.or(self.text_align),
@@ -2742,6 +2767,13 @@ macro_rules! css_impl {
     };
     ($style:ident; font-weight: $value:expr) => {
         $style = $style.font_weight($value);
+    };
+    ($style:ident; font-style: $value:expr; $($rest:tt)*) => {
+        $style = $style.font_style($value);
+        $crate::css_impl!($style; $($rest)*);
+    };
+    ($style:ident; font-style: $value:expr) => {
+        $style = $style.font_style($value);
     };
     ($style:ident; text-decoration: $value:expr; $($rest:tt)*) => {
         $style = $style.text_decoration($value);

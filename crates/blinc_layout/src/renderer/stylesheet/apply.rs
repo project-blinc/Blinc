@@ -162,6 +162,10 @@ impl RenderTree {
         if let Some(fw) = style.font_weight {
             props.font_weight = Some(fw);
         }
+        // Font style
+        if let Some(fs) = style.font_style {
+            props.font_style = Some(fs);
+        }
         // Text decoration
         if let Some(td) = style.text_decoration {
             props.text_decoration = Some(td);

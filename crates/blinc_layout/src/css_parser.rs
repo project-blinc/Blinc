@@ -4891,6 +4891,9 @@ fn apply_property(style: &mut ElementStyle, name: &str, value: &str) {
         "font-weight" => {
             style.font_weight = parse_font_weight(value);
         }
+        "font-style" => {
+            style.font_style = parse_font_style(value);
+        }
         "text-decoration" | "text-decoration-line" => {
             style.text_decoration = parse_text_decoration(value);
         }
@@ -6016,6 +6019,13 @@ fn apply_property_with_errors(
         "font-weight" => {
             if let Some(fw) = parse_font_weight(value) {
                 style.font_weight = Some(fw);
+            } else {
+                errors.push(ParseError::invalid_value(name, value, line, column));
+            }
+        }
+        "font-style" => {
+            if let Some(fs) = parse_font_style(value) {
+                style.font_style = Some(fs);
             } else {
                 errors.push(ParseError::invalid_value(name, value, line, column));
             }
@@ -8929,6 +8939,19 @@ fn parse_text_decoration(value: &str) -> Option<crate::element_style::TextDecora
         "none" => Some(TextDecoration::None),
         "underline" => Some(TextDecoration::Underline),
         "line-through" => Some(TextDecoration::LineThrough),
+        _ => None,
+    }
+}
+
+/// `font-style: normal | italic | oblique`
+///
+/// `oblique` maps to italic: the renderer selects a face, and there is no
+/// synthetic slant to distinguish the two.
+fn parse_font_style(value: &str) -> Option<crate::element_style::FontStyle> {
+    use crate::element_style::FontStyle;
+    match value.trim().to_lowercase().as_str() {
+        "normal" => Some(FontStyle::Normal),
+        "italic" | "oblique" => Some(FontStyle::Italic),
         _ => None,
     }
 }

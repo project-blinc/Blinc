@@ -626,9 +626,10 @@ impl RenderTree {
                     n.props.fill,
                     n.props.stroke,
                     n.props.stroke_width,
+                    n.props.font_style,
                 )
             });
-            if let Some((td, td_color, td_thick, ws, to, tc, ta, fill, stroke, stroke_w)) =
+            if let Some((td, td_color, td_thick, ws, to, tc, ta, fill, stroke, stroke_w, fstyle)) =
                 parent_text_props
             {
                 if let Some(node) = self.render_nodes.get_mut(&node_id) {
@@ -666,6 +667,9 @@ impl RenderTree {
                     }
                     if node.props.stroke_width.is_none() {
                         node.props.stroke_width = stroke_w;
+                    }
+                    if node.props.font_style.is_none() {
+                        node.props.font_style = fstyle;
                     }
                 }
             }

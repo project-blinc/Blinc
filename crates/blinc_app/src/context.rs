@@ -6713,7 +6713,10 @@ impl RenderContext {
                         color: render_node.props.text_color.unwrap_or(text_data.color),
                         align: text_data.align,
                         weight: render_node.props.font_weight.unwrap_or(text_data.weight),
-                        italic: text_data.italic,
+                        italic: render_node
+                            .props
+                            .font_style
+                            .map_or(text_data.italic, |fs| fs.is_italic()),
                         v_align: text_data.v_align,
                         clip_bounds: scaled_clip,
                         // Composite-promoted subtrees: bake at BASE alpha
