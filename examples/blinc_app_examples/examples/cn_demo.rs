@@ -505,6 +505,7 @@ fn buttons_section(_ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                 .flex_row()
                 .flex_wrap()
                 .gap(12.0)
+                .items_center()
                 .child(cn::button("Small").size(ButtonSize::Small))
                 .child(cn::button("Medium").size(ButtonSize::Medium))
                 .child(cn::button("Large").size(ButtonSize::Large))

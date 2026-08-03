@@ -332,6 +332,17 @@ impl ToggleGroupBuilder {
         }
     }
 
+    /// Name this group's per-item state explicitly.
+    ///
+    /// The default key comes from the call site, which is enough in
+    /// Rust. Callers that funnel every group through one call site (the
+    /// DSL's FFI thunk does) must supply their own, or two groups share
+    /// one key and hovering an item in either scales both.
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = InstanceKey::explicit(key);
+        self
+    }
+
     /// Append an item to the group.
     pub fn item(mut self, item: ToggleItem) -> Self {
         self.config.items.push(item);

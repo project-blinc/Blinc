@@ -17,6 +17,8 @@ signal fmt_italic: bool = false
 
 // One of a set. The buttons below write the same signal the dials do.
 signal plan: string = "free"
+// Shared by both toggle bars, so picking in one moves the other.
+signal text_align: string = "left"
 
 // The code fills one character per slot; the chip below reads it.
 signal otp_code: string = ""
@@ -132,6 +134,37 @@ component FormWidgets {
                 cn.Toggle(pressed = fmt_italic, icon = "italic", aria_label = "italic")
                 cn.Toggle(pressed = fmt_bold, label = "Bold", variant = "outline")
                 cn.Switch(checked = fmt_bold, label = "same signal")
+            }
+
+            // One picked at a time, as chips rather than dials. The
+            // children are ordinary cn.Toggles: inside a group they take
+            // a `value` and give up their own `pressed`. Clicking the
+            // selected one is a no-op; a standalone toggle can turn
+            // itself off.
+            //
+            // Icon-only, so each carries an aria_label: there is no text
+            // for a screen reader to fall back on.
+            cn.Label("toggle group: one of a set, as a bar")
+            Div(class = "row") {
+                cn.ToggleGroup(value = text_align, variant = "outline") {
+                    cn.Toggle(value = "left", icon = "text-align-start", aria_label = "Align left")
+                    cn.Toggle(value = "center", icon = "text-align-center", aria_label = "Align centre")
+                    cn.Toggle(value = "right", icon = "text-align-end", aria_label = "Align right")
+                    cn.Toggle(value = "justify", icon = "text-align-justify", aria_label = "Justify")
+                }
+            }
+            // Same signal, so the two bars move together. Different size,
+            // which is also what keeps their per-chip state apart.
+            Div(class = "row") {
+                cn.ToggleGroup(value = text_align, size = "small") {
+                    cn.Toggle(value = "left", icon = "text-align-start", aria_label = "Align left")
+                    cn.Toggle(value = "center", icon = "text-align-center", aria_label = "Align centre")
+                    cn.Toggle(value = "right", icon = "text-align-end", aria_label = "Align right")
+                    cn.Toggle(value = "justify", icon = "text-align-justify", aria_label = "Justify")
+                }
+                cn.Button("Centre it", size = "small",
+                          on_click = || text_align.set("center"))
+                cn.Badge(text_align, variant = "secondary")
             }
 
             cn.Label("ref: drive a field without a signal")

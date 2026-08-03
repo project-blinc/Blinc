@@ -91,6 +91,7 @@ pub mod tab;
 pub mod tabs;
 pub mod textarea;
 pub mod toggle;
+pub mod toggle_group;
 pub mod tooltip;
 pub mod typography;
 
@@ -139,6 +140,7 @@ pub use tab::CnTab;
 pub use tabs::CnTabs;
 pub use textarea::CnTextarea;
 pub use toggle::CnToggle;
+pub use toggle_group::CnToggleGroup;
 pub use tooltip::CnTooltip;
 pub use typography::{
     CnB, CnCaption, CnChainedText, CnH1, CnH2, CnH3, CnH4, CnH5, CnH6, CnInlineCode, CnMuted, CnP,
@@ -212,6 +214,7 @@ pub fn register_basics(dsl: &BlincDsl) -> BlincDslResult<()> {
     dsl.register_extern_widget::<CnSwitch>()?;
     dsl.register_extern_widget::<CnCheckbox>()?;
     dsl.register_extern_widget::<CnToggle>()?;
+    dsl.register_extern_widget::<CnToggleGroup>()?;
     dsl.register_extern_widget::<CnSlider>()?;
     dsl.register_extern_widget::<CnRadioGroup>()?;
     dsl.register_extern_widget::<CnRadio>()?;
