@@ -42,6 +42,10 @@ pub struct CnTabs {
     /// How a panel arrives: `none` / `fade` (default) / `slide_left` /
     /// `slide_right` / `slide_up` / `slide_down`.
     pub transition: String,
+    /// Names this strip when two of them would otherwise look
+    /// identical. Only needed for a genuine duplicate: see
+    /// [`Self::tabs_key`].
+    pub key: String,
     #[children]
     pub children: Mutex<Vec<Box<dyn ElementBuilder>>>,
     /// Built once, consuming `children`.
@@ -54,11 +58,38 @@ impl CnTabs {
         ::blinc_layout::build_once::build_once(&self.shell, || self.make())
     }
 
+    /// What tells this strip's state and motion from another strip's.
+    ///
+    /// Not the call site: the id a DSL widget would key on reads as zero
+    /// for a widget with children, and every strip is built from the one
+    /// line below in any case. Named by what the author wrote instead,
+    /// which is stable across rebuilds and differs wherever two strips
+    /// differ. Two strips alike in every respect share their state;
+    /// `key` is the way out.
+    fn tabs_key(&self, values: &[String]) -> String {
+        if !self.key.is_empty() {
+            return format!("cn-tabs-{}", self.key);
+        }
+        format!(
+            "cn-tabs-{}-{}-{}-{}",
+            crate::bridge::signal_key(&self.value),
+            self.size,
+            self.transition,
+            values.join(",")
+        )
+    }
+
     fn make(&self) -> blinc_cn::TabsBuilder {
         let children = std::mem::take(&mut *self.children.lock().expect("children mutex"));
         let state = crate::bridge::string_state(&self.value);
 
-        let mut b = blinc_cn::tabs(&state)
+        let values: Vec<String> = children
+            .iter()
+            .filter_map(|c| c.as_any().and_then(|a| a.downcast_ref::<CnTab>()))
+            .map(|t| t.tab_value())
+            .collect();
+
+        let mut b = blinc_cn::TabsBuilder::with_key(self.tabs_key(&values), &state)
             .size(self.size())
             .transition(self.transition());
         // The first tab is what shows when the bound value names none of
