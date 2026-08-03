@@ -1922,7 +1922,13 @@ text_int_stmt = { "text" ~ "(" ~ n:integer ~ ")" }
 string_literal = @{ "\"" ~ string_inner* ~ "\"" }
   -> TypedExpression::StringLiteral { value: text() }
 
-string_inner = { !("\"" | "\\") ~ ANY | "\\" ~ ANY }
+// Atomic, and it MUST be: the engine does not inherit atomicity into a
+// called rule, so a plain rule here skips implicit whitespace between
+// the lookahead and `ANY`. In `", "` that ate the space and let `ANY`
+// consume the CLOSING QUOTE — the string ran to end of input. Strings
+// whose content ends in whitespace after any character depended on the
+// next character not being the quote.
+string_inner = @{ !("\"" | "\\") ~ ANY | "\\" ~ ANY }
 
 // Signed integer literal. Atomic rule — `text()` returns the matched
 // digits + optional sign which `parse_int()` interprets. Mirrors
