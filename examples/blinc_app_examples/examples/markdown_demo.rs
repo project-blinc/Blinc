@@ -8,7 +8,7 @@
 
 use blinc_app::prelude::*;
 use blinc_app::windowed::WindowedContext;
-use blinc_core::{Color, SignalId, State};
+use blinc_core::{SignalId, State};
 use blinc_layout::markdown::markdown_light;
 use blinc_layout::prelude::NoState;
 use std::sync::{Arc, Mutex};
@@ -176,6 +176,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
 }
 
 fn build_header() -> impl ElementBuilder + use<> {
+    let theme = ThemeState::get();
     div()
         .flex_col()
         .w_full()
@@ -189,19 +190,19 @@ fn build_header() -> impl ElementBuilder + use<> {
                 .items_center()
                 .child(
                     h1("Markdown Editor")
-                        .color(Color::WHITE)
+                        .color(theme.color(ColorToken::TextPrimary))
                         .weight(FontWeight::Bold),
                 )
                 .child(
                     span("(Live Preview)")
                         .size(14.0)
-                        .color(Color::rgba(0.5, 0.8, 1.0, 0.8)),
+                        .color(theme.color(ColorToken::Primary)),
                 ),
         )
         .child(
             span("Edit markdown on the left, see preview on the right")
                 .size(14.0)
-                .color(Color::rgba(0.6, 0.6, 0.6, 1.0)),
+                .color(theme.color(ColorToken::TextSecondary)),
         )
 }
 
@@ -231,12 +232,12 @@ fn build_editor_panel(
                     span("Source")
                         .size(14.0)
                         .weight(FontWeight::SemiBold)
-                        .color(Color::rgba(0.4, 0.8, 1.0, 1.0)),
+                        .color(theme.color(ColorToken::Primary)),
                 )
                 .child(
                     span("(Markdown)")
                         .size(12.0)
-                        .color(Color::rgba(0.5, 0.5, 0.5, 1.0)),
+                        .color(theme.color(ColorToken::TextTertiary)),
                 ),
         )
         // Editor container
@@ -246,7 +247,7 @@ fn build_editor_panel(
                 .h(height - 200.0)
                 .bg(theme.color(ColorToken::SurfaceElevated))
                 .rounded(8.0)
-                .border(1.0, Color::rgba(0.3, 0.3, 0.35, 1.0))
+                .border(1.0, theme.color(ColorToken::Border))
                 .child(
                     text_area(&state_value)
                         .w_full()
@@ -264,6 +265,7 @@ fn build_preview_panel(
     width: f32,
     height: f32,
 ) -> impl ElementBuilder + use<> {
+    let theme = ThemeState::get();
     div()
         .w(width)
         .h(height)
@@ -279,23 +281,22 @@ fn build_preview_panel(
                     span("Preview")
                         .size(14.0)
                         .weight(FontWeight::SemiBold)
-                        .color(Color::rgba(0.4, 1.0, 0.8, 1.0)),
+                        .color(theme.color(ColorToken::Accent)),
                 )
                 .child(
                     span("(Rendered)")
                         .size(12.0)
-                        .color(Color::rgba(0.5, 0.5, 0.5, 1.0)),
+                        .color(theme.color(ColorToken::TextTertiary)),
                 ),
         )
         // Preview container with scroll - stateful wraps only the markdown content
         .child({
-            let theme = ThemeState::get();
             div()
                 .w_full()
                 .h(height - 200.0)
                 .bg(theme.color(ColorToken::SurfaceElevated))
                 .rounded(8.0)
-                .border(1.0, Color::rgba(0.3, 0.3, 0.35, 1.0))
+                .border(1.0, theme.color(ColorToken::Border))
                 .overflow_clip()
                 .child(
                     scroll()
