@@ -566,6 +566,7 @@ impl TextRenderer {
                                     codepoint: positioned.codepoint,
                                     x: positioned.x + x_offset,
                                     y: positioned.y,
+                                    byte_offset: positioned.byte_offset,
                                 };
 
                                 // Use color rasterization for emoji font
