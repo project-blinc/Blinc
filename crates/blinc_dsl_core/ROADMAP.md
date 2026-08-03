@@ -279,6 +279,31 @@ binding a component to the fields it reads currently needs.
 Related: `SymbolTable.fiber_fn_names` already tracks which functions are
 fibers, so the plumbing is present rather than hypothetical.
 
+**Zyntax's own hot-swap is the mechanism to drive.** `compiler/src/osr.rs`
+exists and `tiered_backend` already does "threads, atomic code-pointer
+swap, generations", wiring `osr::osr_runtime_symbols()` into the
+Cranelift backend so JIT'd back-edge code can resolve them. Read the
+phase comments before relying on it: they say OSR lands in phase 2/3 and
+deopt in phase 4, so the swap machinery is further along than the
+on-stack replacement itself. Check what is actually complete rather than
+taking the module's existence as the feature.
+
+This matters because Blinc's hot reload currently works by building a
+FRESH instance and swapping it wholesale, which is why signal values
+have to survive in a process-global registry — the registry IS the
+state-preservation mechanism. An atomic code-pointer swap with
+generations replaces the instance rebuild, and OSR is what would let a
+SUSPENDED FIBER carry its state across an edit rather than being
+reconstructed. That is the missing piece for FSMs-as-fibers: without it,
+an FSM mid-flight is lost on reload; with it, the fiber resumes into new
+code.
+
+So the three threads converge. Effects give reads an observable
+boundary, fibers give FSMs their suspension, and OSR is how either
+survives an edit. Persistent fibers are the concept to explore first,
+since both the FSM design and the reload story depend on whether a
+fiber's state can outlive the code that created it.
+
 Related: the algebraic-effects section below argues the same thing about
 reactivity, which is not a coincidence. Both come from the DSL treating
 Zyntax as a backend to emit into rather than a language with a semantics
