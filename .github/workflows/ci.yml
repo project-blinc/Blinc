@@ -70,8 +70,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      # `--all-targets` so examples compile too. Without it cargo checks
+      # lib and bins only, and every example in the repo goes unbuilt: a
+      # `cn::sidebar` signature change broke `cn_demo` and CI stayed
+      # green, because nothing here ever compiled it.
       - name: Run cargo check
-        run: cargo check --workspace --all-features
+        run: cargo check --workspace --all-features --all-targets
 
   security-audit:
     name: Security Audit
@@ -296,7 +300,7 @@ jobs:
             ${{ runner.os }}-cargo-clippy-
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-features -- -W clippy::all -A clippy::type_complexity -A dead_code
+        run: cargo clippy --workspace --all-features --all-targets -- -W clippy::all -A clippy::type_complexity -A dead_code
 
   wasm32-check:
     name: Wasm32 Check
