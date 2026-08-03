@@ -90,7 +90,7 @@ impl TextHitSpans {
         let mut run_options = self.options.clone();
         run_options.max_width = None;
 
-        let line_height_px = self.font_size * self.line_height;
+        let line_height_px = crate::text_measure::line_height_px(self.font_size, &self.options);
         let mut rects = Vec::new();
 
         for (row, line) in lines.iter().enumerate() {

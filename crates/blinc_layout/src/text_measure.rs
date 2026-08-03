@@ -343,6 +343,23 @@ pub fn measure_text(text: &str, font_size: f32) -> TextMetrics {
     }
 }
 
+/// Height of one rendered line under `options`
+///
+/// Not `font_size * line_height`: a real measurer derives the line box from
+/// font metrics, which is usually taller. Anything stepping line-to-line
+/// (placing wrapped runs, hit-testing them) must use the same number the
+/// layout did, or lines drift apart as they go down.
+pub fn line_height_px(font_size: f32, options: &TextLayoutOptions) -> f32 {
+    let mut single = options.clone();
+    single.max_width = None;
+    let height = measure_text_with_options("X", font_size, &single).height;
+    if height > 0.0 {
+        height
+    } else {
+        font_size * options.line_height
+    }
+}
+
 /// Wrap points for `text` using the global measurer, or fall back to estimation
 pub fn text_line_spans(text: &str, font_size: f32, options: &TextLayoutOptions) -> Vec<LineSpan> {
     let guard = TEXT_MEASURER.read().unwrap();

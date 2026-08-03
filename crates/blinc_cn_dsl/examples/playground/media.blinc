@@ -7,6 +7,7 @@ component MediaWidgets {
     style {
         .group { width: 100%; padding: 24px; gap: 16px; flex-direction: column }
         .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
+        .richtext-narrow { width: 280px; align-items: flex-start }
     }
 
     view {
@@ -31,6 +32,15 @@ component MediaWidgets {
             // cn.ChainedText (separate elements) cannot manage.
             cn.Label("rich text: inline markup in a single node")
             RichText("Press <b>Enter</b> to accept, <i>Escape</i> to cancel, or read the <a href='https://example.com'>manual</a>.")
+
+            // Narrow on purpose: the paragraph wraps, and the link sits
+            // past the first break. Its pointer and its click both follow
+            // it there, because both are placed against this width rather
+            // than measured as one long line.
+            cn.Label("rich text: wrapped, with a link on a later line")
+            Div(class = "richtext-narrow") {
+                RichText("A paragraph long enough to need several lines in this column, with <b>bold</b> and <i>italic</i> runs that keep their styling across a break, and a <a href='https://example.com'>link near the end</a> that still takes the pointer.")
+            }
 
             cn.Label("markdown: a block becomes a column of elements")
             // A real multi-line string: escapes are not interpreted,

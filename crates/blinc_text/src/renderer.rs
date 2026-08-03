@@ -782,12 +782,7 @@ impl TextRenderer {
         let atlas_dims = self.atlas.dimensions();
 
         // Second pass: build glyph instances with per-glyph colors
-        // We need to map glyph cluster (byte position) to color
-        let byte_positions: Vec<usize> = text.char_indices().map(|(i, _)| i).collect();
-
-        for (i, (positioned, glyph_info)) in
-            positioned_glyphs.iter().zip(glyph_infos.iter()).enumerate()
-        {
+        for (positioned, glyph_info) in positioned_glyphs.iter().zip(glyph_infos.iter()) {
             let glyph_info = match glyph_info {
                 Some(info) => *info,
                 None => continue,
@@ -797,9 +792,11 @@ impl TextRenderer {
                 continue;
             }
 
-            // Get the byte position for this glyph's cluster to determine color
-            let byte_pos = byte_positions.get(i).copied().unwrap_or(0);
-            let color = get_color_for_byte_pos(byte_pos);
+            // The glyph's own cluster, not its index: wrapping drops the
+            // whitespace at each break, so the nth glyph stops being the
+            // nth character and every span colour after the first wrap
+            // point would shift.
+            let color = get_color_for_byte_pos(positioned.byte_offset);
 
             // positioned.x is the pen position from the shaper
             // bearing_x is the offset from pen position to the glyph's left edge

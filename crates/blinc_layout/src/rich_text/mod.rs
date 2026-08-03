@@ -511,24 +511,24 @@ impl RichText {
 
     /// Update size using text measurement
     fn update_size_estimate(&mut self) {
-        let mut options = crate::text_measure::TextLayoutOptions::new();
-        options.font_name = self.font_family.name.clone();
-        options.generic_font = self.font_family.generic;
-        options.font_weight = self.weight.weight();
-        options.italic = self.italic;
-
+        let options = self.measure_options();
         let metrics =
             crate::text_measure::measure_text_with_options(&self.content, self.font_size, &options);
 
         self.measured_width = metrics.width;
         self.ascender = metrics.ascender;
-
-        self.style.size.width = Dimension::Length(metrics.width);
-        let standardized_height = self.font_size * self.line_height;
-        self.style.size.height = Dimension::Length(standardized_height);
         self.style.max_size.width = Dimension::Percent(1.0);
 
-        if !self.wrap {
+        if self.wrap {
+            // Auto on both axes so taffy queries the measure function with
+            // the width actually available, and the node grows to however
+            // many lines that width produces.
+            self.style.size.width = Dimension::Auto;
+            self.style.size.height = Dimension::Auto;
+            self.style.flex_shrink = 1.0;
+        } else {
+            self.style.size.width = Dimension::Length(metrics.width);
+            self.style.size.height = Dimension::Length(self.font_size * self.line_height);
             self.style.flex_shrink = 0.0;
         }
     }
@@ -612,7 +612,25 @@ impl RichText {
 
 impl ElementBuilder for RichText {
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        tree.create_node(self.style.clone())
+        if !self.wrap {
+            return tree.create_node(self.style.clone());
+        }
+        // Measured as plain text: the markup only changes weight and
+        // colour per span, and taffy needs a height for the width it is
+        // considering, not a styled one.
+        tree.create_text_node(
+            self.style.clone(),
+            crate::tree::TextMeasureContext {
+                content: self.content.clone(),
+                font_size: self.font_size,
+                line_height: self.line_height,
+                wrap: true,
+                font_name: self.font_family.name.clone(),
+                generic_font: self.font_family.generic,
+                font_weight: self.weight.weight(),
+                italic: self.italic,
+            },
+        )
     }
 
     #[allow(deprecated)]
