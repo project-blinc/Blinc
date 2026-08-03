@@ -117,6 +117,17 @@ component FormWidgets {
                 cn.Radio(value = "pro", label = "Pro")
             }
 
+            // Same choice as the radios above, on the same signal, but
+            // folded away until asked for. Picking in either moves both.
+            cn.Label("select: pick one from a list that drops down")
+            Div(class = "row") {
+                cn.Select(value = plan, label = "Plan", placeholder = "Pick one", w = 180.0) {
+                    cn.Option(value = "free", label = "Free")
+                    cn.Option(value = "pro", label = "Pro")
+                    cn.Option(value = "team", label = "Team", disabled = true)
+                }
+            }
+
             cn.Label("otp: one slot per character, focus walks itself")
             cn.InputOTP(value = otp_code, length = 6.0, numeric_only = true)
             Div(class = "row") {
