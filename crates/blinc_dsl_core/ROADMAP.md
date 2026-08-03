@@ -47,30 +47,16 @@ first minted, so it never overwrites a live value.
 **FSMs.** `context` blocks, self transitions, event dispatch, and
 `@stateful @fsm([X])` binding a component to the fields it reads.
 
-## In progress
+**Styling any widget.** `class = "a b"` on a `cn.*` or core widget, on
+top of whatever classes the widget carries itself, so a `.blinc` rule
+reaches a cn widget the same way it reaches a `Div`. Every extern
+widget takes it; the arg used to parse and then be dropped, which meant
+the call compiled and the rule silently did nothing.
 
-**Reactive props across the cn surface.** Button, Progress, Skeleton,
-Separator, Badge, Label, Alert, Input, Textarea, Switch, Checkbox, Kbd
-and Avatar accept bound values. Spinner's colours are bindable from
-Rust but not from the DSL, where the prop is a hex string and no colour
-type crosses the FFI. Card has no scalar props to bind. The rest of the
-cn widgets still take plain values.
-
-Two rules have to hold for every widget converted:
-
-- content rebuilt inside a `Stateful` sets its own visual props. The
-  stylesheet pass has already walked the tree by the time a callback
-  builds its content, so it cannot inherit a colour from an ancestor's
-  class.
-- a wrapper introduced around rebuilt content must align where the node
-  it replaces would have. `w_fit` / `h_fit` set `align_self: Start`,
-  which overrides the parent's `align-items`.
-
-## Next
-
-**Hot reload for `.blinc` files** — *the loop and state preservation are
-done; recompile hygiene turned out to be moot.* Edit a file and see it in the running
+**Hot reload for `.blinc` files.** Edit a file and see it in the running
 app, so widget and CSS iteration costs seconds rather than a rebuild.
+All four parts below are done, and both the single-file and the
+imported-module paths are pinned by tests.
 
 Zyntax's `hot_reload` is not the mechanism: it swaps one function's
 machine code by id and cannot add or remove declarations, while a
@@ -106,6 +92,31 @@ build restarts the layout slotmap and hands the same ids out again (now
 dropped by build epoch); and mixed int/float arithmetic reached
 Cranelift with an integer operand under a float instruction, which the
 verifier rejected, silently dropping the function.
+
+## In progress
+
+**Reactive props across the cn surface.** Button, Progress, Skeleton,
+Separator, Badge, Label, Alert, Input, Textarea, Switch, Checkbox, Kbd
+and Avatar accept bound values. Spinner's colours are bindable from
+Rust but not from the DSL, where the prop is a hex string and no colour
+type crosses the FFI. Card has no scalar props to bind. The rest of the
+cn widgets still take plain values.
+
+Two rules have to hold for every widget converted:
+
+- content rebuilt inside a `Stateful` sets its own visual props. The
+  stylesheet pass has already walked the tree by the time a callback
+  builds its content, so it cannot inherit a colour from an ancestor's
+  class.
+- a wrapper introduced around rebuilt content must align where the node
+  it replaces would have. `w_fit` / `h_fit` set `align_self: Start`,
+  which used to override the parent's `align-items`. The layout tree now
+  marks that value incidental and lets a parent's stated `align_items`
+  outrank it, so this is no longer something each widget has to
+  remember. An `align_self` an author wrote still wins, as CSS
+  promises.
+
+## Next
 
 **Scoped `@stateful`.** `has_stateful_view` is a single global flag:
 ANY view carrying `@stateful` makes `view_widget` wrap the whole
@@ -380,13 +391,15 @@ or two, L is a week or more and usually hides a design question.
 | M | `while` with children | The child list belongs to the entry block and a later block cannot use it. A lowering change, not a widget change. |
 | ✅ | A collection type across the FFI | Done. `[a, b, c]` literals, `xs[i]` indexing, `Vec<T>` props for String / bool / i32 / i64 / f64, and `cn.Breadcrumb` as the first consumer. A list of structs still needs the element layout. |
 | M | Module system | Export lists and a manifest. Composes with hot reload, so worth doing after it. |
-| L | Item-driven widgets | Select, Combobox, DropdownMenu, Menubar, ContextMenu, NavigationMenu, Breadcrumb, Pagination, ToggleGroup, Table, Tree, Chart. Each is large on its own and every one waits on the collection type. Chart is the biggest single surface in cn. |
+| L | Item-driven widgets | Select, Combobox, DropdownMenu, Menubar, ContextMenu, NavigationMenu, Pagination, Table, Tree, Chart. Each is large on its own. Chart is the biggest single surface in cn. Breadcrumb and ToggleGroup are done; ToggleGroup did not need the collection type, because its options are children rather than a list prop — worth trying that shape first for the others. |
 | L | Scoped `@stateful` | One `@stateful` anywhere rebuilds the whole program on every signal write, which also kills in-flight animation. Blocked on the `Root$view` wall — see the section above. `with` blocks now deliver most of the benefit without it, so this is only worth doing for the case where the state behaviour deserves a name. |
 | L | Router | Route declarations, params, nested outlets, and how a route change interacts with subtree rebuilds. |
 | L | Standard library | Open-ended by nature; scope it against what view bodies actually reach for. |
 
 **Suggested order.** Hot reload, the four exposed-but-static widgets,
-the collection type and `with` blocks are done. The item-driven widgets
-are unblocked and can land one at a time. `while` with children and
-scoped `@stateful` are independent and can slot in whenever the
+the collection type and `with` blocks are done, as is styling any widget
+by class. The item-driven widgets are unblocked and can land one at a
+time; try the children shape before reaching for a list prop, since
+`ToggleGroup` needed no collection type at all. `while` with children
+and scoped `@stateful` are independent and can slot in whenever the
 compiler work is worth the context switch.

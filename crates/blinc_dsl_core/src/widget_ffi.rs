@@ -557,6 +557,14 @@ pub enum BlincStructFieldValue {
 pub struct Styled<W: blinc_layout::div::ElementBuilder> {
     inner: W,
     overlay: RenderPropsOverlay,
+    /// Classes the author wrote at the call site, e.g.
+    /// `cn.Badge("hi", class = "chip wide")`.
+    author_classes: Vec<std::sync::Arc<str>>,
+    /// `element_classes` hands back a slice, so the widget's own classes
+    /// and the author's have to live in one allocation. Built on first
+    /// ask because the inner widget usually builds itself lazily and has
+    /// no classes to report before that.
+    merged_classes: std::cell::OnceCell<Vec<std::sync::Arc<str>>>,
 }
 
 impl<W: blinc_layout::div::ElementBuilder> Styled<W> {
@@ -564,6 +572,22 @@ impl<W: blinc_layout::div::ElementBuilder> Styled<W> {
         Self {
             inner: widget,
             overlay,
+            author_classes: Vec::new(),
+            merged_classes: std::cell::OnceCell::new(),
+        }
+    }
+
+    /// Same, plus the classes written at the call site.
+    pub fn with_classes(
+        widget: W,
+        overlay: RenderPropsOverlay,
+        classes: Vec<std::sync::Arc<str>>,
+    ) -> Self {
+        Self {
+            inner: widget,
+            overlay,
+            author_classes: classes,
+            merged_classes: std::cell::OnceCell::new(),
         }
     }
     pub fn inner(&self) -> &W {
@@ -601,7 +625,14 @@ impl<W: blinc_layout::div::ElementBuilder> blinc_layout::div::ElementBuilder for
     }
     // Forward identity so CSS class/id/type-name selectors match through the wrapper.
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
-        self.inner.element_classes()
+        if self.author_classes.is_empty() {
+            return self.inner.element_classes();
+        }
+        self.merged_classes.get_or_init(|| {
+            let mut all = self.inner.element_classes().to_vec();
+            all.extend(self.author_classes.iter().cloned());
+            all
+        })
     }
     fn element_id(&self) -> Option<&str> {
         self.inner.element_id()
@@ -670,6 +701,20 @@ pub mod __extern_widget_internals {
     /// `ptr` must come from `__new_style_overlay__`.
     pub unsafe fn decode_overlay(ptr: i64) -> crate::RenderPropsOverlay {
         unsafe { crate::materialize_overlay(ptr) }
+    }
+
+    /// Split a `class = "a b"` argument into interned class names.
+    ///
+    /// A null or empty argument yields none, which is what an omitted
+    /// `class` looks like after the arity pass fills the slot.
+    pub fn decode_class_names(ptr: *const i32) -> Vec<::std::sync::Arc<str>> {
+        if ptr.is_null() {
+            return Vec::new();
+        }
+        super::decode_string_arg(ptr)
+            .split_whitespace()
+            .map(|name| ::blinc_core::intern::intern(name))
+            .collect()
     }
 
     /// Wrap an `ElementBuilder` in `WidgetBox::Custom` and leak as a `WidgetHandle`.

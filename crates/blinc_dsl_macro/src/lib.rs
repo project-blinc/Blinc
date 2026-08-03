@@ -879,6 +879,26 @@ pub fn extern_widget(attr: TokenStream, item: TokenStream) -> TokenStream {
         });
     }
 
+    // Every extern widget takes `class`, so a `.blinc` author can style
+    // one with a CSS rule the same way they style a `Div`. Previously
+    // the arg parsed and was dropped on the floor: the call compiled and
+    // the rule silently never applied.
+    thunk_params.push(quote! { __arg_class: *const i32 });
+    prop_defs.push(quote! {
+        ::blinc_dsl_core::__extern_widget_internals::PropDef {
+            name: ::std::sync::Arc::from("class"),
+            ty: ::blinc_dsl_core::__extern_widget_internals::Type::Primitive(
+                ::blinc_dsl_core::__extern_widget_internals::PrimitiveType::String
+            ),
+            reactive_inner: None,
+        }
+    });
+    param_types.push(quote! {
+        ::blinc_dsl_core::__extern_widget_internals::Type::Primitive(
+            ::blinc_dsl_core::__extern_widget_internals::PrimitiveType::String
+        )
+    });
+
     // Strip macro-only field attributes before re-emitting the struct.
     if let syn::Fields::Named(named) = &mut item_struct.fields {
         for field in &mut named.named {
@@ -897,16 +917,30 @@ pub fn extern_widget(attr: TokenStream, item: TokenStream) -> TokenStream {
                 ::blinc_dsl_core::__extern_widget_internals::decode_overlay(__arg_style)
             };
             let __widget: Box<dyn ::blinc_layout::div::ElementBuilder> = Box::new(
-                ::blinc_dsl_core::__extern_widget_internals::Styled::new(
+                ::blinc_dsl_core::__extern_widget_internals::Styled::with_classes(
                     #struct_ident { #(#struct_inits),* },
                     __overlay,
+                    ::blinc_dsl_core::__extern_widget_internals::decode_class_names(__arg_class),
                 )
             );
         }
     } else {
         quote! {
-            let __widget: Box<dyn ::blinc_layout::div::ElementBuilder> =
-                Box::new(#struct_ident { #(#struct_inits),* });
+            // Unstyled widgets are only wrapped when a class was
+            // actually written, so the common call stays a bare struct.
+            let __classes =
+                ::blinc_dsl_core::__extern_widget_internals::decode_class_names(__arg_class);
+            let __widget: Box<dyn ::blinc_layout::div::ElementBuilder> = if __classes.is_empty() {
+                Box::new(#struct_ident { #(#struct_inits),* })
+            } else {
+                Box::new(
+                    ::blinc_dsl_core::__extern_widget_internals::Styled::with_classes(
+                        #struct_ident { #(#struct_inits),* },
+                        ::std::default::Default::default(),
+                        __classes,
+                    )
+                )
+            };
         }
     };
 
