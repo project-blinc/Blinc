@@ -164,13 +164,22 @@ clicking a page navigated the app. Nothing warns — the second
 declaration finds the first and adopts it, and the only report is
 behaviour.
 
-Names should be qualified by their module, so two files cannot collide
-without asking to. What that has to account for:
+**The fix is one pass away.** `apply_module_namespace_prefix` already
+mangles component classes and FSM state enums by module, for exactly
+this reason — its own comment says same-named cross-file FSMs would
+otherwise collide in the global `FsmRegistry`. Signals have the
+identical problem and were left out. Adding signal declarations to that
+pass's mangle set, plus the reference rewrite it already does for the
+other two categories, is the change.
 
-- **Host interop.** `blinc_runtime::signal::set_str("page", …)` is how
-  Rust drives a `.blinc` program, and ~74 call sites across the repo
-  pass bare names. Qualified names need a resolution rule the host can
-  rely on, or the entry module keeps unqualified names.
+The rule that makes host interop survive falls out of the existing
+design: the namespace is EMPTY for the entry module, so entry signals
+stay unmangled and the ~74 `set_str("name", …)` call sites keep working.
+Only imported modules get qualified — which is precisely where
+collisions come from.
+
+Still to account for:
+
 - **Hot reload.** State survives because values live in that registry
   and outlive the instance. The key changes shape, which is fine as long
   as it changes consistently — but a reload across an edit that MOVES a
