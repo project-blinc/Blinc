@@ -23,7 +23,12 @@ use zyntax_typed_ast::{Span, TypedProgram, TypedStatement, typed_node};
 /// Embedded Blinc DSL grammar source.
 pub const BLINC_GRAMMAR: &str = include_str!("../grammar/blinc.zyn");
 
+// The `#[extern_widget]` macro emits absolute `::blinc_dsl_core`
+// paths, so the crate has to be able to name itself.
+extern crate self as blinc_dsl_core;
+
 mod abi;
+pub mod core_widgets;
 mod fsm_registry;
 mod host;
 mod passes;
@@ -251,6 +256,12 @@ impl BlincDsl {
         // still call `install_runtime_bridge()` explicitly to swap which
         // instance owns the process-wide slot (last-write-wins).
         this.install_runtime_bridge();
+        // Core widgets declared with `#[extern_widget]`. Registered
+        // here rather than by the caller, so they are available with no
+        // `register_*` call — the same guarantee the hand-written
+        // builtins give.
+        this.register_extern_widget::<core_widgets::RichTextWidget>()?;
+        this.register_extern_widget::<core_widgets::MarkdownWidget>()?;
         Ok(this)
     }
 

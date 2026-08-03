@@ -26,6 +26,15 @@ component MediaWidgets {
                 cn.Small("small print.")
             }
 
+            // Core widgets, no cn. prefix — same tier as Div and Text.
+            // One node: formatting mid-sentence survives a wrap, which
+            // cn.ChainedText (separate elements) cannot manage.
+            cn.Label("rich text: inline markup in a single node")
+            RichText("Press <b>Enter</b> to accept, <i>Escape</i> to cancel, or read the <a href=\"https://example.com\">manual</a>.")
+
+            cn.Label("markdown: a block becomes a column of elements")
+            Markdown("## Heading\n\nA paragraph with **bold** and `code`.\n\n- first item\n- second item")
+
             cn.Label("avatar: size x shape")
             Div(class = "row") {
                 cn.Avatar(fallback = "AB", size = "small")

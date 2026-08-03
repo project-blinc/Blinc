@@ -219,12 +219,6 @@ pub(crate) fn register_blinc_layout_primitives() {
         props: vec![style_prop()],
     };
 
-    let rich_text = ComponentDefinition {
-        name: std::sync::Arc::from("RichText"),
-        view_symbol: std::sync::Arc::from("$Blinc$RichText$view"),
-        props: vec![prop("markup", string_ty.clone()), style_prop()],
-    };
-
     let motion = ComponentDefinition {
         name: std::sync::Arc::from("Motion"),
         view_symbol: std::sync::Arc::from("$Blinc$Motion$view"),
@@ -267,7 +261,6 @@ pub(crate) fn register_blinc_layout_primitives() {
         r.register(image);
         r.register(svg);
         r.register(canvas);
-        r.register(rich_text);
         r.register(motion);
         r.register(notch);
         r.register(ComponentDefinition {

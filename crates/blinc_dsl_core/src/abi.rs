@@ -19,7 +19,7 @@ use crate::widget_ffi::{
     blinc_image_view, blinc_inline_code_view, blinc_label_view, blinc_li_view, blinc_link_view,
     blinc_motion_view, blinc_muted_view, blinc_new_child_list, blinc_new_struct_value,
     blinc_new_style_overlay, blinc_notch_view, blinc_ol_view, blinc_p_view, blinc_pre_view,
-    blinc_push_child, blinc_rich_text_view, blinc_set_overlay_bg, blinc_set_overlay_bg_computed,
+    blinc_push_child, blinc_set_overlay_bg, blinc_set_overlay_bg_computed,
     blinc_set_overlay_bg_signal, blinc_set_overlay_border_color,
     blinc_set_overlay_border_color_computed, blinc_set_overlay_border_color_signal,
     blinc_set_overlay_border_width, blinc_set_overlay_border_width_computed,
@@ -637,15 +637,6 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             param_types: &[Type::Primitive(PrimitiveType::I64)],
             return_type: Type::Primitive(PrimitiveType::I64),
             ptr: blinc_canvas_view as *const u8,
-        },
-        BuiltinDescriptor {
-            name: "$Blinc$RichText$view",
-            param_types: &[
-                Type::Primitive(PrimitiveType::String),
-                Type::Primitive(PrimitiveType::I64),
-            ],
-            return_type: Type::Primitive(PrimitiveType::I64),
-            ptr: blinc_rich_text_view as *const u8,
         },
         BuiltinDescriptor {
             name: "$Blinc$Motion$view",

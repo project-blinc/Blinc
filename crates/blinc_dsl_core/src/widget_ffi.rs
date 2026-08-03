@@ -1456,22 +1456,6 @@ pub(crate) extern "C" fn blinc_canvas_view(_call_id: u64, style: i64) -> WidgetH
     leak_custom(Styled::new(widget, overlay))
 }
 
-/// `$Blinc$RichText$view(markup, style) -> WidgetHandle`.
-pub(crate) extern "C" fn blinc_rich_text_view(
-    _call_id: u64,
-    markup_ptr: *const i32,
-    style: i64,
-) -> WidgetHandle {
-    if markup_ptr.is_null() {
-        tracing::warn!("$Blinc$RichText$view called with null markup pointer");
-        return 0;
-    }
-    let markup = decode_string_arg(markup_ptr);
-    let widget = blinc_layout::rich_text::RichText::new(markup);
-    let overlay = unsafe { materialize_overlay(style) };
-    leak_custom(Styled::new(widget, overlay))
-}
-
 /// `$Blinc$Motion$view(children, style) -> WidgetHandle`.
 pub(crate) extern "C" fn blinc_motion_view(
     _call_id: u64,
