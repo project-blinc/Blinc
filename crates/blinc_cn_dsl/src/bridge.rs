@@ -81,6 +81,25 @@ pub fn f64_state(r: &Reactive<f64>) -> blinc_core::reactive::State<f64> {
 
 /// `String` mirror of [`bool_state`], for a widget that owns a word:
 /// which tab is showing, which option is picked.
+/// `i32` mirror of [`bool_state`], for a widget that owns a whole
+/// number — a page, a count, an index.
+pub fn i32_state(r: &Reactive<i32>) -> blinc_core::reactive::State<i32> {
+    use blinc_core::reactive::{Signal, State, global_dirty_flag, global_graph, signal};
+    let sig: Signal<i32> = match r {
+        Reactive::Signal(s) => *s,
+        Reactive::Literal(v) => signal::<i32>(*v),
+        Reactive::Computed(c) => signal::<i32>(c.try_get().unwrap_or(0)),
+    };
+    State::with_stateful_callback(
+        sig,
+        global_graph(),
+        global_dirty_flag(),
+        std::sync::Arc::new(|ids: &[blinc_core::reactive::SignalId]| {
+            blinc_layout::check_stateful_deps(ids);
+        }),
+    )
+}
+
 pub fn string_state(r: &Reactive<String>) -> blinc_core::reactive::State<String> {
     use blinc_core::reactive::{Signal, State, global_dirty_flag, global_graph, signal};
     let sig: Signal<String> = match r {

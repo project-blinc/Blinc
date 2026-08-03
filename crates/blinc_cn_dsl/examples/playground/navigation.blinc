@@ -2,6 +2,12 @@
 
 signal section: string = "account"
 signal pane: string = "one"
+// TEMPORARY. This should be `page`, and it is only spelled differently
+// because signals are keyed globally by bare name: main.blinc already
+// owns `page` for the sidebar, so a second module declaring one shares
+// it, and clicking a number here navigated away. Module-local signals
+// are the fix — see the roadmap. Rename this back once they land.
+signal table_page: i32 = 1
 
 component NavigationWidgets {
     style {
@@ -11,6 +17,7 @@ component NavigationWidgets {
         .group { width: 100%; padding: 24px; gap: 16px; flex-direction: column;
                  color: var(--text-primary) }
         .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
+        .col { gap: 8px; flex-direction: column; align-items: flex-start }
     }
 
     view {
@@ -63,6 +70,24 @@ component NavigationWidgets {
                 }
                 cn.Tab(value = "two", label = "Two") {
                     Div { Text("Second panel.") }
+                }
+            }
+
+            // No children: the numbers come from `total`, unlike the
+            // widgets whose options are cn.Option children. A page is a
+            // whole number, so the signal is an i32 and nothing rounds
+            // on the way through.
+            cn.Label("pagination: numbers derived from a total")
+            Div(class = "col") {
+                cn.Pagination(page = table_page, total = 12.0, visible = 5.0, show_first_last = true)
+                // Driven from outside, to show the binding goes both ways.
+                Div(class = "row") {
+                    cn.Button("First", size = "small", variant = "outline",
+                              on_click = || table_page.set(1))
+                    cn.Button("Middle", size = "small", variant = "outline",
+                              on_click = || table_page.set(6))
+                    cn.Button("Last", size = "small", variant = "outline",
+                              on_click = || table_page.set(12))
                 }
             }
         }

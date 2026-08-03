@@ -181,7 +181,7 @@ pub mod prelude {
         navigation_link, navigation_menu,
     };
     pub use crate::components::pagination::{
-        Pagination, PaginationBuilder, PaginationSize, pagination,
+        PageValue, Pagination, PaginationBuilder, PaginationSize, pagination,
     };
     pub use crate::components::popover::{
         Popover, PopoverAlign, PopoverBuilder, PopoverSide, popover,

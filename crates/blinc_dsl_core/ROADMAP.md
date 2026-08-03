@@ -116,7 +116,7 @@ Two rules have to hold for every widget converted:
   remember. An `align_self` an author wrote still wins, as CSS
   promises.
 
-**cn coverage.** 51 of cn's widgets have a DSL binding. Nine do not,
+**cn coverage.** 52 of cn's widgets have a DSL binding. Eight do not,
 and they are the ones left:
 
 | Widget | Lines | Shape it needs |
@@ -125,16 +125,24 @@ and they are the ones left:
 | `ContextMenu` | 955 | `DropdownMenu` opened by right-click instead of a trigger. |
 | `Menubar` | 1100 | A row of `DropdownMenu`s sharing which one is open. |
 | `NavigationMenu` | 823 | Menubar with panels rather than item lists. |
-| `Pagination` | 719 | Numeric state, no collection. Small and self-contained — a good first one to break the run of menus. |
 | `Table` | 262 | Smallest file, but the only one that genuinely needs a list of structs: a row is not a scalar, and the collection type stops at `Vec<T>` for scalar `T`. |
 | `Tree` | 726 | Recursive children. Nothing else in the DSL nests a widget in itself yet. |
 | `Toast` | 519 | Queue plus timing, and a known exit-motion race on web. No trigger-shaped anchor, so it needs a host-side entry point rather than a view-body call. |
 | `Chart` | 1861 | The biggest single surface in cn, and needs the list-of-structs type as much as `Table` does. Last. |
 
-`ToggleGroup`, `Breadcrumb`, `Select` and `Combobox` are done from this
-family, by two different routes: `Breadcrumb` waited for the collection type and
-takes `items = [...]`, while `ToggleGroup`, `Select` and `Combobox`
-needed nothing new because their options are children. Try the children shape first —
+`ToggleGroup`, `Breadcrumb`, `Select`, `Combobox` and `Pagination` are
+done from this family, by three different routes: `Breadcrumb` waited for the collection type and
+takes `items = [...]`, `ToggleGroup`, `Select` and `Combobox`
+needed nothing new because their options are children; and `Pagination`
+has no options at all, deriving its numbers from a total.
+
+`Pagination` did need one thing, and it was a TYPE rather than a shape:
+its builder wants `State<usize>` and the DSL has no usize signal, so
+`PageValue` was added to accept either that or a `NumberValue` and round
+at the boundary. Converting instead would have minted a second signal id
+and left the binding writing to a copy. Expect the same wherever a cn
+widget's state type has no DSL equivalent — add an accepting enum rather
+than narrowing at the call site. Try the children shape first —
 most of the ten above are option lists, and only `Table` and `Chart`
 clearly need a row type.
 
@@ -145,6 +153,35 @@ rather than vanishing outside a parent. `Combobox` reuses it unchanged, which is
 the case it was named for. Reach for a new child type only where the
 choice genuinely differs — a menu item is a command, not a value, so
 that family will need its own.
+
+**Module-local signals.** `signal page` in two modules is ONE signal.
+Declarations mint into a process-global registry keyed by the bare name
+(`mint_or_get`), so a name chosen in one file silently binds to a name
+chosen in another. It surfaced in the playground: `main.blinc` owns
+`page` for which tab the sidebar shows, a pagination demo in
+`navigation.blinc` declared `signal page` for its page number, and
+clicking a page navigated the app. Nothing warns — the second
+declaration finds the first and adopts it, and the only report is
+behaviour.
+
+Names should be qualified by their module, so two files cannot collide
+without asking to. What that has to account for:
+
+- **Host interop.** `blinc_runtime::signal::set_str("page", …)` is how
+  Rust drives a `.blinc` program, and ~74 call sites across the repo
+  pass bare names. Qualified names need a resolution rule the host can
+  rely on, or the entry module keeps unqualified names.
+- **Hot reload.** State survives because values live in that registry
+  and outlive the instance. The key changes shape, which is fine as long
+  as it changes consistently — but a reload across an edit that MOVES a
+  signal between modules would drop it.
+- **Sharing on purpose.** Two modules sometimes should read one signal.
+  Today that is accidental and free; afterwards it needs a way to say so
+  — an export, or an explicitly global namespace.
+- **The type-mismatch warning.** `mint_or_get` already warns when a name
+  is redeclared at a different type. That warning is the only existing
+  signal that a collision happened, and it fires only on type change:
+  two `f64` declarations collide in silence.
 
 ## Next
 
@@ -421,15 +458,15 @@ or two, L is a week or more and usually hides a design question.
 | M | `while` with children | The child list belongs to the entry block and a later block cannot use it. A lowering change, not a widget change. |
 | ✅ | A collection type across the FFI | Done. `[a, b, c]` literals, `xs[i]` indexing, `Vec<T>` props for String / bool / i32 / i64 / f64, and `cn.Breadcrumb` as the first consumer. A list of structs still needs the element layout. |
 | M | Module system | Export lists and a manifest. Composes with hot reload, so worth doing after it. |
-| L | The nine cn widgets with no DSL binding | See "cn coverage" above. Pagination next, Chart last. |
+| L | The eight cn widgets with no DSL binding | See "cn coverage" above. The menu family next, Chart last. |
 | L | Scoped `@stateful` | One `@stateful` anywhere rebuilds the whole program on every signal write, which also kills in-flight animation. Blocked on the `Root$view` wall — see the section above. `with` blocks now deliver most of the benefit without it, so this is only worth doing for the case where the state behaviour deserves a name. |
 | L | Router | Route declarations, params, nested outlets, and how a route change interacts with subtree rebuilds. |
 | L | Standard library | Open-ended by nature; scope it against what view bodies actually reach for. |
 
 **Suggested order.** Hot reload, the four exposed-but-static widgets,
 the collection type and `with` blocks are done, as is styling any widget
-by class. Of the nine cn widgets still unbound, `Pagination`
-is cheapest and needs nothing new; `Table` and `Chart` should wait for a
+by class. Of the eight cn widgets still unbound, the menu
+family shares one overlay shape and can go together; `Table` and `Chart` should wait for a
 list of structs, and everything else can land one at a time using the
 option-as-child shape. `while` with children and scoped `@stateful` are
 independent and can slot in whenever the compiler work is worth the

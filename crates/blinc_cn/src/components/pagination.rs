@@ -532,10 +532,58 @@ impl ElementBuilder for Pagination {
 }
 
 /// Builder for pagination component
+/// Where a pagination reads and writes its page number.
+///
+/// A caller holding a `State<usize>` passes it straight through. The
+/// DSL has no usize signal — every number there is one `f64` — so it
+/// hands over its own signal and this rounds at the boundary. Narrowing
+/// to a widget-owned copy instead would mint a second id and leave
+/// anything keyed on the first (a `deps` list, an animation key) stale.
+#[derive(Clone)]
+pub enum PageValue {
+    /// A caller's own page counter.
+    Usize(State<usize>),
+    /// A whole-number signal. What the DSL binds: a page is an integer,
+    /// so nothing is rounded on the way through.
+    I32(State<i32>),
+    /// A number signal of any precision, rounded to a page.
+    Number(crate::reactive_props::NumberValue),
+}
+
+impl PageValue {
+    /// The current page, 1-based. A number below 1 clamps, since page 0
+    /// is not a page.
+    pub fn get(&self) -> usize {
+        match self {
+            Self::Usize(s) => s.get(),
+            Self::I32(s) => s.get().max(1) as usize,
+            Self::Number(n) => n.get().round().max(1.0) as usize,
+        }
+    }
+
+    /// Write it back in the caller's own representation.
+    pub fn set(&self, page: usize) {
+        match self {
+            Self::Usize(s) => s.set(page),
+            Self::I32(s) => s.set(page as i32),
+            Self::Number(n) => n.set(page as f32),
+        }
+    }
+
+    /// What to subscribe to. One id either way.
+    pub fn signal_id(&self) -> blinc_core::reactive::SignalId {
+        match self {
+            Self::Usize(s) => s.signal_id(),
+            Self::I32(s) => s.signal_id(),
+            Self::Number(n) => n.signal_id(),
+        }
+    }
+}
+
 pub struct PaginationBuilder {
     key: InstanceKey,
     total_pages: usize,
-    current_page: State<usize>,
+    current_page: PageValue,
     visible_pages: usize,
     show_first_last: bool,
     size: PaginationSize,
@@ -550,11 +598,29 @@ pub struct PaginationBuilder {
 impl PaginationBuilder {
     /// Create a new pagination builder
     #[track_caller]
+    /// Drive the page from a number signal of any precision, for a
+    /// caller with no `State<usize>` to offer — the DSL, where every
+    /// number is one `f64`.
+    pub fn with_page_value(total_pages: usize, page: PageValue) -> Self {
+        Self {
+            key: InstanceKey::new("pagination"),
+            total_pages,
+            current_page: page,
+            visible_pages: 5,
+            show_first_last: false,
+            size: PaginationSize::default(),
+            on_page_change: None,
+            classes: Vec::new(),
+            user_id: None,
+            built: std::cell::OnceCell::new(),
+        }
+    }
+
     pub fn new(total_pages: usize, current_page: State<usize>) -> Self {
         Self {
             key: InstanceKey::new("pagination"),
             total_pages,
-            current_page,
+            current_page: PageValue::Usize(current_page),
             visible_pages: 5,
             show_first_last: false,
             size: PaginationSize::default(),

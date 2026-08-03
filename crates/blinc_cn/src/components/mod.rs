@@ -101,7 +101,7 @@ pub use navigation_menu::{
     navigation_menu,
 };
 pub use number_input::{NumberInput, NumberInputBuilder, number_input};
-pub use pagination::{Pagination, PaginationBuilder, PaginationSize, pagination};
+pub use pagination::{PageValue, Pagination, PaginationBuilder, PaginationSize, pagination};
 pub use popover::{Popover, PopoverAlign, PopoverBuilder, PopoverSide, popover};
 pub use progress::{AnimatedProgress, Progress, ProgressSize, progress, progress_animated};
 pub use radio::{RadioGroup, RadioGroupBuilder, RadioLayout, RadioSize, radio_group};
