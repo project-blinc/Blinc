@@ -154,63 +154,54 @@ the case it was named for. Reach for a new child type only where the
 choice genuinely differs — a menu item is a command, not a value, so
 that family will need its own.
 
-**Scoped signals.** `signal page` in two modules is ONE signal, and so
-is `signal page` in two components of one module.
-Declarations mint into a process-global registry keyed by the bare name
-(`mint_or_get`), so a name chosen in one file silently binds to a name
-chosen in another. It surfaced in the playground: `main.blinc` owns
-`page` for which tab the sidebar shows, a pagination demo in
-`navigation.blinc` declared `signal page` for its page number, and
-clicking a page navigated the app. Nothing warns — the second
-declaration finds the first and adopts it, and the only report is
-behaviour.
+**Symbols instead of name-keyed registries.** *The priority.* Signals,
+FSMs and components each live in a process-global registry keyed by a
+string. Zyntax has symbols — with identity and scope, resolved by the
+compiler, in both the Cranelift and LLVM backends — and the DSL reaches
+around all of it to look things up by name at runtime.
 
-**Mangling is not the fix.** The obvious move is to add signals to
-`apply_module_namespace_prefix`, which already mangles component classes
-and FSM state enums by module for exactly this reason. That would stop
-the accidental collision, but it is the same one global registry with
-longer keys: a module's signal stays addressable from anywhere, merely
-harder to hit by accident.
+Every symptom below is the same mistake wearing different clothes:
 
-Zyntax has block scoping in both the Cranelift and LLVM backends, and
-that is what a scoped signal should be — scoped by the language, so a
-name in one scope is not reachable from another at all rather than
-reachable under a different spelling. The registry-by-name design
-reaches around the language it compiles to; every symptom in this
-section follows from that, not from the names being too short.
+- `signal page` in two modules is ONE signal. It surfaced in the
+  playground: `main.blinc` owns `page` for which tab the sidebar shows,
+  a pagination demo declared `signal page` for its page number, and
+  clicking a page navigated the app. Nothing warns — the second
+  declaration finds the first and adopts it, and behaviour is the only
+  report.
+- `signal page` in two COMPONENTS of one module is also one signal, and
+  that is likelier: a file's components are written together and reuse
+  obvious names. A module is only the coarsest scope; if scoping follows
+  blocks, a component body is one too.
+- FSMs have their own global registry with the same shape. State enums
+  are already mangled per module by `apply_module_namespace_prefix`,
+  whose comment says same-named cross-file FSMs would otherwise collide
+  — an admission that name keys collide, patched for one case.
+- Dependency sets are computed by a pass that WALKS THE AST GUESSING
+  what a view reads, because reads are not tracked. A resolved symbol
+  would say.
 
-**A module is only the coarsest scope.** If scoping follows blocks then
-a component body is one too: a signal declared inside a component should
-be that component's, not shared with the next component in the same
-file. Two components each wanting a `page` or an `open` is the same
-collision as two modules wanting one, and it is more likely, since a
-file's components are usually written together and reuse obvious names.
-Scoping by module alone would fix the case that happened to bite and
-leave the more probable one in place.
+Mangling is not the fix. Adding signals to the module-namespace pass
+stops the accidental collision but leaves one global registry with
+longer keys: a signal stays addressable from anywhere, merely harder to
+hit by accident.
 
-That also changes what a signal declaration MEANS. Today every one is
-program-global, so "shared" is the default and privacy is impossible.
-Afterwards the default inverts: a signal belongs to the scope that
-declares it, and reaching it from outside — another component, another
-module, or the Rust host — is a thing you ask for.
+What changes when symbols carry it instead: a signal belongs to the
+scope that declares it, two scopes cannot collide because there is no
+shared string space to collide in, and the compiler resolves a reference
+rather than the runtime matching a name. Sharing inverts from the
+default to a request.
 
-Still to account for:
+**The one thing that must land with it.** `blinc_runtime::signal::
+set_str("page", …)` is how Rust drives a `.blinc` program, and ~74 call
+sites pass bare names. That works today only because nothing is private.
+Scoping needs an export — a deliberate way to make a symbol reachable
+from outside — or the host loses its grip on the program. Design it
+alongside, not after.
 
-- **Host interop.** `blinc_runtime::signal::set_str("page", …)` is how
-  Rust drives a `.blinc` program, and ~74 call sites pass bare names. A
-  scoped signal needs a deliberate way to be reachable from outside —
-  an export, rather than everything being exported by default.
-- **Hot reload.** State survives because values live in that registry
-  and outlive the instance. The key changes shape, which is fine as long
-  as it changes consistently — but a reload across an edit that MOVES a
-  signal between modules would drop it.
-- **Sharing on purpose.** Two modules sometimes should read one signal.
-  Today that is accidental and free; afterwards it needs a way to say so
-  — an export, or an explicitly global namespace.
-- **The type-mismatch warning.** `mint_or_get` already warns when a name
-  is redeclared at a different type. That warning is the only existing
-  signal that a collision happened, and it fires only on type change:
-  two `f64` declarations collide in silence.
+Related: the algebraic-effects section below argues the same thing about
+reactivity, which is not a coincidence. Both come from the DSL treating
+Zyntax as a backend to emit into rather than a language with a semantics
+to use.
 
 ## Next
 
