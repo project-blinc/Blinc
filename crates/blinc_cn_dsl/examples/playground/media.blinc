@@ -8,6 +8,11 @@ component MediaWidgets {
         .group { width: 100%; padding: 24px; gap: 16px; flex-direction: column }
         .row { gap: 10px; flex-direction: row; align-items: center; flex_wrap: wrap }
         .richtext-narrow { width: 280px; align-items: flex-start }
+        // Author classes on a cn widget. They ADD to the classes the
+        // widget carries itself, so `.cn-badge`'s own pill shape and
+        // padding survive and only what is named here changes.
+        .tag-wide { width: 120px }
+        .tag-square { border-radius: 4px }
         // font-style inherits, so this slants the Text inside it without
         // the Text naming a style of its own.
         .quote { font-style: italic; color: var(--text-secondary) }
@@ -78,6 +83,17 @@ A paragraph with **bold** and `code`.
 
 - first item
 - second item")
+
+            // `class` reaches a cn widget the same way it reaches a Div.
+            // The first badge is untouched, so the difference is the
+            // rule and nothing else.
+            cn.Label("class: style a cn widget with your own CSS")
+            Div(class = "row") {
+                cn.Badge("plain", variant = "secondary")
+                cn.Badge("wide", variant = "secondary", class = "tag-wide")
+                cn.Badge("squared", variant = "secondary", class = "tag-square")
+                cn.Badge("both", variant = "secondary", class = "tag-wide tag-square")
+            }
 
             cn.Label("avatar: size x shape")
             Div(class = "row") {

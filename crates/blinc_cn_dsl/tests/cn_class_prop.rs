@@ -58,10 +58,10 @@ fn has_node_of_width(src: &str, name: &str, width: f32) -> bool {
     false
 }
 
-/// A styled widget: wrapped in `Styled` already, so the class rides
-/// along with the inline overlay.
+/// The common shape: an unstyled widget, wrapped only because a class
+/// was written.
 #[test]
-fn a_class_on_a_styled_widget_reaches_css() {
+fn a_class_on_an_unstyled_widget_reaches_css() {
     assert!(has_node_of_width(
         r#"component C {
              style { .wide { width: 333px } }
@@ -132,5 +132,71 @@ fn omitting_class_is_inert() {
            view { C() }"#,
         "class_absent.blinc",
         333.0,
+    ));
+}
+
+/// A `styled` widget takes the other construction branch: it is already
+/// wrapped for its inline `style`, so the class has to ride along with
+/// the overlay rather than trigger the wrapping itself.
+#[test]
+fn a_class_on_a_styled_widget_reaches_css() {
+    assert!(has_node_of_width(
+        r#"component C {
+             style { .tall { width: 244px } }
+             view { Div { cn.P("hi", class = "tall") } }
+           }
+           view { C() }"#,
+        "class_styled_path.blinc",
+        244.0,
+    ));
+}
+
+/// Class and an inline styling arg on one call. The overlay is what the
+/// styled branch exists for, so the class must ride with it rather than
+/// displace it — and the width from CSS must still land.
+#[test]
+fn a_class_and_an_inline_style_arg_coexist() {
+    assert!(has_node_of_width(
+        r#"component C {
+             style { .tall { width: 255px } }
+             view { Div { cn.P("hi", class = "tall", opacity = 0.5) } }
+           }
+           view { C() }"#,
+        "class_and_style.blinc",
+        255.0,
+    ));
+}
+
+/// A slot-shaped widget, whose children are named rather than positional.
+#[test]
+fn a_slot_widget_takes_a_class() {
+    assert!(has_node_of_width(
+        r#"signal op: bool = true
+           component C {
+             style { .panel { width: 266px } }
+             view {
+               cn.Popover(open = op, class = "panel") {
+                 cn.PopoverTrigger { cn.Label("open") }
+                 cn.PopoverContent { cn.Label("body") }
+               }
+             }
+           }
+           view { C() }"#,
+        "class_slot.blinc",
+        266.0,
+    ));
+}
+
+/// A leaf with no children at all.
+#[test]
+fn a_leaf_widget_takes_a_class() {
+    assert!(has_node_of_width(
+        r#"component C {
+             style { .bar { width: 277px } }
+             view { Div { cn.Separator(class = "bar") } }
+           }
+           view { C() }"#,
+        "class_leaf.blinc",
+        277.0,
     ));
 }
