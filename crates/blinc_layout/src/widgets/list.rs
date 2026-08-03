@@ -177,7 +177,11 @@ impl UnorderedList {
 
     /// Create a new unordered list with custom config
     pub fn with_config(config: ListConfig) -> Self {
-        let inner = div().flex_col().gap(config.item_spacing).ml(config.indent);
+        // `gap_px`: `item_spacing` is pixels, `gap` takes 4px units.
+        let inner = div()
+            .flex_col()
+            .gap_px(config.item_spacing)
+            .ml(config.indent / 4.0);
 
         Self {
             inner,
@@ -218,14 +222,14 @@ impl UnorderedList {
     /// Set the indent (for nested lists)
     pub fn indent(mut self, indent: f32) -> Self {
         self.config.indent = indent;
-        self.inner = self.inner.ml(indent);
+        self.inner = self.inner.ml(indent / 4.0);
         self
     }
 
     /// Set item spacing
     pub fn spacing(mut self, spacing: f32) -> Self {
         self.config.item_spacing = spacing;
-        self.inner = self.inner.gap(spacing);
+        self.inner = self.inner.gap_px(spacing);
         self
     }
 
@@ -325,7 +329,11 @@ impl OrderedList {
 
     /// Create an ordered list starting at a specific number with custom config
     pub fn starting_at_with_config(start: usize, config: ListConfig) -> Self {
-        let inner = div().flex_col().gap(config.item_spacing).ml(config.indent);
+        // `gap_px`: `item_spacing` is pixels, `gap` takes 4px units.
+        let inner = div()
+            .flex_col()
+            .gap_px(config.item_spacing)
+            .ml(config.indent / 4.0);
 
         Self {
             inner,
@@ -377,14 +385,14 @@ impl OrderedList {
     /// Set the indent (for nested lists)
     pub fn indent(mut self, indent: f32) -> Self {
         self.config.indent = indent;
-        self.inner = self.inner.ml(indent);
+        self.inner = self.inner.ml(indent / 4.0);
         self
     }
 
     /// Set item spacing
     pub fn spacing(mut self, spacing: f32) -> Self {
         self.config.item_spacing = spacing;
-        self.inner = self.inner.gap(spacing);
+        self.inner = self.inner.gap_px(spacing);
         self
     }
 
@@ -468,9 +476,9 @@ impl ListItem {
     /// Create a new list item
     pub fn new() -> Self {
         let config = ListConfig::default();
-        let inner = div().flex_row().items_start().gap(config.marker_gap);
+        let inner = div().flex_row().items_start().gap_px(config.marker_gap);
         // Content has a small gap for spacing between text and nested lists
-        let content = div().flex_col().flex_1().gap(4.0);
+        let content = div().flex_col().flex_1().gap_px(4.0);
 
         Self {
             inner,
@@ -523,7 +531,7 @@ impl ListItem {
         self.inner = div()
             .flex_row()
             .items_start()
-            .gap(config.marker_gap)
+            .gap_px(config.marker_gap)
             .child(marker_div)
             .child(std::mem::replace(&mut self.content, div()));
 
@@ -647,7 +655,7 @@ impl TaskListItem {
         let inner = div()
             .flex_row()
             .items_start()
-            .gap(config.marker_gap)
+            .gap_px(config.marker_gap)
             .child(checkbox_container);
 
         Self {

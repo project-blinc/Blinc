@@ -184,7 +184,10 @@ impl<'a> RenderState<'a> {
     fn new(config: &'a MarkdownConfig) -> Self {
         Self {
             config,
-            container: div().flex_col().gap(config.paragraph_spacing),
+            // `gap_px`: the config's spacings are pixels, while `gap`
+            // takes 4px units — passing one straight through spaced
+            // every block four times further apart than configured.
+            container: div().flex_col().gap_px(config.paragraph_spacing),
             stack: Vec::new(),
             inline_text: String::new(),
             inline_style: InlineStyle::default(),
@@ -248,7 +251,7 @@ impl<'a> RenderState<'a> {
             Tag::BlockQuote => {
                 // Note: blockquote() already has proper styling, just wrap in a div for flexibility
                 self.stack.push(StackItem::Blockquote(
-                    div().flex_col().gap(self.config.paragraph_spacing / 2.0),
+                    div().flex_col().gap_px(self.config.paragraph_spacing / 2.0),
                 ));
             }
             Tag::CodeBlock(kind) => {
@@ -350,7 +353,7 @@ impl<'a> RenderState<'a> {
                 self.current_footnote = Some(label.to_string());
                 self.footnote_counter += 1;
                 // Create a container for the footnote content
-                let footnote_content = div().flex_col().gap(self.config.paragraph_spacing / 2.0);
+                let footnote_content = div().flex_col().gap_px(self.config.paragraph_spacing / 2.0);
                 self.stack.push(StackItem::FootnoteDefinition(
                     label.to_string(),
                     footnote_content,
@@ -1071,13 +1074,14 @@ impl<'a> RenderState<'a> {
             self.container = std::mem::replace(&mut self.container, div()).child(separator);
 
             // Add footnotes section
-            let mut footnotes_section = div().flex_col().gap(self.config.paragraph_spacing / 2.0);
+            let mut footnotes_section =
+                div().flex_col().gap_px(self.config.paragraph_spacing / 2.0);
 
             for (label, content) in self.footnote_defs {
                 // Create footnote row: number + content
                 let footnote_row = div()
                     .flex_row()
-                    .gap(8.0)
+                    .gap_px(8.0)
                     .items_start()
                     .child(
                         text(format!("[{}]", label))
