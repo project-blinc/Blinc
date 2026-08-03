@@ -30,10 +30,17 @@ component MediaWidgets {
             // One node: formatting mid-sentence survives a wrap, which
             // cn.ChainedText (separate elements) cannot manage.
             cn.Label("rich text: inline markup in a single node")
-            RichText("Press <b>Enter</b> to accept, <i>Escape</i> to cancel, or read the <a href=\"https://example.com\">manual</a>.")
+            RichText("Press <b>Enter</b> to accept, <i>Escape</i> to cancel, or read the <a href='https://example.com'>manual</a>.")
 
             cn.Label("markdown: a block becomes a column of elements")
-            Markdown("## Heading\n\nA paragraph with **bold** and `code`.\n\n- first item\n- second item")
+            // A real multi-line string: escapes are not interpreted,
+            // so a newline is written as a newline.
+            Markdown("## Heading
+
+A paragraph with **bold** and `code`.
+
+- first item
+- second item")
 
             cn.Label("avatar: size x shape")
             Div(class = "row") {
