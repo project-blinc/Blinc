@@ -20,9 +20,22 @@ fn link_regions(width: f32) -> Vec<(f32, f32)> {
 
     let root = tree.root().expect("root");
     let node = tree.layout_tree.children(root)[0];
+    // The node's OWN laid-out width, not the container's: that is what the
+    // cursor path passes, so a node that sized itself wider than its parent
+    // shows up here rather than being papered over.
+    let node_width = tree
+        .get_absolute_bounds(node)
+        .map(|b| b.width)
+        .unwrap_or(0.0);
+
     tree.get_render_node(node)
-        .and_then(|n| n.props.cursor_regions.clone())
-        .map(|r| r.iter().map(|(a, b, _)| (*a, *b)).collect())
+        .and_then(|n| n.props.text_hit_spans.clone())
+        .map(|hit| {
+            hit.rects(node_width)
+                .iter()
+                .map(|r| (r.x0, r.x1))
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default()
 }
 

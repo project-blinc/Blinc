@@ -4075,7 +4075,7 @@ impl WindowedApp {
                                         let has_move_subscriber = tree
                                             .handler_registry()
                                             .has_any_pointer_move_subscriber();
-                                        // A node publishing `cursor_regions`
+                                        // A node publishing `text_hit_spans`
                                         // varies its cursor ALONG itself, so
                                         // "still inside the same leaf" no
                                         // longer means "nothing to re-resolve"
@@ -4086,12 +4086,12 @@ impl WindowedApp {
                                         // when the hovered node changes.
                                         // ANY node in the hovered chain, not
                                         // just the leaf: the node publishing
-                                        // regions may be an ancestor of
+                                        // spans may be an ancestor of
                                         // whatever hit-testing returned.
                                         let leaf_varies_cursor =
                                             router.last_hit_chain().iter().any(|n| {
                                                 tree.get_render_node(*n)
-                                                    .is_some_and(|n| n.props.cursor_regions.is_some())
+                                                    .is_some_and(|n| n.props.text_hit_spans.is_some())
                                             });
                                         if !pressed
                                             && !pointer_query_active
@@ -4225,7 +4225,7 @@ impl WindowedApp {
                                                 // element boundary mid-skip-window —
                                                 // half-frame at 60 Hz, imperceptible.
                                                 let cursor = tree
-                                                    .get_cursor_for_last_hit(router, lx)
+                                                    .get_cursor_for_last_hit(router, lx, ly)
                                                     .unwrap_or(CursorStyle::Default);
                                                 let want = convert_cursor_style(cursor);
                                                 if ws.last_cursor != Some(want) {
@@ -4396,7 +4396,7 @@ impl WindowedApp {
                                         // so a long stable hover doesn't syscall every
                                         // move.
                                         let cursor = tree
-                                            .get_cursor_for_last_hit(router, lx)
+                                            .get_cursor_for_last_hit(router, lx, ly)
                                             .unwrap_or(CursorStyle::Default);
                                         let want = convert_cursor_style(cursor);
                                         if ws.last_cursor != Some(want) {

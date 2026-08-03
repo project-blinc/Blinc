@@ -1065,15 +1065,17 @@ pub struct RenderProps {
     pub is_overlay_root: bool,
     /// Cursor style when hovering over this element (None = inherit from parent)
     pub cursor: Option<CursorStyle>,
-    /// Cursor overrides for horizontal ranges within this element,
-    /// in element-local x. Consulted before [`Self::cursor`], so a
-    /// single node can offer a pointer over part of itself.
+    /// Pointer targets within this element, addressed by byte range.
+    /// Consulted before [`Self::cursor`], so a single node can offer a
+    /// pointer over part of itself.
     ///
     /// Exists for text that is one node but not uniformly interactive:
     /// a `RichText` paragraph containing a link is one node, so a
     /// node-level cursor would either lie about the whole paragraph or
-    /// deny the link its pointer.
-    pub cursor_regions: Option<std::sync::Arc<Vec<(f32, f32, CursorStyle)>>>,
+    /// deny the link its pointer. Byte ranges rather than rects because
+    /// where a link lands depends on where the text wrapped, which
+    /// depends on a width this element does not have until layout runs.
+    pub text_hit_spans: Option<std::sync::Arc<crate::text_hit::TextHitSpans>>,
     /// Whether this element is transparent to hit-testing (pointer-events: none)
     /// When true, this element will not capture clicks/hovers - only its children can.
     /// Used by Stack layers to allow clicks to pass through to siblings.
@@ -1234,7 +1236,7 @@ impl Default for RenderProps {
             is_stack_layer: false,
             is_overlay_root: false,
             cursor: None,
-            cursor_regions: None,
+            text_hit_spans: None,
             pointer_events_none: false,
             is_fixed: false,
             is_sticky: false,
