@@ -116,12 +116,11 @@ Two rules have to hold for every widget converted:
   remember. An `align_self` an author wrote still wins, as CSS
   promises.
 
-**cn coverage.** 50 of cn's widgets have a DSL binding. Ten do not, and
-they are the ones left:
+**cn coverage.** 51 of cn's widgets have a DSL binding. Nine do not,
+and they are the ones left:
 
 | Widget | Lines | Shape it needs |
 | --- | --- | --- |
-| `Combobox` | 963 | `Select` plus a text filter. Cheapest of the ten now: `cn.Option` already exists and the trigger/overlay shape is the one `Select` proved. |
 | `DropdownMenu` | 1002 | Items as children, overlay anchored to a trigger. The overlay half already exists — Popover, Tooltip and HoverCard all use the signal-as-handle watcher. |
 | `ContextMenu` | 955 | `DropdownMenu` opened by right-click instead of a trigger. |
 | `Menubar` | 1100 | A row of `DropdownMenu`s sharing which one is open. |
@@ -132,19 +131,20 @@ they are the ones left:
 | `Toast` | 519 | Queue plus timing, and a known exit-motion race on web. No trigger-shaped anchor, so it needs a host-side entry point rather than a view-body call. |
 | `Chart` | 1861 | The biggest single surface in cn, and needs the list-of-structs type as much as `Table` does. Last. |
 
-`ToggleGroup`, `Breadcrumb` and `Select` are done from this family, by
-two different routes: `Breadcrumb` waited for the collection type and
-takes `items = [...]`, while `ToggleGroup` and `Select` needed nothing
-new because their options are children. Try the children shape first —
+`ToggleGroup`, `Breadcrumb`, `Select` and `Combobox` are done from this
+family, by two different routes: `Breadcrumb` waited for the collection type and
+takes `items = [...]`, while `ToggleGroup`, `Select` and `Combobox`
+needed nothing new because their options are children. Try the children shape first —
 most of the ten above are option lists, and only `Table` and `Chart`
 clearly need a row type.
 
 `Select`'s option child is `cn.Option`, not `cn.SelectItem`: a combobox
 offers the same value/label/disabled choice, and one widget per parent
 would differ only in which bracket it sits inside. It renders standalone
-rather than vanishing outside a parent. Reuse it for `Combobox`, and
-reach for a new child type only where the choice genuinely differs — a
-menu item is a command, not a value, so that family will need its own.
+rather than vanishing outside a parent. `Combobox` reuses it unchanged, which is
+the case it was named for. Reach for a new child type only where the
+choice genuinely differs — a menu item is a command, not a value, so
+that family will need its own.
 
 ## Next
 
@@ -421,16 +421,15 @@ or two, L is a week or more and usually hides a design question.
 | M | `while` with children | The child list belongs to the entry block and a later block cannot use it. A lowering change, not a widget change. |
 | ✅ | A collection type across the FFI | Done. `[a, b, c]` literals, `xs[i]` indexing, `Vec<T>` props for String / bool / i32 / i64 / f64, and `cn.Breadcrumb` as the first consumer. A list of structs still needs the element layout. |
 | M | Module system | Export lists and a manifest. Composes with hot reload, so worth doing after it. |
-| L | The ten cn widgets with no DSL binding | See "cn coverage" above. Combobox next, Chart last. |
+| L | The nine cn widgets with no DSL binding | See "cn coverage" above. Pagination next, Chart last. |
 | L | Scoped `@stateful` | One `@stateful` anywhere rebuilds the whole program on every signal write, which also kills in-flight animation. Blocked on the `Root$view` wall — see the section above. `with` blocks now deliver most of the benefit without it, so this is only worth doing for the case where the state behaviour deserves a name. |
 | L | Router | Route declarations, params, nested outlets, and how a route change interacts with subtree rebuilds. |
 | L | Standard library | Open-ended by nature; scope it against what view bodies actually reach for. |
 
 **Suggested order.** Hot reload, the four exposed-but-static widgets,
 the collection type and `with` blocks are done, as is styling any widget
-by class. Of the ten cn widgets still unbound, `Combobox` is
-cheapest now that `cn.Option` exists, and `Pagination` needs nothing new
-either; `Table` and `Chart` should wait for a
+by class. Of the nine cn widgets still unbound, `Pagination`
+is cheapest and needs nothing new; `Table` and `Chart` should wait for a
 list of structs, and everything else can land one at a time using the
 option-as-child shape. `while` with children and scoped `@stateful` are
 independent and can slot in whenever the compiler work is worth the

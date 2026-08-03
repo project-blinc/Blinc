@@ -128,6 +128,19 @@ component FormWidgets {
                 }
             }
 
+            // Same cn.Option children as the select above. A combobox
+            // earns its text field when the list is long enough to want
+            // filtering; below that, a select is less machinery.
+            cn.Label("combobox: a select you can type into")
+            Div(class = "row") {
+                cn.Combobox(value = plan, label = "Plan", placeholder = "Search plans", w = 180.0) {
+                    cn.Option(value = "free", label = "Free")
+                    cn.Option(value = "pro", label = "Pro")
+                    cn.Option(value = "team", label = "Team")
+                    cn.Option(value = "enterprise", label = "Enterprise")
+                }
+            }
+
             cn.Label("otp: one slot per character, focus walks itself")
             cn.InputOTP(value = otp_code, length = 6.0, numeric_only = true)
             Div(class = "row") {
