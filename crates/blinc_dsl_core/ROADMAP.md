@@ -164,22 +164,26 @@ clicking a page navigated the app. Nothing warns — the second
 declaration finds the first and adopts it, and the only report is
 behaviour.
 
-**The fix is one pass away.** `apply_module_namespace_prefix` already
-mangles component classes and FSM state enums by module, for exactly
-this reason — its own comment says same-named cross-file FSMs would
-otherwise collide in the global `FsmRegistry`. Signals have the
-identical problem and were left out. Adding signal declarations to that
-pass's mangle set, plus the reference rewrite it already does for the
-other two categories, is the change.
+**Mangling is not the fix.** The obvious move is to add signals to
+`apply_module_namespace_prefix`, which already mangles component classes
+and FSM state enums by module for exactly this reason. That would stop
+the accidental collision, but it is the same one global registry with
+longer keys: a module's signal stays addressable from anywhere, merely
+harder to hit by accident.
 
-The rule that makes host interop survive falls out of the existing
-design: the namespace is EMPTY for the entry module, so entry signals
-stay unmangled and the ~74 `set_str("name", …)` call sites keep working.
-Only imported modules get qualified — which is precisely where
-collisions come from.
+Zyntax has block scoping in both the Cranelift and LLVM backends, and
+that is what a module-local signal should be — scoped by the language,
+so a name in one module is not reachable from another at all rather than
+reachable under a different spelling. The registry-by-name design
+reaches around the language it compiles to; every symptom in this
+section follows from that, not from the names being too short.
 
 Still to account for:
 
+- **Host interop.** `blinc_runtime::signal::set_str("page", …)` is how
+  Rust drives a `.blinc` program, and ~74 call sites pass bare names. A
+  scoped signal needs a deliberate way to be reachable from outside —
+  an export, rather than everything being exported by default.
 - **Hot reload.** State survives because values live in that registry
   and outlive the instance. The key changes shape, which is fine as long
   as it changes consistently — but a reload across an edit that MOVES a
