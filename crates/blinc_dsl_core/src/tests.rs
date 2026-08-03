@@ -1630,8 +1630,9 @@ fn named_args_on_primitive_call_resolve_to_positional() {
     );
     assert_eq!(
         c.positional_args.len(),
-        3,
-        "Text takes content + default style/class props"
+        7,
+        "Text takes content + style/class + the four style flags, all \
+         filled to the extern's arity"
     );
     let TypedExpression::Literal(zyntax_typed_ast::TypedLiteral::String(s)) =
         &c.positional_args[0].node
