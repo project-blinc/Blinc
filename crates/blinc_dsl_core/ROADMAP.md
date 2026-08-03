@@ -248,6 +248,37 @@ Read `ael_cli/src/main.rs` around the `register_effect_handler` call and
 `ael_effects`'s `EffectHandlerDescriptor` before designing this; they are
 short and concrete.
 
+**Fibers are the shape of an FSM.** Zyntax has `fiber def NAME(...)`:
+calling one constructs a fiber (`FiberNew`) rather than running the
+body, `yield expr` inside it is a suspension point (`FiberYield`, lowered
+to `krio_fiber_yield`), and `FiberResume` continues it. An FSM is
+precisely a computation suspended between events, so the correspondence
+is direct:
+
+- The FSM body becomes a `fiber def`. It runs until it yields, and
+  yielding IS waiting in a state.
+- An event resumes the fiber, carrying the event as the resume value.
+- The current state stops being an enum the host tracks in a registry
+  and becomes the fiber's own suspension point — the program counter.
+- Transitions become ordinary control flow. A state machine is written
+  as straight-line code with yields rather than as a transition table
+  plus a dispatch function.
+
+Paired with effects, what the FSM DOES at each step (writing signals,
+dispatching) becomes effect operations resolved by whichever handler is
+installed. That makes an FSM testable by installing different handlers
+rather than by driving the real runtime, and it removes the host
+dispatch function the DSL currently reaches for.
+
+Two things to check before committing to this: whether a fiber can be
+persisted or reconstructed across a hot reload, since today FSM state
+survives in the registry that would be going away; and how a fiber's
+suspension point is addressed from outside, which is what `@fsm([X])`
+binding a component to the fields it reads currently needs.
+
+Related: `SymbolTable.fiber_fn_names` already tracks which functions are
+fibers, so the plumbing is present rather than hypothetical.
+
 Related: the algebraic-effects section below argues the same thing about
 reactivity, which is not a coincidence. Both come from the DSL treating
 Zyntax as a backend to emit into rather than a language with a semantics
