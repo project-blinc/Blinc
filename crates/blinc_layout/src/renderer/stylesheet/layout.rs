@@ -245,6 +245,11 @@ impl RenderTree {
                     StyleAlign::Stretch => AlignSelf::Stretch,
                     StyleAlign::Baseline => AlignSelf::Baseline,
                 });
+                // Written by an author, so it outranks the parent even if
+                // `w_fit` had already marked this node's `align_self` as
+                // incidental. A widget that is `w_fit` inside still takes
+                // an `align-self` rule from CSS.
+                self.layout_tree.clear_incidental_align_self(node_id);
             }
 
             // Spacing
@@ -779,6 +784,11 @@ impl RenderTree {
                     StyleAlign::Stretch => AlignSelf::Stretch,
                     StyleAlign::Baseline => AlignSelf::Baseline,
                 });
+                // Written by an author, so it outranks the parent even if
+                // `w_fit` had already marked this node's `align_self` as
+                // incidental. A widget that is `w_fit` inside still takes
+                // an `align-self` rule from CSS.
+                self.layout_tree.clear_incidental_align_self(node_id);
             }
 
             // Spacing

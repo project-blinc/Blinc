@@ -206,8 +206,11 @@ impl TooltipBuilder {
         let trigger_content = (trigger_builder)();
 
         let trigger = div()
+            // `w_fit()` already keeps this from stretching. Naming
+            // `align_self_start()` on top made the value look authored,
+            // so a row asking for `align-items: center` was ignored and
+            // the trigger hung from the top against taller siblings.
             .w_fit()
-            .align_self_start()
             .child(trigger_content)
             .on_hover_enter(move |ctx| {
                 // Existing tooltip alive? Cancel any pending mouse-leave close

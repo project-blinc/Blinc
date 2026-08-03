@@ -5070,6 +5070,13 @@ impl<S: StateTransitions> ElementBuilder for Stateful<S> {
         // Build the inner div's node (without children since we extracted them)
         let inner = self.inner.borrow_mut();
         let node = tree.create_node(inner.style.clone());
+        // `Stateful` creates its node directly rather than through
+        // `Div::build`, so the mark has to be repeated here or every
+        // widget built on one (button, toggle, ...) looks like it
+        // authored its `align_self`.
+        if inner.incidental_align_self {
+            tree.mark_incidental_align_self(node);
+        }
 
         // Build children from the cache and add to tree
         for child in self.children_cache.borrow().iter() {

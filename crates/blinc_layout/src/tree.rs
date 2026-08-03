@@ -213,6 +213,19 @@ pub struct LayoutTree {
     node_map: SlotMap<LayoutNodeId, NodeId>,
     /// Reverse mapping from Taffy NodeId to our LayoutNodeId
     reverse_map: HashMap<NodeId, LayoutNodeId>,
+    /// Nodes whose `align_self` is incidental, not authored.
+    ///
+    /// `w_fit`/`h_fit` set `align_self: Start` for exactly one reason:
+    /// without it a content-sized item stretches across the cross axis.
+    /// Taffy then gives that incidental value precedence over the
+    /// parent's `align_items`, which is CSS-correct but wrong in intent
+    /// — a `cn::button` is `w_fit` inside, so a row of differently-sized
+    /// buttons hung from their top edges however the row was styled.
+    ///
+    /// Marking it keeps CSS's guarantee intact: an authored `align_self`
+    /// still beats the parent, because only the incidental one is
+    /// listed here. See [`Self::resolve_incidental_align_self`].
+    incidental_align_self: std::collections::HashSet<LayoutNodeId>,
 }
 
 impl LayoutTree {
@@ -221,6 +234,7 @@ impl LayoutTree {
             taffy: TaffyTree::new(),
             node_map: SlotMap::with_key(),
             reverse_map: HashMap::new(),
+            incidental_align_self: std::collections::HashSet::new(),
         }
     }
 
@@ -269,12 +283,56 @@ impl LayoutTree {
 
     /// Compute layout for a tree rooted at the given node
     pub fn compute_layout(&mut self, root: LayoutNodeId, available_space: Size<AvailableSpace>) {
+        self.resolve_incidental_align_self(root);
         if let Some(&taffy_node) = self.node_map.get(root) {
             let _ = self.taffy.compute_layout_with_measure(
                 taffy_node,
                 available_space,
                 text_measure_function,
             );
+        }
+    }
+
+    /// Record that this node's `align_self` was set as a side effect of
+    /// sizing (`w_fit`/`h_fit`), not because an author asked for it.
+    pub fn mark_incidental_align_self(&mut self, id: LayoutNodeId) {
+        self.incidental_align_self.insert(id);
+    }
+
+    /// Forget that a node's `align_self` was incidental.
+    ///
+    /// Called when something authored one on top: a CSS `align-self`
+    /// rule lands on the same node `w_fit` marked, and the author's
+    /// intent replaces the incidental default.
+    pub fn clear_incidental_align_self(&mut self, id: LayoutNodeId) {
+        self.incidental_align_self.remove(&id);
+    }
+
+    /// Let a parent's `align_items` outrank an INCIDENTAL `align_self`.
+    ///
+    /// An authored `align_self` keeps CSS's precedence: it beats the
+    /// parent, which is the control an author is entitled to. Only the
+    /// value `w_fit`/`h_fit` set to prevent stretching yields, and only
+    /// to a parent that actually names an alignment.
+    fn resolve_incidental_align_self(&mut self, root: LayoutNodeId) {
+        if self.incidental_align_self.is_empty() {
+            return;
+        }
+        let mut stack = vec![root];
+        while let Some(id) = stack.pop() {
+            let children = self.children(id);
+            if self.get_style(id).is_some_and(|s| s.align_items.is_some()) {
+                for &child in &children {
+                    if self.incidental_align_self.contains(&child)
+                        && let Some(mut style) = self.get_style(child)
+                        && style.align_self.is_some()
+                    {
+                        style.align_self = None;
+                        self.set_style(child, style);
+                    }
+                }
+            }
+            stack.extend(children);
         }
     }
 

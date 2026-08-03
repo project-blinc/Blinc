@@ -378,6 +378,11 @@ pub type DivRef = ElementRef<Div>;
 /// A div element builder with GPUI/Tailwind-style methods
 pub struct Div {
     pub(crate) style: Style,
+    /// `align_self` came from `w_fit`/`h_fit` as an anti-stretch
+    /// default, not from an author naming an alignment. A parent that
+    /// states `align_items` outranks it. See
+    /// `LayoutTree::resolve_incidental_align_self`.
+    pub(crate) incidental_align_self: bool,
     pub(crate) children: Vec<Box<dyn ElementBuilder>>,
     pub(crate) background: Option<Brush>,
     pub(crate) border_radius: CornerRadius,
@@ -491,6 +496,7 @@ impl Div {
     pub fn new() -> Self {
         Self {
             style: Style::default(),
+            incidental_align_self: false,
             children: Vec::new(),
             background: None,
             border_radius: CornerRadius::default(),
@@ -554,6 +560,7 @@ impl Div {
     pub fn with_style(style: Style) -> Self {
         Self {
             style,
+            incidental_align_self: false,
             children: Vec::new(),
             background: None,
             border_radius: CornerRadius::default(),
@@ -1270,6 +1277,13 @@ impl Div {
         // Style is complex, so we merge it field by field via taffy
         self.merge_style(&other.style, &default.style);
 
+        // Travels with the style it describes: `Stateful::w_fit` merges a
+        // throwaway `Div`, and losing the flag here left the value looking
+        // authored, so it outranked the parent's `align_items`.
+        if other.incidental_align_self {
+            self.incidental_align_self = true;
+        }
+
         // Merge render properties - take other's value if non-default
         if other.background.is_some() {
             self.background = other.background;
@@ -1688,24 +1702,28 @@ impl Div {
     /// Align self to start (overrides parent's align_items for this element)
     pub fn align_self_start(mut self) -> Self {
         self.style.align_self = Some(AlignSelf::Start);
+        self.incidental_align_self = false;
         self
     }
 
     /// Align self to center (overrides parent's align_items for this element)
     pub fn align_self_center(mut self) -> Self {
         self.style.align_self = Some(AlignSelf::Center);
+        self.incidental_align_self = false;
         self
     }
 
     /// Align self to end (overrides parent's align_items for this element)
     pub fn align_self_end(mut self) -> Self {
         self.style.align_self = Some(AlignSelf::End);
+        self.incidental_align_self = false;
         self
     }
 
     /// Stretch self to fill (overrides parent's align_items for this element)
     pub fn align_self_stretch(mut self) -> Self {
         self.style.align_self = Some(AlignSelf::Stretch);
+        self.incidental_align_self = false;
         self
     }
 
@@ -1873,7 +1891,10 @@ impl Div {
         self.style.size.width = Dimension::Auto;
         self.style.flex_grow = 0.0;
         self.style.flex_shrink = 0.0;
+        // Only to stop a content-sized item stretching. Marked soft so a
+        // parent that states `align_items` still wins.
         self.style.align_self = Some(AlignSelf::Start);
+        self.incidental_align_self = true;
         self
     }
 
@@ -1949,7 +1970,9 @@ impl Div {
         self.style.size.height = Dimension::Auto;
         self.style.flex_grow = 0.0;
         self.style.flex_shrink = 0.0;
+        // See `w_fit`.
         self.style.align_self = Some(AlignSelf::Start);
+        self.incidental_align_self = true;
         self
     }
 
@@ -5013,6 +5036,9 @@ impl ElementBuilder for Div {
 
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
         let node = tree.create_node(self.style.clone());
+        if self.incidental_align_self {
+            tree.mark_incidental_align_self(node);
+        }
 
         // Build and add children
         for child in &self.children {
