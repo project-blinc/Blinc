@@ -116,6 +116,30 @@ Two rules have to hold for every widget converted:
   remember. An `align_self` an author wrote still wins, as CSS
   promises.
 
+**cn coverage.** 48 of cn's widgets have a DSL binding. Eleven do not,
+and they are the ones left:
+
+| Widget | Lines | Shape it needs |
+| --- | --- | --- |
+| `Select` | 730 | Options as children, like `ToggleGroup`. A bound signal for the choice. Highest value of the eleven: a form surface with no DSL equivalent. |
+| `Combobox` | 963 | `Select` plus a text filter. Worth doing straight after it, since the option-as-child shape is shared. |
+| `DropdownMenu` | 1002 | Items as children, overlay anchored to a trigger. The overlay half already exists — Popover, Tooltip and HoverCard all use the signal-as-handle watcher. |
+| `ContextMenu` | 955 | `DropdownMenu` opened by right-click instead of a trigger. |
+| `Menubar` | 1100 | A row of `DropdownMenu`s sharing which one is open. |
+| `NavigationMenu` | 823 | Menubar with panels rather than item lists. |
+| `Pagination` | 719 | Numeric state, no collection. Small and self-contained — a good first one to break the run of menus. |
+| `Table` | 262 | Smallest file, but the only one that genuinely needs a list of structs: a row is not a scalar, and the collection type stops at `Vec<T>` for scalar `T`. |
+| `Tree` | 726 | Recursive children. Nothing else in the DSL nests a widget in itself yet. |
+| `Toast` | 519 | Queue plus timing, and a known exit-motion race on web. No trigger-shaped anchor, so it needs a host-side entry point rather than a view-body call. |
+| `Chart` | 1861 | The biggest single surface in cn, and needs the list-of-structs type as much as `Table` does. Last. |
+
+`ToggleGroup` and `Breadcrumb` are the two already done from this
+family, and they took different routes: `Breadcrumb` waited for the
+collection type and takes `items = [...]`, while `ToggleGroup` needed
+nothing new because its options are children. Try the children shape
+first — most of the eleven above are option lists, and only `Table` and
+`Chart` clearly need a row type.
+
 ## Next
 
 **Scoped `@stateful`.** `has_stateful_view` is a single global flag:
@@ -391,15 +415,16 @@ or two, L is a week or more and usually hides a design question.
 | M | `while` with children | The child list belongs to the entry block and a later block cannot use it. A lowering change, not a widget change. |
 | ✅ | A collection type across the FFI | Done. `[a, b, c]` literals, `xs[i]` indexing, `Vec<T>` props for String / bool / i32 / i64 / f64, and `cn.Breadcrumb` as the first consumer. A list of structs still needs the element layout. |
 | M | Module system | Export lists and a manifest. Composes with hot reload, so worth doing after it. |
-| L | Item-driven widgets | Select, Combobox, DropdownMenu, Menubar, ContextMenu, NavigationMenu, Pagination, Table, Tree, Chart. Each is large on its own. Chart is the biggest single surface in cn. Breadcrumb and ToggleGroup are done; ToggleGroup did not need the collection type, because its options are children rather than a list prop — worth trying that shape first for the others. |
+| L | The eleven cn widgets with no DSL binding | See "cn coverage" above. Menus and Select first, Chart last. |
 | L | Scoped `@stateful` | One `@stateful` anywhere rebuilds the whole program on every signal write, which also kills in-flight animation. Blocked on the `Root$view` wall — see the section above. `with` blocks now deliver most of the benefit without it, so this is only worth doing for the case where the state behaviour deserves a name. |
 | L | Router | Route declarations, params, nested outlets, and how a route change interacts with subtree rebuilds. |
 | L | Standard library | Open-ended by nature; scope it against what view bodies actually reach for. |
 
 **Suggested order.** Hot reload, the four exposed-but-static widgets,
 the collection type and `with` blocks are done, as is styling any widget
-by class. The item-driven widgets are unblocked and can land one at a
-time; try the children shape before reaching for a list prop, since
-`ToggleGroup` needed no collection type at all. `while` with children
-and scoped `@stateful` are independent and can slot in whenever the
-compiler work is worth the context switch.
+by class. Of the eleven cn widgets still unbound, `Select` is worth most
+and `Pagination` is the cheapest; `Table` and `Chart` should wait for a
+list of structs, and everything else can land one at a time using the
+option-as-child shape. `while` with children and scoped `@stateful` are
+independent and can slot in whenever the compiler work is worth the
+context switch.
