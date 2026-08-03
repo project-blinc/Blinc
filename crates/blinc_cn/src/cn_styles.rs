@@ -546,7 +546,12 @@ pub const CN_STYLES: &str = r#"
         border-color var(--duration-fast) var(--ease-state),
         transform var(--duration-fastest) var(--ease-state);
 }
-.cn-radio:hover {
+/* `:not(--disabled)` matches what the widget itself does: it gates both
+   the accent border and the scale on the option being reachable. Without
+   it a disabled dial lit up and grew under the pointer, and the scale
+   arrived as a state style on an already-built node rather than at build
+   time, which smeared. */
+.cn-radio:hover:not(.cn-radio--disabled) {
     border-color: var(--cn-radio-hover-border, var(--primary));
     transform: scale(1.05, 1.05);
 }

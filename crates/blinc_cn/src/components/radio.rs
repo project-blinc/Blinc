@@ -40,6 +40,7 @@
 //! ```
 
 use blinc_core::{Color, State, Transform};
+use blinc_layout::InstanceKey;
 use blinc_layout::css_parser::{ElementState, Stylesheet, active_stylesheet};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
@@ -127,6 +128,7 @@ impl RadioGroup {
     ///     .option("option1", "First Option")
     ///     .option("option2", "Second Option")
     /// ```
+    #[track_caller]
     pub fn new(selected: &State<String>) -> Self {
         Self::with_config(RadioGroupConfig::new(selected.clone()))
     }
@@ -219,11 +221,13 @@ fn build_radio_button(
 
     let css_id_for_state = button_css_id.clone();
 
-    // Unique key per radio button for state isolation
-    let stateful_key = button_css_id
-        .as_deref()
-        .map(|id| format!("radio-{id}"))
-        .unwrap_or_else(|| format!("radio-{}", option.value));
+    // Unique per option AND per group. Keyed on the value alone, two
+    // groups offering the same values shared one entry, so hovering an
+    // option in one drove a rebuild that the other answered too.
+    let stateful_key = button_css_id.as_deref().map_or_else(
+        || format!("radio-{}-{}", config.instance_key.get(), option.value),
+        |id| format!("radio-{id}"),
+    );
 
     // Build the radio button circle — CSS handles border, scale, opacity via classes
     let has_custom_colors = config.selected_color.is_some()
@@ -454,14 +458,21 @@ struct RadioGroupConfig {
     hover_border_color: Option<Color>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
     css_group_id: Option<String>,
+    /// Distinguishes this group's per-option state from another
+    /// group's. Two groups offering the same values would otherwise key
+    /// their options identically, and one group's hover would drive the
+    /// other's.
+    instance_key: InstanceKey,
     /// User-added CSS classes
     classes: Vec<std::sync::Arc<str>>,
 }
 
 impl RadioGroupConfig {
+    #[track_caller]
     fn new(selected: State<String>) -> Self {
         Self {
             selected,
+            instance_key: InstanceKey::new("radio-group"),
             options: Vec::new(),
             size: RadioSize::default(),
             layout: RadioLayout::default(),
@@ -487,6 +498,7 @@ pub struct RadioGroupBuilder {
 
 impl RadioGroupBuilder {
     /// Create a new radio group builder with state from context
+    #[track_caller]
     pub fn new(selected: &State<String>) -> Self {
         Self {
             config: RadioGroupConfig::new(selected.clone()),
@@ -499,6 +511,18 @@ impl RadioGroupBuilder {
         ::blinc_layout::build_once::build_once(&self.built, || {
             RadioGroup::with_config(self.config.clone())
         })
+    }
+
+    /// Name this group, so its per-option state is its own.
+    ///
+    /// The default identity is the call site, which is enough for two
+    /// groups written in different places. A caller that builds several
+    /// groups from ONE site -- a loop, or a DSL wrapper -- has to say
+    /// which is which, or groups offering the same option values share
+    /// their options' state.
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.config.instance_key = InstanceKey::explicit(key);
+        self
     }
 
     /// Add a CSS class for selector matching

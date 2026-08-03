@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use blinc_dsl_core::{Reactive, extern_widget};
 use blinc_layout::div::ElementBuilder;
 
+use crate::bridge::CallSiteId;
 use crate::radio::CnRadio;
 
 /// `cn.RadioGroup(value = signal) { cn.Radio(label = "…") }` — pick one.
@@ -41,6 +42,12 @@ pub struct CnRadioGroup {
     pub disabled: bool,
     #[children]
     pub children: Mutex<Vec<Box<dyn ElementBuilder>>>,
+    /// Where this group was written, which is what tells one group's
+    /// options from another's. Every group is built from the one call
+    /// site inside this wrapper, so the widget's own call-site identity
+    /// would be the same for all of them.
+    #[skip]
+    call_site: CallSiteId,
     /// Built once, consuming `children`.
     #[skip]
     shell: OnceCell<blinc_cn::RadioGroup>,
@@ -56,6 +63,7 @@ impl CnRadioGroup {
         let state = crate::bridge::string_state(&self.value);
 
         let mut b = blinc_cn::radio_group(&state)
+            .key(format!("cn-radio-group-{}", self.call_site.0))
             .size(self.size())
             .layout(self.layout());
         if !self.label.is_empty() {
