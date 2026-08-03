@@ -45,6 +45,23 @@ use crate::widgets::link::open_url;
 
 mod parser;
 
+/// Whether link spans cover the entire content, so a node-level
+/// pointer cursor tells the truth.
+fn link_covers_all(spans: &[TextSpan], content_len: usize) -> bool {
+    if content_len == 0 {
+        return false;
+    }
+    let mut covered_to = 0usize;
+    // Spans arrive in order; a gap means some text is not a link.
+    for span in spans.iter().filter(|s| s.link_url.is_some()) {
+        if span.start > covered_to {
+            return false;
+        }
+        covered_to = covered_to.max(span.end);
+    }
+    covered_to >= content_len
+}
+
 /// A clickable link region within rich text
 #[derive(Clone, Debug)]
 struct LinkRegion {
@@ -124,7 +141,11 @@ impl RichText {
         let (content, spans) = parser::parse(&markup);
 
         // Check if there are any links
-        let has_links = spans.iter().any(|s| s.link_url.is_some());
+        // The node itself claims no cursor: `render_props` publishes a
+        // pointer per link x-range instead, so only the link text shows
+        // one. A node-level pointer made every word in a paragraph look
+        // clickable.
+        let has_links = false;
 
         let mut rich = Self {
             content,
@@ -185,7 +206,11 @@ impl RichText {
         }
 
         // Check if there are any links
-        let has_links = spans.iter().any(|s| s.link_url.is_some());
+        // The node itself claims no cursor: `render_props` publishes a
+        // pointer per link x-range instead, so only the link text shows
+        // one. A node-level pointer made every word in a paragraph look
+        // clickable.
+        let has_links = false;
 
         let mut rich = Self {
             content,
@@ -631,6 +656,17 @@ impl ElementBuilder for RichText {
             shadow: self.shadow.clone(),
             transform: self.transform.clone(),
             cursor: self.cursor,
+            // A pointer over each link's measured x-range. `link_regions`
+            // is already computed for click hit-testing, so the cursor
+            // and the click agree by construction.
+            cursor_regions: (!self.link_regions.is_empty()).then(|| {
+                std::sync::Arc::new(
+                    self.link_regions
+                        .iter()
+                        .map(|r| (r.x_start, r.x_end, crate::element::CursorStyle::Pointer))
+                        .collect::<Vec<_>>(),
+                )
+            }),
             ..Default::default()
         }
     }
@@ -746,16 +782,34 @@ mod tests {
         let rt = rich_text(r#"Visit <a href="https://example.com">our website</a> for info"#);
         assert_eq!(rt.content(), "Visit our website for info");
         assert_eq!(rt.spans().len(), 1);
-        assert_eq!(
-            rt.render_props().cursor,
-            Some(crate::element::CursorStyle::Pointer)
-        );
+        // No pointer: the cursor is a NODE property and this node is
+        // mostly not a link, so a pointer would make every word look
+        // clickable. Clicking still hit-tests the link's x-range.
+        assert_eq!(rt.render_props().cursor, None);
         assert_eq!(
             rt.spans()[0].link_url,
             Some("https://example.com".to_string())
         );
         // Link should have underline
         assert!(rt.spans()[0].underline);
+    }
+
+    /// The pointer lives on the link's x-range, not on the node, so a
+    /// paragraph does not claim to be clickable while its link still
+    /// offers a pointer. The ranges are the ones the click handler
+    /// hit-tests, so cursor and click agree by construction.
+    #[test]
+    fn a_link_publishes_a_pointer_over_its_own_range() {
+        let rt = rich_text(r#"Visit <a href="https://example.com">our website</a> now"#);
+        let props = rt.render_props();
+        assert_eq!(props.cursor, None, "the node claims no cursor");
+
+        let regions = props.cursor_regions.expect("link publishes a region");
+        assert_eq!(regions.len(), 1);
+        let (start, end, cursor) = regions[0];
+        assert_eq!(cursor, crate::element::CursorStyle::Pointer);
+        assert!(end > start, "the range has width: {start}..{end}");
+        assert!(start > 0.0, "and starts after the leading text");
     }
 
     #[test]

@@ -342,6 +342,17 @@ impl<'a> Parser<'a> {
             "s" | "strike" | "del" => self.current_style.strikethrough = true,
             "a" => {
                 self.current_style.underline = true;
+                // The theme's link colour, so a link reads as the
+                // action colour rather than inheriting body text. An
+                // explicit `<span color=…>` inside still wins, since
+                // that assignment comes later.
+                // `try_get`: parsing is a pure text operation and must
+                // not require an installed theme. With none — a unit
+                // test, a headless parse — the link keeps the
+                // surrounding colour rather than panicking.
+                if let Some(theme) = blinc_theme::ThemeState::try_get() {
+                    self.current_style.color = Some(theme.color(blinc_theme::ColorToken::TextLink));
+                }
                 if let Some((_, url)) = attrs.iter().find(|(k, _)| k == "href") {
                     self.current_style.link_url = Some(url.clone());
                 }
