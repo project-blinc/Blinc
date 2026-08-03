@@ -10,10 +10,10 @@ use blinc_layout::div::ElementBuilder;
 macro_rules! typography_widget {
     ($ty:ident, $name:literal, $ctor:ident) => {
         #[doc = concat!(
-                    "`cn.", $name, "(text)` — one rung of the theme's type ramp.\n\
+                                    "`cn.", $name, "(text)` — one rung of the theme's type ramp.\n\
              \n\
              `text` binds: a signal here re-renders just this text node.",
-                )]
+                                )]
         #[extern_widget(namespace = "cn", name = $name)]
         pub struct $ty {
             /// What it says.
@@ -87,3 +87,72 @@ typography_widget!(CnH6, "H6", h6);
 typography_widget!(CnP, "P", p);
 typography_widget!(CnMuted, "Muted", muted);
 typography_widget!(CnCaption, "Caption", caption);
+typography_widget!(CnSpan, "Span", span);
+typography_widget!(CnB, "B", b);
+typography_widget!(CnStrong, "Strong", strong);
+typography_widget!(CnSmall, "Small", small);
+typography_widget!(CnInlineCode, "InlineCode", inline_code);
+
+/// `cn.ChainedText { cn.Span("This is ") cn.B("bold") }` — inline runs
+/// on one baseline, mirroring `cn::chained_text([...])`.
+///
+/// The children are the inline constructors above; anything else still
+/// renders, it just sits on the same baseline row.
+#[extern_widget(namespace = "cn", name = "ChainedText")]
+pub struct CnChainedText {
+    #[children]
+    pub children: std::sync::Mutex<Vec<Box<dyn ElementBuilder>>>,
+    /// Built once, consuming `children`.
+    #[skip]
+    built: OnceCell<blinc_layout::div::Div>,
+}
+
+impl CnChainedText {
+    fn get_or_build(&self) -> &blinc_layout::div::Div {
+        ::blinc_layout::build_once::build_once(&self.built, || {
+            let children = std::mem::take(&mut *self.children.lock().expect("children mutex"));
+            // The same shape `cn::chained_text` builds — a baseline
+            // flex row — composed here because the DSL's children
+            // arrive as boxed wrappers rather than bare `Text`s.
+            let mut row = blinc_layout::div::div()
+                .flex_row()
+                .items_start()
+                .items_baseline();
+            for child in children {
+                row = row.child_box(child);
+            }
+            row
+        })
+    }
+}
+
+impl ElementBuilder for CnChainedText {
+    fn build(&self, tree: &mut blinc_layout::LayoutTree) -> blinc_layout::LayoutNodeId {
+        self.get_or_build().build(tree)
+    }
+
+    fn render_props(&self) -> blinc_layout::RenderProps {
+        self.get_or_build().render_props()
+    }
+
+    fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
+        self.get_or_build().children_builders()
+    }
+
+    // MUST forward — see `gotcha_element_builder_trait_forwarding`.
+    fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
+        Some(self.get_or_build().event_handlers())
+    }
+
+    fn element_classes(&self) -> &[std::sync::Arc<str>] {
+        self.get_or_build().element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        self.get_or_build().element_id()
+    }
+
+    fn element_type_id(&self) -> blinc_layout::div::ElementTypeId {
+        self.get_or_build().element_type_id()
+    }
+}

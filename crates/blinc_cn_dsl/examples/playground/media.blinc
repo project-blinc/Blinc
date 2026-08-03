@@ -17,6 +17,14 @@ component MediaWidgets {
             cn.H4("h4 introduces a subsection")
             cn.Muted("muted plays support")
             cn.Caption("captions annotate")
+            cn.ChainedText {
+                cn.Span("Inline runs share a baseline: ")
+                cn.B("bold")
+                cn.Span(", ")
+                cn.InlineCode("code()")
+                cn.Span(", and ")
+                cn.Small("small print.")
+            }
 
             cn.Label("avatar: size x shape")
             Div(class = "row") {

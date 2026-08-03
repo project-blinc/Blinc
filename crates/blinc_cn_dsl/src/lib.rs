@@ -140,7 +140,10 @@ pub use tabs::CnTabs;
 pub use textarea::CnTextarea;
 pub use toggle::CnToggle;
 pub use tooltip::CnTooltip;
-pub use typography::{CnCaption, CnH1, CnH2, CnH3, CnH4, CnH5, CnH6, CnMuted, CnP};
+pub use typography::{
+    CnB, CnCaption, CnChainedText, CnH1, CnH2, CnH3, CnH4, CnH5, CnH6, CnInlineCode, CnMuted, CnP,
+    CnSmall, CnSpan, CnStrong,
+};
 
 use blinc_dsl_core::{BlincDsl, BlincDslResult};
 
@@ -227,6 +230,12 @@ pub fn register_basics(dsl: &BlincDsl) -> BlincDslResult<()> {
     dsl.register_extern_widget::<CnP>()?;
     dsl.register_extern_widget::<CnMuted>()?;
     dsl.register_extern_widget::<CnCaption>()?;
+    dsl.register_extern_widget::<CnSpan>()?;
+    dsl.register_extern_widget::<CnB>()?;
+    dsl.register_extern_widget::<CnStrong>()?;
+    dsl.register_extern_widget::<CnSmall>()?;
+    dsl.register_extern_widget::<CnInlineCode>()?;
+    dsl.register_extern_widget::<CnChainedText>()?;
     dsl.register_extern_widget::<CnPopover>()?;
     dsl.register_extern_widget::<CnPopoverTrigger>()?;
     dsl.register_extern_widget::<CnPopoverContent>()?;
