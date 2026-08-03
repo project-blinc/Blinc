@@ -218,6 +218,36 @@ the ~74 host call sites keep a grip. None of that is settled here, and
 guessing it would produce the kind of plan that reads well and does not
 survive contact.
 
+**How AEL does it, as a worked precedent.** The sibling project drives
+Zyntax effects through a public handler API rather than a name registry,
+and the shape maps onto signals almost directly:
+
+- An `EffectHandlerDescriptor` declares the operation: `effect_type:
+  EffectTypeId` — an ID, not a string — plus `operation`,
+  `parameter_types`, `result_type`, an `abi_version`, and `replay` /
+  `reversibility` modes.
+- `NativeEffectHandler::new(descriptor, closure)` wraps a Rust closure
+  taking `&EffectInvocation` and returning `HandlerOutcome::Completed(
+  EffectDatum)`.
+- `runtime.register_effect_handler(Arc<dyn UserEffectHandler>)` installs
+  it, then `runtime.compile_effect(fragment, effect)` compiles the code
+  that performs it.
+
+The identity is `EffectTypeId`; the handler is installed for a dynamic
+extent rather than looked up by name at the point of use. That is the
+whole difference from `mint_or_get(name)`.
+
+For signals this lines up with what the effects section below already
+argues: a signal READ as an effect operation means a handler installed
+at a reactive boundary observes exactly the reads in that extent — no
+AST-walking pass guessing what a view touched. `replay` and
+`reversibility` are also suggestive for hot reload and for undo, neither
+of which the current design has an answer for.
+
+Read `ael_cli/src/main.rs` around the `register_effect_handler` call and
+`ael_effects`'s `EffectHandlerDescriptor` before designing this; they are
+short and concrete.
+
 Related: the algebraic-effects section below argues the same thing about
 reactivity, which is not a coincidence. Both come from the DSL treating
 Zyntax as a backend to emit into rather than a language with a semantics
