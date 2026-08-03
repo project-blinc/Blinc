@@ -124,6 +124,13 @@ impl Sidebar {
 
         let content_anim_key = format!("{key}_content");
 
+        // Hoisted out of the rail's closure so the content area can read
+        // it too. Keyed by the sidebar, so it is the same signal the rail
+        // writes on a click, and it survives the rail's rebuilds.
+        let active_menu: State<Option<SidebarItem>> =
+            blinc_core::context_state::use_state_keyed(&format!("{key}_active_menu"), || None);
+        let active_menu_for_rail = active_menu.clone();
+
         // Create stateful container that rebuilds when collapsed state changes
         let container_key = format!("{}_container", key.clone());
         // let is_collapsed_for_container = is_collapsed.clone();
@@ -225,8 +232,7 @@ impl Sidebar {
                     items_container = items_container.child(toggle_btn);
                 }
 
-                let active_menu: State<Option<SidebarItem>> =
-                    ctx.use_signal("active_menu", || None);
+                let active_menu = active_menu_for_rail.clone();
                 for (section_idx, section) in sections.iter_mut().enumerate() {
                     // Section title - animate height to 0 when collapsed
                     if let Some(ref title) = section.title {
@@ -379,7 +385,10 @@ impl Sidebar {
                             .clip_to_animated()
                             .snappy(),
                     )
-                    .child(content_fn());
+                    // The selection, handed over rather than made the
+                    // caller's problem: a convenience argument is the
+                    // point of a builder like this.
+                    .child(content_fn(active_menu.get()));
                 Box::new(
                     div()
                         .flex_row()
@@ -436,7 +445,7 @@ impl ElementBuilder for Sidebar {
 }
 
 /// Content builder function type
-type ContentBuilderFn = Arc<dyn Fn() -> Div + Send + Sync>;
+type ContentBuilderFn = Arc<dyn Fn(Option<SidebarItem>) -> Div + Send + Sync>;
 
 /// Builder for sidebar component
 pub struct SidebarBuilder {
@@ -584,7 +593,7 @@ impl SidebarBuilder {
     /// ```
     pub fn content<F>(mut self, builder: F) -> Self
     where
-        F: Fn() -> Div + Send + Sync + 'static,
+        F: Fn(Option<SidebarItem>) -> Div + Send + Sync + 'static,
     {
         self.content_builder = Some(Arc::new(builder));
         self

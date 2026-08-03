@@ -118,10 +118,15 @@ impl CnSidebar {
                     }
                 }
             } else if let Some(content) = any.downcast_ref::<CnSidebarContent>() {
-                b = b.content(crate::shared_child::filling_body_recipe(
+                // `cn.SidebarContent` renders whatever the author nested
+                // in it, so the active item is not its concern. Ignored
+                // here rather than dropped from the Rust builder, where
+                // it saves a caller plumbing the selection themselves.
+                let recipe = crate::shared_child::filling_body_recipe(
                     content.take_children(),
                     content.r#ref,
-                ));
+                );
+                b = b.content(move |_active_item| recipe());
             } else {
                 warn_loose_child();
             }
