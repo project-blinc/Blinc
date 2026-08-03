@@ -1526,19 +1526,22 @@ impl RenderContext {
                 .then_with(|| a.root.cmp(&b.root))
         });
 
+        // The re-walk must not record regions: it runs with the DPI
+        // scale pushed on top of an ambient affine that already has it,
+        // so a region recorded here comes back at twice the scale, then
+        // four times, then eight -- drawn at a position that doubles
+        // with it. The main walk's regions are the correct ones.
+        tree.set_region_capture_suppressed(true);
         for region in &ordered {
-            // Apply DPI scale just like `render_with_motion` does for
-            // the root pass — the ambient affine was captured in
-            // physical-pixel space already, but the walker's
-            // `Transform::translate(bounds.x, bounds.y)` adds logical
-            // coordinates, so the DPI scale needs to wrap the call.
-            let has_scale = tree.scale_factor() != 1.0;
-            if has_scale {
-                scratch.push_transform(blinc_core::Transform::scale(
-                    tree.scale_factor(),
-                    tree.scale_factor(),
-                ));
-            }
+            // NO DPI push here. The ambient affine was captured under
+            // the main walk's root DPI transform, so it already maps
+            // the walker's logical coordinates to physical pixels —
+            // measured: every region's ambient reads sx = scale_factor.
+            // Wrapping the re-walk in DPI again drew each region at
+            // scale_factor× its size, at scale_factor× its position:
+            // on every fast-path frame the sliders lost their fill and
+            // thumb to an oversized copy near whatever was hovered.
+            //
             // The region's root is dynamic by definition — wrap the
             // re-walk in `push_motion_subtree` so emit routes into
             // `dynamic_batch` for consistency with the slow-path
@@ -1546,10 +1549,8 @@ impl RenderContext {
             scratch.push_motion_subtree();
             tree.render_dynamic_region(&mut scratch as &mut dyn DrawContext, region, render_state);
             scratch.pop_motion_subtree();
-            if has_scale {
-                scratch.pop_transform();
-            }
         }
+        tree.set_region_capture_suppressed(false);
 
         // Drain the dynamic batch. The collect-time `push_motion_subtree`
         // around each region's re-walk routes every emit into

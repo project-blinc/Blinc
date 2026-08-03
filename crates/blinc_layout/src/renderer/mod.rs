@@ -680,6 +680,15 @@ pub struct RenderTree {
     /// scissor rect. Cleared at the top of every full paint;
     /// repopulated by `render_layer_with_motion`.
     dynamic_regions: RefCell<HashMap<LayoutNodeId, DynamicRegion>>,
+    /// While set, the walker emits primitives but records no regions.
+    ///
+    /// The per-frame overlay re-walks each region into a scratch
+    /// context with the DPI scale pushed, on top of an ambient affine
+    /// that already carries DPI. Re-recording from there compounds it:
+    /// 2 -> 4 -> 8 every frame, and the region blits at that scale,
+    /// somewhere else. The regions from the main walk are the correct
+    /// ones; the re-walk only needs to draw.
+    suppress_region_capture: std::cell::Cell<bool>,
     /// Previous frame's animation classification per node. Used to
     /// detect transitions (Static ↔ Animating) for the
     /// damage-rect cache-rebuild path. Persists across full paints
@@ -969,6 +978,7 @@ impl RenderTree {
             canvas_paint_records: RefCell::new(HashMap::new()),
             overlay_canvas_paint_records: RefCell::new(HashMap::new()),
             dynamic_regions: RefCell::new(HashMap::new()),
+            suppress_region_capture: std::cell::Cell::new(false),
             previous_animation_status: RefCell::new(HashMap::new()),
             current_animation_status: RefCell::new(HashMap::new()),
             composite_promotion: RefCell::new(std::collections::HashSet::new()),
@@ -1487,6 +1497,20 @@ impl RenderTree {
     /// compositor's per-region dispatch path.
     pub fn dynamic_regions(&self) -> std::cell::Ref<'_, HashMap<LayoutNodeId, DynamicRegion>> {
         self.dynamic_regions.borrow()
+    }
+
+    /// Stop the walker recording regions for the duration of a re-walk.
+    /// See [`Self::suppress_region_capture`].
+    pub fn set_region_capture_suppressed(&self, suppressed: bool) {
+        self.suppress_region_capture.set(suppressed);
+    }
+
+    /// Record a region unless capture is suppressed.
+    pub(crate) fn record_dynamic_region(&self, node: LayoutNodeId, region: DynamicRegion) {
+        if self.suppress_region_capture.get() {
+            return;
+        }
+        self.dynamic_regions.borrow_mut().insert(node, region);
     }
 
     /// Mutable variant of [`Self::dynamic_regions`].

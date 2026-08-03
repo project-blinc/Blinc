@@ -1835,7 +1835,7 @@ impl RenderTree {
                         );
                         let region_clip_aabb = saved_ancestor_clip;
                         let visit_seq = self.dynamic_regions.borrow().len() as u32;
-                        self.dynamic_regions.borrow_mut().insert(
+                        self.record_dynamic_region(
                             node,
                             super::super::DynamicRegion {
                                 root: node,
@@ -2415,7 +2415,7 @@ impl RenderTree {
                         region_screen_aabb[3] + offset_y,
                     ];
                     let visit_seq = self.dynamic_regions.borrow().len() as u32;
-                    self.dynamic_regions.borrow_mut().insert(
+                    self.record_dynamic_region(
                         node,
                         super::super::DynamicRegion {
                             root: node,
@@ -2578,7 +2578,7 @@ impl RenderTree {
                             z_layer: ctx.z_layer(),
                         };
                         let visit_seq = self.dynamic_regions.borrow().len() as u32;
-                        self.dynamic_regions.borrow_mut().insert(
+                        self.record_dynamic_region(
                             node,
                             super::super::DynamicRegion {
                                 root: node,
@@ -2616,7 +2616,7 @@ impl RenderTree {
                 z_layer: ctx.z_layer(),
             };
             let visit_seq = self.dynamic_regions.borrow().len() as u32;
-            self.dynamic_regions.borrow_mut().insert(
+            self.record_dynamic_region(
                 node,
                 super::super::DynamicRegion {
                     root: node,
