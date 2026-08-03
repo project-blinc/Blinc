@@ -45,6 +45,17 @@ component NavigationWidgets {
                           on_click = || section.set("billing"))
             }
 
+            // Handles come from the group; only the panels are declared.
+            cn.Label("resizable: drag the handle between the panes")
+            cn.ResizableGroup(direction = "horizontal", h = 160.0) {
+                cn.ResizablePanel(default_size = 180.0, min_size = 120.0, max_size = 320.0) {
+                    cn.Card { cn.Label("sidebar pane") }
+                }
+                cn.ResizablePanel {
+                    cn.Card { cn.Label("content takes the rest") }
+                }
+            }
+
             cn.Label("small tabs, sliding rather than fading")
             cn.Tabs(value = pane, size = "small", transition = "slide_left") {
                 cn.Tab(value = "one", label = "One") {
