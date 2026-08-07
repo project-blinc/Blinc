@@ -270,11 +270,55 @@ installed. That makes an FSM testable by installing different handlers
 rather than by driving the real runtime, and it removes the host
 dispatch function the DSL currently reaches for.
 
-Two things to check before committing to this: whether a fiber can be
-persisted or reconstructed across a hot reload, since today FSM state
-survives in the registry that would be going away; and how a fiber's
-suspension point is addressed from outside, which is what `@fsm([X])`
-binding a component to the fields it reads currently needs.
+**Both of those are already solved upstream**, and there is a test that
+is very nearly the UI case:
+`zyntax/crates/zynml/tests/hot_reload_effect_fibers.rs`. Its own summary
+calls an effectful fiber "the observing FSM": each transition performs
+an effect to read an event, folds it into loop-carried state, and
+yields; the handler is the machine's event source, installed with `with`
+around the pump loop.
+
+The shape, verbatim from that test:
+
+```
+effect Event { def next_event(): i64 }
+handler Feed for Event { def next_event(): i64 { return 3 } }
+
+@effect(Event)
+fiber def machine(): i64 {
+    let mut state: i64 = 0
+    while state < CAP {
+        let e = next_event()
+        state = state + e * WEIGHT
+        yield state
+    }
+    return state
+}
+
+def drive(): i64 {
+    with Feed {
+        let f = machine()
+        while let Some(x) = f.next() { count = count + 1 }
+    }
+}
+```
+
+Under `TieredConfig` with `enable_osr` and `enable_hot_reload`,
+`reload_typed_program` edits `machine` WHILE IT IS SUSPENDED MID-RUN and
+the test asserts all three legs survive together: the fiber's state, its
+handler-stack segment, and the dispatch path. The proof is a pump count
+landing strictly between the all-old and all-new extremes — it could
+only do that by carrying state across the edit and then folding events
+with the new weight. So a fiber's state does outlive the code that
+created it, and the reload does not have to reconstruct it.
+
+**The boundary worth designing around.** A third test pins that editing
+the HANDLER reloads it but does NOT redirect dispatch: effect op tables
+still hold pointers baked at module compile, so calls keep reaching the
+old body until op-table patching lands in phase 3. Translated to Blinc:
+editing an FSM's transitions hot-reloads cleanly, while editing the
+event SOURCE wired into it will not take effect until that phase. Worth
+knowing before promising authors that everything reloads.
 
 Related: `SymbolTable.fiber_fn_names` already tracks which functions are
 fibers, so the plumbing is present rather than hypothetical.
@@ -298,11 +342,13 @@ reconstructed. That is the missing piece for FSMs-as-fibers: without it,
 an FSM mid-flight is lost on reload; with it, the fiber resumes into new
 code.
 
-So the three threads converge. Effects give reads an observable
-boundary, fibers give FSMs their suspension, and OSR is how either
-survives an edit. Persistent fibers are the concept to explore first,
-since both the FSM design and the reload story depend on whether a
-fiber's state can outlive the code that created it.
+So the three threads converge, and upstream has already proven the hard
+part. Effects give reads an observable boundary, fibers give FSMs their
+suspension, and OSR carries both across an edit — demonstrated together
+in one test rather than three separate hopes. What is left for Blinc is
+mapping its own vocabulary onto it: a pointer event as an effect
+operation, the app's event loop as the installed handler, and an FSM
+declaration as an `@effect(...) fiber def`.
 
 Related: the algebraic-effects section below argues the same thing about
 reactivity, which is not a coincidence. Both come from the DSL treating
