@@ -57,14 +57,15 @@ use passes::inject_user_view_instance_id_params;
 use passes::{
     annotate_computed_lambda_types, apply_module_namespace_prefix, bind_component_props,
     collect_declared, desugar_compound_assigns, detect_and_strip_stateful_views,
-    ensure_unit_return, expand_const_groups, expand_map_calls, extract_and_strip_stylesheets,
-    inject_fsm_context_markers, lower_bare_call_named_args, lower_children_arrays_to_blocks,
-    lower_component_calls, lower_match_blocks, lower_reactive_args, lower_struct_literals,
-    lower_struct_widget_props_to_handles, lower_styling_args_to_overlays,
-    lower_view_to_value_returning, lower_with_blocks, materialize_view, module_namespace_from_path,
-    populate_fsm_registry_pass, resolve_const_references, resolve_dotted_fsm_field_access,
-    resolve_extern_widget_named_args, resolve_fsm_subscribe_calls, resolve_fsm_trigger_calls,
-    resolve_signal_calls, rewrite_component_calls_in_program, synthesize_fsm_context_and_actions,
+    ensure_unit_return, expand_const_groups, expand_map_calls, extract_and_strip_exports,
+    extract_and_strip_stylesheets, inject_fsm_context_markers, lower_bare_call_named_args,
+    lower_children_arrays_to_blocks, lower_component_calls, lower_match_blocks,
+    lower_reactive_args, lower_struct_literals, lower_struct_widget_props_to_handles,
+    lower_styling_args_to_overlays, lower_view_to_value_returning, lower_with_blocks,
+    materialize_view, module_namespace_from_path, populate_fsm_registry_pass,
+    resolve_const_references, resolve_dotted_fsm_field_access, resolve_extern_widget_named_args,
+    resolve_fsm_subscribe_calls, resolve_fsm_trigger_calls, resolve_signal_calls,
+    rewrite_component_calls_in_program, synthesize_fsm_context_and_actions,
     synthesize_fsm_event_enums, synthesize_fsm_trait_interfaces, validate_component_calls,
 };
 use runtime_bridge::{
@@ -190,6 +191,8 @@ pub struct BlincDsl {
     /// subscribes to that instead. `None` until one render has
     /// completed, which is why the fallback still has to exist.
     observed_view_deps: Arc<Mutex<Option<Vec<u64>>>>,
+    /// Signal names this program declares reachable from outside it.
+    exported_signals: Arc<Mutex<Vec<String>>>,
     /// Components carrying `@stateful`, by name. These mount their own
     /// `Stateful` at their call site, so a transition re-renders that
     /// component rather than the whole program. The entry `view { }` is
@@ -242,6 +245,7 @@ impl BlincDsl {
         let declared_fsms = Arc::new(Mutex::new(Vec::new()));
         let has_stateful_view = Arc::new(Mutex::new(false));
         let observed_view_deps = Arc::new(Mutex::new(None));
+        let exported_signals = Arc::new(Mutex::new(Vec::new()));
         let stateful_components = Arc::new(Mutex::new(Vec::new()));
         let stateful_view_deps = Arc::new(Mutex::new(Vec::new()));
         let stateful_view_fsms = Arc::new(Mutex::new(Vec::new()));
@@ -260,6 +264,7 @@ impl BlincDsl {
             declared_fsms,
             has_stateful_view,
             observed_view_deps,
+            exported_signals,
             stateful_components,
             stateful_view_deps,
             stateful_view_fsms,
@@ -666,6 +671,17 @@ impl BlincDsl {
                     ctx.queue_stylesheet(css.clone());
                 }
             }
+        }
+
+        // `export { … }` — the names a host may reach. Collected before
+        // the signals pass so a declaration can be checked against them.
+        {
+            let mut exports = self
+                .exported_signals
+                .lock()
+                .expect("exported_signals mutex poisoned");
+            extract_and_strip_exports(&mut typed_program, &mut exports);
+            blinc_runtime::signal::set_exported(&exports);
         }
 
         lower_struct_literals(&mut typed_program)

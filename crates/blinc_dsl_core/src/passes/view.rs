@@ -521,6 +521,49 @@ pub(crate) fn extract_and_strip_stylesheets(program: &mut TypedProgram, out: &mu
     });
 }
 
+/// Extract the names from `__blinc_exports__` markers and strip them.
+///
+/// An exported signal is one a host may reach by name. Everything else
+/// belongs to the program, which is what makes scoping possible later:
+/// today every signal is reachable, so nothing can be made private
+/// without taking the host's grip away.
+///
+/// Names are captured verbatim by the grammar, so splitting on commas
+/// and trimming is the whole parse. Empty entries are dropped rather
+/// than recorded as a signal named "".
+pub(crate) fn extract_and_strip_exports(program: &mut TypedProgram, out: &mut Vec<String>) {
+    use zyntax_typed_ast::typed_ast::{
+        TypedDeclaration, TypedExpression, TypedLiteral, TypedStatement,
+    };
+    program.declarations.retain(|decl| {
+        let TypedDeclaration::Function(func) = &decl.node else {
+            return true;
+        };
+        if func.name.resolve_global().as_deref() != Some("__blinc_exports__") {
+            return true;
+        }
+        let Some(body) = &func.body else {
+            return false;
+        };
+        for stmt in &body.statements {
+            let TypedStatement::Expression(expr) = &stmt.node else {
+                continue;
+            };
+            if let TypedExpression::Literal(TypedLiteral::String(s)) = &expr.node
+                && let Some(text) = s.resolve_global()
+            {
+                for name in text.split(',') {
+                    let name = name.trim();
+                    if !name.is_empty() && !out.contains(&name.to_string()) {
+                        out.push(name.to_string());
+                    }
+                }
+            }
+        }
+        false
+    });
+}
+
 /// Append `;` inside `{ ... }` blocks where the line's last char doesn't already
 /// terminate. Brace depth tracking is naïve — string/comment braces will skew it.
 pub(crate) fn auto_inject_semicolons(raw: &str) -> String {

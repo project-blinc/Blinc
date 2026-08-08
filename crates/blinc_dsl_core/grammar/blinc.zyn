@@ -198,7 +198,7 @@ top_level_items = { item:top_level_item* }
 // `component_decl`. Falling through handles standalone struct-only
 // `component { fields }` decls, standalone `impl` blocks, and the
 // bare `view { ... }` quick-test shape.
-top_level_item = { import_stmt | style_decl | ref_decl | signal_decl_list_init | signal_decl_init | signal_decl | const_group | const_list_decl | const_decl | struct_decl | component_folded | component_decl | fsm_decl | impl_block | fn_decl | bare_view_item }
+top_level_item = { import_stmt | export_decl | style_decl | ref_decl | signal_decl_list_init | signal_decl_init | signal_decl | const_group | const_list_decl | const_decl | struct_decl | component_folded | component_decl | fsm_decl | impl_block | fn_decl | bare_view_item }
 
 // `style { ...CSS... }` — block-form CSS declaration. Author
 // writes raw CSS between the braces; balanced nested braces
@@ -215,6 +215,29 @@ top_level_item = { import_stmt | style_decl | ref_decl | signal_decl_list_init |
 // `__blinc_stylesheet__` whose body holds the CSS text as a
 // single string-literal statement; `extract_and_strip_stylesheets`
 // reads it out + strips the marker before JIT.
+// `export { page, theme }` — names the signals a host may reach by
+// name. Everything else is the program's own business.
+//
+// A marker declaration rather than a flag on each `signal`: a signal
+// lowers to an external param-less Function, which has nowhere to hang
+// one, and listing exports in a single place is also how an author
+// reads off the program's public surface.
+export_decl = { "export" ~ "{" ~ names:export_name_list ~ "}" }
+  -> TypedDeclaration::Function {
+      name: intern("__blinc_exports__"),
+      params: [],
+      return_type: Type::Unit,
+      body: Some(TypedBlock { statements: [
+          TypedStatement::Expression { expr:
+              TypedExpression::StringLiteral { value: names }
+          },
+      ] }),
+  }
+
+// Captured verbatim and split by the pass: the names are signal
+// identifiers, and a comma-separated list needs no structure here.
+export_name_list = @{ (!"}" ~ ANY)* }
+
 style_decl = { "style" ~ "{" ~ css:style_block_content ~ "}" }
   -> TypedDeclaration::Function {
       name: intern("__blinc_stylesheet__"),

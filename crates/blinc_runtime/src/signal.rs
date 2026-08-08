@@ -300,3 +300,43 @@ pub fn clear_string_list(name: &str) {
     let id_raw = mint_or_get(name, SignalType::StringList);
     Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).set(Vec::new());
 }
+
+// =====================================================================
+// Exports — the names a host may reach
+// =====================================================================
+
+/// Names the running program declared with `export { … }`.
+///
+/// Empty means no program has declared any, which today is every
+/// program: the host reaches every signal by name because nothing is
+/// private yet. Once signals are scoped, this is what keeps a host's
+/// grip on the ones it is meant to have.
+static EXPORTED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Replace the export list. Called by the DSL after each compile, so a
+/// reload that removes an `export` takes it away too.
+pub fn set_exported(names: &[String]) {
+    if let Ok(mut e) = EXPORTED.lock() {
+        e.clear();
+        e.extend_from_slice(names);
+    }
+}
+
+/// The current export list.
+pub fn exported() -> Vec<String> {
+    EXPORTED.lock().map(|e| e.clone()).unwrap_or_default()
+}
+
+/// Whether a host may reach `name`.
+///
+/// Permissive while no program has exported anything: taking the host's
+/// access away before scoping exists would break every caller for no
+/// gain. A program that declares ANY export is stating its surface, and
+/// is held to it.
+pub fn is_reachable(name: &str) -> bool {
+    match EXPORTED.lock() {
+        Ok(e) if e.is_empty() => true,
+        Ok(e) => e.iter().any(|n| n == name),
+        Err(_) => true,
+    }
+}
