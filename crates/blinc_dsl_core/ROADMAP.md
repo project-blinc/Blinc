@@ -180,14 +180,16 @@ addressable from anywhere, merely harder to hit by accident.
 
 ### The design
 
-**A signal read is an effect operation.** A reactive boundary installs a
-handler for its dynamic extent, so reads inside it are observed exactly
-— no AST walk, no guessing, and nothing to go stale when a view changes
-shape. AEL drives Zyntax effects this way already: an
-`EffectHandlerDescriptor` keyed by `EffectTypeId` (an id, not a string),
-a handler registered against it, then code compiled to perform it. Its
-`replay` and `reversibility` modes are also the first credible answer
-this design has had for undo.
+**A signal read is already observed, without effects.** A `with` region
+opens a read scope; reads record against it at the getter externs; the
+accumulated set is the region's dependency set. Effects would add a
+handler able to intercept a read, and nothing here wants to intercept
+one — there is a single interception with a single behaviour. Keep
+effects for where interception is the point: an FSM's EVENTS, where the
+handler genuinely is the event source and can be swapped for a test, a
+replay, or a different input device. AEL's `replay` and `reversibility`
+modes are suggestive there, and are the first credible answer this
+design has had for undo.
 
 **An FSM is an `@effect(E) fiber def`.** Calling one constructs a fiber;
 `yield` is a suspension point, and suspending IS waiting in a state. An
@@ -225,11 +227,28 @@ with a full instance rebuild.
 
 ### Order, and the one blocker
 
-1. **Signal reads as effect operations at ONE boundary** — a `with`
-   region. Smallest thing that proves the mechanism inside Blinc, and it
-   can be measured against the existing dependency pass: the effect
-   handler should observe exactly what the pass guesses, and differ only
-   where the pass was wrong.
+1. ~~Signal reads as effect operations at one boundary.~~ **Already
+   done, and effects are not the mechanism.** `read_scope` accumulates
+   reads at the `__signal_get_by_id_*` choke point and `with_regions::
+   mount` prefers that set over the registered one. `host.rs` argues the
+   case where the interception happens: a `perform` exists so a handler
+   can intercept, and there is exactly one interception with one
+   behaviour, so the indirection buys nothing here.
+
+   Measured rather than assumed (`tests/observed_deps.rs`): a region
+   reading one of two signals subscribes to exactly that one. The
+   distinction that decides whether observation happens at all is
+   BINDING vs READ — `Text("{x}")` hands the widget a handle and the JIT
+   body never reads, so such a region observes nothing and falls back to
+   the registered set, correctly. Control flow forces a real read and
+   the set comes back exact.
+
+   So the AST-walking guess is already gone for `with` regions. What
+   remains of that complaint is `@stateful` views, which still take the
+   marker-arg path in `detect_and_strip_stateful_views` and subscribe to
+   ALL declared signals when no deps are named. Pointing those at a read
+   scope is the actual step, and it is smaller than what was written
+   here.
 2. **An export mechanism.** THE BLOCKER, and it must land before
    scoping. `blinc_runtime::signal::set_str("page", …)` is how Rust
    drives a `.blinc` program, across ~74 call sites, and it works only
