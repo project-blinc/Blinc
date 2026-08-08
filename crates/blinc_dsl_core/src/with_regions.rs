@@ -213,6 +213,13 @@ fn record_mounted_deps(id: i64, ids: &[blinc_core::reactive::SignalId]) {
     }
 }
 
+/// Log the whole-program `@stateful`'s dep set under the reserved id, so
+/// a test can assert on it the same way it does a region's.
+#[doc(hidden)]
+pub fn __record_program_deps(ids: &[blinc_core::reactive::SignalId]) {
+    record_mounted_deps(i64::MIN, ids);
+}
+
 /// Every mount so far, as `(region_id, signal_ids)`.
 ///
 /// Not just the last: tests run in parallel in one process and this log

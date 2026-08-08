@@ -127,3 +127,38 @@ fn a_region_that_reads_nothing_falls_back() {
         .expect("the fallback subscribed it to the registered set");
     assert!(!deps.is_empty(), "never subscribes to nothing: {deps:?}");
 }
+
+/// A bare `@stateful` view narrows to what it read, rather than staying
+/// subscribed to every declared signal.
+///
+/// The dep list is fixed when the `Stateful` is built, before anything
+/// has rendered, so the first build has nothing to go on and takes the
+/// blanket fallback. The render records what it touched and the next
+/// build uses that. This asserts the narrowing, and that the first build
+/// still works from the fallback rather than subscribing to nothing.
+#[test]
+fn a_bare_stateful_view_narrows_after_its_first_render() {
+    let dsl = compile(
+        r#"signal sv_read: i32 = 1
+           signal sv_unread: i32 = 9
+
+           @stateful
+           view {
+             if sv_read.get() > 0 { Text("yes") } else { Text("no") }
+           }"#,
+        "stateful_narrow.blinc",
+    );
+
+    // First build: no render has happened, so the fallback applies and
+    // the program subscribes to everything declared.
+    build(&dsl);
+    // Second build: the first render recorded its reads.
+    build(&dsl);
+
+    let deps = blinc_dsl_core::__deps_mentioning(id_of("sv_read"))
+        .expect("the program stateful subscribed to the signal it read");
+    assert!(
+        !deps.contains(&id_of("sv_unread")),
+        "narrowed away the signal it never read: {deps:?}",
+    );
+}

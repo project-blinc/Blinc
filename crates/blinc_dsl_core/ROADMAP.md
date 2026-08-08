@@ -203,6 +203,35 @@ DECLARATION installs a handler for its scope rather than minting into a
 process-global registry, and a read resolves through the handler stack
 rather than through a baked global id.
 
+**What scoping does to the dependency set.** Observed deps are a
+`Vec<SignalId>` of process-global raw ids, and every consumer — a
+`Stateful`'s `deps()`, `check_stateful_deps`, the ~74 host call sites —
+assumes a name or an id means the same thing everywhere. Scoping breaks
+that assumption, and there are two readings:
+
+- *Resolution changes, identity does not.* A read performs, the handler
+  resolves it to a concrete signal INSTANCE, and that instance has an
+  id. Two components' `page` resolve to two different instances with two
+  different ids. Dep lists stay lists of ids and nothing downstream
+  moves. This is what `EffectTypeId` naming the OPERATION while the
+  handler decides who answers actually buys.
+- *Identity changes too.* A signal is meaningful only relative to a
+  handler stack, and there is no stable id to put in a dep list at all.
+
+Take the first. It keeps the reactive substrate intact and confines the
+change to declaration and read. But it carries one requirement that has
+to hold or the whole thing churns: **a handler must resolve to the SAME
+instance across renders.** Resolve freshly each time and the dep set
+changes every frame, so the `Stateful` re-subscribes to new ids
+continuously and nothing ever matches a write.
+
+It also changes what a question means. "What is signal `page`" stops
+having an answer; the answerable question is "what is `page` IN THIS
+SCOPE". That applies to the host, to cross-module reads, and to tests —
+`tests/observed_deps.rs` currently resolves ids with a global
+`signal::lookup(name)`, which is the very mechanism being removed, so
+that helper becomes "resolve in scope" or the tests lose their footing.
+
 Fibers do the same job for FSM state: a machine's state lives in the
 fiber, the host holds a token in component state, and there is no
 registry entry to collide with another component's machine. Scope by

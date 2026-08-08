@@ -33,12 +33,18 @@ mod fsm_registry;
 mod host;
 mod passes;
 mod read_scope;
+
+/// Region id for the whole-program `@stateful` render's read scope.
+/// Reserved: `with` region ids come from the lowering and are positive.
+const PROGRAM_READ_SCOPE: i64 = i64::MIN;
 pub mod refs;
 mod runtime_bridge;
 mod widget_ffi;
 mod with_regions;
 #[doc(hidden)]
-pub use with_regions::{__clear_mounted_deps, __deps_mentioning, __mounted_deps};
+pub use with_regions::{
+    __clear_mounted_deps, __deps_mentioning, __mounted_deps, __record_program_deps,
+};
 
 use abi::{register_builtins, type_to_native, type_to_tag};
 pub use fsm_registry::{
@@ -176,6 +182,14 @@ pub struct BlincDsl {
     /// Set when any view carries `@stateful`. `view_widget` then
     /// wraps the tree in a reactive `Stateful`.
     has_stateful_view: Arc<Mutex<bool>>,
+    /// Signal ids the last whole-program render actually read.
+    ///
+    /// A bare `@stateful` has no dep list to go on, and the fallback is
+    /// every declared signal — so an unrelated write re-renders the
+    /// program. The render records what it touched, and the next build
+    /// subscribes to that instead. `None` until one render has
+    /// completed, which is why the fallback still has to exist.
+    observed_view_deps: Arc<Mutex<Option<Vec<u64>>>>,
     /// Components carrying `@stateful`, by name. These mount their own
     /// `Stateful` at their call site, so a transition re-renders that
     /// component rather than the whole program. The entry `view { }` is
@@ -227,6 +241,7 @@ impl BlincDsl {
         let declared_signals = Arc::new(Mutex::new(Vec::new()));
         let declared_fsms = Arc::new(Mutex::new(Vec::new()));
         let has_stateful_view = Arc::new(Mutex::new(false));
+        let observed_view_deps = Arc::new(Mutex::new(None));
         let stateful_components = Arc::new(Mutex::new(Vec::new()));
         let stateful_view_deps = Arc::new(Mutex::new(Vec::new()));
         let stateful_view_fsms = Arc::new(Mutex::new(Vec::new()));
@@ -244,6 +259,7 @@ impl BlincDsl {
             declared_signals,
             declared_fsms,
             has_stateful_view,
+            observed_view_deps,
             stateful_components,
             stateful_view_deps,
             stateful_view_fsms,
@@ -1567,9 +1583,28 @@ impl BlincDsl {
             .clone();
 
         // Skip signals whose type isn't bridged (only i32/f64/string today).
+        // A previous render's observed set beats the blanket fallback:
+        // it is what the program actually read, so anything else in
+        // `signals` would only wake it for a write it ignores.
+        let observed_now = self
+            .observed_view_deps
+            .lock()
+            .expect("observed_view_deps mutex poisoned")
+            .clone();
+
         let dep_pool: Vec<(String, Type)> = if explicit_deps.is_empty() {
             if explicit_fsms.is_empty() {
-                signals.clone()
+                match &observed_now {
+                    Some(ids) if !ids.is_empty() => signals
+                        .iter()
+                        .filter(|(name, _)| {
+                            blinc_runtime::signal::lookup(name)
+                                .is_some_and(|(raw, _)| ids.contains(&raw))
+                        })
+                        .cloned()
+                        .collect(),
+                    _ => signals.clone(),
+                }
             } else {
                 // Narrow to the bound FSM's OWN context fields.
                 //
@@ -1649,13 +1684,26 @@ impl BlincDsl {
         {
             builder = builder.with_shared_state(shared);
         }
+        crate::with_regions::__record_program_deps(&signal_ids);
         builder = builder.deps(signal_ids);
 
         let renderer_for_callback = renderer.clone();
+        let observed_sink = Arc::clone(&self.observed_view_deps);
         Box::new(builder.on_state(move |_sctx| {
             tracing::debug!("stateful container: on_state re-render");
+            // Observe this render so the NEXT build can subscribe to what
+            // the program reads rather than to everything declared. The
+            // id is reserved: a `with` region's ids come from the
+            // lowering and never reach it.
+            crate::read_scope::enter(PROGRAM_READ_SCOPE);
             let value =
                 blinc_runtime::view::render_main(&renderer_for_callback).expect("render_main");
+            if let Some(reads) = crate::read_scope::exit(PROGRAM_READ_SCOPE)
+                && !reads.is_empty()
+                && let Ok(mut sink) = observed_sink.lock()
+            {
+                *sink = Some(reads);
+            }
             let ZyntaxValue::Int(handle) = value else {
                 return blinc_layout::div::Div::new();
             };
