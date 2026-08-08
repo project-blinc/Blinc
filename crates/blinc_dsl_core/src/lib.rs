@@ -37,6 +37,8 @@ pub mod refs;
 mod runtime_bridge;
 mod widget_ffi;
 mod with_regions;
+#[doc(hidden)]
+pub use with_regions::{__clear_mounted_deps, __last_mounted_deps};
 
 use abi::{register_builtins, type_to_native, type_to_tag};
 pub use fsm_registry::{

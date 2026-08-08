@@ -87,6 +87,8 @@ pub(crate) unsafe fn mount(id: i64, child: i64) -> i64 {
             .collect()
     };
 
+    record_mounted_deps(id, &signal_ids);
+
     // Logged because a region's `Stateful` is created at ONE source
     // location, so every region shares `InstanceKey`'s per-location
     // call counter. That counter only resets at a frame boundary. If
@@ -190,5 +192,38 @@ fn render_region(name: &str) -> blinc_layout::div::Div {
     match unsafe { crate::widget_ffi::materialize_widget(handle) } {
         Some(widget) => blinc_layout::div::div().child_box(widget.into_element_builder()),
         None => blinc_layout::div::div(),
+    }
+}
+
+// =====================================================================
+// Test observation
+// =====================================================================
+
+/// What `mount` last subscribed each region to.
+///
+/// The dep set is the whole point of a read scope, and it is otherwise
+/// invisible: a region with the wrong subscriptions renders correctly
+/// and only misbehaves later, on a write. Asserting on rendered output
+/// instead would pass while measuring nothing.
+static MOUNTED_DEPS: std::sync::Mutex<Vec<(i64, Vec<u64>)>> = std::sync::Mutex::new(Vec::new());
+
+fn record_mounted_deps(id: i64, ids: &[blinc_core::reactive::SignalId]) {
+    if let Ok(mut log) = MOUNTED_DEPS.lock() {
+        log.push((id, ids.iter().map(|s| s.to_raw()).collect()));
+    }
+}
+
+/// The signal ids the most recent mount of any region subscribed to.
+#[doc(hidden)]
+pub fn __last_mounted_deps() -> Option<(i64, Vec<u64>)> {
+    MOUNTED_DEPS.lock().ok()?.last().cloned()
+}
+
+/// Forget what has been mounted so far, so one test does not read
+/// another's tail.
+#[doc(hidden)]
+pub fn __clear_mounted_deps() {
+    if let Ok(mut log) = MOUNTED_DEPS.lock() {
+        log.clear();
     }
 }
