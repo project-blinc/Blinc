@@ -91,3 +91,57 @@ fn no_export_block_leaves_everything_reachable() {
     blinc_runtime::signal::set_exported(&[]);
     assert!(blinc_runtime::signal::is_reachable("anything_at_all"));
 }
+
+/// `export signal x: T = v` declares and exports in one line.
+///
+/// The shorthand has to do BOTH jobs: the signal must exist and behave
+/// like any other, and its name must join the export list. A marker
+/// that only did the second would leave the program referring to a
+/// signal that was never minted.
+#[test]
+fn the_shorthand_declares_and_exports() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let _dsl = compile(
+        r#"export signal ex_short: i32 = 7
+           signal ex_private: i32 = 8
+
+           view { Text("hi") }"#,
+        "exports_shorthand.blinc",
+    );
+
+    // Declared: minted, with its initial value applied.
+    assert_eq!(
+        blinc_runtime::signal::get_i32("ex_short"),
+        Some(7),
+        "the shorthand still declares a working signal",
+    );
+    // Exported: reachable, while the plain one beside it is not.
+    assert!(blinc_runtime::signal::is_reachable("ex_short"));
+    assert!(
+        !blinc_runtime::signal::is_reachable("ex_private"),
+        "an ordinary signal beside an exported one stays private",
+    );
+    // And nothing is left named after the marker.
+    assert!(
+        blinc_runtime::signal::lookup("__blinc_export_signal__").is_none(),
+        "the marker must not survive as a signal of its own",
+    );
+}
+
+/// The annotation-only form, for a signal seeded from the host.
+#[test]
+fn the_shorthand_works_without_an_initial_value() {
+    let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+    let _dsl = compile(
+        r#"export signal ex_bare: string
+
+           view { Text("hi") }"#,
+        "exports_shorthand_bare.blinc",
+    );
+
+    assert!(blinc_runtime::signal::is_reachable("ex_bare"));
+    assert!(
+        blinc_runtime::signal::lookup("ex_bare").is_some(),
+        "declared even with no value to seed",
+    );
+}

@@ -521,6 +521,55 @@ pub(crate) fn extract_and_strip_stylesheets(program: &mut TypedProgram, out: &mu
     });
 }
 
+/// Turn `export signal x: T = v` markers into ordinary signal
+/// declarations, recording each name as exported.
+///
+/// One grammar rule yields one declaration, and this needs two things:
+/// a signal to exist, and its name to join the export list. Same split
+/// `const ( … )` uses — the grammar marks, a pass expands.
+///
+/// Runs BEFORE the signals pass, which would otherwise see a decl named
+/// `__blinc_export_signal__` and mint a signal called that.
+pub(crate) fn expand_exported_signals(program: &mut TypedProgram, exports: &mut Vec<String>) {
+    use zyntax_typed_ast::typed_ast::{
+        TypedDeclaration, TypedExpression, TypedLiteral, TypedStatement,
+    };
+    for decl in &mut program.declarations {
+        let TypedDeclaration::Function(func) = &mut decl.node else {
+            continue;
+        };
+        if func.name.resolve_global().as_deref() != Some("__blinc_export_signal__") {
+            continue;
+        }
+        let Some(body) = &mut func.body else { continue };
+        // The name rides as the first statement; anything after it is
+        // the initial value the signals pass expects to find alone.
+        let name = body.statements.first().and_then(|stmt| {
+            let TypedStatement::Expression(expr) = &stmt.node else {
+                return None;
+            };
+            let TypedExpression::Literal(TypedLiteral::String(s)) = &expr.node else {
+                return None;
+            };
+            s.resolve_global().map(|n| n.to_string())
+        });
+        let Some(name) = name else { continue };
+
+        body.statements.remove(0);
+        // A no-init `export signal x: T` leaves nothing behind. The
+        // plain form carries `None` there, not an empty block, and the
+        // mint path follows that shape — left as `Some([])` the signal
+        // was never declared.
+        if body.statements.is_empty() {
+            func.body = None;
+        }
+        func.name = zyntax_typed_ast::InternedString::new_global(&name);
+        if !exports.contains(&name) {
+            exports.push(name);
+        }
+    }
+}
+
 /// Extract the names from `__blinc_exports__` markers and strip them.
 ///
 /// An exported signal is one a host may reach by name. Everything else

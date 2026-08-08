@@ -198,7 +198,7 @@ top_level_items = { item:top_level_item* }
 // `component_decl`. Falling through handles standalone struct-only
 // `component { fields }` decls, standalone `impl` blocks, and the
 // bare `view { ... }` quick-test shape.
-top_level_item = { import_stmt | export_decl | style_decl | ref_decl | signal_decl_list_init | signal_decl_init | signal_decl | const_group | const_list_decl | const_decl | struct_decl | component_folded | component_decl | fsm_decl | impl_block | fn_decl | bare_view_item }
+top_level_item = { import_stmt | exported_signal_init | exported_signal | export_decl | style_decl | ref_decl | signal_decl_list_init | signal_decl_init | signal_decl | const_group | const_list_decl | const_decl | struct_decl | component_folded | component_decl | fsm_decl | impl_block | fn_decl | bare_view_item }
 
 // `style { ...CSS... }` — block-form CSS declaration. Author
 // writes raw CSS between the braces; balanced nested braces
@@ -215,6 +215,46 @@ top_level_item = { import_stmt | export_decl | style_decl | ref_decl | signal_de
 // `__blinc_stylesheet__` whose body holds the CSS text as a
 // single string-literal statement; `extract_and_strip_stylesheets`
 // reads it out + strips the marker before JIT.
+// `export signal page: string = "forms"` — declare and export in one
+// line, the shape an author reaches for when a signal exists precisely
+// to be driven from outside.
+//
+// A marker decl expanded by `expand_exported_signals`, the same shape
+// `const ( … )` uses: one grammar rule yields one declaration, and this
+// needs two things to happen — a signal to exist, and its name to join
+// the export list.
+//
+// The name rides in the body as a string so the expansion can recover
+// it; the marker's own name cannot be the signal's, or the pass would
+// have no way to tell an exported signal from an ordinary one.
+exported_signal_init = { "export" ~ "signal" ~ name:identifier ~ ":" ~ ty:state_type ~ "=" ~ value:const_literal }
+  -> TypedDeclaration::Function {
+      name: intern("__blinc_export_signal__"),
+      params: [],
+      return_type: ty,
+      body: Some(TypedBlock { statements: [
+          TypedStatement::Expression { expr:
+              TypedExpression::StringLiteral { value: name }
+          },
+          TypedStatement::Expression { expr: value },
+      ] }),
+      is_external: true,
+  }
+
+// Same, with no initial value.
+exported_signal = { "export" ~ "signal" ~ name:identifier ~ ":" ~ ty:state_type }
+  -> TypedDeclaration::Function {
+      name: intern("__blinc_export_signal__"),
+      params: [],
+      return_type: ty,
+      body: Some(TypedBlock { statements: [
+          TypedStatement::Expression { expr:
+              TypedExpression::StringLiteral { value: name }
+          },
+      ] }),
+      is_external: true,
+  }
+
 // `export { page, theme }` — names the signals a host may reach by
 // name. Everything else is the program's own business.
 //

@@ -57,15 +57,15 @@ use passes::inject_user_view_instance_id_params;
 use passes::{
     annotate_computed_lambda_types, apply_module_namespace_prefix, bind_component_props,
     collect_declared, desugar_compound_assigns, detect_and_strip_stateful_views,
-    ensure_unit_return, expand_const_groups, expand_map_calls, extract_and_strip_exports,
-    extract_and_strip_stylesheets, inject_fsm_context_markers, lower_bare_call_named_args,
-    lower_children_arrays_to_blocks, lower_component_calls, lower_match_blocks,
-    lower_reactive_args, lower_struct_literals, lower_struct_widget_props_to_handles,
-    lower_styling_args_to_overlays, lower_view_to_value_returning, lower_with_blocks,
-    materialize_view, module_namespace_from_path, populate_fsm_registry_pass,
-    resolve_const_references, resolve_dotted_fsm_field_access, resolve_extern_widget_named_args,
-    resolve_fsm_subscribe_calls, resolve_fsm_trigger_calls, resolve_signal_calls,
-    rewrite_component_calls_in_program, synthesize_fsm_context_and_actions,
+    ensure_unit_return, expand_const_groups, expand_exported_signals, expand_map_calls,
+    extract_and_strip_exports, extract_and_strip_stylesheets, inject_fsm_context_markers,
+    lower_bare_call_named_args, lower_children_arrays_to_blocks, lower_component_calls,
+    lower_match_blocks, lower_reactive_args, lower_struct_literals,
+    lower_struct_widget_props_to_handles, lower_styling_args_to_overlays,
+    lower_view_to_value_returning, lower_with_blocks, materialize_view, module_namespace_from_path,
+    populate_fsm_registry_pass, resolve_const_references, resolve_dotted_fsm_field_access,
+    resolve_extern_widget_named_args, resolve_fsm_subscribe_calls, resolve_fsm_trigger_calls,
+    resolve_signal_calls, rewrite_component_calls_in_program, synthesize_fsm_context_and_actions,
     synthesize_fsm_event_enums, synthesize_fsm_trait_interfaces, validate_component_calls,
 };
 use runtime_bridge::{
@@ -647,6 +647,18 @@ impl BlincDsl {
         // BEFORE `resolve_signal_calls`: a ref declaration is the same
         // shape as a signal's, so its uses have to be claimed first.
         crate::passes::resolve_ref_calls(&mut typed_program, filename);
+        // MUST run BEFORE `resolve_signal_calls`: the shorthand arrives
+        // as a marker decl, and the signals pass would otherwise mint a
+        // signal named `__blinc_export_signal__` and never see the real
+        // one.
+        {
+            let mut exports = self
+                .exported_signals
+                .lock()
+                .expect("exported_signals mutex poisoned");
+            expand_exported_signals(&mut typed_program, &mut exports);
+        }
+
         resolve_signal_calls(&mut typed_program);
         // Module hardcoded to "main" here — same key
         // `populate_fsm_registry_pass` uses below. Both FSM-call
