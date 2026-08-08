@@ -136,7 +136,12 @@ impl Sidebar {
         // let is_collapsed_for_container = is_collapsed.clone();
 
         let stateful_container = stateful_with_key::<NoState>(&container_key)
-            .deps([builder.is_collapsed.signal_id()])
+            // `active_menu` as well as the collapse flag: hoisting it out
+            // of this closure so the content area could read it also took
+            // it out of what the rail re-renders for, and the highlight
+            // stopped following the selection — pages swapped while the
+            // rail stayed on whichever item it drew first.
+            .deps([builder.is_collapsed.signal_id(), active_menu.signal_id()])
             .on_state(move |ctx| {
                 let collapsed = collapsed.clone();
 
