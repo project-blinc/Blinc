@@ -180,16 +180,35 @@ addressable from anywhere, merely harder to hit by accident.
 
 ### The design
 
-**A signal read is already observed, without effects.** A `with` region
-opens a read scope; reads record against it at the getter externs; the
-accumulated set is the region's dependency set. Effects would add a
-handler able to intercept a read, and nothing here wants to intercept
-one — there is a single interception with a single behaviour. Keep
-effects for where interception is the point: an FSM's EVENTS, where the
-handler genuinely is the event source and can be swapped for a test, a
-replay, or a different input device. AEL's `replay` and `reversibility`
-modes are suggestive there, and are the first credible answer this
-design has had for undo.
+**Two jobs, and only one of them is already solved.** Keep them apart —
+conflating them once already produced a wrong conclusion.
+
+*Observing* which signals a region read does NOT need effects. A `with`
+region opens a read scope, reads record at the getter externs, and the
+accumulated set is the dependency set. There is one interception with
+one behaviour, so a `perform` adds nothing. Measured in
+`tests/observed_deps.rs`.
+
+*Scoping* is what effects are for, and it is the harder half. A handler
+installed for a dynamic extent decides what a name RESOLVES TO inside
+it. That is the mechanism that makes two components able to each declare
+`page` without colliding: not longer names, but no shared string space
+to collide in — the read is a `perform`, and which signal it reaches is
+whatever handler the enclosing scope installed. `with H { … }` is the
+extent, and the backends already carry it (`pending_with_scopes`,
+`lower_with_scopes`).
+
+So the read stays observed as it is today; what changes is that a signal
+DECLARATION installs a handler for its scope rather than minting into a
+process-global registry, and a read resolves through the handler stack
+rather than through a baked global id.
+
+Fibers do the same job for FSM state: a machine's state lives in the
+fiber, the host holds a token in component state, and there is no
+registry entry to collide with another component's machine. Scope by
+construction rather than by convention. AEL's `replay` and
+`reversibility` modes sit on the same descriptor and are the first
+credible answer this design has had for undo.
 
 **An FSM is an `@effect(E) fiber def`.** Calling one constructs a fiber;
 `yield` is a suspension point, and suspending IS waiting in a state. An
@@ -249,6 +268,12 @@ with a full instance rebuild.
    ALL declared signals when no deps are named. Pointing those at a read
    scope is the actual step, and it is smaller than what was written
    here.
+
+   None of this displaces effects from the plan: they are how SCOPING
+   works, not how observation works, and scoping is still ahead. A
+   declaration installs a handler for its extent; a read resolves
+   through the handler stack. That is the step that makes two
+   components' `page` two different signals.
 2. **An export mechanism.** THE BLOCKER, and it must land before
    scoping. `blinc_runtime::signal::set_str("page", …)` is how Rust
    drives a `.blinc` program, across ~74 call sites, and it works only
