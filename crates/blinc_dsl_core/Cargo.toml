@@ -77,6 +77,12 @@ anyhow = { workspace = true }
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
+# ZynML's grammar, for tests that exercise the Zyntax substrate
+# directly. Blinc's own grammar has no `effect` / `handler` /
+# `fiber def` surface and is not gaining one — the lowering pass
+# synthesizes those declarations. This is how a test writes the shapes
+# the pass will build, without hand-rolling a typed AST per case.
+zynml = { git = "https://github.com/darmie/zyntax", rev = "48428c6ef04c735b98316d82b5a494b0479e03d8" }
 # Tests walk the typed AST as JSON rather than hand-rolling a visitor
 # for every expression shape.
 serde_json = { workspace = true }

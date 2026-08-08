@@ -228,6 +228,19 @@ strip = "symbols"
 # would compile their own GPU code against the local `blinc_core`,
 # breaking exhaustive matches on any new `BuiltinVar` / `ClipShape`
 # variant.
+# Zyntax — redirected to the local checkout while the effects-and-fibers
+# host API is adopted. The pinned rev in each crate's Cargo.toml predates
+# `get_fiber` / `resume_fiber` / `handler_push_info` / `EffectHandlerToken`
+# entirely, and the revision that carries them is not on a remote branch,
+# so a rev bump cannot fetch it. Replace this block with a rev bump once
+# the upstream commit is pushed.
+[patch."https://github.com/darmie/zyntax"]
+zyntax_embed = { path = "../zyntax/crates/zyntax_embed" }
+zyntax_typed_ast = { path = "../zyntax/crates/typed_ast" }
+zyntax_compiler = { path = "../zyntax/crates/compiler" }
+zrtl = { path = "../zyntax/sdk/zrtl" }
+zynml = { path = "../zyntax/crates/zynml" }
+
 [patch."https://github.com/project-blinc/Blinc.git"]
 blinc_core = { path = "crates/blinc_core" }
 # blinc_animation patched too — `/packages/blinc_node_editor` needs

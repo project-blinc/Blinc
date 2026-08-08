@@ -791,6 +791,11 @@ pub(crate) fn populate_fsm_registry_pass(
 
             let type_def = TypeDefinition {
                 id: type_id,
+                // The module the state enum belongs to, which the
+                // registry now resolves names through. Same module the
+                // `FsmId` below is keyed by, so a same-named FSM in
+                // another file stays a different type.
+                module: Some(module),
                 name: enum_decl.name,
                 kind: TypeKind::Enum { variants },
                 type_params: Vec::new(),
