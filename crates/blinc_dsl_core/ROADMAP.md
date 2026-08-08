@@ -238,7 +238,41 @@ with a full instance rebuild.
 3. **Signals become scoped symbols.** The breaking change, deliberately
    third: by then the effect path is proven and the host has a supported
    way to reach in.
-4. **FSMs become fibers**, once effects carry their events.
+4. **FSMs become fibers**, once effects carry their events. Nothing is
+   unknown on the Zyntax side: `zynml/tests/host_fiber_api.rs` is the
+   host-driven contract, and its header describes this use case — "a
+   framework constructs a machine from a compiled `fiber def`, holds a
+   token, and steps it on its own schedule".
+
+   ```rust
+   let token = rt.get_fiber("machine")?;        // per mounted FSM
+   match rt.resume_fiber(token)? {              // once per event
+       HostFiberStep::Yielded(v) => /* v drives the re-render */,
+       HostFiberStep::Done => /* machine finished */,
+   }
+   ```
+
+   `resume_fiber` takes NO value. Events do not go in through resume —
+   they arrive through the effect handler the host installs around each
+   step, which is the host equivalent of a source-level `with Feed { … }`
+   and is what a native handler backed by the winit queue plugs into.
+   Stepping past completion stays `Done`.
+
+   The two edges an edit creates surface as values rather than traps,
+   which is what lets a token live in component state:
+
+   - the machine's function is DELETED — the next resume fails as a
+     value, the test calls it "the UI's cue to drop and remount", and
+     dropping the fiber still works
+   - the yield SHAPE changes — the handle carries a generation and
+     `fiber_info` reports staleness, so a stale token is detected rather
+     than misread. A running fiber keeps yielding the shape its handle
+     was created against; one created after the edit carries the new
+     generation.
+
+   So the Blinc-side work is only: a pointer event as an effect
+   operation, a token in component state, and `Done`-or-failure meaning
+   remount.
 5. **Hot reload switches to OSR reload**, last, because it is the step
    that lets the global registry finally go.
 
