@@ -521,55 +521,6 @@ pub(crate) fn extract_and_strip_stylesheets(program: &mut TypedProgram, out: &mu
     });
 }
 
-/// Read the export names a program declares, without changing it.
-///
-/// Needed before compilation rather than during: scoping is decided
-/// when a signal mints, imported modules mint first, and the surface is
-/// declared in the entry. Both spellings count — the `export { … }`
-/// block and the `export signal x: T` shorthand.
-pub(crate) fn scan_exported_names(program: &TypedProgram) -> Vec<String> {
-    use zyntax_typed_ast::typed_ast::{
-        TypedDeclaration, TypedExpression, TypedLiteral, TypedStatement,
-    };
-    let mut out = Vec::new();
-    for decl in &program.declarations {
-        let TypedDeclaration::Function(func) = &decl.node else {
-            continue;
-        };
-        let marker = func.name.resolve_global().unwrap_or_default();
-        let marker: &str = &marker;
-        let is_block = marker == "__blinc_exports__";
-        let is_shorthand = marker == "__blinc_export_signal__";
-        if !is_block && !is_shorthand {
-            continue;
-        }
-        let Some(body) = &func.body else { continue };
-        for stmt in &body.statements {
-            let TypedStatement::Expression(expr) = &stmt.node else {
-                continue;
-            };
-            let TypedExpression::Literal(TypedLiteral::String(s)) = &expr.node else {
-                continue;
-            };
-            let Some(text) = s.resolve_global() else {
-                continue;
-            };
-            // The block holds a comma list; the shorthand holds one
-            // name, and its first statement is the only string.
-            for name in text.split(',') {
-                let name = name.trim();
-                if !name.is_empty() && !out.contains(&name.to_string()) {
-                    out.push(name.to_string());
-                }
-            }
-            if is_shorthand {
-                break;
-            }
-        }
-    }
-    out
-}
-
 /// Turn `export signal x: T = v` markers into ordinary signal
 /// declarations, recording each name as exported.
 ///
@@ -579,11 +530,7 @@ pub(crate) fn scan_exported_names(program: &TypedProgram) -> Vec<String> {
 ///
 /// Runs BEFORE the signals pass, which would otherwise see a decl named
 /// `__blinc_export_signal__` and mint a signal called that.
-pub(crate) fn expand_exported_signals(
-    program: &mut TypedProgram,
-    namespace: &str,
-    exports: &mut Vec<String>,
-) {
+pub(crate) fn expand_exported_signals(program: &mut TypedProgram, exports: &mut Vec<String>) {
     use zyntax_typed_ast::typed_ast::{
         TypedDeclaration, TypedExpression, TypedLiteral, TypedStatement,
     };
@@ -617,12 +564,8 @@ pub(crate) fn expand_exported_signals(
             func.body = None;
         }
         func.name = zyntax_typed_ast::InternedString::new_global(&name);
-        // Recorded as owned by this module, which is how the key
-        // function looks it up: one module's export must not exempt
-        // another's same-named signal.
-        let owned = super::exported_entry(&name, namespace);
-        if !exports.contains(&owned) {
-            exports.push(owned);
+        if !exports.contains(&name) {
+            exports.push(name);
         }
     }
 }
@@ -637,11 +580,7 @@ pub(crate) fn expand_exported_signals(
 /// Names are captured verbatim by the grammar, so splitting on commas
 /// and trimming is the whole parse. Empty entries are dropped rather
 /// than recorded as a signal named "".
-pub(crate) fn extract_and_strip_exports(
-    program: &mut TypedProgram,
-    namespace: &str,
-    out: &mut Vec<String>,
-) {
+pub(crate) fn extract_and_strip_exports(program: &mut TypedProgram, out: &mut Vec<String>) {
     use zyntax_typed_ast::typed_ast::{
         TypedDeclaration, TypedExpression, TypedLiteral, TypedStatement,
     };
@@ -664,12 +603,8 @@ pub(crate) fn extract_and_strip_exports(
             {
                 for name in text.split(',') {
                     let name = name.trim();
-                    if name.is_empty() {
-                        continue;
-                    }
-                    let owned = super::exported_entry(name, namespace);
-                    if !out.contains(&owned) {
-                        out.push(owned);
+                    if !name.is_empty() && !out.contains(&name.to_string()) {
+                        out.push(name.to_string());
                     }
                 }
             }

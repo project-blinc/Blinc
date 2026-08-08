@@ -38,7 +38,6 @@ pub(crate) use modules::*;
 pub(crate) use reactive::*;
 pub(crate) use refs::resolve_ref_calls;
 pub(crate) use signals::*;
-pub use signals::{exported_entry, signal_registry_key};
 pub(crate) use structs::*;
 pub(crate) use styling::*;
 pub(crate) use view::*;

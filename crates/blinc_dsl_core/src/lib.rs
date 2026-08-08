@@ -32,8 +32,6 @@ pub mod core_widgets;
 mod fsm_registry;
 mod host;
 mod passes;
-#[doc(hidden)]
-pub use passes::{exported_entry, signal_registry_key};
 mod read_scope;
 
 /// Region id for the whole-program `@stateful` render's read scope.
@@ -67,9 +65,8 @@ use passes::{
     lower_view_to_value_returning, lower_with_blocks, materialize_view, module_namespace_from_path,
     populate_fsm_registry_pass, resolve_const_references, resolve_dotted_fsm_field_access,
     resolve_extern_widget_named_args, resolve_fsm_subscribe_calls, resolve_fsm_trigger_calls,
-    resolve_signal_calls, resolve_signal_calls_scoped, rewrite_component_calls_in_program,
-    synthesize_fsm_context_and_actions, synthesize_fsm_event_enums,
-    synthesize_fsm_trait_interfaces, validate_component_calls,
+    resolve_signal_calls, rewrite_component_calls_in_program, synthesize_fsm_context_and_actions,
+    synthesize_fsm_event_enums, synthesize_fsm_trait_interfaces, validate_component_calls,
 };
 use runtime_bridge::{
     JitGuardDispatcher, JitViewRenderer, publish_components_to_runtime_registry,
@@ -659,20 +656,10 @@ impl BlincDsl {
                 .exported_signals
                 .lock()
                 .expect("exported_signals mutex poisoned");
-            expand_exported_signals(&mut typed_program, module_namespace, &mut exports);
+            expand_exported_signals(&mut typed_program, &mut exports);
         }
 
-        {
-            let exports = self
-                .exported_signals
-                .lock()
-                .expect("exported_signals mutex poisoned")
-                .clone();
-            // An exported signal keeps its bare name so a host can still
-            // reach it; everything else is qualified by module, so two
-            // files declaring `page` no longer share one signal.
-            resolve_signal_calls_scoped(&mut typed_program, module_namespace, &exports);
-        }
+        resolve_signal_calls(&mut typed_program);
         // Module hardcoded to "main" here — same key
         // `populate_fsm_registry_pass` uses below. Both FSM-call
         // passes consult the global `FsmRegistry` keyed by this
@@ -705,7 +692,7 @@ impl BlincDsl {
                 .exported_signals
                 .lock()
                 .expect("exported_signals mutex poisoned");
-            extract_and_strip_exports(&mut typed_program, module_namespace, &mut exports);
+            extract_and_strip_exports(&mut typed_program, &mut exports);
             blinc_runtime::signal::set_exported(&exports);
         }
 
@@ -1159,48 +1146,7 @@ impl BlincDsl {
         };
 
         let source = std::fs::read_to_string(entry)?;
-        // Parsed WITHOUT the post-parse passes: `parse_to_typed_ast`
-        // runs the signals pass, which mints — and minting here happens
-        // before the export scan below has said anything, so every
-        // signal in the entry would be keyed as if the program had no
-        // surface. Only imports and export markers are read off this.
-        let program = {
-            let runtime = self
-                .runtime
-                .lock()
-                .expect("BlincDsl runtime mutex poisoned");
-            self.grammar
-                .parse_with_signatures(
-                    &source,
-                    entry.to_string_lossy().as_ref(),
-                    runtime.plugin_signatures(),
-                )
-                .map_err(|e| {
-                    BlincDslError::Compile(e.render_auto().unwrap_or_else(|| e.to_string()))
-                })?
-        };
-
-        // The program's surface has to be known BEFORE any module
-        // compiles, because scoping is decided at mint time and imports
-        // mint first. Read it off the entry, which is already parsed:
-        // an imported module declaring `page` was otherwise minted
-        // unqualified, and the entry's own `export signal page` then
-        // found that entry and adopted its type.
-        if is_entry {
-            let names = passes::scan_exported_names(&program);
-            if !names.is_empty() {
-                let mut exports = self
-                    .exported_signals
-                    .lock()
-                    .expect("exported_signals mutex poisoned");
-                for name in names {
-                    if !exports.contains(&name) {
-                        exports.push(name);
-                    }
-                }
-                blinc_runtime::signal::set_exported(&exports);
-            }
-        }
+        let program = self.parse_to_typed_ast(&source, entry.to_string_lossy().as_ref())?;
 
         for decl in &program.declarations {
             let zyntax_typed_ast::TypedDeclaration::Import(import) = &decl.node else {
