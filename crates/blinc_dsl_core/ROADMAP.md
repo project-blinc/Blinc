@@ -154,216 +154,96 @@ the case it was named for. Reach for a new child type only where the
 choice genuinely differs — a menu item is a command, not a value, so
 that family will need its own.
 
-**Symbols instead of name-keyed registries.** *The priority.* Signals,
-FSMs and components each live in a process-global registry keyed by a
-string. Zyntax has symbols — with identity and scope, resolved by the
-compiler, in both the Cranelift and LLVM backends — and the DSL reaches
-around all of it to look things up by name at runtime.
-
-Every symptom below is the same mistake wearing different clothes:
+**Reactivity through the language, not around it.** *The priority.*
+Signals, FSMs and components each live in a process-global registry
+keyed by a string, and dependency sets are computed by a pass that walks
+the AST guessing what a view reads. Zyntax has symbols, algebraic
+effects and fibers; the DSL reaches around all three. Every symptom is
+that one decision:
 
 - `signal page` in two modules is ONE signal. It surfaced in the
   playground: `main.blinc` owns `page` for which tab the sidebar shows,
   a pagination demo declared `signal page` for its page number, and
   clicking a page navigated the app. Nothing warns — the second
-  declaration finds the first and adopts it, and behaviour is the only
-  report.
-- `signal page` in two COMPONENTS of one module is also one signal, and
-  that is likelier: a file's components are written together and reuse
-  obvious names. A module is only the coarsest scope; if scoping follows
-  blocks, a component body is one too.
-- FSMs have their own global registry with the same shape. State enums
-  are already mangled per module by `apply_module_namespace_prefix`,
-  whose comment says same-named cross-file FSMs would otherwise collide
-  — an admission that name keys collide, patched for one case.
-- Dependency sets are computed by a pass that WALKS THE AST GUESSING
-  what a view reads, because reads are not tracked. A resolved symbol
-  would say.
+  declaration finds the first and adopts it.
+- `signal page` in two COMPONENTS of one file is also one signal, and
+  that is likelier: components in a file are written together and reuse
+  obvious names.
+- FSM state enums are already mangled per module, whose own comment says
+  same-named cross-file FSMs would otherwise collide. An admission that
+  name keys collide, patched for one case.
+- The dependency pass guesses because reads are not observable. A
+  resolved symbol, or an effect, would say.
 
-Mangling is not the fix. Adding signals to the module-namespace pass
-stops the accidental collision but leaves one global registry with
-longer keys: a signal stays addressable from anywhere, merely harder to
-hit by accident.
+Mangling is not the fix: it leaves one global registry with longer keys,
+addressable from anywhere, merely harder to hit by accident.
 
-What changes when symbols carry it instead: a signal belongs to the
-scope that declares it, two scopes cannot collide because there is no
-shared string space to collide in, and the compiler resolves a reference
-rather than the runtime matching a name. Sharing inverts from the
-default to a request.
+### The design
 
-**The one thing that must land with it.** `blinc_runtime::signal::
-set_str("page", …)` is how Rust drives a `.blinc` program, and ~74 call
-sites pass bare names. That works today only because nothing is private.
-Scoping needs an export — a deliberate way to make a symbol reachable
-from outside — or the host loses its grip on the program. Design it
-alongside, not after.
+**A signal read is an effect operation.** A reactive boundary installs a
+handler for its dynamic extent, so reads inside it are observed exactly
+— no AST walk, no guessing, and nothing to go stale when a view changes
+shape. AEL drives Zyntax effects this way already: an
+`EffectHandlerDescriptor` keyed by `EffectTypeId` (an id, not a string),
+a handler registered against it, then code compiled to perform it. Its
+`replay` and `reversibility` modes are also the first credible answer
+this design has had for undo.
 
-**What is actually there (verified).** Zyntax's `SymbolTable` in
-`compiler/lowering` holds functions, globals, types, effects and
-handlers, each an `IndexMap` from `InternedString` to a `HirId` /
-`TypeId`. So the table is name-keyed too — but per compilation unit, and
-resolved BY THE COMPILER to an id. That is the difference that matters:
-identity becomes the `HirId`, and the string stops being what two
-declarations agree on at runtime. It also has `with`-scopes for effect
-handlers (`pending_with_scopes`, `lower_with_scopes`) and block scoping
-for locals in both backends.
+**An FSM is an `@effect(E) fiber def`.** Calling one constructs a fiber;
+`yield` is a suspension point, and suspending IS waiting in a state. An
+event resumes it. The current state stops being an enum a registry
+tracks and becomes the fiber's program counter; transitions become
+ordinary control flow rather than a table plus a host dispatch function.
 
-**Still to explore before this is a plan.** How a signal declaration
-should appear in that table (a global? an effect?); whether component
-bodies can introduce a scope in the table or only inside a function;
-what the FSM registry keys on and whether it can hold ids; how a
-resolved id survives hot reload, which today relies on values outliving
-an instance in a name-keyed registry; and what an export looks like so
-the ~74 host call sites keep a grip. None of that is settled here, and
-guessing it would produce the kind of plan that reads well and does not
-survive contact.
+**Identity is the symbol, scope is the block.** `SymbolTable` resolves
+names to `HirId`s per compilation unit, so the string stops being what
+two declarations agree on at runtime. Scope follows blocks, which the
+backends already support, so a component body scopes its own signals.
 
-**How AEL does it, as a worked precedent.** The sibling project drives
-Zyntax effects through a public handler API rather than a name registry,
-and the shape maps onto signals almost directly:
+**Hot reload rides OSR rather than rebuilding.** Today a reload builds a
+fresh instance and swaps it wholesale — which is exactly why values must
+survive in a global registry. That registry IS the state preservation,
+so it cannot be removed until the reload stops needing it.
 
-- An `EffectHandlerDescriptor` declares the operation: `effect_type:
-  EffectTypeId` — an ID, not a string — plus `operation`,
-  `parameter_types`, `result_type`, an `abi_version`, and `replay` /
-  `reversibility` modes.
-- `NativeEffectHandler::new(descriptor, closure)` wraps a Rust closure
-  taking `&EffectInvocation` and returning `HandlerOutcome::Completed(
-  EffectDatum)`.
-- `runtime.register_effect_handler(Arc<dyn UserEffectHandler>)` installs
-  it, then `runtime.compile_effect(fragment, effect)` compiles the code
-  that performs it.
+### Why this is adaptation, not research
 
-The identity is `EffectTypeId`; the handler is installed for a dynamic
-extent rather than looked up by name at the point of use. That is the
-whole difference from `mint_or_get(name)`.
-
-For signals this lines up with what the effects section below already
-argues: a signal READ as an effect operation means a handler installed
-at a reactive boundary observes exactly the reads in that extent — no
-AST-walking pass guessing what a view touched. `replay` and
-`reversibility` are also suggestive for hot reload and for undo, neither
-of which the current design has an answer for.
-
-Read `ael_cli/src/main.rs` around the `register_effect_handler` call and
-`ael_effects`'s `EffectHandlerDescriptor` before designing this; they are
-short and concrete.
-
-**Fibers are the shape of an FSM.** Zyntax has `fiber def NAME(...)`:
-calling one constructs a fiber (`FiberNew`) rather than running the
-body, `yield expr` inside it is a suspension point (`FiberYield`, lowered
-to `krio_fiber_yield`), and `FiberResume` continues it. An FSM is
-precisely a computation suspended between events, so the correspondence
-is direct:
-
-- The FSM body becomes a `fiber def`. It runs until it yields, and
-  yielding IS waiting in a state.
-- An event resumes the fiber, carrying the event as the resume value.
-- The current state stops being an enum the host tracks in a registry
-  and becomes the fiber's own suspension point — the program counter.
-- Transitions become ordinary control flow. A state machine is written
-  as straight-line code with yields rather than as a transition table
-  plus a dispatch function.
-
-Paired with effects, what the FSM DOES at each step (writing signals,
-dispatching) becomes effect operations resolved by whichever handler is
-installed. That makes an FSM testable by installing different handlers
-rather than by driving the real runtime, and it removes the host
-dispatch function the DSL currently reaches for.
-
-**Both of those are already solved upstream**, and there is a test that
-is very nearly the UI case:
-`zyntax/crates/zynml/tests/hot_reload_effect_fibers.rs`. Its own summary
-calls an effectful fiber "the observing FSM": each transition performs
+`zyntax/crates/zynml/tests/hot_reload_effect_fibers.rs` runs the whole
+composition and calls it "the observing FSM": each transition performs
 an effect to read an event, folds it into loop-carried state, and
-yields; the handler is the machine's event source, installed with `with`
-around the pump loop.
+yields, with the handler installed by `with` around the pump loop. Under
+`enable_osr` + `enable_hot_reload` it proves, in one test, that editing
+a SUSPENDED machine preserves its state, its handler-stack segment and
+its dispatch path together. A companion test edits the event SOURCE
+under a running machine: the machine never reloads, and from its next
+perform it observes the edited events. Both proofs rest on a count
+landing strictly between the all-old and all-new extremes, which is only
+reachable if state crossed the edit.
 
-The shape, verbatim from that test:
+So both halves of an FSM reload independently while suspended — what it
+does, and what it responds to. That is more than Blinc manages today
+with a full instance rebuild.
 
-```
-effect Event { def next_event(): i64 }
-handler Feed for Event { def next_event(): i64 { return 3 } }
+### Order, and the one blocker
 
-@effect(Event)
-fiber def machine(): i64 {
-    let mut state: i64 = 0
-    while state < CAP {
-        let e = next_event()
-        state = state + e * WEIGHT
-        yield state
-    }
-    return state
-}
+1. **Signal reads as effect operations at ONE boundary** — a `with`
+   region. Smallest thing that proves the mechanism inside Blinc, and it
+   can be measured against the existing dependency pass: the effect
+   handler should observe exactly what the pass guesses, and differ only
+   where the pass was wrong.
+2. **An export mechanism.** THE BLOCKER, and it must land before
+   scoping. `blinc_runtime::signal::set_str("page", …)` is how Rust
+   drives a `.blinc` program, across ~74 call sites, and it works only
+   because nothing is private. Scoping without an export takes the
+   host's grip away.
+3. **Signals become scoped symbols.** The breaking change, deliberately
+   third: by then the effect path is proven and the host has a supported
+   way to reach in.
+4. **FSMs become fibers**, once effects carry their events.
+5. **Hot reload switches to OSR reload**, last, because it is the step
+   that lets the global registry finally go.
 
-def drive(): i64 {
-    with Feed {
-        let f = machine()
-        while let Some(x) = f.next() { count = count + 1 }
-    }
-}
-```
-
-Under `TieredConfig` with `enable_osr` and `enable_hot_reload`,
-`reload_typed_program` edits `machine` WHILE IT IS SUSPENDED MID-RUN and
-the test asserts all three legs survive together: the fiber's state, its
-handler-stack segment, and the dispatch path. The proof is a pump count
-landing strictly between the all-old and all-new extremes — it could
-only do that by carrying state across the edit and then folding events
-with the new weight. So a fiber's state does outlive the code that
-created it, and the reload does not have to reconstruct it.
-
-**Editing the event source works too.** Op-table patching has landed
-upstream (`patch effect dispatch tables in place and surface reload as a
-runtime event`), and the tests moved with it: a reload report now
-carries `dispatch_patched`, and a fresh perform reaches the edited
-handler rather than the body baked at module compile.
-
-The test added alongside it is the one that matters most here — the
-event SOURCE is edited under a machine that is mid-run, and the machine
-itself never reloads. Its state and handler segment are untouched, and
-from its next perform the events it observes carry the edited value.
-Again proven by a count landing strictly between the extremes, which
-only happens if dispatch retargeted mid-flight.
-
-So both halves reload: an FSM's transitions, and the source feeding it,
-independently and while suspended. For a UI that is the whole editing
-loop — change what a machine does, or change what it responds to,
-without losing where it had got to.
-
-Related: `SymbolTable.fiber_fn_names` already tracks which functions are
-fibers, so the plumbing is present rather than hypothetical.
-
-**Zyntax's own hot-swap is the mechanism to drive.** `compiler/src/osr.rs`
-exists and `tiered_backend` already does "threads, atomic code-pointer
-swap, generations", wiring `osr::osr_runtime_symbols()` into the
-Cranelift backend so JIT'd back-edge code can resolve them. Read the
-phase comments before relying on it: they say OSR lands in phase 2/3 and
-deopt in phase 4, so the swap machinery is further along than the
-on-stack replacement itself. Check what is actually complete rather than
-taking the module's existence as the feature.
-
-This matters because Blinc's hot reload currently works by building a
-FRESH instance and swapping it wholesale, which is why signal values
-have to survive in a process-global registry — the registry IS the
-state-preservation mechanism. An atomic code-pointer swap with
-generations replaces the instance rebuild, and OSR is what would let a
-SUSPENDED FIBER carry its state across an edit rather than being
-reconstructed. That is the missing piece for FSMs-as-fibers: without it,
-an FSM mid-flight is lost on reload; with it, the fiber resumes into new
-code.
-
-So the three threads converge, and upstream has already proven the hard
-part. Effects give reads an observable boundary, fibers give FSMs their
-suspension, and OSR carries both across an edit — demonstrated together
-in one test rather than three separate hopes. What is left for Blinc is
-mapping its own vocabulary onto it: a pointer event as an effect
-operation, the app's event loop as the installed handler, and an FSM
-declaration as an `@effect(...) fiber def`.
-
-Related: the algebraic-effects section below argues the same thing about
-reactivity, which is not a coincidence. Both come from the DSL treating
-Zyntax as a backend to emit into rather than a language with a semantics
-to use.
+Steps 1 and 2 are independent and can go in parallel. Nothing before
+step 5 removes the registry, so each earlier step is reversible.
 
 ## Next
 
