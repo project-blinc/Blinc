@@ -213,14 +213,29 @@ fn record_mounted_deps(id: i64, ids: &[blinc_core::reactive::SignalId]) {
     }
 }
 
-/// The signal ids the most recent mount of any region subscribed to.
+/// Every mount so far, as `(region_id, signal_ids)`.
+///
+/// Not just the last: tests run in parallel in one process and this log
+/// is global, so a positional accessor hands one test another's mount.
+/// A caller selects the entry that mentions a signal it owns.
 #[doc(hidden)]
-pub fn __last_mounted_deps() -> Option<(i64, Vec<u64>)> {
-    MOUNTED_DEPS.lock().ok()?.last().cloned()
+pub fn __mounted_deps() -> Vec<(i64, Vec<u64>)> {
+    MOUNTED_DEPS
+        .lock()
+        .map(|log| log.clone())
+        .unwrap_or_default()
 }
 
-/// Forget what has been mounted so far, so one test does not read
-/// another's tail.
+/// The deps of the first mount that subscribed to `signal_raw`.
+#[doc(hidden)]
+pub fn __deps_mentioning(signal_raw: u64) -> Option<Vec<u64>> {
+    __mounted_deps()
+        .into_iter()
+        .find(|(_, ids)| ids.contains(&signal_raw))
+        .map(|(_, ids)| ids)
+}
+
+/// Forget what has been mounted so far.
 #[doc(hidden)]
 pub fn __clear_mounted_deps() {
     if let Ok(mut log) = MOUNTED_DEPS.lock() {

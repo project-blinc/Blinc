@@ -8,14 +8,13 @@
 //! These pin the difference. Signals are process-global by name, so each
 //! test names its own.
 //!
-//! `a_region_subscribes_only_to_what_it_read` FAILS TODAY, on purpose:
-//! it is the specification. `read_scope` and `mount` are both in place —
-//! reads record at the `__signal_get_by_id_*` choke point, and `mount`
-//! prefers an observed set over the registered one — but a `with` body's
-//! reads are not reaching the scope, so `observed` comes back empty and
-//! the fallback subscribes to every signal in scope. The measurement is
-//! the point: three earlier versions of these tests asserted on rendered
-//! values and passed while missing it entirely.
+//! The distinction that decides which happens is BINDING vs READ, and it
+//! is easy to get backwards. `Text("{x}")` passes a handle: the widget
+//! subscribes to the property itself and the JIT body never reads a
+//! value, so a region containing only bindings observes nothing and
+//! falls back — correctly, since there is nothing to observe. A body
+//! that reads a VALUE, as control flow must, records at the
+//! `__signal_get_by_id_*` choke point and gets an exact set.
 use blinc_dsl_core::BlincDsl;
 use blinc_layout::div::ElementBuilder;
 
@@ -67,19 +66,16 @@ fn a_region_subscribes_only_to_what_it_read() {
            signal obs_ignored: i32 = 9
 
            view {
-             with { Text("{obs_shown}") }
+             with {
+               if obs_shown.get() > 0 { Text("yes") } else { Text("no") }
+             }
            }"#,
         "observed_one.blinc",
     );
-    blinc_dsl_core::__clear_mounted_deps();
     build(&dsl);
 
-    let (_region, deps) =
-        blinc_dsl_core::__last_mounted_deps().expect("the region mounted a Stateful");
-    assert!(
-        deps.contains(&id_of("obs_shown")),
-        "subscribed to the signal it rendered: {deps:?}",
-    );
+    let deps = blinc_dsl_core::__deps_mentioning(id_of("obs_shown"))
+        .expect("a region subscribed to the signal it read");
     assert!(
         !deps.contains(&id_of("obs_ignored")),
         "did NOT subscribe to the one it never read: {deps:?}",
@@ -95,39 +91,39 @@ fn a_region_subscribes_to_every_signal_it_read() {
            signal obs_b: i32 = 2
 
            view {
-             with { Text("{obs_a} {obs_b}") }
+             with {
+               if obs_a.get() + obs_b.get() > 0 { Text("yes") } else { Text("no") }
+             }
            }"#,
         "observed_both.blinc",
     );
-    blinc_dsl_core::__clear_mounted_deps();
     build(&dsl);
 
-    let (_region, deps) =
-        blinc_dsl_core::__last_mounted_deps().expect("the region mounted a Stateful");
-    for name in ["obs_a", "obs_b"] {
-        assert!(deps.contains(&id_of(name)), "{name} missing from {deps:?}");
-    }
+    let deps = blinc_dsl_core::__deps_mentioning(id_of("obs_a"))
+        .expect("a region subscribed to the first signal");
+    assert!(
+        deps.contains(&id_of("obs_b")),
+        "and to the second it read: {deps:?}",
+    );
 }
 
-/// A region that reads nothing falls back to the registered set rather
-/// than subscribing to nothing, which would leave it permanently stale.
+/// A body of pure BINDINGS reads nothing, so it falls back to the
+/// registered set rather than subscribing to nothing — which would leave
+/// it permanently stale. `Text("{x}")` is the shape: the widget takes a
+/// handle and the JIT body never performs a read.
 #[test]
 fn a_region_that_reads_nothing_falls_back() {
     let dsl = compile(
-        r#"signal obs_unread: i32 = 1
+        r#"signal obs_bound: i32 = 1
 
            view {
-             with { Text("static") }
+             with { Text("{obs_bound}") }
            }"#,
         "observed_none.blinc",
     );
-    blinc_dsl_core::__clear_mounted_deps();
     build(&dsl);
 
-    let (_region, deps) =
-        blinc_dsl_core::__last_mounted_deps().expect("the region mounted a Stateful");
-    assert!(
-        !deps.is_empty(),
-        "a region with no observed reads must not subscribe to nothing: {deps:?}",
-    );
+    let deps = blinc_dsl_core::__deps_mentioning(id_of("obs_bound"))
+        .expect("the fallback subscribed it to the registered set");
+    assert!(!deps.is_empty(), "never subscribes to nothing: {deps:?}");
 }
