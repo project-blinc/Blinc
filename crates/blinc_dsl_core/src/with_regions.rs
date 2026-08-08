@@ -15,7 +15,14 @@ pub(crate) struct MountedRegion {
     /// `__blinc_with_<id>` — what `render_component` is called with.
     pub name: String,
     /// Signals whose writes re-render the region.
-    pub signal_names: Vec<String>,
+    /// Resolved at REGISTRATION, not carried as names.
+    ///
+    /// `mount` runs at render time, when the module a name belonged to
+    /// is long gone — every attempt to answer "which module is this
+    /// name in?" there resolved under whichever module compiled last.
+    /// Registration happens during that module's own compile, so the
+    /// question has an answer exactly once.
+    pub signal_ids: Vec<u64>,
     /// FSM the region binds its shared state to, if any. First listed
     /// wins: a `Stateful` exposes a single `SharedState`.
     pub fsm: Option<String>,
@@ -75,10 +82,9 @@ pub(crate) unsafe fn mount(id: i64, child: i64) -> i64 {
 
     let signal_ids: Vec<SignalId> = if observed.is_empty() {
         region
-            .signal_names
+            .signal_ids
             .iter()
-            .filter_map(|name| blinc_runtime::signal::lookup(name))
-            .map(|(raw, _ty)| SignalId::from_raw(raw))
+            .map(|raw| SignalId::from_raw(*raw))
             .collect()
     } else {
         observed

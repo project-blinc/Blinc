@@ -6211,9 +6211,9 @@ fn dsl_opacity_computed_binding_compiles() {
     let dsl = BlincDsl::new().expect("runtime init");
     dsl.compile_source(
         r#"
-            signal alpha: f64
+            signal alpha_compiles: f64
             view {
-                Div(opacity = computed { alpha.get() } : f64)
+                Div(opacity = computed { alpha_compiles.get() } : f64)
             }
         "#,
         "div_opacity_computed_compiles.blinc",
@@ -6229,9 +6229,9 @@ fn dsl_bg_computed_binding_compiles() {
     let dsl = BlincDsl::new().expect("runtime init");
     dsl.compile_source(
         r#"
-            signal bg_color: i32
+            signal bg_color_compiles: i32
             view {
-                Div(bg = computed { bg_color.get() } : i32)
+                Div(bg = computed { bg_color_compiles.get() } : i32)
             }
         "#,
         "div_bg_computed_compiles.blinc",

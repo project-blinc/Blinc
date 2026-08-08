@@ -86,7 +86,93 @@ fn seed_signal(
     }
 }
 
+/// The module path of a `.blinc` file: its directories and its name,
+/// relative to the source root — `pages/nav.blinc` is `pages.nav`.
+///
+/// `namespace` already carries those segments, since that is what
+/// `module_namespace_from_path` produces. It joins them with `$`
+/// because a mangled component name has to survive codegen as an
+/// identifier; a registry key has no such constraint, so the segments
+/// are re-joined the way the language spells a module path.
+///
+/// The entry file compiles with no namespace, deliberately — mangling
+/// it would break the bare names a host and the source both address it
+/// by. Its file stem is still its module.
+pub(crate) fn module_of(filename: &str, namespace: &str) -> String {
+    if !namespace.is_empty() {
+        return namespace.replace('$', ".");
+    }
+    std::path::Path::new(filename)
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
+thread_local! {
+    /// The module whose passes are running on this thread right now.
+    static COMPILING: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
+/// Sets [`COMPILING`] for as long as it lives, restoring the previous
+/// value on drop so a nested compile cannot leave a stale module behind.
+pub(crate) struct ModuleScope(String);
+
+impl Drop for ModuleScope {
+    fn drop(&mut self) {
+        COMPILING.with(|m| *m.borrow_mut() = std::mem::take(&mut self.0));
+    }
+}
+
+/// Name the module the following passes belong to.
+///
+/// Several passes turn a bare identifier into a signal id — a bound
+/// prop (`Div(bg = tint)`), a styling arg, an FSM guard. Each needs to
+/// know which module's `tint` is meant, and none of them can be handed
+/// the answer without threading a parameter through every nested
+/// rewrite helper they own.
+///
+/// A thread-local is safe HERE and was not safe for the render path,
+/// which is the distinction the two reverted attempts got wrong: this
+/// is read synchronously, inside the same call that set it, while a
+/// module is being compiled. The render path reads long after every
+/// compile has finished, when the answer is whichever module went last.
+pub(crate) fn enter_module(module: &str) -> ModuleScope {
+    let previous = COMPILING.with(|m| m.replace(module.to_string()));
+    ModuleScope(previous)
+}
+
+/// Resolve `name` as the module currently compiling sees it: its own
+/// declaration first, then the ordinary qualified-name rules for a
+/// signal some other module owns.
+pub(crate) fn signal_in_scope(name: &str) -> Option<(u64, blinc_runtime::signal::SignalType)> {
+    let module = COMPILING.with(|m| m.borrow().clone());
+    if !module.is_empty() {
+        let key = blinc_runtime::signal::qualify(&module, name);
+        if let Some(hit) = blinc_runtime::signal::lookup_exact(&key) {
+            return Some(hit);
+        }
+    }
+    blinc_runtime::signal::lookup(name)
+}
+
 pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
+    resolve_signal_calls_scoped(program, "");
+}
+
+/// As [`resolve_signal_calls`], minting each declaration under the
+/// module that declares it.
+///
+/// Only the REGISTRY key is qualified. References inside the module
+/// still say `page` and resolve through this pass's own map to a baked
+/// id, so nothing in the AST needs renaming — which is what makes this
+/// a small change rather than the component-mangling one.
+///
+/// A host still reaches an unambiguous `page` by that bare name:
+/// `signal::resolve` matches a lone `module.page` by suffix. Exports
+/// are not consulted, because they were only ever a way to say "leave
+/// this name reachable", and suffix resolution leaves every unique name
+/// reachable already.
+pub(crate) fn resolve_signal_calls_scoped(program: &mut TypedProgram, module: &str) {
     use std::collections::HashMap;
     use zyntax_typed_ast::InternedString;
     use zyntax_typed_ast::typed_ast::{TypedCall, TypedDeclaration, TypedExpression, TypedLiteral};
@@ -136,8 +222,9 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
         // Comparing against the last DECLARED default separates the two:
         // an edit to the source is an authoring action and wins, while a
         // recompile of unchanged source leaves the live value alone.
-        let is_new = blinc_runtime::signal::lookup(name_str.as_ref()).is_none();
-        let id_raw_u64 = blinc_runtime::signal::mint_or_get(name_str.as_ref(), sig_ty);
+        let key = blinc_runtime::signal::qualify(module, name_str.as_ref());
+        let is_new = blinc_runtime::signal::lookup_exact(&key).is_none();
+        let id_raw_u64 = blinc_runtime::signal::mint_qualified(module, name_str.as_ref(), sig_ty);
 
         // `signal feed = ["a", "b"]` — seed the elements on first mint.
         // Only on first mint, matching the scalar rule: the registry
@@ -145,7 +232,7 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
         // the program has since written.
         if sig_ty == blinc_runtime::signal::SignalType::StringList {
             if is_new && let Some(elements) = declared_list_elements(func) {
-                blinc_runtime::signal::set_string_list(name_str.as_ref(), elements);
+                blinc_runtime::signal::set_string_list(&key, elements);
             }
             continue;
         }
@@ -155,9 +242,9 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
             // the first compile never recorded anything and the next one
             // read "no previous default", called it a change, and
             // clobbered the live value.
-            let changed = declared_default_changed(name_str.as_ref(), lit);
+            let changed = declared_default_changed(&key, lit);
             if is_new || changed {
-                seed_signal(name_str.as_ref(), sig_ty, lit);
+                seed_signal(&key, sig_ty, lit);
             }
         } else {
             // The default was removed; forget it, so re-adding the same
@@ -165,7 +252,7 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
             declared_defaults()
                 .lock()
                 .expect("declared defaults poisoned")
-                .remove(name_str.as_ref() as &str);
+                .remove(key.as_str());
         }
         signals.insert(
             func.name,

@@ -1,5 +1,18 @@
 //! Process-global `name → SignalId` map plus thin typed accessors.
 //!
+//! ## Keys are qualified, resolution is not
+//!
+//! A declaration mints under `module.name` ([`mint_qualified`]), so two
+//! files that each declare `page` get two signals. Callers that reach in
+//! by name go through [`resolve`], which takes an exact key first and
+//! otherwise matches a single `module.name` entry. A bare name that
+//! several modules declare is [`ResolveError::Ambiguous`], not a pick.
+//!
+//! The rule that matters is resolve-once: a name is turned into an id
+//! where the module is known, which is at declaration, and everything
+//! downstream carries the id. Resolving per call is what makes a name
+//! mean different things at different moments.
+//!
 //! Each declared signal name maps to a single
 //! `blinc_core::reactive::Signal<T>` minted lazily on first lookup
 //! against the process-global reactive graph. There is NO parallel
@@ -60,9 +73,88 @@ fn registry() -> &'static RwLock<HashMap<String, Entry>> {
     REGISTRY.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
+/// Separates a module from a signal name in a registry key. Dotted to
+/// match the DSL's own qualification, so the name a host must spell to
+/// disambiguate is the name an author would write.
+pub const QUALIFIER: char = '.';
+
+/// Build the registry key for `name` declared in `module`. An empty
+/// module leaves the name bare, for callers with no file behind them.
+pub fn qualify(module: &str, name: &str) -> String {
+    if module.is_empty() {
+        return name.to_string();
+    }
+    format!("{module}{QUALIFIER}{name}")
+}
+
+/// Why a name did not resolve to exactly one signal.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ResolveError {
+    /// No entry, qualified or otherwise, matches.
+    Unknown,
+    /// Several modules declare this name and the caller passed it
+    /// unqualified. Carries the candidate keys so the message can name
+    /// them.
+    Ambiguous(Vec<String>),
+}
+
+/// Resolve a name to one signal, qualified-name aware.
+///
+/// An exact key wins outright. Otherwise an unqualified name matches a
+/// single `module.name` entry; two or more is
+/// [`ResolveError::Ambiguous`] and the caller must qualify.
+///
+/// Ambiguity is an ERROR rather than a pick. Silently adopting the
+/// first match is how two modules that each declare `page` end up
+/// sharing one signal, which reads as a signal firing for something
+/// that never wrote it.
+pub fn resolve(name: &str) -> Result<(u64, SignalType), ResolveError> {
+    let map = registry().read().map_err(|_| ResolveError::Unknown)?;
+    if let Some(e) = map.get(name) {
+        return Ok((e.id_raw, e.ty));
+    }
+    let suffix = format!("{QUALIFIER}{name}");
+    let mut hits = map.iter().filter(|(k, _)| k.ends_with(&suffix));
+    let Some((_, first)) = hits.next() else {
+        return Err(ResolveError::Unknown);
+    };
+    if hits.next().is_some() {
+        let mut candidates: Vec<String> = map
+            .keys()
+            .filter(|k| k.ends_with(&suffix))
+            .cloned()
+            .collect();
+        candidates.sort();
+        return Err(ResolveError::Ambiguous(candidates));
+    }
+    Ok((first.id_raw, first.ty))
+}
+
 /// Look up an existing signal by name. Returns the raw `SignalId` plus
 /// declared type, or `None` if `name` hasn't been minted yet.
+///
+/// [`resolve`] without the reason. An ambiguous name reads as absent
+/// here, so a caller that cannot report the error at least fails to
+/// find rather than finding the wrong one.
 pub fn lookup(name: &str) -> Option<(u64, SignalType)> {
+    match resolve(name) {
+        Ok(hit) => Some(hit),
+        Err(ResolveError::Ambiguous(candidates)) => {
+            tracing::warn!(
+                name = name,
+                candidates = ?candidates,
+                "signal name is ambiguous across modules — qualify it"
+            );
+            None
+        }
+        Err(ResolveError::Unknown) => None,
+    }
+}
+
+/// Exact-key lookup, with no qualified-name fallback. The mint path
+/// uses this: declaring `forms.page` must not find `nav.page` and
+/// decide the work is done.
+pub fn lookup_exact(name: &str) -> Option<(u64, SignalType)> {
     let map = registry().read().ok()?;
     map.get(name).map(|e| (e.id_raw, e.ty))
 }
@@ -88,7 +180,45 @@ pub fn mint_or_get(name: &str, ty: SignalType) -> u64 {
         }
         return id;
     }
+    mint_exact(name, ty)
+}
 
+/// Mint under the module-qualified key. What a DECLARATION calls: the
+/// module is known there, so a same-named signal in ANOTHER module must
+/// not be adopted.
+///
+/// One entry it does adopt: a BARE one under the same name. That is a
+/// host which seeded the signal before compiling — `set_signal_i32`
+/// then `compile_source` is an ordinary order to work in, and the host
+/// had no module to name at the time. Both keys end up on one id, so
+/// the value survives and anything already subscribed stays subscribed.
+pub fn mint_qualified(module: &str, name: &str, ty: SignalType) -> u64 {
+    let key = qualify(module, name);
+    if let Some((id, existing_ty)) = lookup_exact(&key) {
+        if existing_ty != ty {
+            tracing::warn!(
+                name = key,
+                existing = ?existing_ty,
+                requested = ?ty,
+                "signal type changed across declarations — keeping the original entry"
+            );
+        }
+        return id;
+    }
+    if key != name
+        && let Some((id, existing_ty)) = lookup_exact(name)
+        && existing_ty == ty
+    {
+        registry()
+            .write()
+            .expect("signal registry RwLock poisoned")
+            .insert(key, Entry { id_raw: id, ty });
+        return id;
+    }
+    mint_exact(&key, ty)
+}
+
+fn mint_exact(name: &str, ty: SignalType) -> u64 {
     let id_raw = match ty {
         SignalType::I32 => blinc_core::reactive::signal::<i32>(0).id().to_raw(),
         SignalType::I64 => blinc_core::reactive::signal::<i64>(0).id().to_raw(),
@@ -234,6 +364,93 @@ mod tests {
         assert_eq!(get_f64("conflict"), None);
         assert_eq!(get_str("conflict"), None);
         assert_eq!(get_i32("conflict"), Some(100));
+    }
+
+    /// A lone `module.name` answers to its bare name, so qualification
+    /// costs a host nothing until two modules actually clash.
+    #[test]
+    fn a_lone_qualified_signal_resolves_unqualified() {
+        let _guard = crate::GLOBAL_REGISTRY_TEST_LOCK.lock().unwrap();
+        clear_all();
+        mint_qualified("pages.nav", "tab", SignalType::I32);
+        set_i32("tab", 5);
+        assert_eq!(get_i32("tab"), Some(5));
+        assert_eq!(get_i32("pages.nav.tab"), Some(5), "same signal both ways");
+        assert!(
+            lookup_exact("tab").is_none(),
+            "reachable by suffix, not stored bare",
+        );
+    }
+
+    /// Two modules declaring one name is ambiguous, not a pick. Adopting
+    /// the first match is the original bug: `page` in two files became
+    /// one signal, so a page click drove the sidebar.
+    #[test]
+    fn a_name_two_modules_declare_is_ambiguous() {
+        let _guard = crate::GLOBAL_REGISTRY_TEST_LOCK.lock().unwrap();
+        clear_all();
+        let a = mint_qualified("nav", "page", SignalType::I32);
+        let b = mint_qualified("forms", "page", SignalType::I32);
+        assert_ne!(a, b, "two modules, two signals");
+
+        assert_eq!(
+            resolve("page"),
+            Err(ResolveError::Ambiguous(vec![
+                "forms.page".to_string(),
+                "nav.page".to_string(),
+            ])),
+        );
+        assert_eq!(resolve("nav.page"), Ok((a, SignalType::I32)));
+        assert_eq!(resolve("forms.page"), Ok((b, SignalType::I32)));
+    }
+
+    /// A host that seeds before compiling keeps its value and its id:
+    /// the declaration adopts the bare entry rather than minting beside
+    /// it. Two entries would leave the host writing one signal while the
+    /// program reads another.
+    #[test]
+    fn a_declaration_adopts_a_signal_the_host_seeded_first() {
+        let _guard = crate::GLOBAL_REGISTRY_TEST_LOCK.lock().unwrap();
+        clear_all();
+        set_i32("seeded", 42);
+        let bare = lookup_exact("seeded").expect("host minted it").0;
+
+        let declared = mint_qualified("app", "seeded", SignalType::I32);
+        assert_eq!(declared, bare, "one signal, not two");
+        assert_eq!(get_i32("app.seeded"), Some(42), "the seeded value survives");
+
+        set_i32("seeded", 7);
+        assert_eq!(get_i32("app.seeded"), Some(7), "both keys drive one signal");
+    }
+
+    /// Adoption is same-type only. A bare `x: i32` and a declared
+    /// `x: string` are not the same signal, and merging them would hand
+    /// the program a value it cannot read.
+    #[test]
+    fn adoption_does_not_cross_types() {
+        let _guard = crate::GLOBAL_REGISTRY_TEST_LOCK.lock().unwrap();
+        clear_all();
+        set_i32("mixed", 3);
+        let bare = lookup_exact("mixed").expect("host minted it").0;
+        let declared = mint_qualified("app", "mixed", SignalType::String);
+        assert_ne!(declared, bare, "a String declaration mints its own");
+    }
+
+    /// An exact key wins over a suffix match. Nested module paths make
+    /// this reachable: `panel.mode` is both a key of its own and the
+    /// tail of `pages.panel.mode`, and naming one exactly must not
+    /// resolve to the other.
+    #[test]
+    fn an_exact_key_beats_a_suffix_match() {
+        let _guard = crate::GLOBAL_REGISTRY_TEST_LOCK.lock().unwrap();
+        clear_all();
+        let shallow = mint_qualified("panel", "mode", SignalType::I32);
+        let nested = mint_qualified("pages.panel", "mode", SignalType::I32);
+        assert_ne!(shallow, nested, "different files, different signals");
+        assert_eq!(resolve("panel.mode"), Ok((shallow, SignalType::I32)));
+        assert_eq!(resolve("pages.panel.mode"), Ok((nested, SignalType::I32)));
+        // Bare `mode` is the tail of both, so it must not pick one.
+        assert!(matches!(resolve("mode"), Err(ResolveError::Ambiguous(_))));
     }
 
     #[test]

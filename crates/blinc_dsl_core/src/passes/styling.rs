@@ -77,7 +77,7 @@ pub(crate) fn lower_styling_args_to_overlays(program: &mut TypedProgram) {
         // user signals alone.
         if let TypedExpression::Variable(name) = &value.node {
             let name_str = name.resolve_global()?;
-            let (id_raw, ty) = blinc_runtime::signal::lookup(&name_str)?;
+            let (id_raw, ty) = crate::passes::signal_in_scope(&name_str)?;
             if ty != expected_ty {
                 return None;
             }

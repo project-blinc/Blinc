@@ -65,8 +65,9 @@ use passes::{
     lower_view_to_value_returning, lower_with_blocks, materialize_view, module_namespace_from_path,
     populate_fsm_registry_pass, resolve_const_references, resolve_dotted_fsm_field_access,
     resolve_extern_widget_named_args, resolve_fsm_subscribe_calls, resolve_fsm_trigger_calls,
-    resolve_signal_calls, rewrite_component_calls_in_program, synthesize_fsm_context_and_actions,
-    synthesize_fsm_event_enums, synthesize_fsm_trait_interfaces, validate_component_calls,
+    resolve_signal_calls, resolve_signal_calls_scoped, rewrite_component_calls_in_program,
+    synthesize_fsm_context_and_actions, synthesize_fsm_event_enums,
+    synthesize_fsm_trait_interfaces, validate_component_calls,
 };
 use runtime_bridge::{
     JitGuardDispatcher, JitViewRenderer, publish_components_to_runtime_registry,
@@ -516,6 +517,13 @@ impl BlincDsl {
                 BlincDslError::Compile(e.render_auto().unwrap_or_else(|| e.to_string()))
             })?;
 
+        // Names the module for the whole pass pipeline below, so the
+        // passes that turn a bare identifier into a signal id resolve it
+        // against THIS file's declarations. Dropped at the end of the
+        // function, restoring whatever an outer compile had set.
+        let module = passes::module_of(filename, module_namespace);
+        let _scope = passes::enter_module(&module);
+
         // Apply the module-namespace prefix to local components
         // BEFORE import-extern injection so cross-module references
         // resolve against the registered mangled name. No-op when
@@ -626,9 +634,6 @@ impl BlincDsl {
                 .expect("declared_fsms mutex poisoned")
                 .extend(fsms);
         }
-        // Regions can only resolve their deps once the declared signals
-        // are known, so file them here rather than at lift time.
-        self.register_with_regions(&with_regions);
         lower_match_blocks(&mut typed_program);
         // MUST run before `resolve_const_references` so const-group
         // members are hoisted into individual `const` Variable
@@ -659,7 +664,17 @@ impl BlincDsl {
             expand_exported_signals(&mut typed_program, &mut exports);
         }
 
-        resolve_signal_calls(&mut typed_program);
+        // Qualified by the module that declares them, so two files that
+        // each declare `page` get two signals. References inside this
+        // program keep resolving to the id this pass bakes in; only the
+        // registry key is qualified.
+        resolve_signal_calls_scoped(&mut typed_program, &module);
+        // AFTER the signals pass, not before: a region files the ids of
+        // the signals it depends on, and those ids only exist once this
+        // module's declarations have minted. Filing names instead would
+        // push the lookup to mount time, where the module is no longer
+        // known.
+        self.register_with_regions(&with_regions, &module);
         // Module hardcoded to "main" here — same key
         // `populate_fsm_registry_pass` uses below. Both FSM-call
         // passes consult the global `FsmRegistry` keyed by this
@@ -1146,7 +1161,12 @@ impl BlincDsl {
         };
 
         let source = std::fs::read_to_string(entry)?;
-        let program = self.parse_to_typed_ast(&source, entry.to_string_lossy().as_ref())?;
+        // Parse only. The full pipeline would mint this file's signals
+        // as a side effect, and it runs here with no namespace — so a
+        // scan whose only job is reading the import list would claim the
+        // bare key first and shadow the qualified one the real compile
+        // is about to mint.
+        let program = self.parse_only(&source, entry.to_string_lossy().as_ref())?;
 
         for decl in &program.declarations {
             let zyntax_typed_ast::TypedDeclaration::Import(import) = &decl.node else {
@@ -1262,6 +1282,21 @@ impl BlincDsl {
 
     /// Parse `.blinc` source to TypedAST without compiling. Runs the same
     /// post-parse pipeline as `compile_source` so AST tests see the lowered shape.
+    /// Parse to a typed AST and run NO passes.
+    ///
+    /// For callers that want the shape of a file rather than a compiled
+    /// program — the import scan being the one that matters, since the
+    /// passes have registry side effects it must not cause.
+    fn parse_only(&self, source: &str, filename: &str) -> BlincDslResult<TypedProgram> {
+        let runtime = self
+            .runtime
+            .lock()
+            .expect("BlincDsl runtime mutex poisoned");
+        self.grammar
+            .parse_with_signatures(source, filename, runtime.plugin_signatures())
+            .map_err(|e| BlincDslError::Compile(e.render_auto().unwrap_or_else(|| e.to_string())))
+    }
+
     pub fn parse_to_typed_ast(&self, source: &str, filename: &str) -> BlincDslResult<TypedProgram> {
         let runtime = self
             .runtime
@@ -1280,6 +1315,11 @@ impl BlincDsl {
             .map_err(|e| {
                 BlincDslError::Compile(e.render_auto().unwrap_or_else(|| e.to_string()))
             })?;
+
+        // No module: this entry point compiles a program on its own,
+        // with no file position to resolve against. Set explicitly so a
+        // previous compile on this thread cannot lend it one.
+        let _scope = passes::enter_module("");
 
         // Post-parse passes — no-op on programs without the matching shapes.
         inject_fsm_context_markers(&mut program);
@@ -1398,13 +1438,17 @@ impl BlincDsl {
     }
 
     /// Resolve each lifted `with` region's declared dependencies to
-    /// signal names and file them for [`crate::with_regions::mount`].
+    /// signal IDS and file them for [`crate::with_regions::mount`].
     ///
     /// The three cases mirror the whole-program `@stateful` path:
     /// explicit signals win; an `@fsm` list narrows to that FSM's own
     /// context fields the body reads as VALUES; a bare region falls back
     /// to every declared signal.
-    fn register_with_regions(&self, regions: &[passes::WithRegion]) {
+    ///
+    /// `module` is the file being compiled, which is what makes the
+    /// name → id step answerable: a region in `pages/navigation.blinc`
+    /// that depends on `page` means THAT module's `page`.
+    fn register_with_regions(&self, regions: &[passes::WithRegion], module: &str) {
         if regions.is_empty() {
             return;
         }
@@ -1470,11 +1514,25 @@ impl BlincDsl {
                 declared.clone()
             };
 
+            // Names become ids HERE, where `namespace` says which
+            // module they belong to. A name that does not resolve is
+            // dropped rather than carried: mount could only re-ask the
+            // same question with less information.
+            let signal_ids: Vec<u64> = signal_names
+                .iter()
+                .filter_map(|name| {
+                    let key = blinc_runtime::signal::qualify(module, name);
+                    blinc_runtime::signal::lookup_exact(&key)
+                        .or_else(|| blinc_runtime::signal::lookup(name))
+                        .map(|(raw, _ty)| raw)
+                })
+                .collect();
+
             with_regions::register(
                 region.id,
                 with_regions::MountedRegion {
                     name: region.name.clone(),
-                    signal_names,
+                    signal_ids,
                     // First listed wins: a Stateful exposes one shared
                     // state. No FSM named means no shared state to bind.
                     fsm: fsms.first().cloned(),

@@ -144,7 +144,10 @@ fn the_rail_navigates_and_collapses() {
         "and the old page is gone: {found:?}"
     );
 
-    dsl.set_signal_bool("shut", true);
+    // Qualified: the bare-item program above declares `shut` too, so two
+    // modules own that name and an unqualified write has no single signal
+    // to land on.
+    dsl.set_signal_bool("nav_flow.shut", true);
     let found = texts(&laid_out(&dsl));
     assert!(
         !found.iter().any(|t| t == "Forms" || t == "WIDGETS"),

@@ -150,7 +150,7 @@ pub(crate) fn lower_reactive_args(program: &mut TypedProgram) {
             return None;
         };
         let name_str = name.resolve_global()?;
-        let (id_raw, _ty) = blinc_runtime::signal::lookup(&name_str)?;
+        let (id_raw, _ty) = crate::passes::signal_in_scope(&name_str)?;
         Some(id_raw)
     }
 
