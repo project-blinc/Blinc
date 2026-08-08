@@ -2,12 +2,10 @@
 
 signal section: string = "account"
 signal pane: string = "one"
-// TEMPORARY. This should be `page`, and it is only spelled differently
-// because signals are keyed globally by bare name: main.blinc already
-// owns `page` for the sidebar, so a second module declaring one shares
-// it, and clicking a number here navigated away. Module-local signals
-// are the fix — see the roadmap. Rename this back once they land.
-signal table_page: i32 = 1
+// Named `page` again, which is what it wants to be called. It is this
+// module's own: main.blinc's `page` drives the sidebar and is exported,
+// this one is private to `navigation`, and the two no longer collide.
+signal page: i32 = 1
 
 component NavigationWidgets {
     style {
@@ -79,15 +77,15 @@ component NavigationWidgets {
             // on the way through.
             cn.Label("pagination: numbers derived from a total")
             Div(class = "col") {
-                cn.Pagination(page = table_page, total = 12.0, visible = 5.0, show_first_last = true)
+                cn.Pagination(page = page, total = 12.0, visible = 5.0, show_first_last = true)
                 // Driven from outside, to show the binding goes both ways.
                 Div(class = "row") {
                     cn.Button("First", size = "small", variant = "outline",
-                              on_click = || table_page.set(1))
+                              on_click = || page.set(1))
                     cn.Button("Middle", size = "small", variant = "outline",
-                              on_click = || table_page.set(6))
+                              on_click = || page.set(6))
                     cn.Button("Last", size = "small", variant = "outline",
-                              on_click = || table_page.set(12))
+                              on_click = || page.set(12))
                 }
             }
         }

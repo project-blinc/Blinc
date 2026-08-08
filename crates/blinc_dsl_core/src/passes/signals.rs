@@ -108,10 +108,27 @@ fn seed_signal(
 /// required — which is what makes this a small change rather than the
 /// component-mangling one.
 pub fn signal_registry_key(name: &str, namespace: &str, exported: &[String]) -> String {
-    if namespace.is_empty() || exported.is_empty() || exported.iter().any(|e| e == name) {
+    // An export belongs to the module that DECLARED it. Matching on the
+    // bare name alone made an entry's `export signal page` exempt every
+    // module's `page` too, which is the collision this exists to stop
+    // wearing a different hat.
+    let owned = format!("{namespace}$${name}");
+    if namespace.is_empty() || exported.is_empty() || exported.iter().any(|e| e == &owned) {
         return name.to_string();
     }
     format!("{namespace}$${name}")
+}
+
+/// How an export is recorded: owned by the module that declared it.
+///
+/// The entry has no namespace and is never qualified, so its exports
+/// record as bare names and are only ever compared against themselves.
+pub fn exported_entry(name: &str, namespace: &str) -> String {
+    if namespace.is_empty() {
+        name.to_string()
+    } else {
+        format!("{namespace}$${name}")
+    }
 }
 
 pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {

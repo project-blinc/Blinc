@@ -33,7 +33,7 @@ mod fsm_registry;
 mod host;
 mod passes;
 #[doc(hidden)]
-pub use passes::signal_registry_key;
+pub use passes::{exported_entry, signal_registry_key};
 mod read_scope;
 
 /// Region id for the whole-program `@stateful` render's read scope.
@@ -659,7 +659,7 @@ impl BlincDsl {
                 .exported_signals
                 .lock()
                 .expect("exported_signals mutex poisoned");
-            expand_exported_signals(&mut typed_program, &mut exports);
+            expand_exported_signals(&mut typed_program, module_namespace, &mut exports);
         }
 
         {
@@ -705,7 +705,7 @@ impl BlincDsl {
                 .exported_signals
                 .lock()
                 .expect("exported_signals mutex poisoned");
-            extract_and_strip_exports(&mut typed_program, &mut exports);
+            extract_and_strip_exports(&mut typed_program, module_namespace, &mut exports);
             blinc_runtime::signal::set_exported(&exports);
         }
 
@@ -1159,7 +1159,48 @@ impl BlincDsl {
         };
 
         let source = std::fs::read_to_string(entry)?;
-        let program = self.parse_to_typed_ast(&source, entry.to_string_lossy().as_ref())?;
+        // Parsed WITHOUT the post-parse passes: `parse_to_typed_ast`
+        // runs the signals pass, which mints — and minting here happens
+        // before the export scan below has said anything, so every
+        // signal in the entry would be keyed as if the program had no
+        // surface. Only imports and export markers are read off this.
+        let program = {
+            let runtime = self
+                .runtime
+                .lock()
+                .expect("BlincDsl runtime mutex poisoned");
+            self.grammar
+                .parse_with_signatures(
+                    &source,
+                    entry.to_string_lossy().as_ref(),
+                    runtime.plugin_signatures(),
+                )
+                .map_err(|e| {
+                    BlincDslError::Compile(e.render_auto().unwrap_or_else(|| e.to_string()))
+                })?
+        };
+
+        // The program's surface has to be known BEFORE any module
+        // compiles, because scoping is decided at mint time and imports
+        // mint first. Read it off the entry, which is already parsed:
+        // an imported module declaring `page` was otherwise minted
+        // unqualified, and the entry's own `export signal page` then
+        // found that entry and adopted its type.
+        if is_entry {
+            let names = passes::scan_exported_names(&program);
+            if !names.is_empty() {
+                let mut exports = self
+                    .exported_signals
+                    .lock()
+                    .expect("exported_signals mutex poisoned");
+                for name in names {
+                    if !exports.contains(&name) {
+                        exports.push(name);
+                    }
+                }
+                blinc_runtime::signal::set_exported(&exports);
+            }
+        }
 
         for decl in &program.declarations {
             let zyntax_typed_ast::TypedDeclaration::Import(import) = &decl.node else {

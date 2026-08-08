@@ -20,7 +20,12 @@ import { ReactivePage } from "./reactive"
 
 // Which page the rail is showing. A string rather than an index so the
 // match arms name what they render.
-signal page: string = "forms"
+//
+// Exported: it is this program's public surface, and declaring one is
+// also what turns scoping ON. Without it, a signal named `page` in an
+// imported module would silently be THIS one — which is exactly what
+// happened when the pagination demo first landed.
+export signal page: string = "forms"
 
 // The rail's own state. Bound rather than left to the widget so anything
 // else could collapse it too, and so this file can read it.
