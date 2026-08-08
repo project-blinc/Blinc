@@ -312,13 +312,23 @@ only do that by carrying state across the edit and then folding events
 with the new weight. So a fiber's state does outlive the code that
 created it, and the reload does not have to reconstruct it.
 
-**The boundary worth designing around.** A third test pins that editing
-the HANDLER reloads it but does NOT redirect dispatch: effect op tables
-still hold pointers baked at module compile, so calls keep reaching the
-old body until op-table patching lands in phase 3. Translated to Blinc:
-editing an FSM's transitions hot-reloads cleanly, while editing the
-event SOURCE wired into it will not take effect until that phase. Worth
-knowing before promising authors that everything reloads.
+**Editing the event source works too.** Op-table patching has landed
+upstream (`patch effect dispatch tables in place and surface reload as a
+runtime event`), and the tests moved with it: a reload report now
+carries `dispatch_patched`, and a fresh perform reaches the edited
+handler rather than the body baked at module compile.
+
+The test added alongside it is the one that matters most here — the
+event SOURCE is edited under a machine that is mid-run, and the machine
+itself never reloads. Its state and handler segment are untouched, and
+from its next perform the events it observes carry the edited value.
+Again proven by a count landing strictly between the extremes, which
+only happens if dispatch retargeted mid-flight.
+
+So both halves reload: an FSM's transitions, and the source feeding it,
+independently and while suspended. For a UI that is the whole editing
+loop — change what a machine does, or change what it responds to,
+without losing where it had got to.
 
 Related: `SymbolTable.fiber_fn_names` already tracks which functions are
 fibers, so the plumbing is present rather than hypothetical.
