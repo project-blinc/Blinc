@@ -225,6 +225,30 @@ instance across renders.** Resolve freshly each time and the dep set
 changes every frame, so the `Stateful` re-subscribes to new ids
 continuously and nothing ever matches a write.
 
+**And the API already makes that a choice rather than a hazard.**
+`host_fiber_api.rs`'s `a_bound_handler_carries_state_across_steps` shows
+both modes side by side:
+
+- `resume_fiber_within(token, &["Seq"])` opens a fresh handler scope per
+  step, so handler state is reconstructed each time — the machine
+  observes 1, 1, 1.
+- `get_handler("Seq")` resolves a handler token ONCE and
+  `bind_fiber_handler(token, handler)` binds it for the machine's
+  lifetime — 1, 2, 3.
+
+A component's signal scope is the bound case: resolved when the
+component mounts, carried across every render, so the instances a read
+resolves to are stable and a dep list built from them does not churn.
+Per-step is there for when fresh state is what you want. The failure I
+was worried about is the one you get by choosing the wrong mode, not one
+lying in wait.
+
+The same file also pins that a partial handler install unwinds —
+`resume_fiber_within(token, &["Feed", "NoSuchHandler"])` fails with the
+handler stack at the depth it started, and the machine still drivable.
+`handler_stack_depth()` is observable, and `drop_fiber` exists, so a
+component unmounting has a defined way to let go.
+
 It also changes what a question means. "What is signal `page`" stops
 having an answer; the answerable question is "what is `page` IN THIS
 SCOPE". That applies to the host, to cross-module reads, and to tests —
