@@ -203,6 +203,39 @@ DECLARATION installs a handler for its scope rather than minting into a
 process-global registry, and a read resolves through the handler stack
 rather than through a baked global id.
 
+**Attempted and reverted, twice — read this before trying again.**
+Qualifying a signal's registry key by module was built and taken back
+out (ecd9a3b9, bdb2110f, reverted in b2e3cd7c). Both failures came from
+the same place: a signal resolves BY NAME in five separate sites, and
+the answer to "which module is this name in?" is not available at all of
+them.
+
+- Keying only the mint site left bound props, styling args and both dep
+  lists resolving the bare name. A write went to `mod$$x` while the
+  widget bound to it had resolved `x`, so every bound control in an
+  imported module went dead. Shipped, and found by clicking, not by
+  tests.
+- Routing all five through a thread-local module context fixed compile
+  time and broke render time: `with` region deps, `@stateful` deps and
+  host lookups run long after every module has compiled, and the
+  thread-local then holds whichever module compiled LAST. Two overlays
+  in different modules resolved to each other's signal and opened
+  together.
+
+The shape that would work: resolve a signal's key ONCE, at declaration,
+where the module is known — and carry the resolved ID to every consumer
+instead of the name. Render-time name lookup has no module and cannot
+acquire one, so any design that still looks a signal up by name after
+compilation will fail the same way a third time.
+
+**What the tests missed, which is the more useful lesson.** Every test
+written for this asserted on the registry: minted here, looked up there.
+All of them passed through both regressions, because all five resolution
+paths were invisible to that shape of assertion. The test that would
+have caught it is a module signal BOUND TO A WIDGET and then written —
+the thing an author actually does. Assert on behaviour through a
+binding, not on registry contents.
+
 **What scoping does to the dependency set.** Observed deps are a
 `Vec<SignalId>` of process-global raw ids, and every consumer — a
 `Stateful`'s `deps()`, `check_stateful_deps`, the ~74 host call sites —
