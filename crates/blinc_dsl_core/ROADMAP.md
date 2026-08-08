@@ -330,7 +330,11 @@ So both halves of an FSM reload independently while suspended — what it
 does, and what it responds to. That is more than Blinc manages today
 with a full instance rebuild.
 
-### Order, and the one blocker
+### Order, and the blockers
+
+*The order below was written before the code review that follows it. Read
+both: the review moves the FSM step ahead of the signal step and adds a
+precondition neither had.*
 
 1. ~~Signal reads as effect operations at one boundary.~~ **Already
    done, and effects are not the mechanism.** `read_scope` accumulates
@@ -408,6 +412,58 @@ with a full instance rebuild.
 
 Steps 1 and 2 are independent and can go in parallel. Nothing before
 step 5 removes the registry, so each earlier step is reversible.
+
+### What a review of the code found, and what it changes
+
+**The pin predates every API this plan is written against.** The
+revision Blinc builds Zyntax from has none of `get_fiber`,
+`resume_fiber`, `handler_push_info` or `FiberToken` — it sits behind the
+entire host fiber-and-effect line, alongside the SSA, OSR and
+type-resolution work that landed with it. Every snippet above calls
+something the crate cannot currently name. Bumping is not a step in this
+plan; it is the precondition for starting it, and it is real work
+because the same range moves name resolution and renames compiler
+internals.
+
+**Handlers install around a FIBER, and only a fiber.** The public
+surface takes a fiber token: drive a machine with handlers around the
+step, or bind one for the machine's lifetime. The frame push itself is
+private, and the plain-call entry points take no handler list. A view is
+a plain call, so there is no way to open a handler scope around a
+render.
+
+This inverts the order. Scoped signals need a handler around a render
+and are therefore blocked on an API that does not exist. FSMs-as-fibers
+need a handler around a fiber step, which is exactly what shipped. **The
+fiber step is unblocked and the signal step is not** — the reverse of
+the order above. What the signal step needs is small and mirrors what is
+already there for fibers: a token-based push and pop, or a call entry
+point that takes handler tokens.
+
+**FSM is the worse half, and the plan under-weights it.** A signal's
+collisions come from two declarations choosing one name; longer keys
+make that rarer. An FSM's state cell is keyed by the FSM's NAME, so an
+FSM has exactly one instance for the process, and two components using
+one machine share its state. No key is long enough to fix that: two
+instances of one component in one module are the same name by
+construction. The transition subscribers, transition effects and the
+fallback state codes are per-thread maps keyed by that same name, so an
+FSM driven from another thread reads a different table than the one the
+widgets watch.
+
+That is the scaling wall. It is not reachable by mangling, and it is
+what a fiber removes outright: a machine's state lives in the fiber, the
+host holds a token in component state, and two mounted components hold
+two tokens with nothing shared to collide over.
+
+**Module-qualified signal keys landed, and they are mangling.** Two
+files declaring `page` are now two signals, resolution is
+qualified-name-aware, and ambiguity is an error rather than a silent
+adoption. It fixes a live bug and it is the floor. But this section says
+mangling is not the fix, and it is right: the key got longer and there
+is still one global registry addressable from anywhere. Component
+scoping stays out of reach, because the next scope down has no name to
+add.
 
 ## Next
 
