@@ -80,6 +80,7 @@ pub struct DialogBuilder {
     cancel_text: String,
     on_confirm: Option<Arc<dyn Fn() + Send + Sync>>,
     on_cancel: Option<Arc<dyn Fn() + Send + Sync>>,
+    on_close: Option<Arc<dyn Fn() + Send + Sync>>,
     confirm_destructive: bool,
     show_cancel: bool,
     /// Custom enter animation (defaults to dialog_in)
@@ -108,6 +109,7 @@ impl DialogBuilder {
             cancel_text: "Cancel".to_string(),
             on_confirm: None,
             on_cancel: None,
+            on_close: None,
             confirm_destructive: false,
             show_cancel: true,
             enter_animation: None,
@@ -196,6 +198,20 @@ impl DialogBuilder {
         self
     }
 
+    /// Fired when the dialog closes, however it was dismissed.
+    ///
+    /// `on_confirm` and `on_cancel` are the BUTTONS. A backdrop click or
+    /// an Escape closes the dialog without either firing, so a caller
+    /// binding a signal to `open` had no way to learn it closed: the
+    /// signal stayed set and the dialog returned on the next mount.
+    pub fn on_close<F>(mut self, callback: F) -> Self
+    where
+        F: Fn() + Send + Sync + 'static,
+    {
+        self.on_close = Some(Arc::new(callback));
+        self
+    }
+
     /// Add a CSS class for selector matching
     pub fn class(mut self, name: impl AsRef<str>) -> Self {
         self.classes.push(blinc_core::intern::intern(name.as_ref()));
@@ -265,6 +281,7 @@ impl DialogBuilder {
         let cancel_text = self.cancel_text;
         let on_confirm = self.on_confirm;
         let on_cancel = self.on_cancel;
+        let on_close = self.on_close;
         let confirm_destructive = self.confirm_destructive;
         let show_cancel = self.show_cancel;
         let classes = self.classes;
@@ -293,7 +310,14 @@ impl DialogBuilder {
             .unwrap_or(0);
         let dialog_handle = OverlayHandle::from_raw(next_handle_id);
 
+        // Every dismissal route, not just the two buttons.
+        let on_close_any = on_close.clone();
         let handle = OverlayBuilder::dialog()
+            .on_close(move |_reason| {
+                if let Some(ref cb) = on_close_any {
+                    cb();
+                }
+            })
             // Dialog defaults (DismissRules::default_for(Dialog)):
             // on_escape=true, on_click_outside=true (backdrop click), backdrop=Some.
             .motion_enter(enter_animation)

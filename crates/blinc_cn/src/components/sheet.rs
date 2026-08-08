@@ -273,7 +273,18 @@ impl SheetBuilder {
             .unwrap_or(0);
         let sheet_handle = OverlayHandle::from_raw(next_handle_id);
 
+        // Every dismissal route, not just the close button. Backdrop
+        // and Escape are handled inside the overlay stack, so a caller
+        // that only wired the button's callback saw its bound signal
+        // stay set — the overlay went away and returned on the next
+        // mount, because nothing had told the signal it closed.
+        let on_close_any = on_close.clone();
         let handle = OverlayBuilder::modal()
+            .on_close(move |_reason| {
+                if let Some(ref cb) = on_close_any {
+                    cb();
+                }
+            })
             // Modal defaults: ESC, click-outside (backdrop dismiss), backdrop=Some.
             .edge(edge_side)
             .size(panel_w, panel_h)

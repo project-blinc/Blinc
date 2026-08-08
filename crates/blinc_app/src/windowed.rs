@@ -5629,6 +5629,11 @@ impl WindowedApp {
                                 windowed_ctx.scale_factor as f32,
                             );
                             windowed_ctx.overlay_manager.update(current_time);
+                            // Input-driven dismissals (backdrop, Escape)
+                            // queue their callbacks under the stack's
+                            // mutex; run them here, where nothing holds
+                            // it. See `drain_close_callbacks`.
+                            blinc_layout::widgets::overlay_stack::drain_close_callbacks();
                             // Phase 3 transition: also tick the new OverlayStack +
                             // ToastTray. Each is the authoritative manager for the
                             // widgets that have already been migrated.

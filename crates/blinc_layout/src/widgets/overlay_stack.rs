@@ -290,6 +290,13 @@ impl OverlayEntry {
 /// truncate everything from the target handle upward atomically.
 pub struct OverlayStack {
     entries: Vec<OverlayEntry>,
+    /// Close callbacks waiting to run outside this stack's mutex.
+    ///
+    /// Firing one under the guard hands control to user code that may
+    /// come straight back — clearing a bound signal re-enters whatever
+    /// drives the overlay, which locks the stack again. Drained by
+    /// [`drain_close_callbacks`].
+    pending_close_callbacks: Vec<(Arc<dyn Fn(CloseReason) + Send + Sync>, CloseReason)>,
     next_id: AtomicU64,
     viewport: (f32, f32),
     scale_factor: f32,
@@ -321,6 +328,7 @@ impl OverlayStack {
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
+            pending_close_callbacks: Vec::new(),
             next_id: AtomicU64::new(1),
             viewport: (0.0, 0.0),
             scale_factor: 1.0,
@@ -537,6 +545,17 @@ impl OverlayStack {
     /// Internal helper. Idempotent — calling twice on the same idx is a no-op
     /// the second time (the entry is already `exiting`, exit motion already
     /// queued, on_close already fired).
+    /// Take the close callbacks queued since the last take.
+    ///
+    /// The caller runs them once it has released this stack's guard.
+    /// [`drain_close_callbacks`] does that for the global stack; a
+    /// caller holding its own stack drains it directly.
+    pub fn take_pending_close_callbacks(
+        &mut self,
+    ) -> Vec<(Arc<dyn Fn(CloseReason) + Send + Sync>, CloseReason)> {
+        std::mem::take(&mut self.pending_close_callbacks)
+    }
+
     fn begin_exit(&mut self, idx: usize, reason: CloseReason) {
         let entry = &mut self.entries[idx];
         if entry.exiting {
@@ -550,7 +569,15 @@ impl OverlayStack {
         // the queue is a no-op and the entry will be reaped on the next
         // `update()` tick via `motion_done() → true`.
         entry.queue_motion_exit();
-        entry.fire_on_close(reason);
+        // QUEUED, not fired. `begin_exit` runs under the stack's own
+        // mutex, and a callback is user code: a caller that clears a
+        // bound signal from it lands back in whatever drives this
+        // overlay, which locks the stack again and hangs the thread.
+        // `std::sync::Mutex` is not re-entrant. Drained by
+        // `drain_close_callbacks` once the guard is gone.
+        if let Some(cb) = entry.on_close.clone() {
+            self.pending_close_callbacks.push((cb, reason));
+        }
         // Assert animation_dirty so the runner's redraw chain wakes up to
         // drive the exit motion — closing via ESC / programmatic close
         // without input would otherwise leave the loop sleeping and the
@@ -1333,6 +1360,28 @@ impl OverlayHandle {
         if let Ok(mut s) = overlay_stack().lock() {
             s.close(*self);
         }
+        // Outside the guard: a close callback is user code and may come
+        // straight back into the stack.
+        drain_close_callbacks();
+    }
+}
+
+/// Run the close callbacks queued since the last drain.
+///
+/// Separate from closing because `begin_exit` runs under the stack's
+/// mutex and a callback is user code: clearing a bound signal from one
+/// re-enters whatever drives the overlay, which locks the stack again
+/// and hangs the thread. Called after every programmatic close and once
+/// per frame by the runner, so an input-driven dismissal (backdrop,
+/// Escape) reports at most a frame later.
+pub fn drain_close_callbacks() {
+    use crate::overlay_state::overlay_stack;
+    let pending = match overlay_stack().lock() {
+        Ok(mut s) => std::mem::take(&mut s.pending_close_callbacks),
+        Err(_) => return,
+    };
+    for (cb, reason) in pending {
+        cb(reason);
     }
 }
 
@@ -1581,6 +1630,10 @@ mod tests {
         stack.push(entry);
 
         stack.handle_escape();
+        // Queued under the guard, run outside it — see `begin_exit`.
+        for (cb, reason) in stack.take_pending_close_callbacks() {
+            cb(reason);
+        }
 
         let log = received.lock().unwrap();
         assert_eq!(log.len(), 1);
@@ -1623,6 +1676,10 @@ mod tests {
         stack.push(c);
 
         stack.close(a_handle);
+        // Queued under the guard, run outside it — see `begin_exit`.
+        for (cb, reason) in stack.take_pending_close_callbacks() {
+            cb(reason);
+        }
 
         let log = received.lock().unwrap();
         let by_handle: std::collections::HashMap<OverlayHandle, CloseReason> =

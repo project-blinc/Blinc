@@ -58,17 +58,35 @@ where
 }
 
 fn sync(key: u64, should_be_open: bool, show: &impl Fn() -> OverlayHandle) {
-    let mut overlays = open_overlays().lock().expect("open overlays");
-    let live = overlays.get(&key).is_some_and(|h| h.is_live());
+    // Nothing that can re-enter runs under the guard. `show` builds an
+    // overlay and `close` tears one down, and both reach back into the
+    // overlay stack — and, once an overlay reports its own dismissal,
+    // into whatever the caller bound to it, which arrives back here.
+    // `std::sync::Mutex` is not re-entrant, so a callback invoked under
+    // the guard hangs the thread rather than failing. See
+    // `gotcha_overlay_handle_lock_reentrancy`.
+    let live = {
+        let overlays = open_overlays().lock().expect("open overlays");
+        overlays.get(&key).is_some_and(|h| h.is_live())
+    };
+
     match (should_be_open, live) {
         (true, false) => {
-            overlays.insert(key, show());
+            let handle = show();
+            open_overlays()
+                .lock()
+                .expect("open overlays")
+                .insert(key, handle);
         }
         (false, true) => {
-            // Removed before closing: `close` reaches back into the
+            // Removed BEFORE closing: `close` reaches back into the
             // overlay stack, and a handle left behind would read as live
-            // on the next frame.
-            if let Some(h) = overlays.remove(&key) {
+            // on the next frame. Removing first also terminates the
+            // cycle a self-reporting overlay creates — its dismissal
+            // clears the bound signal, which lands here again and finds
+            // nothing live to close.
+            let handle = open_overlays().lock().expect("open overlays").remove(&key);
+            if let Some(h) = handle {
                 h.close();
             }
         }

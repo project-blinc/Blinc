@@ -148,6 +148,9 @@ impl DialogProps {
             self.open.clone(),
             self.on_cancel,
         ));
+        // And every other way out: a backdrop click or an Escape closes
+        // the dialog without either button firing.
+        d = d.on_close(crate::modal::closing_handler(self.open.clone(), 0));
         d.show()
     }
 }
