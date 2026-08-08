@@ -233,11 +233,16 @@ pub fn __mounted_deps() -> Vec<(i64, Vec<u64>)> {
         .unwrap_or_default()
 }
 
-/// The deps of the first mount that subscribed to `signal_raw`.
+/// The deps of the LATEST mount that subscribed to `signal_raw`.
+///
+/// Latest, not first: a dep set narrows as renders observe what is
+/// actually read, so the first entry is the widest guess and the last
+/// is what the thing is subscribed to now.
 #[doc(hidden)]
 pub fn __deps_mentioning(signal_raw: u64) -> Option<Vec<u64>> {
     __mounted_deps()
         .into_iter()
+        .rev()
         .find(|(_, ids)| ids.contains(&signal_raw))
         .map(|(_, ids)| ids)
 }
