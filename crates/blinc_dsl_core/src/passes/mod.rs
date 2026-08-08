@@ -37,6 +37,7 @@ pub(crate) use misc::*;
 pub(crate) use modules::*;
 pub(crate) use reactive::*;
 pub(crate) use refs::resolve_ref_calls;
+pub use signals::signal_registry_key;
 pub(crate) use signals::*;
 pub(crate) use structs::*;
 pub(crate) use styling::*;

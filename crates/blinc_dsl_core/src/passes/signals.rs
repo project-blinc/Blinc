@@ -86,7 +86,45 @@ fn seed_signal(
     }
 }
 
+/// The key a signal is minted under.
+///
+/// An EXPORTED signal keeps its bare name: that is the name a host
+/// reaches it by, and the whole point of exporting is to be reachable.
+/// Everything else is qualified by its module, so two files declaring
+/// `page` get two signals rather than silently sharing one.
+///
+/// **Scoping is opt-in, per program.** A program that declares NO
+/// exports is not qualified at all: every signal keeps its bare name and
+/// a host reaches it as it always could. Qualifying regardless would
+/// break every host that drives a signal declared in an imported module,
+/// for a program that never asked for privacy — and it would disagree
+/// with `signal::is_reachable`, which is permissive on the same
+/// condition. Declaring one export is how a program says it has a
+/// surface, and from then on the rest is private.
+///
+/// Only the REGISTRY key changes. References inside the module still
+/// say `page` and resolve through this pass's own map to a baked id, so
+/// nothing in the AST needs renaming and no reference rewriting is
+/// required — which is what makes this a small change rather than the
+/// component-mangling one.
+pub fn signal_registry_key(name: &str, namespace: &str, exported: &[String]) -> String {
+    if namespace.is_empty() || exported.is_empty() || exported.iter().any(|e| e == name) {
+        return name.to_string();
+    }
+    format!("{namespace}$${name}")
+}
+
 pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
+    resolve_signal_calls_scoped(program, "", &[]);
+}
+
+/// As [`resolve_signal_calls`], with the module a declaration belongs to
+/// and the names it exports.
+pub(crate) fn resolve_signal_calls_scoped(
+    program: &mut TypedProgram,
+    namespace: &str,
+    exported: &[String],
+) {
     use std::collections::HashMap;
     use zyntax_typed_ast::InternedString;
     use zyntax_typed_ast::typed_ast::{TypedCall, TypedDeclaration, TypedExpression, TypedLiteral};
@@ -136,8 +174,9 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
         // Comparing against the last DECLARED default separates the two:
         // an edit to the source is an authoring action and wins, while a
         // recompile of unchanged source leaves the live value alone.
-        let is_new = blinc_runtime::signal::lookup(name_str.as_ref()).is_none();
-        let id_raw_u64 = blinc_runtime::signal::mint_or_get(name_str.as_ref(), sig_ty);
+        let key = signal_registry_key(name_str.as_ref(), namespace, exported);
+        let is_new = blinc_runtime::signal::lookup(&key).is_none();
+        let id_raw_u64 = blinc_runtime::signal::mint_or_get(&key, sig_ty);
 
         // `signal feed = ["a", "b"]` — seed the elements on first mint.
         // Only on first mint, matching the scalar rule: the registry
@@ -145,7 +184,7 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
         // the program has since written.
         if sig_ty == blinc_runtime::signal::SignalType::StringList {
             if is_new && let Some(elements) = declared_list_elements(func) {
-                blinc_runtime::signal::set_string_list(name_str.as_ref(), elements);
+                blinc_runtime::signal::set_string_list(&key, elements);
             }
             continue;
         }
@@ -155,9 +194,9 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
             // the first compile never recorded anything and the next one
             // read "no previous default", called it a change, and
             // clobbered the live value.
-            let changed = declared_default_changed(name_str.as_ref(), lit);
+            let changed = declared_default_changed(&key, lit);
             if is_new || changed {
-                seed_signal(name_str.as_ref(), sig_ty, lit);
+                seed_signal(&key, sig_ty, lit);
             }
         } else {
             // The default was removed; forget it, so re-adding the same
@@ -165,7 +204,7 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
             declared_defaults()
                 .lock()
                 .expect("declared defaults poisoned")
-                .remove(name_str.as_ref() as &str);
+                .remove(key.as_str());
         }
         signals.insert(
             func.name,

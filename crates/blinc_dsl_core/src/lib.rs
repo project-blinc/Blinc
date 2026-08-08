@@ -32,6 +32,8 @@ pub mod core_widgets;
 mod fsm_registry;
 mod host;
 mod passes;
+#[doc(hidden)]
+pub use passes::signal_registry_key;
 mod read_scope;
 
 /// Region id for the whole-program `@stateful` render's read scope.
@@ -65,8 +67,9 @@ use passes::{
     lower_view_to_value_returning, lower_with_blocks, materialize_view, module_namespace_from_path,
     populate_fsm_registry_pass, resolve_const_references, resolve_dotted_fsm_field_access,
     resolve_extern_widget_named_args, resolve_fsm_subscribe_calls, resolve_fsm_trigger_calls,
-    resolve_signal_calls, rewrite_component_calls_in_program, synthesize_fsm_context_and_actions,
-    synthesize_fsm_event_enums, synthesize_fsm_trait_interfaces, validate_component_calls,
+    resolve_signal_calls, resolve_signal_calls_scoped, rewrite_component_calls_in_program,
+    synthesize_fsm_context_and_actions, synthesize_fsm_event_enums,
+    synthesize_fsm_trait_interfaces, validate_component_calls,
 };
 use runtime_bridge::{
     JitGuardDispatcher, JitViewRenderer, publish_components_to_runtime_registry,
@@ -659,7 +662,17 @@ impl BlincDsl {
             expand_exported_signals(&mut typed_program, &mut exports);
         }
 
-        resolve_signal_calls(&mut typed_program);
+        {
+            let exports = self
+                .exported_signals
+                .lock()
+                .expect("exported_signals mutex poisoned")
+                .clone();
+            // An exported signal keeps its bare name so a host can still
+            // reach it; everything else is qualified by module, so two
+            // files declaring `page` no longer share one signal.
+            resolve_signal_calls_scoped(&mut typed_program, module_namespace, &exports);
+        }
         // Module hardcoded to "main" here — same key
         // `populate_fsm_registry_pass` uses below. Both FSM-call
         // passes consult the global `FsmRegistry` keyed by this
