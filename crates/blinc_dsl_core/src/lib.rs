@@ -11,8 +11,8 @@ use std::sync::{Arc, Mutex};
 
 use thiserror::Error;
 use zyntax_embed::{
-    Grammar2, Grammar2Error, NativeSignature, NativeType, RuntimeError, TypeTag, ZrtlSigFlags,
-    ZrtlSymbolSig, TieredRuntime,
+    Grammar2, Grammar2Error, NativeSignature, NativeType, RuntimeError, TieredRuntime, TypeTag,
+    ZrtlSigFlags, ZrtlSymbolSig,
 };
 
 /// Mirror of `zyntax_compiler::zrtl::MAX_PARAMS` (16). Part of `ZrtlSymbolSig`'s wire ABI.
@@ -1819,6 +1819,56 @@ impl BlincDsl {
 
     /// Resolve a tick-driven transition. First-matching guard wins. Returns
     /// `None` when no guard fires.
+    /// Construct a machine for `fsm`. The token is this instance's
+    /// identity: two calls give two machines with separate state, which
+    /// is what a name-keyed state cell cannot express.
+    pub fn fsm_machine(&self, fsm: &str) -> BlincDslResult<zyntax_embed::FiberToken> {
+        let mut runtime = self
+            .runtime
+            .lock()
+            .expect("BlincDsl runtime mutex poisoned");
+        runtime
+            .get_fiber(&passes::machine_fn_name(fsm))
+            .map_err(BlincDslError::from)
+    }
+
+    /// Deliver `event_code` to `machine` and run it to its next
+    /// suspension. `Some(state_code)` is where it settled; `None` means
+    /// it finished or its code is gone, which is the caller's cue to
+    /// drop and remount.
+    pub fn step_fsm_machine(
+        &self,
+        fsm: &str,
+        machine: zyntax_embed::FiberToken,
+        event_code: u32,
+    ) -> BlincDslResult<Option<u32>> {
+        let mut runtime = self
+            .runtime
+            .lock()
+            .expect("BlincDsl runtime mutex poisoned");
+        // Armed under the same lock that drives the step, so another
+        // machine cannot arm over this one between the two.
+        host::set_pending_fsm_event(event_code as i64);
+        let step = runtime
+            .resume_fiber_within(machine, &[&passes::host_events_handler_name(fsm)])
+            .map_err(BlincDslError::from)?;
+        Ok(match step {
+            zyntax_embed::HostFiberStep::Yielded(zyntax_embed::ZyntaxValue::Int(code)) => {
+                Some(code as u32)
+            }
+            _ => None,
+        })
+    }
+
+    /// Free a machine. What a component does when it unmounts.
+    pub fn drop_fsm_machine(&self, machine: zyntax_embed::FiberToken) -> BlincDslResult<()> {
+        let mut runtime = self
+            .runtime
+            .lock()
+            .expect("BlincDsl runtime mutex poisoned");
+        runtime.drop_fiber(machine).map_err(BlincDslError::from)
+    }
+
     pub fn step_tick(
         &self,
         id: &FsmId,
