@@ -66,10 +66,15 @@ pub(crate) fn machine_fn_name(fsm: &str) -> String {
     format!("{fsm}$machine")
 }
 
-/// Handler installed around a step, answering from the host's armed
-/// event slot.
+/// Handler installed around a step. Owns the FSM's context as its own
+/// state and answers events from the host's armed slot.
 pub(crate) fn host_events_handler_name(fsm: &str) -> String {
     format!("{fsm}$HostEvents")
+}
+
+/// Operation reading context field `field`.
+pub(crate) fn ctx_get_op_name(fsm: &str, field: &str) -> String {
+    format!("{fsm}$get_{field}")
 }
 
 /// Multiplier separating a state from an event in the dispatch key.
@@ -214,8 +219,8 @@ pub(crate) fn synthesize_fsm_fibers(
             continue;
         }
         emit.push((
-            events_effect(fsm),
-            host_events_handler(fsm),
+            events_effect(fsm, def),
+            host_events_handler(fsm, def),
             machine_fn(fsm, def, &states),
         ));
     }
@@ -255,48 +260,140 @@ pub(crate) fn synthesize_fsm_fibers(
     }
 }
 
-/// `handler <Fsm>$HostEvents for <Fsm>$Events {
-///      def <Fsm>$next_event(): i64 { return __blinc_fsm_next_event() }
-///  }`
+/// The handler that owns the FSM's context.
 ///
-/// Stateless: the event belongs to the resume, not to the handler, so
-/// there is nothing to carry between steps.
-fn host_events_handler(fsm: &str) -> TypedEffectHandler {
-    let call = TypedNode::new(
-        TypedExpression::Call(TypedCall {
-            callee: Box::new(var(NEXT_EVENT_EXTERN)),
-            positional_args: Vec::new(),
-            named_args: Vec::new(),
-            type_args: Vec::new(),
-        }),
-        i64_ty(),
-        Span::default(),
-    );
+/// Its fields ARE the context: handler state is allocated per scope by
+/// the synthesized `H$new` and carried for a machine's lifetime once
+/// bound, so two bound machines hold two contexts with nothing shared.
+/// Anything outside reads a field by performing the matching op, which
+/// is what "delegate to the FSM that owns it" means concretely.
+///
+/// `next_event` stays here too: the event belongs to the resume, so it
+/// reads the host's armed slot rather than any field.
+fn host_events_handler(fsm: &str, def: &FsmDefinition) -> TypedEffectHandler {
+    let take_event = TypedEffectHandlerImpl {
+        op_name: InternedString::new_global(&next_event_op_name(fsm)),
+        return_type: i64_ty(),
+        body: Some(block(vec![stmt(TypedStatement::Return(Some(Box::new(
+            TypedNode::new(
+                TypedExpression::Call(TypedCall {
+                    callee: Box::new(var(NEXT_EVENT_EXTERN)),
+                    positional_args: Vec::new(),
+                    named_args: Vec::new(),
+                    type_args: Vec::new(),
+                }),
+                i64_ty(),
+                Span::default(),
+            ),
+        ))))])),
+        ..Default::default()
+    };
+
+    let mut fields = Vec::new();
+    let mut handlers = vec![take_event];
+    for f in &def.context_fields {
+        let Some(name) = f.name.resolve_global() else {
+            continue;
+        };
+        let ty = ctx_field_type(f);
+        fields.push(zyntax_typed_ast::typed_ast::TypedField {
+            name: f.name,
+            ty: ty.clone(),
+            initializer: Some(Box::new(ctx_field_default(f))),
+            visibility: Default::default(),
+            mutability: Mutability::Mutable,
+            is_static: false,
+            span: Span::default(),
+        });
+        // `def <Fsm>$get_<field>(): T { return self.<field> }`
+        handlers.push(TypedEffectHandlerImpl {
+            op_name: InternedString::new_global(&ctx_get_op_name(fsm, &name)),
+            return_type: ty.clone(),
+            body: Some(block(vec![stmt(TypedStatement::Return(Some(Box::new(
+                self_field(f.name, ty),
+            ))))])),
+            ..Default::default()
+        });
+    }
+
     TypedEffectHandler {
         name: InternedString::new_global(&host_events_handler_name(fsm)),
         effect_name: InternedString::new_global(&events_effect_name(fsm)),
-        handlers: vec![TypedEffectHandlerImpl {
-            op_name: InternedString::new_global(&next_event_op_name(fsm)),
-            return_type: i64_ty(),
-            body: Some(block(vec![stmt(TypedStatement::Return(Some(Box::new(
-                call,
-            ))))])),
-            ..Default::default()
-        }],
+        fields,
+        handlers,
         ..Default::default()
     }
 }
 
-fn events_effect(fsm: &str) -> TypedEffect {
+/// `self.<field>`
+fn self_field(field: InternedString, ty: Type) -> TypedNode<TypedExpression> {
+    TypedNode::new(
+        TypedExpression::Field(zyntax_typed_ast::typed_ast::TypedFieldAccess {
+            object: Box::new(TypedNode::new(
+                TypedExpression::Variable(InternedString::new_global("self")),
+                Type::Unknown,
+                Span::default(),
+            )),
+            field,
+        }),
+        ty,
+        Span::default(),
+    )
+}
+
+fn events_effect(fsm: &str, def: &FsmDefinition) -> TypedEffect {
+    let mut operations = vec![TypedEffectOp {
+        name: InternedString::new_global(&next_event_op_name(fsm)),
+        return_type: i64_ty(),
+        ..Default::default()
+    }];
+    // One read op per context field. The handler owns the storage, so
+    // this is how anything outside the machine asks the FSM for it
+    // rather than reaching a global of its own.
+    for f in &def.context_fields {
+        let Some(name) = f.name.resolve_global() else {
+            continue;
+        };
+        operations.push(TypedEffectOp {
+            name: InternedString::new_global(&ctx_get_op_name(fsm, &name)),
+            return_type: ctx_field_type(f),
+            ..Default::default()
+        });
+    }
     TypedEffect {
         name: InternedString::new_global(&events_effect_name(fsm)),
-        operations: vec![TypedEffectOp {
-            name: InternedString::new_global(&next_event_op_name(fsm)),
-            return_type: i64_ty(),
-            ..Default::default()
-        }],
+        operations,
         ..Default::default()
     }
+}
+
+/// The declared type of a context field.
+fn ctx_field_type(f: &crate::fsm_registry::ContextField) -> Type {
+    use crate::fsm_registry::ContextDefault;
+    Type::Primitive(match f.default {
+        ContextDefault::I32(_) => PrimitiveType::I32,
+        ContextDefault::F64(_) => PrimitiveType::F64,
+        ContextDefault::Bool(_) => PrimitiveType::Bool,
+        ContextDefault::String(_) => PrimitiveType::String,
+    })
+}
+
+/// The field's declared default, as a literal.
+fn ctx_field_default(f: &crate::fsm_registry::ContextField) -> TypedNode<TypedExpression> {
+    use crate::fsm_registry::ContextDefault;
+    let (lit, ty) = match &f.default {
+        ContextDefault::I32(v) => (
+            TypedLiteral::Integer(*v as i128),
+            Type::Primitive(PrimitiveType::I32),
+        ),
+        ContextDefault::F64(v) => (TypedLiteral::Float(*v), Type::Primitive(PrimitiveType::F64)),
+        ContextDefault::Bool(v) => (TypedLiteral::Bool(*v), Type::Primitive(PrimitiveType::Bool)),
+        ContextDefault::String(v) => (
+            TypedLiteral::String(*v),
+            Type::Primitive(PrimitiveType::String),
+        ),
+    };
+    TypedNode::new(TypedExpression::Literal(lit), ty, Span::default())
 }
 
 fn machine_fn(fsm: &str, def: &FsmDefinition, states: &[String]) -> TypedFunction {

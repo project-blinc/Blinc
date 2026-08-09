@@ -1871,6 +1871,37 @@ impl BlincDsl {
         runtime.get_effect_handler(name).is_ok()
     }
 
+    /// Run `f` with `fsm`'s handler installed, so a perform inside it
+    /// resolves to that FSM's context rather than to nothing.
+    ///
+    /// The read path a component uses: the FSM owns its context, and
+    /// asking for a field means asking the owner while its handler is
+    /// in scope.
+    pub fn with_fsm_context<R>(&self, fsm: &str, f: impl FnOnce() -> R) -> BlincDslResult<R> {
+        let runtime = self
+            .runtime
+            .lock()
+            .expect("BlincDsl runtime mutex poisoned");
+        let token = {
+            let mut rt = runtime;
+            let t = rt
+                .get_effect_handler(&passes::host_events_handler_name(fsm))
+                .map_err(BlincDslError::from)?;
+            drop(rt);
+            t
+        };
+        let runtime = self
+            .runtime
+            .lock()
+            .expect("BlincDsl runtime mutex poisoned");
+        let frame = runtime
+            .push_effect_handler(token)
+            .map_err(BlincDslError::from)?;
+        let out = f();
+        runtime.pop_effect_handler(frame);
+        Ok(out)
+    }
+
     /// Free a machine. What a component does when it unmounts.
     pub fn drop_fsm_machine(&self, machine: zyntax_embed::FiberToken) -> BlincDslResult<()> {
         let mut runtime = self
