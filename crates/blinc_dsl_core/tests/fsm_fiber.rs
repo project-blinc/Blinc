@@ -220,3 +220,77 @@ fn two_instances_of_one_fsm_do_not_share_context() {
     dsl.drop_fsm_machine(a).expect("drop a");
     dsl.drop_fsm_machine(b).expect("drop b");
 }
+
+/// A tick guard reads the context the machine owns and fires when it
+/// crosses its threshold. The host sends a tick like any other event.
+const GATED: &str = r#"
+fsm Gate {
+    context {
+        level: i32 = 0
+    }
+    state Low
+    state High
+    initial Low
+    on Low.Fill -> Low { ctx.level += 4 }
+    tick Low -> High when ctx.level > 10
+}
+"#;
+
+#[test]
+fn a_tick_guard_fires_once_its_context_crosses() {
+    let dsl = compiled(GATED, "gate.blinc");
+    let m = dsl.fsm_machine("Gate").expect("construct");
+    let tick = blinc_dsl_core::FSM_TICK_EVENT_CODE;
+
+    // Below the threshold: a tick changes nothing.
+    dsl.step_fsm_machine("Gate", m, event_code(0))
+        .expect("fill");
+    assert_eq!(
+        dsl.step_fsm_machine("Gate", m, tick).expect("tick"),
+        Some(0),
+        "level is 4, so the guard does not fire",
+    );
+
+    // Cross it, then tick.
+    dsl.step_fsm_machine("Gate", m, event_code(0))
+        .expect("fill");
+    dsl.step_fsm_machine("Gate", m, event_code(0))
+        .expect("fill");
+    assert_eq!(
+        dsl.read_fsm_context_i32("Gate", m, "level").expect("read"),
+        12,
+    );
+    assert_eq!(
+        dsl.step_fsm_machine("Gate", m, tick).expect("tick"),
+        Some(1),
+        "level is 12, so Low -> High",
+    );
+    dsl.drop_fsm_machine(m).expect("drop");
+}
+
+/// A tick guard belongs to its own machine's context, so one machine
+/// crossing the threshold does not advance another.
+#[test]
+fn a_tick_guard_reads_its_own_machines_context() {
+    let dsl = compiled(GATED, "gate_two.blinc");
+    let a = dsl.fsm_machine("Gate").expect("a");
+    let b = dsl.fsm_machine("Gate").expect("b");
+    let tick = blinc_dsl_core::FSM_TICK_EVENT_CODE;
+
+    for _ in 0..3 {
+        dsl.step_fsm_machine("Gate", a, event_code(0))
+            .expect("fill a");
+    }
+    assert_eq!(
+        dsl.step_fsm_machine("Gate", a, tick).expect("tick a"),
+        Some(1)
+    );
+    assert_eq!(
+        dsl.step_fsm_machine("Gate", b, tick).expect("tick b"),
+        Some(0),
+        "b never filled, so its own guard does not fire",
+    );
+
+    dsl.drop_fsm_machine(a).expect("drop a");
+    dsl.drop_fsm_machine(b).expect("drop b");
+}

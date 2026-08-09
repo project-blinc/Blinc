@@ -32,6 +32,7 @@ pub(crate) use args::*;
 pub(crate) use components::*;
 pub(crate) use consts::*;
 pub(crate) use fsm::*;
+pub use fsm_fiber::TICK_EVENT_CODE;
 pub(crate) use fsm_fiber::*;
 pub(crate) use list_map::*;
 pub(crate) use matching::*;

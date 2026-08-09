@@ -1233,6 +1233,7 @@ pub(crate) fn synthesize_fsm_context_and_actions(program: &mut TypedProgram) {
             };
 
             let mut action_idx: usize = 0;
+            let mut tick_idx: usize = 0;
             for stmt in &mut body.statements {
                 let TypedStatement::Expression(expr_node) = &mut stmt.node else {
                     continue;
@@ -1336,6 +1337,12 @@ pub(crate) fn synthesize_fsm_context_and_actions(program: &mut TypedProgram) {
                         // ctx-rewrite so guards can read context fields
                         // the same way actions do.
                         if let Some(guard_expr) = call.positional_args.get_mut(1) {
+                            // Stashed with `ctx.<field>` intact, for the
+                            // same reason action bodies are: the machine
+                            // needs it as a perform, the registry path
+                            // needs it as a signal read.
+                            crate::passes::stash_guard_expr(fsm_name_str, tick_idx, guard_expr);
+                            tick_idx += 1;
                             rewrite_fsm_ctx_access_expr(fsm_name_str, guard_expr);
                         }
                     }

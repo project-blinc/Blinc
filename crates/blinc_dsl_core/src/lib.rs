@@ -34,6 +34,9 @@ mod host;
 mod passes;
 
 pub use host::set_pending_fsm_event;
+
+/// Event code that makes a machine evaluate its tick guards.
+pub use passes::TICK_EVENT_CODE as FSM_TICK_EVENT_CODE;
 mod read_scope;
 
 /// Region id for the whole-program `@stateful` render's read scope.

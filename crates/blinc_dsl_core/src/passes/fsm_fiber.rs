@@ -36,9 +36,11 @@
 //! something to call inside a pushed scope, since it cannot perform on
 //! its own.
 //!
-//! Tick guards are not lowered: a guard is a lifted function the host
-//! calls, with no route into the fiber until guards arrive through the
-//! same effect.
+//! Tick guards evaluate when the host sends [`TICK_EVENT_CODE`]. A guard
+//! is a condition on top of the state test, which is the nested shape
+//! the loop's join cannot see, so the guard's own result folds into the
+//! key: doubling the key first leaves the low bit to the guard, and the
+//! rule's constant matches only when the state and the guard both do.
 //!
 //! Nothing consumes these declarations; the registry path still drives
 //! every mounted FSM.
@@ -113,6 +115,25 @@ pub(crate) fn stash_action_body(symbol: &str, body: &TypedBlock) {
 
 fn take_action_body(symbol: &str) -> Option<TypedBlock> {
     ACTION_BODIES.with(|m| m.borrow().get(symbol).cloned())
+}
+
+thread_local! {
+    /// Tick-guard expressions as authored, keyed `<fsm>#<idx>`.
+    static GUARD_EXPRS: std::cell::RefCell<
+        std::collections::HashMap<String, TypedNode<TypedExpression>>,
+    > = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Record a tick guard as authored, before its `ctx.<field>` reads were
+/// rewritten into module-level signal access.
+pub(crate) fn stash_guard_expr(fsm: &str, idx: usize, expr: &TypedNode<TypedExpression>) {
+    GUARD_EXPRS.with(|m| {
+        m.borrow_mut().insert(format!("{fsm}#{idx}"), expr.clone());
+    });
+}
+
+fn take_guard_expr(fsm: &str, idx: usize) -> Option<TypedNode<TypedExpression>> {
+    GUARD_EXPRS.with(|m| m.borrow().get(&format!("{fsm}#{idx}")).cloned())
 }
 
 /// Rewrite `ctx.<field>` in a transition body into performs against the
@@ -201,6 +222,11 @@ fn ctx_field_of(e: &TypedNode<TypedExpression>) -> Option<String> {
     f.field.resolve_global().map(|s| s.to_string())
 }
 
+/// Event code the host sends to make a machine evaluate its tick
+/// guards. Distinct from every declared event, which are assigned from
+/// the runtime's offset upward.
+pub const TICK_EVENT_CODE: u32 = blinc_runtime::fsm::FSM_EVENT_CODE_OFFSET - 1;
+
 /// Multiplier separating a state from an event in the dispatch key.
 /// Clears the runtime's event-code offset so the two never overlap.
 const STATE_STRIDE: i64 = 1 << 33;
@@ -261,6 +287,49 @@ fn block(statements: Vec<TypedNode<TypedStatement>>) -> TypedBlock {
         statements,
         span: Span::default(),
     }
+}
+
+/// The guard's result as an i64 in {0, 1}.
+///
+/// Prefers the authored expression, so `ctx.<field>` reads reach the
+/// handler that owns the context rather than a module-level signal.
+/// Falls back to calling the lifted guard fn when nothing was stashed.
+fn guard_value(
+    fsm: &str,
+    idx: usize,
+    g: &crate::fsm_registry::TickGuard,
+    ctx_fields: &[(String, Type)],
+) -> Option<TypedNode<TypedExpression>> {
+    if let Some(mut expr) = take_guard_expr(fsm, idx) {
+        ctx_to_performs_expr(fsm, ctx_fields, &mut expr);
+        // A comparison yields bool; the key arithmetic needs an int.
+        return Some(TypedNode::new(
+            TypedExpression::Cast(zyntax_typed_ast::typed_ast::TypedCast {
+                expr: Box::new(expr),
+                target_type: i64_ty(),
+            }),
+            i64_ty(),
+            Span::default(),
+        ));
+    }
+    let symbol = g.guard_fn?.resolve_global()?;
+    Some(TypedNode::new(
+        TypedExpression::Cast(zyntax_typed_ast::typed_ast::TypedCast {
+            expr: Box::new(TypedNode::new(
+                TypedExpression::Call(TypedCall {
+                    callee: Box::new(var(&symbol)),
+                    positional_args: Vec::new(),
+                    named_args: Vec::new(),
+                    type_args: Vec::new(),
+                }),
+                Type::Primitive(PrimitiveType::I32),
+                Span::default(),
+            )),
+            target_type: i64_ty(),
+        }),
+        i64_ty(),
+        Span::default(),
+    ))
 }
 
 /// `<lifted_action>()` — a transition body the FSM pass already lifted
@@ -692,6 +761,43 @@ fn machine_fn(fsm: &str, def: &FsmDefinition, states: &[String]) -> TypedFunctio
                 }
                 arm
             }),
+            else_block: None,
+            span: Span::default(),
+        })));
+    }
+    // Tick guards, evaluated when the host sends TICK_EVENT_CODE.
+    //
+    // A guard is a condition on top of the state test, which is the
+    // nested shape the loop's join cannot see. Folding the guard's own
+    // result into the key keeps it one comparison: `key * 2 + guard()`
+    // is the rule's constant only when the state matches AND the guard
+    // returned 1. Doubling first means the guard owns the low bit
+    // outright, so no other pair can alias into a match.
+    for (idx, g) in def.tick_guards.iter().enumerate() {
+        let Some(from) = code_of(g.from) else {
+            continue;
+        };
+        let Some(to) = code_of(g.to) else { continue };
+        let Some(fired) = guard_value(fsm, idx, g, &ctx_fields) else {
+            continue;
+        };
+        let probe = format!("g{idx}");
+        body.push(stmt(TypedStatement::Let(TypedLet {
+            name: InternedString::new_global(&probe),
+            ty: i64_ty(),
+            initializer: Some(Box::new(binary(
+                BinaryOp::Add,
+                binary(BinaryOp::Mul, var("key"), int(2), i64_ty()),
+                fired,
+                i64_ty(),
+            ))),
+            mutability: Mutability::Immutable,
+            span: Span::default(),
+        })));
+        let want = (from as i64 * STATE_STRIDE + TICK_EVENT_CODE as i64) * 2 + 1;
+        body.push(stmt(TypedStatement::If(TypedIf {
+            condition: Box::new(eq(var(&probe), int(want))),
+            then_block: block(vec![assign_state(to)]),
             else_block: None,
             span: Span::default(),
         })));
