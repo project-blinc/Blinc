@@ -641,6 +641,11 @@ pub(crate) struct JitMachineDriver {
     pub(crate) runtime: crate::machines::Runtime,
     pub(crate) instances: crate::machines::Instances,
     handles: Mutex<std::collections::HashMap<u64, FiberToken>>,
+    /// `(scope, fsm)` to the handle already issued for it. What makes
+    /// `machine_for` idempotent across rebuilds: a view body asks on
+    /// every render, and without this each render would build a machine
+    /// whose context starts back at its declared defaults.
+    by_key: Mutex<std::collections::HashMap<(u64, String), u64>>,
     next: std::sync::atomic::AtomicU64,
 }
 
@@ -653,6 +658,7 @@ impl JitMachineDriver {
             runtime,
             instances,
             handles: Mutex::new(std::collections::HashMap::new()),
+            by_key: Mutex::new(std::collections::HashMap::new()),
             next: std::sync::atomic::AtomicU64::new(1),
         }
     }
@@ -681,10 +687,33 @@ unsafe impl Send for JitMachineDriver {}
 unsafe impl Sync for JitMachineDriver {}
 
 impl blinc_runtime::fsm::MachineDriver for JitMachineDriver {
-    fn machine_for(&self, fsm: &str) -> Option<u64> {
-        crate::machines::create(&self.runtime, &self.instances, fsm)
+    fn machine_for(&self, fsm: &str, scope: u64) -> Option<u64> {
+        let key = (scope, fsm.to_string());
+        if let Some(existing) = self
+            .by_key
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&key)
+        {
+            return Some(*existing);
+        }
+        // Built outside the `by_key` lock: construction reaches into the
+        // runtime, which a handler op can re-enter.
+        let handle = crate::machines::create(&self.runtime, &self.instances, fsm)
             .ok()
-            .map(|t| self.issue(t))
+            .map(|t| self.issue(t))?;
+        let mut by_key = self.by_key.lock().unwrap_or_else(|e| e.into_inner());
+        // A racing caller may have installed one while we built; keep
+        // theirs so a scope never has two machines, and let ours fall to
+        // `drop_machine` below.
+        if let Some(existing) = by_key.get(&key) {
+            let winner = *existing;
+            drop(by_key);
+            self.drop_machine(handle);
+            return Some(winner);
+        }
+        by_key.insert(key, handle);
+        Some(handle)
     }
 
     fn step(&self, _fsm: &str, machine: u64, event_code: u32) -> Option<u32> {
@@ -710,6 +739,10 @@ impl blinc_runtime::fsm::MachineDriver for JitMachineDriver {
         else {
             return;
         };
+        self.by_key
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(|_, h| *h != machine);
         let _ = crate::machines::release(&self.runtime, &self.instances, token);
     }
 }

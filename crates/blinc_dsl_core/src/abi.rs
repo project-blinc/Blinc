@@ -2,8 +2,9 @@ use super::*;
 use crate::host::{
     blinc_dsl_computed_bool, blinc_dsl_computed_f64, blinc_dsl_computed_i32,
     blinc_dsl_computed_string, blinc_dsl_effect, blinc_dsl_with_region, blinc_format_int,
-    blinc_fsm_runtime_trigger, blinc_fsm_subscribe, blinc_fsm_subscribe_all, blinc_input_blur,
-    blinc_input_clear, blinc_input_focus, blinc_input_select_all, blinc_ref_blur, blinc_ref_focus,
+    blinc_fsm_ctx_id, blinc_fsm_runtime_trigger, blinc_fsm_scope_enter, blinc_fsm_scope_exit,
+    blinc_fsm_subscribe, blinc_fsm_subscribe_all, blinc_input_blur, blinc_input_clear,
+    blinc_input_focus, blinc_input_select_all, blinc_ref_blur, blinc_ref_focus,
     blinc_ref_scroll_into_view, blinc_scope_enter, blinc_scroll_by, blinc_scroll_to_bottom,
     blinc_scroll_to_top, blinc_signal_get_by_id_bool, blinc_signal_get_by_id_f64,
     blinc_signal_get_by_id_i32, blinc_signal_get_by_id_i64, blinc_signal_get_by_id_string,
@@ -273,6 +274,34 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             ],
             return_type: Type::Primitive(PrimitiveType::Unit),
             ptr: blinc_fsm_runtime_trigger as *const u8,
+        },
+        BuiltinDescriptor {
+            // The signal id behind one FSM context field, for the
+            // component instance in scope. Third arg is the id the
+            // compiler baked, used when no machine backs the read.
+            name: "__blinc_fsm_ctx_id__",
+            param_types: &[
+                Type::Primitive(PrimitiveType::String),
+                Type::Primitive(PrimitiveType::String),
+                Type::Primitive(PrimitiveType::I64),
+            ],
+            return_type: Type::Primitive(PrimitiveType::I64),
+            ptr: blinc_fsm_ctx_id as *const u8,
+        },
+        BuiltinDescriptor {
+            // Claim a component instance as the FSM scope, answering with
+            // the scope it displaced.
+            name: "__blinc_fsm_scope_enter__",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::I64),
+            ptr: blinc_fsm_scope_enter as *const u8,
+        },
+        BuiltinDescriptor {
+            // Restore the scope `__blinc_fsm_scope_enter__` displaced.
+            name: "__blinc_fsm_scope_exit__",
+            param_types: &[Type::Primitive(PrimitiveType::I64)],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            ptr: blinc_fsm_scope_exit as *const u8,
         },
         BuiltinDescriptor {
             // `<FsmName>.subscribe("From.Event", closure)` — third arg is the

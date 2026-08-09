@@ -3,6 +3,37 @@
 use super::*;
 use crate::*;
 
+thread_local! {
+    /// Mangled context-signal name to the `(fsm, field)` it was built
+    /// from, recorded as the signal declarations are synthesized.
+    ///
+    /// Thread-local rather than process-global: a compile happens on one
+    /// thread, and two threads compiling different programs must not see
+    /// each other's fields. Entries accumulate across compiles on the
+    /// same thread, which is harmless — the mangled name is unique to
+    /// the FSM and field it came from, so a later compile overwrites an
+    /// identical value.
+    static CTX_SIGNAL_ORIGIN: std::cell::RefCell<
+        std::collections::HashMap<String, (String, String)>,
+    > = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Remember that `mangled` is `fsm`'s `field`, so a read site can be
+/// lowered to ask for this instance's signal rather than the one baked
+/// at compile time.
+pub(crate) fn record_ctx_signal_origin(mangled: &str, fsm: &str, field: &str) {
+    CTX_SIGNAL_ORIGIN.with(|m| {
+        m.borrow_mut()
+            .insert(mangled.to_string(), (fsm.to_string(), field.to_string()));
+    });
+}
+
+/// The `(fsm, field)` behind a mangled context-signal name, or `None`
+/// for an ordinary `signal` declaration.
+pub(crate) fn ctx_signal_origin(mangled: &str) -> Option<(String, String)> {
+    CTX_SIGNAL_ORIGIN.with(|m| m.borrow().get(mangled).cloned())
+}
+
 /// Rewrite `<FsmName>.trigger(<path>)` → `__fsm_runtime_trigger__("<FsmName>", <path>)`.
 ///
 /// Two sources of "this is a known FSM" are checked at each call
@@ -1283,6 +1314,12 @@ pub(crate) fn synthesize_fsm_context_and_actions(program: &mut TypedProgram) {
                         };
                         let signal_name =
                             crate::fsm_registry::mangle_ctx_signal(fsm_name_str, &name_str);
+                        // Remembered here, where both halves are still
+                        // separate values. The mangled name cannot be
+                        // split back apart: `__fsm_ctx_a_b_c` is as
+                        // consistent with fsm `a_b` as with field `b_c`,
+                        // and a module namespace adds another separator.
+                        record_ctx_signal_origin(&signal_name, fsm_name_str, &name_str);
                         signal_decls.push(CtxFieldDecl {
                             signal_name,
                             ty: field_ty,

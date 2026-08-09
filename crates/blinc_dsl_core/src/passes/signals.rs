@@ -12,6 +12,98 @@ struct SignalEntry {
     /// `SignalId.to_raw()` cast to i64 — Cranelift's value-map population
     /// doesn't handle `HirConstant::U64`, so we stay in i64-land.
     id_raw: i64,
+    /// `(fsm, field)` when this signal is an FSM context field, so its
+    /// reads resolve per instance rather than to `id_raw`.
+    ctx_origin: Option<(String, String)>,
+}
+
+/// The expression a read or write uses to name its signal.
+///
+/// An ordinary signal bakes its id: there is one, and it is known now.
+/// An FSM context field cannot, because which signal `Play.pct` means
+/// depends on which component instance is asking, and that is only known
+/// while the code runs. It lowers instead to a call that resolves the
+/// current instance's signal, carrying the baked id as the value to fall
+/// back on when no machine backs the read.
+fn signal_id_expr(
+    entry: &SignalEntry,
+    span: zyntax_typed_ast::Span,
+) -> zyntax_typed_ast::TypedNode<zyntax_typed_ast::typed_ast::TypedExpression> {
+    use zyntax_typed_ast::InternedString;
+    use zyntax_typed_ast::typed_ast::{TypedCall, TypedExpression, TypedLiteral};
+
+    let baked = zyntax_typed_ast::TypedNode::new(
+        TypedExpression::Literal(TypedLiteral::Integer(entry.id_raw as i128)),
+        Type::Primitive(PrimitiveType::I64),
+        span,
+    );
+    let Some((fsm, field)) = &entry.ctx_origin else {
+        return baked;
+    };
+    let str_arg = |s: &str| {
+        zyntax_typed_ast::TypedNode::new(
+            TypedExpression::Literal(TypedLiteral::String(InternedString::new_global(s))),
+            Type::Primitive(PrimitiveType::String),
+            span,
+        )
+    };
+    zyntax_typed_ast::TypedNode::new(
+        TypedExpression::Call(TypedCall {
+            callee: Box::new(zyntax_typed_ast::TypedNode::new(
+                TypedExpression::Variable(InternedString::new_global("__blinc_fsm_ctx_id__")),
+                Type::Unknown,
+                span,
+            )),
+            positional_args: vec![str_arg(fsm), str_arg(field), baked],
+            named_args: Vec::new(),
+            type_args: Vec::new(),
+        }),
+        Type::Primitive(PrimitiveType::I64),
+        span,
+    )
+}
+
+/// Declare `__blinc_fsm_ctx_id__` so the calls [`signal_id_expr`] emits
+/// can be lowered.
+///
+/// Registering the host symbol is not enough on its own: lowering
+/// resolves a call against the program's own declarations, and a call to
+/// something undeclared makes it skip the whole enclosing function
+/// rather than fail. A view that reads FSM context would simply go
+/// missing, and the error would name the view's caller.
+fn declare_ctx_id_extern(program: &mut TypedProgram) {
+    use zyntax_typed_ast::typed_ast::{TypedDeclaration, TypedFunction, TypedParameter};
+    use zyntax_typed_ast::{InternedString, Span};
+
+    const NAME: &str = "__blinc_fsm_ctx_id__";
+    let already = program.declarations.iter().any(|d| {
+        matches!(&d.node, TypedDeclaration::Function(f)
+            if f.name.resolve_global().as_deref() == Some(NAME))
+    });
+    if already {
+        return;
+    }
+    let param = |i: usize, ty: Type| TypedParameter {
+        name: InternedString::new_global(&format!("a{i}")),
+        ty,
+        ..Default::default()
+    };
+    program.declarations.push(zyntax_typed_ast::TypedNode::new(
+        TypedDeclaration::Function(TypedFunction {
+            name: InternedString::new_global(NAME),
+            params: vec![
+                param(0, Type::Primitive(PrimitiveType::String)),
+                param(1, Type::Primitive(PrimitiveType::String)),
+                param(2, Type::Primitive(PrimitiveType::I64)),
+            ],
+            return_type: Type::Primitive(PrimitiveType::I64),
+            body: None,
+            is_external: true,
+            ..Default::default()
+        }),
+        Type::Unknown,
+        Span::default(),
+    ));
 }
 
 /// Last `= <literal>` seen for each signal name, so a reload can tell an
@@ -175,7 +267,7 @@ pub(crate) fn resolve_signal_calls(program: &mut TypedProgram) {
 pub(crate) fn resolve_signal_calls_scoped(program: &mut TypedProgram, module: &str) {
     use std::collections::HashMap;
     use zyntax_typed_ast::InternedString;
-    use zyntax_typed_ast::typed_ast::{TypedCall, TypedDeclaration, TypedExpression, TypedLiteral};
+    use zyntax_typed_ast::typed_ast::{TypedCall, TypedDeclaration, TypedExpression};
 
     // Step 1: collect signal name → (type, id_raw). The id_raw is
     // minted on first encounter via the process-global
@@ -263,12 +355,17 @@ pub(crate) fn resolve_signal_calls_scoped(program: &mut TypedProgram, module: &s
                 // (see commit 54dc831b for context). Re-cast back to
                 // u64 inside the extern.
                 id_raw: id_raw_u64 as i64,
+                ctx_origin: super::fsm::ctx_signal_origin(name_str.as_ref()),
             },
         );
     }
 
     if signals.is_empty() {
         return;
+    }
+
+    if signals.values().any(|e| e.ctx_origin.is_some()) {
+        declare_ctx_id_extern(program);
     }
 
     // Step 2: rewrite `<sig>.get()` → `__signal_get_by_id_<T>(<id_literal>)`.
@@ -311,11 +408,7 @@ pub(crate) fn resolve_signal_calls_scoped(program: &mut TypedProgram, module: &s
             && let Some(entry) = signals.get(name)
             && let Some(getter) = typed_signal_extern_name(&entry.ty)
         {
-            let id_arg = zyntax_typed_ast::TypedNode::new(
-                TypedExpression::Literal(TypedLiteral::Integer(entry.id_raw as i128)),
-                Type::Primitive(PrimitiveType::I64),
-                expr.span,
-            );
+            let id_arg = signal_id_expr(entry, expr.span);
             let callee = zyntax_typed_ast::TypedNode::new(
                 TypedExpression::Variable(InternedString::new_global(getter)),
                 Type::Unknown,
@@ -407,11 +500,7 @@ pub(crate) fn resolve_signal_calls_scoped(program: &mut TypedProgram, module: &s
             let mut rhs = (*b.right).clone();
             rewrite_expr(&mut rhs, signals);
 
-            let id_arg = zyntax_typed_ast::TypedNode::new(
-                TypedExpression::Literal(TypedLiteral::Integer(entry.id_raw as i128)),
-                Type::Primitive(PrimitiveType::I64),
-                expr.span,
-            );
+            let id_arg = signal_id_expr(&entry, expr.span);
             let callee = zyntax_typed_ast::TypedNode::new(
                 TypedExpression::Variable(InternedString::new_global(setter)),
                 Type::Unknown,
@@ -592,11 +681,7 @@ pub(crate) fn resolve_signal_calls_scoped(program: &mut TypedProgram, module: &s
                         Type::Unknown,
                         span,
                     )),
-                    positional_args: vec![zyntax_typed_ast::TypedNode::new(
-                        TypedExpression::Literal(TypedLiteral::Integer(entry.id_raw as i128)),
-                        Type::Primitive(PrimitiveType::I64),
-                        span,
-                    )],
+                    positional_args: vec![signal_id_expr(&entry, span)],
                     named_args: vec![],
                     type_args: vec![],
                 });
@@ -621,11 +706,7 @@ pub(crate) fn resolve_signal_calls_scoped(program: &mut TypedProgram, module: &s
                         Type::Unknown,
                         span,
                     )),
-                    positional_args: vec![zyntax_typed_ast::TypedNode::new(
-                        TypedExpression::Literal(TypedLiteral::Integer(entry.id_raw as i128)),
-                        Type::Primitive(PrimitiveType::I64),
-                        span,
-                    )],
+                    positional_args: vec![signal_id_expr(&entry, span)],
                     named_args: vec![],
                     type_args: vec![],
                 });
@@ -643,14 +724,7 @@ pub(crate) fn resolve_signal_calls_scoped(program: &mut TypedProgram, module: &s
                         Type::Unknown,
                         span,
                     )),
-                    positional_args: vec![
-                        zyntax_typed_ast::TypedNode::new(
-                            TypedExpression::Literal(TypedLiteral::Integer(entry.id_raw as i128)),
-                            Type::Primitive(PrimitiveType::I64),
-                            span,
-                        ),
-                        value,
-                    ],
+                    positional_args: vec![signal_id_expr(&entry, span), value],
                     named_args: vec![],
                     type_args: vec![],
                 });

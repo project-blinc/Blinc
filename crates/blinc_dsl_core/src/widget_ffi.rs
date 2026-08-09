@@ -1458,8 +1458,14 @@ pub(crate) extern "C" fn blinc_div_view(
     if on_click_closure != 0 {
         type ClosureFn = extern "C" fn();
         let func: ClosureFn = unsafe { std::mem::transmute(on_click_closure) };
+        // The FSM scope is captured HERE, while the component that
+        // registered the handler is still building, and reinstated at
+        // click time. A `Play.trigger(…)` in the body lowers to a bare
+        // `extern "C" fn()` with no environment, so this is the only
+        // thing connecting it to the instance it was written inside.
+        let scope = blinc_runtime::fsm::current_scope();
         widget = widget.cursor_pointer().on_click(move |_ctx| {
-            func();
+            blinc_runtime::fsm::with_scope(scope, || func());
         });
     }
     if overflow_scroll != 0 {

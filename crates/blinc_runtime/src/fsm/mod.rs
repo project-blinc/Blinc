@@ -57,6 +57,7 @@ pub mod default_instance;
 pub mod dispatch;
 pub mod instance;
 pub mod registry;
+pub mod scope;
 
 pub use default_instance::{
     TransitionEffect, TransitionSubscriber, TransitionSubscriberPathed, current_state_code,
@@ -72,3 +73,4 @@ pub use registry::{
     EventTransition, FSM_EVENT_CODE_OFFSET, FsmDefinition, FsmId, FsmRegistry, TickGuard,
     TransitionAction, with_fsm_registry, with_fsm_registry_mut,
 };
+pub use scope::{NO_SCOPE, current_scope, enter_scope, exit_scope, with_scope};

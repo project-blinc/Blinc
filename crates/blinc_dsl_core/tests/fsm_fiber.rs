@@ -410,9 +410,16 @@ fn a_machine_drives_through_the_runtime_seam() {
     dsl.install_runtime_bridge();
 
     let driver = blinc_runtime::fsm::machine_driver().expect("a driver is installed");
-    let a = driver.machine_for("Tally").expect("construct a");
-    let b = driver.machine_for("Tally").expect("construct b");
+    // Two component instances, so two scopes.
+    let a = driver.machine_for("Tally", 0xA).expect("construct a");
+    let b = driver.machine_for("Tally", 0xB).expect("construct b");
     assert_ne!(a, b, "two mounts, two machines");
+    assert_eq!(
+        driver.machine_for("Tally", 0xA),
+        Some(a),
+        "asking again for the same scope reuses the machine — a view body \
+         asks on every rebuild, and constructing there would reset the context"
+    );
 
     for _ in 0..2 {
         driver.step("Tally", a, event_code(0)).expect("step a");
