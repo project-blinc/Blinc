@@ -71,7 +71,8 @@ fn a_machine_steps_under_a_host_installed_event_source() {
         HostFiberStep::Yielded(ZyntaxValue::Int(6)),
     );
 
-    rt.drop_fiber(machine).expect("a component unmounting lets go");
+    rt.drop_fiber(machine)
+        .expect("a component unmounting lets go");
 }
 
 /// Identity is the token, and the name is recoverable from it rather
@@ -126,12 +127,11 @@ fn two_machines_from_one_definition_hold_separate_state() {
     rt.drop_fiber(b).expect("drop b");
 }
 
-/// A stateful handler, in its own program.
+/// A stateful handler and the machine that reads through it.
 ///
-/// Deliberately NOT added to [`OBSERVER`]: declaring a stateful handler
-/// alongside a stateless one for the same effect faults the process
-/// with SIGBUS rather than erroring, which is worth knowing before a
-/// lowering pass starts emitting handler sets per effect.
+/// Separate from [`OBSERVER`] so the two state stories stay legible:
+/// there the state lives in the machine, here it lives in the handler.
+/// A signal is the second kind.
 const COUNTER: &str = r#"
 effect Counter {
     def next(): i64
@@ -190,26 +190,19 @@ fn a_bound_handler_carries_state_where_a_per_step_scope_rebuilds_it() {
     rt.drop_fiber(bound).expect("drop");
 }
 
-/// UPSTREAM BUG, minimal repro. Ignored because it faults the process
-/// rather than failing, which takes the rest of the binary with it.
+/// Several handlers share one effect, stateful and stateless mixed, in
+/// either declaration order.
 ///
-/// A stateful handler declared AFTER a stateless one for the same
-/// effect faults with SIGBUS when installed. Declare the stateful one
-/// first and the identical program works, so it is declaration order
-/// and not the pairing. Nothing about the machine matters: the same
-/// fiber, the same step, the same handler name.
-///
-/// This constrains the lowering pass directly. A signal's handler is
-/// stateful — its cell is the handler state — so a set of signals
-/// sharing one effect per TYPE is exactly this shape, and any
-/// stateless handler emitted alongside them decides whether the
-/// program runs by where it lands in the declaration list. Until it is
-/// fixed upstream, a signal wants its own effect rather than a shared
-/// one.
+/// This faulted the process with SIGBUS when the stateful handler was
+/// declared second, and swapping the two made the identical program
+/// run — fixed upstream by giving each effect its own op ABI. Kept
+/// because the lowering depends on it: a signal's cell IS its handler's
+/// state, so one effect per signal TYPE with one handler per signal is
+/// exactly this shape, and it only works if handler order does not
+/// decide whether the program runs.
 #[test]
-#[ignore = "faults the process: stateful handler declared after a stateless one on the same effect"]
-fn upstream_a_stateful_handler_declared_second_faults_on_install() {
-    const ORDERED: &str = r#"
+fn handlers_sharing_an_effect_do_not_depend_on_declaration_order() {
+    const STATELESS_FIRST: &str = r#"
 effect C { def next(): i64 }
 handler Flat for C { def next(): i64 { return 3 } }
 handler Seq for C {
@@ -223,12 +216,54 @@ fiber def m(): i64 {
     return s
 }
 "#;
-    let mut rt = runtime_with(ORDERED);
-    let f = rt.get_fiber("m").expect("construct");
-    assert_eq!(
-        rt.resume_fiber_within(f, &["Seq"]).expect("step"),
-        HostFiberStep::Yielded(ZyntaxValue::Int(1)),
-        "swapping the two handler declarations makes this pass",
-    );
-    rt.drop_fiber(f).expect("drop");
+    const STATEFUL_FIRST: &str = r#"
+effect C { def next(): i64 }
+handler Seq for C {
+    var n: i64 = 0
+    def next(): i64 { self.n = self.n + 1  return self.n }
+}
+handler Flat for C { def next(): i64 { return 3 } }
+@effect(C)
+fiber def m(): i64 {
+    let mut s: i64 = 0
+    while s < 100 { s = s + next()  yield s }
+    return s
+}
+"#;
+
+    // Each handler is checked in both programs, so a crossed op ABI
+    // shows up as one answering with the other's behaviour rather than
+    // only as a fault.
+    //
+    // `resume_fiber_within` opens a FRESH scope per step, so the
+    // stateful handler restarts and answers 1 every time: the machine's
+    // own total climbs 1, 2, 3 while the handler's counter does not.
+    // The bound case, where the counter does climb, is covered
+    // separately.
+    for (label, src) in [
+        ("stateless declared first", STATELESS_FIRST),
+        ("stateful declared first", STATEFUL_FIRST),
+    ] {
+        let mut rt = runtime_with(src);
+
+        let seq = rt.get_fiber("m").expect("construct");
+        for expect in [1, 2, 3] {
+            assert_eq!(
+                rt.resume_fiber_within(seq, &["Seq"]).expect("step"),
+                HostFiberStep::Yielded(ZyntaxValue::Int(expect)),
+                "{label}: the stateful handler answers 1 into a fresh scope",
+            );
+        }
+        rt.drop_fiber(seq).expect("drop");
+
+        let flat = rt.get_fiber("m").expect("construct");
+        for expect in [3, 6, 9] {
+            assert_eq!(
+                rt.resume_fiber_within(flat, &["Flat"]).expect("step"),
+                HostFiberStep::Yielded(ZyntaxValue::Int(expect)),
+                "{label}: the stateless handler answers the same each time",
+            );
+        }
+        rt.drop_fiber(flat).expect("drop");
+    }
 }
