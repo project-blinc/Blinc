@@ -166,31 +166,57 @@ fn a_transition_body_no_longer_writes_a_module_level_signal() {
 
 /// The end of the delegation path: step a machine, then read the field
 /// back through the FSM that owns it.
-///
-/// BLOCKED, and the blocker is upstream. `bind_fiber_handler` allocates
-/// the handler's state once and joins it to the MACHINE's saved handler
-/// segment, so that context is reachable only from inside a resume of
-/// that fiber. `push_effect_handler` allocates a fresh instance, so a
-/// read outside the machine sees a zeroed context rather than the one
-/// the machine has been writing.
-///
-/// Closing it needs a handler INSTANCE the host can install in two
-/// places -- around the machine's step and around the component's
-/// render -- which neither entry point offers today.
 #[test]
-#[ignore = "a fiber-bound handler's state is not reachable outside the fiber"]
 fn a_context_field_reads_back_through_the_fsm() {
     let dsl = compiled(COUNTER, "tally_read.blinc");
     let m = dsl.fsm_machine("Tally").expect("construct");
-    dsl.step_fsm_machine("Tally", m, event_code(0))
-        .expect("step");
 
-    let seen = dsl
-        .with_fsm_context("Tally", || {
-            // Would call a compiled reader that performs `Tally$get_total`.
-            0i32
-        })
-        .expect("scoped read");
-    assert_eq!(seen, 5, "the machine wrote 5 into the context it owns");
+    assert_eq!(
+        dsl.read_fsm_context_i32("Tally", m, "total").expect("read"),
+        0,
+        "the declared default is what a machine starts with",
+    );
+    for expect in [5, 10, 15] {
+        dsl.step_fsm_machine("Tally", m, event_code(0))
+            .expect("step");
+        assert_eq!(
+            dsl.read_fsm_context_i32("Tally", m, "total").expect("read"),
+            expect,
+            "the read resolves to the context this machine has been writing",
+        );
+    }
     dsl.drop_fsm_machine(m).expect("drop");
+}
+
+/// Two machines from one fsm hold separate CONTEXT, not just separate
+/// state. This is what a module-level signal per field cannot express,
+/// however the name is qualified.
+#[test]
+fn two_instances_of_one_fsm_do_not_share_context() {
+    let dsl = compiled(COUNTER, "tally_two.blinc");
+    let a = dsl.fsm_machine("Tally").expect("construct a");
+    let b = dsl.fsm_machine("Tally").expect("construct b");
+
+    for _ in 0..3 {
+        dsl.step_fsm_machine("Tally", a, event_code(0))
+            .expect("a step");
+    }
+    dsl.step_fsm_machine("Tally", b, event_code(0))
+        .expect("b step");
+
+    assert_eq!(
+        dsl.read_fsm_context_i32("Tally", a, "total")
+            .expect("read a"),
+        15,
+        "a stepped three times",
+    );
+    assert_eq!(
+        dsl.read_fsm_context_i32("Tally", b, "total")
+            .expect("read b"),
+        5,
+        "b stepped once, and a's writes did not reach it",
+    );
+
+    dsl.drop_fsm_machine(a).expect("drop a");
+    dsl.drop_fsm_machine(b).expect("drop b");
 }

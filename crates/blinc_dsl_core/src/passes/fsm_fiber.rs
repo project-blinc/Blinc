@@ -28,9 +28,14 @@
 //! the registry path uses, so a body that reads the state sees the one
 //! it transitioned into.
 //!
-//! Scope: state and transition bodies. Context fields stay as
-//! module-level signals — widgets read them through a signal id, so two
-//! machines still share context even though they no longer share state.
+//! Context fields belong to the handler, which is what owns them: its
+//! state is allocated per instance and the host installs that instance
+//! both around the machine's steps and around a read, so two machines
+//! hold two contexts. `ctx.<field>` in a transition body lowers to a
+//! perform, and a compiled `<Fsm>$read_<field>` gives the host
+//! something to call inside a pushed scope, since it cannot perform on
+//! its own.
+//!
 //! Tick guards are not lowered: a guard is a lifted function the host
 //! calls, with no route into the fiber until guards arrive through the
 //! same effect.
@@ -80,6 +85,15 @@ pub(crate) fn ctx_get_op_name(fsm: &str, field: &str) -> String {
 /// Operation writing context field `field`.
 pub(crate) fn ctx_set_op_name(fsm: &str, field: &str) -> String {
     format!("{fsm}$set_{field}")
+}
+
+/// Compiled reader for context field `field`.
+///
+/// A perform needs a function to happen inside; the host cannot perform
+/// on its own. This is that function: called with the FSM's handler
+/// instance installed, it performs the read and the instance answers.
+pub(crate) fn ctx_reader_fn_name(fsm: &str, field: &str) -> String {
+    format!("{fsm}$read_{field}")
 }
 
 thread_local! {
@@ -319,6 +333,7 @@ pub(crate) fn synthesize_fsm_fibers(
     found: &[(InternedString, FsmDefinition)],
 ) {
     let mut emit: Vec<(TypedEffect, TypedEffectHandler, TypedFunction)> = Vec::new();
+    let mut readers: Vec<TypedFunction> = Vec::new();
     for (fsm_name, def) in found {
         let Some(fsm) = fsm_name.resolve_global() else {
             continue;
@@ -333,6 +348,7 @@ pub(crate) fn synthesize_fsm_fibers(
             host_events_handler(fsm, def),
             machine_fn(fsm, def, &states),
         ));
+        readers.extend(ctx_readers(fsm, def));
     }
     if emit.is_empty() {
         return;
@@ -368,6 +384,42 @@ pub(crate) fn synthesize_fsm_fibers(
             Span::default(),
         ));
     }
+    for reader in readers {
+        program.declarations.push(TypedNode::new(
+            TypedDeclaration::Function(reader),
+            Type::Unknown,
+            Span::default(),
+        ));
+    }
+}
+
+/// `@effect(<Fsm>$Events) def <Fsm>$read_<field>(): T { return <Fsm>$get_<field>() }`
+fn ctx_readers(fsm: &str, def: &FsmDefinition) -> Vec<TypedFunction> {
+    def.context_fields
+        .iter()
+        .filter_map(|f| {
+            let name = f.name.resolve_global()?;
+            let ty = ctx_field_type(f);
+            Some(TypedFunction {
+                name: InternedString::new_global(&ctx_reader_fn_name(fsm, &name)),
+                effects: vec![InternedString::new_global(&events_effect_name(fsm))],
+                return_type: ty.clone(),
+                body: Some(block(vec![stmt(TypedStatement::Return(Some(Box::new(
+                    TypedNode::new(
+                        TypedExpression::Call(TypedCall {
+                            callee: Box::new(var(&ctx_get_op_name(fsm, &name))),
+                            positional_args: Vec::new(),
+                            named_args: Vec::new(),
+                            type_args: Vec::new(),
+                        }),
+                        ty,
+                        Span::default(),
+                    ),
+                ))))])),
+                ..Default::default()
+            })
+        })
+        .collect()
 }
 
 /// The handler that owns the FSM's context.

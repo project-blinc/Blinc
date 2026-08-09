@@ -161,6 +161,12 @@ pub struct BlincDsl {
     /// it compiles. `inject_imported_view_externs` reads this map to
     /// build the cross-file mangled-name reference at the entry site.
     module_namespaces: Arc<Mutex<std::collections::HashMap<std::path::PathBuf, String>>>,
+    /// Handler instance per mounted machine. The instance holds that
+    /// machine's context, so a read has to install this one and not a
+    /// freshly constructed one.
+    fsm_instances: Arc<
+        Mutex<std::collections::HashMap<zyntax_embed::FiberToken, zyntax_embed::HandlerInstance>>,
+    >,
     /// Non-fatal compile-time diagnostics accumulated across every
     /// `compile_*` call (e.g. duplicate-local-name imports from
     /// distinct source files). Compile keeps going — the warning is
@@ -247,6 +253,7 @@ impl BlincDsl {
         let value_returning_views = Arc::new(Mutex::new(std::collections::HashSet::new()));
         let compiled_modules = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let module_namespaces = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let fsm_instances = Arc::new(Mutex::new(std::collections::HashMap::new()));
         let compile_diagnostics = Arc::new(Mutex::new(Vec::new()));
         let compiled_stylesheets = Arc::new(Mutex::new(Vec::new()));
         let stylesheets_queued_up_to = Arc::new(Mutex::new(0));
@@ -266,6 +273,7 @@ impl BlincDsl {
             value_returning_views,
             compiled_modules,
             module_namespaces,
+            fsm_instances,
             compile_diagnostics,
             compiled_stylesheets,
             stylesheets_queued_up_to,
@@ -1830,16 +1838,60 @@ impl BlincDsl {
         let machine = runtime
             .get_fiber(&passes::machine_fn_name(fsm))
             .map_err(BlincDslError::from)?;
-        // Bound, not per-step: the handler owns this machine's context,
-        // and a fresh scope per step would allocate a fresh context
-        // every time, resetting it between events.
         let token = runtime
             .get_effect_handler(&passes::host_events_handler_name(fsm))
             .map_err(BlincDslError::from)?;
-        runtime
-            .bind_fiber_handler(machine, token)
+        // One instance per machine, installed in both places: bound to
+        // the fiber so the context survives across events, and pushed
+        // around a read so the caller sees the same storage rather than
+        // a fresh one.
+        let instance = runtime
+            .new_handler_instance(token)
             .map_err(BlincDslError::from)?;
+        runtime
+            .bind_fiber_handler_instance(machine, instance)
+            .map_err(BlincDslError::from)?;
+        drop(runtime);
+        self.fsm_instances
+            .lock()
+            .expect("fsm_instances mutex poisoned")
+            .insert(machine, instance);
         Ok(machine)
+    }
+
+    /// Read context field `field` of the FSM `machine` runs.
+    ///
+    /// Pushes that machine's handler instance, then calls the compiled
+    /// reader: the perform inside resolves to this machine's context,
+    /// which is what delegating to the owner buys.
+    pub fn read_fsm_context_i32(
+        &self,
+        fsm: &str,
+        machine: zyntax_embed::FiberToken,
+        field: &str,
+    ) -> BlincDslResult<i32> {
+        let instance = *self
+            .fsm_instances
+            .lock()
+            .expect("fsm_instances mutex poisoned")
+            .get(&machine)
+            .ok_or_else(|| BlincDslError::Compile("unknown machine".to_string()))?;
+        let runtime = self
+            .runtime
+            .lock()
+            .expect("BlincDsl runtime mutex poisoned");
+        let frame = runtime
+            .push_handler_instance(instance)
+            .map_err(BlincDslError::from)?;
+        let sig = zyntax_embed::NativeSignature::new(&[], zyntax_embed::NativeType::I32);
+        let out = runtime.call_function(&passes::ctx_reader_fn_name(fsm, field), &[], &sig);
+        runtime.pop_effect_handler(frame);
+        match out.map_err(BlincDslError::from)? {
+            zyntax_embed::ZyntaxValue::Int(v) => Ok(v as i32),
+            other => Err(BlincDslError::Compile(format!(
+                "reader returned {other:?}, expected an int"
+            ))),
+        }
     }
 
     /// Deliver `event_code` to `machine` and run it to its next
