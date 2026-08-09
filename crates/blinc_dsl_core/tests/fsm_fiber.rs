@@ -172,7 +172,8 @@ fn a_context_field_reads_back_through_the_fsm() {
     let m = dsl.fsm_machine("Tally").expect("construct");
 
     assert_eq!(
-        dsl.read_fsm_context_i32("Tally", m, "total").expect("read"),
+        dsl.read_fsm_context::<i32>("Tally", m, "total")
+            .expect("read"),
         0,
         "the declared default is what a machine starts with",
     );
@@ -180,7 +181,8 @@ fn a_context_field_reads_back_through_the_fsm() {
         dsl.step_fsm_machine("Tally", m, event_code(0))
             .expect("step");
         assert_eq!(
-            dsl.read_fsm_context_i32("Tally", m, "total").expect("read"),
+            dsl.read_fsm_context::<i32>("Tally", m, "total")
+                .expect("read"),
             expect,
             "the read resolves to the context this machine has been writing",
         );
@@ -205,13 +207,13 @@ fn two_instances_of_one_fsm_do_not_share_context() {
         .expect("b step");
 
     assert_eq!(
-        dsl.read_fsm_context_i32("Tally", a, "total")
+        dsl.read_fsm_context::<i32>("Tally", a, "total")
             .expect("read a"),
         15,
         "a stepped three times",
     );
     assert_eq!(
-        dsl.read_fsm_context_i32("Tally", b, "total")
+        dsl.read_fsm_context::<i32>("Tally", b, "total")
             .expect("read b"),
         5,
         "b stepped once, and a's writes did not reach it",
@@ -257,7 +259,8 @@ fn a_tick_guard_fires_once_its_context_crosses() {
     dsl.step_fsm_machine("Gate", m, event_code(0))
         .expect("fill");
     assert_eq!(
-        dsl.read_fsm_context_i32("Gate", m, "level").expect("read"),
+        dsl.read_fsm_context::<i32>("Gate", m, "level")
+            .expect("read"),
         12,
     );
     assert_eq!(
@@ -293,4 +296,48 @@ fn a_tick_guard_reads_its_own_machines_context() {
 
     dsl.drop_fsm_machine(a).expect("drop a");
     dsl.drop_fsm_machine(b).expect("drop b");
+}
+
+/// The reader is generic, so a context of mixed types needs no accessor
+/// per type. Asserting on more than i32 keeps that honest.
+const MIXED: &str = r#"
+fsm Mixed {
+    context {
+        count: i32 = 1
+        ratio: f64 = 0.5
+        armed: bool = false
+    }
+    state Only
+    initial Only
+    on Only.Go -> Only {
+        ctx.count += 2
+        ctx.ratio += 0.25
+        ctx.armed = true
+    }
+}
+"#;
+
+#[test]
+fn context_fields_read_back_at_their_declared_types() {
+    let dsl = compiled(MIXED, "mixed.blinc");
+    let m = dsl.fsm_machine("Mixed").expect("construct");
+
+    assert_eq!(dsl.read_fsm_context::<i32>("Mixed", m, "count").unwrap(), 1);
+    assert_eq!(
+        dsl.read_fsm_context::<f64>("Mixed", m, "ratio").unwrap(),
+        0.5
+    );
+    assert!(!dsl.read_fsm_context::<bool>("Mixed", m, "armed").unwrap());
+
+    dsl.step_fsm_machine("Mixed", m, event_code(0))
+        .expect("step");
+
+    assert_eq!(dsl.read_fsm_context::<i32>("Mixed", m, "count").unwrap(), 3);
+    assert_eq!(
+        dsl.read_fsm_context::<f64>("Mixed", m, "ratio").unwrap(),
+        0.75
+    );
+    assert!(dsl.read_fsm_context::<bool>("Mixed", m, "armed").unwrap());
+
+    dsl.drop_fsm_machine(m).expect("drop");
 }

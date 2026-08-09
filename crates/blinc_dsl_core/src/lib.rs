@@ -1867,12 +1867,17 @@ impl BlincDsl {
     /// Pushes that machine's handler instance, then calls the compiled
     /// reader: the perform inside resolves to this machine's context,
     /// which is what delegating to the owner buys.
-    pub fn read_fsm_context_i32(
+    ///
+    /// Generic over the field's type rather than one accessor per type.
+    /// The runtime already records each compiled function's signature
+    /// and decodes the return through it, so the caller only has to say
+    /// what it expects back.
+    pub fn read_fsm_context<T: zyntax_embed::FromZyntax>(
         &self,
         fsm: &str,
         machine: zyntax_embed::FiberToken,
         field: &str,
-    ) -> BlincDslResult<i32> {
+    ) -> BlincDslResult<T> {
         let instance = *self
             .fsm_instances
             .lock()
@@ -1886,15 +1891,11 @@ impl BlincDsl {
         let frame = runtime
             .push_handler_instance(instance)
             .map_err(BlincDslError::from)?;
-        let sig = zyntax_embed::NativeSignature::new(&[], zyntax_embed::NativeType::I32);
-        let out = runtime.call_function(&passes::ctx_reader_fn_name(fsm, field), &[], &sig);
+        let out = runtime.call::<T>(&passes::ctx_reader_fn_name(fsm, field), &[]);
+        // Popped before the result is inspected: an error still leaves
+        // the thread's handler stack as it was.
         runtime.pop_effect_handler(frame);
-        match out.map_err(BlincDslError::from)? {
-            zyntax_embed::ZyntaxValue::Int(v) => Ok(v as i32),
-            other => Err(BlincDslError::Compile(format!(
-                "reader returned {other:?}, expected an int"
-            ))),
-        }
+        out.map_err(BlincDslError::from)
     }
 
     /// Deliver `event_code` to `machine` and run it to its next
@@ -1907,6 +1908,7 @@ impl BlincDsl {
         machine: zyntax_embed::FiberToken,
         event_code: u32,
     ) -> BlincDslResult<Option<u32>> {
+        let _ = fsm;
         let mut runtime = self
             .runtime
             .lock()
@@ -1914,9 +1916,8 @@ impl BlincDsl {
         // Armed under the same lock that drives the step, so another
         // machine cannot arm over this one between the two.
         host::set_pending_fsm_event(event_code as i64);
-        let _ = fsm;
-        // The handler was bound at construction, so the machine already
-        // carries it and its context.
+        // The handler instance was bound at construction, so the machine
+        // already carries it and its context.
         let step = runtime.resume_fiber(machine).map_err(BlincDslError::from)?;
         Ok(match step {
             zyntax_embed::HostFiberStep::Yielded(zyntax_embed::ZyntaxValue::Int(code)) => {
@@ -1935,37 +1936,6 @@ impl BlincDsl {
             .lock()
             .expect("BlincDsl runtime mutex poisoned");
         runtime.get_effect_handler(name).is_ok()
-    }
-
-    /// Run `f` with `fsm`'s handler installed, so a perform inside it
-    /// resolves to that FSM's context rather than to nothing.
-    ///
-    /// The read path a component uses: the FSM owns its context, and
-    /// asking for a field means asking the owner while its handler is
-    /// in scope.
-    pub fn with_fsm_context<R>(&self, fsm: &str, f: impl FnOnce() -> R) -> BlincDslResult<R> {
-        let runtime = self
-            .runtime
-            .lock()
-            .expect("BlincDsl runtime mutex poisoned");
-        let token = {
-            let mut rt = runtime;
-            let t = rt
-                .get_effect_handler(&passes::host_events_handler_name(fsm))
-                .map_err(BlincDslError::from)?;
-            drop(rt);
-            t
-        };
-        let runtime = self
-            .runtime
-            .lock()
-            .expect("BlincDsl runtime mutex poisoned");
-        let frame = runtime
-            .push_effect_handler(token)
-            .map_err(BlincDslError::from)?;
-        let out = f();
-        runtime.pop_effect_handler(frame);
-        Ok(out)
     }
 
     /// Free a machine. What a component does when it unmounts.
