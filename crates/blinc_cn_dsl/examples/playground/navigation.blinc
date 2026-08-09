@@ -73,6 +73,25 @@ component NavigationWidgets {
                 }
             }
 
+            // Rows are children, like the option lists — but a menu row
+            // is a COMMAND rather than a value, so it is cn.MenuItem and
+            // not cn.Option.
+            cn.Label("dropdown menu: commands under a trigger")
+            Div(class = "row") {
+                cn.DropdownMenu(label = "File", align = "start") {
+                    cn.MenuItem(label = "New", shortcut = "N",
+                                on_click = || table_page.set(1))
+                    cn.MenuItem(label = "Open", icon = "folder-open",
+                                on_click = || table_page.set(2))
+                    cn.MenuSeparator()
+                    cn.MenuItem(label = "Unavailable", disabled = true)
+                }
+                cn.DropdownMenu(label = "Go", align = "end") {
+                    cn.MenuItem(label = "First page", on_click = || table_page.set(1))
+                    cn.MenuItem(label = "Last page", on_click = || table_page.set(12))
+                }
+            }
+
             // No children: the numbers come from `total`, unlike the
             // widgets whose options are cn.Option children. A page is a
             // whole number, so the signal is an i32 and nothing rounds
