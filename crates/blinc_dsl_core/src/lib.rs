@@ -1827,9 +1827,19 @@ impl BlincDsl {
             .runtime
             .lock()
             .expect("BlincDsl runtime mutex poisoned");
-        runtime
+        let machine = runtime
             .get_fiber(&passes::machine_fn_name(fsm))
-            .map_err(BlincDslError::from)
+            .map_err(BlincDslError::from)?;
+        // Bound, not per-step: the handler owns this machine's context,
+        // and a fresh scope per step would allocate a fresh context
+        // every time, resetting it between events.
+        let token = runtime
+            .get_effect_handler(&passes::host_events_handler_name(fsm))
+            .map_err(BlincDslError::from)?;
+        runtime
+            .bind_fiber_handler(machine, token)
+            .map_err(BlincDslError::from)?;
+        Ok(machine)
     }
 
     /// Deliver `event_code` to `machine` and run it to its next
@@ -1849,9 +1859,10 @@ impl BlincDsl {
         // Armed under the same lock that drives the step, so another
         // machine cannot arm over this one between the two.
         host::set_pending_fsm_event(event_code as i64);
-        let step = runtime
-            .resume_fiber_within(machine, &[&passes::host_events_handler_name(fsm)])
-            .map_err(BlincDslError::from)?;
+        let _ = fsm;
+        // The handler was bound at construction, so the machine already
+        // carries it and its context.
+        let step = runtime.resume_fiber(machine).map_err(BlincDslError::from)?;
         Ok(match step {
             zyntax_embed::HostFiberStep::Yielded(zyntax_embed::ZyntaxValue::Int(code)) => {
                 Some(code as u32)

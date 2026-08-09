@@ -77,6 +77,116 @@ pub(crate) fn ctx_get_op_name(fsm: &str, field: &str) -> String {
     format!("{fsm}$get_{field}")
 }
 
+/// Operation writing context field `field`.
+pub(crate) fn ctx_set_op_name(fsm: &str, field: &str) -> String {
+    format!("{fsm}$set_{field}")
+}
+
+thread_local! {
+    /// Transition bodies as authored, before `ctx.<field>` was rewritten
+    /// into module-level signal access. Filled by the action lifter and
+    /// read by this pass during the same compile on the same thread.
+    static ACTION_BODIES: std::cell::RefCell<std::collections::HashMap<String, TypedBlock>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Record a transition body under its lifted symbol name.
+pub(crate) fn stash_action_body(symbol: &str, body: &TypedBlock) {
+    ACTION_BODIES.with(|m| {
+        m.borrow_mut().insert(symbol.to_string(), body.clone());
+    });
+}
+
+fn take_action_body(symbol: &str) -> Option<TypedBlock> {
+    ACTION_BODIES.with(|m| m.borrow().get(symbol).cloned())
+}
+
+/// Rewrite `ctx.<field>` in a transition body into performs against the
+/// handler that owns the context: a read becomes `<Fsm>$get_<field>()`
+/// and an assignment becomes `<Fsm>$set_<field>(rhs)`.
+fn ctx_to_performs(fsm: &str, fields: &[(String, Type)], block: &mut TypedBlock) {
+    for st in &mut block.statements {
+        ctx_to_performs_stmt(fsm, fields, st);
+    }
+}
+
+fn ctx_to_performs_stmt(fsm: &str, fields: &[(String, Type)], st: &mut TypedNode<TypedStatement>) {
+    match &mut st.node {
+        TypedStatement::Expression(e) => {
+            // An assignment whose target is `ctx.<field>` becomes a
+            // write perform; anything else just has its reads rewritten.
+            if let TypedExpression::Binary(b) = &mut e.node
+                && b.op == BinaryOp::Assign
+                && let Some(field) = ctx_field_of(&b.left)
+                && let Some((name, ty)) = fields.iter().find(|(n, _)| *n == field)
+            {
+                ctx_to_performs_expr(fsm, fields, &mut b.right);
+                let mut rhs = (*b.right).clone();
+                rhs.ty = ty.clone();
+                e.node = TypedExpression::Call(TypedCall {
+                    callee: Box::new(var(&ctx_set_op_name(fsm, name))),
+                    positional_args: vec![rhs],
+                    named_args: Vec::new(),
+                    type_args: Vec::new(),
+                });
+                e.ty = Type::Primitive(PrimitiveType::Unit);
+                return;
+            }
+            ctx_to_performs_expr(fsm, fields, e);
+        }
+        TypedStatement::Let(l) => {
+            if let Some(init) = &mut l.initializer {
+                ctx_to_performs_expr(fsm, fields, init);
+            }
+        }
+        TypedStatement::Return(Some(e)) => ctx_to_performs_expr(fsm, fields, e),
+        TypedStatement::Block(b) => ctx_to_performs(fsm, fields, b),
+        _ => {}
+    }
+}
+
+fn ctx_to_performs_expr(fsm: &str, fields: &[(String, Type)], e: &mut TypedNode<TypedExpression>) {
+    if let Some(field) = ctx_field_of(e)
+        && let Some((name, ty)) = fields.iter().find(|(n, _)| *n == field)
+    {
+        e.node = TypedExpression::Call(TypedCall {
+            callee: Box::new(var(&ctx_get_op_name(fsm, name))),
+            positional_args: Vec::new(),
+            named_args: Vec::new(),
+            type_args: Vec::new(),
+        });
+        e.ty = ty.clone();
+        return;
+    }
+    match &mut e.node {
+        TypedExpression::Binary(b) => {
+            ctx_to_performs_expr(fsm, fields, &mut b.left);
+            ctx_to_performs_expr(fsm, fields, &mut b.right);
+        }
+        TypedExpression::Unary(u) => ctx_to_performs_expr(fsm, fields, &mut u.operand),
+        TypedExpression::Call(c) => {
+            for a in &mut c.positional_args {
+                ctx_to_performs_expr(fsm, fields, a);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// `ctx.<field>` → the field name.
+fn ctx_field_of(e: &TypedNode<TypedExpression>) -> Option<String> {
+    let TypedExpression::Field(f) = &e.node else {
+        return None;
+    };
+    let TypedExpression::Variable(obj) = &f.object.node else {
+        return None;
+    };
+    if obj.resolve_global().as_deref() != Some("ctx") {
+        return None;
+    }
+    f.field.resolve_global().map(|s| s.to_string())
+}
+
 /// Multiplier separating a state from an event in the dispatch key.
 /// Clears the runtime's event-code offset so the two never overlap.
 const STATE_STRIDE: i64 = 1 << 33;
@@ -310,8 +420,31 @@ fn host_events_handler(fsm: &str, def: &FsmDefinition) -> TypedEffectHandler {
             op_name: InternedString::new_global(&ctx_get_op_name(fsm, &name)),
             return_type: ty.clone(),
             body: Some(block(vec![stmt(TypedStatement::Return(Some(Box::new(
-                self_field(f.name, ty),
+                self_field(f.name, ty.clone()),
             ))))])),
+            ..Default::default()
+        });
+        // `def <Fsm>$set_<field>(v: T) { self.<field> = v }`
+        handlers.push(TypedEffectHandlerImpl {
+            op_name: InternedString::new_global(&ctx_set_op_name(fsm, &name)),
+            params: vec![zyntax_typed_ast::typed_ast::TypedParameter {
+                name: InternedString::new_global("v"),
+                ty: ty.clone(),
+                ..Default::default()
+            }],
+            return_type: Type::Primitive(PrimitiveType::Unit),
+            body: Some(block(vec![stmt(TypedStatement::Expression(Box::new(
+                binary(
+                    BinaryOp::Assign,
+                    self_field(f.name, ty.clone()),
+                    TypedNode::new(
+                        TypedExpression::Variable(InternedString::new_global("v")),
+                        ty.clone(),
+                        Span::default(),
+                    ),
+                    Type::Primitive(PrimitiveType::Unit),
+                ),
+            )))])),
             ..Default::default()
         });
     }
@@ -354,9 +487,20 @@ fn events_effect(fsm: &str, def: &FsmDefinition) -> TypedEffect {
         let Some(name) = f.name.resolve_global() else {
             continue;
         };
+        let ty = ctx_field_type(f);
         operations.push(TypedEffectOp {
             name: InternedString::new_global(&ctx_get_op_name(fsm, &name)),
-            return_type: ctx_field_type(f),
+            return_type: ty.clone(),
+            ..Default::default()
+        });
+        operations.push(TypedEffectOp {
+            name: InternedString::new_global(&ctx_set_op_name(fsm, &name)),
+            params: vec![zyntax_typed_ast::typed_ast::TypedParameter {
+                name: InternedString::new_global("v"),
+                ty: ty.clone(),
+                ..Default::default()
+            }],
+            return_type: Type::Primitive(PrimitiveType::Unit),
             ..Default::default()
         });
     }
@@ -397,6 +541,11 @@ fn ctx_field_default(f: &crate::fsm_registry::ContextField) -> TypedNode<TypedEx
 }
 
 fn machine_fn(fsm: &str, def: &FsmDefinition, states: &[String]) -> TypedFunction {
+    let ctx_fields: Vec<(String, Type)> = def
+        .context_fields
+        .iter()
+        .filter_map(|f| Some((f.name.resolve_global()?.to_string(), ctx_field_type(f))))
+        .collect();
     let code_of = |name: InternedString| -> Option<u32> {
         let n = name.resolve_global()?;
         states.iter().position(|s| *s == *n).map(|i| i as u32)
@@ -474,8 +623,19 @@ fn machine_fn(fsm: &str, def: &FsmDefinition, states: &[String]) -> TypedFunctio
             then_block: block({
                 let mut arm = vec![assign_state(to)];
                 for action in &t.actions {
-                    if let blinc_runtime::fsm::TransitionAction::Symbol(sym) = action {
-                        arm.push(call_action(sym));
+                    let blinc_runtime::fsm::TransitionAction::Symbol(sym) = action else {
+                        continue;
+                    };
+                    // The authored body, with `ctx.<field>` lowered to
+                    // performs, inlined here rather than called: the
+                    // lifted fn writes module-level signals, and the
+                    // machine's context lives in its handler.
+                    match take_action_body(sym) {
+                        Some(mut body) => {
+                            ctx_to_performs(fsm, &ctx_fields, &mut body);
+                            arm.extend(body.statements);
+                        }
+                        None => arm.push(call_action(sym)),
                     }
                 }
                 arm

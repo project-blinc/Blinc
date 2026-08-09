@@ -146,25 +146,51 @@ fsm Tally {
 "#;
 
 #[test]
-fn a_transition_body_runs_on_the_step_that_takes_it() {
+fn a_transition_body_no_longer_writes_a_module_level_signal() {
     let dsl = compiled(COUNTER, "tally.blinc");
     let m = dsl.fsm_machine("Tally").expect("construct");
     let signal = format!("tally.__fsm_ctx_{}_{}", "Tally", "total");
 
+    for _ in 0..3 {
+        dsl.step_fsm_machine("Tally", m, event_code(0))
+            .expect("step");
+    }
     assert_eq!(
         blinc_runtime::signal::get_i32(&signal),
         Some(0),
-        "the declared default seeds the context signal",
+        "the context moved onto the handler, so the old global stays at \
+         its seeded default",
     );
+    dsl.drop_fsm_machine(m).expect("drop");
+}
 
-    for expect in [5, 10, 15] {
-        dsl.step_fsm_machine("Tally", m, event_code(0))
-            .expect("step");
-        assert_eq!(
-            blinc_runtime::signal::get_i32(&signal),
-            Some(expect),
-            "each step runs the body once",
-        );
-    }
+/// The end of the delegation path: step a machine, then read the field
+/// back through the FSM that owns it.
+///
+/// BLOCKED, and the blocker is upstream. `bind_fiber_handler` allocates
+/// the handler's state once and joins it to the MACHINE's saved handler
+/// segment, so that context is reachable only from inside a resume of
+/// that fiber. `push_effect_handler` allocates a fresh instance, so a
+/// read outside the machine sees a zeroed context rather than the one
+/// the machine has been writing.
+///
+/// Closing it needs a handler INSTANCE the host can install in two
+/// places -- around the machine's step and around the component's
+/// render -- which neither entry point offers today.
+#[test]
+#[ignore = "a fiber-bound handler's state is not reachable outside the fiber"]
+fn a_context_field_reads_back_through_the_fsm() {
+    let dsl = compiled(COUNTER, "tally_read.blinc");
+    let m = dsl.fsm_machine("Tally").expect("construct");
+    dsl.step_fsm_machine("Tally", m, event_code(0))
+        .expect("step");
+
+    let seen = dsl
+        .with_fsm_context("Tally", || {
+            // Would call a compiled reader that performs `Tally$get_total`.
+            0i32
+        })
+        .expect("scoped read");
+    assert_eq!(seen, 5, "the machine wrote 5 into the context it owns");
     dsl.drop_fsm_machine(m).expect("drop");
 }

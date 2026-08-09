@@ -1298,12 +1298,20 @@ pub(crate) fn synthesize_fsm_context_and_actions(program: &mut TypedProgram) {
                         let TypedExpression::Block(action_block) = body_arg.node else {
                             continue;
                         };
+                        let fn_name_str = format!("__fsm_action_{fsm_name_str}_{action_idx}__");
+                        // Stash the body with `ctx.<field>` still intact.
+                        // The rewrite below turns those into module-level
+                        // signal reads, which is the shape the registry
+                        // path needs; the machine wants them as performs
+                        // against the handler that owns the context, and
+                        // only the un-rewritten body can become either.
+                        crate::passes::stash_action_body(&fn_name_str, &action_block);
+
                         // Apply ctx-rewrite to the lifted body before
                         // it leaves this FSM's scope.
                         let mut rewritten = action_block;
                         rewrite_fsm_ctx_access_block(fsm_name_str, &mut rewritten);
 
-                        let fn_name_str = format!("__fsm_action_{fsm_name_str}_{action_idx}__");
                         let fn_name = InternedString::new_global(&fn_name_str);
                         action_lifts.push(ActionLift {
                             fn_name,
