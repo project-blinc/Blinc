@@ -688,3 +688,26 @@ pub(crate) extern "C" fn blinc_dsl_list_clear(name_ptr: *const i32) {
     };
     blinc_runtime::signal::clear_string_list(name);
 }
+
+// =====================================================================
+// FSM machines — the event a fiber's handler takes
+// =====================================================================
+
+/// Event code the next `<Fsm>$next_event()` performs will answer with.
+///
+/// Set by the host immediately before resuming a machine, so the value
+/// belongs to that resume. One slot rather than a queue per machine:
+/// stepping is sequential, and the host knows which fiber it is about
+/// to drive.
+static PENDING_EVENT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+/// Arm the event the next machine step will read.
+pub fn set_pending_fsm_event(code: i64) {
+    PENDING_EVENT.store(code, std::sync::atomic::Ordering::Release);
+}
+
+/// `__blinc_fsm_next_event()` — the body of every synthesized
+/// `<Fsm>$HostEvents` handler.
+pub(crate) extern "C" fn blinc_fsm_next_event() -> i64 {
+    PENDING_EVENT.load(std::sync::atomic::Ordering::Acquire)
+}

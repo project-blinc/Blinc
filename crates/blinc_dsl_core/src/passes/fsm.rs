@@ -887,6 +887,12 @@ pub(crate) fn populate_fsm_registry_pass(
         imp.methods
             .retain(|m| m.name.resolve_global().as_deref() != Some("__fsm_meta__"));
     }
+
+    // Step 5: the same machines again, as fibers. Additive — nothing
+    // consumes them yet, and the registry above still drives every
+    // mounted FSM. Emitted here because this is where the definitions
+    // exist in one place.
+    crate::passes::synthesize_fsm_fibers(program, &found[..]);
 }
 
 /// Synthesise a sibling `<FSM>Event` enum for every fsm with transitions.

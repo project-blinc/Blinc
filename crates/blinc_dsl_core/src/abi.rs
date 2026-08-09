@@ -237,6 +237,14 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             ptr: blinc_signal_set_by_id_bool as *const u8,
         },
         BuiltinDescriptor {
+            // Body of every synthesized `<Fsm>$HostEvents` handler: the
+            // event code the host armed before this resume.
+            name: "__blinc_fsm_next_event",
+            param_types: &[],
+            return_type: Type::Primitive(PrimitiveType::I64),
+            ptr: crate::host::blinc_fsm_next_event as *const u8,
+        },
+        BuiltinDescriptor {
             // `<FsmName>.trigger("State.Event")` lowered by `resolve_fsm_trigger_calls`.
             name: "__fsm_runtime_trigger__",
             param_types: &[

@@ -32,6 +32,8 @@ pub mod core_widgets;
 mod fsm_registry;
 mod host;
 mod passes;
+
+pub use host::set_pending_fsm_event;
 mod read_scope;
 
 /// Region id for the whole-program `@stateful` render's read scope.
