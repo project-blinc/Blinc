@@ -1860,6 +1860,17 @@ impl BlincDsl {
         })
     }
 
+    /// Whether the running program has a resolvable handler by this
+    /// name. Diagnostic: a synthesized handler that never reaches the
+    /// module is indistinguishable at the call site from one that does.
+    pub fn effect_handler_present(&self, name: &str) -> bool {
+        let mut runtime = self
+            .runtime
+            .lock()
+            .expect("BlincDsl runtime mutex poisoned");
+        runtime.get_effect_handler(name).is_ok()
+    }
+
     /// Free a machine. What a component does when it unmounts.
     pub fn drop_fsm_machine(&self, machine: zyntax_embed::FiberToken) -> BlincDslResult<()> {
         let mut runtime = self

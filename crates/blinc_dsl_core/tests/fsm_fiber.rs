@@ -44,7 +44,6 @@ fn an_fsm_becomes_a_constructible_machine() {
 /// The machine starts in the declared initial state and advances on the
 /// event the transition table names.
 #[test]
-#[ignore = "the synthesized perform does not reach the synthesized handler"]
 fn a_machine_starts_at_initial_and_advances_on_its_event() {
     let dsl = compiled(TOGGLE, "toggle_feed.blinc");
     let m = dsl.fsm_machine("Toggle").expect("construct");
@@ -87,7 +86,6 @@ fn an_event_with_no_rule_for_this_state_does_nothing() {
 /// separate state. The registry path keys the state cell by the FSM's
 /// name, so this is the case it cannot express.
 #[test]
-#[ignore = "the synthesized perform does not reach the synthesized handler"]
 fn two_instances_of_one_fsm_do_not_share_state() {
     let dsl = compiled(TOGGLE, "toggle_two.blinc");
     let a = dsl.fsm_machine("Toggle").expect("construct a");
@@ -116,4 +114,16 @@ fn two_instances_of_one_fsm_do_not_share_state() {
 
     dsl.drop_fsm_machine(a).expect("drop a");
     dsl.drop_fsm_machine(b).expect("drop b");
+}
+
+/// Do the synthesized declarations survive into the compiled module?
+/// `get_effect_handler` reads the module's handler table, so a token
+/// here means the handler is present and resolvable.
+#[test]
+fn the_synthesized_handler_is_in_the_compiled_module() {
+    let dsl = compiled(TOGGLE, "toggle_present.blinc");
+    assert!(
+        dsl.effect_handler_present("Toggle$HostEvents"),
+        "the pass emits the handler but it is not in the module",
+    );
 }

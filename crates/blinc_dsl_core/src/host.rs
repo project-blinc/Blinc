@@ -693,21 +693,28 @@ pub(crate) extern "C" fn blinc_dsl_list_clear(name_ptr: *const i32) {
 // FSM machines — the event a fiber's handler takes
 // =====================================================================
 
-/// Event code the next `<Fsm>$next_event()` performs will answer with.
-///
-/// Set by the host immediately before resuming a machine, so the value
-/// belongs to that resume. One slot rather than a queue per machine:
-/// stepping is sequential, and the host knows which fiber it is about
-/// to drive.
-static PENDING_EVENT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+thread_local! {
+    /// Event code the next `<Fsm>$next_event()` perform answers with.
+    ///
+    /// Armed immediately before a resume, so the value belongs to that
+    /// resume. One slot rather than a queue per machine: a step is
+    /// arm-then-resume with nothing in between, and the host knows
+    /// which fiber it is about to drive.
+    ///
+    /// Per-thread because that pairing is what makes one slot safe. A
+    /// process-global slot lets a second thread arm between another's
+    /// arm and resume, which is a machine taking an event meant for a
+    /// different one.
+    static PENDING_EVENT: std::cell::Cell<i64> = const { std::cell::Cell::new(0) };
+}
 
-/// Arm the event the next machine step will read.
+/// Arm the event the next machine step on this thread will read.
 pub fn set_pending_fsm_event(code: i64) {
-    PENDING_EVENT.store(code, std::sync::atomic::Ordering::Release);
+    PENDING_EVENT.with(|e| e.set(code));
 }
 
 /// `__blinc_fsm_next_event()` — the body of every synthesized
 /// `<Fsm>$HostEvents` handler.
 pub(crate) extern "C" fn blinc_fsm_next_event() -> i64 {
-    PENDING_EVENT.load(std::sync::atomic::Ordering::Acquire)
+    PENDING_EVENT.with(|e| e.get())
 }

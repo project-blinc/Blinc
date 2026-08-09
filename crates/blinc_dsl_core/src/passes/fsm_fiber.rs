@@ -66,6 +66,10 @@ pub(crate) fn host_events_handler_name(fsm: &str) -> String {
     format!("{fsm}$HostEvents")
 }
 
+/// Multiplier separating a state from an event in the dispatch key.
+/// Clears the runtime's event-code offset so the two never overlap.
+const STATE_STRIDE: i64 = 1 << 33;
+
 /// Host symbol every handler body calls for its event code.
 pub(crate) const NEXT_EVENT_EXTERN: &str = "__blinc_fsm_next_event";
 
@@ -312,31 +316,40 @@ fn machine_fn(fsm: &str, def: &FsmDefinition, states: &[String]) -> TypedFunctio
         span: Span::default(),
     }));
 
-    // One arm per from-state, holding that state's rules in declaration
-    // order. First match wins, which is what the registry does.
+    // `let key: i64 = state * STATE_STRIDE + ev` — one comparison per
+    // rule instead of a state test wrapping an event test.
+    //
+    // Nesting an `if` inside an `if` inside the loop leaves the
+    // assignment invisible to the loop's join, so the machine never
+    // advances; `&&` in the condition faults the Cranelift tier. Both
+    // are upstream, and both are avoided by making each rule a single
+    // equality at the loop's top level.
+    //
+    // Event codes carry the runtime's high offset, so the stride has to
+    // clear them: a state contributes a multiple of 2^33, an event
+    // stays under 2^32, and the two never overlap.
     let mut body = vec![take_event];
-    for from_code in 0..states.len() as u32 {
-        let arms: Vec<TypedNode<TypedStatement>> = def
-            .transitions
-            .iter()
-            .filter(|t| code_of(t.from) == Some(from_code))
-            .filter_map(|t| {
-                let ev = event_code_of(t.event)?;
-                let to = code_of(t.to)?;
-                Some(stmt(TypedStatement::If(TypedIf {
-                    condition: Box::new(eq(var("ev"), int(ev as i64))),
-                    then_block: block(vec![assign_state(to)]),
-                    else_block: None,
-                    span: Span::default(),
-                })))
-            })
-            .collect();
-        if arms.is_empty() {
+    body.push(stmt(TypedStatement::Let(TypedLet {
+        name: InternedString::new_global("key"),
+        ty: i64_ty(),
+        initializer: Some(Box::new(binary(
+            BinaryOp::Add,
+            binary(BinaryOp::Mul, var("state"), int(STATE_STRIDE), i64_ty()),
+            var("ev"),
+            i64_ty(),
+        ))),
+        mutability: Mutability::Immutable,
+        span: Span::default(),
+    })));
+    for t in &def.transitions {
+        let (Some(from), Some(ev), Some(to)) =
+            (code_of(t.from), event_code_of(t.event), code_of(t.to))
+        else {
             continue;
-        }
+        };
         body.push(stmt(TypedStatement::If(TypedIf {
-            condition: Box::new(eq(var("state"), int(from_code as i64))),
-            then_block: block(arms),
+            condition: Box::new(eq(var("key"), int(from as i64 * STATE_STRIDE + ev as i64))),
+            then_block: block(vec![assign_state(to)]),
             else_block: None,
             span: Span::default(),
         })));
