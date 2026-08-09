@@ -30,6 +30,98 @@ extern crate self as blinc_dsl_core;
 mod abi;
 pub mod core_widgets;
 mod fsm_registry;
+/// Machine operations, over the two pieces of state they need rather
+/// than over `BlincDsl`, so the `MachineDriver` installed into
+/// `blinc_runtime` can call them without holding the whole DSL.
+pub(crate) mod machines {
+    use super::{BlincDslError, BlincDslResult, passes};
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+    use zyntax_embed::{FiberToken, HandlerInstance, TieredRuntime};
+
+    pub(crate) type Instances = Arc<Mutex<HashMap<FiberToken, HandlerInstance>>>;
+    pub(crate) type Runtime = Arc<Mutex<TieredRuntime>>;
+
+    /// Construct a machine and give it its own handler instance, bound
+    /// so the context survives events and pushable so a read sees the
+    /// same storage.
+    pub(crate) fn create(rt: &Runtime, inst: &Instances, fsm: &str) -> BlincDslResult<FiberToken> {
+        let mut runtime = rt.lock().expect("BlincDsl runtime mutex poisoned");
+        let machine = runtime
+            .get_fiber(&passes::machine_fn_name(fsm))
+            .map_err(BlincDslError::from)?;
+        let token = runtime
+            .get_effect_handler(&passes::host_events_handler_name(fsm))
+            .map_err(BlincDslError::from)?;
+        let instance = runtime
+            .new_handler_instance(token)
+            .map_err(BlincDslError::from)?;
+        runtime
+            .bind_fiber_handler_instance(machine, instance)
+            .map_err(BlincDslError::from)?;
+        drop(runtime);
+        inst.lock()
+            .expect("fsm_instances mutex poisoned")
+            .insert(machine, instance);
+        Ok(machine)
+    }
+
+    /// Deliver an event and run the machine to its next suspension.
+    pub(crate) fn step(
+        rt: &Runtime,
+        machine: FiberToken,
+        event_code: u32,
+    ) -> BlincDslResult<Option<u32>> {
+        let mut runtime = rt.lock().expect("BlincDsl runtime mutex poisoned");
+        // Armed under the same lock that drives the step, so another
+        // machine cannot arm over this one between the two.
+        crate::host::set_pending_fsm_event(event_code as i64);
+        let step = runtime.resume_fiber(machine).map_err(BlincDslError::from)?;
+        Ok(match step {
+            zyntax_embed::HostFiberStep::Yielded(zyntax_embed::ZyntaxValue::Int(code)) => {
+                Some(code as u32)
+            }
+            _ => None,
+        })
+    }
+
+    /// Run `f` with `machine`'s handler instance installed. The frame
+    /// pops before the result is inspected, so an error still leaves the
+    /// thread's handler stack as it was.
+    pub(crate) fn with_handler<T>(
+        rt: &Runtime,
+        inst: &Instances,
+        machine: FiberToken,
+        f: impl FnOnce(&TieredRuntime) -> zyntax_embed::RuntimeResult<T>,
+    ) -> BlincDslResult<T> {
+        let instance = *inst
+            .lock()
+            .expect("fsm_instances mutex poisoned")
+            .get(&machine)
+            .ok_or_else(|| BlincDslError::Compile("unknown machine".to_string()))?;
+        let runtime = rt.lock().expect("BlincDsl runtime mutex poisoned");
+        let frame = runtime
+            .push_handler_instance(instance)
+            .map_err(BlincDslError::from)?;
+        let out = f(&runtime);
+        runtime.pop_effect_handler(frame);
+        out.map_err(BlincDslError::from)
+    }
+
+    /// Free a machine and forget its instance handle.
+    pub(crate) fn release(
+        rt: &Runtime,
+        inst: &Instances,
+        machine: FiberToken,
+    ) -> BlincDslResult<()> {
+        inst.lock()
+            .expect("fsm_instances mutex poisoned")
+            .remove(&machine);
+        let mut runtime = rt.lock().expect("BlincDsl runtime mutex poisoned");
+        runtime.drop_fiber(machine).map_err(BlincDslError::from)
+    }
+}
+
 mod host;
 mod passes;
 
@@ -317,6 +409,15 @@ impl BlincDsl {
         blinc_runtime::fsm::set_guard_dispatcher(std::sync::Arc::new(JitGuardDispatcher {
             runtime: self.runtime.clone(),
         }));
+        // The fiber-backed path. Installed alongside rather than
+        // instead: the registry still drives every mounted FSM, and a
+        // caller reaches machines only by asking for one.
+        blinc_runtime::fsm::set_machine_driver(std::sync::Arc::new(
+            crate::runtime_bridge::JitMachineDriver::new(
+                self.runtime.clone(),
+                self.fsm_instances.clone(),
+            ),
+        ));
     }
 
     /// Register a Rust widget that implements [`ExternWidget`]. Primary Rust→DSL surface.
@@ -1834,32 +1935,7 @@ impl BlincDsl {
     /// identity: two calls give two machines with separate state, which
     /// is what a name-keyed state cell cannot express.
     pub fn fsm_machine(&self, fsm: &str) -> BlincDslResult<zyntax_embed::FiberToken> {
-        let mut runtime = self
-            .runtime
-            .lock()
-            .expect("BlincDsl runtime mutex poisoned");
-        let machine = runtime
-            .get_fiber(&passes::machine_fn_name(fsm))
-            .map_err(BlincDslError::from)?;
-        let token = runtime
-            .get_effect_handler(&passes::host_events_handler_name(fsm))
-            .map_err(BlincDslError::from)?;
-        // One instance per machine, installed in both places: bound to
-        // the fiber so the context survives across events, and pushed
-        // around a read so the caller sees the same storage rather than
-        // a fresh one.
-        let instance = runtime
-            .new_handler_instance(token)
-            .map_err(BlincDslError::from)?;
-        runtime
-            .bind_fiber_handler_instance(machine, instance)
-            .map_err(BlincDslError::from)?;
-        drop(runtime);
-        self.fsm_instances
-            .lock()
-            .expect("fsm_instances mutex poisoned")
-            .insert(machine, instance);
-        Ok(machine)
+        machines::create(&self.runtime, &self.fsm_instances, fsm)
     }
 
     /// Read context field `field` of the FSM `machine` runs.

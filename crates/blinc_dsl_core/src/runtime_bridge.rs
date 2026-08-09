@@ -6,6 +6,7 @@
 // LLVM AOT) write to the same `FsmRegistry` and install their own dispatcher.
 
 use super::*;
+use zyntax_embed::FiberToken;
 
 /// JIT `GuardDispatcher` — routes tick-guard calls through `TieredRuntime`.
 /// Lifted guards return `i32` (1 = fires, 0 = doesn't).
@@ -623,5 +624,92 @@ pub(crate) fn publish_fsms_to_runtime_registry(program: &TypedProgram) {
                 }
             }
         }
+    }
+}
+
+/// JIT `MachineDriver` — the fiber-backed FSM path.
+///
+/// Holds the two pieces of state a machine needs rather than the whole
+/// `BlincDsl`: the runtime it lives in, and the handler instance that
+/// carries its context.
+///
+/// The `u64` crossing the seam is this driver's own handle, not a
+/// `FiberToken`: `blinc_runtime` needs no Zyntax types, the same reason
+/// `GuardDispatcher` passes symbol names rather than function pointers.
+/// A handle means nothing outside the map that issued it.
+pub(crate) struct JitMachineDriver {
+    pub(crate) runtime: crate::machines::Runtime,
+    pub(crate) instances: crate::machines::Instances,
+    handles: Mutex<std::collections::HashMap<u64, FiberToken>>,
+    next: std::sync::atomic::AtomicU64,
+}
+
+impl JitMachineDriver {
+    pub(crate) fn new(
+        runtime: crate::machines::Runtime,
+        instances: crate::machines::Instances,
+    ) -> Self {
+        Self {
+            runtime,
+            instances,
+            handles: Mutex::new(std::collections::HashMap::new()),
+            next: std::sync::atomic::AtomicU64::new(1),
+        }
+    }
+
+    fn issue(&self, token: FiberToken) -> u64 {
+        let h = self.next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.handles
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(h, token);
+        h
+    }
+
+    fn token(&self, handle: u64) -> Option<FiberToken> {
+        self.handles
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&handle)
+            .copied()
+    }
+}
+
+// SAFETY: same reasoning as `JitGuardDispatcher` — the runtime behind
+// this is `!Send + !Sync` and serialised by its own mutex.
+unsafe impl Send for JitMachineDriver {}
+unsafe impl Sync for JitMachineDriver {}
+
+impl blinc_runtime::fsm::MachineDriver for JitMachineDriver {
+    fn machine_for(&self, fsm: &str) -> Option<u64> {
+        crate::machines::create(&self.runtime, &self.instances, fsm)
+            .ok()
+            .map(|t| self.issue(t))
+    }
+
+    fn step(&self, _fsm: &str, machine: u64, event_code: u32) -> Option<u32> {
+        crate::machines::step(&self.runtime, self.token(machine)?, event_code)
+            .ok()
+            .flatten()
+    }
+
+    fn context_signal_id(&self, fsm: &str, machine: u64, field: &str) -> Option<u64> {
+        crate::machines::with_handler(&self.runtime, &self.instances, self.token(machine)?, |rt| {
+            rt.call::<i64>(&crate::passes::ctx_id_reader_fn_name(fsm, field), &[])
+        })
+        .ok()
+        .map(|v| v as u64)
+    }
+
+    fn drop_machine(&self, machine: u64) {
+        let Some(token) = self
+            .handles
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&machine)
+        else {
+            return;
+        };
+        let _ = crate::machines::release(&self.runtime, &self.instances, token);
     }
 }

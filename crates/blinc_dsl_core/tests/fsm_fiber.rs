@@ -397,3 +397,40 @@ fn two_machines_expose_different_signal_ids() {
     dsl.drop_fsm_machine(a).expect("drop a");
     dsl.drop_fsm_machine(b).expect("drop b");
 }
+
+/// The seam the widget layer will use.
+///
+/// `blinc_runtime` owns the widget-side FSM substrate and cannot depend
+/// on the DSL, so machines reach it through an installed driver — the
+/// same shape as `GuardDispatcher`. These drive a machine entirely
+/// through that trait, with no `BlincDsl` in hand.
+#[test]
+fn a_machine_drives_through_the_runtime_seam() {
+    let dsl = compiled(COUNTER, "tally_seam.blinc");
+    dsl.install_runtime_bridge();
+
+    let driver = blinc_runtime::fsm::machine_driver().expect("a driver is installed");
+    let a = driver.machine_for("Tally").expect("construct a");
+    let b = driver.machine_for("Tally").expect("construct b");
+    assert_ne!(a, b, "two mounts, two machines");
+
+    for _ in 0..2 {
+        driver.step("Tally", a, event_code(0)).expect("step a");
+    }
+    driver.step("Tally", b, event_code(0)).expect("step b");
+
+    let ia = driver
+        .context_signal_id("Tally", a, "total")
+        .expect("a's signal");
+    let ib = driver
+        .context_signal_id("Tally", b, "total")
+        .expect("b's signal");
+    assert_ne!(ia, ib, "each machine binds to its own signal");
+
+    // Read through the graph, which is where a binding would read.
+    assert_eq!(blinc_runtime::signal::get_i32_by_id(ia), Some(10));
+    assert_eq!(blinc_runtime::signal::get_i32_by_id(ib), Some(5));
+
+    driver.drop_machine(a);
+    driver.drop_machine(b);
+}

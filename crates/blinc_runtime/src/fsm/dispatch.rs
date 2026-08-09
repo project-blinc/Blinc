@@ -216,3 +216,65 @@ mod tests {
         clear_guard_dispatcher();
     }
 }
+
+// =====================================================================
+// Machine driving — the fiber-backed path
+// =====================================================================
+
+/// Drives an FSM that was lowered to a fiber, for hosts that compile one.
+///
+/// The registry path keys a machine's state cell by the FSM's NAME, so
+/// one FSM has one instance for the process. A fiber has no name to
+/// collide over: a mount constructs a machine, holds the token, and two
+/// mounts hold two machines with separate state and separate context.
+///
+/// Installed by whichever layer owns the compiled program, the same way
+/// [`GuardDispatcher`] is. Absent, the registry path runs unchanged.
+pub trait MachineDriver: Send + Sync + 'static {
+    /// Construct a machine for `fsm`. `None` when the program has none,
+    /// which is every program compiled before the fiber lowering and
+    /// any FSM whose states could not be derived.
+    fn machine_for(&self, fsm: &str) -> Option<u64>;
+
+    /// Deliver `event_code` and run the machine to its next suspension,
+    /// answering with the state code it settled in. `None` means the
+    /// machine finished or its code is gone — a caller's cue to drop
+    /// and remount rather than to retry.
+    fn step(&self, fsm: &str, machine: u64, event_code: u32) -> Option<u32>;
+
+    /// The signal id behind `field` of `machine`'s context.
+    ///
+    /// Per instance, so a binding asks for it rather than resolving a
+    /// name — there is no name to resolve.
+    fn context_signal_id(&self, fsm: &str, machine: u64, field: &str) -> Option<u64>;
+
+    /// Release a machine. What a component does when it unmounts.
+    fn drop_machine(&self, machine: u64);
+}
+
+static GLOBAL_MACHINE_DRIVER: OnceLock<std::sync::RwLock<Option<Arc<dyn MachineDriver>>>> =
+    OnceLock::new();
+
+fn machine_slot() -> &'static std::sync::RwLock<Option<Arc<dyn MachineDriver>>> {
+    GLOBAL_MACHINE_DRIVER.get_or_init(|| std::sync::RwLock::new(None))
+}
+
+/// Install the driver. Replaces any previous one, so a hot reload that
+/// rebuilds the program installs the new one over the old.
+pub fn set_machine_driver(driver: Arc<dyn MachineDriver>) {
+    if let Ok(mut slot) = machine_slot().write() {
+        *slot = Some(driver);
+    }
+}
+
+/// Remove the driver, returning the registry path to being the only one.
+pub fn clear_machine_driver() {
+    if let Ok(mut slot) = machine_slot().write() {
+        *slot = None;
+    }
+}
+
+/// The installed driver, if a host compiled machines.
+pub fn machine_driver() -> Option<Arc<dyn MachineDriver>> {
+    machine_slot().read().ok().and_then(|s| s.clone())
+}

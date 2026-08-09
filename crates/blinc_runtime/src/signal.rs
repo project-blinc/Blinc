@@ -493,6 +493,24 @@ pub fn get_string_list(name: &str) -> Option<Vec<String>> {
     Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).try_get()
 }
 
+/// Read an i32 signal by raw id.
+///
+/// For a caller holding an id rather than a name — an FSM machine's
+/// context field, whose signal is per instance and has no name.
+pub fn get_i32_by_id(id_raw: u64) -> Option<i32> {
+    Signal::<i32>::from_id(SignalId::from_raw(id_raw)).try_get()
+}
+
+/// f64 mirror of [`get_i32_by_id`].
+pub fn get_f64_by_id(id_raw: u64) -> Option<f64> {
+    Signal::<f64>::from_id(SignalId::from_raw(id_raw)).try_get()
+}
+
+/// bool mirror of [`get_i32_by_id`].
+pub fn get_bool_by_id(id_raw: u64) -> Option<bool> {
+    Signal::<bool>::from_id(SignalId::from_raw(id_raw)).try_get()
+}
+
 /// Read by raw signal id, for the extern that only has the baked id.
 pub fn get_string_list_by_id(id_raw: u64) -> Option<Vec<String>> {
     Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).try_get()
