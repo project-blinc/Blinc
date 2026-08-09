@@ -28,13 +28,19 @@
 //! the registry path uses, so a body that reads the state sees the one
 //! it transitioned into.
 //!
-//! Context fields belong to the handler, which is what owns them: its
-//! state is allocated per instance and the host installs that instance
-//! both around the machine's steps and around a read, so two machines
-//! hold two contexts. `ctx.<field>` in a transition body lowers to a
-//! perform, and a compiled `<Fsm>$read_<field>` gives the host
+//! Context fields belong to the handler, which holds each field's
+//! SIGNAL ID rather than its value. `H$new` runs per handler instance,
+//! so two machines mint two signals and neither is reachable by name;
+//! the value and its subscribers stay in the reactive graph, so a write
+//! travels the same path every other signal write does and anything
+//! bound to it hears. Holding the value in handler state instead gave
+//! correct per-instance context that nothing could observe.
+//!
+//! `ctx.<field>` in a transition body lowers to a perform, and compiled
+//! `<Fsm>$read_<field>` / `<Fsm>$readid_<field>` give the host
 //! something to call inside a pushed scope, since it cannot perform on
-//! its own.
+//! its own. A widget binds to the id, which is why there is a reader
+//! for it.
 //!
 //! Tick guards evaluate when the host sends [`TICK_EVENT_CODE`]. A guard
 //! is a condition on top of the state test, which is the nested shape
@@ -87,6 +93,19 @@ pub(crate) fn ctx_get_op_name(fsm: &str, field: &str) -> String {
 /// Operation writing context field `field`.
 pub(crate) fn ctx_set_op_name(fsm: &str, field: &str) -> String {
     format!("{fsm}$set_{field}")
+}
+
+/// Operation reading the SIGNAL ID behind context field `field`.
+///
+/// What a widget binds to. The id is per instance, so a binding has to
+/// ask the machine rather than resolve a name.
+pub(crate) fn ctx_id_op_name(fsm: &str, field: &str) -> String {
+    format!("{fsm}$id_{field}")
+}
+
+/// Compiled reader for the signal id behind `field`.
+pub(crate) fn ctx_id_reader_fn_name(fsm: &str, field: &str) -> String {
+    format!("{fsm}$readid_{field}")
 }
 
 /// Compiled reader for context field `field`.
@@ -233,6 +252,48 @@ const STATE_STRIDE: i64 = 1 << 33;
 
 /// Host symbol every handler body calls for its event code.
 pub(crate) const NEXT_EVENT_EXTERN: &str = "__blinc_fsm_next_event";
+
+/// Extern that mints one instance's signal for a field of this type,
+/// plus the graph accessors its ops route through.
+fn field_externs(ty: &Type) -> Option<(&'static str, &'static str, &'static str)> {
+    Some(match ty {
+        Type::Primitive(PrimitiveType::I32) => (
+            "__blinc_mint_fsm_signal_i32",
+            "__signal_get_by_id_i32",
+            "__signal_set_by_id_i32",
+        ),
+        Type::Primitive(PrimitiveType::F64) => (
+            "__blinc_mint_fsm_signal_f64",
+            "__signal_get_by_id_f64",
+            "__signal_set_by_id_f64",
+        ),
+        Type::Primitive(PrimitiveType::Bool) => (
+            "__blinc_mint_fsm_signal_bool",
+            "__signal_get_by_id_bool",
+            "__signal_set_by_id_bool",
+        ),
+        _ => return None,
+    })
+}
+
+/// `<extern>(<args>)`
+fn call(name: &str, args: Vec<TypedNode<TypedExpression>>, ty: Type) -> TypedNode<TypedExpression> {
+    TypedNode::new(
+        TypedExpression::Call(TypedCall {
+            callee: Box::new(var(name)),
+            positional_args: args,
+            named_args: Vec::new(),
+            type_args: Vec::new(),
+        }),
+        ty,
+        Span::default(),
+    )
+}
+
+/// The handler field holding a context field's signal id.
+fn id_field_name(field: &str) -> String {
+    format!("{field}_id")
+}
 
 fn i64_ty() -> Type {
     Type::Primitive(PrimitiveType::I64)
@@ -422,20 +483,54 @@ pub(crate) fn synthesize_fsm_fibers(
     if emit.is_empty() {
         return;
     }
-    // `extern fn __blinc_fsm_next_event(): i64` — the handler bodies
-    // call it, and lowering rejects a call to a function it has no
-    // declaration for. One declaration serves every machine.
-    program.declarations.push(TypedNode::new(
-        TypedDeclaration::Function(TypedFunction {
-            name: InternedString::new_global(NEXT_EVENT_EXTERN),
-            return_type: i64_ty(),
-            body: None,
-            is_external: true,
-            ..Default::default()
-        }),
-        Type::Unknown,
-        Span::default(),
-    ));
+    // Lowering rejects a call to a function it has no declaration for,
+    // and the synthesized handlers call host externs. Declare each one
+    // the emitted code can reach, once, whatever the FSMs need.
+    let mut externs: Vec<(String, Vec<Type>, Type)> =
+        vec![(NEXT_EVENT_EXTERN.to_string(), Vec::new(), i64_ty())];
+    for (_, def) in found {
+        for f in &def.context_fields {
+            let ty = ctx_field_type(f);
+            let Some((mint, get_by_id, set_by_id)) = field_externs(&ty) else {
+                continue;
+            };
+            externs.push((mint.to_string(), vec![ty.clone()], i64_ty()));
+            externs.push((get_by_id.to_string(), vec![i64_ty()], ty.clone()));
+            externs.push((
+                set_by_id.to_string(),
+                vec![i64_ty(), ty.clone()],
+                Type::Primitive(PrimitiveType::Unit),
+            ));
+        }
+    }
+    externs.dedup_by(|a, b| a.0 == b.0);
+    let mut seen: Vec<String> = Vec::new();
+    for (name, params, ret) in externs {
+        if seen.contains(&name) {
+            continue;
+        }
+        seen.push(name.clone());
+        program.declarations.push(TypedNode::new(
+            TypedDeclaration::Function(TypedFunction {
+                name: InternedString::new_global(&name),
+                params: params
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, ty)| zyntax_typed_ast::typed_ast::TypedParameter {
+                        name: InternedString::new_global(&format!("a{i}")),
+                        ty,
+                        ..Default::default()
+                    })
+                    .collect(),
+                return_type: ret,
+                body: None,
+                is_external: true,
+                ..Default::default()
+            }),
+            Type::Unknown,
+            Span::default(),
+        ));
+    }
     for (effect, handler, machine) in emit {
         program.declarations.push(TypedNode::new(
             TypedDeclaration::Effect(effect),
@@ -464,31 +559,45 @@ pub(crate) fn synthesize_fsm_fibers(
 
 /// `@effect(<Fsm>$Events) def <Fsm>$read_<field>(): T { return <Fsm>$get_<field>() }`
 fn ctx_readers(fsm: &str, def: &FsmDefinition) -> Vec<TypedFunction> {
-    def.context_fields
+    let mut out: Vec<TypedFunction> = def
+        .context_fields
         .iter()
         .filter_map(|f| {
             let name = f.name.resolve_global()?;
-            let ty = ctx_field_type(f);
             Some(TypedFunction {
-                name: InternedString::new_global(&ctx_reader_fn_name(fsm, &name)),
+                name: InternedString::new_global(&ctx_id_reader_fn_name(fsm, &name)),
                 effects: vec![InternedString::new_global(&events_effect_name(fsm))],
-                return_type: ty.clone(),
+                return_type: i64_ty(),
                 body: Some(block(vec![stmt(TypedStatement::Return(Some(Box::new(
-                    TypedNode::new(
-                        TypedExpression::Call(TypedCall {
-                            callee: Box::new(var(&ctx_get_op_name(fsm, &name))),
-                            positional_args: Vec::new(),
-                            named_args: Vec::new(),
-                            type_args: Vec::new(),
-                        }),
-                        ty,
-                        Span::default(),
-                    ),
+                    call(&ctx_id_op_name(fsm, &name), Vec::new(), i64_ty()),
                 ))))])),
                 ..Default::default()
             })
         })
-        .collect()
+        .collect();
+    out.extend(def.context_fields.iter().filter_map(|f| {
+        let name = f.name.resolve_global()?;
+        let ty = ctx_field_type(f);
+        Some(TypedFunction {
+            name: InternedString::new_global(&ctx_reader_fn_name(fsm, &name)),
+            effects: vec![InternedString::new_global(&events_effect_name(fsm))],
+            return_type: ty.clone(),
+            body: Some(block(vec![stmt(TypedStatement::Return(Some(Box::new(
+                TypedNode::new(
+                    TypedExpression::Call(TypedCall {
+                        callee: Box::new(var(&ctx_get_op_name(fsm, &name))),
+                        positional_args: Vec::new(),
+                        named_args: Vec::new(),
+                        type_args: Vec::new(),
+                    }),
+                    ty,
+                    Span::default(),
+                ),
+            ))))])),
+            ..Default::default()
+        })
+    }));
+    out
 }
 
 /// The handler that owns the FSM's context.
@@ -527,21 +636,38 @@ fn host_events_handler(fsm: &str, def: &FsmDefinition) -> TypedEffectHandler {
             continue;
         };
         let ty = ctx_field_type(f);
+        let Some((mint, get_by_id, set_by_id)) = field_externs(&ty) else {
+            continue;
+        };
+        // The field holds the signal's ID, not its value. `H$new` runs
+        // per handler instance, so two machines mint two signals and
+        // neither is reachable by name -- and a write goes through the
+        // graph, which is what notifies anything bound to it.
         fields.push(zyntax_typed_ast::typed_ast::TypedField {
-            name: f.name,
-            ty: ty.clone(),
-            initializer: Some(Box::new(ctx_field_default(f))),
+            name: InternedString::new_global(&id_field_name(&name)),
+            ty: i64_ty(),
+            initializer: Some(Box::new(call(mint, vec![ctx_field_default(f)], i64_ty()))),
             visibility: Default::default(),
             mutability: Mutability::Mutable,
             is_static: false,
             span: Span::default(),
         });
-        // `def <Fsm>$get_<field>(): T { return self.<field> }`
+        let id = || self_field(InternedString::new_global(&id_field_name(&name)), i64_ty());
+        // `def <Fsm>$get_<field>(): T { return __signal_get_by_id_T(self.<field>_id) }`
         handlers.push(TypedEffectHandlerImpl {
             op_name: InternedString::new_global(&ctx_get_op_name(fsm, &name)),
             return_type: ty.clone(),
             body: Some(block(vec![stmt(TypedStatement::Return(Some(Box::new(
-                self_field(f.name, ty.clone()),
+                call(get_by_id, vec![id()], ty.clone()),
+            ))))])),
+            ..Default::default()
+        });
+        // `def <Fsm>$id_<field>(): i64 { return self.<field>_id }`
+        handlers.push(TypedEffectHandlerImpl {
+            op_name: InternedString::new_global(&ctx_id_op_name(fsm, &name)),
+            return_type: i64_ty(),
+            body: Some(block(vec![stmt(TypedStatement::Return(Some(Box::new(
+                id(),
             ))))])),
             ..Default::default()
         });
@@ -554,15 +680,19 @@ fn host_events_handler(fsm: &str, def: &FsmDefinition) -> TypedEffectHandler {
                 ..Default::default()
             }],
             return_type: Type::Primitive(PrimitiveType::Unit),
+            // `__signal_set_by_id_T(self.<field>_id, v)` -- the write
+            // path every other signal uses, so a bound widget hears it.
             body: Some(block(vec![stmt(TypedStatement::Expression(Box::new(
-                binary(
-                    BinaryOp::Assign,
-                    self_field(f.name, ty.clone()),
-                    TypedNode::new(
-                        TypedExpression::Variable(InternedString::new_global("v")),
-                        ty.clone(),
-                        Span::default(),
-                    ),
+                call(
+                    set_by_id,
+                    vec![
+                        id(),
+                        TypedNode::new(
+                            TypedExpression::Variable(InternedString::new_global("v")),
+                            ty.clone(),
+                            Span::default(),
+                        ),
+                    ],
                     Type::Primitive(PrimitiveType::Unit),
                 ),
             )))])),
@@ -612,6 +742,11 @@ fn events_effect(fsm: &str, def: &FsmDefinition) -> TypedEffect {
         operations.push(TypedEffectOp {
             name: InternedString::new_global(&ctx_get_op_name(fsm, &name)),
             return_type: ty.clone(),
+            ..Default::default()
+        });
+        operations.push(TypedEffectOp {
+            name: InternedString::new_global(&ctx_id_op_name(fsm, &name)),
+            return_type: i64_ty(),
             ..Default::default()
         });
         operations.push(TypedEffectOp {

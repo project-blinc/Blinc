@@ -1878,6 +1878,20 @@ impl BlincDsl {
         machine: zyntax_embed::FiberToken,
         field: &str,
     ) -> BlincDslResult<T> {
+        self.with_machine_handler(machine, |rt| {
+            rt.call::<T>(&passes::ctx_reader_fn_name(fsm, field), &[])
+        })
+    }
+
+    /// Run `f` with `machine`'s handler instance installed.
+    ///
+    /// The frame pops before the result is inspected, so an error still
+    /// leaves the thread's handler stack as it was.
+    fn with_machine_handler<T>(
+        &self,
+        machine: zyntax_embed::FiberToken,
+        f: impl FnOnce(&zyntax_embed::TieredRuntime) -> zyntax_embed::RuntimeResult<T>,
+    ) -> BlincDslResult<T> {
         let instance = *self
             .fsm_instances
             .lock()
@@ -1891,9 +1905,7 @@ impl BlincDsl {
         let frame = runtime
             .push_handler_instance(instance)
             .map_err(BlincDslError::from)?;
-        let out = runtime.call::<T>(&passes::ctx_reader_fn_name(fsm, field), &[]);
-        // Popped before the result is inspected: an error still leaves
-        // the thread's handler stack as it was.
+        let out = f(&runtime);
         runtime.pop_effect_handler(frame);
         out.map_err(BlincDslError::from)
     }
@@ -1936,6 +1948,23 @@ impl BlincDsl {
             .lock()
             .expect("BlincDsl runtime mutex poisoned");
         runtime.get_effect_handler(name).is_ok()
+    }
+
+    /// The signal id behind `field` of the FSM `machine` runs.
+    ///
+    /// What a widget binds to. The id is per instance, so a binding
+    /// asks the machine for it rather than resolving a name -- which is
+    /// the whole point: there is no name to resolve.
+    pub fn fsm_context_signal_id(
+        &self,
+        fsm: &str,
+        machine: zyntax_embed::FiberToken,
+        field: &str,
+    ) -> BlincDslResult<u64> {
+        self.with_machine_handler(machine, |rt| {
+            rt.call::<i64>(&passes::ctx_id_reader_fn_name(fsm, field), &[])
+        })
+        .map(|v| v as u64)
     }
 
     /// Free a machine. What a component does when it unmounts.

@@ -718,3 +718,25 @@ pub fn set_pending_fsm_event(code: i64) {
 pub(crate) extern "C" fn blinc_fsm_next_event() -> i64 {
     PENDING_EVENT.with(|e| e.get())
 }
+
+/// `__blinc_mint_fsm_signal_<T>(default)` — a fresh signal for one FSM
+/// instance's context field.
+///
+/// Called from a handler's field initializer, so it runs once per
+/// handler instance: two machines mint two signals and neither is
+/// reachable by name. The id is what the handler stores; the value and
+/// its subscribers live in the reactive graph, so a write goes through
+/// the same notification path every other signal write does.
+pub(crate) extern "C" fn blinc_mint_fsm_signal_i32(default: i32) -> i64 {
+    blinc_core::reactive::signal::<i32>(default).id().to_raw() as i64
+}
+
+/// f64 mirror of [`blinc_mint_fsm_signal_i32`].
+pub(crate) extern "C" fn blinc_mint_fsm_signal_f64(default: f64) -> i64 {
+    blinc_core::reactive::signal::<f64>(default).id().to_raw() as i64
+}
+
+/// bool mirror of [`blinc_mint_fsm_signal_i32`].
+pub(crate) extern "C" fn blinc_mint_fsm_signal_bool(default: bool) -> i64 {
+    blinc_core::reactive::signal::<bool>(default).id().to_raw() as i64
+}

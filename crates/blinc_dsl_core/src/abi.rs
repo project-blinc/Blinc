@@ -237,6 +237,26 @@ fn builtins() -> Vec<BuiltinDescriptor> {
             ptr: blinc_signal_set_by_id_bool as *const u8,
         },
         BuiltinDescriptor {
+            // Mints one FSM instance's context signal. Called from a
+            // handler field initializer, so once per instance.
+            name: "__blinc_mint_fsm_signal_i32",
+            param_types: &[Type::Primitive(PrimitiveType::I32)],
+            return_type: Type::Primitive(PrimitiveType::I64),
+            ptr: crate::host::blinc_mint_fsm_signal_i32 as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__blinc_mint_fsm_signal_f64",
+            param_types: &[Type::Primitive(PrimitiveType::F64)],
+            return_type: Type::Primitive(PrimitiveType::I64),
+            ptr: crate::host::blinc_mint_fsm_signal_f64 as *const u8,
+        },
+        BuiltinDescriptor {
+            name: "__blinc_mint_fsm_signal_bool",
+            param_types: &[Type::Primitive(PrimitiveType::Bool)],
+            return_type: Type::Primitive(PrimitiveType::I64),
+            ptr: crate::host::blinc_mint_fsm_signal_bool as *const u8,
+        },
+        BuiltinDescriptor {
             // Body of every synthesized `<Fsm>$HostEvents` handler: the
             // event code the host armed before this resume.
             name: "__blinc_fsm_next_event",

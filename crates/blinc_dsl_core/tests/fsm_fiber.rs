@@ -341,3 +341,59 @@ fn context_fields_read_back_at_their_declared_types() {
 
     dsl.drop_fsm_machine(m).expect("drop");
 }
+
+/// A context write notifies, because the storage is a signal.
+///
+/// The reason handler state holds the field's ID rather than its value:
+/// per-instance identity comes from the handler, while the value and
+/// its subscribers stay in the reactive graph, so a write goes down the
+/// same path every other signal write does. Holding the value directly
+/// gave correct per-instance context that nothing could observe.
+#[test]
+fn a_context_write_reaches_the_deps_notifier() {
+    use std::sync::Mutex;
+    static SEEN: Mutex<Vec<u64>> = Mutex::new(Vec::new());
+
+    blinc_core::reactive::set_stateful_deps_notifier(|ids| {
+        let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
+        seen.extend(ids.iter().map(|id| id.to_raw()));
+    });
+
+    let dsl = compiled(COUNTER, "tally_notify.blinc");
+    let m = dsl.fsm_machine("Tally").expect("construct");
+    let id = dsl
+        .fsm_context_signal_id("Tally", m, "total")
+        .expect("per-instance signal id");
+
+    SEEN.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    dsl.step_fsm_machine("Tally", m, event_code(0))
+        .expect("step");
+
+    let seen = SEEN.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    assert!(
+        seen.contains(&id),
+        "the transition body wrote the context and nothing heard it; \
+         notified {seen:?}, wanted {id}",
+    );
+    dsl.drop_fsm_machine(m).expect("drop");
+}
+
+/// Two machines bind to two different signals, which is what makes a
+/// per-instance binding possible at all.
+#[test]
+fn two_machines_expose_different_signal_ids() {
+    let dsl = compiled(COUNTER, "tally_ids.blinc");
+    let a = dsl.fsm_machine("Tally").expect("a");
+    let b = dsl.fsm_machine("Tally").expect("b");
+
+    let ia = dsl
+        .fsm_context_signal_id("Tally", a, "total")
+        .expect("a id");
+    let ib = dsl
+        .fsm_context_signal_id("Tally", b, "total")
+        .expect("b id");
+    assert_ne!(ia, ib, "one signal per instance, not one per field name");
+
+    dsl.drop_fsm_machine(a).expect("drop a");
+    dsl.drop_fsm_machine(b).expect("drop b");
+}
