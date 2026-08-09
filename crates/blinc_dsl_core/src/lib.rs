@@ -1,7 +1,7 @@
 //! Blinc DSL core — Zyntax-embedded grammar, runtime engine, and host glue.
 //!
 //! Pipeline: source → `Grammar2::from_source` → `TypedProgram` →
-//! `ZyntaxRuntime::compile_typed_program` → JIT call → scene buffer drained
+//! `TieredRuntime::compile_typed_program` → JIT call → scene buffer drained
 //! via `take_scene_ops()` → `ElementBuilder` tree for the renderer.
 //!
 //! Builtins are registered statically — no `.zrtl` plugin discovery.
@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use thiserror::Error;
 use zyntax_embed::{
     Grammar2, Grammar2Error, NativeSignature, NativeType, RuntimeError, TypeTag, ZrtlSigFlags,
-    ZrtlSymbolSig, ZyntaxRuntime,
+    ZrtlSymbolSig, TieredRuntime,
 };
 
 /// Mirror of `zyntax_compiler::zrtl::MAX_PARAMS` (16). Part of `ZrtlSymbolSig`'s wire ABI.
@@ -144,7 +144,7 @@ pub type BlincDslResult<T> = std::result::Result<T, BlincDslError>;
 /// and the loaded module table.
 pub struct BlincDsl {
     grammar: Grammar2,
-    runtime: Arc<Mutex<ZyntaxRuntime>>,
+    runtime: Arc<Mutex<TieredRuntime>>,
     /// JIT symbols `lower_view_to_value_returning` rewrote to the
     /// `i64` widget-handle ABI; consulted to choose `call_function`
     /// vs `call::<()>` at render time.
@@ -221,7 +221,13 @@ impl BlincDsl {
         // Parse grammar first so embedded-grammar bugs fail fast.
         let grammar = Grammar2::from_source(BLINC_GRAMMAR)?;
 
-        let mut runtime = ZyntaxRuntime::new()
+        // Tiered: cold code runs at tier 0 and hot views promote, and
+        // the fiber-and-effect host API lives on this runtime only.
+        // OSR so a view already running when a function promotes
+        // transfers rather than finishing on the cold entry.
+        let mut config = zyntax_embed::TieredConfig::development();
+        config.enable_osr = true;
+        let mut runtime = TieredRuntime::new(config)
             .map_err(|e| BlincDslError::Compile(format!("runtime init: {e}")))?;
 
         // MUST register builtins BEFORE any module load so the JIT linker can resolve them.
@@ -232,7 +238,7 @@ impl BlincDsl {
             .finalize_runtime_symbols()
             .map_err(|e| BlincDslError::Compile(format!("finalize symbols: {e}")))?;
 
-        // `ZyntaxRuntime` isn't Send+Sync; the Arc<Mutex<_>> wrapper is the production shape.
+        // `TieredRuntime` isn't Send+Sync; the Arc<Mutex<_>> wrapper is the production shape.
         #[allow(clippy::arc_with_non_send_sync)]
         let runtime = Arc::new(Mutex::new(runtime));
 
@@ -819,10 +825,19 @@ impl BlincDsl {
         // Export `<Component>$view` symbols so the next `compile_source`
         // (e.g. the entry in `compile_project`) can link against imports
         // that resolve to them.
+        let mut exported = false;
         for name in &function_names {
             if name.ends_with("$view") {
-                let _ = runtime.export_function(name);
+                exported |= runtime.export_function(name).is_ok();
             }
+        }
+        // An export accumulates a runtime symbol; the JIT resolves it
+        // only after a rebuild. Batched: this module's whole surface goes
+        // in, then one rebuild makes it linkable by the next compile.
+        if exported {
+            runtime
+                .finalize_runtime_symbols()
+                .map_err(|e| BlincDslError::Compile(format!("export views: {e}")))?;
         }
 
         // Eagerly run each component's `<Component>$__init__` exactly once at compile.

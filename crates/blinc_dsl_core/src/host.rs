@@ -32,7 +32,7 @@ pub fn take_scene_ops() -> Vec<DslOp> {
 ///
 /// # Safety
 ///
-/// Called by Zyntax's JIT via [`ZyntaxRuntime::register_function`]; `s_ptr`
+/// Called by Zyntax's JIT via [`TieredRuntime::register_function`]; `s_ptr`
 /// points at a `ZyntaxString` (`[i32 len][utf8 bytes…]`).
 /// `pages.scroll_to_top()` — `id` is the handle the ref lowered to.
 pub(crate) extern "C" fn blinc_scroll_to_top(id: i64) {
@@ -310,7 +310,7 @@ pub(crate) extern "C" fn blinc_fsm_runtime_trigger(fsm_ptr: *const i32, path_ptr
 /// # Safety
 ///
 /// `closure_ptr` must remain valid for the lifetime of the
-/// `ZyntaxRuntime`.
+/// `TieredRuntime`.
 pub(crate) extern "C" fn blinc_dsl_computed_i32(closure_ptr: i64) -> i64 {
     if closure_ptr == 0 {
         tracing::warn!("__blinc_computed_i32__ called with null closure pointer");
@@ -384,7 +384,7 @@ pub(crate) extern "C" fn blinc_dsl_computed_string(closure_ptr: i64) -> i64 {
 /// # Safety
 ///
 /// `closure_ptr` must remain valid for the lifetime of the
-/// `ZyntaxRuntime` (same contract as `__fsm_subscribe__`).
+/// `TieredRuntime` (same contract as `__fsm_subscribe__`).
 pub(crate) extern "C" fn blinc_dsl_effect(closure_ptr: i64) {
     if closure_ptr == 0 {
         tracing::warn!("__blinc_effect__ called with null closure pointer");
@@ -425,7 +425,7 @@ pub(crate) extern "C" fn blinc_dsl_with_region(region_id: i64, child_handle: i64
 ///
 /// # Safety
 ///
-/// `closure_ptr` must remain valid for the lifetime of the `ZyntaxRuntime`.
+/// `closure_ptr` must remain valid for the lifetime of the `TieredRuntime`.
 pub(crate) extern "C" fn blinc_fsm_subscribe(
     fsm_ptr: *const i32,
     path_ptr: *const i32,
@@ -460,7 +460,7 @@ pub(crate) extern "C" fn blinc_fsm_subscribe(
 /// # Safety
 ///
 /// `closure_ptr` must remain valid for the lifetime of the
-/// `ZyntaxRuntime`. The closure ABI is
+/// `TieredRuntime`. The closure ABI is
 /// `extern "C" fn(*const i32)` — string-ptr in, no return — matching
 /// Zyntax's one-arg `CreateClosure` shape for closures whose only
 /// param is a `Ptr<I8>`-typed string.

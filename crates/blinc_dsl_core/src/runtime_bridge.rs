@@ -7,13 +7,13 @@
 
 use super::*;
 
-/// JIT `GuardDispatcher` — routes tick-guard calls through `ZyntaxRuntime`.
+/// JIT `GuardDispatcher` — routes tick-guard calls through `TieredRuntime`.
 /// Lifted guards return `i32` (1 = fires, 0 = doesn't).
 pub(crate) struct JitGuardDispatcher {
-    pub(crate) runtime: Arc<Mutex<ZyntaxRuntime>>,
+    pub(crate) runtime: Arc<Mutex<TieredRuntime>>,
 }
 
-// SAFETY: `ZyntaxRuntime` is `!Send + !Sync` (Cranelift `JITModule`). The
+// SAFETY: `TieredRuntime` is `!Send + !Sync` (Cranelift `JITModule`). The
 // surrounding `Mutex` serialises access; UI threads run single-threaded anyway.
 // The unsafe impl is what lets `Arc<dyn GuardDispatcher>` hold a JIT dispatcher.
 unsafe impl Send for JitGuardDispatcher {}
@@ -36,7 +36,7 @@ impl blinc_runtime::fsm::GuardDispatcher for JitGuardDispatcher {
         // see `call_action` for the same rationale. Even read-only
         // guards can fire property-binding side effects via the
         // signals they read (notify_active → wake_callback → frame
-        // scheduling), and any reentry into ZyntaxRuntime would
+        // scheduling), and any reentry into TieredRuntime would
         // deadlock against this lock.
         drop(runtime);
         Some(guard() != 0)
@@ -58,7 +58,7 @@ impl blinc_runtime::fsm::GuardDispatcher for JitGuardDispatcher {
         // CRITICAL: release the runtime mutex BEFORE running the JIT
         // body. The action's lifted code calls host externs
         // (`__signal_set_by_id_i32`, etc.); those don't reach back
-        // into ZyntaxRuntime, but anything in the framework that
+        // into TieredRuntime, but anything in the framework that
         // does (computed re-evals, view re-renders triggered by
         // signal change) would deadlock against our held lock.
         drop(runtime);
@@ -70,7 +70,7 @@ impl blinc_runtime::fsm::GuardDispatcher for JitGuardDispatcher {
 /// JIT `ViewRenderer` — value-returning views call as `() -> i64` (handle);
 /// legacy Unit-returning views call as `() -> ()` and drain the scene-op buffer.
 pub(crate) struct JitViewRenderer {
-    pub(crate) runtime: Arc<Mutex<ZyntaxRuntime>>,
+    pub(crate) runtime: Arc<Mutex<TieredRuntime>>,
     pub(crate) value_returning_views: Arc<Mutex<std::collections::HashSet<String>>>,
 }
 

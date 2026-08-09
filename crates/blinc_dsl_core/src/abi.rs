@@ -1240,7 +1240,7 @@ fn descriptor_to_sig(b: &BuiltinDescriptor) -> ZrtlSymbolSig {
 /// Also populates [`SUBSTRATE_WIDGET_NAMES`] with every widget-view
 /// builtin so the lowering pass + sig inflation share a single source
 /// of truth.
-pub(crate) fn register_builtins(runtime: &mut ZyntaxRuntime) {
+pub(crate) fn register_builtins(runtime: &mut TieredRuntime) {
     // Populate the substrate-widget-name set FIRST so `descriptor_to_sig`
     // sees it when inflating each widget's signature with the leading
     // `U64` call-site key.

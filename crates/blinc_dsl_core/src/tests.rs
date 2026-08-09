@@ -6243,7 +6243,7 @@ fn dsl_bg_computed_binding_compiles() {
 ///
 /// Historically ignored as "blocked on upstream zyntax lambda f64-return
 /// propagation" — that attribution was wrong (a raw-TypedAST program run
-/// straight through ZyntaxRuntime returns lambda values fine; see
+/// straight through TieredRuntime returns lambda values fine; see
 /// tests/lambda_return_abi.rs). Three Blinc-side bugs stacked here:
 /// the grammar's `computed_expr_*` rules built `Return` in tuple form,
 /// which the action-language interpreter (which only reads the named
