@@ -127,3 +127,44 @@ fn the_synthesized_handler_is_in_the_compiled_module() {
         "the pass emits the handler but it is not in the module",
     );
 }
+
+/// A transition body runs when the machine takes that transition.
+///
+/// The body is a lifted zero-arg fn writing the FSM's context signal,
+/// so the signal is what proves it ran. Context lives in module-level
+/// signals, not in the machine, so this is behaviour parity with the
+/// registry path rather than per-instance context.
+const COUNTER: &str = r#"
+fsm Tally {
+    context {
+        total: i32 = 0
+    }
+    state Idle
+    initial Idle
+    on Idle.Bump -> Idle { ctx.total += 5 }
+}
+"#;
+
+#[test]
+fn a_transition_body_runs_on_the_step_that_takes_it() {
+    let dsl = compiled(COUNTER, "tally.blinc");
+    let m = dsl.fsm_machine("Tally").expect("construct");
+    let signal = format!("tally.__fsm_ctx_{}_{}", "Tally", "total");
+
+    assert_eq!(
+        blinc_runtime::signal::get_i32(&signal),
+        Some(0),
+        "the declared default seeds the context signal",
+    );
+
+    for expect in [5, 10, 15] {
+        dsl.step_fsm_machine("Tally", m, event_code(0))
+            .expect("step");
+        assert_eq!(
+            blinc_runtime::signal::get_i32(&signal),
+            Some(expect),
+            "each step runs the body once",
+        );
+    }
+    dsl.drop_fsm_machine(m).expect("drop");
+}

@@ -24,10 +24,16 @@
 //! The machine loops until the host drops the fiber; the trailing
 //! `return` is unreachable and exists to type the function.
 //!
-//! Scope: state only. Context fields stay as module-level signals, since
-//! widgets read them through a signal id. Tick guards are not lowered —
-//! a guard is a lifted function the host calls, with no route into the
-//! fiber until guards arrive through the same effect.
+//! A rule's body runs after its state assignment, matching the order
+//! the registry path uses, so a body that reads the state sees the one
+//! it transitioned into.
+//!
+//! Scope: state and transition bodies. Context fields stay as
+//! module-level signals — widgets read them through a signal id, so two
+//! machines still share context even though they no longer share state.
+//! Tick guards are not lowered: a guard is a lifted function the host
+//! calls, with no route into the fiber until guards arrive through the
+//! same effect.
 //!
 //! Nothing consumes these declarations; the registry path still drives
 //! every mounted FSM.
@@ -126,6 +132,22 @@ fn block(statements: Vec<TypedNode<TypedStatement>>) -> TypedBlock {
         statements,
         span: Span::default(),
     }
+}
+
+/// `<lifted_action>()` — a transition body the FSM pass already lifted
+/// to a top-level zero-arg fn. Only `Symbol` reaches here; the reduced
+/// `SetI32` / `AddI32` forms are not emitted by the DSL.
+fn call_action(symbol: &str) -> TypedNode<TypedStatement> {
+    stmt(TypedStatement::Expression(Box::new(TypedNode::new(
+        TypedExpression::Call(TypedCall {
+            callee: Box::new(var(symbol)),
+            positional_args: Vec::new(),
+            named_args: Vec::new(),
+            type_args: Vec::new(),
+        }),
+        Type::Primitive(PrimitiveType::Unit),
+        Span::default(),
+    ))))
 }
 
 /// `state = <code>`
@@ -349,7 +371,18 @@ fn machine_fn(fsm: &str, def: &FsmDefinition, states: &[String]) -> TypedFunctio
         };
         body.push(stmt(TypedStatement::If(TypedIf {
             condition: Box::new(eq(var("key"), int(from as i64 * STATE_STRIDE + ev as i64))),
-            then_block: block(vec![assign_state(to)]),
+            // State first, then the body — the order the registry
+            // path runs them in, so a body that reads the state sees
+            // the one it transitioned into.
+            then_block: block({
+                let mut arm = vec![assign_state(to)];
+                for action in &t.actions {
+                    if let blinc_runtime::fsm::TransitionAction::Symbol(sym) = action {
+                        arm.push(call_action(sym));
+                    }
+                }
+                arm
+            }),
             else_block: None,
             span: Span::default(),
         })));
