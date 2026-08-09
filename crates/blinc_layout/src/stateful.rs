@@ -590,6 +590,14 @@ pub fn queue_layout_prop_subtree_rebuild(parent_id: LayoutNodeId, new_child: cra
 /// Take all pending subtree rebuilds
 ///
 /// Called by the windowed app to apply incremental child updates to the RenderTree.
+///
+/// The queue is process-global and holds entries for whatever tree
+/// queued them. An app has one tree, so draining takes its own work.
+/// A TEST BINARY does not: several tests each building a tree and
+/// draining in parallel will take each other's entries, and a
+/// `LayoutNodeId` recycles across trees so a stolen entry can land on
+/// an unrelated node. Tests that build a tree and drain must serialize
+/// against each other.
 pub fn take_pending_subtree_rebuilds() -> Vec<PendingSubtreeRebuild> {
     std::mem::take(&mut *PENDING_SUBTREE_REBUILDS.lock().unwrap())
 }

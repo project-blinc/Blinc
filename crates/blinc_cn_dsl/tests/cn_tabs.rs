@@ -4,6 +4,20 @@ use blinc_layout::div::div;
 use blinc_layout::renderer::{ElementType, RenderTree};
 use std::sync::{Arc, Mutex};
 
+/// The pending-subtree-rebuild queue is process-global, and every test
+/// here builds its own tree and drains it. Run in parallel they take
+/// each other's entries, and a recycled `LayoutNodeId` lands a stolen
+/// entry on an unrelated node. Taking this first makes them take turns.
+///
+/// Poison is ignored on purpose: one failing assertion must not cascade
+/// into every other test in the file reporting a lock error instead of
+/// its own result.
+static SUBTREE_QUEUE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    SUBTREE_QUEUE.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 fn init() {
     static I: std::sync::Once = std::sync::Once::new();
     I.call_once(|| {
@@ -76,6 +90,7 @@ impl Harness {
 /// one's value.
 #[test]
 fn tabs_draw_their_strip_and_follow_the_bound_signal() {
+    let _serial = serial();
     init();
     let dsl = BlincDsl::new().expect("runtime init");
     blinc_cn_dsl::register_all(&dsl).expect("register");
@@ -126,6 +141,7 @@ fn tabs_draw_their_strip_and_follow_the_bound_signal() {
 /// rather than drawn somewhere arbitrary.
 #[test]
 fn a_loose_child_is_dropped_not_drawn() {
+    let _serial = serial();
     init();
     let dsl = BlincDsl::new().expect("runtime init");
     blinc_cn_dsl::register_all(&dsl).expect("register");
@@ -165,6 +181,7 @@ fn a_loose_child_is_dropped_not_drawn() {
 /// to the layout default — black, and invisible on a dark scheme.
 #[test]
 fn panel_text_keeps_its_inherited_colour_across_a_swap() {
+    let _serial = serial();
     init();
     let dsl = BlincDsl::new().expect("runtime init");
     blinc_cn_dsl::register_all(&dsl).expect("register");

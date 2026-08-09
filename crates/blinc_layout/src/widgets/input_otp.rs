@@ -521,6 +521,12 @@ mod tests {
 
     use super::*;
 
+    /// Focus is process-global, so these take turns.
+    ///
+    /// Poison is ignored deliberately: `.unwrap()` here turned one
+    /// failing assertion into every other test in the module reporting
+    /// a lock error instead of its own result, which hides which test
+    /// actually broke.
     static OTP_FOCUS_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn test_state(initial: impl Into<String>) -> State<String> {
@@ -589,7 +595,9 @@ mod tests {
 
     #[test]
     fn focusing_future_empty_slot_redirects_to_first_empty_slot() {
-        let _guard = OTP_FOCUS_TEST_LOCK.lock().unwrap();
+        let _guard = OTP_FOCUS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         reset_focus_for_test();
         blinc_theme::ThemeState::init_default();
 
@@ -622,7 +630,9 @@ mod tests {
     // stuck. Assert the FSM, not just `visual`.
     #[test]
     fn redirected_click_does_not_leave_slot_fsm_focused() {
-        let _guard = OTP_FOCUS_TEST_LOCK.lock().unwrap();
+        let _guard = OTP_FOCUS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         reset_focus_for_test();
         blinc_theme::ThemeState::init_default();
 
@@ -669,7 +679,9 @@ mod tests {
 
     #[test]
     fn typing_into_full_slot_does_not_advance_focus() {
-        let _guard = OTP_FOCUS_TEST_LOCK.lock().unwrap();
+        let _guard = OTP_FOCUS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         reset_focus_for_test();
         blinc_theme::ThemeState::init_default();
 
@@ -702,7 +714,9 @@ mod tests {
 
     #[test]
     fn typing_into_empty_slot_advances_focus() {
-        let _guard = OTP_FOCUS_TEST_LOCK.lock().unwrap();
+        let _guard = OTP_FOCUS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         reset_focus_for_test();
         blinc_theme::ThemeState::init_default();
 
@@ -733,7 +747,9 @@ mod tests {
 
     #[test]
     fn auto_advance_blurs_previous_slot_stateful_visuals() {
-        let _guard = OTP_FOCUS_TEST_LOCK.lock().unwrap();
+        let _guard = OTP_FOCUS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         reset_focus_for_test();
         blinc_theme::ThemeState::init_default();
 
@@ -782,7 +798,9 @@ mod tests {
 
     #[test]
     fn broadcast_text_input_does_not_fill_next_slot_with_same_character() {
-        let _guard = OTP_FOCUS_TEST_LOCK.lock().unwrap();
+        let _guard = OTP_FOCUS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         reset_focus_for_test();
         blinc_theme::ThemeState::init_default();
 
@@ -820,7 +838,9 @@ mod tests {
 
     #[test]
     fn on_complete_fires_once_on_the_incomplete_to_complete_transition() {
-        let _guard = OTP_FOCUS_TEST_LOCK.lock().unwrap();
+        let _guard = OTP_FOCUS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         reset_focus_for_test();
         blinc_theme::ThemeState::init_default();
 
@@ -854,7 +874,9 @@ mod tests {
 
     #[test]
     fn on_complete_does_not_refire_when_pasting_over_an_already_complete_code() {
-        let _guard = OTP_FOCUS_TEST_LOCK.lock().unwrap();
+        let _guard = OTP_FOCUS_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         blinc_theme::ThemeState::init_default();
 
         let value = test_state("12");
