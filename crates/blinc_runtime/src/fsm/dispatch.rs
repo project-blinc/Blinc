@@ -231,21 +231,10 @@ mod tests {
 /// Installed by whichever layer owns the compiled program, the same way
 /// [`GuardDispatcher`] is. Absent, the registry path runs unchanged.
 pub trait MachineDriver: Send + Sync + 'static {
-    /// The machine `fsm` refers to in `scope`, constructing it on first
-    /// ask. `None` when the program has none, which is every program
-    /// compiled before the fiber lowering and any FSM whose states could
-    /// not be derived.
-    ///
-    /// Get-or-create rather than create: a view body runs again on every
-    /// rebuild and asks again each time, and a machine that were
-    /// reconstructed there would reset its context on every frame. The
-    /// pairing is instead with [`drop_machine`](Self::drop_machine),
-    /// which an unmount calls.
-    ///
-    /// `scope` is a [`super::scope`] value — [`super::scope::NO_SCOPE`]
-    /// asks for the process-wide instance keyed by name, which is what
-    /// code outside a scoped component view gets.
-    fn machine_for(&self, fsm: &str, scope: u64) -> Option<u64>;
+    /// Construct a machine for `fsm`. `None` when the program has none,
+    /// which is every program compiled before the fiber lowering and
+    /// any FSM whose states could not be derived.
+    fn machine_for(&self, fsm: &str) -> Option<u64>;
 
     /// Deliver `event_code` and run the machine to its next suspension,
     /// answering with the state code it settled in. `None` means the

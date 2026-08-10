@@ -21,13 +21,7 @@ use super::registry::with_fsm_registry;
 pub use super::registry::TransitionAction;
 
 fn state_key(fsm_name: &str) -> String {
-    // Keyed by the scope in effect as well as the name, so two mounts of
-    // one component follow two state cells. `NO_SCOPE` keeps a single
-    // cell per name, which is what code outside a scoped view sees.
-    match super::scope::current_scope() {
-        super::scope::NO_SCOPE => format!("__fsm:state:{fsm_name}"),
-        scope => format!("__fsm:state:{scope:x}:{fsm_name}"),
-    }
+    format!("__fsm:state:{fsm_name}")
 }
 
 /// `SharedState<FsmStateId>` for `fsm_name`'s default instance.
@@ -130,16 +124,6 @@ fn dispatch_default_inner(fsm_name: &str, event_name: &str) -> Option<(Arc<str>,
         r.get(id)?.event_code(event_name)
     })?;
 
-    if let Some(outcome) = step_machine(fsm_name, event_code) {
-        let (from_name, to_name) = outcome;
-        // No `actions` to run: the machine executed the transition body
-        // itself, as performs against its own handler. Running the
-        // registry's lifted symbols too would apply every context write
-        // a second time.
-        finish_transition(fsm_name, event_name, &from_name, &to_name, &[]);
-        return Some((from_name, to_name));
-    }
-
     let (from_name, to_name, actions) = if let Some(shared) = default_state(fsm_name) {
         let (from_state, to_state, actions) = {
             let mut inner = shared.lock().ok()?;
@@ -201,28 +185,13 @@ fn dispatch_default_inner(fsm_name: &str, event_name: &str) -> Option<(Arc<str>,
         (from_name, to_name, actions)
     };
 
-    finish_transition(fsm_name, event_name, &from_name, &to_name, &actions);
-    Some((from_name, to_name))
-}
-
-/// Run a fired transition's actions, then its effects and subscribers,
-/// in the order a caller can rely on. Shared by the machine path (which
-/// passes no actions, having already run the body) and the registry
-/// path.
-fn finish_transition(
-    fsm_name: &str,
-    event_name: &str,
-    from_name: &Arc<str>,
-    to_name: &Arc<str>,
-    actions: &[TransitionAction],
-) {
-    for action in actions {
+    for action in &actions {
         execute_action(action);
     }
     EFFECTS.with(|e| {
         if let Some(list) = e.borrow().get(fsm_name) {
             for cb in list {
-                cb(from_name, event_name, to_name);
+                cb(&from_name, event_name, &to_name);
             }
         }
     });
@@ -256,66 +225,7 @@ fn finish_transition(
     for cb in all_matched {
         cb(&triggered_path);
     }
-}
 
-/// Advance the machine backing this scope, if one does.
-///
-/// The registry still decides WHETHER a transition fires and what the
-/// state names are: it is a pure table lookup on `(from_code,
-/// event_code)`, and keeping it as the decision point means a machine
-/// answering with an unchanged state code is not mistaken for a
-/// self-transition. The machine's job is to EXECUTE — its own state
-/// advance, and the context writes in the transition body, which are
-/// performs against the handler that owns this instance's context.
-///
-/// `None` means no machine backs this scope, and the caller should walk
-/// the registry itself as it did before.
-fn step_machine(fsm_name: &str, event_code: u32) -> Option<(Arc<str>, Arc<str>)> {
-    let driver = super::dispatch::machine_driver()?;
-    let machine = driver.machine_for(fsm_name, super::scope::current_scope())?;
-
-    let shared = default_state(fsm_name)?;
-    let from = shared.lock().ok()?.state;
-    let (from_name, to_name, to_code) = with_fsm_registry(|r| {
-        let def = r.get(from.fsm_id)?;
-        let t = def
-            .transitions
-            .iter()
-            .find(|t| t.from_code == from.variant && t.event_code == event_code)?;
-        Some((
-            def.state_name(t.from_code).cloned()?,
-            def.state_name(t.to_code).cloned()?,
-            t.to_code,
-        ))
-    })?;
-
-    // The machine reaches the same state by running the rule itself; the
-    // yielded code is what it actually settled in, so a machine and a
-    // table that disagree resolve in the machine's favour rather than
-    // drifting silently.
-    let settled = driver.step(fsm_name, machine, event_code);
-    if let Some(code) = settled
-        && code != to_code
-    {
-        tracing::warn!(
-            fsm = fsm_name,
-            expected = to_code,
-            settled = code,
-            "machine settled in a different state than the registry rule predicted"
-        );
-    }
-    let landed = settled.unwrap_or(to_code);
-
-    if let Ok(mut inner) = shared.lock() {
-        inner.state.variant = landed;
-    }
-    request_redraw();
-    tracing::debug!(
-        fsm = fsm_name,
-        from = %from_name,
-        to = %to_name,
-        "fsm transition fired (machine path)"
-    );
     Some((from_name, to_name))
 }
 

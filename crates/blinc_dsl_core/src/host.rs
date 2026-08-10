@@ -318,10 +318,7 @@ pub(crate) extern "C" fn blinc_dsl_computed_i32(closure_ptr: i64) -> i64 {
     }
     type ComputedFn = extern "C" fn() -> i32;
     let func: ComputedFn = unsafe { std::mem::transmute(closure_ptr) };
-    let scope = blinc_runtime::fsm::current_scope();
-    let computed = blinc_core::reactive::computed::<i32, _>(move |_graph| {
-        blinc_runtime::fsm::with_scope(scope, || func())
-    });
+    let computed = blinc_core::reactive::computed::<i32, _>(move |_graph| func());
     computed.derived_id().to_raw() as i64
 }
 
@@ -337,10 +334,7 @@ pub(crate) extern "C" fn blinc_dsl_computed_bool(closure_ptr: i64) -> i64 {
     }
     type ComputedFn = extern "C" fn() -> i32;
     let func: ComputedFn = unsafe { std::mem::transmute(closure_ptr) };
-    let scope = blinc_runtime::fsm::current_scope();
-    let computed = blinc_core::reactive::computed::<bool, _>(move |_graph| {
-        blinc_runtime::fsm::with_scope(scope, || func()) != 0
-    });
+    let computed = blinc_core::reactive::computed::<bool, _>(move |_graph| func() != 0);
     computed.derived_id().to_raw() as i64
 }
 
@@ -352,10 +346,7 @@ pub(crate) extern "C" fn blinc_dsl_computed_f64(closure_ptr: i64) -> i64 {
     }
     type ComputedFn = extern "C" fn() -> f64;
     let func: ComputedFn = unsafe { std::mem::transmute(closure_ptr) };
-    let scope = blinc_runtime::fsm::current_scope();
-    let computed = blinc_core::reactive::computed::<f64, _>(move |_graph| {
-        blinc_runtime::fsm::with_scope(scope, || func())
-    });
+    let computed = blinc_core::reactive::computed::<f64, _>(move |_graph| func());
     computed.derived_id().to_raw() as i64
 }
 
@@ -370,9 +361,8 @@ pub(crate) extern "C" fn blinc_dsl_computed_string(closure_ptr: i64) -> i64 {
     }
     type ComputedFn = extern "C" fn() -> *const i32;
     let func: ComputedFn = unsafe { std::mem::transmute(closure_ptr) };
-    let scope = blinc_runtime::fsm::current_scope();
     let computed = blinc_core::reactive::computed::<String, _>(move |_graph| {
-        let ptr = blinc_runtime::fsm::with_scope(scope, || func());
+        let ptr = func();
         // SAFETY: closure body produces a length-prefixed string via
         // `blinc_string_alloc` (the Zyntax string-return ABI).
         unsafe { blinc_string_decode(ptr).to_string() }
@@ -402,8 +392,7 @@ pub(crate) extern "C" fn blinc_dsl_effect(closure_ptr: i64) {
     }
     type EffectFn = extern "C" fn();
     let func: EffectFn = unsafe { std::mem::transmute(closure_ptr) };
-    let scope = blinc_runtime::fsm::current_scope();
-    blinc_core::reactive::effect(move |_graph| blinc_runtime::fsm::with_scope(scope, || func()));
+    blinc_core::reactive::effect(move |_graph| func());
 }
 
 /// `__blinc_scope_enter__(region_id)` — open a read scope for a region
@@ -454,12 +443,11 @@ pub(crate) extern "C" fn blinc_fsm_subscribe(
         tracing::warn!("__fsm_subscribe__ called with null closure pointer");
         return;
     }
-    let scope = blinc_runtime::fsm::current_scope();
     blinc_runtime::fsm::register_subscriber(fsm, path, move || {
         // SAFETY: SSA lowering produces an `extern "C" fn()` lambda body.
         type SubscriberFn = extern "C" fn();
         let func: SubscriberFn = unsafe { std::mem::transmute(closure_ptr) };
-        blinc_runtime::fsm::with_scope(scope, || func());
+        func();
     });
 }
 
@@ -751,63 +739,4 @@ pub(crate) extern "C" fn blinc_mint_fsm_signal_f64(default: f64) -> i64 {
 /// bool mirror of [`blinc_mint_fsm_signal_i32`].
 pub(crate) extern "C" fn blinc_mint_fsm_signal_bool(default: bool) -> i64 {
     blinc_core::reactive::signal::<bool>(default).id().to_raw() as i64
-}
-
-/// `__blinc_fsm_scope_enter(instance)` — claim this component instance
-/// as the one unqualified FSM names resolve against, answering with the
-/// scope it displaced.
-///
-/// Emitted as the first statement of a component `view` whose `@fsm([…])`
-/// names at least one FSM, passing that view's `__instance_id__`. The
-/// displaced scope comes back as the return value rather than being
-/// stacked here, so a nested view restores its parent exactly and a
-/// missed exit cannot corrupt an unrelated frame.
-pub(crate) extern "C" fn blinc_fsm_scope_enter(instance: i64) -> i64 {
-    blinc_runtime::fsm::enter_scope(instance as u64) as i64
-}
-
-/// `__blinc_fsm_scope_exit(previous)` — restore what
-/// [`blinc_fsm_scope_enter`] displaced. Emitted at the end of the same
-/// view body, after its result is bound.
-pub(crate) extern "C" fn blinc_fsm_scope_exit(previous: i64) {
-    blinc_runtime::fsm::exit_scope(previous as u64);
-}
-
-/// `__blinc_fsm_ctx_id(fsm, field) -> i64` — the signal id behind one
-/// context field of the machine `fsm` refers to in the current scope.
-///
-/// Takes no instance argument on purpose. A `computed { Play.pct / 2.0 }`
-/// body and an `on_click` both lower to closures that cannot capture a
-/// runtime value, so a read that needed to be handed its instance would
-/// work in a view body and silently read the wrong machine everywhere
-/// else. Resolving through the scope makes every read site identical.
-///
-/// `fallback` is the name-keyed signal id the compiler baked for this
-/// field, returned whenever no machine backs the read: a program with no
-/// fiber lowering, an FSM the lowering could not derive, or a read from
-/// outside any component scope. Every such case then behaves exactly as
-/// it did before machines existed, rather than reading id `0`.
-pub(crate) extern "C" fn blinc_fsm_ctx_id(
-    fsm_ptr: *const i32,
-    field_ptr: *const i32,
-    fallback: i64,
-) -> i64 {
-    let (Some(fsm), Some(field)) = (decode_signal_name(fsm_ptr), decode_signal_name(field_ptr))
-    else {
-        tracing::warn!("__blinc_fsm_ctx_id called with a null pointer");
-        return fallback;
-    };
-    scoped_context_signal_id(&fsm, &field)
-        .map(|id| id as i64)
-        .unwrap_or(fallback)
-}
-
-/// The signal id for `fsm`'s `field` in the scope in effect, or `None`
-/// when no driver is installed or the program compiled no machine for
-/// this FSM. Shared by the id extern and the typed value readers.
-pub(crate) fn scoped_context_signal_id(fsm: &str, field: &str) -> Option<u64> {
-    let driver = blinc_runtime::fsm::machine_driver()?;
-    let scope = blinc_runtime::fsm::current_scope();
-    let machine = driver.machine_for(fsm, scope)?;
-    driver.context_signal_id(fsm, machine, field)
 }
