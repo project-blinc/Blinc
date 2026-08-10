@@ -99,7 +99,7 @@ pub(crate) mod machines {
             .expect("fsm_instances mutex poisoned")
             .get(&machine)
             .ok_or_else(|| BlincDslError::Compile("unknown machine".to_string()))?;
-        let runtime = rt.lock().expect("BlincDsl runtime mutex poisoned");
+        let mut runtime = rt.lock().expect("BlincDsl runtime mutex poisoned");
         let frame = runtime
             .push_handler_instance(instance)
             .map_err(BlincDslError::from)?;
@@ -164,7 +164,7 @@ use passes::{
     resolve_extern_widget_named_args, resolve_fsm_subscribe_calls, resolve_fsm_trigger_calls,
     resolve_signal_calls, resolve_signal_calls_scoped, rewrite_component_calls_in_program,
     synthesize_fsm_context_and_actions, synthesize_fsm_event_enums,
-    synthesize_fsm_trait_interfaces, validate_component_calls,
+    synthesize_fsm_placeholder_types, synthesize_fsm_trait_interfaces, validate_component_calls,
 };
 use runtime_bridge::{
     JitGuardDispatcher, JitViewRenderer, publish_components_to_runtime_registry,
@@ -723,6 +723,7 @@ impl BlincDsl {
         inject_fsm_context_markers(&mut typed_program);
         synthesize_fsm_event_enums(&mut typed_program);
         synthesize_fsm_trait_interfaces(&mut typed_program);
+        synthesize_fsm_placeholder_types(&mut typed_program);
         // Expand `+=` / `-=` / `*=` / `/=` markers into plain
         // `target = target op value` BEFORE any pass that inspects
         // Binary expressions (resolve_signal_calls, match-lowering, …).
@@ -1454,6 +1455,7 @@ impl BlincDsl {
         inject_fsm_context_markers(&mut program);
         synthesize_fsm_event_enums(&mut program);
         synthesize_fsm_trait_interfaces(&mut program);
+        synthesize_fsm_placeholder_types(&mut program);
         desugar_compound_assigns(&mut program);
         synthesize_fsm_context_and_actions(&mut program);
         lower_match_blocks(&mut program);
@@ -1974,7 +1976,7 @@ impl BlincDsl {
             .expect("fsm_instances mutex poisoned")
             .get(&machine)
             .ok_or_else(|| BlincDslError::Compile("unknown machine".to_string()))?;
-        let runtime = self
+        let mut runtime = self
             .runtime
             .lock()
             .expect("BlincDsl runtime mutex poisoned");

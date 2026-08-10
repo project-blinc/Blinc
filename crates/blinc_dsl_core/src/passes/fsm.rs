@@ -987,6 +987,37 @@ pub(crate) fn synthesize_fsm_event_enums(program: &mut TypedProgram) {
         event_enums.push(TypedNode::new(event_enum, Type::Unknown, Span::default()));
     }
 
+    // Register each synthesized enum's TYPE as well as its declaration.
+    // HIR lowering resolves an enum through the registry and warns
+    // "not found in type registry" otherwise, pointing at the `fsm`
+    // line, since a synthesized decl has no span of its own.
+    for node in &event_enums {
+        let TypedDeclaration::Enum(e) = &node.node else {
+            continue;
+        };
+        if program.type_registry.get_type_by_name(e.name).is_some() {
+            continue;
+        }
+        let variants = e
+            .variants
+            .iter()
+            .map(|v| zyntax_typed_ast::type_registry::VariantDef {
+                name: v.name,
+                fields: zyntax_typed_ast::type_registry::VariantFields::Unit,
+                discriminant: None,
+                span: v.span,
+            })
+            .collect();
+        program.type_registry.register_enum_type(
+            e.name,
+            vec![],
+            variants,
+            vec![],
+            Default::default(),
+            e.span,
+        );
+    }
+
     // Append at the end so `find_map` lookups still return user-declared decls first.
     program.declarations.extend(event_enums);
 }
@@ -1034,6 +1065,67 @@ pub(crate) fn synthesize_fsm_trait_interfaces(program: &mut TypedProgram) {
         .collect();
 
     program.declarations.extend(interfaces);
+}
+
+/// Mint an empty type per FSM so the `impl <Fsm>` the grammar produces
+/// has a target that resolves.
+///
+/// `fsm CounterFsm { … }` parses to an impl whose trait AND target are
+/// both the fsm's name. [`synthesize_fsm_trait_interfaces`] supplies the
+/// trait half; without this the target half stays `Unresolved`, which
+/// costs three warnings per fsm and, more importantly, makes the
+/// compiler skip the trait impl as "requires monomorphization".
+pub(crate) fn synthesize_fsm_placeholder_types(program: &mut TypedProgram) {
+    use std::collections::HashSet;
+    use zyntax_typed_ast::type_registry::Visibility;
+    use zyntax_typed_ast::typed_ast::{TypedClass, TypedDeclaration};
+    use zyntax_typed_ast::{InternedString, TypedNode};
+
+    let mut named: HashSet<InternedString> = HashSet::new();
+    for decl in &program.declarations {
+        let TypedDeclaration::Impl(imp) = &decl.node else {
+            continue;
+        };
+        if imp
+            .methods
+            .iter()
+            .any(|m| m.name.resolve_global().as_deref() == Some("__fsm_meta__"))
+        {
+            named.insert(imp.trait_name);
+        }
+    }
+    // Don't shadow a type the author actually declared.
+    for decl in &program.declarations {
+        if let TypedDeclaration::Class(c) = &decl.node {
+            named.remove(&c.name);
+        }
+    }
+
+    let types: Vec<TypedNode<TypedDeclaration>> = named
+        .into_iter()
+        .map(|name| {
+            TypedNode::new(
+                TypedDeclaration::Class(TypedClass {
+                    name,
+                    type_params: vec![],
+                    extends: None,
+                    implements: vec![],
+                    fields: vec![],
+                    methods: vec![],
+                    constructors: vec![],
+                    visibility: Visibility::Public,
+                    is_abstract: false,
+                    is_final: false,
+                    annotations: vec![],
+                    span: Span::default(),
+                }),
+                Type::Unknown,
+                Span::default(),
+            )
+        })
+        .collect();
+
+    program.declarations.extend(types);
 }
 
 /// Rewrite `ctx.<field>` → `<mangled_signal_name>` inside the supplied
