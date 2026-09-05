@@ -16,7 +16,7 @@ publish = false
 # in upstream changes (upstream is `0.1.0` with no semver
 # guarantees and a blanket `#![allow(unused, dead_code, deprecated)]`,
 # so expect occasional breakage).
-zyntax_embed = { git = "https://github.com/darmie/zyntax", rev = "48428c6ef04c735b98316d82b5a494b0479e03d8" }
+zyntax_embed = { git = "https://github.com/darmie/zyntax", rev = "262a7d1ed45efa5e3f6ff8cdcfcf32ac013c2631" }
 # Direct dep on the typed-AST crate so we can inject extern function
 # declarations into a parsed `TypedProgram` from Rust before passing
 # it to `compile_typed_program`. The grammar-action interpreter
@@ -26,14 +26,14 @@ zyntax_embed = { git = "https://github.com/darmie/zyntax", rev = "48428c6ef04c73
 # through type inference has to add the extern decls programmatically.
 # Pinned to the same upstream rev as `zyntax_embed` above —
 # bump every Zyntax-pinned dep across the workspace together.
-zyntax_typed_ast = { git = "https://github.com/darmie/zyntax", rev = "48428c6ef04c735b98316d82b5a494b0479e03d8" }
+zyntax_typed_ast = { git = "https://github.com/darmie/zyntax", rev = "262a7d1ed45efa5e3f6ff8cdcfcf32ac013c2631" }
 
 # Zyntax runtime support library (`sdk/zrtl/`). The JIT compiles
 # DSL closures (`|| { … }`) into `ZrtlClosure*` values; the Div
 # on_click extern receives that pointer as an `i64` and invokes
 # it via `zrtl_closure_call`. Pinned to the same upstream rev as
 # the other Zyntax crates.
-zrtl = { git = "https://github.com/darmie/zyntax", rev = "48428c6ef04c735b98316d82b5a494b0479e03d8" }
+zrtl = { git = "https://github.com/darmie/zyntax", rev = "262a7d1ed45efa5e3f6ff8cdcfcf32ac013c2631" }
 
 # Runtime-agnostic FSM substrate. blinc_dsl_core publishes its
 # parsed FSM defs into `blinc_runtime::fsm::FsmRegistry` and
@@ -82,7 +82,7 @@ tracing-subscriber = { workspace = true }
 # `fiber def` surface and is not gaining one — the lowering pass
 # synthesizes those declarations. This is how a test writes the shapes
 # the pass will build, without hand-rolling a typed AST per case.
-zynml = { git = "https://github.com/darmie/zyntax", rev = "48428c6ef04c735b98316d82b5a494b0479e03d8" }
+zynml = { git = "https://github.com/darmie/zyntax", rev = "262a7d1ed45efa5e3f6ff8cdcfcf32ac013c2631" }
 # Tests walk the typed AST as JSON rather than hand-rolling a visitor
 # for every expression shape.
 serde_json = { workspace = true }

@@ -20,7 +20,7 @@ tracing-subscriber.workspace = true
 # Renderer surface + ZyntaxValue used to materialise widgets through
 # the JIT in end-to-end tests.
 blinc_runtime = { path = "../blinc_runtime", version = "0.5.1" }
-zyntax_embed = { git = "https://github.com/darmie/zyntax", rev = "48428c6ef04c735b98316d82b5a494b0479e03d8" }
+zyntax_embed = { git = "https://github.com/darmie/zyntax", rev = "262a7d1ed45efa5e3f6ff8cdcfcf32ac013c2631" }
 # Desktop windowed runner for the cn_dsl_demo example. Same posture
 # `blinc_dsl_core` uses for counter_dsl / reactive_dsl.
 blinc_app = { path = "../blinc_app", default-features = false, features = ["windowed"] }

@@ -94,9 +94,9 @@ rust-version = "1.85"
 # to (zyntax/crates/passes/krio_adapter/Cargo.toml). Cargo's `[patch]`
 # rejects same-URL+same-rev redirects, so the workspace-deps line is
 # the operative pin. Bump all three together when Zyntax does.
-krio-async     = { git = "https://github.com/darmie/krio.git", rev = "fe0177c" }
-krio-stackless = { git = "https://github.com/darmie/krio.git", rev = "fe0177c" }
-krio-core      = { git = "https://github.com/darmie/krio.git", rev = "fe0177c" }
+krio-async     = { git = "https://github.com/darmie/krio.git", rev = "9466253" }
+krio-stackless = { git = "https://github.com/darmie/krio.git", rev = "9466253" }
+krio-core      = { git = "https://github.com/darmie/krio.git", rev = "9466253" }
 
 # GPU rendering — wgpu 26.x for the PowerVR Tensor G5 SDF-pipeline
 # fix (23 hits "Parent device is lost"). 27/28/29 carry their own
@@ -229,19 +229,6 @@ strip = "symbols"
 # would compile their own GPU code against the local `blinc_core`,
 # breaking exhaustive matches on any new `BuiltinVar` / `ClipShape`
 # variant.
-# Zyntax — redirected to the local checkout while the effects-and-fibers
-# host API is adopted. The pinned rev in each crate's Cargo.toml predates
-# `get_fiber` / `resume_fiber` / `handler_push_info` / `EffectHandlerToken`
-# entirely, and the revision that carries them is not on a remote branch,
-# so a rev bump cannot fetch it. Replace this block with a rev bump once
-# the upstream commit is pushed.
-[patch."https://github.com/darmie/zyntax"]
-zyntax_embed = { path = "../zyntax/crates/zyntax_embed" }
-zyntax_typed_ast = { path = "../zyntax/crates/typed_ast" }
-zyntax_compiler = { path = "../zyntax/crates/compiler" }
-zrtl = { path = "../zyntax/sdk/zrtl" }
-zynml = { path = "../zyntax/crates/zynml" }
-
 [patch."https://github.com/project-blinc/Blinc.git"]
 blinc_core = { path = "crates/blinc_core" }
 # blinc_animation patched too — `/packages/blinc_node_editor` needs
