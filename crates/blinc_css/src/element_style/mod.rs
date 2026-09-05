@@ -30,7 +30,7 @@
 //! # Layout
 //!
 //! - [`schema`] — the [`ElementStyle`] struct itself and its constructor.
-//! - [`builder`] — the builder methods, one module per family of property.
+//! - `builder` — the builder methods, one module per family of property.
 //! - [`keywords`] — the enums for keyword-valued properties.
 //! - [`dynamic`] — properties held as an unevaluated `calc(env(...))`.
 //! - [`filter`] — CSS filter functions.

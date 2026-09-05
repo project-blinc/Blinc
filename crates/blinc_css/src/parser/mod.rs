@@ -52,19 +52,20 @@
 //!
 //! - [`error`] — diagnostics: severities, positions, and the accumulating
 //!   result type that lets one bad rule cost only that rule.
-//! - [`selector`] — the selector data model; [`grammar::selector`] parses it.
+//! - [`selector`] — the selector data model; `grammar::selector` parses it.
 //! - [`keyframes`] / [`animation`] — `@keyframes` geometry and the
 //!   `animation` / `transition` timing that drives it.
 //! - [`stylesheet`] — the parsed sheet and the process-wide active slot.
-//! - [`grammar`] — comments, declarations, rules, at-rule dispatch, and the
+//! - `grammar` — comments, declarations, rules, at-rule dispatch, and the
 //!   sheet driver.
-//! - [`properties`] — turning one declaration into a field on an
-//!   [`ElementStyle`], silently or with diagnostics.
+//! - `properties` — turning one declaration into a field on an
+//!   [`ElementStyle`](crate::element_style::ElementStyle), silently or with
+//!   diagnostics.
 //! - [`value`] — one module per family of value: colors, gradients,
 //!   lengths, transforms, shadows, filters, clip paths.
 //! - [`flow`] — the `@flow` shader DAG: statements, semantic forms, and the
 //!   expression grammar.
-//! - [`util`] — paren-aware splitting shared by the value grammars.
+//! - `util` — paren-aware splitting shared by the value grammars.
 
 use nom::{IResult, error::VerboseError};
 

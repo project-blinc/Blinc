@@ -19,7 +19,7 @@
 //! - [`material`] — surface materials (glass, metal, wood) and cursors.
 //! - [`motion`] — enter/exit keyframes.
 //! - [`text`] — text alignment and font weight.
-//! - [`pointer`] — pointer-space configuration for `env(pointer-*)`.
+//! - [`mod@pointer`] — pointer-space configuration for `env(pointer-*)`.
 //!
 //! # Why the style model lives with the parser
 //!

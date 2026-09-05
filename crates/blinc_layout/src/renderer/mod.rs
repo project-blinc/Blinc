@@ -1500,7 +1500,8 @@ impl RenderTree {
     }
 
     /// Stop the walker recording regions for the duration of a re-walk.
-    /// See [`Self::suppress_region_capture`].
+    ///
+    /// While set, `record_dynamic_region` drops everything handed to it.
     pub fn set_region_capture_suppressed(&self, suppressed: bool) {
         self.suppress_region_capture.set(suppressed);
     }

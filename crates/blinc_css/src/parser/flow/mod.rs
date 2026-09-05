@@ -5,7 +5,7 @@
 //! [`FlowGraph`] the GPU layer compiles.
 //!
 //! Statement-level parsing lives here; the semantic forms (`step`, chain,
-//! `use`) are in [`semantic`] and the expression grammar in [`expr`].
+//! `use`) are in `semantic` and the expression grammar in `expr`.
 
 use std::collections::HashMap;
 

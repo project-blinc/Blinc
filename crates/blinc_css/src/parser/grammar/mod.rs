@@ -1,6 +1,6 @@
 //! The CSS grammar: comments, declarations, rules, and the sheet driver.
 //!
-//! [`parse_stylesheet_with_errors`] is the entry point. It walks top-level
+//! `parse_stylesheet_with_errors` is the entry point. It walks top-level
 //! blocks, dispatches `@keyframes` and `@flow` to their own parsers, and
 //! turns everything else into rules. A rule that fails to parse is skipped
 //! to its closing brace and recorded as an error, so the rest of the sheet
