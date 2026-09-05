@@ -34,12 +34,12 @@ pub mod build_once;
 pub mod canvas;
 pub mod diff;
 pub mod div;
+pub mod dynamic_style;
 pub mod element;
 pub mod notch;
 
 // Layout animation systems
 pub mod binding;
-pub mod element_style;
 pub mod event_handler;
 pub mod event_router;
 pub mod image;
@@ -65,7 +65,6 @@ pub mod text_measure;
 pub mod text_selection;
 pub mod tree;
 pub mod typography;
-pub mod units;
 pub mod visual_animation;
 pub mod widgets;
 
@@ -89,10 +88,8 @@ pub mod click_outside;
 pub mod recorder_bridge;
 
 // CSS calc() expression engine
-pub mod calc;
 
 // CSS subset parser for ElementStyle
-pub mod css_parser;
 
 // Stable unique key generation for components
 pub mod back_handler;
@@ -100,6 +97,17 @@ pub mod key;
 pub mod window_actions;
 
 // Re-export InstanceKey and reset function at crate root
+// The style model and its CSS front end live in `blinc_css`. They are
+// re-exported at their historical module paths so `blinc_layout::css_parser`,
+// `::element_style`, `::calc` and `::units` keep resolving.
+pub use blinc_css::parser as css_parser;
+pub use blinc_css::{calc, element_style, units};
+
+// `css!`, `style!` and `flow!` are `#[macro_export]`ed by `blinc_css`, which
+// puts them at that crate's root. Re-export them so they stay callable as
+// `blinc_layout::css!` and through the prelude.
+pub use blinc_css::{css, css_impl, flow, style, style_impl};
+
 pub use key::{InstanceKey, reset_call_counters};
 
 // Property channel foundation (reactive architecture v2, Phase 1)

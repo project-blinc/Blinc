@@ -28,7 +28,7 @@
 //! ```
 
 use crate::calc::CalcExpr;
-use crate::element::CursorStyle;
+use crate::material::CursorStyle;
 use blinc_core::{
     BlendMode, Brush, ClipPath, Color, CornerRadius, CornerShape, OverflowFade, PointerEvents,
     Shadow, Transform,
@@ -59,66 +59,6 @@ pub enum DynamicProperty {
 }
 
 impl DynamicProperty {
-    /// Evaluate this dynamic property and apply the result to RenderProps.
-    pub fn apply(&self, props: &mut crate::element::RenderProps, ctx: &crate::calc::CalcContext) {
-        match self {
-            DynamicProperty::Opacity(expr) => {
-                let v = expr.eval(ctx).clamp(0.0, 1.0);
-                props.opacity = v;
-            }
-            DynamicProperty::RotateX(expr) => {
-                let v = expr.eval(ctx);
-                props.rotate_x = Some(v);
-            }
-            DynamicProperty::RotateY(expr) => {
-                let v = expr.eval(ctx);
-                props.rotate_y = Some(v);
-            }
-            DynamicProperty::Perspective(expr) => {
-                props.perspective = Some(expr.eval(ctx));
-            }
-            DynamicProperty::CornerRadius(expr) => {
-                let r = expr.eval(ctx).max(0.0);
-                props.border_radius = blinc_core::CornerRadius::uniform(r);
-            }
-            DynamicProperty::TranslateZ(expr) => {
-                props.translate_z = Some(expr.eval(ctx));
-            }
-            DynamicProperty::Depth(expr) => {
-                props.depth = Some(expr.eval(ctx));
-            }
-            DynamicProperty::BorderWidth(expr) => {
-                let v = expr.eval(ctx).max(0.0);
-                props.border_width = v;
-            }
-            DynamicProperty::SkewX(expr) => {
-                let deg = expr.eval(ctx);
-                let skew = blinc_core::Affine2D::skew_x(deg.to_radians());
-                compose_affine(props, skew);
-            }
-            DynamicProperty::SkewY(expr) => {
-                let deg = expr.eval(ctx);
-                let skew = blinc_core::Affine2D::skew_y(deg.to_radians());
-                compose_affine(props, skew);
-            }
-            DynamicProperty::Rotate(expr) => {
-                let deg = expr.eval(ctx);
-                let rot = blinc_core::Affine2D::rotation(deg.to_radians());
-                compose_affine(props, rot);
-            }
-            DynamicProperty::ScaleX(expr) => {
-                let sx = expr.eval(ctx);
-                let s = blinc_core::Affine2D::scale(sx, 1.0);
-                compose_affine(props, s);
-            }
-            DynamicProperty::ScaleY(expr) => {
-                let sy = expr.eval(ctx);
-                let s = blinc_core::Affine2D::scale(1.0, sy);
-                compose_affine(props, s);
-            }
-        }
-    }
-
     /// Returns true if this dynamic property modifies `props.transform` (Affine2D).
     pub fn is_transform(&self) -> bool {
         matches!(
@@ -149,17 +89,6 @@ impl DynamicProperty {
             | DynamicProperty::ScaleY(e) => e,
         }
     }
-}
-
-/// Compose a new 2D affine transform onto the existing `props.transform`.
-/// If no transform exists, sets it directly. Otherwise multiplies.
-fn compose_affine(props: &mut crate::element::RenderProps, new_affine: blinc_core::Affine2D) {
-    use blinc_core::Transform;
-    let composed = match &props.transform {
-        Some(Transform::Affine2D(existing)) => existing.then(&new_affine),
-        _ => new_affine,
-    };
-    props.transform = Some(Transform::Affine2D(composed));
 }
 
 /// CSS filter functions applied to an element
@@ -230,8 +159,8 @@ where
     pick(&shadows).iter().map(Shadow::from).collect()
 }
 
-use crate::css_parser::{CssAnimation, CssTransitionSet};
-use crate::element::{GlassMaterial, Material, MetallicMaterial, RenderLayer, WoodMaterial};
+use crate::material::{GlassMaterial, Material, MetallicMaterial, RenderLayer, WoodMaterial};
+use crate::parser::{CssAnimation, CssTransitionSet};
 
 /// Text decoration line types
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -445,7 +374,7 @@ pub struct ElementStyle {
     /// Text shadow (offset, blur, color)
     pub text_shadow: Option<Shadow>,
     /// Font weight (100-900)
-    pub font_weight: Option<crate::div::FontWeight>,
+    pub font_weight: Option<crate::text::FontWeight>,
     /// Font style (upright or italic)
     pub font_style: Option<FontStyle>,
     /// Text decoration (underline, line-through, etc.)
@@ -453,7 +382,7 @@ pub struct ElementStyle {
     /// Line height multiplier
     pub line_height: Option<f32>,
     /// Text alignment (left, center, right)
-    pub text_align: Option<crate::div::TextAlign>,
+    pub text_align: Option<crate::text::TextAlign>,
     /// Letter spacing in pixels
     pub letter_spacing: Option<f32>,
     /// 2D rotation angle in degrees (original CSS value, avoids lossy atan2 decomposition)
@@ -684,7 +613,7 @@ pub struct ElementStyle {
     // Pointer Query
     // =========================================================================
     /// Pointer tracking configuration (enables continuous pointer data on this element)
-    pub pointer_space: Option<crate::pointer_query::PointerSpaceConfig>,
+    pub pointer_space: Option<crate::pointer::PointerSpaceConfig>,
 
     // =========================================================================
     // Dynamic Properties (calc with env vars — evaluated per-frame)
@@ -1503,7 +1432,7 @@ impl ElementStyle {
     }
 
     /// Set font weight
-    pub fn font_weight(mut self, weight: crate::div::FontWeight) -> Self {
+    pub fn font_weight(mut self, weight: crate::text::FontWeight) -> Self {
         self.font_weight = Some(weight);
         self
     }
@@ -1527,7 +1456,7 @@ impl ElementStyle {
     }
 
     /// Set text alignment
-    pub fn text_align(mut self, align: crate::div::TextAlign) -> Self {
+    pub fn text_align(mut self, align: crate::text::TextAlign) -> Self {
         self.text_align = Some(align);
         self
     }
@@ -2804,15 +2733,15 @@ macro_rules! css_impl {
         $style = $style.line_height($value);
     };
     ($style:ident; text-align: center; $($rest:tt)*) => {
-        $style = $style.text_align($crate::div::TextAlign::Center);
+        $style = $style.text_align($crate::text::TextAlign::Center);
         $crate::css_impl!($style; $($rest)*);
     };
     ($style:ident; text-align: right; $($rest:tt)*) => {
-        $style = $style.text_align($crate::div::TextAlign::Right);
+        $style = $style.text_align($crate::text::TextAlign::Right);
         $crate::css_impl!($style; $($rest)*);
     };
     ($style:ident; text-align: left; $($rest:tt)*) => {
-        $style = $style.text_align($crate::div::TextAlign::Left);
+        $style = $style.text_align($crate::text::TextAlign::Left);
         $crate::css_impl!($style; $($rest)*);
     };
     ($style:ident; text-align: $value:expr; $($rest:tt)*) => {
@@ -4250,7 +4179,7 @@ macro_rules! style_impl {
 #[macro_export]
 macro_rules! flow {
     ($name:ident, $target:ident, { $($body:tt)* }) => {{
-        $crate::css_parser::parse_flow_string(concat!(
+        $crate::parser::parse_flow_string(concat!(
             "@flow ", stringify!($name), " {\n  target: ", stringify!($target), ";\n  ",
             stringify!($($body)*),
             "\n}"

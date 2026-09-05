@@ -52,10 +52,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use blinc_core::{
-    Brush, ChainLink, ClipLength, ClipPath, Color, CornerRadius, CornerShape, FlowChain, FlowError,
-    FlowExpr, FlowFunc, FlowGraph, FlowInput, FlowInputSource, FlowNode, FlowOutput,
-    FlowOutputTarget, FlowStep, FlowTarget, FlowType, FlowUse, Gradient, GradientSpace,
-    GradientStop, ImageBrush, OverflowFade, Point, Shadow, StepParam, StepType, Transform,
+    Brush, ChainLink, ClipLength, ClipPath, Color, CornerRadius, CornerShape, FlowChain, FlowExpr,
+    FlowFunc, FlowGraph, FlowInput, FlowInputSource, FlowNode, FlowOutput, FlowOutputTarget,
+    FlowStep, FlowTarget, FlowType, FlowUse, Gradient, GradientSpace, GradientStop, ImageBrush,
+    OverflowFade, Point, Shadow, StepParam, StepType, Transform,
 };
 use blinc_theme::{ColorToken, ThemeState};
 use nom::{
@@ -71,11 +71,11 @@ use nom::{
 };
 use tracing::debug;
 
-use crate::element::{GlassMaterial, Material, MetallicMaterial, RenderLayer, WoodMaterial};
 use crate::element_style::{
     ElementStyle, SpacingRect, StyleAlign, StyleDisplay, StyleFlexDirection, StyleJustify,
     StyleOverflow, StylePosition,
 };
+use crate::material::{GlassMaterial, Material, MetallicMaterial, RenderLayer, WoodMaterial};
 use crate::units::Length;
 
 /// Custom parser result type using VerboseError for better diagnostics
@@ -742,13 +742,13 @@ impl CssKeyframes {
     /// Convert to Blinc MotionAnimation for enter animations
     ///
     /// Uses the first keyframe (0% or from) as enter_from and animates to the final state.
-    pub fn to_enter_animation(&self, duration_ms: u32) -> crate::element::MotionAnimation {
+    pub fn to_enter_animation(&self, duration_ms: u32) -> crate::motion::MotionAnimation {
         let enter_from = self
             .keyframes
             .first()
             .map(|kf| Self::style_to_motion_keyframe(&kf.style));
 
-        crate::element::MotionAnimation {
+        crate::motion::MotionAnimation {
             enter_from,
             enter_duration_ms: duration_ms,
             enter_delay_ms: 0,
@@ -760,13 +760,13 @@ impl CssKeyframes {
     /// Convert to Blinc MotionAnimation for exit animations
     ///
     /// Uses the last keyframe (100% or to) as exit_to.
-    pub fn to_exit_animation(&self, duration_ms: u32) -> crate::element::MotionAnimation {
+    pub fn to_exit_animation(&self, duration_ms: u32) -> crate::motion::MotionAnimation {
         let exit_to = self
             .keyframes
             .last()
             .map(|kf| Self::style_to_motion_keyframe(&kf.style));
 
-        crate::element::MotionAnimation {
+        crate::motion::MotionAnimation {
             enter_from: None,
             enter_duration_ms: 0,
             enter_delay_ms: 0,
@@ -782,7 +782,7 @@ impl CssKeyframes {
         &self,
         enter_duration_ms: u32,
         exit_duration_ms: u32,
-    ) -> crate::element::MotionAnimation {
+    ) -> crate::motion::MotionAnimation {
         let enter_from = self
             .keyframes
             .first()
@@ -792,7 +792,7 @@ impl CssKeyframes {
             .last()
             .map(|kf| Self::style_to_motion_keyframe(&kf.style));
 
-        crate::element::MotionAnimation {
+        crate::motion::MotionAnimation {
             enter_from,
             enter_duration_ms,
             enter_delay_ms: 0,
@@ -1142,10 +1142,10 @@ impl CssKeyframes {
     /// Extracts animatable properties from an ElementStyle for use in motion animations.
     /// Note: Transform decomposition is limited - for complex CSS transforms, only
     /// simple scale/translate/rotate can be reliably extracted.
-    fn style_to_motion_keyframe(style: &ElementStyle) -> crate::element::MotionKeyframe {
+    fn style_to_motion_keyframe(style: &ElementStyle) -> crate::motion::MotionKeyframe {
         use blinc_core::Transform;
 
-        let mut kf = crate::element::MotionKeyframe::new();
+        let mut kf = crate::motion::MotionKeyframe::new();
 
         if let Some(opacity) = style.opacity {
             kf.opacity = Some(opacity);
@@ -2136,7 +2136,7 @@ impl Stylesheet {
     ///     // Apply motion animation to the element
     /// }
     /// ```
-    pub fn resolve_animation(&self, id: &str) -> Option<crate::element::MotionAnimation> {
+    pub fn resolve_animation(&self, id: &str) -> Option<crate::motion::MotionAnimation> {
         // Get the element's style
         let style = self.get(id)?;
 
@@ -2165,7 +2165,7 @@ impl Stylesheet {
         &self,
         id: &str,
         state: ElementState,
-    ) -> Option<crate::element::MotionAnimation> {
+    ) -> Option<crate::motion::MotionAnimation> {
         // First try state-specific animation
         if let Some(style) = self.get_with_state(id, state) {
             if let Some(anim_config) = &style.animation {
@@ -4065,7 +4065,7 @@ fn parse_flow_additive(input: &str) -> Result<(FlowExpr, &str), String> {
             // Distinguish binary minus from unary minus / negative literal
             // If '-' is followed by a digit and we're after an operator position, it's unary
             // Binary minus: appears after a complete expression
-            let after = trimmed[1..].trim_start();
+            let _after = trimmed[1..].trim_start();
             // Check if the character after '-' starts what could be a token
             // This is binary minus because left already parsed successfully
             let (right, r) = parse_flow_multiplicative(&trimmed[1..])?;
@@ -5917,7 +5917,7 @@ fn apply_property(style: &mut ElementStyle, name: &str, value: &str) {
             }
         }
         "pointer-space" => {
-            use crate::pointer_query::{PointerSpace, PointerSpaceConfig};
+            use crate::pointer::{PointerSpace, PointerSpaceConfig};
             let v = value.trim();
             let space = match v {
                 "self" => PointerSpace::SelfSpace,
@@ -5935,7 +5935,7 @@ fn apply_property(style: &mut ElementStyle, name: &str, value: &str) {
             config.space = space;
         }
         "pointer-origin" => {
-            use crate::pointer_query::{PointerOrigin, PointerSpaceConfig};
+            use crate::pointer::{PointerOrigin, PointerSpaceConfig};
             let v = value.trim();
             let origin = match v {
                 "center" => PointerOrigin::Center,
@@ -5949,7 +5949,7 @@ fn apply_property(style: &mut ElementStyle, name: &str, value: &str) {
             config.origin = origin;
         }
         "pointer-range" => {
-            use crate::pointer_query::PointerSpaceConfig;
+            use crate::pointer::PointerSpaceConfig;
             let v = value.trim();
             let parts: Vec<&str> = v.split_whitespace().collect();
             if parts.len() == 2 {
@@ -5962,7 +5962,7 @@ fn apply_property(style: &mut ElementStyle, name: &str, value: &str) {
             }
         }
         "pointer-smoothing" => {
-            use crate::pointer_query::PointerSpaceConfig;
+            use crate::pointer::PointerSpaceConfig;
             let v = value.trim();
             let v = v.strip_suffix('s').unwrap_or(v); // strip optional 's' suffix
             if let Ok(dur) = v.parse::<f32>() {
@@ -7242,7 +7242,7 @@ fn apply_property_with_errors(
             }
         }
         "pointer-space" => {
-            use crate::pointer_query::{PointerSpace, PointerSpaceConfig};
+            use crate::pointer::{PointerSpace, PointerSpaceConfig};
             let v = value.trim();
             let space = match v {
                 "self" => PointerSpace::SelfSpace,
@@ -7263,7 +7263,7 @@ fn apply_property_with_errors(
             config.space = space;
         }
         "pointer-origin" => {
-            use crate::pointer_query::{PointerOrigin, PointerSpaceConfig};
+            use crate::pointer::{PointerOrigin, PointerSpaceConfig};
             let v = value.trim();
             let origin = match v {
                 "center" => PointerOrigin::Center,
@@ -7280,7 +7280,7 @@ fn apply_property_with_errors(
             config.origin = origin;
         }
         "pointer-range" => {
-            use crate::pointer_query::PointerSpaceConfig;
+            use crate::pointer::PointerSpaceConfig;
             let v = value.trim();
             let parts: Vec<&str> = v.split_whitespace().collect();
             if parts.len() == 2 {
@@ -7297,7 +7297,7 @@ fn apply_property_with_errors(
             }
         }
         "pointer-smoothing" => {
-            use crate::pointer_query::PointerSpaceConfig;
+            use crate::pointer::PointerSpaceConfig;
             let v = value.trim();
             let v = v.strip_suffix('s').unwrap_or(v);
             if let Ok(dur) = v.parse::<f32>() {
@@ -8917,8 +8917,8 @@ fn parse_css_spacing(input: &str) -> Option<SpacingRect> {
 // Color Parsing
 // ============================================================================
 
-fn parse_font_weight(value: &str) -> Option<crate::div::FontWeight> {
-    use crate::div::FontWeight;
+fn parse_font_weight(value: &str) -> Option<crate::text::FontWeight> {
+    use crate::text::FontWeight;
     match value.trim().to_lowercase().as_str() {
         "100" | "thin" => Some(FontWeight::Thin),
         "200" | "extra-light" | "extralight" => Some(FontWeight::ExtraLight),
@@ -8956,8 +8956,8 @@ fn parse_font_style(value: &str) -> Option<crate::element_style::FontStyle> {
     }
 }
 
-fn parse_text_align(value: &str) -> Option<crate::div::TextAlign> {
-    use crate::div::TextAlign;
+fn parse_text_align(value: &str) -> Option<crate::text::TextAlign> {
+    use crate::text::TextAlign;
     match value.trim().to_lowercase().as_str() {
         "left" | "start" => Some(TextAlign::Left),
         "center" => Some(TextAlign::Center),
@@ -8966,8 +8966,8 @@ fn parse_text_align(value: &str) -> Option<crate::div::TextAlign> {
     }
 }
 
-fn parse_cursor(value: &str) -> Option<crate::element::CursorStyle> {
-    use crate::element::CursorStyle;
+fn parse_cursor(value: &str) -> Option<crate::material::CursorStyle> {
+    use crate::material::CursorStyle;
     match value.trim().to_lowercase().as_str() {
         "default" | "auto" => Some(CursorStyle::Default),
         "pointer" => Some(CursorStyle::Pointer),
@@ -9588,7 +9588,7 @@ fn default_position(index: usize, total: usize) -> f32 {
 }
 
 /// Fill in missing/default positions with even distribution
-fn distribute_stop_positions(stops: &mut [GradientStop]) {
+fn distribute_stop_positions(_stops: &mut [GradientStop]) {
     // The positions are already set during parsing
     // This function could be enhanced to handle "auto" positions
     // For now, we rely on default_position during parsing
@@ -12515,7 +12515,7 @@ mod tests {
         let style = result.stylesheet.get("a").unwrap();
         assert!(matches!(
             style.material,
-            Some(crate::element::Material::Glass(_))
+            Some(crate::material::Material::Glass(_))
         ));
     }
 
@@ -12526,7 +12526,7 @@ mod tests {
         let style = result.stylesheet.get("a").unwrap();
         assert!(matches!(
             style.material,
-            Some(crate::element::Material::Metallic(_))
+            Some(crate::material::Material::Metallic(_))
         ));
     }
 
@@ -12537,7 +12537,7 @@ mod tests {
         let style = result.stylesheet.get("a").unwrap();
         assert!(matches!(
             style.material,
-            Some(crate::element::Material::Metallic(_))
+            Some(crate::material::Material::Metallic(_))
         ));
     }
 

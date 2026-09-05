@@ -1,0 +1,28 @@
+[package]
+name = "blinc_css"
+description = "Blinc style model and CSS front end - ElementStyle, calc(), and the CSS subset parser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/blinc_css"
+rust-version.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+blinc_core = { path = "../blinc_core", version = "0.5.1" }
+blinc_animation = { path = "../blinc_animation", version = "0.5.1" }
+blinc_theme = { path = "../blinc_theme", version = "0.5.1" }
+
+# `Length` lowers straight into Taffy's LengthPercentage types, so the
+# unit model is expressed in Taffy's vocabulary rather than translated
+# at the layout boundary.
+taffy.workspace = true
+
+# CSS parser combinators
+nom = "7"
+
+# Logging
+tracing.workspace = true

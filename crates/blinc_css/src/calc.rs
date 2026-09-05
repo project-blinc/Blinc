@@ -590,7 +590,6 @@ fn tokenize(input: &str) -> Option<Vec<Token>> {
                 // Hex color — parse as a literal number for now (just the alpha channel)
                 // Full color support can be added later
                 i += 1;
-                let start = i;
                 while i < len && chars[i].is_ascii_hexdigit() {
                     i += 1;
                 }
@@ -718,7 +717,7 @@ fn parse_function_call<'a>(name: &str, tokens: &'a [Token]) -> ParseResult<'a> {
                     Some((CalcExpr::EnvVar(var_name), &rest[1..]))
                 } else if matches!(rest.first(), Some(Token::Comma)) {
                     // env(name, fallback) — parse fallback but use var if available
-                    let (fallback, rest2) = parse_additive(&rest[1..])?;
+                    let (_fallback, rest2) = parse_additive(&rest[1..])?;
                     if matches!(rest2.first(), Some(Token::RParen)) {
                         // For now, just use the env var (fallback evaluation would need runtime)
                         Some((CalcExpr::EnvVar(var_name), &rest2[1..]))

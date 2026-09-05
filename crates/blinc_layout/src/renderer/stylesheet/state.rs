@@ -28,6 +28,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 
 use crate::css_parser::{ElementState, Stylesheet};
+use crate::dynamic_style::DynamicPropertyExt;
 use crate::element_style::ElementStyle;
 use crate::tree::LayoutNodeId;
 

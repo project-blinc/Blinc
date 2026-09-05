@@ -29,6 +29,7 @@ media = ["dep:blinc_media"]
 clipboard_image = ["arboard/image-data"]
 [dependencies]
 blinc_core = { path = "../blinc_core", version = "0.5.1" }
+blinc_css = { path = "../blinc_css", version = "0.5.1" }
 blinc_animation = { path = "../blinc_animation", version = "0.5.1" }
 blinc_theme = { path = "../blinc_theme", version = "0.5.1" }
 
