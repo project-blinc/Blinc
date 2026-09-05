@@ -68,7 +68,7 @@ pub(crate) fn view_returning_fn_names(program: &TypedProgram) -> std::collection
         // helper come out, and the annotation becomes optional for every
         // return type rather than just widgets.
         let inferred = matches!(func.return_type, Type::Primitive(PrimitiveType::Unit))
-            && func.body.as_ref().is_some_and(|b| ends_in_a_widget_call(b));
+            && func.body.as_ref().is_some_and(ends_in_a_widget_call);
         if (named.as_deref() == Some("View") || inferred)
             && let Some(name) = func.name.resolve_global()
         {

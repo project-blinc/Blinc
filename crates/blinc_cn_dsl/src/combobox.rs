@@ -51,7 +51,7 @@ pub struct CnCombobox {
     #[children]
     pub children: Mutex<Vec<Box<dyn ElementBuilder>>>,
     /// Tells this combobox's state from another's when two would
-    /// otherwise look identical. See [`Self::instance_key`].
+    /// otherwise look identical. See `instance_key`.
     pub key: String,
     /// Built once, consuming `children`.
     #[skip]

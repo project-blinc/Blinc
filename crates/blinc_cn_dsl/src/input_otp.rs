@@ -41,7 +41,7 @@ pub struct CnInputOTP {
     pub on_complete: i64,
     /// Names this widget when two of them would otherwise look
     /// identical. Only needed for a genuine duplicate: see
-    /// [`Self::otp_key`].
+    /// `otp_key`.
     pub key: String,
     /// Lazy-constructed cn widget. Same caching rationale as
     /// `CnButton::built`.

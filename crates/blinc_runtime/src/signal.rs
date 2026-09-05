@@ -338,6 +338,115 @@ pub fn clear_all() {
     }
 }
 
+// =====================================================================
+// String-list accessors.
+//
+// The source for `items.map(|x| Row(x))` over a list that changes at
+// runtime. Set from Rust; the DSL reads it only through the
+// child-producing extern, never as a value.
+// =====================================================================
+
+/// Replace a string-list signal's contents. Auto-mints if absent.
+///
+/// Fires the same subscriber path as any other `set`, so a region that
+/// rendered from this list re-renders.
+pub fn set_string_list(name: &str, value: Vec<String>) {
+    let id_raw = mint_or_get(name, SignalType::StringList);
+    Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).set(value);
+}
+
+/// Read a string-list signal. `None` if undeclared or minted as another
+/// type.
+pub fn get_string_list(name: &str) -> Option<Vec<String>> {
+    let (id_raw, SignalType::StringList) = lookup(name)? else {
+        return None;
+    };
+    Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).try_get()
+}
+
+/// Read an i32 signal by raw id.
+///
+/// For a caller holding an id rather than a name — an FSM machine's
+/// context field, whose signal is per instance and has no name.
+pub fn get_i32_by_id(id_raw: u64) -> Option<i32> {
+    Signal::<i32>::from_id(SignalId::from_raw(id_raw)).try_get()
+}
+
+/// f64 mirror of [`get_i32_by_id`].
+pub fn get_f64_by_id(id_raw: u64) -> Option<f64> {
+    Signal::<f64>::from_id(SignalId::from_raw(id_raw)).try_get()
+}
+
+/// bool mirror of [`get_i32_by_id`].
+pub fn get_bool_by_id(id_raw: u64) -> Option<bool> {
+    Signal::<bool>::from_id(SignalId::from_raw(id_raw)).try_get()
+}
+
+/// Read by raw signal id, for the extern that only has the baked id.
+pub fn get_string_list_by_id(id_raw: u64) -> Option<Vec<String>> {
+    Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).try_get()
+}
+
+/// Append one element to a string-list signal. Auto-mints if absent.
+///
+/// The DSL writes a list this way rather than handing one across the
+/// FFI: only the element crosses, and a string already has a
+/// representation on both sides.
+pub fn push_string_list(name: &str, value: String) {
+    let id_raw = mint_or_get(name, SignalType::StringList);
+    let sig = Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw));
+    let mut items = sig.try_get().unwrap_or_default();
+    items.push(value);
+    sig.set(items);
+}
+
+/// Empty a string-list signal. Auto-mints if absent, so clearing an
+/// undeclared list is a no-op rather than an error.
+pub fn clear_string_list(name: &str) {
+    let id_raw = mint_or_get(name, SignalType::StringList);
+    Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).set(Vec::new());
+}
+
+// =====================================================================
+// Exports — the names a host may reach
+// =====================================================================
+
+/// Names the running program declared with `export { … }`.
+///
+/// Empty means no program has declared any, which today is every
+/// program: the host reaches every signal by name because nothing is
+/// private yet. Once signals are scoped, this is what keeps a host's
+/// grip on the ones it is meant to have.
+static EXPORTED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Replace the export list. Called by the DSL after each compile, so a
+/// reload that removes an `export` takes it away too.
+pub fn set_exported(names: &[String]) {
+    if let Ok(mut e) = EXPORTED.lock() {
+        e.clear();
+        e.extend_from_slice(names);
+    }
+}
+
+/// The current export list.
+pub fn exported() -> Vec<String> {
+    EXPORTED.lock().map(|e| e.clone()).unwrap_or_default()
+}
+
+/// Whether a host may reach `name`.
+///
+/// Permissive while no program has exported anything: taking the host's
+/// access away before scoping exists would break every caller for no
+/// gain. A program that declares ANY export is stating its surface, and
+/// is held to it.
+pub fn is_reachable(name: &str) -> bool {
+    match EXPORTED.lock() {
+        Ok(e) if e.is_empty() => true,
+        Ok(e) => e.iter().any(|n| n == name),
+        Err(_) => true,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -464,114 +573,5 @@ mod tests {
         assert_eq!(get_str_or_default("title_t"), "");
         set_str("title_t", "hello");
         assert_eq!(get_str("title_t").as_deref(), Some("hello"));
-    }
-}
-
-// =====================================================================
-// String-list accessors.
-//
-// The source for `items.map(|x| Row(x))` over a list that changes at
-// runtime. Set from Rust; the DSL reads it only through the
-// child-producing extern, never as a value.
-// =====================================================================
-
-/// Replace a string-list signal's contents. Auto-mints if absent.
-///
-/// Fires the same subscriber path as any other `set`, so a region that
-/// rendered from this list re-renders.
-pub fn set_string_list(name: &str, value: Vec<String>) {
-    let id_raw = mint_or_get(name, SignalType::StringList);
-    Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).set(value);
-}
-
-/// Read a string-list signal. `None` if undeclared or minted as another
-/// type.
-pub fn get_string_list(name: &str) -> Option<Vec<String>> {
-    let (id_raw, SignalType::StringList) = lookup(name)? else {
-        return None;
-    };
-    Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).try_get()
-}
-
-/// Read an i32 signal by raw id.
-///
-/// For a caller holding an id rather than a name — an FSM machine's
-/// context field, whose signal is per instance and has no name.
-pub fn get_i32_by_id(id_raw: u64) -> Option<i32> {
-    Signal::<i32>::from_id(SignalId::from_raw(id_raw)).try_get()
-}
-
-/// f64 mirror of [`get_i32_by_id`].
-pub fn get_f64_by_id(id_raw: u64) -> Option<f64> {
-    Signal::<f64>::from_id(SignalId::from_raw(id_raw)).try_get()
-}
-
-/// bool mirror of [`get_i32_by_id`].
-pub fn get_bool_by_id(id_raw: u64) -> Option<bool> {
-    Signal::<bool>::from_id(SignalId::from_raw(id_raw)).try_get()
-}
-
-/// Read by raw signal id, for the extern that only has the baked id.
-pub fn get_string_list_by_id(id_raw: u64) -> Option<Vec<String>> {
-    Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).try_get()
-}
-
-/// Append one element to a string-list signal. Auto-mints if absent.
-///
-/// The DSL writes a list this way rather than handing one across the
-/// FFI: only the element crosses, and a string already has a
-/// representation on both sides.
-pub fn push_string_list(name: &str, value: String) {
-    let id_raw = mint_or_get(name, SignalType::StringList);
-    let sig = Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw));
-    let mut items = sig.try_get().unwrap_or_default();
-    items.push(value);
-    sig.set(items);
-}
-
-/// Empty a string-list signal. Auto-mints if absent, so clearing an
-/// undeclared list is a no-op rather than an error.
-pub fn clear_string_list(name: &str) {
-    let id_raw = mint_or_get(name, SignalType::StringList);
-    Signal::<Vec<String>>::from_id(SignalId::from_raw(id_raw)).set(Vec::new());
-}
-
-// =====================================================================
-// Exports — the names a host may reach
-// =====================================================================
-
-/// Names the running program declared with `export { … }`.
-///
-/// Empty means no program has declared any, which today is every
-/// program: the host reaches every signal by name because nothing is
-/// private yet. Once signals are scoped, this is what keeps a host's
-/// grip on the ones it is meant to have.
-static EXPORTED: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
-
-/// Replace the export list. Called by the DSL after each compile, so a
-/// reload that removes an `export` takes it away too.
-pub fn set_exported(names: &[String]) {
-    if let Ok(mut e) = EXPORTED.lock() {
-        e.clear();
-        e.extend_from_slice(names);
-    }
-}
-
-/// The current export list.
-pub fn exported() -> Vec<String> {
-    EXPORTED.lock().map(|e| e.clone()).unwrap_or_default()
-}
-
-/// Whether a host may reach `name`.
-///
-/// Permissive while no program has exported anything: taking the host's
-/// access away before scoping exists would break every caller for no
-/// gain. A program that declares ANY export is stating its surface, and
-/// is held to it.
-pub fn is_reachable(name: &str) -> bool {
-    match EXPORTED.lock() {
-        Ok(e) if e.is_empty() => true,
-        Ok(e) => e.iter().any(|n| n == name),
-        Err(_) => true,
     }
 }

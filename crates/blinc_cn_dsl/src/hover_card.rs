@@ -118,7 +118,7 @@ pub struct CnHoverCard {
     /// cn default.
     pub close_delay: f64,
     /// Names this card when two of them would otherwise look identical.
-    /// Only needed for a genuine duplicate: see [`Self::card_key`].
+    /// Only needed for a genuine duplicate: see `card_key`.
     pub key: String,
     #[children]
     pub children: Mutex<Vec<Box<dyn ElementBuilder>>>,
@@ -175,10 +175,10 @@ impl CnHoverCard {
         let trigger = crate::shared_child::body_recipe(trigger);
 
         let key = blinc_layout::InstanceKey::explicit(self.card_key());
-        let mut h = blinc_cn::HoverCardBuilder::with_key(move || trigger(), key);
+        let mut h = blinc_cn::HoverCardBuilder::with_key(trigger, key);
         if let Some(content) = content {
             let content = crate::shared_child::body_recipe(content);
-            h = h.content(move || content());
+            h = h.content(content);
         } else {
             tracing::warn!("cn.HoverCard: no cn.HoverCardContent — it raises nothing");
         }

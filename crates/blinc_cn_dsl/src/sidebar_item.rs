@@ -17,7 +17,7 @@ pub(crate) const ICON_SIZE: f32 = 18.0;
 /// }
 /// ```
 ///
-/// `icon` names a Lucide icon; see [`crate::icon::resolve`] for the
+/// `icon` names a Lucide icon; see `icon::resolve` for the
 /// escape hatch. The sidebar reads this through `as_any` and draws the
 /// row itself, so an item outside one renders nothing.
 #[extern_widget(namespace = "cn", name = "SidebarItem")]

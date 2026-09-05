@@ -772,6 +772,9 @@ pub(crate) fn inject_user_view_instance_id_params(program: &mut TypedProgram) {
                 kind: ParameterKind::Regular,
                 default_value: None,
                 attributes: vec![],
+                // A u64 instance id is a value type: the callee gets a
+                // copy and the caller keeps what it had.
+                ownership: zyntax_typed_ast::typed_ast::ParamOwnership::Copied,
                 span: method.span,
             };
             method.params.insert(0, param);

@@ -229,7 +229,7 @@ impl CollapsibleBuilder {
         }
         let built = self.make();
         let _ = self.built.set(built);
-        return self.built.get().expect("just set");
+        self.built.get().expect("just set")
     }
 
     fn make(&self) -> Collapsible {
@@ -271,8 +271,6 @@ impl CollapsibleBuilder {
         self.content = Some(std::sync::Arc::new(content));
         self
     }
-
-    /// Set the content of the collapsible
 
     /// Toggle the collapsible state
     pub fn toggle(&self) {

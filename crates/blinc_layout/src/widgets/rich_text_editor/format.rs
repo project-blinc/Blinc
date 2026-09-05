@@ -145,7 +145,14 @@ fn for_each_line_in_selection<F: FnMut(&mut StyledLine, usize, usize)>(
         } else {
             line_count.saturating_sub(1)
         };
-        for line_idx in first_line..=last_line.min(line_count.saturating_sub(1)) {
+        let stop_line = last_line.min(line_count.saturating_sub(1));
+        for (line_idx, line) in doc.blocks[block_idx]
+            .lines
+            .iter_mut()
+            .enumerate()
+            .take(stop_line + 1)
+            .skip(first_line)
+        {
             // Compute the byte range for this line within the selection.
             let line_start_col = if block_idx == start.block && line_idx == start.line {
                 start.col
@@ -155,9 +162,8 @@ fn for_each_line_in_selection<F: FnMut(&mut StyledLine, usize, usize)>(
             let line_end_col = if block_idx == end.block && line_idx == end.line {
                 end.col
             } else {
-                doc.blocks[block_idx].lines[line_idx].text.chars().count()
+                line.text.chars().count()
             };
-            let line = &mut doc.blocks[block_idx].lines[line_idx];
             let bs = char_to_byte(&line.text, line_start_col);
             let be = char_to_byte(&line.text, line_end_col);
             if bs >= be {
@@ -195,7 +201,14 @@ fn for_each_line_in_selection_ref<F: FnMut(&StyledLine, usize, usize)>(
         } else {
             line_count.saturating_sub(1)
         };
-        for line_idx in first_line..=last_line.min(line_count.saturating_sub(1)) {
+        let stop_line = last_line.min(line_count.saturating_sub(1));
+        for (line_idx, line) in doc.blocks[block_idx]
+            .lines
+            .iter()
+            .enumerate()
+            .take(stop_line + 1)
+            .skip(first_line)
+        {
             let line_start_col = if block_idx == start.block && line_idx == start.line {
                 start.col
             } else {
@@ -204,9 +217,8 @@ fn for_each_line_in_selection_ref<F: FnMut(&StyledLine, usize, usize)>(
             let line_end_col = if block_idx == end.block && line_idx == end.line {
                 end.col
             } else {
-                doc.blocks[block_idx].lines[line_idx].text.chars().count()
+                line.text.chars().count()
             };
-            let line = &doc.blocks[block_idx].lines[line_idx];
             let bs = char_to_byte(&line.text, line_start_col);
             let be = char_to_byte(&line.text, line_end_col);
             if bs >= be {

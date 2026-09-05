@@ -722,7 +722,7 @@ fn form_inputs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
     let qty = ctx.use_state_keyed("number_qty", || 1.0);
     let temperature = ctx.use_state_keyed("number_temp", || 22.5);
 
-    let otp_code = ctx.use_state_keyed("otp_code", || String::new());
+    let otp_code = ctx.use_state_keyed("otp_code", String::new);
 
     section_container()
         .child(section_title("Form Inputs"))

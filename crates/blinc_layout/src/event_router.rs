@@ -1675,13 +1675,12 @@ impl EventRouter {
                 .unwrap_or(false);
 
             let mut child_offset = base_child_offset;
-            let child_cumulative;
 
-            if child_is_fixed {
+            let child_cumulative = if child_is_fixed {
                 // Cancel all accumulated scroll for fixed elements
                 child_offset.0 -= new_cumulative_scroll.0;
                 child_offset.1 -= new_cumulative_scroll.1;
-                child_cumulative = (0.0, 0.0);
+                (0.0, 0.0)
             } else if child_is_sticky {
                 if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top) {
                     if let Some(cb) = tree.layout().get_bounds(child, (0.0, 0.0)) {
@@ -1692,10 +1691,10 @@ impl EventRouter {
                         }
                     }
                 }
-                child_cumulative = new_cumulative_scroll;
+                new_cumulative_scroll
             } else {
-                child_cumulative = new_cumulative_scroll;
-            }
+                new_cumulative_scroll
+            };
 
             // Match the paint path for `scroll().viewport_cull(true)`: once
             // a culling scroll is active, ordinary off-viewport child subtrees
@@ -1915,12 +1914,11 @@ impl EventRouter {
             let child_is_sticky = child_render.map(|n| n.props.is_sticky).unwrap_or(false);
 
             let mut child_offset = base_child_offset;
-            let child_cumulative;
 
-            if child_is_fixed {
+            let child_cumulative = if child_is_fixed {
                 child_offset.0 -= new_cumulative_scroll.0;
                 child_offset.1 -= new_cumulative_scroll.1;
-                child_cumulative = (0.0, 0.0);
+                (0.0, 0.0)
             } else if child_is_sticky {
                 if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top) {
                     if let Some(cb) = tree.layout().get_bounds(child, (0.0, 0.0)) {
@@ -1931,10 +1929,10 @@ impl EventRouter {
                         }
                     }
                 }
-                child_cumulative = new_cumulative_scroll;
+                new_cumulative_scroll
             } else {
-                child_cumulative = new_cumulative_scroll;
-            }
+                new_cumulative_scroll
+            };
 
             if let Some((cx, cy, cw, ch)) = cull_viewport {
                 let child_is_fg = child_render

@@ -52,7 +52,7 @@ pub struct CnToggleGroup {
     pub children: Mutex<Vec<Box<dyn ElementBuilder>>>,
     /// Names this group when two of them would otherwise look
     /// identical. Only needed for a genuine duplicate: see
-    /// [`Self::group_key`].
+    /// `group_key`.
     pub key: String,
     /// Built once, consuming `children`.
     #[skip]

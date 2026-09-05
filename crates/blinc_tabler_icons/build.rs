@@ -77,11 +77,7 @@ fn generate_module(icons_dir: &Path, out_path: &Path, variant: &str) {
 
     icons.sort_by(|a, b| a.0.cmp(&b.0));
 
-    println!(
-        "cargo:warning=Generated {} {} icon constants",
-        icons.len(),
-        variant
-    );
+    println!("Generated {} {} icon constants", icons.len(), variant);
 
     for (const_name, path_data, doc) in &icons {
         output.push_str(doc);

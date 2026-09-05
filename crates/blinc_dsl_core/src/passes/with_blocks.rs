@@ -470,9 +470,13 @@ fn synthetic_impl(
                 is_static: false,
                 is_async: false,
                 is_override: false,
+                annotations: vec![],
                 span,
             }],
             associated_types: vec![],
+            // The DSL synthesizes this impl in the program itself; an
+            // import did not bring it here.
+            module: None,
             span,
         }),
         Type::Primitive(PrimitiveType::Unit),

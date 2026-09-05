@@ -347,9 +347,7 @@ impl CodeEditorData {
 
     /// Invalidate entire highlight cache
     fn invalidate_all_highlights(&mut self) {
-        for slot in &mut self.highlight_cache {
-            *slot = None;
-        }
+        self.highlight_cache.fill(None);
         self.sync_highlight_cache();
     }
 
@@ -554,8 +552,13 @@ impl CodeEditorData {
             Some(line[s..e].to_string())
         } else {
             let mut result = String::new();
-            for line_idx in start.line..=end.line {
-                let line = &self.lines[line_idx];
+            for (line_idx, line) in self
+                .lines
+                .iter()
+                .enumerate()
+                .take(end.line + 1)
+                .skip(start.line)
+            {
                 if line_idx == start.line {
                     let s = char_to_byte_pos(line, start.column);
                     result.push_str(&line[s..]);
@@ -2483,23 +2486,21 @@ fn find_matching_brackets(data: &CodeEditorData) -> Option<(TextPosition, TextPo
     let (bracket_char, bracket_col) = if let Some(c) = at_cursor {
         if matches!(c, '{' | '}' | '(' | ')' | '[' | ']') {
             (c, col)
-        } else if let Some(c2) = before_cursor {
+        } else {
+            let c2 = before_cursor?;
             if matches!(c2, '{' | '}' | '(' | ')' | '[' | ']') {
                 (c2, col - 1)
             } else {
                 return None;
             }
-        } else {
-            return None;
         }
-    } else if let Some(c) = before_cursor {
+    } else {
+        let c = before_cursor?;
         if matches!(c, '{' | '}' | '(' | ')' | '[' | ']') {
             (c, col - 1)
         } else {
             return None;
         }
-    } else {
-        return None;
     };
 
     let (open, close) = match bracket_char {
@@ -2515,9 +2516,9 @@ fn find_matching_brackets(data: &CodeEditorData) -> Option<(TextPosition, TextPo
     if is_open {
         // Search forward for matching close
         let mut depth = 0i32;
-        for l in line..data.lines.len() {
+        for (l, text) in data.lines.iter().enumerate().skip(line) {
             let start_col = if l == line { bracket_col } else { 0 };
-            for (ci, ch) in data.lines[l].chars().enumerate() {
+            for (ci, ch) in text.chars().enumerate() {
                 if ci < start_col {
                     continue;
                 }

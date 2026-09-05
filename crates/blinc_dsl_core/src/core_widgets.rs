@@ -48,7 +48,7 @@ pub struct RichTextWidget {
 }
 
 impl RichTextWidget {
-    fn get_or_build(&self) -> &Box<dyn ElementBuilder> {
+    fn get_or_build(&self) -> &dyn ElementBuilder {
         blinc_layout::build_once::build_once(&self.built, || {
             let size = self.size;
             let line_height = self.line_height;
@@ -67,6 +67,7 @@ impl RichTextWidget {
                 Box::new(t)
             })
         })
+        .as_ref()
     }
 
     fn align(&self) -> Option<blinc_layout::div::TextAlign> {
@@ -103,12 +104,13 @@ pub struct MarkdownWidget {
 }
 
 impl MarkdownWidget {
-    fn get_or_build(&self) -> &Box<dyn ElementBuilder> {
+    fn get_or_build(&self) -> &dyn ElementBuilder {
         blinc_layout::build_once::build_once(&self.built, || {
             reactive_string_node(&self.source, |s| {
                 Box::new(blinc_layout::markdown::markdown(&s))
             })
         })
+        .as_ref()
     }
 }
 

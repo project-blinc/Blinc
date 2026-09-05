@@ -713,7 +713,7 @@ pub mod __extern_widget_internals {
         }
         super::decode_string_arg(ptr)
             .split_whitespace()
-            .map(|name| ::blinc_core::intern::intern(name))
+            .map(::blinc_core::intern::intern)
             .collect()
     }
 

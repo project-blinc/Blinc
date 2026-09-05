@@ -44,7 +44,7 @@ pub struct CnTabs {
     pub transition: String,
     /// Names this strip when two of them would otherwise look
     /// identical. Only needed for a genuine duplicate: see
-    /// [`Self::tabs_key`].
+    /// `tabs_key`.
     pub key: String,
     #[children]
     pub children: Mutex<Vec<Box<dyn ElementBuilder>>>,

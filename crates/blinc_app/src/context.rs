@@ -2818,10 +2818,7 @@ impl RenderContext {
                 .cached_motion_subtree_svgs
                 .as_ref()
                 .is_some_and(|v| !v.is_empty());
-        if any_binding_active && has_motion_overlay_glyphs {
-            return false;
-        }
-        true
+        !(any_binding_active && has_motion_overlay_glyphs)
     }
 
     /// Re-bind the latest glyph atlas views onto the SDF pipeline.
@@ -7750,12 +7747,8 @@ impl RenderContext {
                     .and_then(|v| v.lock().ok())
                     .map(|g| g.get())
                     .unwrap_or(0.0);
-                if (cx - meta.last_translate.0).abs() > VISIBLE_PIXEL_EPS
+                (cx - meta.last_translate.0).abs() > VISIBLE_PIXEL_EPS
                     || (cy - meta.last_translate.1).abs() > VISIBLE_PIXEL_EPS
-                {
-                    return true;
-                }
-                false
             })
         };
         let bindings_animating = direct_write_drift
@@ -8103,7 +8096,7 @@ impl RenderContext {
                         if let Some(scissor) = damage_scissor_from_union(union, &self.renderer) {
                             self.renderer.set_pending_scissor(scissor);
                             if let Some(glyphs_by_layer) = self.cached_glyphs_by_layer.clone() {
-                                for (_z, glyphs) in glyphs_by_layer.iter() {
+                                for glyphs in glyphs_by_layer.values() {
                                     let filtered: Vec<_> = glyphs
                                         .iter()
                                         .filter(|g| aabb_intersects_any(g.bounds, &damaged))
@@ -8156,7 +8149,7 @@ impl RenderContext {
                         // Full re-dispatch (no scissor) — cache was
                         // fully cleared by `render_static_layer`.
                         if let Some(glyphs_by_layer) = self.cached_glyphs_by_layer.clone() {
-                            for (_z, glyphs) in glyphs_by_layer.iter() {
+                            for glyphs in glyphs_by_layer.values() {
                                 if !glyphs.is_empty() {
                                     self.render_text(&static_view, glyphs);
                                 }
@@ -8454,7 +8447,7 @@ impl RenderContext {
                                 let scale_factor = tree.scale_factor();
                                 self.renderer.set_pending_scissor(scissor);
                                 if let Some(glyphs_by_layer) = self.cached_glyphs_by_layer.clone() {
-                                    for (_z, glyphs) in glyphs_by_layer.iter() {
+                                    for glyphs in glyphs_by_layer.values() {
                                         let filtered: Vec<_> = glyphs
                                             .iter()
                                             .filter(|g| aabb_intersects_any(g.bounds, &damaged))

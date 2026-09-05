@@ -140,12 +140,11 @@ impl RenderTree {
             let child_is_sticky = child_render.map(|n| n.props.is_sticky).unwrap_or(false);
 
             let mut child_offset = new_offset;
-            let child_cumulative;
 
-            if child_is_fixed {
+            let child_cumulative = if child_is_fixed {
                 child_offset.0 -= new_cumulative_scroll.0;
                 child_offset.1 -= new_cumulative_scroll.1;
-                child_cumulative = (0.0, 0.0);
+                (0.0, 0.0)
             } else if child_is_sticky {
                 if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top) {
                     if let Some(cb) = self.layout_tree.get_bounds(child_id, (0.0, 0.0)) {
@@ -156,10 +155,10 @@ impl RenderTree {
                         }
                     }
                 }
-                child_cumulative = new_cumulative_scroll;
+                new_cumulative_scroll
             } else {
-                child_cumulative = new_cumulative_scroll;
-            }
+                new_cumulative_scroll
+            };
 
             self.collect_text_elements(child_id, child_offset, result, child_cumulative);
         }
@@ -230,12 +229,11 @@ impl RenderTree {
             let child_is_sticky = child_render.map(|n| n.props.is_sticky).unwrap_or(false);
 
             let mut child_offset = new_offset;
-            let child_cumulative;
 
-            if child_is_fixed {
+            let child_cumulative = if child_is_fixed {
                 child_offset.0 -= new_cumulative_scroll.0;
                 child_offset.1 -= new_cumulative_scroll.1;
-                child_cumulative = (0.0, 0.0);
+                (0.0, 0.0)
             } else if child_is_sticky {
                 if let Some(threshold) = child_render.and_then(|n| n.props.sticky_top) {
                     if let Some(cb) = self.layout_tree.get_bounds(child_id, (0.0, 0.0)) {
@@ -246,10 +244,10 @@ impl RenderTree {
                         }
                     }
                 }
-                child_cumulative = new_cumulative_scroll;
+                new_cumulative_scroll
             } else {
-                child_cumulative = new_cumulative_scroll;
-            }
+                new_cumulative_scroll
+            };
 
             self.collect_svg_elements(child_id, child_offset, result, child_cumulative);
         }

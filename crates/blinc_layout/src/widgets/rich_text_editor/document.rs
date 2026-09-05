@@ -216,8 +216,13 @@ impl RichDocument {
         let e_block = end.block.min(last_block);
 
         let mut out = String::new();
-        for block_idx in s_block..=e_block {
-            let block = &self.blocks[block_idx];
+        for (block_idx, block) in self
+            .blocks
+            .iter()
+            .enumerate()
+            .take(e_block + 1)
+            .skip(s_block)
+        {
             if block_idx > s_block {
                 out.push('\n');
             }
@@ -232,8 +237,7 @@ impl RichDocument {
             } else {
                 last_line
             };
-            for line_idx in s_line..=e_line {
-                let line = &block.lines[line_idx];
+            for (line_idx, line) in block.lines.iter().enumerate().take(e_line + 1).skip(s_line) {
                 if line_idx > s_line {
                     out.push('\n');
                 }

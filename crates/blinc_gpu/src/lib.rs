@@ -1,4 +1,8 @@
 #![allow(unused, dead_code, deprecated)]
+// wgpu's `Send` obligations nest deeper than the default 128-step
+// budget, so proving `CustomRenderPass` impls auto-trait-safe needs
+// more room. Purely a compile-time budget; no runtime effect.
+#![recursion_limit = "256"]
 //! Blinc GPU Renderer
 //!
 //! SDF-based GPU rendering using wgpu.

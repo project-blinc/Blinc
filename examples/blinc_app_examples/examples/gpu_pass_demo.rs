@@ -1,3 +1,5 @@
+// Same deep wgpu `Send` chain as blinc_gpu; see its lib.rs.
+#![recursion_limit = "256"]
 //! `DrawContext::run_gpu_pass` end-to-end demo.
 //!
 //! Shows the same pattern a user would reach for if they wanted to
