@@ -312,11 +312,8 @@ pub(crate) fn parse_transition(value: &str) -> Option<CssTransitionSet> {
         if trimmed.is_empty() {
             continue;
         }
-        if let Some(t) = parse_single_transition(trimmed) {
-            transitions.push(t);
-        } else {
-            return None;
-        }
+        let t = parse_single_transition(trimmed)?;
+        transitions.push(t);
     }
 
     if transitions.is_empty() {

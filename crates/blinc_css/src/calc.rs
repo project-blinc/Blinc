@@ -543,11 +543,8 @@ fn tokenize(input: &str) -> Option<Vec<Token>> {
                         }
                         if i > unit_start {
                             let unit_str: String = chars[unit_start..i].iter().collect();
-                            if let Some(unit) = CalcUnit::parse(&unit_str) {
-                                tokens.push(Token::Dimension(num, unit));
-                            } else {
-                                return None;
-                            }
+                            let unit = CalcUnit::parse(&unit_str)?;
+                            tokens.push(Token::Dimension(num, unit));
                         } else {
                             tokens.push(Token::Number(num));
                         }
@@ -576,11 +573,8 @@ fn tokenize(input: &str) -> Option<Vec<Token>> {
                     }
                     if i > unit_start {
                         let unit_str: String = chars[unit_start..i].iter().collect();
-                        if let Some(unit) = CalcUnit::parse(&unit_str) {
-                            tokens.push(Token::Dimension(num, unit));
-                        } else {
-                            return None;
-                        }
+                        let unit = CalcUnit::parse(&unit_str)?;
+                        tokens.push(Token::Dimension(num, unit));
                     } else {
                         tokens.push(Token::Number(num));
                     }
