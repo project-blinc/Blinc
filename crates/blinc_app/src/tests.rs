@@ -35,9 +35,14 @@ macro_rules! require_gpu {
     };
 }
 
-/// Create a test texture for rendering (must match renderer's format)
+/// Create a test texture for rendering.
+///
+/// Takes the format from the renderer: a pipeline and its render pass
+/// must agree, and a hardcoded copy here silently broke every pixel test
+/// the moment the renderer's default changed.
 fn create_test_texture(
     device: &wgpu::Device,
+    format: wgpu::TextureFormat,
     width: u32,
     height: u32,
 ) -> (wgpu::Texture, wgpu::TextureView) {
@@ -51,7 +56,7 @@ fn create_test_texture(
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Bgra8UnormSrgb,
+        format,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
@@ -168,7 +173,7 @@ fn render_to_png(
     width: u32,
     height: u32,
 ) {
-    let (texture, view) = create_test_texture(app.device(), width, height);
+    let (texture, view) = create_test_texture(app.device(), app.texture_format(), width, height);
     app.render(ui, &view, width as f32, height as f32)
         .expect("Render failed");
 
@@ -689,7 +694,12 @@ fn test_layer_blur_visible_on_msaa_path() {
     ));
     let render_state = blinc_layout::RenderState::new(scheduler);
 
-    let (texture, view) = create_test_texture(app.device(), canvas as u32, canvas as u32);
+    let (texture, view) = create_test_texture(
+        app.device(),
+        app.texture_format(),
+        canvas as u32,
+        canvas as u32,
+    );
     app.render_tree_with_motion(&tree, &render_state, &view, canvas as u32, canvas as u32)
         .expect("Render failed");
 
@@ -798,7 +808,12 @@ fn test_layer_blur_visible_via_app_render() {
             .bg(Color::RED),
     );
 
-    let (texture, view) = create_test_texture(app.device(), canvas as u32, canvas as u32);
+    let (texture, view) = create_test_texture(
+        app.device(),
+        app.texture_format(),
+        canvas as u32,
+        canvas as u32,
+    );
     app.render(&ui, &view, canvas, canvas)
         .expect("Render failed");
 
@@ -848,7 +863,7 @@ fn test_render_tree_reuse() {
     let mut tree = RenderTree::from_element(&ui);
     tree.compute_layout(200.0, 200.0);
 
-    let (texture, view) = create_test_texture(app.device(), 200, 200);
+    let (texture, view) = create_test_texture(app.device(), app.texture_format(), 200, 200);
 
     // Render the same tree 3 times
     for i in 0..3 {
@@ -905,11 +920,11 @@ fn render_to_rgba8_with_motion_routes_through_motion_path() {
 fn render_to_rgba8_returns_packed_pixels() {
     require_gpu!(app);
 
-    // Solid red over the full surface. Use sRGB-correct hex so the
-    // value survives the surface-format gamma path:
-    // BlincApp's default texture_format is `Bgra8UnormSrgb`, so the
-    // values we sample are gamma-decoded. A pure-red CSS literal
-    // (#ff0000) lands at (255, 0, 0) after the swizzle.
+    // Solid red over the full surface. This test is about packing and
+    // row padding, not colour; see
+    // `render_to_rgba8_does_not_double_encode_gamma` for the gamma path.
+    // Pure red says nothing about it either way, since 255 is a fixed
+    // point of the sRGB curve.
     let ui = div().w(8.0).h(8.0).bg(Color::RED);
 
     let pixels = app
@@ -941,4 +956,40 @@ fn render_to_rgba8_returns_packed_pixels() {
     assert!(pixels[i + 1] < 80, "green should be ~0 for solid red");
     assert!(pixels[i + 2] < 80, "blue should be ~0 for solid red");
     assert_eq!(pixels[i + 3], 255, "alpha should be opaque");
+}
+
+/// `render_to_rgba8` must give back the colour that went in.
+///
+/// Windowed surfaces deliberately pick a NON-sRGB format, because Blinc's
+/// shaders bake the gamma transfer at the source (see the rationale in
+/// `renderer.rs`). The headless default was `Bgra8UnormSrgb`, which treats
+/// those already-encoded values as linear and encodes them again, so every
+/// offscreen capture came out lighter than the same UI on screen.
+///
+/// Pure red hides this: 255 is a fixed point of the sRGB curve, which is
+/// why `render_to_rgba8_returns_packed_pixels` never caught it. A mid-tone
+/// does not.
+#[test]
+fn render_to_rgba8_does_not_double_encode_gamma() {
+    require_gpu!(app);
+
+    // Hybrid's primary. Mid-tones are where a stray transfer shows.
+    let want: [u8; 3] = [0x2A, 0x63, 0xE9];
+    let ui = div().w(8.0).h(8.0).bg(Color::from_hex(0x2A63E9));
+
+    let pixels = app
+        .render_to_rgba8(&ui, 8, 8)
+        .expect("render_to_rgba8 should succeed");
+
+    let got = [pixels[0], pixels[1], pixels[2]];
+    eprintln!("wanted {want:?}, got {got:?}");
+    for (i, (g, w)) in got.iter().zip(want.iter()).enumerate() {
+        let diff = (*g as i32 - *w as i32).abs();
+        assert!(
+            diff <= 2,
+            "channel {i}: got {g}, want {w} (off by {diff}). \
+             A second sRGB encode would read about {:?}.",
+            [113, 167, 245]
+        );
+    }
 }

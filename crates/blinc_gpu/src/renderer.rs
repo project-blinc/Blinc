@@ -1808,10 +1808,14 @@ impl GpuRenderer {
         let device = Arc::new(device);
         let queue = Arc::new(queue);
 
-        // Default texture format for headless
+        // Non-sRGB for the same reason windowed surfaces prefer it below:
+        // the shaders bake the gamma transfer at the source, so an sRGB
+        // target treats already-encoded values as linear and encodes them
+        // again. Offscreen captures used to come back lighter than the
+        // same UI on screen.
         let texture_format = config
             .texture_format
-            .unwrap_or(wgpu::TextureFormat::Bgra8UnormSrgb);
+            .unwrap_or(wgpu::TextureFormat::Bgra8Unorm);
 
         Self::create_renderer(
             instance,
