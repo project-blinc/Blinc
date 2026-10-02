@@ -1,16 +1,24 @@
-//! Text measurement using actual font metrics
+//! Font-backed text measurement.
 //!
-//! Provides accurate text measurement for layout by using the same font
-//! as the renderer.
+//! Measures with the same fonts and shaper the renderer draws with, so
+//! layout agrees with what lands on screen. Without this installed a
+//! `LayoutTree` falls back to [`crate::text_measure::EstimatedTextMeasurer`],
+//! which guesses a
+//! width per character and gets narrow and wide glyphs equally wrong.
+//!
+//! Needs no renderer and no windowing: a host driving a `LayoutTree`
+//! directly can call [`init_text_measurer`] and measure properly.
 
-use blinc_layout::GenericFont as LayoutGenericFont;
-use blinc_layout::text_measure::{
-    EstimatedTextMeasurer, LineSpan, TextLayoutOptions, TextMeasurer, TextMetrics,
-};
-use blinc_text::{FontFace, FontRegistry, GenericFont, LayoutOptions, TextLayoutEngine};
 use std::sync::{Arc, Mutex};
 
-/// Convert from layout's GenericFont to text's GenericFont
+use blinc_text::{FontRegistry, GenericFont, LayoutOptions, TextLayoutEngine};
+
+use crate::GenericFont as LayoutGenericFont;
+use crate::text_measure::{
+    EstimatedTextMeasurer, LineSpan, TextLayoutOptions, TextMeasurer, TextMetrics,
+};
+
+/// Convert from layout's `GenericFont` to text's.
 fn to_text_generic_font(layout_font: LayoutGenericFont) -> GenericFont {
     match layout_font {
         LayoutGenericFont::System => GenericFont::System,
@@ -20,72 +28,46 @@ fn to_text_generic_font(layout_font: LayoutGenericFont) -> GenericFont {
     }
 }
 
-/// A text measurer that uses actual font metrics
-///
-/// This measurer uses the same font loading logic as the renderer
-/// to provide accurate text dimensions for layout.
+/// A text measurer backed by real font metrics.
 pub struct FontTextMeasurer {
-    /// The font face to use for measurement (default/sans-serif)
-    font: Arc<Mutex<Option<FontFace>>>,
-    /// Font registry for loading different font families
+    /// Where faces are looked up. Shared with the renderer when there is
+    /// one, so measurement and drawing cannot disagree.
     font_registry: Arc<Mutex<FontRegistry>>,
-    /// The layout engine for measuring text
+    /// The shaper. Behind its own lock because shaping is not reentrant.
     layout_engine: Mutex<TextLayoutEngine>,
 }
 
 impl FontTextMeasurer {
-    /// Create a new font text measurer.
+    /// Build a measurer over the global shared registry, preloading the
+    /// generic families so the first measurement has fonts to find.
     ///
-    /// Uses the global shared font registry to minimize memory usage.
-    /// Apple Color Emoji alone is 180MB - sharing prevents loading it multiple times.
+    /// The preload is what makes this usable with no renderer:
+    /// `get_for_render_with_style` only reads the cache, so an unpopulated
+    /// registry silently measures every string as an estimate.
     pub fn new() -> Self {
-        let mut measurer = Self {
-            font: Arc::new(Mutex::new(None)),
-            font_registry: blinc_text::global_font_registry(),
-            layout_engine: Mutex::new(TextLayoutEngine::new()),
-        };
-        measurer.load_system_font();
-        measurer
-    }
-
-    /// Create a font text measurer with a shared font registry
-    ///
-    /// Use this to share the font registry with the text renderer,
-    /// ensuring consistent font loading and metrics between measurement
-    /// and rendering.
-    pub fn with_shared_registry(font_registry: Arc<Mutex<FontRegistry>>) -> Self {
-        // Note: system font loading is skipped since the registry is shared
-        // and should already be initialized by the renderer
+        let font_registry = blinc_text::global_font_registry();
+        if let Ok(mut registry) = font_registry.lock() {
+            registry.preload_generic_fonts();
+        }
         Self {
-            font: Arc::new(Mutex::new(None)),
             font_registry,
             layout_engine: Mutex::new(TextLayoutEngine::new()),
         }
     }
 
-    /// Load the system default font
-    fn load_system_font(&mut self) {
-        for font_path in crate::system_font_paths() {
-            let path = std::path::Path::new(font_path);
-            if path.exists() {
-                if let Ok(data) = std::fs::read(path) {
-                    if let Ok(font) = FontFace::from_data(data) {
-                        *self.font.lock().unwrap() = Some(font);
-                        break;
-                    }
-                }
-            }
+    /// Build a measurer over a registry someone else owns.
+    ///
+    /// No preload: the caller sharing a registry is the renderer, which
+    /// fills the cache as it draws, and preloading here would risk a
+    /// system font scan during startup.
+    pub fn with_shared_registry(font_registry: Arc<Mutex<FontRegistry>>) -> Self {
+        Self {
+            font_registry,
+            layout_engine: Mutex::new(TextLayoutEngine::new()),
         }
     }
 
-    /// Load a custom font from data
-    pub fn load_font_data(&self, data: Vec<u8>) -> Result<(), blinc_text::TextError> {
-        let font = FontFace::from_data(data)?;
-        *self.font.lock().unwrap() = Some(font);
-        Ok(())
-    }
-
-    /// Fallback estimation when no font is loaded
+    /// Fallback when the registry has no face for what was asked.
     fn estimate_size(text: &str, font_size: f32, options: &TextLayoutOptions) -> TextMetrics {
         let char_count = text.chars().count() as f32;
         let word_count = text.split_whitespace().count().max(1) as f32;
@@ -94,14 +76,12 @@ impl FontTextMeasurer {
         let base_char_width = font_size * 0.55;
         let base_width = char_count * base_char_width;
 
-        // Add letter spacing
         let letter_spacing_total = if char_count > 1.0 {
             (char_count - 1.0) * options.letter_spacing
         } else {
             0.0
         };
 
-        // Add word spacing
         let word_spacing_total = if word_count > 1.0 {
             (word_count - 1.0) * options.word_spacing
         } else {
@@ -110,7 +90,6 @@ impl FontTextMeasurer {
 
         let total_width = base_width + letter_spacing_total + word_spacing_total;
 
-        // Handle wrapping
         let (width, line_count) = if let Some(max_width) = options.max_width {
             if total_width > max_width && max_width > 0.0 {
                 let lines = (total_width / max_width).ceil() as u32;
@@ -311,30 +290,76 @@ impl TextMeasurer for FontTextMeasurer {
     }
 }
 
-/// Initialize the global text measurer with font support
+/// Install a font-backed measurer as the global one.
 ///
-/// Call this at application startup to enable accurate text measurement.
-/// This should be called before any UI elements are created.
+/// Call it before building any tree that holds text. It preloads the
+/// generic font families, so it works with no renderer and no
+/// `blinc_app` — which is the point of it living here.
 ///
-/// Note: For optimal text rendering, use `init_text_measurer_with_registry`
-/// to share the font registry with the text renderer.
+/// With a renderer, prefer [`init_text_measurer_with_registry`] so
+/// measurement and drawing share one registry.
 pub fn init_text_measurer() {
-    let measurer = Arc::new(FontTextMeasurer::new());
-    blinc_layout::set_text_measurer(measurer);
+    crate::set_text_measurer(Arc::new(FontTextMeasurer::new()));
 }
 
-/// Initialize the global text measurer with a shared font registry
+/// Install a font-backed measurer over a registry the renderer owns.
 ///
-/// This ensures the text measurer uses the same fonts as the renderer,
-/// providing accurate text measurement that matches rendered text exactly.
-///
-/// Call this after creating the BlincApp/TextRenderingContext:
+/// Measurement then resolves the same faces the renderer draws with, so
+/// a measured width matches the drawn one exactly.
 ///
 /// ```ignore
 /// let (app, surface) = BlincApp::with_window(window, None)?;
 /// init_text_measurer_with_registry(app.font_registry());
 /// ```
 pub fn init_text_measurer_with_registry(font_registry: Arc<Mutex<FontRegistry>>) {
-    let measurer = Arc::new(FontTextMeasurer::with_shared_registry(font_registry));
-    blinc_layout::set_text_measurer(measurer);
+    crate::set_text_measurer(Arc::new(FontTextMeasurer::with_shared_registry(
+        font_registry,
+    )));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::text_measure::measure_text_with_options;
+
+    /// The whole point of this module: a tree with no renderer and no
+    /// `blinc_app` measures with real glyph advances.
+    ///
+    /// `EstimatedTextMeasurer` bills every character at `0.55 * font_size`,
+    /// so six narrow glyphs and six wide ones come out identical. A font
+    /// disagrees, and by a wide margin for these two.
+    #[test]
+    fn narrow_and_wide_glyphs_measure_differently() {
+        init_text_measurer();
+
+        let opts = TextLayoutOptions::new();
+        let narrow = measure_text_with_options("iiiiii", 32.0, &opts);
+        let wide = measure_text_with_options("WWWWWW", 32.0, &opts);
+
+        // A machine with none of the known font paths cannot prove
+        // anything; skip rather than fail the suite on a bare container.
+        let estimate = 6.0 * 32.0 * 0.55;
+        if (narrow.width - estimate).abs() < 0.01 && (wide.width - estimate).abs() < 0.01 {
+            eprintln!("no system font resolved; skipping");
+            return;
+        }
+
+        assert!(
+            wide.width > narrow.width * 1.5,
+            "expected W to far outmeasure i, got narrow={} wide={}",
+            narrow.width,
+            wide.width
+        );
+        assert!(narrow.ascender > 0.0 && narrow.descender < 0.0);
+    }
+
+    /// The estimator is what you get without this installed, and it is
+    /// blind to glyph width. Guards the contrast the test above relies on.
+    #[test]
+    fn the_estimator_cannot_tell_them_apart() {
+        let opts = TextLayoutOptions::new();
+        let narrow = EstimatedTextMeasurer.measure_with_options("iiiiii", 32.0, &opts);
+        let wide = EstimatedTextMeasurer.measure_with_options("WWWWWW", 32.0, &opts);
+        assert_eq!(narrow.width, wide.width);
+    }
 }

@@ -658,7 +658,7 @@ impl WebApp {
         // Same call the desktop runner makes at
         // [`windowed.rs:2535`](crate::windowed) and the iOS runner
         // does inside `init_text_measurer()` at `ios.rs:203`.
-        crate::text_measurer::init_text_measurer_with_registry(blinc_app.font_registry());
+        blinc_layout::init_text_measurer_with_registry(blinc_app.font_registry());
 
         // 4. Configure the surface for the canvas's physical dimensions.
         let texture_format = blinc_app.texture_format();

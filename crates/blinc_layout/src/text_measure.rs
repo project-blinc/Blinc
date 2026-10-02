@@ -4,7 +4,7 @@
 //! This allows accurate text sizing without estimation.
 
 /// Text layout options that affect measurement
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct TextLayoutOptions {
     /// Line height multiplier (1.0 = default, 1.5 = 150%)
     pub line_height: f32,
@@ -22,6 +22,17 @@ pub struct TextLayoutOptions {
     pub font_weight: u16,
     /// Whether text is italic
     pub italic: bool,
+}
+
+impl Default for TextLayoutOptions {
+    /// Same as [`Self::new`].
+    ///
+    /// Deriving this gave `font_weight: 0` and `line_height: 0.0`. Nothing
+    /// is registered at weight 0, so the font lookup missed and measurement
+    /// fell back to the estimator without saying so.
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TextLayoutOptions {

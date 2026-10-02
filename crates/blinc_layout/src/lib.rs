@@ -62,6 +62,9 @@ pub mod syntax;
 pub mod text;
 pub mod text_hit;
 pub mod text_measure;
+/// Font-backed text measurement. Needs the `text_measurer` feature.
+#[cfg(feature = "text_measurer")]
+pub mod text_measurer;
 pub mod text_selection;
 pub mod tree;
 pub mod typography;
@@ -223,6 +226,8 @@ pub use text_measure::{
     TextLayoutOptions, TextMeasurer, TextMetrics, measure_text, measure_text_with_options,
     set_text_measurer,
 };
+#[cfg(feature = "text_measurer")]
+pub use text_measurer::{FontTextMeasurer, init_text_measurer, init_text_measurer_with_registry};
 
 // Text selection (clipboard support)
 pub use text_selection::{

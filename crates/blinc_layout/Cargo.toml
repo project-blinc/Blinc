@@ -11,6 +11,12 @@ rust-version.workspace = true
 [lib]
 crate-type = ["lib"]
 
+# The example calls `init_text_measurer`, which only exists with the
+# feature on, so `--all-targets` must not try to build it without.
+[[example]]
+name = "standalone_text_measure"
+required-features = ["text_measurer"]
+
 [features]
 default = []
 # Enable recorder integration for debugging/testing. Disable for production builds.
@@ -27,6 +33,11 @@ media = ["dep:blinc_media"]
 # chain plus ~30 transitive crates from the desktop dep graph. Apps
 # that only paste/copy text can stay off; image-paste flows opt in.
 clipboard_image = ["arboard/image-data"]
+# Font-backed text measurement. Off by default: it pulls in blinc_text
+# (ttf-parser + rustybuzz + fontdb + swash). Without it a standalone
+# `LayoutTree` measures text with `EstimatedTextMeasurer`, so every
+# width is an estimate. `blinc_app` turns it on for you.
+text_measurer = ["dep:blinc_text"]
 [dependencies]
 blinc_core = { path = "../blinc_core", version = "0.5.1" }
 blinc_css = { path = "../blinc_css", version = "0.5.1" }
@@ -56,6 +67,12 @@ regex.workspace = true
 # that want media widgets enable `blinc_layout/media` (or just opt in
 # transitively through their own dep on `blinc_media`).
 blinc_media = { path = "../blinc_media", version = "0.5.1", optional = true }
+
+# Font-backed text measurement, behind the `text_measurer` feature.
+# blinc_text depends only on blinc_core, so this direction is
+# cycle-free; putting the measurer in blinc_text instead would have
+# made it depend on this crate and everything this crate pulls.
+blinc_text = { path = "../blinc_text", version = "0.5.1", optional = true }
 
 # Markdown parsing
 pulldown-cmark = "0.10"

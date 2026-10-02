@@ -205,7 +205,7 @@ impl IOSApp {
         Self::init_asset_loader();
 
         // Initialize the text measurer
-        crate::text_measurer::init_text_measurer();
+        blinc_layout::init_text_measurer();
 
         // Initialize the theme system
         Self::init_theme();

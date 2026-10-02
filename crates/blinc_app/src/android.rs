@@ -341,7 +341,7 @@ impl AndroidApp {
             .map(|p| p.join("blinc_pipeline_cache.bin"));
 
         // Initialize the text measurer
-        crate::text_measurer::init_text_measurer();
+        blinc_layout::init_text_measurer();
 
         // Initialize the theme system
         Self::init_theme();
@@ -515,7 +515,7 @@ impl AndroidApp {
                                 if initializing_gpu {
                                     match Self::init_gpu(&window, pipeline_cache_path.clone()) {
                                         Ok(app_instance) => {
-                                            crate::text_measurer::init_text_measurer_with_registry(
+                                            blinc_layout::init_text_measurer_with_registry(
                                                 app_instance.font_registry(),
                                             );
                                             blinc_app = Some(app_instance);

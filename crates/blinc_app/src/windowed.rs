@@ -2621,7 +2621,7 @@ impl WindowedApp {
         Self::init_asset_loader();
 
         // Initialize the text measurer for accurate text layout
-        crate::text_measurer::init_text_measurer();
+        blinc_layout::init_text_measurer();
 
         // Initialize the theme system with platform detection
         Self::init_theme();
@@ -3416,7 +3416,7 @@ impl WindowedApp {
                                     surf.configure(blinc_app.device(), &config);
 
                                     // Update text measurer with shared font registry for accurate measurement
-                                    crate::text_measurer::init_text_measurer_with_registry(
+                                    blinc_layout::init_text_measurer_with_registry(
                                         blinc_app.font_registry(),
                                     );
 

@@ -230,11 +230,20 @@ impl FontRegistry {
         tracing::debug!("System fonts loaded: {} faces", self.db.faces().count());
     }
 
-    /// Preload essential generic font categories at startup.
+    /// Preload essential generic font categories.
     ///
-    /// Emoji and Symbol fonts are NOT preloaded - they're loaded lazily on first use.
-    /// This saves ~180MB of memory if emoji aren't used (Apple Color Emoji is huge).
-    fn preload_generic_fonts(&mut self) {
+    /// `new()` deliberately does not call this: on the renderer path the
+    /// renderer fills the cache, and preloading there risks a full system
+    /// font scan at startup. A caller measuring text WITHOUT a renderer has
+    /// to call it, because `get_for_render_with_style` only reads the cache
+    /// and an empty cache measures as an estimate.
+    ///
+    /// Usually resolves from the known font paths `new()` already loaded;
+    /// it falls back to a full scan only where those miss.
+    ///
+    /// Emoji and Symbol are left out - they load on first use, which keeps
+    /// Apple Color Emoji's ~180MB out of a process that never shows one.
+    pub fn preload_generic_fonts(&mut self) {
         // Only preload essential text fonts - NOT emoji/symbol
         // Emoji font is 180MB+ on macOS, so lazy loading saves significant memory
         for generic in [

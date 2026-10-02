@@ -18,7 +18,7 @@ crate-type = ["rlib", "staticlib"]
 
 [dependencies]
 blinc_core = { path = "../blinc_core", version = "0.5.1" }
-blinc_layout = { path = "../blinc_layout", version = "0.5.1" }
+blinc_layout = { path = "../blinc_layout", version = "0.5.1", features = ["text_measurer"] }
 blinc_gpu = { path = "../blinc_gpu", version = "0.5.1", default-features = false }
 blinc_svg = { path = "../blinc_svg", version = "0.5.1" }
 blinc_text = { path = "../blinc_text", version = "0.5.1" }

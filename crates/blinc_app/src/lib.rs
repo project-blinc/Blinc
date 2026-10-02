@@ -126,7 +126,6 @@ mod app;
 mod context;
 mod error;
 mod svg_atlas;
-mod text_measurer;
 
 /// Subsecond hot-reload websocket client.
 ///
@@ -209,7 +208,10 @@ mod tests;
 pub use app::{BlincApp, BlincConfig};
 pub use context::{DebugMode, RenderContext};
 pub use error::{BlincError, Result};
-pub use text_measurer::{FontTextMeasurer, init_text_measurer, init_text_measurer_with_registry};
+// The measurer moved to blinc_layout so a host driving a LayoutTree
+// without blinc_app can still measure with real fonts. Re-exported
+// here under its original names.
+pub use blinc_layout::{FontTextMeasurer, init_text_measurer, init_text_measurer_with_registry};
 
 /// Register a font face into the process-wide `blinc_text` font
 /// registry. The returned count is the number of faces fontdb
@@ -260,7 +262,7 @@ pub mod prelude {
     pub use crate::context::{DebugMode, RenderContext};
     pub use crate::error::{BlincError, Result};
     pub use crate::register_font;
-    pub use crate::text_measurer::{init_text_measurer, init_text_measurer_with_registry};
+    pub use blinc_layout::{init_text_measurer, init_text_measurer_with_registry};
 
     // Layout builders
     pub use blinc_layout::RenderTree;
