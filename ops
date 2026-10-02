@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1790966782,"nonce":"1kvGNFWCfOq/XMhjB1Z2AFov/eQ=","added":["bug","area:text"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":2,"timestamp":1790966888,"nonce":"ByOZh/pAD53ju79d6NgZTLCcYkA=","title":"canvas_demo Canvas Text sample draws its plate but not its headings","was":"canvas_demo's \\\"Canvas Text\\\" sample renders the background plate but not the headings —"}]}
