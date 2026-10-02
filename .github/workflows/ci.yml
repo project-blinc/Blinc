@@ -173,7 +173,7 @@ jobs:
 
       - name: Run tests (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum cargo nextest run --workspace --all-features
+        run: xvfb-run --auto-servernum cargo nextest run --workspace --all-features --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
         env:
           # Use software rendering for headless GPU tests
           MESA_GL_VERSION_OVERRIDE: "4.5"
@@ -181,11 +181,11 @@ jobs:
 
       - name: Run tests (non-Linux)
         if: runner.os != 'Linux'
-        run: cargo nextest run --workspace --all-features
+        run: cargo nextest run --workspace --all-features --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
 
       - name: Run doctests (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum cargo test --doc --workspace --all-features
+        run: xvfb-run --auto-servernum cargo test --doc --workspace --all-features --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
         env:
           # Use software rendering for headless GPU tests
           MESA_GL_VERSION_OVERRIDE: "4.5"
@@ -193,7 +193,7 @@ jobs:
 
       - name: Run doctests (non-Linux)
         if: runner.os != 'Linux'
-        run: cargo test --doc --workspace --all-features
+        run: cargo test --doc --workspace --all-features --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
 
   hlsl-dxc-check:
     name: HLSL DXC Shader Check

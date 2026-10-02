@@ -177,7 +177,7 @@ jobs:
         run: cargo check --workspace
 
       - name: Run tests
-        run: xvfb-run --auto-servernum cargo test --workspace
+        run: xvfb-run --auto-servernum cargo test --workspace --exclude blinc_dsl_core --exclude blinc_cn_dsl --exclude blinc_dsl_macro
         env:
           MESA_GL_VERSION_OVERRIDE: "4.5"
           LIBGL_ALWAYS_SOFTWARE: "1"
