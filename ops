@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1790966811,"nonce":"VZGkUf1N0Dw9QoZ1Nh4XZxs0Fxo=","status":2}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":2,"timestamp":1790966887,"nonce":"+U7RbTC6u+QJrVcrL42ZQFEIqaM=","title":"cn reactive-prop migration: 14 of 19 DSL widgets take Reactive props","was":"as of 2026-07-31. Of the ~19 widgets blinc_cn_dsl exposes, 14 take Reactive props and ZERO"}]}
