@@ -1180,21 +1180,6 @@ blinc/
 
 ---
 
-## Implementation Phases
-
-| Phase | Focus | Deliverables | Unlocks |
-|-------|-------|--------------|---------|
-| **1** | SDF UI | Rect, circle, shadow, text; Flexbox layout | Forms, dashboards, settings |
-| **2** | Canvas2D | Path tessellation, SDF curves, MSDF cache | Charts, diagrams, custom drawing |
-| **3** | Scene3D | PBR materials, directional light, shadows | Product viewers, 3D previews |
-| **4** | Composition | Layer blending, post effects, portals | Polished visual effects |
-| **5** | Bridging | Billboard, Viewport3D, unified input | Game UI, spatial apps, CAD |
-| **6** | Animation | Spring, tween, keyframe systems | Fluid interactions |
-| **7** | Compiler | Full AOT pipeline, optimizations | Production performance |
-| **8** | Polish | Platform integration, accessibility | Production readiness |
-
----
-
 ## Appendix: Shader Reference
 
 ### SDF Primitives (WGSL)
