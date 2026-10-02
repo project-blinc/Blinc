@@ -251,7 +251,8 @@ if let Some(frame) = camera.latest_frame() {
 
 The platform side uses `Camera2` (Android) or `AVCaptureSession` (iOS) and pushes frames through the native bridge stream protocol.
 
-> **Note**: A complete camera demo example is on the roadmap. The API surface above is stable.
+> **Note**: The API surface above is stable. A complete camera demo
+> example is tracked as git-bug 982879f.
 
 ### Audio recording
 

@@ -135,12 +135,16 @@ If a full-workspace build still thrashes or OOMs on a constrained box
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for detailed milestones. Current focus:
+Current focus:
 
 1. Missing widgets (date/time/color picker, data grid)
 2. Zyntax DSL: `.blinc` domain specific language for UI definitions, with support for live editing and hot reload in the future
 3. Accessibility (screen reader, keyboard navigation)
 4. Developer tooling (hot reload, visual inspector)
+
+Planned work is tracked as issues in the repository itself, with
+[git-bug](https://github.com/git-bug/git-bug): `git-bug bug --status open`
+after a `git-bug pull bugs`.
 
 ## Community
 

@@ -20,7 +20,7 @@
 //!
 //! # Running in Fuchsia Emulator
 //!
-//! See docs/fuchsia/SETUP.md for emulator setup instructions.
+//! The Fuchsia platform lives under `extensions/archived/`.
 
 #[cfg(target_os = "fuchsia")]
 use blinc_app::fuchsia::FuchsiaApp;

@@ -5,8 +5,8 @@
 > `--hot-patch` mode. The patch points and the websocket client
 > that talks to dx's dev-server both live inside `blinc_app` —
 > Blinc apps don't depend on Dioxus at runtime. A native `blinc
-> dev` driver that vendors the dev-server side too is on the
-> roadmap (issue #30, level 2).
+> dev` driver that vendors the dev-server side too is tracked as
+> git-bug 4e9dd6e.
 
 Blinc can hot-patch the body of your UI builder closure while the
 app is running, so iterating on a layout or styling tweak doesn't
@@ -169,8 +169,8 @@ blinc dev --mode dsl       # Blinc DSL via Zyntax (in plan)
 ```
 
 Today both modes are stubs that print a friendly "not yet" message —
-the Rust path waits on the websocket-driver work tracked under
-issue #30 level 2; the DSL path waits on Zyntax Grammar2 + Runtime2.
+the Rust path waits on the websocket-driver work in git-bug 4e9dd6e;
+the DSL path waits on Zyntax Grammar2 + Runtime2.
 For now, use `dx serve --hot-patch` (above) to drive Rust hot-patches.
 
 ## Troubleshooting
@@ -207,16 +207,10 @@ For now, use `dx serve --hot-patch` (above) to drive Rust hot-patches.
   Blinc team wants to know which patterns are unsafe in practice
   so we can document them here.
 
-## Roadmap
+## What is shipped
 
-Level 1 (shipped) installs the in-process patch points behind a
-feature flag *and* the websocket client that talks to `dx serve
---hot-patch`. Editing a UI body in your binary crate now triggers
-an in-place patch without restart. Blinc apps don't link any of
-the Dioxus reactive runtime at runtime — only `subsecond`,
+The in-process patch points sit behind a feature flag, alongside the
+websocket client that talks to `dx serve --hot-patch`. Editing a UI
+body in your binary crate patches in place without a restart. Blinc
+apps link no part of the Dioxus reactive runtime — only `subsecond`,
 `tungstenite`, and the env-var convention crate.
-
-Level 2 will vendor the dev-server side so `blinc dev` becomes a
-first-party command — no `dx` install required, and a chance to
-tighten the rebuild-detection rules to Blinc's tree (e.g.
-invalidate `Stylesheet` caches when CSS-only files change).

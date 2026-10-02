@@ -28,8 +28,8 @@
 //! escape hatch that doesn't exist yet. Use [`NumberInputBuilder::step`]
 //! together with `cn::number_input`'s `+` / `−` buttons (or any
 //! caller-supplied buttons that call [`step_up`] / [`step_down`]) to
-//! step the value. Keyboard stepping is a follow-up — see
-//! [§1.4 of the ROADMAP](https://github.com/project-blinc/Blinc/blob/main/ROADMAP.md#14-missing-widgets-p1).
+//! step the value. Keyboard stepping is a follow-up, tracked as
+//! git-bug e750fa9.
 
 use std::sync::Arc;
 

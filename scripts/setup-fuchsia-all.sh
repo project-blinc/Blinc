@@ -135,7 +135,6 @@ print_summary() {
     fi
     echo -e "${BLUE}Documentation:${NC}"
     echo "  - Fuchsia SDK: https://fuchsia.dev/fuchsia-src/development/sdk"
-    echo "  - Blinc Fuchsia: docs/plans/fuchsia-integration-gaps.md"
     echo ""
 }
 
