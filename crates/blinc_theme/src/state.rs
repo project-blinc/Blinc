@@ -325,9 +325,16 @@ impl ThemeState {
 
         // Interpolate colors based on progress
         if let (Some(from), Some(to)) = (&transition.from_colors, &transition.to_colors) {
-            let interpolated = interpolate_color_tokens(from, to, progress);
+            // `at_target` accepts the spring within 1 of 100, so the lerp
+            // there lands near 0.99. Assign the target itself on the
+            // finishing frame or the scheme settles just short of it.
+            let settled = if at_target {
+                to.clone()
+            } else {
+                interpolate_color_tokens(from, to, progress)
+            };
             drop(transition);
-            *self.colors.write().unwrap() = interpolated;
+            *self.colors.write().unwrap() = settled;
 
             if at_target {
                 // Animation complete - clean up

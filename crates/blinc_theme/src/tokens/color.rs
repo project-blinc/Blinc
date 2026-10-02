@@ -213,47 +213,45 @@ impl ColorTokens {
 }
 
 impl Default for ColorTokens {
+    /// The framework default, which is `BlincTheme`'s light palette.
+    ///
+    /// Delegating rather than restating it: this used to carry its own
+    /// copy of the Catppuccin Latte palette, so anything falling back to
+    /// `default()` kept the retired look after `BlincTheme` became
+    /// `HybridTheme`.
     fn default() -> Self {
-        // Default to a basic light theme
-        Self {
-            primary: Color::from_hex(0x1E66F5),
-            primary_hover: Color::from_hex(0x1758D1),
-            primary_active: Color::from_hex(0x114AB3),
-            secondary: Color::from_hex(0x8839EF),
-            secondary_hover: Color::from_hex(0x7530D4),
-            secondary_active: Color::from_hex(0x6228B9),
-            success: Color::from_hex(0x40A02B),
-            success_bg: Color::from_hex(0x40A02B).with_alpha(0.1),
-            warning: Color::from_hex(0xDF8E1D),
-            warning_bg: Color::from_hex(0xDF8E1D).with_alpha(0.1),
-            error: Color::from_hex(0xD20F39),
-            error_bg: Color::from_hex(0xD20F39).with_alpha(0.1),
-            info: Color::from_hex(0x04A5E5),
-            info_bg: Color::from_hex(0x04A5E5).with_alpha(0.1),
-            background: Color::from_hex(0xEFF1F5),
-            surface: Color::WHITE,
-            surface_elevated: Color::WHITE,
-            surface_overlay: Color::from_hex(0xE6E9EF),
-            text_primary: Color::from_hex(0x4C4F69),
-            text_secondary: Color::from_hex(0x6C6F85),
-            text_tertiary: Color::from_hex(0x9CA0B0),
-            text_inverse: Color::WHITE,
-            text_link: Color::from_hex(0x1E66F5),
-            border: Color::from_hex(0xCCD0DA),
-            border_secondary: Color::from_hex(0xBCC0CC),
-            border_hover: Color::from_hex(0xBCC0CC),
-            border_focus: Color::from_hex(0x1E66F5),
-            border_error: Color::from_hex(0xD20F39),
-            input_bg: Color::WHITE,
-            input_bg_hover: Color::from_hex(0xF9FAFB),
-            input_bg_focus: Color::WHITE,
-            input_bg_disabled: Color::from_hex(0xE6E9EF),
-            selection: Color::from_hex(0x1E66F5).with_alpha(0.3),
-            selection_text: Color::from_hex(0x4C4F69),
-            accent: Color::from_hex(0x1E66F5),
-            accent_subtle: Color::from_hex(0x1E66F5).with_alpha(0.1),
-            tooltip_bg: Color::from_hex(0x1C1C1E), // Dark bg for light theme
-            tooltip_text: Color::from_hex(0xF5F5F5), // Light text for dark bg
-        }
+        use crate::Theme;
+        crate::themes::universal::HybridTheme::light()
+            .colors()
+            .clone()
+    }
+}
+
+#[cfg(test)]
+mod default_palette_tests {
+    use super::*;
+    use crate::Theme;
+    use crate::themes::universal::HybridTheme;
+
+    /// `default()` delegates, so it must not recurse: `HybridTheme::light`
+    /// has to build its `ColorTokens` field by field, never through
+    /// `Default`. Running at all is the assertion.
+    #[test]
+    fn default_is_the_framework_light_palette() {
+        let d = ColorTokens::default();
+        let hybrid = HybridTheme::light();
+        assert_eq!(d.primary, hybrid.colors().primary);
+        assert_eq!(d.background, hybrid.colors().background);
+    }
+
+    /// The palette this used to return was Catppuccin Latte. Pin the one
+    /// colour so a silent revert to it fails here.
+    #[test]
+    fn default_is_not_the_retired_palette() {
+        assert_ne!(
+            ColorTokens::default().primary,
+            Color::from_hex(0x1E66F5),
+            "primary is Catppuccin Latte blue again"
+        );
     }
 }
