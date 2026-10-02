@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1790969422,"nonce":"FVlxyWn5LqzrsWKPojCfyE/b3GM=","status":2}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1790969749,"nonce":"KS0bhreXikL07mEWd3+egt+Ms3I=","message":"Landed as 695f66c89185120dfaf90a5c26948a1ceaaa37f2 (the 892cb708 named above was amended to carry the git-bug trailer).","files":null}]}
