@@ -257,6 +257,35 @@ impl LayoutTree {
         id
     }
 
+    /// Change a text node's measure context in place and mark the node
+    /// dirty, so the next `compute_layout` measures it again.
+    ///
+    /// False when `id` is gone or is not a text node: a node made by
+    /// `create_node` has no context to change.
+    pub fn update_text(
+        &mut self,
+        id: LayoutNodeId,
+        f: impl FnOnce(&mut TextMeasureContext),
+    ) -> bool {
+        let Some(&taffy_node) = self.node_map.get(id) else {
+            return false;
+        };
+        let Some(context) = self.taffy.get_node_context_mut(taffy_node) else {
+            return false;
+        };
+        f(context);
+        // `get_node_context_mut` leaves taffy's cached layout in place.
+        let _ = self.taffy.mark_dirty(taffy_node);
+        true
+    }
+
+    /// A text node's measure context; `None` for any other node.
+    pub fn text_context(&self, id: LayoutNodeId) -> Option<&TextMeasureContext> {
+        self.node_map
+            .get(id)
+            .and_then(|&taffy_node| self.taffy.get_node_context(taffy_node))
+    }
+
     /// Set the style for a node
     pub fn set_style(&mut self, id: LayoutNodeId, style: Style) {
         if let Some(&taffy_node) = self.node_map.get(id) {
