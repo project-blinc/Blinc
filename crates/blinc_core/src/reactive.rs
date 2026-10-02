@@ -766,6 +766,49 @@ impl ReactiveGraph {
         }
     }
 
+    /// Remove a signal. Deriveds and effects that read it stop depending
+    /// on it, and every handle to it reads `None` from now on: slot keys
+    /// are versioned, so a later signal in the same slot is not aliased.
+    /// False if it was already gone.
+    pub fn dispose_signal(&mut self, id: SignalId) -> bool {
+        let Some(node) = self.signals.remove(id) else {
+            return false;
+        };
+        for sub in node.subscribers {
+            match sub {
+                SubscriberId::Derived(d) => {
+                    if let Some(derived) = self.derived.get_mut(d) {
+                        derived.dependencies.retain(|s| *s != id);
+                    }
+                }
+                SubscriberId::Effect(e) => {
+                    if let Some(effect) = self.effects.get_mut(e) {
+                        effect.dependencies.retain(|s| *s != id);
+                    }
+                }
+            }
+        }
+        if let Some(tracking) = self.tracking.borrow_mut().as_mut() {
+            tracking.retain(|s| *s != id);
+        }
+        true
+    }
+
+    /// Remove a derived, unsubscribing it from the signals it read. Its
+    /// compute closure is dropped with it. False if it was already gone.
+    pub fn dispose_derived(&mut self, id: DerivedId) -> bool {
+        let Some(node) = self.derived.remove(id) else {
+            return false;
+        };
+        for &dep_id in &node.dependencies {
+            if let Some(sig) = self.signals.get_mut(dep_id) {
+                sig.subscribers.retain(|s| *s != SubscriberId::Derived(id));
+            }
+        }
+        self.derived_dirty_buffer.borrow_mut().retain(|d| *d != id);
+        true
+    }
+
     // =========================================================================
     // BATCHING
     // =========================================================================
@@ -1628,6 +1671,64 @@ where
     computed(compute)
 }
 
+/// A node removed from the global graph, as told to the dispose notifier.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Disposed {
+    Signal(SignalId),
+    Derived(DerivedId),
+}
+
+/// Global notifier for disposals, so `blinc_layout` can drop the property
+/// bindings of a node that no longer exists. Same lifecycle as
+/// [`PROPERTY_BINDING_NOTIFIER`]: installed once, with the binding registry.
+static DISPOSE_NOTIFIER: std::sync::OnceLock<Box<dyn Fn(Disposed) + Send + Sync + 'static>> =
+    std::sync::OnceLock::new();
+
+/// Install the global dispose notifier. Idempotent: only the first call wins.
+pub fn set_dispose_notifier(notifier: impl Fn(Disposed) + Send + Sync + 'static) {
+    let _ = DISPOSE_NOTIFIER.set(Box::new(notifier));
+}
+
+/// Remove a signal from the global graph, together with its property
+/// bindings.
+///
+/// Inside an effect or a computation the graph is already locked and the
+/// running closure may belong to what is being removed, so the removal is
+/// deferred like a write made there: it runs after the next write on this
+/// thread completes.
+pub fn dispose_signal(id: SignalId) {
+    dispose(Disposed::Signal(id));
+}
+
+/// Remove a derived from the global graph, together with its property
+/// bindings. Deferred inside an effect or a computation, as
+/// [`dispose_signal`] is.
+pub fn dispose_derived(id: DerivedId) {
+    dispose(Disposed::Derived(id));
+}
+
+fn dispose(node: Disposed) {
+    if is_in_flush() {
+        DEFERRED_WRITES.with(|q| q.borrow_mut().push(Box::new(move || dispose(node))));
+        return;
+    }
+    let removed = {
+        let graph = global_graph();
+        let mut g = graph.lock().unwrap();
+        match node {
+            Disposed::Signal(id) => g.dispose_signal(id),
+            Disposed::Derived(id) => g.dispose_derived(id),
+        }
+    };
+    // Told after the graph lock is released: the binding registry is
+    // locked before the graph on the notify path.
+    if removed {
+        if let Some(notifier) = DISPOSE_NOTIFIER.get() {
+            notifier(node);
+        }
+    }
+}
+
 /// Create an effect that runs every time any signal touched inside
 /// `run` changes. Auto-tracks dependencies on first run.
 ///
@@ -1687,6 +1788,68 @@ mod tests {
             Some(0.85),
             "global-path read inside compute must register the dependency"
         );
+    }
+
+    #[test]
+    fn disposed_signal_reads_none_and_leaves_its_readers() {
+        let mut graph = ReactiveGraph::new();
+        let a = graph.create_signal(2i32);
+        let b = graph.create_signal(3i32);
+        let sum = graph.create_derived(move |g| g.get(a).unwrap_or(0) + g.get(b).unwrap_or(0));
+        assert_eq!(graph.get_derived(sum), Some(5));
+
+        assert!(graph.dispose_signal(a.id()));
+        assert!(!graph.dispose_signal(a.id()), "already gone");
+        assert_eq!(graph.get(a), None);
+        assert_eq!(
+            graph.derived[sum.id].dependencies.as_slice(),
+            &[b.id()],
+            "the derived no longer depends on the disposed signal"
+        );
+
+        // A new signal may reuse the slot; the old handle must not see it.
+        let c = graph.create_signal(9i32);
+        assert_eq!(graph.get(a), None);
+        assert_eq!(graph.get(c), Some(9));
+    }
+
+    #[test]
+    fn disposed_derived_stops_being_dirtied() {
+        let mut graph = ReactiveGraph::new();
+        let a = graph.create_signal(1i32);
+        let doubled = graph.create_derived(move |g| g.get(a).unwrap_or(0) * 2);
+        assert_eq!(graph.get_derived(doubled), Some(2));
+
+        assert!(graph.dispose_derived(doubled.id));
+        assert!(!graph.dispose_derived(doubled.id), "already gone");
+        assert!(graph.signals[a.id()].subscribers.is_empty());
+
+        graph.set(a, 5);
+        assert!(graph.take_dirty_derived().is_empty());
+        assert_eq!(graph.get_derived(doubled), None);
+    }
+
+    #[test]
+    fn disposing_inside_a_computation_waits_for_the_next_write() {
+        let trigger = signal(0i32);
+        let victim = signal(7i32);
+        let victim_id = victim.id();
+        let disposer = computed::<i32, _>(move |_| {
+            if trigger.try_get().unwrap_or(0) > 0 {
+                dispose_signal(victim_id);
+            }
+            0
+        });
+        assert_eq!(disposer.try_get(), Some(0));
+
+        trigger.set(1);
+        // Runs the compute closure, which defers the dispose instead of
+        // re-locking the graph it runs under.
+        assert_eq!(disposer.try_get(), Some(0));
+        assert_eq!(victim.try_get(), Some(7), "not yet: deferred");
+
+        trigger.set(2);
+        assert_eq!(victim.try_get(), None, "applied after the next write");
     }
 
     #[test]

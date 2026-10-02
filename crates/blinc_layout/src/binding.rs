@@ -681,6 +681,36 @@ impl PropertyBindingRegistry {
         }
     }
 
+    /// Drop every subscription to a signal that no longer exists.
+    pub fn unregister_signal(&mut self, signal_id: SignalId) {
+        let Some(subs) = self.bindings.remove(&signal_id) else {
+            return;
+        };
+        for sub in subs {
+            if let Some(ids) = self.by_node.get_mut(&sub.node_id) {
+                ids.retain(|s| *s != signal_id);
+                if ids.is_empty() {
+                    self.by_node.remove(&sub.node_id);
+                }
+            }
+        }
+    }
+
+    /// Drop every subscription to a derived that no longer exists.
+    pub fn unregister_derived(&mut self, derived_id: DerivedId) {
+        let Some(subs) = self.derived_bindings.remove(&derived_id) else {
+            return;
+        };
+        for sub in subs {
+            if let Some(ids) = self.derived_by_node.get_mut(&sub.node_id) {
+                ids.retain(|d| *d != derived_id);
+                if ids.is_empty() {
+                    self.derived_by_node.remove(&sub.node_id);
+                }
+            }
+        }
+    }
+
     /// Walk every subscriber waiting on `signal_id` and queue a partial
     /// property update for each. Called by the global notifier from
     /// `blinc_core::reactive::set_property_binding_notifier` whenever a
@@ -789,6 +819,15 @@ static REGISTRY: LazyLock<Mutex<PropertyBindingRegistry>> = LazyLock::new(|| {
     blinc_core::reactive::set_derived_binding_notifier(|derived_id| {
         if let Ok(reg) = REGISTRY.lock() {
             reg.fire_derived(derived_id);
+        }
+    });
+    // A disposed signal or derived takes its subscriptions with it.
+    blinc_core::reactive::set_dispose_notifier(|disposed| {
+        if let Ok(mut reg) = REGISTRY.lock() {
+            match disposed {
+                blinc_core::reactive::Disposed::Signal(id) => reg.unregister_signal(id),
+                blinc_core::reactive::Disposed::Derived(id) => reg.unregister_derived(id),
+            }
         }
     });
     Mutex::new(PropertyBindingRegistry::new())
@@ -990,6 +1029,64 @@ mod tests {
         let mut props = RenderProps::default();
         (updates.into_iter().next().unwrap().render_write.unwrap())(&mut props);
         assert_eq!(fire_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn disposing_a_signal_drops_its_bindings() {
+        let _guard = lock_and_reset();
+        let state = State::new(
+            blinc_core::reactive::signal(0i32),
+            blinc_core::reactive::global_graph(),
+            blinc_core::reactive::global_dirty_flag(),
+        );
+        let mut tree = crate::tree::LayoutTree::new();
+        let node_id = mint_node(&mut tree);
+        register_typed(
+            state.signal_id(),
+            node_id,
+            PropertyId::Opacity,
+            state.clone(),
+            |props, v: i32| props.opacity = v as f32,
+        );
+        assert_eq!(with_registry(|r| r.subscriber_count(state.signal_id())), 1);
+
+        blinc_core::reactive::dispose_signal(state.signal_id());
+
+        assert_eq!(with_registry(|r| r.subscriber_count(state.signal_id())), 0);
+        assert!(with_registry(|r| !r.by_node.contains_key(&node_id)));
+        state.set(1);
+        assert!(crate::stateful::take_pending_partial_prop_updates().is_empty());
+    }
+
+    #[test]
+    fn disposing_a_derived_drops_its_bindings() {
+        let _guard = lock_and_reset();
+        let source = blinc_core::reactive::signal(2i32);
+        let doubled =
+            blinc_core::reactive::computed::<i32, _>(move |_| source.try_get().unwrap_or(0) * 2);
+        let mut tree = crate::tree::LayoutTree::new();
+        let node_id = mint_node(&mut tree);
+        register_typed_computed(
+            doubled.derived_id(),
+            node_id,
+            PropertyId::Opacity,
+            doubled.clone(),
+            |props, v: i32| props.opacity = v as f32,
+        );
+        assert_eq!(
+            with_registry(|r| r.derived_subscriber_count(doubled.derived_id())),
+            1
+        );
+
+        blinc_core::reactive::dispose_derived(doubled.derived_id());
+
+        assert_eq!(
+            with_registry(|r| r.derived_subscriber_count(doubled.derived_id())),
+            0
+        );
+        assert!(with_registry(|r| !r.derived_by_node.contains_key(&node_id)));
+        source.set(3);
+        assert!(crate::stateful::take_pending_partial_prop_updates().is_empty());
     }
 
     #[test]
