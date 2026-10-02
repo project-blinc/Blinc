@@ -223,6 +223,38 @@ fn sd_rounded_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec
 // shape.xyzw = superellipse n for (top-left, top-right, bottom-right, bottom-left)
 // n=1.0 = round (circle), n=0.0 = bevel, n=2.0 = squircle
 // n>=100.0 = square, n<=-100.0 = notch, n<0 = concave (scoop)
+// Distance to the superellipse |t|_p = 1, scaled by r.
+//
+// `(|t|_p - 1) * r` is a level set, not a distance: its gradient is
+// sqrt(2) for p = 1 and drifts with p, which made the bevel's border
+// ~30% thin and the AA width uneven around squircles. Dividing by the
+// norm's own gradient length normalises it.
+//
+// The largest component is factored out because `t.x^p + t.y^p`
+// underflows f32 once p reaches 8, which made f zero, the gradient term
+// infinite and the distance collapse to -0.
+//
+// Callers pass a non-negative t.
+fn superellipse_dist(t: vec2<f32>, p: f32, r: f32) -> f32 {
+    let m = max(t.x, t.y);
+    if m <= 1e-20 {
+        // At the corner's inner centre the arc is exactly r away, and
+        // the box bounds the result anyway.
+        return -r;
+    }
+    let a = t.x / m;
+    let b = t.y / m;
+    let s = pow(a, p) + pow(b, p);
+    let sp = pow(s, 1.0 / p);
+    let f = m * sp;
+    // grad |t|_p = ((t.x/f)^(p-1), (t.y/f)^(p-1)), written against the
+    // factored form so nothing divides by an underflowed f. pow(0, 0) is
+    // undefined in WGSL and p == 1 would reach it on the axes, so the
+    // bevel takes its own exact branch below.
+    let g = vec2<f32>(pow(a / sp, p - 1.0), pow(b / sp, p - 1.0));
+    return (f - 1.0) * r / max(length(g), 1e-6);
+}
+
 fn sd_shaped_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec4<f32>, shape: vec4<f32>) -> f32 {
     let half_size = size * 0.5;
     let center = origin + half_size;
@@ -248,41 +280,51 @@ fn sd_shaped_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec4
 
     r = min(r, min(half_size.x, half_size.y));
 
-    // Notch: rectangular step cut at each corner (before guard)
-    // Shape = union of horizontal bar (full width, height-2r) and vertical bar (width-2r, full height)
+    // Sharp box, exact. Bounds every corner shape below, which is what
+    // keeps the interior continuous without a region gate.
+    let box_d = length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0);
+    let qa = q + vec2<f32>(r);
+    let rr = max(r, 0.001);
+
+    // Notch: the box less the unbounded quadrant past the step, so its
+    // only edges are the step's two faces. A union of two bars
+    // misreported depth near the reentrant corner.
     if n <= -100.0 {
-        let d_h = max(q.x, q.y + r);  // horizontal bar SDF
-        let d_v = max(q.x + r, q.y);  // vertical bar SDF
-        return min(d_h, d_v);          // union
+        let nq = -qa;
+        let cut = length(max(nq, vec2<f32>(0.0))) + min(max(nq.x, nq.y), 0.0);
+        return max(box_d, -cut);
     }
 
-    let q_adj = q + vec2<f32>(r);
-
-    // Fast path: n ~ 1.0 -> standard circular
-    if abs(n - 1.0) < 0.01 {
-        return length(max(q_adj, vec2<f32>(0.0))) + min(max(q_adj.x, q_adj.y), 0.0) - r;
-    }
-
-    // Outside corner region -> flat edge
-    if q_adj.x <= 0.0 || q_adj.y <= 0.0 {
-        return max(q.x, q.y);
-    }
-
-    // Square: sharp corner (L-infinity convex)
+    // Square: the box itself.
     if n >= 100.0 {
-        return max(q_adj.x, q_adj.y) - r;
+        return box_d;
     }
 
-    // Superellipse: p_exp = 2^|n|, clamped to avoid overflow
-    let t = q_adj / max(r, 0.001);
-    let p_exp = pow(2.0, min(abs(n), 5.0));
-    let se = pow(t.x, p_exp) + pow(t.y, p_exp);
-    let se_dist = (pow(se, 1.0 / p_exp) - 1.0) * r;
+    // Circle: already exact, and cheaper than the general form.
+    if abs(n - 1.0) < 0.01 {
+        return length(max(qa, vec2<f32>(0.0))) + min(max(qa.x, qa.y), 0.0) - r;
+    }
 
+    // Scoop: a concave arc centred on the corner's TIP, carved out of the
+    // box across the whole quadrant. Negating the convex superellipse
+    // about the inner centre instead left the tip filled and cut a disc
+    // out of the interior.
     if n < 0.0 {
-        return -se_dist;  // concave (scoop)
+        let p_exp = pow(2.0, min(abs(n), 5.0));
+        let t = abs(q) / rr;
+        return max(box_d, -superellipse_dist(t, p_exp, r));
     }
-    return se_dist;  // convex
+
+    // Bevel: exact, and keeps p == 1 out of the general path.
+    if abs(n) < 0.01 {
+        return max(box_d, (qa.x + qa.y - r) / sqrt(2.0));
+    }
+
+    // Convex superellipse, clamped to the corner quadrant and bounded by
+    // the box.
+    let p_exp = pow(2.0, min(abs(n), 5.0));
+    let t = max(qa, vec2<f32>(0.0)) / rr;
+    return max(box_d, superellipse_dist(t, p_exp, r));
 }
 
 // Circle SDF
