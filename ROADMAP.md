@@ -2,6 +2,11 @@
 
 > Last updated: 2026-04-13
 
+> Queued items from this document are tracked in `git-bug`.
+> `git-bug bug --status open` lists them; this file stays as the
+> narrative.
+
+
 ## Vision
 
 Blinc is a GPU-accelerated, cross-platform UI framework that enables developers to build production-quality desktop, mobile, and embedded applications from a single Rust codebase. The framework aims to match the quality of native platform UIs while providing a unified developer experience across all targets.

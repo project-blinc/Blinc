@@ -1,5 +1,9 @@
 # Blinc DSL roadmap
 
+> Queued items from this document are tracked in `git-bug`.
+> `git-bug bug --status open` lists them; this file stays as the
+> narrative.
+
 Status of the `.blinc` surface: what it can express today, what is being
 worked on, and what is queued. Each item names the concepts involved
 rather than files, which move.
