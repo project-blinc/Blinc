@@ -625,6 +625,29 @@ impl ReactiveGraph {
     /// deadlock. Returns `None` when the derived has never been
     /// computed; the value may be stale, since derived-to-derived
     /// dependencies are not tracked (see `get_derived`).
+    /// A derived read by another computation or effect, which holds this
+    /// graph and so cannot cache: a clean derived gives its cached value, a
+    /// dirty or never-computed one runs its compute closure without caching.
+    /// Either way the reader comes to depend on the derived's signals, so it
+    /// re-runs when they change; the derived itself stays as it was.
+    pub fn read_derived_in_flight<T: Clone + 'static>(&self, derived: Derived<T>) -> Option<T> {
+        let node = self.derived.get(derived.id)?;
+        if !node.dirty.get() {
+            if let Some(value) = node.value.as_ref().and_then(|v| v.downcast_ref::<T>()) {
+                if let Some(tracking) = self.tracking.borrow_mut().as_mut() {
+                    tracking.extend(node.dependencies.iter().copied());
+                }
+                return Some(value.clone());
+            }
+        }
+        // The closure's reads go through this graph's `get`, which records
+        // them in the reader's tracking.
+        (node.compute)(self)
+            .downcast::<T>()
+            .ok()
+            .map(|value| *value)
+    }
+
     pub fn peek_derived<T: Clone + 'static>(&self, derived: Derived<T>) -> Option<T> {
         let node = self.derived.get(derived.id)?;
         node.value.as_ref()?.downcast_ref::<T>().cloned()
@@ -1566,9 +1589,8 @@ impl<T: Clone + Send + 'static> Computed<T> {
         }
         // Re-entrant path first, mirroring `Signal::try_get`: when this
         // thread is already inside a compute (it holds the graph mutex),
-        // locking again would deadlock against itself. Reads the cached
-        // value rather than recomputing, since recompute needs `&mut`.
-        if let Some(value) = with_in_flight_graph(|g| g.peek_derived(self.derived)) {
+        // locking again would deadlock against itself.
+        if let Some(value) = with_in_flight_graph(|g| g.read_derived_in_flight(self.derived)) {
             return value;
         }
         self.reactive.lock().unwrap().get_derived(self.derived)
@@ -1788,6 +1810,36 @@ mod tests {
             Some(0.85),
             "global-path read inside compute must register the dependency"
         );
+    }
+
+    #[test]
+    fn a_computed_reading_a_computed_follows_its_signals() {
+        let base = signal(1i32);
+        let doubled = computed::<i32, _>(move |_| base.try_get().unwrap_or(0) * 2);
+        let inner = doubled.clone();
+        let quadrupled = computed::<i32, _>(move |_| inner.try_get().unwrap_or(0) * 2);
+        assert_eq!(quadrupled.try_get(), Some(4));
+
+        base.set(3);
+        assert_eq!(quadrupled.try_get(), Some(12));
+        assert_eq!(
+            doubled.try_get(),
+            Some(6),
+            "the inner one still recomputes on its own read"
+        );
+    }
+
+    #[test]
+    fn an_effect_reading_a_computed_reruns_when_its_signals_change() {
+        let base = signal(1i32);
+        let doubled = computed::<i32, _>(move |_| base.try_get().unwrap_or(0) * 2);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let log = Arc::clone(&seen);
+        let inner = doubled.clone();
+        let _watch = effect(move |_| log.lock().unwrap().push(inner.try_get().unwrap_or(-1)));
+
+        base.set(5);
+        assert_eq!(*seen.lock().unwrap(), vec![2, 10]);
     }
 
     #[test]
