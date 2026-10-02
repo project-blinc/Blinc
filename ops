@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1790966792,"nonce":"xiEuu6zUhXNxoit2u13fGwFyNGY=","added":["bug","area:dsl"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":2,"timestamp":1790966896,"nonce":"ydTu7F5YPxY/l++wWjRvOj/i9O0=","title":"FSM identity is (module, name) but the compiler hardcoded \"main\"","was":"FSM identity is (module, name); the compiler hardcoded \\\"main\\\" and the runtime registry"}]}
