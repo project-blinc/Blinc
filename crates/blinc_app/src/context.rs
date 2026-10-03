@@ -6022,6 +6022,7 @@ impl RenderContext {
                 &mut flows,
                 None,  // No initial CSS transform
                 1.0,   // Initial inherited CSS opacity
+                None,  // No inherited text colour at the root
                 None,  // No parent node
                 None,  // No initial scroll clip
                 None,  // No 3D layer ancestor
@@ -6068,6 +6069,10 @@ impl RenderContext {
         // Accumulated CSS opacity from ancestors (compounds multiplicatively).
         // CSS `opacity` applies to the element and its entire visual subtree.
         inherited_css_opacity: f32,
+        // Inherited text colour, resolved as the walk descends rather than
+        // copied into props beforehand, so a subtree rebuilt after the
+        // stylesheet pass still inherits. Mirrors `render_text_recursive`.
+        inherited_text_color: Option<[f32; 4]>,
         // Parent node ID for inheriting non-cascading CSS props (border, shadow, filter)
         // to child images that render separately from the SDF pipeline.
         parent_node: Option<LayoutNodeId>,
@@ -6129,6 +6134,13 @@ impl RenderContext {
 
         let abs_x = bounds.x;
         let abs_y = bounds.y;
+
+        // What this node set for itself wins; anything it did not set, it
+        // inherits. This is what paints and what descends.
+        let effective_text_color = tree
+            .get_render_node(node)
+            .and_then(|n| n.props.text_color)
+            .or(inherited_text_color);
 
         // Get motion values for this node from RenderState (entry/exit animations)
         let motion_values = render_state.and_then(|rs| {
@@ -6707,7 +6719,7 @@ impl RenderContext {
                         width: scaled_width,
                         height: scaled_height,
                         font_size: scaled_font_size,
-                        color: render_node.props.text_color.unwrap_or(text_data.color),
+                        color: effective_text_color.unwrap_or(text_data.color),
                         align: text_data.align,
                         weight: render_node.props.font_weight.unwrap_or(text_data.weight),
                         italic: render_node
@@ -7430,6 +7442,7 @@ impl RenderContext {
                 flows,
                 node_css_affine,
                 child_css_opacity,
+                effective_text_color,
                 Some(node), // pass current node as parent for children
                 child_scroll_clip,
                 child_3d_layer.clone(),

@@ -359,9 +359,8 @@ impl RenderTree {
                     if node.props.text_overflow.is_none() {
                         node.props.text_overflow = to;
                     }
-                    if node.props.text_color.is_none() {
-                        node.props.text_color = tc;
-                    }
+                    // text_color is NOT copied here either; see
+                    // `propagate_inherited_text`.
                     if node.props.text_align.is_none() {
                         if let Some(ta) = ta {
                             node.props.text_align = Some(ta);
@@ -559,7 +558,8 @@ impl RenderTree {
                     .or(inherited.decoration_thickness);
                 p.white_space = p.white_space.or(inherited.white_space);
                 p.text_overflow = p.text_overflow.or(inherited.overflow);
-                p.text_color = p.text_color.or(inherited.color);
+                // text_color is NOT copied: the paint walk resolves it as it
+                // descends, so a subtree rebuilt after this pass inherits too.
                 p.font_style = p.font_style.or(inherited.font_style);
                 if p.text_align.is_none()
                     && let Some(align) = inherited.align
@@ -597,16 +597,14 @@ mod inherit_tests {
     use crate::renderer::RenderTree;
     use crate::text::text;
 
-    /// An inherited colour must reach a deeply nested text node in ONE
-    /// pass.
+    /// An inherited colour must reach a deeply nested text node.
     ///
-    /// The propagation copies from the immediate parent, so the pass
-    /// only converges if parents are visited first. Insertion order
-    /// happens to satisfy that for a freshly built tree -- this pins the
-    /// invariant so a rebuild that re-inserts a parent behind its
-    /// children cannot quietly cost a frame per level.
+    /// Asked through `resolved_text_color`, because the colour is no
+    /// longer copied into the child's props: `props.text_color` holds
+    /// only what a node set for itself, and the effective value is
+    /// resolved by descending the tree.
     #[test]
-    fn inherited_text_color_reaches_a_deep_child_in_one_pass() {
+    fn inherited_text_color_reaches_a_deep_child() {
         let host = div().class("tinted").child(
             // Two intermediate wrappers, as a Stateful-backed widget
             // introduces between the classed node and its label.
@@ -626,13 +624,85 @@ mod inherit_tests {
             }
         }
         let color = tree
-            .render_nodes
-            .get(&deepest)
-            .and_then(|n| n.props.text_color)
+            .resolved_text_color(deepest)
             .expect("the text node must have inherited a colour");
         assert_eq!(
             color[0], 1.0,
             "expected the red from `.tinted`, got {color:?}"
+        );
+
+        // And the child must NOT have been handed a copy: that is what
+        // went stale when an ancestor changed, and what left content
+        // built after the pass with no colour at all.
+        assert!(
+            tree.render_nodes
+                .get(&deepest)
+                .and_then(|n| n.props.text_color)
+                .is_none(),
+            "the inherited colour was copied into the child's own props"
+        );
+    }
+
+    /// A subtree replaced after the stylesheet pass still resolves.
+    ///
+    /// A property test, not a regression guard: `rebuild_children_in_place`
+    /// re-runs build-time inheritance, so this held before the change too.
+    /// The failures that motivated it are pinned by the other two tests --
+    /// the copy itself, and a descendant going stale when its ancestor
+    /// changes.
+    #[test]
+    fn a_node_added_after_the_pass_still_inherits() {
+        let host = div().class("tinted").child(div());
+        let mut tree = RenderTree::from_element(&host);
+        tree.set_stylesheet(Stylesheet::parse(".tinted { color: #ff0000 }").expect("css"));
+        tree.apply_stylesheet_base_styles();
+
+        // Replace the wrapper's children AFTER the pass, the way a
+        // Stateful rebuild does. Nothing re-runs the stylesheet.
+        let wrapper = tree.layout_tree.children(tree.root().expect("root"))[0];
+        let fresh: Vec<Box<dyn crate::ElementBuilder>> = vec![Box::new(text("late"))];
+        tree.rebuild_children_in_place(wrapper, &fresh);
+
+        let late = *tree
+            .layout_tree
+            .children(wrapper)
+            .first()
+            .expect("the rebuilt child");
+
+        let color = tree
+            .resolved_text_color(late)
+            .expect("a node added after the pass must still inherit");
+        assert_eq!(
+            color[0], 1.0,
+            "expected the red from `.tinted`, got {color:?}"
+        );
+    }
+
+    /// An ancestor's colour changing must reach descendants, rather than
+    /// leaving them on a copy taken when the pass ran.
+    #[test]
+    fn a_descendant_follows_an_ancestor_that_changes() {
+        let host = div().class("tinted").child(div().child(text("hello")));
+        let mut tree = RenderTree::from_element(&host);
+        tree.set_stylesheet(Stylesheet::parse(".tinted { color: #ff0000 }").expect("css"));
+        tree.apply_stylesheet_base_styles();
+
+        let mut deepest = tree.root().expect("root");
+        while let Some(&c) = tree.layout_tree.children(deepest).first() {
+            deepest = c;
+        }
+        assert_eq!(tree.resolved_text_color(deepest).expect("red")[0], 1.0);
+
+        // Repaint the ancestor blue, as a theme switch or :hover would.
+        let root = tree.root().expect("root");
+        if let Some(n) = tree.render_nodes.get_mut(&root) {
+            n.props.text_color = Some([0.0, 0.0, 1.0, 1.0]);
+        }
+
+        let after = tree.resolved_text_color(deepest).expect("still set");
+        assert_eq!(
+            after[2], 1.0,
+            "the descendant kept a stale copy instead of following its ancestor"
         );
     }
 }

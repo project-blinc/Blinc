@@ -506,11 +506,14 @@ impl RenderTree {
     /// Render all text elements via the LayoutRenderer
     fn render_text_elements<R: LayoutRenderer>(&self, renderer: &mut R) {
         if let Some(root) = self.root {
-            self.render_text_recursive(renderer, root, (0.0, 0.0), 0, false, (0.0, 0.0));
+            self.render_text_recursive(renderer, root, (0.0, 0.0), 0, false, (0.0, 0.0), None);
         }
     }
 
     /// Recursively render text elements
+    // Carries the descent state the walk needs; the sibling walk in
+    // blinc_app does the same.
+    #[allow(clippy::too_many_arguments)]
     fn render_text_recursive<R: LayoutRenderer>(
         &self,
         renderer: &mut R,
@@ -519,12 +522,25 @@ impl RenderTree {
         glass_depth: u32,
         inside_foreground: bool,
         cumulative_scroll: (f32, f32),
+        // What this node inherits from its ancestors. Resolved as the walk
+        // descends rather than copied into props beforehand, so a subtree
+        // rebuilt after the stylesheet pass still inherits.
+        inherited_color: Option<[f32; 4]>,
     ) {
         // Use get_render_bounds to get animated bounds if layout animation is active
         // This ensures text respects layout animations (FLIP-style bounds animation)
         let Some(bounds) = self.get_render_bounds(node, (0.0, 0.0)) else {
             return;
         };
+
+        // `props.text_color` is what this node set for itself; anything it
+        // did not set, it inherits. The effective value is what paints and
+        // what descends.
+        let effective_color = self
+            .render_nodes
+            .get(&node)
+            .and_then(|n| n.props.text_color)
+            .or(inherited_color);
 
         let Some(render_node) = self.render_nodes.get(&node) else {
             return;
@@ -555,7 +571,7 @@ impl RenderTree {
             let abs_y = parent_offset.1 + bounds.y;
 
             // Use animated/overridden text color, font size and weight if available
-            let color = render_node.props.text_color.unwrap_or(text_data.color);
+            let color = effective_color.unwrap_or(text_data.color);
             let font_size = render_node.props.font_size.unwrap_or(text_data.font_size);
             let weight = render_node.props.font_weight.unwrap_or(text_data.weight);
 
@@ -654,6 +670,7 @@ impl RenderTree {
                 children_glass_depth,
                 children_inside_foreground,
                 child_cumulative,
+                effective_color,
             );
         }
     }

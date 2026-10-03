@@ -1135,7 +1135,38 @@ impl RenderTree {
     /// default its element type carries. Exposed because "the label is
     /// the wrong colour" is otherwise only observable on screen.
     pub fn resolved_text_color(&self, id: LayoutNodeId) -> Option<[f32; 4]> {
-        self.render_nodes.get(&id).and_then(|n| n.props.text_color)
+        // Resolved by descending, the same rule the paint walk applies:
+        // what a node set for itself, else what its nearest ancestor set.
+        // `props.text_color` alone is only the node's OWN value now, so
+        // reading it would miss everything inherited.
+        //
+        // The layout tree exposes children but no parent, so this walks
+        // down from the root rather than up from `id`. It is a diagnostic
+        // accessor, not a per-frame path.
+        fn descend(
+            tree: &RenderTree,
+            node: LayoutNodeId,
+            inherited: Option<[f32; 4]>,
+            want: LayoutNodeId,
+        ) -> Option<Option<[f32; 4]>> {
+            let effective = tree
+                .render_nodes
+                .get(&node)
+                .and_then(|n| n.props.text_color)
+                .or(inherited);
+            if node == want {
+                return Some(effective);
+            }
+            for child in tree.layout_tree.children(node) {
+                if let Some(found) = descend(tree, child, effective, want) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+
+        let root = self.root?;
+        descend(self, root, None, id).flatten()
     }
 
     // ========================================================================

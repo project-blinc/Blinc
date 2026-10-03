@@ -653,9 +653,8 @@ impl RenderTree {
                     if node.props.text_overflow.is_none() {
                         node.props.text_overflow = to;
                     }
-                    if node.props.text_color.is_none() {
-                        node.props.text_color = tc;
-                    }
+                    // text_color is NOT copied here either; see
+                    // `propagate_inherited_text`.
                     if node.props.text_align.is_none() {
                         if let Some(ta) = ta {
                             node.props.text_align = Some(ta);

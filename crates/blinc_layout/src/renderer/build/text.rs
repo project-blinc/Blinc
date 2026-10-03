@@ -67,12 +67,9 @@ impl RenderTree {
                 props.text_overflow = Some(to);
             }
         }
-        // color (CSS spec: inherited)
-        if props.text_color.is_none() {
-            if let Some(c) = parent_props.text_color {
-                props.text_color = Some(c);
-            }
-        }
+        // color (CSS spec: inherited) is NOT copied: the paint walk
+        // resolves it as it descends, so `props.text_color` stays what this
+        // node set for itself and an ancestor's later change is picked up.
         // text-align (CSS spec: inherited)
         if props.text_align.is_none() {
             if let Some(ta) = parent_props.text_align {
