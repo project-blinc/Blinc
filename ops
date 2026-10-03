@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":2,"timestamp":1790966888,"nonce":"aw349DWmy129cosTLZpYc5TF61Q=","title":"DSL while-with-children in a view body still emits nothing","was":"(84ccd7eb): if/else in widget bodies now works; while-with-children still broken."}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1791029934,"nonce":"OCzGCtiCK82r7nhKMnugxY00LGE=","status":1}]}
