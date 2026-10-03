@@ -2086,8 +2086,39 @@ impl RenderTree {
         }
     }
 
+    /// Push CSS letter-spacing into the text measure contexts.
+    ///
+    /// The stylesheet pass puts it on `RenderProps` after `build()` has
+    /// already made each text node's context, so the measurer would
+    /// otherwise never see it and Taffy would size the box to unspaced
+    /// text.
+    ///
+    /// Writes only on a change: `update_text` marks the node dirty, and
+    /// doing that unconditionally would re-measure every text node every
+    /// frame.
+    fn sync_text_measure_contexts(&mut self) {
+        let pending: Vec<(LayoutNodeId, f32)> = self
+            .render_nodes
+            .iter()
+            .filter_map(|(&id, render_node)| {
+                let spacing = render_node.props.letter_spacing?;
+                let ctx = self.layout_tree.text_context(id)?;
+                (ctx.letter_spacing != spacing).then_some((id, spacing))
+            })
+            .collect();
+
+        for (id, spacing) in pending {
+            self.layout_tree
+                .update_text(id, |ctx| ctx.letter_spacing = spacing);
+        }
+    }
+
     /// Compute layout for the given viewport size
     pub fn compute_layout(&mut self, width: f32, height: f32) {
+        // Before measuring: CSS text properties that affect measurement
+        // reach the contexts here, not at build time.
+        self.sync_text_measure_contexts();
+
         if let Some(root) = self.root {
             // Step 1: Check for existing collapsing animations and apply their constraints
             // This ensures children are laid out at the larger (animated) size during collapse
@@ -2947,6 +2978,88 @@ mod tests {
 
         assert_eq!(bounds.width, 200.0);
         assert_eq!(bounds.height, 200.0);
+    }
+
+    /// CSS letter-spacing reaches RenderProps during the stylesheet
+    /// pass, which runs after the measure context was built, so
+    /// `compute_layout` has to push it in. Without that the measurer
+    /// sizes the box to unspaced text.
+    #[test]
+    fn css_letter_spacing_reaches_the_measure_context() {
+        let ui = div()
+            .w(400.0)
+            .h(200.0)
+            .child(crate::text::text("abcdefghij"));
+        let mut tree = RenderTree::from_element(&ui);
+
+        // The one node carrying a measure context is the text.
+        let text_node = tree
+            .render_nodes
+            .keys()
+            .copied()
+            .find(|&id| tree.layout_tree.text_context(id).is_some())
+            .expect("a text node with a measure context");
+
+        tree.compute_layout(400.0, 200.0);
+        let unspaced = tree.get_bounds(text_node).unwrap().width;
+        assert_eq!(
+            tree.layout_tree
+                .text_context(text_node)
+                .unwrap()
+                .letter_spacing,
+            0.0
+        );
+
+        // What the stylesheet pass does for `letter-spacing: 4px`.
+        tree.render_nodes
+            .get_mut(&text_node)
+            .unwrap()
+            .props
+            .letter_spacing = Some(4.0);
+
+        tree.compute_layout(400.0, 200.0);
+
+        assert_eq!(
+            tree.layout_tree
+                .text_context(text_node)
+                .unwrap()
+                .letter_spacing,
+            4.0,
+            "compute_layout did not sync the context"
+        );
+        let spaced = tree.get_bounds(text_node).unwrap().width;
+        assert!(spaced > unspaced, "{unspaced} -> {spaced}");
+    }
+
+    /// Syncing is idempotent: a node whose context already agrees with
+    /// its props is left alone, so a steady frame does not re-measure
+    /// every text node.
+    #[test]
+    fn syncing_an_unchanged_context_is_a_no_op() {
+        let ui = div()
+            .w(400.0)
+            .h(200.0)
+            .child(crate::text::text("abcdefghij"));
+        let mut tree = RenderTree::from_element(&ui);
+        let text_node = tree
+            .render_nodes
+            .keys()
+            .copied()
+            .find(|&id| tree.layout_tree.text_context(id).is_some())
+            .expect("a text node");
+
+        tree.render_nodes
+            .get_mut(&text_node)
+            .unwrap()
+            .props
+            .letter_spacing = Some(4.0);
+        tree.compute_layout(400.0, 200.0);
+        let first = tree.get_bounds(text_node).unwrap().width;
+
+        tree.sync_text_measure_contexts();
+        tree.compute_layout(400.0, 200.0);
+
+        assert_eq!(tree.get_bounds(text_node).unwrap().width, first);
     }
 
     /// A rebuild queued against a tree that has since been replaced
