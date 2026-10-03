@@ -325,6 +325,37 @@ impl TextRenderer {
         self.atlas.utilization()
     }
 
+    /// Share of the atlas holding live glyph pixels. Falls when
+    /// `gc_atlas` reclaims, which `atlas_utilization` does not.
+    pub fn atlas_occupancy(&self) -> f32 {
+        self.atlas.occupancy()
+    }
+
+    /// Start a new atlas epoch. Call once per frame so `gc_atlas` can
+    /// tell a glyph still in use from one that has gone cold.
+    pub fn begin_atlas_epoch(&mut self) {
+        self.atlas.begin_epoch();
+    }
+
+    /// Reclaim atlas space from glyphs unused for `max_age` epochs.
+    ///
+    /// Clears this renderer's own glyph cache when anything was
+    /// dropped. That cache holds copies of `GlyphInfo`, and a reclaimed
+    /// shelf's pixels are zeroed and its space reused, so a surviving
+    /// copy would sample whatever lands there next. The entries cost a
+    /// re-rasterization to rebuild, which is why this is worth doing
+    /// rarely rather than every frame.
+    ///
+    /// Live glyphs never move, so atlas coordinates already emitted in
+    /// primitives stay valid and no batch needs invalidating.
+    pub fn gc_atlas(&mut self, max_age: u64) -> crate::atlas::AtlasGcReport {
+        let report = self.atlas.gc(max_age);
+        if report.glyphs_dropped > 0 {
+            self.glyph_cache.clear();
+        }
+        report
+    }
+
     /// Number of cached color glyph rasterization entries (emoji LRU)
     pub fn color_glyph_cache_len(&self) -> usize {
         self.color_glyph_cache.len()
@@ -1103,7 +1134,11 @@ impl TextRenderer {
 
         // Check cache first (LruCache::get promotes to most-recently-used)
         if let Some(info) = self.glyph_cache.get(&cache_key) {
-            return Ok(*info);
+            let info = *info;
+            // Our LRU just served this without the atlas seeing it,
+            // which would otherwise read as disuse to `gc`.
+            self.atlas.touch_glyph(font_id, glyph_id, font_size, phase);
+            return Ok(info);
         }
 
         // Rasterize the glyph

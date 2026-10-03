@@ -141,6 +141,27 @@ impl DirtyRegion {
     }
 }
 
+/// What one `gc` pass reclaimed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AtlasGcReport {
+    /// Shelves whose every glyph had gone stale and were reset.
+    pub shelves_reclaimed: usize,
+    /// Glyph entries dropped. A caller holding `GlyphInfo` for any of
+    /// these must stop using it: the pixels are zeroed and the space is
+    /// free for reuse.
+    pub glyphs_dropped: usize,
+    /// Atlas bytes freed for reuse.
+    pub bytes_reclaimed: usize,
+}
+
+impl AtlasGcReport {
+    /// Whether anything was reclaimed, so a caller can skip the
+    /// invalidation it would otherwise have to do.
+    pub fn is_empty(&self) -> bool {
+        self.glyphs_dropped == 0 && self.shelves_reclaimed == 0
+    }
+}
+
 /// Glyph atlas for caching rendered glyphs
 pub struct GlyphAtlas {
     /// Atlas width in pixels
@@ -157,6 +178,11 @@ pub struct GlyphAtlas {
     padding: u32,
     /// Which atlas region changed since the last upload
     dirty: DirtyRegion,
+    /// Monotonic tick, bumped by `begin_epoch`. Ages glyphs for `gc`.
+    epoch: u64,
+    /// Epoch each glyph was last used at. Kept out of `GlyphInfo`,
+    /// which is public, `Copy` and built by literal downstream.
+    last_used: FxHashMap<GlyphKey, u64>,
 }
 
 impl GlyphAtlas {
@@ -173,6 +199,8 @@ impl GlyphAtlas {
             shelves: Vec::new(),
             padding: 2, // 2 pixel padding between glyphs
             dirty: DirtyRegion::all(width, height),
+            epoch: 0,
+            last_used: FxHashMap::default(),
         }
     }
 
@@ -315,7 +343,9 @@ impl GlyphAtlas {
 
         // Check if already cached
         if let Some(info) = self.glyphs.get(&key) {
-            return Ok(*info);
+            let info = *info;
+            self.last_used.insert(key, self.epoch);
+            return Ok(info);
         }
 
         // Allocate region
@@ -342,6 +372,7 @@ impl GlyphAtlas {
         };
 
         self.glyphs.insert(key, info);
+        self.last_used.insert(key, self.epoch);
         // The padding the allocator reserves is never written, so it
         // stays zero and does not need uploading.
         self.dirty.add(region.x, region.y, width, height);
@@ -383,9 +414,111 @@ impl GlyphAtlas {
     /// Clear all cached glyphs
     pub fn clear(&mut self) {
         self.glyphs.clear();
+        self.last_used.clear();
         self.shelves.clear();
         self.pixels.fill(0);
         self.dirty = DirtyRegion::all(self.width, self.height);
+    }
+
+    /// Start a new epoch. Call once per frame; `gc` ages glyphs against
+    /// this.
+    pub fn begin_epoch(&mut self) {
+        self.epoch = self.epoch.wrapping_add(1);
+    }
+
+    /// Mark a glyph as used in the current epoch, so `gc` keeps it.
+    ///
+    /// Needed because a caller with its own glyph cache can serve a hit
+    /// without touching the atlas, which would otherwise look like
+    /// disuse.
+    pub fn touch_glyph(&mut self, font_id: u32, glyph_id: u16, font_size: f32, phase: u8) {
+        let key = GlyphKey::with_phase(font_id, glyph_id, font_size, phase);
+        if self.glyphs.contains_key(&key) {
+            self.last_used.insert(key, self.epoch);
+        }
+    }
+
+    /// Reclaim space from glyphs unused for `max_age` epochs.
+    ///
+    /// Only resets a shelf whose every glyph has gone stale, which is
+    /// what makes this safe: a live glyph never moves, so atlas pixel
+    /// coordinates already baked into emitted primitives stay valid.
+    /// Compacting live glyphs would reclaim more and invalidate all of
+    /// them.
+    ///
+    /// Glyphs on a reclaimed shelf are dropped and their pixels zeroed.
+    /// A caller caching `GlyphInfo` in a map of its own must drop that
+    /// too; the report says whether anything went.
+    pub fn gc(&mut self, max_age: u64) -> AtlasGcReport {
+        let cutoff = self.epoch.saturating_sub(max_age);
+
+        // A shelf is reclaimable only if nothing on it is still live.
+        // Fresh is `used at or after the cutoff`, so gc(0) keeps what
+        // this epoch touched rather than treating an epoch-0 insert as
+        // already expired. A missing last_used counts as stale: it can
+        // only mean the entry predates the bookkeeping.
+        let mut live_rows: FxHashMap<u32, bool> = FxHashMap::default();
+        for (key, info) in &self.glyphs {
+            let fresh = self.last_used.get(key).is_some_and(|&used| used >= cutoff);
+            *live_rows.entry(info.region.y).or_insert(false) |= fresh;
+        }
+
+        let mut report = AtlasGcReport::default();
+        let width = self.width;
+        let height = self.height;
+        for shelf in &mut self.shelves {
+            if shelf.x == 0 || live_rows.get(&shelf.y).copied().unwrap_or(false) {
+                continue;
+            }
+
+            // Zero the used span so stale coverage cannot bleed into a
+            // glyph packed here later, and send it up on the next
+            // upload.
+            let used_width = shelf.x.min(width);
+            for y in shelf.y..(shelf.y + shelf.height).min(height) {
+                let row = (y * width) as usize;
+                let end = row + used_width as usize;
+                if end <= self.pixels.len() {
+                    self.pixels[row..end].fill(0);
+                }
+            }
+            self.dirty.add(0, shelf.y, used_width, shelf.height);
+
+            report.shelves_reclaimed += 1;
+            report.bytes_reclaimed += (used_width * shelf.height) as usize;
+            shelf.x = 0;
+        }
+
+        if report.shelves_reclaimed > 0 {
+            let reclaimed: Vec<u32> = self
+                .shelves
+                .iter()
+                .filter(|s| s.x == 0)
+                .map(|s| s.y)
+                .collect();
+            let before = self.glyphs.len();
+            self.glyphs
+                .retain(|_, info| !reclaimed.contains(&info.region.y));
+            self.last_used
+                .retain(|key, _| self.glyphs.contains_key(key));
+            report.glyphs_dropped = before - self.glyphs.len();
+        }
+
+        report
+    }
+
+    /// Share of the atlas occupied by live glyph pixels, 0.0 to 1.0.
+    ///
+    /// Unlike `utilization`, which measures how far down the shelves
+    /// reach and so never falls, this drops when `gc` reclaims, which
+    /// makes it the figure to watch.
+    pub fn occupancy(&self) -> f32 {
+        let used: u64 = self
+            .glyphs
+            .values()
+            .map(|i| (i.region.width * i.region.height) as u64)
+            .sum();
+        used as f32 / (self.width as f32 * self.height as f32)
     }
 
     /// Get number of cached glyphs
@@ -861,5 +994,160 @@ mod dirty_rect_tests {
         assert_eq!(atlas.is_dirty(), atlas.dirty_rect().is_some());
         insert(&mut atlas, 1, 8, 8);
         assert_eq!(atlas.is_dirty(), atlas.dirty_rect().is_some());
+    }
+}
+
+#[cfg(test)]
+mod gc_tests {
+    use super::*;
+
+    fn insert(atlas: &mut GlyphAtlas, glyph_id: u16, size: f32, w: u32, h: u32) -> GlyphInfo {
+        let bitmap = vec![0xff; (w * h) as usize];
+        atlas
+            .insert_glyph(0, glyph_id, size, w, h, 0, 0, w as u16, &bitmap)
+            .expect("fits")
+    }
+
+    /// A glyph used this epoch must survive, or the GC would evict what
+    /// the next frame is about to draw.
+    #[test]
+    fn a_fresh_glyph_survives() {
+        let mut atlas = GlyphAtlas::new(128, 128);
+        insert(&mut atlas, 1, 16.0, 8, 8);
+
+        let report = atlas.gc(0);
+        assert!(report.is_empty(), "{report:?}");
+        assert_eq!(atlas.glyph_count(), 1);
+    }
+
+    /// A shelf whose every glyph has aged out is reclaimed, and the
+    /// bytes are reported so the saving is measurable.
+    #[test]
+    fn a_wholly_stale_shelf_is_reclaimed() {
+        let mut atlas = GlyphAtlas::new(128, 128);
+        insert(&mut atlas, 1, 16.0, 8, 8);
+        insert(&mut atlas, 2, 16.0, 8, 8);
+        let before = atlas.occupancy();
+
+        for _ in 0..5 {
+            atlas.begin_epoch();
+        }
+        let report = atlas.gc(2);
+
+        assert_eq!(report.shelves_reclaimed, 1, "{report:?}");
+        assert_eq!(report.glyphs_dropped, 2, "{report:?}");
+        assert!(report.bytes_reclaimed > 0, "{report:?}");
+        assert_eq!(atlas.glyph_count(), 0);
+        assert!(atlas.occupancy() < before);
+    }
+
+    /// One live glyph keeps its whole shelf, because reclaiming it
+    /// would mean moving that glyph, and its atlas coordinates are
+    /// already baked into emitted primitives.
+    #[test]
+    fn one_live_glyph_keeps_the_shelf() {
+        let mut atlas = GlyphAtlas::new(128, 128);
+        let kept = insert(&mut atlas, 1, 16.0, 8, 8);
+        insert(&mut atlas, 2, 16.0, 8, 8);
+
+        for _ in 0..5 {
+            atlas.begin_epoch();
+        }
+        // Keep glyph 1 alive the way a caller's own cache hit would.
+        atlas.touch_glyph(0, 1, 16.0, 0);
+
+        let report = atlas.gc(2);
+        assert!(report.is_empty(), "a live shelf was reclaimed: {report:?}");
+        assert_eq!(
+            atlas.get_glyph(0, 1, 16.0).map(|i| i.region.x),
+            Some(kept.region.x),
+            "a surviving glyph must not move"
+        );
+    }
+
+    /// Reclaimed pixels are zeroed, so leftover coverage cannot bleed
+    /// into whatever is packed there next.
+    #[test]
+    fn reclaimed_pixels_are_zeroed() {
+        let mut atlas = GlyphAtlas::new(128, 128);
+        let info = insert(&mut atlas, 1, 16.0, 8, 8);
+        let probe = (info.region.y * 128 + info.region.x) as usize;
+        assert_eq!(atlas.pixels()[probe], 0xff);
+
+        for _ in 0..5 {
+            atlas.begin_epoch();
+        }
+        assert_eq!(atlas.gc(2).shelves_reclaimed, 1);
+
+        assert_eq!(atlas.pixels()[probe], 0, "stale coverage left behind");
+    }
+
+    /// Reclaiming has to be uploaded, or the GPU keeps sampling pixels
+    /// the CPU has already zeroed and reused.
+    #[test]
+    fn reclaiming_dirties_the_freed_region() {
+        let mut atlas = GlyphAtlas::new(128, 128);
+        insert(&mut atlas, 1, 16.0, 8, 8);
+        for _ in 0..5 {
+            atlas.begin_epoch();
+        }
+        atlas.mark_clean();
+
+        assert_eq!(atlas.gc(2).shelves_reclaimed, 1);
+        assert!(
+            atlas.dirty_rect().is_some(),
+            "a reclaimed region was not marked for upload"
+        );
+    }
+
+    /// Space a GC frees must actually be usable again, otherwise the
+    /// shelf reset is bookkeeping with no benefit.
+    #[test]
+    fn reclaimed_space_is_reusable() {
+        let mut atlas = GlyphAtlas::new(64, 64);
+        // Fill with one shelf's worth.
+        let mut n = 0u16;
+        while atlas
+            .insert_glyph(0, n, 16.0, 8, 8, 0, 0, 8, &[0xff; 64])
+            .is_ok()
+        {
+            n += 1;
+            if n > 200 {
+                break;
+            }
+        }
+        let packed = atlas.glyph_count();
+        assert!(packed > 0);
+
+        for _ in 0..5 {
+            atlas.begin_epoch();
+        }
+        let report = atlas.gc(2);
+        assert!(report.bytes_reclaimed > 0, "{report:?}");
+
+        // The same glyphs fit again after reclaiming.
+        assert!(
+            atlas
+                .insert_glyph(0, 9001, 16.0, 8, 8, 0, 0, 8, &[0xff; 64])
+                .is_ok(),
+            "reclaimed space was not reusable"
+        );
+    }
+
+    /// `utilization` measures how far the shelves reach and so never
+    /// falls; `occupancy` is the one that reflects a GC.
+    #[test]
+    fn occupancy_falls_where_utilization_does_not() {
+        let mut atlas = GlyphAtlas::new(128, 128);
+        insert(&mut atlas, 1, 16.0, 16, 16);
+        let util_before = atlas.utilization();
+
+        for _ in 0..5 {
+            atlas.begin_epoch();
+        }
+        assert_eq!(atlas.gc(2).glyphs_dropped, 1);
+
+        assert_eq!(atlas.utilization(), util_before);
+        assert_eq!(atlas.occupancy(), 0.0);
     }
 }

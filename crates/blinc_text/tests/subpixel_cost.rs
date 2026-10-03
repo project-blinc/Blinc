@@ -82,7 +82,11 @@ fn a_single_phase_costs_nothing() {
         let _ = draw(&mut r, SAMPLE, Some(sub(1, i as f32 * 0.37)));
     }
 
-    assert_eq!(r.subpixel_stats().phased_rasters, 0, "phases=1 phased a glyph");
+    assert_eq!(
+        r.subpixel_stats().phased_rasters,
+        0,
+        "phases=1 phased a glyph"
+    );
 }
 
 /// The measurement this feature has to justify: how many more atlas
@@ -233,4 +237,97 @@ fn atlas_pressure_falls_back_to_whole_pixel() {
         stats.phase0_fallbacks > 0,
         "pressure limit did not engage: {stats:?}"
     );
+}
+
+/// The GC against the cost it exists to relieve: phase entries that
+/// have gone cold are reclaimed, so the 3x is a working-set multiple
+/// rather than a permanent one.
+#[test]
+fn the_gc_reclaims_cold_phase_entries() {
+    let Some(mut r) = renderer() else { return };
+
+    // A spread of origins over text that will then go cold.
+    for i in 0..24 {
+        let _ = draw(&mut r, SAMPLE, Some(sub(3, i as f32 * 0.29)));
+    }
+    let entries_before = r.glyph_cache_len();
+    let occupancy_before = r.atlas_occupancy();
+    assert!(
+        r.subpixel_stats().phased_rasters > 0,
+        "nothing was phased, so there is nothing to reclaim"
+    );
+
+    // Age it out: nothing touches those glyphs for a while.
+    for _ in 0..10 {
+        r.begin_atlas_epoch();
+    }
+    let report = r.gc_atlas(3);
+
+    eprintln!(
+        "gc: {} shelves, {} glyphs, {} bytes reclaimed; occupancy {:.2}% -> {:.2}%, \
+         cache {} -> {}",
+        report.shelves_reclaimed,
+        report.glyphs_dropped,
+        report.bytes_reclaimed,
+        occupancy_before * 100.0,
+        r.atlas_occupancy() * 100.0,
+        entries_before,
+        r.glyph_cache_len(),
+    );
+
+    assert!(
+        report.bytes_reclaimed > 0,
+        "cold phase entries were not reclaimed: {report:?}"
+    );
+    assert!(r.atlas_occupancy() < occupancy_before);
+}
+
+/// Text drawn right up to the GC must keep rendering across it. The
+/// shelf rule means live glyphs never move, so this is about the
+/// renderer's own cache being dropped correctly rather than left
+/// pointing at reclaimed space.
+#[test]
+fn text_still_renders_after_a_gc() {
+    let Some(mut r) = renderer() else { return };
+
+    for i in 0..8 {
+        let _ = draw(&mut r, SAMPLE, Some(sub(3, i as f32 * 0.29)));
+    }
+    for _ in 0..10 {
+        r.begin_atlas_epoch();
+    }
+    let _ = r.gc_atlas(3);
+
+    let after = draw(&mut r, SAMPLE, Some(sub(3, 0.5)));
+    assert!(!after.glyphs.is_empty(), "no glyphs after a gc");
+    for g in &after.glyphs {
+        assert!(g.bounds[2] > 0.0 && g.bounds[3] > 0.0, "degenerate glyph");
+        assert!(
+            g.uv_bounds[2] > g.uv_bounds[0] && g.uv_bounds[3] > g.uv_bounds[1],
+            "glyph points at an empty atlas region"
+        );
+    }
+}
+
+/// A GC must not evict what is still on screen. Touching the glyphs
+/// each epoch is what a drawing frame does.
+#[test]
+fn the_gc_keeps_text_that_is_still_drawn() {
+    let Some(mut r) = renderer() else { return };
+
+    let first = draw(&mut r, SAMPLE, None);
+    for _ in 0..10 {
+        r.begin_atlas_epoch();
+        // Still being drawn every frame.
+        let _ = draw(&mut r, SAMPLE, None);
+    }
+
+    let report = r.gc_atlas(2);
+    assert!(
+        report.is_empty(),
+        "evicted glyphs that are still drawn: {report:?}"
+    );
+
+    let after = draw(&mut r, SAMPLE, None);
+    assert_eq!(after.glyphs.len(), first.glyphs.len());
 }
