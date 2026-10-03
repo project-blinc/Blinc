@@ -737,24 +737,35 @@ impl TextRenderingContext {
             self.atlas_view = Some(view);
         }
 
-        // Upload pixel data
+        // Upload pixel data. A fresh texture needs all of it; otherwise
+        // send just the region the atlas says changed, so typing one new
+        // character does not re-upload megabytes. `bytes_per_row` stays
+        // the full atlas stride, which is what makes the sub-rect read
+        // the right bytes out of the same buffer.
+        let (rx, ry, rw, rh) = match self.renderer.atlas_dirty_rect() {
+            Some(r) if !needs_create => r,
+            _ => (0, 0, width, height),
+        };
+        if pixels.is_empty() {
+            return;
+        }
         if let Some(texture) = &self.atlas_texture {
             self.queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture,
                     mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
+                    origin: wgpu::Origin3d { x: rx, y: ry, z: 0 },
                     aspect: wgpu::TextureAspect::All,
                 },
                 pixels,
                 wgpu::TexelCopyBufferLayout {
-                    offset: 0,
+                    offset: (ry * width + rx) as u64,
                     bytes_per_row: Some(width),
-                    rows_per_image: Some(height),
+                    rows_per_image: Some(rh),
                 },
                 wgpu::Extent3d {
-                    width,
-                    height,
+                    width: rw,
+                    height: rh,
                     depth_or_array_layers: 1,
                 },
             );
@@ -798,24 +809,32 @@ impl TextRenderingContext {
             self.color_atlas_view = Some(view);
         }
 
-        // Upload pixel data (RGBA = 4 bytes per pixel)
+        // Upload pixel data (RGBA = 4 bytes per pixel). Partial, for the
+        // reasons in `update_atlas_texture`.
+        let (rx, ry, rw, rh) = match self.renderer.color_atlas_dirty_rect() {
+            Some(r) if !needs_create => r,
+            _ => (0, 0, width, height),
+        };
+        if pixels.is_empty() {
+            return;
+        }
         if let Some(texture) = &self.color_atlas_texture {
             self.queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
                     texture,
                     mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
+                    origin: wgpu::Origin3d { x: rx, y: ry, z: 0 },
                     aspect: wgpu::TextureAspect::All,
                 },
                 pixels,
                 wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(width * 4), // 4 bytes per pixel for RGBA
-                    rows_per_image: Some(height),
+                    offset: ((ry * width + rx) * 4) as u64,
+                    bytes_per_row: Some(width * 4),
+                    rows_per_image: Some(rh),
                 },
                 wgpu::Extent3d {
-                    width,
-                    height,
+                    width: rw,
+                    height: rh,
                     depth_or_array_layers: 1,
                 },
             );

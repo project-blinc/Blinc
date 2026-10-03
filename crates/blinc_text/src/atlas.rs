@@ -83,6 +83,55 @@ struct Shelf {
     x: u32,
 }
 
+/// The union of the atlas regions written since the last `mark_clean`.
+///
+/// One source of truth for dirtiness: `None` is clean, so the boolean
+/// and the rect cannot disagree. A caller uploads just this rect
+/// instead of the whole atlas.
+#[derive(Debug, Clone, Copy, Default)]
+struct DirtyRegion {
+    rect: Option<(u32, u32, u32, u32)>,
+}
+
+impl DirtyRegion {
+    /// Nothing to upload.
+    fn clean() -> Self {
+        Self { rect: None }
+    }
+
+    /// The whole atlas, for a resize or a clear.
+    fn all(width: u32, height: u32) -> Self {
+        Self {
+            rect: Some((0, 0, width, height)),
+        }
+    }
+
+    /// Grow the region to cover `(x, y, w, h)` as well.
+    fn add(&mut self, x: u32, y: u32, w: u32, h: u32) {
+        if w == 0 || h == 0 {
+            return;
+        }
+        self.rect = Some(match self.rect {
+            None => (x, y, w, h),
+            Some((cx, cy, cw, ch)) => {
+                let x0 = cx.min(x);
+                let y0 = cy.min(y);
+                let x1 = (cx + cw).max(x + w);
+                let y1 = (cy + ch).max(y + h);
+                (x0, y0, x1 - x0, y1 - y0)
+            }
+        });
+    }
+
+    fn rect(&self) -> Option<(u32, u32, u32, u32)> {
+        self.rect
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.rect.is_some()
+    }
+}
+
 /// Glyph atlas for caching rendered glyphs
 pub struct GlyphAtlas {
     /// Atlas width in pixels
@@ -97,8 +146,8 @@ pub struct GlyphAtlas {
     shelves: Vec<Shelf>,
     /// Padding between glyphs
     padding: u32,
-    /// Whether atlas data has been modified since last upload
-    dirty: bool,
+    /// Which atlas region changed since the last upload
+    dirty: DirtyRegion,
 }
 
 impl GlyphAtlas {
@@ -114,7 +163,7 @@ impl GlyphAtlas {
             glyphs: FxHashMap::default(),
             shelves: Vec::new(),
             padding: 2, // 2 pixel padding between glyphs
-            dirty: true,
+            dirty: DirtyRegion::all(width, height),
         }
     }
 
@@ -130,12 +179,18 @@ impl GlyphAtlas {
 
     /// Check if atlas has been modified
     pub fn is_dirty(&self) -> bool {
-        self.dirty
+        self.dirty.is_dirty()
+    }
+
+    /// The region written since the last `mark_clean`, as
+    /// `(x, y, width, height)` in atlas pixels. `None` when clean.
+    pub fn dirty_rect(&self) -> Option<(u32, u32, u32, u32)> {
+        self.dirty.rect()
     }
 
     /// Mark atlas as clean (after GPU upload)
     pub fn mark_clean(&mut self) {
-        self.dirty = false;
+        self.dirty = DirtyRegion::clean();
     }
 
     /// Look up a cached glyph
@@ -245,7 +300,9 @@ impl GlyphAtlas {
         };
 
         self.glyphs.insert(key, info);
-        self.dirty = true;
+        // The padding the allocator reserves is never written, so it
+        // stays zero and does not need uploading.
+        self.dirty.add(region.x, region.y, width, height);
 
         Ok(info)
     }
@@ -277,7 +334,7 @@ impl GlyphAtlas {
         self.pixels = new_pixels;
         self.width = new_width;
         self.height = new_height;
-        self.dirty = true;
+        self.dirty = DirtyRegion::all(new_width, new_height);
         true
     }
 
@@ -286,7 +343,7 @@ impl GlyphAtlas {
         self.glyphs.clear();
         self.shelves.clear();
         self.pixels.fill(0);
-        self.dirty = true;
+        self.dirty = DirtyRegion::all(self.width, self.height);
     }
 
     /// Get number of cached glyphs
@@ -318,7 +375,7 @@ impl std::fmt::Debug for GlyphAtlas {
                 "utilization",
                 &format!("{:.1}%", self.utilization() * 100.0),
             )
-            .field("dirty", &self.dirty)
+            .field("dirty_rect", &self.dirty.rect())
             .finish()
     }
 }
@@ -346,8 +403,8 @@ pub struct ColorGlyphAtlas {
     shelves: Vec<Shelf>,
     /// Padding between glyphs
     padding: u32,
-    /// Whether atlas data has been modified since last upload
-    dirty: bool,
+    /// Which atlas region changed since the last upload
+    dirty: DirtyRegion,
 }
 
 impl ColorGlyphAtlas {
@@ -364,10 +421,10 @@ impl ColorGlyphAtlas {
             glyphs: FxHashMap::default(),
             shelves: Vec::new(),
             padding: 2,
-            // `dirty` stays false until something is actually inserted.
-            // Was previously `true` because `new` allocated a fresh
-            // (empty) buffer; with lazy alloc there is nothing to upload.
-            dirty: false,
+            // Stays clean until something is actually inserted. Was
+            // previously dirty because `new` allocated a fresh (empty)
+            // buffer; with lazy alloc there is nothing to upload.
+            dirty: DirtyRegion::clean(),
         }
     }
 
@@ -391,12 +448,18 @@ impl ColorGlyphAtlas {
 
     /// Check if atlas has been modified
     pub fn is_dirty(&self) -> bool {
-        self.dirty
+        self.dirty.is_dirty()
+    }
+
+    /// The region written since the last `mark_clean`, as
+    /// `(x, y, width, height)` in atlas pixels. `None` when clean.
+    pub fn dirty_rect(&self) -> Option<(u32, u32, u32, u32)> {
+        self.dirty.rect()
     }
 
     /// Mark atlas as clean (after GPU upload)
     pub fn mark_clean(&mut self) {
-        self.dirty = false;
+        self.dirty = DirtyRegion::clean();
     }
 
     /// Look up a cached glyph
@@ -508,7 +571,9 @@ impl ColorGlyphAtlas {
         };
 
         self.glyphs.insert(key, info);
-        self.dirty = true;
+        // The padding the allocator reserves is never written, so it
+        // stays zero and does not need uploading.
+        self.dirty.add(region.x, region.y, width, height);
 
         Ok(info)
     }
@@ -543,7 +608,7 @@ impl ColorGlyphAtlas {
         self.pixels = Some(new_pixels);
         self.width = new_width;
         self.height = new_height;
-        self.dirty = true;
+        self.dirty = DirtyRegion::all(new_width, new_height);
         true
     }
 
@@ -552,10 +617,12 @@ impl ColorGlyphAtlas {
     pub fn clear(&mut self) {
         self.glyphs.clear();
         self.shelves.clear();
+        // Only dirty if there is a buffer to upload. Unallocated means
+        // nothing was ever written, so a clear changes nothing.
         if let Some(pixels) = self.pixels.as_mut() {
             pixels.fill(0);
+            self.dirty = DirtyRegion::all(self.width, self.height);
         }
-        self.dirty = true;
     }
 
     /// Get number of cached glyphs
@@ -587,7 +654,158 @@ impl std::fmt::Debug for ColorGlyphAtlas {
                 "utilization",
                 &format!("{:.1}%", self.utilization() * 100.0),
             )
-            .field("dirty", &self.dirty)
+            .field("dirty_rect", &self.dirty.rect())
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod dirty_rect_tests {
+    use super::*;
+
+    /// A 4x4 glyph of solid coverage.
+    fn bitmap(w: u32, h: u32) -> Vec<u8> {
+        vec![0xff; (w * h) as usize]
+    }
+
+    fn insert(atlas: &mut GlyphAtlas, glyph_id: u16, w: u32, h: u32) -> GlyphInfo {
+        atlas
+            .insert_glyph(0, glyph_id, 16.0, w, h, 0, 0, w as u16, &bitmap(w, h))
+            .expect("fits")
+    }
+
+    #[test]
+    fn a_clean_atlas_reports_no_rect() {
+        let mut atlas = GlyphAtlas::new(128, 128);
+        atlas.mark_clean();
+        assert_eq!(atlas.dirty_rect(), None);
+        assert!(!atlas.is_dirty());
+    }
+
+    /// The rect covers the glyph that was written, not the whole atlas.
+    /// That is the entire point: uploading the whole atlas per glyph is
+    /// what this replaces.
+    #[test]
+    fn one_glyph_dirties_only_its_own_region() {
+        let mut atlas = GlyphAtlas::new(128, 128);
+        atlas.mark_clean();
+        let info = insert(&mut atlas, 1, 8, 12);
+
+        let (x, y, w, h) = atlas.dirty_rect().expect("dirty after insert");
+        assert_eq!((x, y), (info.region.x, info.region.y));
+        assert_eq!((w, h), (8, 12));
+        assert!(w < 128 && h < 128, "should not be the whole atlas");
+    }
+
+    /// Two glyphs give the bounding box of both, so a single upload
+    /// covers them.
+    #[test]
+    fn two_glyphs_union_into_one_rect() {
+        let mut atlas = GlyphAtlas::new(128, 128);
+        atlas.mark_clean();
+        let a = insert(&mut atlas, 1, 8, 8);
+        let b = insert(&mut atlas, 2, 8, 8);
+
+        let (x, y, w, h) = atlas.dirty_rect().expect("dirty");
+        let x0 = a.region.x.min(b.region.x);
+        let y0 = a.region.y.min(b.region.y);
+        let x1 = (a.region.x + 8).max(b.region.x + 8);
+        let y1 = (a.region.y + 8).max(b.region.y + 8);
+        assert_eq!((x, y, w, h), (x0, y0, x1 - x0, y1 - y0));
+    }
+
+    /// Re-requesting a cached glyph writes nothing, so it must not
+    /// re-dirty the atlas.
+    #[test]
+    fn a_cache_hit_does_not_dirty() {
+        let mut atlas = GlyphAtlas::new(128, 128);
+        insert(&mut atlas, 1, 8, 8);
+        atlas.mark_clean();
+
+        insert(&mut atlas, 1, 8, 8);
+        assert_eq!(atlas.dirty_rect(), None, "cache hit wrote nothing");
+    }
+
+    /// Growing moves every pixel into a new, larger buffer, so the whole
+    /// thing has to go up.
+    #[test]
+    fn grow_dirties_the_whole_atlas() {
+        let mut atlas = GlyphAtlas::new(128, 128);
+        insert(&mut atlas, 1, 8, 8);
+        atlas.mark_clean();
+
+        assert!(atlas.grow());
+        let (w, h) = atlas.dimensions();
+        assert_eq!(atlas.dirty_rect(), Some((0, 0, w, h)));
+    }
+
+    #[test]
+    fn clear_dirties_the_whole_atlas() {
+        let mut atlas = GlyphAtlas::new(128, 128);
+        atlas.mark_clean();
+
+        atlas.clear();
+        assert_eq!(atlas.dirty_rect(), Some((0, 0, 128, 128)));
+    }
+
+    /// The colour atlas allocates lazily, so it starts clean and the
+    /// same rules apply once something lands in it.
+    #[test]
+    fn the_color_atlas_tracks_its_own_region() {
+        let mut atlas = ColorGlyphAtlas::new(128, 128);
+        assert_eq!(
+            atlas.dirty_rect(),
+            None,
+            "lazy alloc means nothing to upload"
+        );
+
+        let rgba = vec![0xff; (6 * 6 * 4) as usize];
+        let info = atlas
+            .insert_glyph(0, 1, 16.0, 6, 6, 0, 0, 6, &rgba)
+            .expect("fits");
+
+        assert_eq!(
+            atlas.dirty_rect(),
+            Some((info.region.x, info.region.y, 6, 6))
+        );
+        atlas.mark_clean();
+        assert_eq!(atlas.dirty_rect(), None);
+    }
+
+    /// Clearing an atlas that never allocated must not ask for an
+    /// upload: `pixels()` is empty, and a non-empty extent from an empty
+    /// slice is a wgpu validation error.
+    #[test]
+    fn clearing_an_unallocated_color_atlas_stays_clean() {
+        let mut atlas = ColorGlyphAtlas::new(128, 128);
+        atlas.clear();
+        assert_eq!(atlas.dirty_rect(), None);
+        assert!(atlas.pixels().is_empty());
+    }
+
+    /// Once allocated, a clear does need the whole atlas uploaded.
+    #[test]
+    fn clearing_an_allocated_color_atlas_dirties_it() {
+        let mut atlas = ColorGlyphAtlas::new(128, 128);
+        let rgba = vec![0xff; (4 * 4 * 4) as usize];
+        atlas
+            .insert_glyph(0, 1, 16.0, 4, 4, 0, 0, 4, &rgba)
+            .expect("fits");
+        atlas.mark_clean();
+
+        atlas.clear();
+        assert_eq!(atlas.dirty_rect(), Some((0, 0, 128, 128)));
+    }
+
+    /// is_dirty and dirty_rect read the same field, so they cannot
+    /// disagree about whether an upload is needed.
+    #[test]
+    fn is_dirty_agrees_with_dirty_rect() {
+        let mut atlas = GlyphAtlas::new(128, 128);
+        assert_eq!(atlas.is_dirty(), atlas.dirty_rect().is_some());
+        atlas.mark_clean();
+        assert_eq!(atlas.is_dirty(), atlas.dirty_rect().is_some());
+        insert(&mut atlas, 1, 8, 8);
+        assert_eq!(atlas.is_dirty(), atlas.dirty_rect().is_some());
     }
 }

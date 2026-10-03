@@ -258,6 +258,18 @@ impl TextRenderer {
         self.color_atlas.is_dirty()
     }
 
+    /// The atlas region written since the last upload, as
+    /// `(x, y, width, height)` in atlas pixels. `None` when clean.
+    pub fn atlas_dirty_rect(&self) -> Option<(u32, u32, u32, u32)> {
+        self.atlas.dirty_rect()
+    }
+
+    /// The color atlas region written since the last upload, as
+    /// `(x, y, width, height)` in atlas pixels. `None` when clean.
+    pub fn color_atlas_dirty_rect(&self) -> Option<(u32, u32, u32, u32)> {
+        self.color_atlas.dirty_rect()
+    }
+
     /// Mark atlas as clean after GPU upload
     pub fn mark_atlas_clean(&mut self) {
         self.atlas.mark_clean();
