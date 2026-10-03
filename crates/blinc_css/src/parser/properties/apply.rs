@@ -185,8 +185,9 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
             }
         }
         "box-shadow" => {
-            if let Some(shadow_stack) = parse_shadow_stack(value) {
-                style.shadow = shadow_stack;
+            if let Some(layers) = parse_shadow_layers(value) {
+                style.shadow = layers.outer;
+                style.inner_shadow = layers.inner;
             }
         }
         "text-shadow" => {

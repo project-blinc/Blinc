@@ -296,6 +296,9 @@ pub struct RenderProps {
     pub node_id: Option<LayoutNodeId>,
     /// Drop shadow stack (empty = none, 1 = single, 2-3 = compound layered shadows)
     pub shadow: Vec<Shadow>,
+    /// Inset shadow stack, drawn inside the padding box after the fill.
+    /// Separate from `shadow` because `Shadow` carries no inset flag.
+    pub inner_shadow: Vec<Shadow>,
     /// Transform applied to this element (translate, scale, rotate)
     pub transform: Option<Transform>,
     /// Opacity (0.0 = transparent, 1.0 = opaque)
@@ -496,6 +499,7 @@ impl Default for RenderProps {
             material: None,
             node_id: None,
             shadow: Vec::new(),
+            inner_shadow: Vec::new(),
             transform: None,
             opacity: 1.0,
             clips_content: false,

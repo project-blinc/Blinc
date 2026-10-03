@@ -1247,15 +1247,6 @@ pub struct Shadow {
     pub blur: f32,
     pub spread: f32,
     pub color: Color,
-    /// Paint inside the shape rather than outside, as CSS
-    /// `box-shadow: inset` does.
-    ///
-    /// The paint walk clips an inset shadow to the PADDING box, so it
-    /// cannot cover the border. That is what CSS's
-    /// background → inset shadow → border order looks like, without
-    /// splitting the merged fill+border primitive that keeps corners
-    /// free of AA fringe.
-    pub inset: bool,
 }
 
 impl Shadow {
@@ -1266,22 +1257,7 @@ impl Shadow {
             blur,
             spread: 0.0,
             color,
-            inset: false,
         }
-    }
-
-    /// An inset shadow, the CSS `box-shadow: inset` form.
-    pub fn new_inset(offset_x: f32, offset_y: f32, blur: f32, color: Color) -> Self {
-        Self {
-            inset: true,
-            ..Self::new(offset_x, offset_y, blur, color)
-        }
-    }
-
-    /// Same shadow, painted inside the shape.
-    pub fn inset(mut self) -> Self {
-        self.inset = true;
-        self
     }
 }
 

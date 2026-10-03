@@ -87,55 +87,81 @@ mod inset_shadow_tests {
     use crate::element_style::ElementStyle;
     use crate::parser::Stylesheet;
 
-    fn shadows(css: &str) -> Vec<blinc_core::Shadow> {
+    fn parse(css: &str) -> ElementStyle {
         let sheet = Stylesheet::parse(&format!("#x {{ {css} }}")).expect("css");
-        let style: ElementStyle = sheet.get("x").cloned().expect("rule");
-        style.shadow
+        sheet.get("x").cloned().expect("rule")
     }
 
     /// `inset` is written first about as often as last, and CSS allows
-    /// either, so both have to parse.
+    /// either, so both have to parse — and both land in the inner list.
     #[test]
     fn inset_is_recognised_at_either_end() {
-        let first = shadows("box-shadow: inset 0px 2px 4px #000000;");
-        assert_eq!(first.len(), 1);
-        assert!(first[0].inset, "`inset` leading was not picked up");
+        let first = parse("box-shadow: inset 0px 2px 4px #000000;");
+        let last = parse("box-shadow: 0px 2px 4px #000000 inset;");
 
-        let last = shadows("box-shadow: 0px 2px 4px #000000 inset;");
-        assert_eq!(last.len(), 1);
-        assert!(last[0].inset, "`inset` trailing was not picked up");
+        assert_eq!(first.inner_shadow.len(), 1);
+        assert!(
+            first.shadow.is_empty(),
+            "an inset layer is not an outer one"
+        );
+        assert_eq!(last.inner_shadow.len(), 1);
+        assert!(last.shadow.is_empty());
 
         // And the geometry survives either way.
-        assert_eq!(first[0].offset_y, last[0].offset_y);
-        assert_eq!(first[0].blur, last[0].blur);
+        assert_eq!(
+            first.inner_shadow[0].offset_y,
+            last.inner_shadow[0].offset_y
+        );
+        assert_eq!(first.inner_shadow[0].blur, last.inner_shadow[0].blur);
     }
 
     /// Without the keyword it must stay an outer shadow.
     #[test]
     fn a_plain_shadow_is_not_inset() {
-        let s = shadows("box-shadow: 0px 2px 4px #000000;");
-        assert_eq!(s.len(), 1);
-        assert!(!s[0].inset);
+        let s = parse("box-shadow: 0px 2px 4px #000000;");
+        assert_eq!(s.shadow.len(), 1);
+        assert!(s.inner_shadow.is_empty());
     }
 
     /// The four-value form carries a spread, and `inset` must not be
     /// mistaken for it.
     #[test]
     fn inset_coexists_with_spread() {
-        let s = shadows("box-shadow: inset 0px 2px 4px 1px #000000;");
-        assert_eq!(s.len(), 1);
-        assert!(s[0].inset);
-        assert_eq!(s[0].spread, 1.0);
-        assert_eq!(s[0].blur, 4.0);
+        let s = parse("box-shadow: inset 0px 2px 4px 1px #000000;");
+        assert_eq!(s.inner_shadow.len(), 1);
+        assert_eq!(s.inner_shadow[0].spread, 1.0);
+        assert_eq!(s.inner_shadow[0].blur, 4.0);
     }
 
-    /// A stack can mix the two, and each layer keeps its own flag. This is
-    /// the case the paint walk splits on.
+    /// A stack can mix the two. This is the split the paint walk relies
+    /// on: outer layers before the fill, inner ones after.
     #[test]
-    fn a_stack_can_mix_inset_and_outer_layers() {
-        let s = shadows("box-shadow: 0px 4px 8px #111111, inset 0px 1px 2px #222222;");
-        assert_eq!(s.len(), 2, "both layers should parse");
-        assert!(!s[0].inset, "the first layer is an outer shadow");
-        assert!(s[1].inset, "the second layer is inset");
+    fn a_stack_splits_into_the_two_lists() {
+        let s = parse("box-shadow: 0px 4px 8px #111111, inset 0px 1px 2px #222222;");
+        assert_eq!(s.shadow.len(), 1, "one outer layer");
+        assert_eq!(s.inner_shadow.len(), 1, "one inner layer");
+        // Each layer kept its own geometry rather than being swapped.
+        assert_eq!(s.shadow[0].blur, 8.0);
+        assert_eq!(s.inner_shadow[0].blur, 2.0);
+    }
+
+    /// `theme(shadow-inner)` is the token form, and the token is inset in
+    /// every theme, so it must route to the inner list.
+    #[test]
+    fn the_inner_theme_token_routes_to_the_inner_list() {
+        let s = parse("box-shadow: theme(shadow-inner);");
+        assert!(!s.inner_shadow.is_empty(), "shadow-inner produced no layer");
+        assert!(s.shadow.is_empty(), "shadow-inner is not an outer shadow");
+    }
+
+    /// `text-shadow` takes no `inset`, so such a layer yields nothing
+    /// rather than silently painting as a drop shadow.
+    #[test]
+    fn text_shadow_ignores_an_inset_layer() {
+        let s = parse("text-shadow: inset 0px 1px 2px #000000;");
+        assert!(s.text_shadow.is_none());
+
+        let ok = parse("text-shadow: 0px 1px 2px #000000;");
+        assert!(ok.text_shadow.is_some());
     }
 }

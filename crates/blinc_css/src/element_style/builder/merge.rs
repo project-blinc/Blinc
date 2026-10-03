@@ -22,6 +22,11 @@ impl ElementStyle {
             } else {
                 self.shadow.clone()
             },
+            inner_shadow: if !other.inner_shadow.is_empty() {
+                other.inner_shadow.clone()
+            } else {
+                self.inner_shadow.clone()
+            },
             transform: other.transform.clone().or_else(|| self.transform.clone()),
             material: other.material.clone().or_else(|| self.material.clone()),
             render_layer: other.render_layer.or(self.render_layer),
@@ -171,6 +176,7 @@ impl ElementStyle {
             || self.corner_radius.is_some()
             || self.corner_shape.is_some()
             || !self.shadow.is_empty()
+            || !self.inner_shadow.is_empty()
             || self.transform.is_some()
             || self.material.is_some()
             || self.render_layer.is_some()

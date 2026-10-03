@@ -252,7 +252,13 @@ impl LinuxTheme {
                 0.0,
                 base_color.with_alpha(0.30),
             )],
-            shadow_inner: vec![Shadow::new(0.0, 1.0, 2.0, 0.0, base_color.with_alpha(0.08))],
+            shadow_inner: vec![Shadow::new_inset(
+                0.0,
+                1.0,
+                2.0,
+                0.0,
+                base_color.with_alpha(0.08),
+            )],
             shadow_none: Vec::new(),
         }
     }
@@ -273,7 +279,13 @@ impl LinuxTheme {
                 0.0,
                 base_color.with_alpha(0.70),
             )],
-            shadow_inner: vec![Shadow::new(0.0, 1.0, 2.0, 0.0, base_color.with_alpha(0.20))],
+            shadow_inner: vec![Shadow::new_inset(
+                0.0,
+                1.0,
+                2.0,
+                0.0,
+                base_color.with_alpha(0.20),
+            )],
             shadow_none: Vec::new(),
         }
     }

@@ -78,7 +78,6 @@ pub mod shadow_presets {
             blur: 6.0,
             spread: -1.0,
             color: Color::BLACK.with_alpha(0.1),
-            inset: false,
         }
     }
 
@@ -90,7 +89,6 @@ pub mod shadow_presets {
             blur: 15.0,
             spread: -3.0,
             color: Color::BLACK.with_alpha(0.1),
-            inset: false,
         }
     }
 }

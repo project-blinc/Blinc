@@ -175,9 +175,6 @@ impl RenderTree {
             // ambient layer paints first and the tight key-light layer
             // lands on top.
             for shadow in render_node.props.shadow.iter().rev() {
-                if shadow.inset {
-                    continue; // drawn after the fill, below
-                }
                 ctx.draw_shadow(rect, radius, *shadow);
             }
 
@@ -304,7 +301,7 @@ impl RenderTree {
             // AA fringe. The shadow's geometry still comes from the border
             // box, so its falloff starts where CSS says it does — the clip
             // only stops it reaching the border band.
-            if render_node.props.shadow.iter().any(|s| s.inset) {
+            if !render_node.props.inner_shadow.is_empty() {
                 let bw = render_node.props.border_width.max(0.0);
                 let pad = Rect {
                     origin: blinc_core::Point::new(rect.origin.x + bw, rect.origin.y + bw),
@@ -321,10 +318,8 @@ impl RenderTree {
                 };
                 if pad.size.width > 0.0 && pad.size.height > 0.0 {
                     ctx.push_clip(ClipShape::rounded_rect(pad, inner_radius));
-                    for shadow in render_node.props.shadow.iter().rev() {
-                        if shadow.inset {
-                            ctx.draw_inner_shadow(rect, radius, *shadow);
-                        }
+                    for shadow in render_node.props.inner_shadow.iter().rev() {
+                        ctx.draw_inner_shadow(rect, radius, *shadow);
                     }
                     ctx.pop_clip();
                 }

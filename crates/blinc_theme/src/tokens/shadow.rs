@@ -106,7 +106,6 @@ impl From<Shadow> for blinc_core::Shadow {
             blur: shadow.blur,
             spread: shadow.spread,
             color: shadow.color,
-            inset: shadow.inset,
         }
     }
 }
@@ -119,7 +118,6 @@ impl From<&Shadow> for blinc_core::Shadow {
             blur: shadow.blur,
             spread: shadow.spread,
             color: shadow.color,
-            inset: shadow.inset,
         }
     }
 }
@@ -205,7 +203,13 @@ impl ShadowTokens {
                 -12.0,
                 base_color.with_alpha(0.25),
             )],
-            shadow_inner: vec![Shadow::new(0.0, 2.0, 4.0, 0.0, base_color.with_alpha(0.05))],
+            shadow_inner: vec![Shadow::new_inset(
+                0.0,
+                2.0,
+                4.0,
+                0.0,
+                base_color.with_alpha(0.05),
+            )],
             shadow_none: Vec::new(),
         }
     }
@@ -238,7 +242,13 @@ impl ShadowTokens {
                 -12.0,
                 base_color.with_alpha(0.5),
             )],
-            shadow_inner: vec![Shadow::new(0.0, 2.0, 4.0, 0.0, base_color.with_alpha(0.15))],
+            shadow_inner: vec![Shadow::new_inset(
+                0.0,
+                2.0,
+                4.0,
+                0.0,
+                base_color.with_alpha(0.15),
+            )],
             shadow_none: Vec::new(),
         }
     }
@@ -316,19 +326,15 @@ mod inset_tests {
         }
     }
 
-    /// Crossing the FFI to the render type must keep the flag, or the
-    /// paint walk never sees it.
+    /// The render type has no inset flag: the two kinds travel in
+    /// separate lists, split before the conversion. The conversion must
+    /// still carry the geometry across unchanged.
     #[test]
-    fn the_conversion_keeps_inset() {
-        let inner = Shadow::new_inset(0.0, 1.0, 2.0, 0.0, Color::BLACK);
+    fn the_conversion_carries_the_geometry() {
+        let inner = Shadow::new_inset(0.0, 1.0, 2.0, 3.0, Color::BLACK);
         let core: blinc_core::Shadow = (&inner).into();
-        assert!(
-            core.inset,
-            "inset was dropped converting to the render type"
-        );
-
-        let outer = Shadow::new(0.0, 1.0, 2.0, 0.0, Color::BLACK);
-        let core: blinc_core::Shadow = (&outer).into();
-        assert!(!core.inset);
+        assert_eq!(core.offset_y, 1.0);
+        assert_eq!(core.blur, 2.0);
+        assert_eq!(core.spread, 3.0);
     }
 }

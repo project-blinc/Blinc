@@ -251,7 +251,13 @@ impl WindowsTheme {
                 0.0,
                 base_color.with_alpha(0.16),
             )],
-            shadow_inner: vec![Shadow::new(0.0, 1.0, 2.0, 0.0, base_color.with_alpha(0.04))],
+            shadow_inner: vec![Shadow::new_inset(
+                0.0,
+                1.0,
+                2.0,
+                0.0,
+                base_color.with_alpha(0.04),
+            )],
             shadow_none: Vec::new(),
         }
     }
@@ -283,7 +289,13 @@ impl WindowsTheme {
                 0.0,
                 base_color.with_alpha(0.44),
             )],
-            shadow_inner: vec![Shadow::new(0.0, 1.0, 2.0, 0.0, base_color.with_alpha(0.12))],
+            shadow_inner: vec![Shadow::new_inset(
+                0.0,
+                1.0,
+                2.0,
+                0.0,
+                base_color.with_alpha(0.12),
+            )],
             shadow_none: Vec::new(),
         }
     }

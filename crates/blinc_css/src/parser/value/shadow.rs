@@ -17,36 +17,58 @@ use tracing::debug;
 
 use crate::parser::*;
 
-pub(crate) fn parse_shadow(value: &str) -> Option<Shadow> {
-    // Returns just the first layer for callers (e.g. `text-shadow`) that
-    // still take a single `Shadow`. Use `parse_shadow_stack` for
-    // multi-layer box-shadow.
-    parse_shadow_stack(value).and_then(|s| s.into_iter().next())
+/// The outer and inner layers of a shadow value, kept apart.
+///
+/// `blinc_core::Shadow` carries no inset flag, so the two kinds travel
+/// in separate lists: the paint walk draws the outer ones before the
+/// fill and the inner ones after, clipped to the padding box.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct ShadowLayers {
+    pub outer: Vec<Shadow>,
+    pub inner: Vec<Shadow>,
 }
 
-/// Parse a CSS shadow value into a stack of layers.
+impl ShadowLayers {
+    fn is_empty(&self) -> bool {
+        self.outer.is_empty() && self.inner.is_empty()
+    }
+}
+
+/// Parse a shadow value for a property that takes a single outer layer,
+/// such as `text-shadow`. An `inset` layer is not one, so it is skipped.
+pub(crate) fn parse_shadow(value: &str) -> Option<Shadow> {
+    parse_shadow_layers(value).and_then(|l| l.outer.into_iter().next())
+}
+
+/// Parse a CSS shadow value into its outer and inner layers.
 ///
 /// Handles:
-/// - `none` → single transparent shadow,
-/// - `theme(shadow-*)` → the theme's full layer stack,
-/// - one or more comma-separated explicit shadows.
-pub(crate) fn parse_shadow_stack(value: &str) -> Option<Vec<Shadow>> {
+/// - `none` → a single transparent outer shadow,
+/// - `theme(shadow-*)` → the token's full layer stack,
+/// - one or more comma-separated explicit shadows, each of which may
+///   carry the `inset` keyword.
+pub(crate) fn parse_shadow_layers(value: &str) -> Option<ShadowLayers> {
     let trimmed = value.trim();
     if trimmed.eq_ignore_ascii_case("none") {
-        return Some(vec![Shadow::new(0.0, 0.0, 0.0, Color::TRANSPARENT)]);
+        return Some(ShadowLayers {
+            outer: vec![Shadow::new(0.0, 0.0, 0.0, Color::TRANSPARENT)],
+            inner: Vec::new(),
+        });
     }
 
-    // Try theme() function first — preserves multi-layer compound shadow.
-    if let Ok((_, stack)) = parse_theme_shadow::<nom::error::Error<&str>>(trimmed) {
-        return Some(stack);
+    // Try theme() first — it preserves the multi-layer compound shadow.
+    if let Ok((_, layers)) = parse_theme_shadow::<nom::error::Error<&str>>(trimmed) {
+        return Some(layers);
     }
 
-    // Comma-separated explicit shadows.
-    let parts = split_commas_respecting_parens(trimmed);
-    let mut layers = Vec::with_capacity(parts.len().max(1));
-    for part in parts {
-        if let Some(layer) = parse_explicit_shadow(part.trim()) {
-            layers.push(layer);
+    let mut layers = ShadowLayers::default();
+    for part in split_commas_respecting_parens(trimmed) {
+        if let Some((shadow, inset)) = parse_explicit_shadow(part.trim()) {
+            if inset {
+                layers.inner.push(shadow);
+            } else {
+                layers.outer.push(shadow);
+            }
         }
     }
     if layers.is_empty() {
@@ -59,7 +81,7 @@ pub(crate) fn parse_shadow_stack(value: &str) -> Option<Vec<Shadow>> {
 /// Parse theme(shadow-*) tokens
 pub(crate) fn parse_theme_shadow<'a, E: NomParseError<&'a str>>(
     input: &'a str,
-) -> IResult<&'a str, Vec<Shadow>, E> {
+) -> IResult<&'a str, ShadowLayers, E> {
     let (input, _) = ws(input)?;
     let (input, _) = tag_no_case("theme")(input)?;
     let (input, _) = ws(input)?;
@@ -76,6 +98,7 @@ pub(crate) fn parse_theme_shadow<'a, E: NomParseError<&'a str>>(
         "shadow-lg" => &shadows.shadow_lg,
         "shadow-xl" => &shadows.shadow_xl,
         "shadow-2xl" => &shadows.shadow_2xl,
+        "shadow-inner" => &shadows.shadow_inner,
         "shadow-none" => &shadows.shadow_none,
         _ => {
             debug!(token = token_name, "Unknown theme shadow token");
@@ -86,12 +109,22 @@ pub(crate) fn parse_theme_shadow<'a, E: NomParseError<&'a str>>(
         }
     };
 
-    let stack: Vec<Shadow> = stack.iter().map(Shadow::from).collect();
-    Ok((input, stack))
+    // The theme type keeps the flag; split on it here, since what crosses
+    // into the render type cannot.
+    let mut layers = ShadowLayers::default();
+    for s in stack {
+        if s.inset {
+            layers.inner.push(s.into());
+        } else {
+            layers.outer.push(s.into());
+        }
+    }
+    Ok((input, layers))
 }
 
-/// Parse explicit shadow: `offset-x offset-y blur [spread] color`
-pub(crate) fn parse_explicit_shadow(input: &str) -> Option<Shadow> {
+/// Parse an explicit shadow: `[inset] offset-x offset-y blur [spread] color`.
+/// Returns the layer and whether it was marked `inset`.
+pub(crate) fn parse_explicit_shadow(input: &str) -> Option<(Shadow, bool)> {
     let mut parts = split_whitespace_respecting_parens(input);
 
     // CSS lets `inset` sit anywhere among the components, and authors
@@ -105,21 +138,18 @@ pub(crate) fn parse_explicit_shadow(input: &str) -> Option<Shadow> {
         let offset_x = parse_length_value(&parts[0])?;
         let offset_y = parse_length_value(&parts[1])?;
         let blur = parse_length_value(&parts[2])?;
-        // Try 5-part form: offset-x offset-y blur spread color
+        // Try the 5-part form: offset-x offset-y blur spread color
         if parts.len() >= 5 {
             if let Some(spread) = parse_length_value(&parts[3]) {
                 let color = parse_color(&parts[4])?;
                 let mut shadow = Shadow::new(offset_x, offset_y, blur, color);
                 shadow.spread = spread;
-                shadow.inset = inset;
-                return Some(shadow);
+                return Some((shadow, inset));
             }
         }
         // 4-part form: offset-x offset-y blur color
         let color = parse_color(&parts[3])?;
-        let mut shadow = Shadow::new(offset_x, offset_y, blur, color);
-        shadow.inset = inset;
-        return Some(shadow);
+        return Some((Shadow::new(offset_x, offset_y, blur, color), inset));
     }
     None
 }

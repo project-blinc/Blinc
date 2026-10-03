@@ -36,6 +36,9 @@ pub struct ElementStyle {
     pub corner_shape: Option<CornerShape>,
     /// Drop shadow stack (empty = none, 1 = single, 2-3 = compound layered shadows).
     pub shadow: Vec<Shadow>,
+    /// Inset shadow stack, drawn inside the padding box after the fill.
+    /// Separate from `shadow` because the render type carries no inset flag.
+    pub inner_shadow: Vec<Shadow>,
     /// Transform (scale, rotate, translate)
     pub transform: Option<Transform>,
     /// Material effect (glass, metallic, wood)

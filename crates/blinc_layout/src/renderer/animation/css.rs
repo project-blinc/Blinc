@@ -1139,7 +1139,6 @@ impl RenderTree {
                 blur,
                 spread,
                 color,
-                inset: false,
             });
         } else if let Some([r, g, b, a]) = anim_props.text_shadow_color {
             if let Some(ts) = &mut props.text_shadow {
@@ -1205,7 +1204,6 @@ impl RenderTree {
                     blur: l[2],
                     spread: l[3],
                     color: blinc_core::Color::rgba(l[4], l[5], l[6], l[7]),
-                    inset: false,
                 })
                 .collect();
         } else if let Some([ox, oy, blur, spread]) = anim_props.shadow_params {
@@ -1222,7 +1220,6 @@ impl RenderTree {
                 blur,
                 spread,
                 color,
-                inset: false,
             };
             if let Some(first) = props.shadow.first_mut() {
                 *first = layer;

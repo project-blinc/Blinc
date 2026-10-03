@@ -245,8 +245,9 @@ pub(crate) fn apply_property_with_errors(
             }
         }
         "box-shadow" => {
-            if let Some(stack) = parse_shadow_stack(value) {
-                style.shadow = stack;
+            if let Some(layers) = parse_shadow_layers(value) {
+                style.shadow = layers.outer;
+                style.inner_shadow = layers.inner;
             } else {
                 errors.push(ParseError::invalid_value(name, value, line, column));
             }
