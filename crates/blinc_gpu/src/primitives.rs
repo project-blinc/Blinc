@@ -276,7 +276,8 @@ pub enum ClipType {
 /// - corner_shape: `vec4<f32>`    (16 bytes) - superellipse n per corner (1.0=round, 0.0=bevel, 2.0=squircle)
 /// - clip_fade: `vec4<f32>`       (16 bytes) - overflow fade distances (top, right, bottom, left) in pixels
 /// - type_info: `vec4<u32>`       (16 bytes) - (primitive_type, fill_type, clip_type, z_layer)
-///   Total: 368 bytes
+///   Total: 384 bytes (24 x vec4). Asserted against the WGSL
+///   declaration in `tests/primitive_layout.rs`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct GpuPrimitive {
