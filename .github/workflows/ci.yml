@@ -53,6 +53,7 @@ jobs:
             libegl1-mesa-dev \
             libvulkan-dev \
             libfontconfig1-dev \
+            fonts-dejavu-core \
             libglib2.0-dev \
             libatk1.0-dev \
             libgtk-3-dev \
@@ -147,13 +148,13 @@ jobs:
             libvulkan-dev \
             mesa-vulkan-drivers \
             libfontconfig1-dev \
+            fonts-dejavu-core \
             libglib2.0-dev \
             libatk1.0-dev \
             libgtk-3-dev \
             libdbus-1-dev \
             libxdo-dev \
             libasound2-dev \
-            fonts-dejavu-core \
             xvfb
 
       - name: Cache cargo registry
@@ -282,6 +283,7 @@ jobs:
             libegl1-mesa-dev \
             libvulkan-dev \
             libfontconfig1-dev \
+            fonts-dejavu-core \
             libglib2.0-dev \
             libatk1.0-dev \
             libgtk-3-dev \
@@ -444,6 +446,7 @@ jobs:
             libegl1-mesa-dev \
             libvulkan-dev \
             libfontconfig1-dev \
+            fonts-dejavu-core \
             libglib2.0-dev \
             libatk1.0-dev \
             libgtk-3-dev \
@@ -506,6 +509,7 @@ jobs:
             libegl1-mesa-dev \
             libvulkan-dev \
             libfontconfig1-dev \
+            fonts-dejavu-core \
             libglib2.0-dev \
             libatk1.0-dev \
             libgtk-3-dev \

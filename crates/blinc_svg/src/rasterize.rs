@@ -13,16 +13,50 @@ use usvg::{Options, Tree};
 /// `system-fonts` and `memmap-fonts` features let usvg convert text to
 /// paths, but only once it has a font to shape with, so without this every
 /// `<text>` element resolved to no glyphs and vanished.
-static SYSTEM_FONTS: OnceLock<Arc<usvg::fontdb::Database>> = OnceLock::new();
+static SYSTEM_FONTS: OnceLock<(Arc<usvg::fontdb::Database>, Option<String>)> = OnceLock::new();
 
-fn system_fonts() -> Arc<usvg::fontdb::Database> {
-    SYSTEM_FONTS
-        .get_or_init(|| {
-            let mut db = usvg::fontdb::Database::new();
-            db.load_system_fonts();
-            Arc::new(db)
-        })
-        .clone()
+/// A family that is actually installed, to use as the default.
+///
+/// usvg's own default is "Times New Roman", which most Linux systems do
+/// not have, so an SVG with no `font-family` would resolve to no glyphs
+/// there even with the database attached. Prefers the usual serif and
+/// sans faces, then settles for anything present.
+fn installed_default_family(db: &usvg::fontdb::Database) -> Option<String> {
+    const PREFERRED: &[&str] = &[
+        "Times New Roman",
+        "DejaVu Serif",
+        "Liberation Serif",
+        "Helvetica",
+        "Arial",
+        "DejaVu Sans",
+        "Liberation Sans",
+        "Noto Sans",
+    ];
+    let has = |name: &str| {
+        db.faces()
+            .any(|f| f.families.iter().any(|(n, _)| n.eq_ignore_ascii_case(name)))
+    };
+    if let Some(name) = PREFERRED.iter().find(|n| has(n)) {
+        return Some((*name).to_string());
+    }
+    db.faces()
+        .next()
+        .and_then(|f| f.families.first().map(|(n, _)| n.clone()))
+}
+
+fn system_fonts() -> &'static (Arc<usvg::fontdb::Database>, Option<String>) {
+    SYSTEM_FONTS.get_or_init(|| {
+        let mut db = usvg::fontdb::Database::new();
+        db.load_system_fonts();
+        // Generic families resolve through these, so an SVG asking for
+        // `sans-serif` gets something rather than nothing.
+        if let Some(name) = installed_default_family(&db) {
+            db.set_sans_serif_family(name.clone());
+            db.set_serif_family(name.clone());
+        }
+        let default = installed_default_family(&db);
+        (Arc::new(db), default)
+    })
 }
 
 /// Parse options for `data`.
@@ -33,7 +67,11 @@ fn system_fonts() -> Arc<usvg::fontdb::Database> {
 pub(crate) fn options_for(data: &[u8]) -> Options<'static> {
     let mut options = Options::default();
     if contains_text_element(data) {
-        options.fontdb = system_fonts();
+        let (db, default_family) = system_fonts();
+        options.fontdb = db.clone();
+        if let Some(name) = default_family {
+            options.font_family = name.clone();
+        }
     }
     options
 }
@@ -327,12 +365,43 @@ mod text_tests {
     /// every glyph resolved to nothing and the whole element vanished.
     #[test]
     fn text_draws_pixels() {
+        // A machine with no fonts installed cannot prove anything here, and
+        // a bare CI container is one: it has fontconfig but no font
+        // packages. Skip rather than fail, and say which it was.
+        let (db, family) = super::system_fonts();
+        if db.is_empty() || family.is_none() {
+            eprintln!("no system fonts installed; skipping");
+            return;
+        }
+
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text x="0" y="22" font-size="28" fill="black">M</text></svg>"#;
         let r = RasterizedSvg::from_str(svg, 48, 48).expect("rasterize");
-        let drawn = opaque_pixels(&r);
         assert!(
-            drawn > 0,
-            "`<text>` drew nothing: no font was available to shape it"
+            opaque_pixels(&r) > 0,
+            "`<text>` drew nothing, with {} faces available and {:?} as the \
+             default family",
+            db.len(),
+            family
+        );
+    }
+
+    /// The attach logic, independent of what fonts the machine has: a
+    /// document with text gets the shared database, one without does not.
+    /// This is the part of the change that CI can actually verify.
+    #[test]
+    fn the_database_is_attached_only_for_text() {
+        let with_text = super::options_for(b"<svg><text>hi</text></svg>");
+        let shared = &super::system_fonts().0;
+        assert!(
+            Arc::ptr_eq(&with_text.fontdb, shared),
+            "a document with text did not get the shared database"
+        );
+
+        let without = super::options_for(br#"<svg><path d="M0 0"/></svg>"#);
+        assert!(
+            !Arc::ptr_eq(&without.fontdb, shared),
+            "a path-only document was given the font database, so it paid \
+             for a system font scan it did not need"
         );
     }
 
