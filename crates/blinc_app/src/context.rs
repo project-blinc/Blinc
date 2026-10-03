@@ -6827,10 +6827,13 @@ impl RenderContext {
                         y: scaled_y,
                         width: scaled_width,
                         height: scaled_height,
+                        // CSS `color` is what `currentColor` resolves to, so
+                        // this takes the EFFECTIVE colour. Reading
+                        // props.text_color would see only what this node set
+                        // itself, and an icon inside a tinted ancestor would
+                        // lose its colour.
                         tint: svg_data.tint.or_else(|| {
-                            render_node
-                                .props
-                                .text_color
+                            effective_text_color
                                 .map(|c| blinc_core::Color::rgba(c[0], c[1], c[2], c[3]))
                         }),
                         fill: render_node

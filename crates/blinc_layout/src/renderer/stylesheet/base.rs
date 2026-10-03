@@ -35,7 +35,6 @@ struct InheritedText {
     decoration_thickness: Option<f32>,
     white_space: Option<crate::element_style::WhiteSpace>,
     overflow: Option<crate::element_style::TextOverflow>,
-    color: Option<[f32; 4]>,
     align: Option<crate::div::TextAlign>,
     font_style: Option<crate::element_style::FontStyle>,
 }
@@ -48,7 +47,6 @@ impl InheritedText {
             decoration_thickness: node.props.text_decoration_thickness,
             white_space: node.props.white_space,
             overflow: node.props.text_overflow,
-            color: node.props.text_color,
             align: node.props.text_align,
             font_style: node.props.font_style,
         }
@@ -332,7 +330,6 @@ impl RenderTree {
                     n.props.text_decoration_thickness,
                     n.props.white_space,
                     n.props.text_overflow,
-                    n.props.text_color,
                     n.props.text_align,
                     n.props.fill,
                     n.props.stroke,
@@ -340,7 +337,7 @@ impl RenderTree {
                     n.props.font_style,
                 )
             });
-            if let Some((td, td_color, td_thick, ws, to, tc, ta, fill, stroke, stroke_w, fstyle)) =
+            if let Some((td, td_color, td_thick, ws, to, ta, fill, stroke, stroke_w, fstyle)) =
                 parent_text_props
             {
                 if let Some(node) = self.render_nodes.get_mut(&node_id) {

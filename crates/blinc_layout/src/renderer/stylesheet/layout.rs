@@ -626,7 +626,6 @@ impl RenderTree {
                     n.props.text_decoration_thickness,
                     n.props.white_space,
                     n.props.text_overflow,
-                    n.props.text_color,
                     n.props.text_align,
                     n.props.fill,
                     n.props.stroke,
@@ -634,7 +633,7 @@ impl RenderTree {
                     n.props.font_style,
                 )
             });
-            if let Some((td, td_color, td_thick, ws, to, tc, ta, fill, stroke, stroke_w, fstyle)) =
+            if let Some((td, td_color, td_thick, ws, to, ta, fill, stroke, stroke_w, fstyle)) =
                 parent_text_props
             {
                 if let Some(node) = self.render_nodes.get_mut(&node_id) {
