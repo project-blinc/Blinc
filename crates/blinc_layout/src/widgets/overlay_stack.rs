@@ -283,6 +283,9 @@ impl OverlayEntry {
 // OverlayStack
 // =============================================================================
 
+/// A close callback paired with the reason it will be given, queued
+/// until the overlay is actually torn down.
+type PendingCloseCallbacks = Vec<(Arc<dyn Fn(CloseReason) + Send + Sync>, CloseReason)>;
 /// LIFO stack of dismissable overlays.
 ///
 /// `entries.last()` is the top. Push appends; pop removes from the end (after
@@ -296,7 +299,7 @@ pub struct OverlayStack {
     /// come straight back — clearing a bound signal re-enters whatever
     /// drives the overlay, which locks the stack again. Drained by
     /// [`drain_close_callbacks`].
-    pending_close_callbacks: Vec<(Arc<dyn Fn(CloseReason) + Send + Sync>, CloseReason)>,
+    pending_close_callbacks: PendingCloseCallbacks,
     next_id: AtomicU64,
     viewport: (f32, f32),
     scale_factor: f32,
@@ -550,9 +553,7 @@ impl OverlayStack {
     /// The caller runs them once it has released this stack's guard.
     /// [`drain_close_callbacks`] does that for the global stack; a
     /// caller holding its own stack drains it directly.
-    pub fn take_pending_close_callbacks(
-        &mut self,
-    ) -> Vec<(Arc<dyn Fn(CloseReason) + Send + Sync>, CloseReason)> {
+    pub fn take_pending_close_callbacks(&mut self) -> PendingCloseCallbacks {
         std::mem::take(&mut self.pending_close_callbacks)
     }
 
