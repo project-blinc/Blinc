@@ -41,38 +41,39 @@ impl Easing {
         }
     }
 
-    /// Evaluate the easing function at time t (0.0 to 1.0)
-    pub fn evaluate(&self, t: f32) -> f32 {
-        let t = t.clamp(0.0, 1.0);
-        match self {
-            Easing::Linear => t,
-            Easing::EaseIn => t * t,
-            Easing::EaseOut => 1.0 - (1.0 - t) * (1.0 - t),
-            Easing::EaseInOut => {
-                if t < 0.5 {
-                    2.0 * t * t
-                } else {
-                    1.0 - (-2.0 * t + 2.0).powi(2) / 2.0
-                }
-            }
-            Easing::CubicBezier(x1, y1, x2, y2) => {
-                // Simplified cubic bezier - for full accuracy would need iterative solve
-                cubic_bezier_approximate(t, *x1, *y1, *x2, *y2)
-            }
+    /// The cubic-bezier control points this easing denotes, or `None` for
+    /// `Linear`.
+    ///
+    /// One source of truth, so the curve a theme evaluates and the
+    /// `cubic-bezier()` it exports to CSS cannot drift apart. Every named
+    /// variant used to evaluate a hand-written polynomial while exporting
+    /// different control points, and `CubicBezier` ignored its own x pair
+    /// entirely.
+    pub fn control_points(&self) -> Option<[f32; 4]> {
+        match *self {
+            Easing::Linear => None,
+            Easing::EaseIn => Some([0.4, 0.0, 1.0, 1.0]),
+            Easing::EaseOut => Some([0.0, 0.0, 0.2, 1.0]),
+            Easing::EaseInOut => Some([0.4, 0.0, 0.2, 1.0]),
+            Easing::CubicBezier(x1, y1, x2, y2) => Some([x1, y1, x2, y2]),
         }
     }
-}
 
-/// Approximate cubic bezier evaluation
-fn cubic_bezier_approximate(t: f32, _x1: f32, y1: f32, _x2: f32, y2: f32) -> f32 {
-    // Simple approximation - evaluate y at t directly
-    // For accurate bezier, would need to solve for t given x
-    let t2 = t * t;
-    let t3 = t2 * t;
-    let mt = 1.0 - t;
-    let mt2 = mt * mt;
-
-    3.0 * mt2 * t * y1 + 3.0 * mt * t2 * y2 + t3
+    /// Evaluate the easing function at time t (0.0 to 1.0).
+    ///
+    /// A cubic-bezier easing is y at the parameter s where x(s) = t, not y
+    /// at t. Solving for s is what `blinc_animation` already does, so this
+    /// defers to it rather than keeping a second implementation.
+    ///
+    /// An overshoot curve such as a spring's returns values above 1, which
+    /// is the point of it; only the input is clamped.
+    pub fn evaluate(&self, t: f32) -> f32 {
+        let t = t.clamp(0.0, 1.0);
+        match self.control_points() {
+            None => t,
+            Some([x1, y1, x2, y2]) => blinc_animation::Easing::CubicBezier(x1, y1, x2, y2).apply(t),
+        }
+    }
 }
 
 /// Complete set of animation tokens
@@ -156,6 +157,86 @@ impl Default for AnimationTokens {
             ease_nav: Easing::EaseInOut,
             ease_spring: Easing::EaseOut,
             ease_sheet: Easing::EaseOut,
+        }
+    }
+}
+
+#[cfg(test)]
+mod easing_tests {
+    use super::*;
+
+    /// The theme's STANDARD curve is CSS `ease`. A browser gives 0.8024 at
+    /// the halfway point; evaluating the y polynomial at t instead gives
+    /// 0.5375, which is what this used to return.
+    #[test]
+    fn standard_curve_matches_css_ease() {
+        let standard = Easing::CubicBezier(0.25, 0.10, 0.25, 1.0);
+        let got = standard.evaluate(0.5);
+        assert!(
+            (got - 0.8024).abs() < 0.001,
+            "want CSS's 0.8024 at t=0.5, got {got:.4} \
+             (0.5375 means the x control points are being ignored)"
+        );
+    }
+
+    /// The x pair has to change the answer. Two curves with identical y
+    /// control points and different x ones must not agree.
+    #[test]
+    fn the_x_control_points_matter() {
+        let a = Easing::CubicBezier(0.25, 0.10, 0.25, 1.0).evaluate(0.5);
+        let b = Easing::CubicBezier(0.90, 0.10, 0.90, 1.0).evaluate(0.5);
+        assert!(
+            (a - b).abs() > 0.1,
+            "x control points are being discarded: both curves gave {a:.4}"
+        );
+    }
+
+    /// A spring curve's whole purpose is to pass its target and come back,
+    /// so evaluate must be free to exceed 1 even though t is clamped.
+    #[test]
+    fn a_spring_curve_overshoots() {
+        let spring = Easing::CubicBezier(0.34, 1.30, 0.64, 1.0);
+        let peak = (0..=100)
+            .map(|i| spring.evaluate(i as f32 / 100.0))
+            .fold(0.0f32, f32::max);
+        assert!(peak > 1.0, "spring never passed 1, peak was {peak:.4}");
+    }
+
+    /// Endpoints are exact for every curve, or a transition starts or ends
+    /// with a visible jump.
+    #[test]
+    fn endpoints_are_exact() {
+        for e in [
+            Easing::Linear,
+            Easing::EaseIn,
+            Easing::EaseOut,
+            Easing::EaseInOut,
+            Easing::CubicBezier(0.25, 0.10, 0.25, 1.0),
+            Easing::CubicBezier(0.34, 1.30, 0.64, 1.0),
+        ] {
+            assert!(e.evaluate(0.0).abs() < 1e-6, "{e:?} does not start at 0");
+            assert!(
+                (e.evaluate(1.0) - 1.0).abs() < 1e-6,
+                "{e:?} does not end at 1"
+            );
+        }
+    }
+
+    /// Every named variant must evaluate the curve it exports to CSS.
+    /// They diverged before: `EaseIn` computed `t * t` while exporting
+    /// `cubic-bezier(0.4, 0, 1, 1)`.
+    #[test]
+    fn named_variants_evaluate_what_they_export() {
+        for e in [Easing::EaseIn, Easing::EaseOut, Easing::EaseInOut] {
+            let [x1, y1, x2, y2] = e.control_points().expect("not linear");
+            let direct = Easing::CubicBezier(x1, y1, x2, y2);
+            for i in 0..=10 {
+                let t = i as f32 / 10.0;
+                assert!(
+                    (e.evaluate(t) - direct.evaluate(t)).abs() < 1e-6,
+                    "{e:?} at t={t} differs from its own control points"
+                );
+            }
         }
     }
 }

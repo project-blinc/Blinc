@@ -518,15 +518,12 @@ impl ThemeState {
             out
         }
         fn easing(e: crate::tokens::Easing) -> String {
-            use crate::tokens::Easing;
-            match e {
-                Easing::Linear => "linear".to_string(),
-                Easing::EaseIn => "cubic-bezier(0.4, 0, 1, 1)".to_string(),
-                Easing::EaseOut => "cubic-bezier(0, 0, 0.2, 1)".to_string(),
-                Easing::EaseInOut => "cubic-bezier(0.4, 0, 0.2, 1)".to_string(),
-                Easing::CubicBezier(a, b, c, d) => {
-                    format!("cubic-bezier({}, {}, {}, {})", a, b, c, d)
-                }
+            // Read the control points off the easing rather than restating
+            // them, so what a theme exports is what `Easing::evaluate`
+            // actually runs.
+            match e.control_points() {
+                None => "linear".to_string(),
+                Some([a, b, c, d]) => format!("cubic-bezier({}, {}, {}, {})", a, b, c, d),
             }
         }
 
