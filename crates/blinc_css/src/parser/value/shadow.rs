@@ -92,7 +92,15 @@ pub(crate) fn parse_theme_shadow<'a, E: NomParseError<&'a str>>(
 
 /// Parse explicit shadow: `offset-x offset-y blur [spread] color`
 pub(crate) fn parse_explicit_shadow(input: &str) -> Option<Shadow> {
-    let parts = split_whitespace_respecting_parens(input);
+    let mut parts = split_whitespace_respecting_parens(input);
+
+    // CSS lets `inset` sit anywhere among the components, and authors
+    // write it first or last about equally. Lift it out, then parse what
+    // is left as the ordinary offset/blur/spread/colour form.
+    let before = parts.len();
+    parts.retain(|p| !p.trim().eq_ignore_ascii_case("inset"));
+    let inset = parts.len() != before;
+
     if parts.len() >= 4 {
         let offset_x = parse_length_value(&parts[0])?;
         let offset_y = parse_length_value(&parts[1])?;
@@ -103,12 +111,15 @@ pub(crate) fn parse_explicit_shadow(input: &str) -> Option<Shadow> {
                 let color = parse_color(&parts[4])?;
                 let mut shadow = Shadow::new(offset_x, offset_y, blur, color);
                 shadow.spread = spread;
+                shadow.inset = inset;
                 return Some(shadow);
             }
         }
         // 4-part form: offset-x offset-y blur color
         let color = parse_color(&parts[3])?;
-        return Some(Shadow::new(offset_x, offset_y, blur, color));
+        let mut shadow = Shadow::new(offset_x, offset_y, blur, color);
+        shadow.inset = inset;
+        return Some(shadow);
     }
     None
 }
