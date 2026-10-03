@@ -329,3 +329,48 @@ mod tests {
         assert!((v.x - 100.0).abs() < 1e-4);
     }
 }
+
+#[cfg(test)]
+mod overshoot_tests {
+    use super::*;
+
+    /// The theme's spring curves have y2 above 1, so a correct easing
+    /// hands `lerp` a t past 1. That has to survive for a number: the
+    /// overshoot is the whole reason those curves exist.
+    ///
+    /// Reachable only since easing started solving the curve properly —
+    /// the old approximation never returned more than 1 — so nothing
+    /// exercised this before.
+    #[test]
+    fn a_number_keeps_its_overshoot() {
+        let past_target = 0.0f32.lerp(&100.0, 1.098);
+        assert!(
+            past_target > 100.0,
+            "overshoot was flattened: {past_target} should pass 100"
+        );
+    }
+
+    /// A colour channel beyond its endpoint is not a colour, so this one
+    /// clamps. Keep the asymmetry with numbers deliberate: it is not an
+    /// oversight to tidy up.
+    #[test]
+    fn a_colour_does_not_overshoot() {
+        let black = Color::rgba(0.0, 0.0, 0.0, 1.0);
+        let white = Color::rgba(1.0, 1.0, 1.0, 1.0);
+        let past = black.lerp(&white, 1.098);
+        assert!(
+            past.r <= 1.0 && past.g <= 1.0 && past.b <= 1.0 && past.a <= 1.0,
+            "a channel left its range: {past:?}"
+        );
+        assert!((past.r - 1.0).abs() < 1e-6, "should settle at the endpoint");
+    }
+
+    /// Undershoot is the same story: a curve dipping below 0 pulls a
+    /// number below its start, and leaves a colour at its start.
+    #[test]
+    fn undershoot_behaves_the_same_way_round() {
+        assert!(0.0f32.lerp(&100.0, -0.1) < 0.0);
+        let c = Color::rgba(0.5, 0.5, 0.5, 1.0).lerp(&Color::rgba(1.0, 1.0, 1.0, 1.0), -0.1);
+        assert!(c.r >= 0.0 && (c.r - 0.5).abs() < 1e-6);
+    }
+}
