@@ -627,6 +627,7 @@ impl ElementBuilder for Text {
                 content: self.content.clone(),
                 font_size: self.font_size,
                 line_height: self.line_height,
+                letter_spacing: self.letter_spacing,
                 wrap: true,
                 font_name: self.font_family.name.clone(),
                 generic_font: self.font_family.generic,

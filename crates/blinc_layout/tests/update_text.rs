@@ -9,6 +9,7 @@ fn context(content: &str) -> TextMeasureContext {
         content: content.into(),
         font_size: 16.0,
         line_height: 1.2,
+        letter_spacing: 0.0,
         wrap: false,
         font_name: None,
         generic_font: GenericFont::System,
@@ -67,4 +68,43 @@ fn a_node_without_text_is_left_alone() {
 
     assert!(!tree.update_text(node, |ctx| ctx.content = "x".into()));
     assert!(tree.text_context(node).is_none());
+}
+
+/// Letter spacing widens the drawn line, so it has to widen the measured
+/// one too, or Taffy sizes the box narrower than the glyphs need.
+#[test]
+fn letter_spacing_widens_the_measured_line() {
+    let mut tree = LayoutTree::new();
+    let root = tree.create_node(Style::default());
+    let text = tree.create_text_node(Style::default(), context("abcdefghij"));
+    tree.add_child(root, text);
+
+    let tight = width(&mut tree, root, text);
+    assert!(tree.update_text(text, |ctx| ctx.letter_spacing = 4.0));
+    let spaced = width(&mut tree, root, text);
+
+    // Nine gaps between ten characters, 4px each.
+    let gaps = 9.0 * 4.0;
+    assert!(
+        (spaced - tight - gaps).abs() < 0.5,
+        "expected {tight} + {gaps}, got {spaced}"
+    );
+}
+
+/// A wrapping node takes the same path through a different branch of the
+/// measure function, so it needs its own guard.
+#[test]
+fn letter_spacing_widens_a_wrapping_line_too() {
+    let mut tree = LayoutTree::new();
+    let root = tree.create_node(Style::default());
+    let mut ctx = context("abcdefghij");
+    ctx.wrap = true;
+    let text = tree.create_text_node(Style::default(), ctx);
+    tree.add_child(root, text);
+
+    let tight = width(&mut tree, root, text);
+    assert!(tree.update_text(text, |c| c.letter_spacing = 4.0));
+    let spaced = width(&mut tree, root, text);
+
+    assert!(spaced > tight, "{tight} -> {spaced}");
 }

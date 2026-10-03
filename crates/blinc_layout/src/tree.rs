@@ -105,6 +105,9 @@ pub struct TextMeasureContext {
     pub font_size: f32,
     /// Line height multiplier
     pub line_height: f32,
+    /// Extra spacing between letters in pixels. Measured text must carry
+    /// it or a letter-spaced line lays out narrower than it draws.
+    pub letter_spacing: f32,
     /// Whether text should wrap
     pub wrap: bool,
     /// Font family name (if any)
@@ -171,6 +174,7 @@ fn text_measure_function(
         options.font_weight = ctx.font_weight;
         options.italic = ctx.italic;
         options.line_height = ctx.line_height;
+        options.letter_spacing = ctx.letter_spacing;
         // No max_width for non-wrapping
 
         let metrics = measure_text_with_options(&ctx.content, ctx.font_size, &options);
@@ -197,6 +201,7 @@ fn text_measure_function(
     options.font_weight = ctx.font_weight;
     options.italic = ctx.italic;
     options.line_height = ctx.line_height;
+    options.letter_spacing = ctx.letter_spacing;
     options.max_width = max_width;
 
     let metrics = measure_text_with_options(&ctx.content, ctx.font_size, &options);
