@@ -8,7 +8,7 @@
 use crate::font::FontFace;
 use crate::{Result, TextError};
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
-use swash::zeno::Format;
+use swash::zeno::{Format, Vector};
 
 /// Format of the rasterized glyph bitmap
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,6 +59,23 @@ impl GlyphRasterizer {
         glyph_id: u16,
         font_size: f32,
     ) -> Result<RasterizedGlyph> {
+        self.rasterize_at_offset(font, glyph_id, font_size, 0.0)
+    }
+
+    /// Rasterize a glyph shifted `offset_x` of a pixel to the right.
+    ///
+    /// Used for subpixel horizontal positioning: the same glyph
+    /// rasterized at a few fractional offsets lets a caller keep even
+    /// letter spacing while still placing every glyph on a whole pixel.
+    /// `bearing_x` comes back relative to the shifted raster, so the
+    /// caller needs no further correction.
+    pub fn rasterize_at_offset(
+        &mut self,
+        font: &FontFace,
+        glyph_id: u16,
+        font_size: f32,
+        offset_x: f32,
+    ) -> Result<RasterizedGlyph> {
         // Get the raw font data and create a swash FontRef with correct face index
         let font_data = font.data();
         let swash_font = swash::FontRef::from_index(font_data, font.face_index() as usize)
@@ -89,6 +106,9 @@ impl GlyphRasterizer {
 
         // Set the format to alpha (8-bit grayscale)
         render.format(Format::Alpha);
+        if offset_x != 0.0 {
+            render.offset(Vector::new(offset_x, 0.0));
+        }
 
         // Render the glyph
         let image = render.render(&mut scaler, glyph_id);

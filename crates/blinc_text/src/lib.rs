@@ -28,6 +28,7 @@ pub mod rasterizer;
 pub mod registry;
 pub mod renderer;
 pub mod shaper;
+pub mod subpixel;
 
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -72,6 +73,7 @@ pub use rasterizer::{GlyphFormat, GlyphRasterizer, RasterizedGlyph};
 pub use registry::{FontRegistry, GenericFont};
 pub use renderer::{ColorSpan, GlyphInstance, PreparedText, TextRenderer};
 pub use shaper::{ShapedGlyph, ShapedText, TextShaper};
+pub use subpixel::SubpixelX;
 
 use thiserror::Error;
 

@@ -58,16 +58,25 @@ struct GlyphKey {
     glyph_id: u16,
     /// Font size (quantized to avoid too many entries)
     size_key: u16,
+    /// Horizontal subpixel phase this raster was rendered at. 0 is the
+    /// un-offset glyph, which is the only phase without subpixel
+    /// positioning.
+    phase: u8,
 }
 
 impl GlyphKey {
     fn new(font_id: u32, glyph_id: u16, font_size: f32) -> Self {
+        Self::with_phase(font_id, glyph_id, font_size, 0)
+    }
+
+    fn with_phase(font_id: u32, glyph_id: u16, font_size: f32, phase: u8) -> Self {
         // Quantize font size to reduce cache entries (0.5px granularity)
         let size_key = (font_size * 2.0).round() as u16;
         Self {
             font_id,
             glyph_id,
             size_key,
+            phase,
         }
     }
 }
@@ -195,7 +204,19 @@ impl GlyphAtlas {
 
     /// Look up a cached glyph
     pub fn get_glyph(&self, font_id: u32, glyph_id: u16, font_size: f32) -> Option<&GlyphInfo> {
-        let key = GlyphKey::new(font_id, glyph_id, font_size);
+        self.get_glyph_at_phase(font_id, glyph_id, font_size, 0)
+    }
+
+    /// The glyph rasterized at a given subpixel phase. Phase 0 is the
+    /// un-offset raster, so this agrees with `get_glyph` there.
+    pub fn get_glyph_at_phase(
+        &self,
+        font_id: u32,
+        glyph_id: u16,
+        font_size: f32,
+        phase: u8,
+    ) -> Option<&GlyphInfo> {
+        let key = GlyphKey::with_phase(font_id, glyph_id, font_size, phase);
         self.glyphs.get(&key)
     }
 
@@ -269,7 +290,28 @@ impl GlyphAtlas {
         advance: u16,
         bitmap: &[u8],
     ) -> Result<GlyphInfo> {
-        let key = GlyphKey::new(font_id, glyph_id, font_size);
+        self.insert_glyph_at_phase(
+            font_id, glyph_id, font_size, 0, width, height, bearing_x, bearing_y, advance, bitmap,
+        )
+    }
+
+    /// Insert a glyph rasterized at a subpixel phase. Phase 0 is the
+    /// un-offset raster, so this agrees with `insert_glyph` there.
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_glyph_at_phase(
+        &mut self,
+        font_id: u32,
+        glyph_id: u16,
+        font_size: f32,
+        phase: u8,
+        width: u32,
+        height: u32,
+        bearing_x: i16,
+        bearing_y: i16,
+        advance: u16,
+        bitmap: &[u8],
+    ) -> Result<GlyphInfo> {
+        let key = GlyphKey::with_phase(font_id, glyph_id, font_size, phase);
 
         // Check if already cached
         if let Some(info) = self.glyphs.get(&key) {
@@ -464,7 +506,19 @@ impl ColorGlyphAtlas {
 
     /// Look up a cached glyph
     pub fn get_glyph(&self, font_id: u32, glyph_id: u16, font_size: f32) -> Option<&GlyphInfo> {
-        let key = GlyphKey::new(font_id, glyph_id, font_size);
+        self.get_glyph_at_phase(font_id, glyph_id, font_size, 0)
+    }
+
+    /// The glyph rasterized at a given subpixel phase. Phase 0 is the
+    /// un-offset raster, so this agrees with `get_glyph` there.
+    pub fn get_glyph_at_phase(
+        &self,
+        font_id: u32,
+        glyph_id: u16,
+        font_size: f32,
+        phase: u8,
+    ) -> Option<&GlyphInfo> {
+        let key = GlyphKey::with_phase(font_id, glyph_id, font_size, phase);
         self.glyphs.get(&key)
     }
 

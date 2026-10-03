@@ -13,6 +13,7 @@ use crate::layout::{LayoutOptions, PositionedGlyph, TextLayout, TextLayoutEngine
 use crate::rasterizer::GlyphRasterizer;
 use crate::registry::{FontRegistry, GenericFont};
 use crate::shaper::TextShaper;
+use crate::subpixel::SubpixelX;
 use crate::{Result, TextError};
 use lru::LruCache;
 use std::num::NonZeroUsize;
@@ -101,6 +102,24 @@ pub struct ColorSpan {
     pub color: [f32; 4],
 }
 
+/// Above this atlas utilization, no new phased rasters are created:
+/// phase 0 is used instead. Spacing degrades to whole-pixel rather than
+/// the atlas growing toward its cap for a cosmetic feature.
+const SUBPIXEL_PRESSURE_LIMIT: f32 = 0.75;
+
+/// What subpixel positioning is costing, so the tradeoff can be
+/// measured rather than argued about.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SubpixelStats {
+    /// Glyphs rasterized at a non-zero phase. Each one is an atlas
+    /// entry that whole-pixel positioning would not have needed.
+    pub phased_rasters: u64,
+    /// Times a phased raster was declined and phase 0 used instead,
+    /// because the atlas was under pressure or could not grow. Spacing
+    /// is uneven for those glyphs; nothing fails.
+    pub phase0_fallbacks: u64,
+}
+
 /// Text renderer that manages fonts, atlas, and glyph rendering
 pub struct TextRenderer {
     /// Default font (legacy support)
@@ -118,7 +137,9 @@ pub struct TextRenderer {
     layout_engine: TextLayoutEngine,
     /// LRU cache for grayscale glyphs: (font_id, glyph_id, quantized_size) -> atlas info
     /// font_id is hash of font name or 0 for default
-    glyph_cache: LruCache<(u32, u16, u16), GlyphInfo>,
+    glyph_cache: LruCache<(u32, u16, u16, u8), GlyphInfo>,
+    /// Running count of what subpixel positioning has cost
+    subpixel_stats: SubpixelStats,
     /// LRU cache for color glyphs (emoji) - same key format
     color_glyph_cache: LruCache<(u32, u16, u16), GlyphInfo>,
     /// LRU cache for HarfBuzz layout results. Stores `Arc<TextLayout>`
@@ -146,6 +167,7 @@ impl TextRenderer {
             rasterizer: GlyphRasterizer::new(),
             layout_engine: TextLayoutEngine::new(),
             glyph_cache: LruCache::new(NonZeroUsize::new(GLYPH_CACHE_CAPACITY).unwrap()),
+            subpixel_stats: SubpixelStats::default(),
             color_glyph_cache: LruCache::new(
                 NonZeroUsize::new(COLOR_GLYPH_CACHE_CAPACITY).unwrap(),
             ),
@@ -166,6 +188,7 @@ impl TextRenderer {
             rasterizer: GlyphRasterizer::new(),
             layout_engine: TextLayoutEngine::new(),
             glyph_cache: LruCache::new(NonZeroUsize::new(GLYPH_CACHE_CAPACITY).unwrap()),
+            subpixel_stats: SubpixelStats::default(),
             color_glyph_cache: LruCache::new(
                 NonZeroUsize::new(COLOR_GLYPH_CACHE_CAPACITY).unwrap(),
             ),
@@ -185,6 +208,7 @@ impl TextRenderer {
             rasterizer: GlyphRasterizer::new(),
             layout_engine: TextLayoutEngine::new(),
             glyph_cache: LruCache::new(NonZeroUsize::new(GLYPH_CACHE_CAPACITY).unwrap()),
+            subpixel_stats: SubpixelStats::default(),
             color_glyph_cache: LruCache::new(
                 NonZeroUsize::new(COLOR_GLYPH_CACHE_CAPACITY).unwrap(),
             ),
@@ -285,6 +309,22 @@ impl TextRenderer {
         self.glyph_cache.len()
     }
 
+    /// What subpixel positioning has cost so far.
+    pub fn subpixel_stats(&self) -> SubpixelStats {
+        self.subpixel_stats
+    }
+
+    /// Zero the subpixel counters, for measuring one stretch of work.
+    pub fn reset_subpixel_stats(&mut self) {
+        self.subpixel_stats = SubpixelStats::default();
+    }
+
+    /// How full the glyph atlas is, 0.0 to 1.0. Above
+    /// `SUBPIXEL_PRESSURE_LIMIT` no new phased rasters are created.
+    pub fn atlas_utilization(&self) -> f32 {
+        self.atlas.utilization()
+    }
+
     /// Number of cached color glyph rasterization entries (emoji LRU)
     pub fn color_glyph_cache_len(&self) -> usize {
         self.color_glyph_cache.len()
@@ -337,6 +377,7 @@ impl TextRenderer {
             GenericFont::System,
             400,
             false,
+            None,
         )
     }
 
@@ -359,7 +400,7 @@ impl TextRenderer {
         generic: GenericFont,
     ) -> Result<PreparedText> {
         self.prepare_text_internal(
-            text, font_size, color, options, font_name, generic, 400, false,
+            text, font_size, color, options, font_name, generic, 400, false, None,
         )
     }
 
@@ -387,7 +428,39 @@ impl TextRenderer {
         italic: bool,
     ) -> Result<PreparedText> {
         self.prepare_text_internal(
-            text, font_size, color, options, font_name, generic, weight, italic,
+            text, font_size, color, options, font_name, generic, weight, italic, None,
+        )
+    }
+
+    /// Prepare text with horizontal subpixel positioning.
+    ///
+    /// `subpixel` is `None` for the whole-pixel behaviour every other
+    /// entry point gives, so this is purely opt-in and reverting is a
+    /// matter of passing `None`.
+    ///
+    /// Pass `Some` only when nothing rotates or skews the run: the
+    /// phases are horizontal offsets in device pixels, which a
+    /// transform would invalidate. `origin_x` is the run's device-space
+    /// x; draw the result at `origin_x.floor()`.
+    ///
+    /// Deliberately not on `LayoutOptions`: that type keys the shaping
+    /// cache, and a position-dependent key would make every run at a
+    /// new x re-shape through HarfBuzz.
+    #[allow(clippy::too_many_arguments)]
+    pub fn prepare_text_subpixel(
+        &mut self,
+        text: &str,
+        font_size: f32,
+        color: [f32; 4],
+        options: &LayoutOptions,
+        font_name: Option<&str>,
+        generic: GenericFont,
+        weight: u16,
+        italic: bool,
+        subpixel: Option<SubpixelX>,
+    ) -> Result<PreparedText> {
+        self.prepare_text_internal(
+            text, font_size, color, options, font_name, generic, weight, italic, subpixel,
         )
     }
 
@@ -403,6 +476,7 @@ impl TextRenderer {
         generic: GenericFont,
         weight: u16,
         italic: bool,
+        subpixel: Option<SubpixelX>,
     ) -> Result<PreparedText> {
         // Resolve the font to use
         let font = self.resolve_font_with_style(font_name, generic, weight, italic)?;
@@ -469,6 +543,10 @@ impl TextRenderer {
             info: GlyphInfo,
             positioned: PositionedGlyph,
             is_color: bool,
+            /// The whole device pixel subpixel positioning chose for
+            /// this glyph. `None` when positioning whole-pixel, which
+            /// keeps the shaper's own x.
+            whole_x: Option<f32>,
         }
 
         let mut glyph_infos: Vec<Option<RasterizedGlyphData>> =
@@ -620,6 +698,7 @@ impl TextRenderer {
                                     info: glyph_info,
                                     positioned: fallback_positioned,
                                     is_color,
+                                    whole_x: None,
                                 }));
                                 found_fallback = true;
                                 break;
@@ -634,14 +713,33 @@ impl TextRenderer {
             }
 
             // Use primary font (apply accumulated x_offset)
-            let glyph_info =
-                self.rasterize_glyph_for_font(&font, font_id, positioned.glyph_id, font_size)?;
             let mut adjusted_positioned = *positioned;
             adjusted_positioned.x += x_offset;
+
+            // Subpixel positioning: pick the whole pixel this glyph
+            // lands on and the phase to rasterize it at. The fallback
+            // inside the rasterizer may quietly use phase 0, which only
+            // costs evenness, so `whole_x` stays correct either way.
+            let (whole_x, phase, offset_x) = match subpixel {
+                Some(sub) => {
+                    let (whole, phase) = sub.split(adjusted_positioned.x);
+                    (Some(whole), phase, sub.offset(phase))
+                }
+                None => (None, 0, 0.0),
+            };
+            let glyph_info = self.rasterize_glyph_at_phase(
+                &font,
+                font_id,
+                positioned.glyph_id,
+                font_size,
+                phase,
+                offset_x,
+            )?;
             glyph_infos.push(Some(RasterizedGlyphData {
                 info: glyph_info,
                 positioned: adjusted_positioned,
                 is_color: false,
+                whole_x,
             }));
         }
 
@@ -664,7 +762,17 @@ impl TextRenderer {
             // Calculate screen position
             // positioned.x is the pen position from the shaper (includes advance)
             // bearing_x is the offset from pen position to the glyph's left edge
-            let x = data.positioned.x + data.info.bearing_x as f32;
+            //
+            // With subpixel positioning the pen x is replaced by the
+            // whole pixel the split chose, expressed relative to the
+            // run origin snapped down to a whole pixel. The caller
+            // draws the run at that snapped origin, so the glyph lands
+            // exactly on a pixel with the fractional spacing baked into
+            // the raster.
+            let x = match (subpixel, data.whole_x) {
+                (Some(sub), Some(whole)) => sub.local_x(whole) + data.info.bearing_x as f32,
+                _ => data.positioned.x + data.info.bearing_x as f32,
+            };
             let y = data.positioned.y - data.info.bearing_y as f32;
             let w = data.info.region.width as f32;
             let h = data.info.region.height as f32;
@@ -956,9 +1064,42 @@ impl TextRenderer {
         glyph_id: u16,
         font_size: f32,
     ) -> Result<GlyphInfo> {
+        self.rasterize_glyph_at_phase(font, font_id, glyph_id, font_size, 0, 0.0)
+    }
+
+    /// Rasterize a glyph at a horizontal subpixel phase.
+    ///
+    /// `phase` keys the raster; `offset_x` is the fraction of a pixel it
+    /// is shifted by. Phase 0 with offset 0 is the ordinary glyph.
+    ///
+    /// Declines to create a new phased entry when the atlas is above
+    /// `SUBPIXEL_PRESSURE_LIMIT`, or when a phased insert needs growth
+    /// the atlas cannot do, and uses phase 0 instead. Spacing degrades
+    /// to whole-pixel for those glyphs; nothing fails, and the fallback
+    /// is counted.
+    fn rasterize_glyph_at_phase(
+        &mut self,
+        font: &FontFace,
+        font_id: u32,
+        glyph_id: u16,
+        font_size: f32,
+        phase: u8,
+        offset_x: f32,
+    ) -> Result<GlyphInfo> {
         // Quantize font size for cache key (0.5px granularity)
         let size_key = (font_size * 2.0).round() as u16;
-        let cache_key = (font_id, glyph_id, size_key);
+        let cache_key = (font_id, glyph_id, size_key, phase);
+
+        // A phase already in the atlas costs nothing more, so pressure
+        // only gates NEW entries. Checked before the pressure test so a
+        // hot glyph keeps its even spacing as the atlas fills.
+        if phase != 0
+            && self.glyph_cache.peek(&cache_key).is_none()
+            && self.atlas.utilization() >= SUBPIXEL_PRESSURE_LIMIT
+        {
+            self.subpixel_stats.phase0_fallbacks += 1;
+            return self.rasterize_glyph_at_phase(font, font_id, glyph_id, font_size, 0, 0.0);
+        }
 
         // Check cache first (LruCache::get promotes to most-recently-used)
         if let Some(info) = self.glyph_cache.get(&cache_key) {
@@ -966,7 +1107,9 @@ impl TextRenderer {
         }
 
         // Rasterize the glyph
-        let rasterized = self.rasterizer.rasterize(font, glyph_id, font_size)?;
+        let rasterized = self
+            .rasterizer
+            .rasterize_at_offset(font, glyph_id, font_size, offset_x)?;
 
         // Handle empty glyphs (like space)
         if rasterized.width == 0 || rasterized.height == 0 {
@@ -988,10 +1131,11 @@ impl TextRenderer {
         }
 
         // Insert into atlas, growing if full
-        let info = match self.atlas.insert_glyph(
+        let info = match self.atlas.insert_glyph_at_phase(
             font_id,
             glyph_id,
             font_size,
+            phase,
             rasterized.width,
             rasterized.height,
             rasterized.bearing_x,
@@ -1002,14 +1146,23 @@ impl TextRenderer {
             Ok(info) => info,
             Err(TextError::AtlasFull) => {
                 if !self.atlas.grow() {
+                    // A phase is cosmetic: give up the even spacing
+                    // rather than the glyph. Phase 0 is very likely
+                    // already resident, so this usually cannot fail.
+                    if phase != 0 {
+                        self.subpixel_stats.phase0_fallbacks += 1;
+                        return self
+                            .rasterize_glyph_at_phase(font, font_id, glyph_id, font_size, 0, 0.0);
+                    }
                     return Err(TextError::AtlasFull);
                 }
                 let (nw, nh) = self.atlas.dimensions();
                 tracing::info!("Glyph atlas grew to {}x{}", nw, nh);
-                self.atlas.insert_glyph(
+                self.atlas.insert_glyph_at_phase(
                     font_id,
                     glyph_id,
                     font_size,
+                    phase,
                     rasterized.width,
                     rasterized.height,
                     rasterized.bearing_x,
@@ -1021,6 +1174,9 @@ impl TextRenderer {
             Err(e) => return Err(e),
         };
 
+        if phase != 0 {
+            self.subpixel_stats.phased_rasters += 1;
+        }
         self.glyph_cache.put(cache_key, info);
         Ok(info)
     }
