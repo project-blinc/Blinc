@@ -286,6 +286,7 @@ fn menu_bar(state: &State<DropdownState>, bg: Color) -> Div {
             blur: 12.0,
             spread: 0.0,
             color: Color::BLACK.with_alpha(0.35),
+            inset: false,
         })
         .flex_row()
         .items_center()
@@ -375,6 +376,7 @@ fn notched_dropdown(args: NotchedDropdownArgs) -> Notch {
             blur: 8.0,
             spread: 0.0,
             color: Color::BLACK.with_alpha(0.12),
+            inset: false,
         })
         .opacity(args.opacity)
         // The dropdown's bbox overlaps neighbouring menu icons —

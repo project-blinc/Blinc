@@ -79,6 +79,7 @@ pub fn suite() -> TestSuite {
                 blur: 10.0,
                 spread: 5.0,
                 color: Color::BLACK.with_alpha(0.3),
+                inset: false,
             },
         );
 
@@ -153,6 +154,7 @@ pub fn suite() -> TestSuite {
                 blur: 8.0,
                 spread: 4.0,
                 color: Color::BLACK.with_alpha(0.25),
+                inset: false,
             },
         );
     });
@@ -187,6 +189,7 @@ pub fn suite() -> TestSuite {
                 blur: 6.0,
                 spread: 2.0,
                 color: Color::BLACK.with_alpha(0.2),
+                inset: false,
             },
         );
     });
@@ -224,6 +227,7 @@ pub fn suite() -> TestSuite {
                 blur: 4.0,
                 spread: 1.0,
                 color: Color::BLACK.with_alpha(0.08),
+                inset: false,
             },
         );
     });
@@ -350,6 +354,7 @@ pub fn suite() -> TestSuite {
                 blur: 16.0,
                 spread: -2.0,
                 color: Color::BLACK.with_alpha(0.12),
+                inset: false,
             },
         );
 

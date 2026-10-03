@@ -34,6 +34,8 @@ pub struct Shadow {
     pub blur: f32,
     pub spread: f32,
     pub color: Color,
+    /// Painted inside the shape, as CSS `box-shadow: inset`.
+    pub inset: bool,
 }
 
 impl Shadow {
@@ -44,6 +46,22 @@ impl Shadow {
             blur,
             spread,
             color,
+            inset: false,
+        }
+    }
+
+    /// An inset shadow. Separate from `new` so that stays a 5-arg
+    /// `const fn` and no existing token changes.
+    pub const fn new_inset(
+        offset_x: f32,
+        offset_y: f32,
+        blur: f32,
+        spread: f32,
+        color: Color,
+    ) -> Self {
+        Self {
+            inset: true,
+            ..Self::new(offset_x, offset_y, blur, spread, color)
         }
     }
 
@@ -54,6 +72,7 @@ impl Shadow {
             blur: 0.0,
             spread: 0.0,
             color: Color::TRANSPARENT,
+            inset: false,
         }
     }
 
@@ -65,6 +84,10 @@ impl Shadow {
             blur: from.blur + (to.blur - from.blur) * t,
             spread: from.spread + (to.spread - from.spread) * t,
             color: Color::lerp(&from.color, &to.color, t),
+            // Not interpolable: a shadow is inset or it is not. Hold the
+            // start's value; the transition assigns the target on its
+            // final frame.
+            inset: from.inset,
         }
     }
 }
@@ -83,6 +106,7 @@ impl From<Shadow> for blinc_core::Shadow {
             blur: shadow.blur,
             spread: shadow.spread,
             color: shadow.color,
+            inset: shadow.inset,
         }
     }
 }
@@ -95,6 +119,7 @@ impl From<&Shadow> for blinc_core::Shadow {
             blur: shadow.blur,
             spread: shadow.spread,
             color: shadow.color,
+            inset: shadow.inset,
         }
     }
 }
@@ -240,5 +265,70 @@ impl ShadowTokens {
 impl Default for ShadowTokens {
     fn default() -> Self {
         Self::light()
+    }
+}
+
+#[cfg(test)]
+mod inset_tests {
+    use super::*;
+
+    /// `shadow_inner` must be inset, or it paints as a drop shadow under
+    /// the element instead of an inset one. Every theme defined the token
+    /// and none of them could express it.
+    #[test]
+    fn the_inner_token_is_inset_in_every_theme() {
+        use crate::Theme;
+        use crate::themes::universal::{ExpressiveTheme, HybridTheme, RestrainedTheme};
+
+        fn check(label: &str, theme: &dyn Theme) {
+            let inner = &theme.shadows().shadow_inner;
+            assert!(!inner.is_empty(), "{label}: no inner shadow");
+            for s in inner {
+                assert!(
+                    s.inset,
+                    "{label}: shadow_inner is not inset, so it draws outside"
+                );
+            }
+        }
+
+        check("hybrid light", &HybridTheme::light());
+        check("hybrid dark", &HybridTheme::dark());
+        check("restrained light", &RestrainedTheme::light());
+        check("restrained dark", &RestrainedTheme::dark());
+        check("expressive light", &ExpressiveTheme::light());
+        check("expressive dark", &ExpressiveTheme::dark());
+    }
+
+    /// The ordinary tokens must NOT be inset.
+    #[test]
+    fn the_outer_tokens_are_not_inset() {
+        use crate::Theme;
+        let t = crate::themes::universal::HybridTheme::light();
+        let sh = t.shadows();
+        for (name, stack) in [
+            ("sm", &sh.shadow_sm),
+            ("md", &sh.shadow_md),
+            ("lg", &sh.shadow_lg),
+        ] {
+            for s in stack {
+                assert!(!s.inset, "shadow_{name} should be an outer shadow");
+            }
+        }
+    }
+
+    /// Crossing the FFI to the render type must keep the flag, or the
+    /// paint walk never sees it.
+    #[test]
+    fn the_conversion_keeps_inset() {
+        let inner = Shadow::new_inset(0.0, 1.0, 2.0, 0.0, Color::BLACK);
+        let core: blinc_core::Shadow = (&inner).into();
+        assert!(
+            core.inset,
+            "inset was dropped converting to the render type"
+        );
+
+        let outer = Shadow::new(0.0, 1.0, 2.0, 0.0, Color::BLACK);
+        let core: blinc_core::Shadow = (&outer).into();
+        assert!(!core.inset);
     }
 }

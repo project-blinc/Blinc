@@ -292,7 +292,7 @@ fn restrained_shadows_light() -> ShadowTokens {
             Shadow::new(0.0, 6.0, 12.0, 0.0, ink.with_alpha(0.08)),
             Shadow::new(0.0, 32.0, 64.0, 0.0, ink.with_alpha(0.14)),
         ],
-        shadow_inner: vec![Shadow::new(0.0, 1.0, 2.0, 0.0, ink.with_alpha(0.06))],
+        shadow_inner: vec![Shadow::new_inset(0.0, 1.0, 2.0, 0.0, ink.with_alpha(0.06))],
         shadow_none: Vec::new(),
     }
 }
@@ -324,7 +324,7 @@ fn restrained_shadows_dark() -> ShadowTokens {
             Shadow::new(0.0, 6.0, 12.0, 0.0, ink.with_alpha(0.36)),
             Shadow::new(0.0, 32.0, 64.0, 0.0, ink.with_alpha(0.58)),
         ],
-        shadow_inner: vec![Shadow::new(0.0, 1.0, 2.0, 0.0, ink.with_alpha(0.30))],
+        shadow_inner: vec![Shadow::new_inset(0.0, 1.0, 2.0, 0.0, ink.with_alpha(0.30))],
         shadow_none: Vec::new(),
     }
 }

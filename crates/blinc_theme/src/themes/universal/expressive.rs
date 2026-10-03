@@ -299,7 +299,7 @@ fn expressive_shadows_light() -> ShadowTokens {
             Shadow::new(0.0, 22.0, 38.0, 0.0, ink.with_alpha(0.10)),
             Shadow::new(0.0, 48.0, 80.0, 0.0, accent.with_alpha(0.10)),
         ],
-        shadow_inner: vec![Shadow::new(0.0, 2.0, 4.0, 0.0, ink.with_alpha(0.08))],
+        shadow_inner: vec![Shadow::new_inset(0.0, 2.0, 4.0, 0.0, ink.with_alpha(0.08))],
         shadow_none: Vec::new(),
     }
 }
@@ -337,7 +337,7 @@ fn expressive_shadows_dark() -> ShadowTokens {
             Shadow::new(0.0, 22.0, 38.0, 0.0, ink.with_alpha(0.60)),
             Shadow::new(0.0, 48.0, 80.0, 0.0, accent.with_alpha(0.22)),
         ],
-        shadow_inner: vec![Shadow::new(0.0, 2.0, 4.0, 0.0, ink.with_alpha(0.35))],
+        shadow_inner: vec![Shadow::new_inset(0.0, 2.0, 4.0, 0.0, ink.with_alpha(0.35))],
         shadow_none: Vec::new(),
     }
 }

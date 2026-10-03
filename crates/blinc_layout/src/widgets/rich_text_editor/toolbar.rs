@@ -107,6 +107,7 @@ pub fn selection_toolbar(
             blur: 12.0,
             spread: 0.0,
             color: Color::rgba(0.0, 0.0, 0.0, 0.45),
+            inset: false,
         })
         .child(mark_row);
 

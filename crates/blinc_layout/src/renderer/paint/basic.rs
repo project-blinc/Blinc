@@ -175,6 +175,9 @@ impl RenderTree {
             // ambient layer paints first and the tight key-light layer
             // lands on top.
             for shadow in render_node.props.shadow.iter().rev() {
+                if shadow.inset {
+                    continue; // drawn after the fill, below
+                }
                 ctx.draw_shadow(rect, radius, *shadow);
             }
 
@@ -291,6 +294,39 @@ impl RenderTree {
                 // No border — just fill
                 if let Some(ref bg) = render_node.props.background {
                     ctx.fill_rect(rect, radius, bg.clone());
+                }
+            }
+
+            // Inset shadows, after the background. CSS paints these over
+            // the background and under the border; clipping to the PADDING
+            // box gets the same picture without splitting the merged
+            // fill+border primitive, which is what keeps corners free of
+            // AA fringe. The shadow's geometry still comes from the border
+            // box, so its falloff starts where CSS says it does — the clip
+            // only stops it reaching the border band.
+            if render_node.props.shadow.iter().any(|s| s.inset) {
+                let bw = render_node.props.border_width.max(0.0);
+                let pad = Rect {
+                    origin: blinc_core::Point::new(rect.origin.x + bw, rect.origin.y + bw),
+                    size: blinc_core::Size::new(
+                        (rect.size.width - bw * 2.0).max(0.0),
+                        (rect.size.height - bw * 2.0).max(0.0),
+                    ),
+                };
+                let inner_radius = CornerRadius {
+                    top_left: (radius.top_left - bw).max(0.0),
+                    top_right: (radius.top_right - bw).max(0.0),
+                    bottom_right: (radius.bottom_right - bw).max(0.0),
+                    bottom_left: (radius.bottom_left - bw).max(0.0),
+                };
+                if pad.size.width > 0.0 && pad.size.height > 0.0 {
+                    ctx.push_clip(ClipShape::rounded_rect(pad, inner_radius));
+                    for shadow in render_node.props.shadow.iter().rev() {
+                        if shadow.inset {
+                            ctx.draw_inner_shadow(rect, radius, *shadow);
+                        }
+                    }
+                    ctx.pop_clip();
                 }
             }
         }
