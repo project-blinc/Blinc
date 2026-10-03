@@ -149,6 +149,11 @@ mod inset_shadow_tests {
     /// every theme, so it must route to the inner list.
     #[test]
     fn the_inner_theme_token_routes_to_the_inner_list() {
+        // theme() reads the global ThemeState, which panics when unset.
+        // Each test gets its own process under nextest, so no sibling
+        // test can have installed it.
+        blinc_theme::ThemeState::init_default();
+
         let s = parse("box-shadow: theme(shadow-inner);");
         assert!(!s.inner_shadow.is_empty(), "shadow-inner produced no layer");
         assert!(s.shadow.is_empty(), "shadow-inner is not an outer shadow");
