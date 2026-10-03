@@ -453,7 +453,18 @@ struct EffectNode {
 
 /// The reactive graph that manages all signals, derived values, and effects
 pub struct ReactiveGraph {
-    signals: SlotMap<SignalId, SignalNode>,
+    /// Interior-mutable so a signal can be CREATED while a derived or
+    /// effect closure is in flight: that path only has `&ReactiveGraph`,
+    /// because the lock guard is held further up the stack. Every other
+    /// field touched during an evaluation is already `RefCell`/`Cell` for
+    /// the same reason.
+    ///
+    /// No raw pointer into this map is held across a call into user code,
+    /// which is what makes insertion during an evaluation sound here.
+    /// `derived` and `effects` are NOT like this — `get_derived` and
+    /// `run_effect` point into them across the closure, so inserting
+    /// there mid-evaluation could reallocate under a live pointer.
+    signals: RefCell<SlotMap<SignalId, SignalNode>>,
     derived: SlotMap<DerivedId, DerivedNode>,
     effects: SlotMap<EffectId, EffectNode>,
     /// Pending effects to run
@@ -476,7 +487,7 @@ impl ReactiveGraph {
     /// Create a new reactive graph
     pub fn new() -> Self {
         Self {
-            signals: SlotMap::with_key(),
+            signals: RefCell::new(SlotMap::with_key()),
             derived: SlotMap::with_key(),
             effects: SlotMap::with_key(),
             pending_effects: RefCell::new(VecDeque::new()),
@@ -492,8 +503,13 @@ impl ReactiveGraph {
     // =========================================================================
 
     /// Create a new signal with an initial value
-    pub fn create_signal<T: Send + 'static>(&mut self, initial: T) -> Signal<T> {
-        let id = self.signals.insert(SignalNode {
+    /// Create a signal.
+    ///
+    /// Takes `&self` so this works through the in-flight graph, which is
+    /// all a derived or effect closure has: a nested `signal()` used to
+    /// deadlock on the graph mutex the evaluation already held.
+    pub fn create_signal<T: Send + 'static>(&self, initial: T) -> Signal<T> {
+        let id = self.signals.borrow_mut().insert(SignalNode {
             value: Box::new(initial),
             version: 0,
             subscribers: SmallVec::new(),
@@ -517,6 +533,7 @@ impl ReactiveGraph {
         }
 
         self.signals
+            .borrow()
             .get(signal.id)
             .and_then(|node| node.value.downcast_ref::<T>().cloned())
     }
@@ -524,15 +541,27 @@ impl ReactiveGraph {
     /// Get the current value without tracking as a dependency
     pub fn get_untracked<T: Clone + 'static>(&self, signal: Signal<T>) -> Option<T> {
         self.signals
+            .borrow()
             .get(signal.id)
             .and_then(|node| node.value.downcast_ref::<T>().cloned())
     }
 
     /// Set the value of a signal, triggering reactive updates
     pub fn set<T: Send + 'static>(&mut self, signal: Signal<T>, value: T) {
-        if let Some(node) = self.signals.get_mut(signal.id) {
+        // Mutate under a borrow that ends before anything calls out.
+        // `mark_dirty` and `flush_effects` run user closures, and one of
+        // those may now CREATE a signal, which borrows this map mutably.
+        // Holding the borrow across them would panic.
+        let subscribers: SmallVec<[SubscriberId; 4]> = {
+            let mut signals = self.signals.borrow_mut();
+            let Some(node) = signals.get_mut(signal.id) else {
+                return;
+            };
             node.value = Box::new(value);
             node.version += 1;
+            node.subscribers.clone()
+        };
+        {
             self.global_version.set(self.global_version.get() + 1);
 
             // Mark all subscribers as dirty. mark_dirty recursively
@@ -545,7 +574,6 @@ impl ReactiveGraph {
             // binding registry's read closures call
             // `Computed::try_get` which re-acquires this same
             // mutex.
-            let subscribers: SmallVec<[SubscriberId; 4]> = node.subscribers.clone();
             for sub in subscribers {
                 self.mark_dirty(sub);
             }
@@ -582,7 +610,7 @@ impl ReactiveGraph {
 
     /// Get the version of a signal (for change detection)
     pub fn signal_version(&self, id: SignalId) -> Option<u64> {
-        self.signals.get(id).map(|n| n.version)
+        self.signals.borrow().get(id).map(|n| n.version)
     }
 
     // =========================================================================
@@ -714,7 +742,7 @@ impl ReactiveGraph {
         if let Some(node) = self.derived.get_mut(derived.id) {
             // Unsubscribe from old dependencies
             for &dep_id in &node.dependencies {
-                if let Some(sig) = self.signals.get_mut(dep_id) {
+                if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
                     sig.subscribers
                         .retain(|s| *s != SubscriberId::Derived(derived.id));
                 }
@@ -722,7 +750,7 @@ impl ReactiveGraph {
 
             // Subscribe to new dependencies
             for &dep_id in &deps {
-                if let Some(sig) = self.signals.get_mut(dep_id) {
+                if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
                     let sub = SubscriberId::Derived(derived.id);
                     if !sig.subscribers.contains(&sub) {
                         sig.subscribers.push(sub);
@@ -731,12 +759,14 @@ impl ReactiveGraph {
             }
 
             // Update depth based on dependencies
-            let max_dep_depth = deps
-                .iter()
-                .filter_map(|&id| self.signals.get(id))
-                .map(|_| 0u32) // Signals have depth 0
-                .max()
-                .unwrap_or(0);
+            let max_dep_depth = {
+                let signals = self.signals.borrow();
+                deps.iter()
+                    .filter_map(|&id| signals.get(id))
+                    .map(|_| 0u32) // Signals have depth 0
+                    .max()
+                    .unwrap_or(0)
+            };
 
             node.dependencies = deps.into_iter().collect();
             node.depth = max_dep_depth + 1;
@@ -781,7 +811,7 @@ impl ReactiveGraph {
         if let Some(node) = self.effects.remove(effect.id) {
             // Unsubscribe from all dependencies
             for &dep_id in &node.dependencies {
-                if let Some(sig) = self.signals.get_mut(dep_id) {
+                if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
                     sig.subscribers
                         .retain(|s| *s != SubscriberId::Effect(effect.id));
                 }
@@ -794,7 +824,7 @@ impl ReactiveGraph {
     /// are versioned, so a later signal in the same slot is not aliased.
     /// False if it was already gone.
     pub fn dispose_signal(&mut self, id: SignalId) -> bool {
-        let Some(node) = self.signals.remove(id) else {
+        let Some(node) = self.signals.borrow_mut().remove(id) else {
             return false;
         };
         for sub in node.subscribers {
@@ -824,7 +854,7 @@ impl ReactiveGraph {
             return false;
         };
         for &dep_id in &node.dependencies {
-            if let Some(sig) = self.signals.get_mut(dep_id) {
+            if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
                 sig.subscribers.retain(|s| *s != SubscriberId::Derived(id));
             }
         }
@@ -965,7 +995,7 @@ impl ReactiveGraph {
         if let Some(node) = self.effects.get_mut(effect_id) {
             // Unsubscribe from old dependencies
             for &dep_id in &node.dependencies {
-                if let Some(sig) = self.signals.get_mut(dep_id) {
+                if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
                     sig.subscribers
                         .retain(|s| *s != SubscriberId::Effect(effect_id));
                 }
@@ -973,7 +1003,7 @@ impl ReactiveGraph {
 
             // Subscribe to new dependencies
             for &dep_id in &deps {
-                if let Some(sig) = self.signals.get_mut(dep_id) {
+                if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
                     let sub = SubscriberId::Effect(effect_id);
                     if !sig.subscribers.contains(&sub) {
                         sig.subscribers.push(sub);
@@ -988,7 +1018,7 @@ impl ReactiveGraph {
     /// Get statistics about the reactive graph
     pub fn stats(&self) -> ReactiveStats {
         ReactiveStats {
-            signal_count: self.signals.len(),
+            signal_count: self.signals.borrow().len(),
             derived_count: self.derived.len(),
             effect_count: self.effects.len(),
             pending_effects: self.pending_effects.borrow().len(),
@@ -1650,8 +1680,20 @@ impl<T: Clone + Send + 'static> Computed<T> {
 /// label.text(&count.get().to_string());
 /// ```
 pub fn signal<T: Send + 'static>(initial: T) -> Signal<T> {
+    // Inside a derived or effect closure the graph mutex is already held
+    // by this thread, so go through the in-flight graph the way reads do.
+    // The signal lands in the live graph, so a read later in the same
+    // evaluation sees it and records it as a dependency.
+    //
+    // Checked before moving `initial`, since the closure would consume it.
+    if is_in_flush() {
+        if let Some(s) = with_in_flight_graph(|g| g.create_signal(initial)) {
+            return s;
+        }
+        unreachable!("is_in_flush() was true, so the pointer is non-null");
+    }
     let graph = global_graph();
-    let mut g = graph.lock().unwrap();
+    let g = graph.lock().unwrap();
     g.create_signal(initial)
 }
 
@@ -1874,7 +1916,7 @@ mod tests {
 
         assert!(graph.dispose_derived(doubled.id));
         assert!(!graph.dispose_derived(doubled.id), "already gone");
-        assert!(graph.signals[a.id()].subscribers.is_empty());
+        assert!(graph.signals.borrow()[a.id()].subscribers.is_empty());
 
         graph.set(a, 5);
         assert!(graph.take_dirty_derived().is_empty());
@@ -2075,5 +2117,79 @@ mod tests {
         let stats = graph.stats();
         assert_eq!(stats.signal_count, 2);
         assert_eq!(stats.derived_count, 1);
+    }
+}
+
+#[cfg(test)]
+mod in_flight_creation_tests {
+    use super::*;
+
+    /// Creating a signal inside a computed used to deadlock: `signal()`
+    /// took the graph mutex that the evaluation already held.
+    ///
+    /// Every test here would HANG rather than fail before the fix, so run
+    /// them with a timeout if you are bisecting.
+    #[test]
+    fn a_signal_can_be_created_inside_a_computed() {
+        let trigger = signal(1_i32);
+        let c = computed(move |g| {
+            let made = signal(41_i32);
+            g.get(trigger).unwrap_or(0) + g.get_untracked(made).unwrap_or(0)
+        });
+        assert_eq!(c.try_get(), Some(42));
+    }
+
+    /// The new signal must be readable in the SAME evaluation, not just
+    /// reserved for later. Reserving a slot and inserting on return would
+    /// pass the test above and fail this one.
+    #[test]
+    fn the_new_signal_is_readable_immediately() {
+        let c = computed(move |g| {
+            let made = signal(7_i32);
+            // Read it back through the same in-flight graph.
+            g.get(made).unwrap_or(-1)
+        });
+        assert_eq!(c.try_get(), Some(7));
+    }
+
+    /// Writing to a freshly created signal inside the evaluation works
+    /// too: the write path already defers while in flight.
+    #[test]
+    fn a_fresh_signal_accepts_a_write_in_flight() {
+        let c = computed(move |g| {
+            let made = signal(1_i32);
+            let first = g.get_untracked(made).unwrap_or(0);
+            made.set(2);
+            first
+        });
+        assert_eq!(c.try_get(), Some(1));
+    }
+
+    /// Nested evaluation: a computed read inside another computed, with a
+    /// signal created at the inner level. Exercises the in-flight pointer
+    /// save/restore as well as creation.
+    #[test]
+    fn creation_survives_a_nested_evaluation() {
+        let base = signal(10_i32);
+        let inner = computed(move |g| {
+            let extra = signal(5_i32);
+            g.get(base).unwrap_or(0) + g.get_untracked(extra).unwrap_or(0)
+        });
+        let outer = computed(move |_g| inner.try_get().unwrap_or(0) * 2);
+        assert_eq!(outer.try_get(), Some(30));
+    }
+
+    /// Creation must not disturb dependency tracking: the computed still
+    /// re-fires when its real dependency changes.
+    #[test]
+    fn creating_a_signal_does_not_break_tracking() {
+        let dep = signal(1_i32);
+        let c = computed(move |g| {
+            let _scratch = signal(0_i32);
+            g.get(dep).unwrap_or(0) * 10
+        });
+        assert_eq!(c.try_get(), Some(10));
+        dep.set(3);
+        assert_eq!(c.try_get(), Some(30), "the computed did not re-fire");
     }
 }
