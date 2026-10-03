@@ -422,13 +422,24 @@ struct SignalNode {
 }
 
 /// Internal derived node storage
+type ComputeFn = Box<dyn Fn(&ReactiveGraph) -> Box<dyn Any + Send> + Send>;
+
 struct DerivedNode {
     /// Cached value (if computed)
     value: Option<Box<dyn Any + Send>>,
     /// Version of cached value
     cached_version: u64,
-    /// The compute function
-    compute: Box<dyn Fn(&ReactiveGraph) -> Box<dyn Any + Send> + Send>,
+    /// The compute function.
+    ///
+    /// `Option` so an evaluation can TAKE it, releasing the borrow on the
+    /// derived map for the duration of the call. A nested `computed()`
+    /// then has a free map to insert into. Previously the evaluation held
+    /// a raw pointer into the map across the closure, so an insert could
+    /// have reallocated under it.
+    ///
+    /// `None` only while this derived is mid-evaluation, which also makes
+    /// a self-referential read return `None` instead of recursing.
+    compute: Option<ComputeFn>,
     /// Dependencies (signals this derived reads from)
     dependencies: SmallVec<[SignalId; 4]>,
     /// Subscribers to notify when this derived changes
@@ -465,7 +476,12 @@ pub struct ReactiveGraph {
     /// `run_effect` point into them across the closure, so inserting
     /// there mid-evaluation could reallocate under a live pointer.
     signals: RefCell<SlotMap<SignalId, SignalNode>>,
-    derived: SlotMap<DerivedId, DerivedNode>,
+    /// Interior-mutable for the same reason as `signals`: a `computed()`
+    /// created inside an evaluation needs to insert through
+    /// `&ReactiveGraph`. Safe to insert into mid-evaluation only because
+    /// `with_compute` takes the closure out rather than pointing into the
+    /// map across the call.
+    derived: RefCell<SlotMap<DerivedId, DerivedNode>>,
     effects: SlotMap<EffectId, EffectNode>,
     /// Pending effects to run
     pending_effects: RefCell<VecDeque<EffectId>>,
@@ -488,7 +504,7 @@ impl ReactiveGraph {
     pub fn new() -> Self {
         Self {
             signals: RefCell::new(SlotMap::with_key()),
-            derived: SlotMap::with_key(),
+            derived: RefCell::new(SlotMap::with_key()),
             effects: SlotMap::with_key(),
             pending_effects: RefCell::new(VecDeque::new()),
             batch_depth: Cell::new(0),
@@ -618,7 +634,13 @@ impl ReactiveGraph {
     // =========================================================================
 
     /// Create a derived (computed) value
-    pub fn create_derived<T, F>(&mut self, compute: F) -> Derived<T>
+    /// Create a derived.
+    ///
+    /// Takes `&self` so this works through the in-flight graph, which is
+    /// all a closure has. Sound because `with_compute` takes a derived's
+    /// closure out of the map for the duration of its evaluation, so an
+    /// insert here cannot reallocate under a live reference.
+    pub fn create_derived<T, F>(&self, compute: F) -> Derived<T>
     where
         T: Clone + Send + 'static,
         F: Fn(&ReactiveGraph) -> T + Send + 'static,
@@ -627,10 +649,10 @@ impl ReactiveGraph {
         let compute_boxed =
             move |graph: &ReactiveGraph| -> Box<dyn Any + Send> { Box::new(compute(graph)) };
 
-        let id = self.derived.insert(DerivedNode {
+        let id = self.derived.borrow_mut().insert(DerivedNode {
             value: None,
             cached_version: 0,
-            compute: Box::new(compute_boxed),
+            compute: Some(Box::new(compute_boxed)),
             dependencies: SmallVec::new(),
             subscribers: SmallVec::new(),
             dirty: Cell::new(true), // Start dirty to force initial computation
@@ -659,26 +681,66 @@ impl ReactiveGraph {
     /// Either way the reader comes to depend on the derived's signals, so it
     /// re-runs when they change; the derived itself stays as it was.
     pub fn read_derived_in_flight<T: Clone + 'static>(&self, derived: Derived<T>) -> Option<T> {
-        let node = self.derived.get(derived.id)?;
-        if !node.dirty.get() {
-            if let Some(value) = node.value.as_ref().and_then(|v| v.downcast_ref::<T>()) {
-                if let Some(tracking) = self.tracking.borrow_mut().as_mut() {
-                    tracking.extend(node.dependencies.iter().copied());
+        // Clean: answer from the cache and hand the reader our deps,
+        // under a borrow that ends before we return.
+        {
+            let map = self.derived.borrow();
+            let node = map.get(derived.id)?;
+            if !node.dirty.get() {
+                if let Some(value) = node.value.as_ref().and_then(|v| v.downcast_ref::<T>()) {
+                    if let Some(tracking) = self.tracking.borrow_mut().as_mut() {
+                        tracking.extend(node.dependencies.iter().copied());
+                    }
+                    return Some(value.clone());
                 }
-                return Some(value.clone());
             }
         }
-        // The closure's reads go through this graph's `get`, which records
-        // them in the reader's tracking.
-        (node.compute)(self)
+        // Dirty: run it with the map free, so the closure may create.
+        // Its reads go through this graph's `get`, which records them in
+        // the reader's tracking.
+        self.with_compute(derived.id, |compute| compute(self))?
             .downcast::<T>()
             .ok()
             .map(|value| *value)
     }
 
     pub fn peek_derived<T: Clone + 'static>(&self, derived: Derived<T>) -> Option<T> {
-        let node = self.derived.get(derived.id)?;
+        let map = self.derived.borrow();
+        let node = map.get(derived.id)?;
         node.value.as_ref()?.downcast_ref::<T>().cloned()
+    }
+
+    /// Run a derived's compute with the derived map NOT borrowed.
+    ///
+    /// Takes the closure out, calls it, puts it back. That is what lets a
+    /// nested `computed()` or `signal()` insert while this evaluation is
+    /// in flight. A guard restores the closure even if it panics, so one
+    /// bad compute does not leave the derived permanently inert.
+    fn with_compute<R>(&self, id: DerivedId, f: impl FnOnce(&ComputeFn) -> R) -> Option<R> {
+        let compute = self.derived.borrow_mut().get_mut(id)?.compute.take()?;
+
+        struct Restore<'a> {
+            map: &'a RefCell<SlotMap<DerivedId, DerivedNode>>,
+            id: DerivedId,
+            compute: Option<ComputeFn>,
+        }
+        impl Drop for Restore<'_> {
+            fn drop(&mut self) {
+                if let Some(c) = self.compute.take()
+                    && let Some(node) = self.map.borrow_mut().get_mut(self.id)
+                {
+                    node.compute = Some(c);
+                }
+            }
+        }
+        let mut guard = Restore {
+            map: &self.derived,
+            id,
+            compute: Some(compute),
+        };
+        let out = f(guard.compute.as_ref().expect("just set"));
+        drop(guard);
+        Some(out)
     }
 
     pub fn get_derived<T: Clone + 'static>(&mut self, derived: Derived<T>) -> Option<T> {
@@ -686,28 +748,20 @@ impl ReactiveGraph {
         // This would require converting DerivedId to SignalId somehow
         // Future: support full derived -> derived dep tracking
 
-        let node = self.derived.get(derived.id)?;
-
-        // If not dirty and we have a cached value, return it
-        if !node.dirty.get() {
-            if let Some(ref cached) = node.value {
-                return cached.downcast_ref::<T>().cloned();
+        // Cached answer, under a borrow that ends here.
+        {
+            let map = self.derived.borrow();
+            let node = map.get(derived.id)?;
+            if !node.dirty.get() {
+                if let Some(ref cached) = node.value {
+                    return cached.downcast_ref::<T>().cloned();
+                }
             }
+            node.dirty.set(false);
         }
 
         // Need to recompute - track dependencies
         self.tracking.replace(Some(Vec::new()));
-
-        // Get compute function (we need to be careful with borrowing)
-        let compute: *const Box<dyn Fn(&ReactiveGraph) -> Box<dyn Any + Send> + Send> = {
-            let node = self.derived.get(derived.id)?;
-            // We can't call compute while borrowing node, so just mark dirty = false
-            node.dirty.set(false);
-
-            // Return a reference we can use - actually we need to restructure this
-            // For now, let's use a simpler approach
-            &node.compute as *const _
-        };
 
         // Set the in-flight pointer around the compute call, mirroring
         // run_effect: a JIT'd DSL closure (or any nested code) reading a
@@ -727,8 +781,11 @@ impl ReactiveGraph {
         IN_FLIGHT_GRAPH.with(|c| c.set(self as *const _));
         let _in_flight_guard = InFlightGuard;
 
-        // SAFETY: We're not modifying derived while calling compute
-        let value = unsafe { (*compute)(self) };
+        // Taken out of the map for the call, so the closure is free to
+        // create a signal or another computed. Previously this was a raw
+        // pointer into the map, which an insert could have reallocated
+        // under.
+        let value = self.with_compute(derived.id, |compute| compute(self))?;
 
         drop(_in_flight_guard);
         // Restore an enclosing in-flight scope (nested evaluation inside
@@ -739,7 +796,10 @@ impl ReactiveGraph {
         let deps = self.tracking.take().unwrap_or_default();
 
         // Update the node
-        if let Some(node) = self.derived.get_mut(derived.id) {
+        // Subscription bookkeeping. Collected first, then applied, so no
+        // borrow spans the signals map's own borrow.
+        let mut derived_map = self.derived.borrow_mut();
+        if let Some(node) = derived_map.get_mut(derived.id) {
             // Unsubscribe from old dependencies
             for &dep_id in &node.dependencies {
                 if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
@@ -830,7 +890,7 @@ impl ReactiveGraph {
         for sub in node.subscribers {
             match sub {
                 SubscriberId::Derived(d) => {
-                    if let Some(derived) = self.derived.get_mut(d) {
+                    if let Some(derived) = self.derived.borrow_mut().get_mut(d) {
                         derived.dependencies.retain(|s| *s != id);
                     }
                 }
@@ -850,7 +910,7 @@ impl ReactiveGraph {
     /// Remove a derived, unsubscribing it from the signals it read. Its
     /// compute closure is dropped with it. False if it was already gone.
     pub fn dispose_derived(&mut self, id: DerivedId) -> bool {
-        let Some(node) = self.derived.remove(id) else {
+        let Some(node) = self.derived.borrow_mut().remove(id) else {
             return false;
         };
         for &dep_id in &node.dependencies {
@@ -901,20 +961,26 @@ impl ReactiveGraph {
     fn mark_dirty(&mut self, sub: SubscriberId) {
         match sub {
             SubscriberId::Derived(id) => {
-                if let Some(node) = self.derived.get(id)
-                    && !node.dirty.get()
-                {
-                    node.dirty.set(true);
-                    // Record for the per-set property-binding fire
-                    // (drained at the end of `set`). Each derived can
-                    // only flip once per set (we're inside the
-                    // `!dirty.get()` arm), so no dedup is needed.
-                    self.derived_dirty_buffer.borrow_mut().push(id);
-                    // Propagate to derived's subscribers
-                    let subscribers: SmallVec<[SubscriberId; 4]> = node.subscribers.clone();
-                    for sub in subscribers {
-                        self.mark_dirty(sub);
+                // Flip and collect under a borrow that ends before the
+                // recursion, which borrows this map again.
+                let subscribers: SmallVec<[SubscriberId; 4]> = {
+                    let map = self.derived.borrow();
+                    let Some(node) = map.get(id) else {
+                        return;
+                    };
+                    if node.dirty.get() {
+                        return;
                     }
+                    node.dirty.set(true);
+                    node.subscribers.clone()
+                };
+                // Record for the per-set property-binding fire (drained
+                // at the end of `set`). Each derived can only flip once
+                // per set, since we returned above if already dirty, so
+                // no dedup is needed.
+                self.derived_dirty_buffer.borrow_mut().push(id);
+                for sub in subscribers {
+                    self.mark_dirty(sub);
                 }
             }
             SubscriberId::Effect(id) => {
@@ -1019,7 +1085,7 @@ impl ReactiveGraph {
     pub fn stats(&self) -> ReactiveStats {
         ReactiveStats {
             signal_count: self.signals.borrow().len(),
-            derived_count: self.derived.len(),
+            derived_count: self.derived.borrow().len(),
             effect_count: self.effects.len(),
             pending_effects: self.pending_effects.borrow().len(),
             global_version: self.global_version.get(),
@@ -1718,8 +1784,17 @@ where
     F: Fn(&ReactiveGraph) -> T + Send + 'static,
 {
     let graph = global_graph();
+    // Inside a derived or effect closure the mutex is already held by this
+    // thread, so go through the in-flight graph as reads do. Checked
+    // before the move, since the closure would consume `compute`.
+    if is_in_flush() {
+        if let Some(derived) = with_in_flight_graph(|g| g.create_derived(compute)) {
+            return Computed::new(derived, graph);
+        }
+        unreachable!("is_in_flush() was true, so the pointer is non-null");
+    }
     let derived = {
-        let mut g = graph.lock().unwrap();
+        let g = graph.lock().unwrap();
         g.create_derived(compute)
     };
     Computed::new(derived, graph)
@@ -1896,7 +1971,7 @@ mod tests {
         assert!(!graph.dispose_signal(a.id()), "already gone");
         assert_eq!(graph.get(a), None);
         assert_eq!(
-            graph.derived[sum.id].dependencies.as_slice(),
+            graph.derived.borrow()[sum.id].dependencies.as_slice(),
             &[b.id()],
             "the derived no longer depends on the disposed signal"
         );
@@ -2177,6 +2252,46 @@ mod in_flight_creation_tests {
         });
         let outer = computed(move |_g| inner.try_get().unwrap_or(0) * 2);
         assert_eq!(outer.try_get(), Some(30));
+    }
+
+    /// A computed can be created inside another computed's evaluation.
+    ///
+    /// This is the half that needed `with_compute`: the evaluation used to
+    /// hold a raw pointer into the derived map across the closure, so an
+    /// insert could have reallocated under it. A deadlock would have been
+    /// the lucky outcome.
+    #[test]
+    fn a_computed_can_be_created_inside_a_computed() {
+        let base = signal(6_i32);
+        let outer = computed(move |g| {
+            let inner = computed(move |g2| g2.get(base).unwrap_or(0) * 7);
+            inner.try_get().unwrap_or(0) + g.get(base).unwrap_or(0)
+        });
+        assert_eq!(outer.try_get(), Some(48));
+    }
+
+    /// A derived mid-evaluation has its closure taken out, so a nested
+    /// read of the SAME derived answers `None` instead of recursing.
+    ///
+    /// A consequence of `with_compute`, and the reason it returns
+    /// `Option`: worth pinning so it is not mistaken for a bug later.
+    #[test]
+    fn a_derived_being_evaluated_reports_no_compute() {
+        let g = ReactiveGraph::new();
+        let a = g.create_signal(2_i32);
+        let d = g.create_derived(move |gg| gg.get(a).unwrap_or(0));
+        // Outer take succeeds; the inner one sees it already taken.
+        let inner = g.with_compute(d.id, |_| g.with_compute(d.id, |_| ()));
+        assert_eq!(
+            inner,
+            Some(None),
+            "a nested evaluation of the same derived should find no closure"
+        );
+        // And it is put back afterwards.
+        assert!(
+            g.with_compute(d.id, |_| ()).is_some(),
+            "the closure was not restored"
+        );
     }
 
     /// Creation must not disturb dependency tracking: the computed still
