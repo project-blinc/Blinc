@@ -2250,55 +2250,57 @@ pub const CLEAR_QUAD_SHADER: &str = include_str!("shaders/clear_quad.wgsl");
 /// Handles prim_type 0-2 with full features: borders, gradients,
 /// CSS filters, mask gradients, perspective, clip regions.
 /// Part of the multi-pipeline SDF split for driver compatibility.
-pub const SDF_CORE_SHADER: &str = include_str!("shaders/sdf_core.wgsl");
+pub const SDF_CORE_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_core.wgsl"));
 
 /// Split SDF shader: Shadow primitives
 ///
 /// Handles prim_type 3-6 (Shadow, InnerShadow, CircleShadow,
 /// CircleInnerShadow). Each case is self-contained with early return.
-pub const SDF_SHADOW_SHADER: &str = include_str!("shaders/sdf_shadow.wgsl");
+pub const SDF_SHADOW_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_shadow.wgsl"));
 
 /// Split SDF shader: 3D raymarched shapes
 ///
 /// Handles primitives with shape_type > 0 (3D box, sphere, cylinder,
 /// torus, capsule, group). 32-step raymarching with Blinn-Phong lighting.
-pub const SDF_3D_SHADER: &str = include_str!("shaders/sdf_3d.wgsl");
+pub const SDF_3D_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_3d.wgsl"));
 
 /// Split SDF shader: Notch primitives (prim_type 8)
 ///
 /// Handles concave corners with edge modifiers (scoop, bulge, cut, peak).
 /// Full border, gradient, filter, and mask support.
-pub const SDF_NOTCH_SHADER: &str = include_str!("shaders/sdf_notch.wgsl");
+pub const SDF_NOTCH_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_notch.wgsl"));
 
 /// Vertex-buffer fallback: Core shapes (no VERTEX_STORAGE needed)
 ///
 /// Same as SDF_CORE_SHADER but vs_main reads instance attributes
 /// from a vertex buffer instead of the storage buffer.
-pub const SDF_CORE_VB_SHADER: &str = include_str!("shaders/sdf_core_vb.wgsl");
+pub const SDF_CORE_VB_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_core_vb.wgsl"));
 
 /// Vertex-buffer fallback: Shadow primitives
-pub const SDF_SHADOW_VB_SHADER: &str = include_str!("shaders/sdf_shadow_vb.wgsl");
+pub const SDF_SHADOW_VB_SHADER: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/sdf_shadow_vb.wgsl"));
 
 /// Vertex-buffer fallback: 3D raymarched shapes
-pub const SDF_3D_VB_SHADER: &str = include_str!("shaders/sdf_3d_vb.wgsl");
+pub const SDF_3D_VB_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_3d_vb.wgsl"));
 
 /// Vertex-buffer fallback: Notch primitives
-pub const SDF_NOTCH_VB_SHADER: &str = include_str!("shaders/sdf_notch_vb.wgsl");
+pub const SDF_NOTCH_VB_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_notch_vb.wgsl"));
 
 /// Data-texture fallback: Core shapes (no storage buffers needed — WebGL2)
 ///
 /// Replaces storage buffer reads with textureLoad from RGBA32F data textures.
 /// Also uses vertex buffer instance attributes (inherits from VB variant).
-pub const SDF_CORE_DT_SHADER: &str = include_str!("shaders/sdf_core_dt.wgsl");
+pub const SDF_CORE_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_core_dt.wgsl"));
 
 /// Data-texture fallback: Shadow primitives
-pub const SDF_SHADOW_DT_SHADER: &str = include_str!("shaders/sdf_shadow_dt.wgsl");
+pub const SDF_SHADOW_DT_SHADER: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/sdf_shadow_dt.wgsl"));
 
 /// Data-texture fallback: 3D raymarched shapes
-pub const SDF_3D_DT_SHADER: &str = include_str!("shaders/sdf_3d_dt.wgsl");
+pub const SDF_3D_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_3d_dt.wgsl"));
 
 /// Data-texture fallback: Notch primitives
-pub const SDF_NOTCH_DT_SHADER: &str = include_str!("shaders/sdf_notch_dt.wgsl");
+pub const SDF_NOTCH_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/sdf_notch_dt.wgsl"));
 
 /// Data-texture fallback: Text rendering (no storage buffers — WebGL2)
 ///

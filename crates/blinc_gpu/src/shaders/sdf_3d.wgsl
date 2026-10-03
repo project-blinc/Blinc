@@ -219,53 +219,6 @@ fn vs_main(
 // SDF Functions (clip support)
 // ============================================================================
 
-// Rounded rectangle SDF
-fn sd_rounded_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec4<f32>) -> f32 {
-    let half_size = size * 0.5;
-    let center = origin + half_size;
-    let rel = p - center;  // Relative position from center (signed)
-    let q = abs(rel) - half_size;
-
-    // Select corner radius based on quadrant
-    // radius: (top-left, top-right, bottom-right, bottom-left)
-    // In screen coords: Y increases downward, so rel.y < 0 means top half
-    var r: f32;
-    if rel.y < 0.0 {
-        // Top half (y is above center)
-        if rel.x > 0.0 {
-            r = radius.y; // top-right
-        } else {
-            r = radius.x; // top-left
-        }
-    } else {
-        // Bottom half (y is below center)
-        if rel.x > 0.0 {
-            r = radius.z; // bottom-right
-        } else {
-            r = radius.w; // bottom-left
-        }
-    }
-
-    // Clamp radius to half the minimum dimension
-    r = min(r, min(half_size.x, half_size.y));
-
-    let q_adjusted = q + vec2<f32>(r);
-    return length(max(q_adjusted, vec2<f32>(0.0))) + min(max(q_adjusted.x, q_adjusted.y), 0.0) - r;
-}
-
-// Circle SDF
-fn sd_circle(p: vec2<f32>, center: vec2<f32>, radius: f32) -> f32 {
-    return length(p - center) - radius;
-}
-
-// Ellipse SDF (approximation)
-fn sd_ellipse(p: vec2<f32>, center: vec2<f32>, radii: vec2<f32>) -> f32 {
-    let p_centered = p - center;
-    let p_norm = p_centered / radii;
-    let dist = length(p_norm);
-    return (dist - 1.0) * min(radii.x, radii.y);
-}
-
 // Calculate clip alpha (1.0 = inside clip, 0.0 = outside)
 // For non-rect clips (circle, ellipse, polygon):
 //   clip_bounds = rect scissor from parent clips [x, y, w, h]
@@ -413,84 +366,9 @@ fn calculate_polygon_clip_alpha(p: vec2<f32>, vertex_count: u32, aux_offset: u32
 // declarations — see the longer comment next to the 2D enum block
 // above for why.
 
-fn sd_box_3d(p: vec3<f32>, half_ext: vec3<f32>, r: f32) -> f32 {
-    let q = abs(p) - half_ext + vec3<f32>(r);
-    return length(max(q, vec3<f32>(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
-}
-
-fn sd_sphere_3d(p: vec3<f32>, r: f32) -> f32 {
-    return length(p) - r;
-}
-
-fn sd_cylinder_3d(p: vec3<f32>, h: f32, r: f32) -> f32 {
-    let d = vec2<f32>(length(p.xz) - r, abs(p.y) - h);
-    return min(max(d.x, d.y), 0.0) + length(max(d, vec2<f32>(0.0)));
-}
-
-fn sd_torus_3d(p: vec3<f32>, major_r: f32, minor_r: f32) -> f32 {
-    let q = vec2<f32>(length(p.xz) - major_r, p.y);
-    return length(q) - minor_r;
-}
-
-fn sd_capsule_3d(p: vec3<f32>, h: f32, r: f32) -> f32 {
-    let py = p.y - clamp(p.y, -h, h);
-    return length(vec3<f32>(p.x, py, p.z)) - r;
-}
-
-fn sdf_3d_eval(p: vec3<f32>, shape_type: u32, half_ext: vec3<f32>, corner_r: f32) -> f32 {
-    // Use X-Y dimensions for shape sizing (not Z/depth which may be smaller)
-    let min_xy = min(half_ext.x, half_ext.y);
-    switch shape_type {
-        case 1u: { return sd_box_3d(p, half_ext, corner_r); }
-        case 2u: { return sd_sphere_3d(p, min_xy); }
-        case 3u: { return sd_cylinder_3d(p, half_ext.y, half_ext.x); }
-        case 4u: {
-            // Torus: minor + major = min_xy so outer edge fills element
-            let minor = min(min_xy / 3.0, half_ext.y);
-            let major = min_xy - minor;
-            return sd_torus_3d(p, major, minor);
-        }
-        case 5u: {
-            // Capsule: inscribe in X-Y bounding box
-            let r = min(half_ext.x, half_ext.y * 0.5);
-            let h = max(half_ext.y - r, 0.0);
-            return sd_capsule_3d(p, h, r);
-        }
-        default: { return 1e10; }
-    }
-}
-
 // ============================================================================
 // 3D Boolean Operations
 // ============================================================================
-
-fn op_union(d1: f32, d2: f32) -> f32 { return min(d1, d2); }
-fn op_subtract(d1: f32, d2: f32) -> f32 { return max(d1, -d2); }
-fn op_intersect(d1: f32, d2: f32) -> f32 { return max(d1, d2); }
-fn op_smooth_union(d1: f32, d2: f32, k: f32) -> f32 {
-    let h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
-    return mix(d2, d1, h) - k * h * (1.0 - h);
-}
-fn op_smooth_subtract(d1: f32, d2: f32, k: f32) -> f32 {
-    let h = clamp(0.5 - 0.5 * (d2 + d1) / k, 0.0, 1.0);
-    return mix(d1, -d2, h) + k * h * (1.0 - h);
-}
-fn op_smooth_intersect(d1: f32, d2: f32, k: f32) -> f32 {
-    let h = clamp(0.5 - 0.5 * (d2 - d1) / k, 0.0, 1.0);
-    return mix(d2, d1, h) + k * h * (1.0 - h);
-}
-
-fn apply_boolean_op(d_accum: f32, d_new: f32, op_type: u32, blend: f32) -> f32 {
-    switch op_type {
-        case 0u: { return op_union(d_accum, d_new); }
-        case 1u: { return op_subtract(d_accum, d_new); }
-        case 2u: { return op_intersect(d_accum, d_new); }
-        case 3u: { return op_smooth_union(d_accum, d_new, max(blend, 0.001)); }
-        case 4u: { return op_smooth_subtract(d_accum, d_new, max(blend, 0.001)); }
-        case 5u: { return op_smooth_intersect(d_accum, d_new, max(blend, 0.001)); }
-        default: { return op_union(d_accum, d_new); }
-    }
-}
 
 // ============================================================================
 // 3D Group SDF Evaluation
@@ -553,74 +431,6 @@ fn eval_group_closest_shape_color(hp: vec3<f32>, shape_count: u32, aux_offset: u
 // ============================================================================
 // UV Mapping for 3D Shapes
 // ============================================================================
-
-fn compute_uv_box(hp: vec3<f32>, half: vec3<f32>) -> vec2<f32> {
-    let abs_hp = abs(hp);
-    let safe_half = max(abs(half), vec3<f32>(0.001));
-    // Project onto dominant face
-    if abs_hp.z >= safe_half.z - 0.01 {
-        // Front/back face
-        return vec2<f32>((hp.x / safe_half.x + 1.0) * 0.5, (hp.y / safe_half.y + 1.0) * 0.5);
-    } else if abs_hp.y >= safe_half.y - 0.01 {
-        // Top/bottom face
-        return vec2<f32>((hp.x / safe_half.x + 1.0) * 0.5, (hp.z / safe_half.z + 1.0) * 0.5);
-    } else {
-        // Left/right face
-        return vec2<f32>((hp.z / safe_half.z + 1.0) * 0.5, (hp.y / safe_half.y + 1.0) * 0.5);
-    }
-}
-
-fn compute_uv_sphere(hp: vec3<f32>) -> vec2<f32> {
-    let n = normalize(hp + vec3<f32>(0.0001));
-    let u = atan2(n.z, n.x) / (2.0 * 3.14159) + 0.5;
-    let v = asin(clamp(n.y, -1.0, 1.0)) / 3.14159 + 0.5;
-    return vec2<f32>(u, v);
-}
-
-fn compute_uv_cylinder(hp: vec3<f32>, half_h: f32) -> vec2<f32> {
-    let u = atan2(hp.z, hp.x) / (2.0 * 3.14159) + 0.5;
-    let v = (hp.y / max(half_h, 0.001) + 1.0) * 0.5;
-    return vec2<f32>(u, v);
-}
-
-fn compute_uv_3d(hp: vec3<f32>, shape_type: u32, half: vec3<f32>) -> vec2<f32> {
-    switch shape_type {
-        case 1u: { return compute_uv_box(hp, half); }
-        case 2u: { return compute_uv_sphere(hp); }
-        case 3u: { return compute_uv_cylinder(hp, half.y); }
-        case 4u: { return compute_uv_cylinder(hp, half.y); } // torus uses cylindrical
-        case 5u: { return compute_uv_cylinder(hp, half.y); } // capsule uses cylindrical
-        default: { return vec2<f32>(0.5, 0.5); }
-    }
-}
-
-// Analytical ray-AABB intersection (slab method)
-// Returns vec2(t_enter, t_exit). If t_enter > t_exit, the ray misses.
-fn ray_aabb_intersect(ro: vec3<f32>, rd: vec3<f32>, half: vec3<f32>) -> vec2<f32> {
-    let inv_rd = vec3<f32>(
-        select(1.0 / rd.x, 1e10, abs(rd.x) < 1e-8),
-        select(1.0 / rd.y, 1e10, abs(rd.y) < 1e-8),
-        select(1.0 / rd.z, 1e10, abs(rd.z) < 1e-8),
-    );
-    let t1 = (-half - ro) * inv_rd;
-    let t2 = (half - ro) * inv_rd;
-    let tmin = min(t1, t2);
-    let tmax = max(t1, t2);
-    let t_enter = max(max(tmin.x, tmin.y), tmin.z);
-    let t_exit = min(min(tmax.x, tmax.y), tmax.z);
-    return vec2<f32>(t_enter, t_exit);
-}
-
-// Inverse rotation helpers (transpose of forward rotation)
-fn rotate_y_inv(p: vec3<f32>, s: f32, c: f32) -> vec3<f32> {
-    return vec3<f32>(c * p.x - s * p.z, p.y, s * p.x + c * p.z);
-}
-fn rotate_x_inv(p: vec3<f32>, s: f32, c: f32) -> vec3<f32> {
-    return vec3<f32>(p.x, c * p.y + s * p.z, -s * p.y + c * p.z);
-}
-fn rotate_z_inv(p: vec3<f32>, s: f32, c: f32) -> vec3<f32> {
-    return vec3<f32>(c * p.x + s * p.y, -s * p.x + c * p.y, p.z);
-}
 
 // ============================================================================
 // Fragment Shader
