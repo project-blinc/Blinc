@@ -3,8 +3,55 @@
 //! This module provides CPU-based SVG rasterization using resvg and tiny-skia,
 //! producing pixel-perfect anti-aliased output that can be uploaded as GPU textures.
 
+use std::sync::{Arc, OnceLock};
 use tiny_skia::{Pixmap, Transform};
 use usvg::{Options, Tree};
+
+/// The font database SVG text is shaped with, loaded once per process.
+///
+/// `Options::default()` carries an EMPTY database. resvg's `text`,
+/// `system-fonts` and `memmap-fonts` features let usvg convert text to
+/// paths, but only once it has a font to shape with, so without this every
+/// `<text>` element resolved to no glyphs and vanished.
+static SYSTEM_FONTS: OnceLock<Arc<usvg::fontdb::Database>> = OnceLock::new();
+
+fn system_fonts() -> Arc<usvg::fontdb::Database> {
+    SYSTEM_FONTS
+        .get_or_init(|| {
+            let mut db = usvg::fontdb::Database::new();
+            db.load_system_fonts();
+            Arc::new(db)
+        })
+        .clone()
+}
+
+/// Parse options for `data`.
+///
+/// Scanning system fonts is slow, and most SVGs Blinc draws are icons made
+/// of paths, so the database is only attached — and only built — when the
+/// source actually contains a `<text>` element.
+pub(crate) fn options_for(data: &[u8]) -> Options<'static> {
+    let mut options = Options::default();
+    if contains_text_element(data) {
+        options.fontdb = system_fonts();
+    }
+    options
+}
+
+/// Whether the source has a `<text>` element, as opposed to the substring
+/// appearing in an id, a class or a comment.
+fn contains_text_element(data: &[u8]) -> bool {
+    let Ok(s) = std::str::from_utf8(data) else {
+        // Not UTF-8, so no cheap scan; pay for the fonts rather than drop text.
+        return true;
+    };
+    s.match_indices("<text").any(|(i, _)| {
+        s[i + 5..]
+            .chars()
+            .next()
+            .is_none_or(|c| c.is_whitespace() || c == '>' || c == '/')
+    })
+}
 
 use crate::error::SvgError;
 
@@ -42,7 +89,7 @@ impl RasterizedSvg {
         };
 
         // Parse SVG
-        let options = Options::default();
+        let options = options_for(data);
         let tree = Tree::from_data(data, &options).map_err(|e| SvgError::Parse(e.to_string()))?;
 
         Self::from_tree(&tree, width, height)
@@ -261,5 +308,68 @@ mod tests {
             }
             Err(e) => panic!("Failed to rasterize complex SVG: {}", e),
         }
+    }
+}
+
+#[cfg(test)]
+mod text_tests {
+    use super::*;
+
+    fn opaque_pixels(r: &RasterizedSvg) -> usize {
+        r.pixels.chunks_exact(4).filter(|c| c[3] > 0).count()
+    }
+
+    /// `<text>` must draw something.
+    ///
+    /// resvg is built with `text`, `system-fonts` and `memmap-fonts`, but
+    /// those only let usvg convert text to paths once it has a font to
+    /// shape with. `Options::default()` carries an EMPTY font database, so
+    /// every glyph resolved to nothing and the whole element vanished.
+    #[test]
+    fn text_draws_pixels() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text x="0" y="22" font-size="28" fill="black">M</text></svg>"#;
+        let r = RasterizedSvg::from_str(svg, 48, 48).expect("rasterize");
+        let drawn = opaque_pixels(&r);
+        assert!(
+            drawn > 0,
+            "`<text>` drew nothing: no font was available to shape it"
+        );
+    }
+
+    /// The control: a shape needs no font, so it draws either way. If this
+    /// fails the rasterizer is broken rather than the font database.
+    #[test]
+    fn a_shape_draws_without_any_font() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="black"/></svg>"#;
+        let r = RasterizedSvg::from_str(svg, 48, 48).expect("rasterize");
+        assert!(opaque_pixels(&r) > 0, "a circle drew nothing");
+    }
+}
+
+#[cfg(test)]
+mod fontdb_gate_tests {
+    use super::contains_text_element;
+
+    /// The gate decides whether a document pays for a system font scan, so
+    /// it must look for the ELEMENT and not the substring.
+    #[test]
+    fn only_a_real_text_element_counts() {
+        assert!(contains_text_element(
+            br#"<svg><text x="0">hi</text></svg>"#
+        ));
+        assert!(contains_text_element(br#"<svg><text/></svg>"#));
+        assert!(contains_text_element(b"<svg><text>hi</text></svg>"));
+
+        // An id, a class or a comment must not drag the fonts in.
+        assert!(!contains_text_element(
+            br#"<svg><rect id="textbox"/></svg>"#
+        ));
+        assert!(!contains_text_element(
+            br#"<svg><g class="textual"><path d="M0 0"/></g></svg>"#
+        ));
+        assert!(!contains_text_element(br#"<svg><!-- textarea --></svg>"#));
+        assert!(!contains_text_element(
+            br#"<svg><path d="M0 0" fill="currentColor"/></svg>"#
+        ));
     }
 }

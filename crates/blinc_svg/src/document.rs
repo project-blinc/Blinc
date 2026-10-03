@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path as FilePath;
 
 use blinc_core::{Brush, DrawContext, Path, PathCommand, Point, Rect, Stroke};
-use usvg::{Options, Tree};
+use usvg::Tree;
 
 use crate::error::SvgError;
 use crate::path::usvg_path_to_blinc;
@@ -42,7 +42,7 @@ impl SvgDocument {
 
     /// Load an SVG document from raw bytes
     pub fn from_data(data: &[u8]) -> Result<Self, SvgError> {
-        let options = Options::default();
+        let options = crate::rasterize::options_for(data);
         let tree = Tree::from_data(data, &options).map_err(|e| SvgError::Parse(e.to_string()))?;
 
         let size = tree.size();
@@ -191,7 +191,7 @@ pub struct SvgSubElement {
 /// element that has a non-empty `id` attribute. This enables CSS selector
 /// targeting of individual SVG elements.
 pub fn extract_element_metadata(svg_str: &str) -> Result<Vec<SvgSubElement>, SvgError> {
-    let options = Options::default();
+    let options = crate::rasterize::options_for(svg_str.as_bytes());
     let tree = Tree::from_data(svg_str.as_bytes(), &options)
         .map_err(|e| SvgError::Parse(e.to_string()))?;
     let mut elements = Vec::new();

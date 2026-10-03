@@ -25,8 +25,10 @@ usvg = "0.44"
 # `default-features = false` drops the `raster-images` feature group
 # (gif + image-webp + zune-jpeg). Re-enable with this crate's
 # `svg_raster_images` feature if you embed raster bitmaps in SVGs.
-# The vector + text path stays — `text` / `system-fonts` /
-# `memmap-fonts` are kept on so SVG text rendering still works.
+# The vector + text path stays. `text` / `system-fonts` /
+# `memmap-fonts` only let usvg convert text to paths; it also needs a
+# populated font database, which `rasterize::options_for` attaches and
+# loads lazily for a document that actually contains `<text>`.
 resvg = { version = "0.44", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
 tiny-skia = "0.11"
 thiserror = "2.0"
