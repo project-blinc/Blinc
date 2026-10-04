@@ -352,6 +352,38 @@ impl FontRegistry {
     }
 
     /// Find a font ID by name, weight, and italic style
+    /// The families a platform's UI actually uses, best first.
+    ///
+    /// `GenericFont::System` means `system-ui`: the face the OS sets its
+    /// own interface in, which is what a browser resolves `system-ui`
+    /// to. Mapping it to the generic sans instead gives Helvetica on
+    /// macOS, whose metrics sit capitals about a pixel above centre in a
+    /// small button where SF Pro's centre them.
+    ///
+    /// Empty where there is no single answer, so the lookup falls
+    /// through to the generic sans.
+    fn system_ui_families() -> &'static [&'static str] {
+        if cfg!(target_os = "macos") {
+            // `.SF NS` is the real face; the others are what older
+            // systems and some installs expose it as. SF Pro is a
+            // variable font, so its weights need the `wght` axis, which
+            // the registry now sets.
+            &[
+                ".SF NS",
+                ".SF NS Text",
+                "SF Pro Text",
+                "SF Pro",
+                "Helvetica Neue",
+            ]
+        } else if cfg!(target_os = "windows") {
+            &["Segoe UI Variable Text", "Segoe UI"]
+        } else {
+            // Linux has no one UI face. These are the common desktop
+            // defaults; anything else falls through to the generic sans.
+            &["Cantarell", "Ubuntu", "Noto Sans", "DejaVu Sans"]
+        }
+    }
+
     fn find_font_id(&self, name: &str, weight: u16, italic: bool) -> Option<fontdb::ID> {
         // Query fontdb for the font by family name with requested weight/style
         let query = Query {
@@ -715,8 +747,16 @@ impl FontRegistry {
             GenericFont::Symbol => unreachable!(), // Handled above
         };
 
-        // Try to find the font (may need to load system fonts lazily)
-        let id = self.find_generic_font_id(family, weight, italic);
+        // `system-ui` is the platform's own interface face, so try that
+        // before the generic sans. Falls through when none is installed.
+        let id = if generic == GenericFont::System {
+            Self::system_ui_families()
+                .iter()
+                .find_map(|name| self.find_font_id(name, weight, italic))
+                .or_else(|| self.find_generic_font_id(family, weight, italic))
+        } else {
+            self.find_generic_font_id(family, weight, italic)
+        };
 
         // If not found in known fonts, try loading all system fonts
         let id = match id {
