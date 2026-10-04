@@ -272,3 +272,131 @@ fn a_padded_container_aligns_by_its_text() {
         (a - b).abs()
     );
 }
+
+/// An absolutely positioned child of a flex container is not a flex
+/// item: CSS positions it against the container's padding box and it
+/// takes no part in alignment. Shifting one would move a box whose
+/// position its author already computed, which is what an inline-flow
+/// implementation does when it places each piece itself.
+#[test]
+fn an_absolute_child_is_not_shifted() {
+    let mut tree = LayoutTree::new();
+
+    let root = tree.create_node(Style {
+        display: Display::Flex,
+        flex_direction: FlexDirection::Row,
+        align_items: Some(AlignItems::Baseline),
+        size: Size {
+            width: length(400.0_f32),
+            height: length(200.0_f32),
+        },
+        ..Default::default()
+    });
+
+    // An in-flow item big enough that baseline alignment would move
+    // anything aligned against it.
+    let prose = tree.create_text_node(
+        Style::default(),
+        context("paragraph", 32.0, GenericFont::SansSerif),
+    );
+    // Placed by its author, at an explicit offset.
+    let placed = tree.create_text_node(
+        Style {
+            position: Position::Absolute,
+            inset: Rect {
+                left: length(10.0_f32),
+                // Shallower than the 32px item beside it, so baseline
+                // alignment would pull it DOWN if it took part. Placing
+                // it lower would make it the deepest baseline and it
+                // would never be the one moved.
+                top: length(5.0_f32),
+                right: auto(),
+                bottom: auto(),
+            },
+            ..Default::default()
+        },
+        context("inline", 12.0, GenericFont::SansSerif),
+    );
+    tree.add_child(root, prose);
+    tree.add_child(root, placed);
+
+    tree.compute_layout(
+        root,
+        Size {
+            width: AvailableSpace::Definite(400.0),
+            height: AvailableSpace::Definite(200.0),
+        },
+    );
+
+    let b = tree.get_absolute_bounds(placed).expect("laid out");
+    assert_eq!(
+        b.y, 5.0,
+        "an absolutely positioned child was moved off the top its author set"
+    );
+}
+
+/// Nor does an out-of-flow child define its container's first baseline:
+/// a chip whose only in-flow content is text must align by that text,
+/// not by something floating over it.
+#[test]
+fn an_absolute_child_does_not_define_a_container_baseline() {
+    let mut tree = LayoutTree::new();
+
+    let root = tree.create_node(Style {
+        display: Display::Flex,
+        flex_direction: FlexDirection::Row,
+        align_items: Some(AlignItems::Baseline),
+        size: Size {
+            width: length(400.0_f32),
+            height: length(200.0_f32),
+        },
+        ..Default::default()
+    });
+
+    let prose = tree.create_text_node(
+        Style::default(),
+        context("paragraph", 16.0, GenericFont::SansSerif),
+    );
+
+    let chip = tree.create_node(Style {
+        display: Display::Flex,
+        ..Default::default()
+    });
+    // Out of flow, and deliberately first in order.
+    let floating = tree.create_text_node(
+        Style {
+            position: Position::Absolute,
+            inset: Rect {
+                left: length(0.0_f32),
+                top: length(30.0_f32),
+                right: auto(),
+                bottom: auto(),
+            },
+            ..Default::default()
+        },
+        context("x", 40.0, GenericFont::SansSerif),
+    );
+    let chip_text = tree.create_text_node(
+        Style::default(),
+        context("code", 14.0, GenericFont::Monospace),
+    );
+    tree.add_child(chip, floating);
+    tree.add_child(chip, chip_text);
+    tree.add_child(root, prose);
+    tree.add_child(root, chip);
+
+    tree.compute_layout(
+        root,
+        Size {
+            width: AvailableSpace::Definite(400.0),
+            height: AvailableSpace::Definite(200.0),
+        },
+    );
+
+    let a = drawn_baseline(&mut tree, prose, 16.0, GenericFont::SansSerif, 0.0);
+    let b = drawn_baseline(&mut tree, chip_text, 14.0, GenericFont::Monospace, 0.0);
+    assert!(
+        (a - b).abs() <= 0.5,
+        "chip aligned by its floating child instead of its text: {a:.2} vs {b:.2}"
+    );
+}

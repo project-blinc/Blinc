@@ -547,8 +547,13 @@ impl LayoutTree {
 
         // A container takes its first child's baseline. Walking in order
         // rather than taking child 0 skips children that have none, such
-        // as an icon beside a label.
+        // as an icon beside a label. Out-of-flow children are skipped
+        // for the same reason they are not aligned: they are not flex
+        // items, so they do not define the container's first baseline.
         for child in self.children(id) {
+            if !self.is_in_flow(child) {
+                continue;
+            }
             if let (Some(child_layout), Some(offset)) =
                 (self.get_layout(child), self.baseline_offset(child))
             {
@@ -569,7 +574,22 @@ impl LayoutTree {
     /// `align_self` outranks the parent's `align_items`, except where
     /// `w_fit`/`h_fit` set it as a side effect: that is not an author
     /// asking to opt out, so such a node follows the parent.
+    /// Whether a child is in flow, and so a flex item at all.
+    ///
+    /// An absolutely positioned child of a flex container is not a flex
+    /// item: it is positioned against the container's padding box and
+    /// takes no part in alignment. Shifting one would move a box whose
+    /// position its author computed.
+    fn is_in_flow(&self, child: LayoutNodeId) -> bool {
+        self.get_style(child)
+            .is_none_or(|s| s.position != Position::Absolute)
+    }
+
     fn aligns_to_baseline(&self, parent_align: Option<AlignItems>, child: LayoutNodeId) -> bool {
+        if !self.is_in_flow(child) {
+            return false;
+        }
+
         let authored = self
             .get_style(child)
             .and_then(|s| s.align_self)
