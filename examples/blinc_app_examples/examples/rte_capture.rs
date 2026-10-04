@@ -1,4 +1,4 @@
-//! Offscreen capture of the rich text editor, for debugging its layout.
+//! no-web: Offscreen capture of the rich text editor, for debugging its layout.
 //!
 //! The windowed demo needs a real window and a screen grab, which makes
 //! iteration slow and the result non-deterministic. This renders the
