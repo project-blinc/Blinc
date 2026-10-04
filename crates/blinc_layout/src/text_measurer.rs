@@ -76,11 +76,10 @@ impl FontTextMeasurer {
         let base_char_width = font_size * 0.55;
         let base_width = char_count * base_char_width;
 
-        let letter_spacing_total = if char_count > 1.0 {
-            (char_count - 1.0) * options.letter_spacing
-        } else {
-            0.0
-        };
+        // After every character, the last included — see the note in
+        // text_measure.rs. This fallback has to agree with the real
+        // path, which gets it from blinc_text's layout.
+        let letter_spacing_total = char_count * options.letter_spacing;
 
         let word_spacing_total = if word_count > 1.0 {
             (word_count - 1.0) * options.word_spacing

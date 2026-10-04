@@ -83,11 +83,12 @@ fn letter_spacing_widens_the_measured_line() {
     assert!(tree.update_text(text, |ctx| ctx.letter_spacing = 4.0));
     let spaced = width(&mut tree, root, text);
 
-    // Nine gaps between ten characters, 4px each.
-    let gaps = 9.0 * 4.0;
+    // Spacing lands after every one of the ten characters, the last
+    // included, which is what the renderer advances by.
+    let added = 10.0 * 4.0;
     assert!(
-        (spaced - tight - gaps).abs() < 0.5,
-        "expected {tight} + {gaps}, got {spaced}"
+        (spaced - tight - added).abs() < 0.5,
+        "expected {tight} + {added}, got {spaced}"
     );
 }
 

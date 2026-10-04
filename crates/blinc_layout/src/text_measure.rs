@@ -202,7 +202,9 @@ impl EstimatedTextMeasurer {
         let char_count = text.chars().count() as f32;
         let word_count = text.split_whitespace().count().max(1) as f32;
         let base = char_count * font_size * 0.55;
-        let letters = (char_count - 1.0).max(0.0) * options.letter_spacing;
+        // Every character carries its spacing, the last one included,
+        // matching what the renderer advances by and what CSS does.
+        let letters = char_count * options.letter_spacing;
         let words = (word_count - 1.0).max(0.0) * options.word_spacing;
         base + letters + words
     }
@@ -271,12 +273,11 @@ impl TextMeasurer for EstimatedTextMeasurer {
         let base_char_width = font_size * 0.55;
         let base_width = char_count * base_char_width;
 
-        // Add letter spacing (per character gap)
-        let letter_spacing_total = if char_count > 1.0 {
-            (char_count - 1.0) * options.letter_spacing
-        } else {
-            0.0
-        };
+        // Letter spacing is added after EVERY character, the last one
+        // included: that is what blinc_text advances by when it draws,
+        // and what CSS does. Counting the gaps instead would make the
+        // box one spacing narrower than the line in it.
+        let letter_spacing_total = char_count * options.letter_spacing;
 
         // Add word spacing (per word gap)
         let word_spacing_total = if word_count > 1.0 {
