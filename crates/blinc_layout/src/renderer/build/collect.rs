@@ -376,6 +376,7 @@ impl RenderTree {
                         weight: info.weight,
                         italic: info.italic,
                         ascender: info.ascender,
+                        half_leading: info.half_leading,
                     })
                 } else {
                     ElementType::Div
@@ -688,6 +689,7 @@ impl RenderTree {
                         weight: info.weight,
                         italic: info.italic,
                         ascender: info.ascender,
+                        half_leading: info.half_leading,
                     })
                 } else {
                     ElementType::Div

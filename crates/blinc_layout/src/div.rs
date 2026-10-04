@@ -4442,6 +4442,9 @@ pub struct TextRenderInfo {
     /// Font ascender in pixels (distance from baseline to top)
     /// Used for accurate baseline alignment across different fonts
     pub ascender: f32,
+    /// Half the line box's leading. CSS puts the baseline this far
+    /// below the box top, before the ascender.
+    pub half_leading: f32,
     /// Whether text has strikethrough decoration
     pub strikethrough: bool,
     /// Whether text has underline decoration
@@ -4494,6 +4497,8 @@ pub struct StyledTextRenderInfo {
     pub italic: bool,
     /// Measured ascender from font metrics (for consistent baseline alignment)
     pub ascender: f32,
+    /// Half the line box's leading, above the ascender
+    pub half_leading: f32,
 }
 
 /// SVG render data extracted from element

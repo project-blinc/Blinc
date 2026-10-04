@@ -99,6 +99,7 @@ pub struct RichText {
     measured_width: f32,
     /// Measured ascender from font metrics
     ascender: f32,
+    half_leading: f32,
     /// Cursor style when hovering
     cursor: Option<crate::element::CursorStyle>,
     /// Word spacing
@@ -151,6 +152,7 @@ impl RichText {
             line_height: 1.2,
             measured_width: 0.0,
             ascender: 14.0 * 0.8,
+            half_leading: 0.0,
             cursor: has_links.then_some(crate::element::CursorStyle::Pointer),
             word_spacing: 0.0,
             event_handlers: EventHandlers::new(),
@@ -216,6 +218,7 @@ impl RichText {
             line_height: 1.2,
             measured_width: 0.0,
             ascender: 14.0 * 0.8,
+            half_leading: 0.0,
             cursor: has_links.then_some(crate::element::CursorStyle::Pointer),
             word_spacing: 0.0,
             event_handlers: EventHandlers::new(),
@@ -696,6 +699,7 @@ impl ElementBuilder for RichText {
             weight: self.weight,
             italic: self.italic,
             ascender: self.ascender,
+            half_leading: self.half_leading,
         })
     }
 }

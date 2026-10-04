@@ -622,6 +622,8 @@ struct TextElement {
     z_index: u32,
     /// Font ascender in pixels (distance from baseline to top)
     ascender: f32,
+    /// Half the line box's leading, above the ascender
+    half_leading: f32,
     /// Whether text has strikethrough decoration
     strikethrough: bool,
     /// Whether text has underline decoration
@@ -3653,7 +3655,7 @@ impl RenderContext {
                 TextVerticalAlign::Baseline => {
                     // Use the actual font ascender for baseline positioning.
                     // This ensures each font aligns by its true baseline.
-                    let baseline_y = text.y + text.ascender;
+                    let baseline_y = text.y + text.half_leading + text.ascender;
                     (TextAnchor::Baseline, baseline_y, false)
                 }
             };
@@ -6750,6 +6752,7 @@ impl RenderContext {
                             .unwrap_or(text_data.letter_spacing),
                         z_index: *z_layer,
                         ascender: text_data.ascender * scale,
+                        half_leading: text_data.half_leading * scale,
                         strikethrough: render_node.props.text_decoration.map_or(
                             text_data.strikethrough,
                             |td| {
@@ -7227,6 +7230,7 @@ impl RenderContext {
 
                     // Use consistent ascender from element for baseline alignment
                     let scaled_ascender = styled_data.ascender * scale;
+                    let scaled_half_leading = styled_data.half_leading * scale;
 
                     // Where the text wraps at this node's laid-out width.
                     // Segments are placed within a line, so a segment
@@ -7332,6 +7336,7 @@ impl RenderContext {
                                 letter_spacing: render_node.props.letter_spacing.unwrap_or(0.0),
                                 z_index: *z_layer,
                                 ascender: scaled_ascender * effective_motion_scale.1, // Scale ascender with motion
+                                half_leading: scaled_half_leading * effective_motion_scale.1,
                                 strikethrough,
                                 underline,
                                 decoration_color: render_node.props.text_decoration_color,
@@ -9569,7 +9574,7 @@ impl RenderContext {
                 }
                 TextVerticalAlign::Top => (TextAnchor::Top, text.y, true),
                 TextVerticalAlign::Baseline => {
-                    let baseline_y = text.y + text.ascender;
+                    let baseline_y = text.y + text.half_leading + text.ascender;
                     (TextAnchor::Baseline, baseline_y, false)
                 }
             };
@@ -9770,7 +9775,7 @@ impl RenderContext {
                 }
                 TextVerticalAlign::Top => (TextAnchor::Top, text.y, true),
                 TextVerticalAlign::Baseline => {
-                    let baseline_y = text.y + text.ascender;
+                    let baseline_y = text.y + text.half_leading + text.ascender;
                     (TextAnchor::Baseline, baseline_y, false)
                 }
             };
@@ -9870,7 +9875,7 @@ impl RenderContext {
                 }
                 TextVerticalAlign::Top => (TextAnchor::Top, text.y, true),
                 TextVerticalAlign::Baseline => {
-                    let baseline_y = text.y + text.ascender;
+                    let baseline_y = text.y + text.half_leading + text.ascender;
                     (TextAnchor::Baseline, baseline_y, false)
                 }
             };
@@ -10705,7 +10710,7 @@ impl RenderContext {
                     }
                     TextVerticalAlign::Top => (TextAnchor::Top, text.y, true),
                     TextVerticalAlign::Baseline => {
-                        let baseline_y = text.y + text.ascender;
+                        let baseline_y = text.y + text.half_leading + text.ascender;
                         (TextAnchor::Baseline, baseline_y, false)
                     }
                 };
@@ -10873,7 +10878,7 @@ impl RenderContext {
                 }
                 TextVerticalAlign::Top => (TextAnchor::Top, text.y, true),
                 TextVerticalAlign::Baseline => {
-                    let baseline_y = text.y + text.ascender;
+                    let baseline_y = text.y + text.half_leading + text.ascender;
                     (TextAnchor::Baseline, baseline_y, false)
                 }
             };
@@ -11282,7 +11287,7 @@ fn generate_text_debug_primitives(texts: &[TextElement]) -> Vec<GpuPrimitive> {
 
         // Baseline indicator (magenta horizontal line)
         // The baseline is at y + ascender
-        let baseline_y = text.y + text.ascender;
+        let baseline_y = text.y + text.half_leading + text.ascender;
         let baseline = GpuPrimitive::rect(text.x, baseline_y - 0.5, debug_width, 1.0)
             .with_color(1.0, 0.0, 1.0, 0.6); // Magenta
         primitives.push(baseline);

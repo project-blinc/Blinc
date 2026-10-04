@@ -141,6 +141,7 @@ impl RenderTree {
             word_spacing: info.word_spacing,
             letter_spacing: info.letter_spacing,
             ascender: info.ascender,
+            half_leading: info.half_leading,
             strikethrough,
             underline,
         }

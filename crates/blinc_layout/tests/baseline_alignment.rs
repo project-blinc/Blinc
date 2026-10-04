@@ -11,11 +11,12 @@
 //! faces at different sizes have different ascenders, so their drawn
 //! baselines diverge.
 //!
-//! These tests state the property that has to hold. They are ignored
-//! because satisfying them needs a first baseline to reach taffy, which
-//! taffy 0.6 has no extension point for: the dispatch that would carry
-//! it lives on `TaffyView`, which is `pub(crate)` and reaches into
-//! private tree state, so no wrapper can override it.
+//! `LayoutTree::align_baselines` corrects this after taffy runs: it
+//! measures each baseline-aligned item's own baseline and shifts the
+//! items of a line onto the deepest one. taffy is left alone, because
+//! the dispatch that would carry a baseline lives on `TaffyView`, which
+//! is `pub(crate)` and reaches into private tree state, so no wrapper
+//! can override it.
 
 use blinc_layout::div::GenericFont;
 use blinc_layout::text_measure::{TextLayoutOptions, measure_text_with_options};
@@ -43,9 +44,9 @@ fn context(content: &str, font_size: f32, generic: GenericFont) -> TextMeasureCo
 }
 
 /// Where Blinc draws the baseline of a text node: the node's top, plus
-/// its own top padding, plus the ascender of the face it is drawn in.
-/// Mirrors the paint path rather than restating CSS, because this is
-/// the position a reader actually sees.
+/// its own top padding, plus half the line box's leading, plus the
+/// ascender of the face it is drawn in. Mirrors the paint path rather
+/// than restating CSS, because this is the position a reader sees.
 fn drawn_baseline(
     tree: &mut LayoutTree,
     node: LayoutNodeId,
@@ -55,13 +56,14 @@ fn drawn_baseline(
 ) -> f32 {
     let metrics = measure_text_with_options("x", font_size, &options(generic));
     let top = tree.get_absolute_bounds(node).expect("laid out").y;
-    top + padding_top + metrics.ascender
+    let line_box = metrics.height / metrics.line_count.max(1) as f32;
+    let half_leading = (line_box - (metrics.ascender - metrics.descender)) / 2.0;
+    top + padding_top + half_leading + metrics.ascender
 }
 
 /// The request: 16px sans beside 14px monospace with 1px padding, in a
 /// row that asks for baseline alignment, must share a baseline.
 #[test]
-#[ignore = "taffy 0.6 gives a text leaf no first baseline; needs the decision recorded in git-bug"]
 fn different_sizes_share_a_baseline() {
     let mut tree = LayoutTree::new();
 
@@ -155,11 +157,11 @@ fn the_same_face_at_the_same_size_already_aligns() {
     assert!((a - b).abs() <= 0.5, "{a} vs {b}");
 }
 
-/// Documents what taffy does today, so the gap is visible in the suite
-/// rather than only in a report. If this ever fails, taffy has started
-/// giving leaves a baseline and the ignored test above should be tried.
+/// The widest spread in the request's spirit: a heading beside small
+/// text. Box bottoms used to coincide here, which put the big text's
+/// baseline about `0.4 * (32 - 12)` px above the small one's.
 #[test]
-fn today_baseline_alignment_aligns_box_bottoms() {
+fn a_wide_size_spread_shares_a_baseline() {
     let mut tree = LayoutTree::new();
 
     let root = tree.create_node(Style {
@@ -192,14 +194,81 @@ fn today_baseline_alignment_aligns_box_bottoms() {
         },
     );
 
+    let a = drawn_baseline(&mut tree, tall, 32.0, GenericFont::SansSerif, 0.0);
+    let b = drawn_baseline(&mut tree, short, 12.0, GenericFont::SansSerif, 0.0);
+    assert!(
+        (a - b).abs() <= 0.5,
+        "baselines diverge by {:.2}px: 32px at {a:.2}, 12px at {b:.2}",
+        (a - b).abs()
+    );
+
+    // And the boxes must NOT be bottom-aligned any more, which is what
+    // the old fallback did.
     let tall_b = tree.get_absolute_bounds(tall).expect("laid out");
     let short_b = tree.get_absolute_bounds(short).expect("laid out");
+    assert!(
+        ((tall_b.y + tall_b.height) - (short_b.y + short_b.height)).abs() > 0.5,
+        "boxes are still bottom-aligned, so nothing was shifted"
+    );
+}
+
+/// A container takes its first child's baseline, which is what makes an
+/// inline `code` chip (a padded box around text) line up with the prose
+/// beside it. Without it the chip would align by its box instead.
+#[test]
+fn a_padded_container_aligns_by_its_text() {
+    let mut tree = LayoutTree::new();
+
+    let root = tree.create_node(Style {
+        display: Display::Flex,
+        flex_direction: FlexDirection::Row,
+        align_items: Some(AlignItems::Baseline),
+        size: Size {
+            width: length(400.0_f32),
+            height: length(200.0_f32),
+        },
+        ..Default::default()
+    });
+
+    let prose = tree.create_text_node(
+        Style::default(),
+        context("paragraph", 16.0, GenericFont::SansSerif),
+    );
+    // The chip: a padded box whose only child is smaller mono text.
+    let chip = tree.create_node(Style {
+        display: Display::Flex,
+        padding: Rect {
+            left: length(4.0_f32),
+            right: length(4.0_f32),
+            top: length(3.0_f32),
+            bottom: length(3.0_f32),
+        },
+        ..Default::default()
+    });
+    let chip_text = tree.create_text_node(
+        Style::default(),
+        context("code", 14.0, GenericFont::Monospace),
+    );
+    tree.add_child(chip, chip_text);
+    tree.add_child(root, prose);
+    tree.add_child(root, chip);
+
+    tree.compute_layout(
+        root,
+        Size {
+            width: AvailableSpace::Definite(400.0),
+            height: AvailableSpace::Definite(200.0),
+        },
+    );
+
+    let a = drawn_baseline(&mut tree, prose, 16.0, GenericFont::SansSerif, 0.0);
+    // The chip's text carries no padding of its own; the chip's padding
+    // already moved it down, and absolute bounds account for that.
+    let b = drawn_baseline(&mut tree, chip_text, 14.0, GenericFont::Monospace, 0.0);
 
     assert!(
-        ((tall_b.y + tall_b.height) - (short_b.y + short_b.height)).abs() <= 0.5,
-        "expected bottoms to coincide, which is the fallback taffy uses: \
-         {} vs {}",
-        tall_b.y + tall_b.height,
-        short_b.y + short_b.height
+        (a - b).abs() <= 0.5,
+        "chip text diverges by {:.2}px: prose at {a:.2}, code at {b:.2}",
+        (a - b).abs()
     );
 }

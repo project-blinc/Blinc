@@ -190,6 +190,10 @@ name = "cn_demo"
 required-features = ["cn"]
 
 [[example]]
+name = "baseline_capture"
+required-features = ["cn"]
+
+[[example]]
 name = "spinner_test"
 required-features = ["cn"]
 

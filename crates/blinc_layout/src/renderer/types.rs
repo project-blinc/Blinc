@@ -103,6 +103,9 @@ pub struct TextData {
     pub letter_spacing: f32,
     /// Font ascender in pixels (distance from baseline to top)
     pub ascender: f32,
+    /// Half the line box's leading, above the ascender. CSS puts the
+    /// baseline this far below the box top, before the ascender.
+    pub half_leading: f32,
     /// Whether text has strikethrough decoration
     pub strikethrough: bool,
     /// Whether text has underline decoration
@@ -185,6 +188,8 @@ pub struct StyledTextData {
     pub italic: bool,
     /// Measured ascender for consistent baseline alignment
     pub ascender: f32,
+    /// Half the line box's leading, above the ascender
+    pub half_leading: f32,
 }
 
 /// SVG data for rendering

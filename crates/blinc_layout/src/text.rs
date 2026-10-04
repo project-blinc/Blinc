@@ -73,6 +73,9 @@ pub struct Text {
     letter_spacing: f32,
     /// Measured ascender from font metrics (distance from baseline to top)
     ascender: f32,
+    /// Half the line box's leading, the space CSS puts above the
+    /// ascender. The baseline sits this far below the box top.
+    half_leading: f32,
     /// Whether text has strikethrough decoration
     strikethrough: bool,
     /// Whether text has underline decoration
@@ -133,6 +136,7 @@ impl Text {
             word_spacing: 0.0,    // normal word spacing
             letter_spacing: 0.0,  // normal letter spacing
             ascender: 14.0 * 0.8, // will be set by update_size_estimate
+            half_leading: 0.0,    // same
             strikethrough: false,
             underline: false,
             pointer_events_none: false,
@@ -478,6 +482,7 @@ impl Text {
 
         // Store actual ascender from font metrics for baseline alignment
         self.ascender = metrics.ascender;
+        self.half_leading = crate::tree::half_leading(&metrics);
 
         if self.wrap {
             // For wrapping text, we want Taffy to call our measure function
@@ -622,6 +627,23 @@ impl ElementBuilder for Text {
 
         // For wrapping text, use a measure context so Taffy can calculate
         // the correct multi-line height based on available width
+        // Both branches report the baseline: a non-wrapping node gets
+        // fixed dimensions and no measure context, so the tree has
+        // nothing to measure from.
+        //
+        // Only for anchors that actually draw on it. `Top` centres the
+        // glyphs in the line box, which puts the first baseline at
+        // half-leading plus the ascender, and `Baseline` targets that
+        // same position. `Center` is optically centred by cap height
+        // instead, so it has no first baseline to align by and keeps
+        // whatever taffy gave it.
+        let baseline = match self.v_align {
+            TextVerticalAlign::Top | TextVerticalAlign::Baseline => {
+                Some(self.half_leading + self.ascender)
+            }
+            TextVerticalAlign::Center => None,
+        };
+
         if self.wrap {
             let context = TextMeasureContext {
                 content: self.content.clone(),
@@ -634,10 +656,18 @@ impl ElementBuilder for Text {
                 font_weight: self.weight.weight(),
                 italic: self.italic,
             };
-            tree.create_text_node(self.style.clone(), context)
+            let node = tree.create_text_node(self.style.clone(), context);
+            if let Some(baseline) = baseline {
+                tree.set_text_baseline(node, baseline);
+            }
+            node
         } else {
             // Non-wrapping text can use fixed dimensions
-            tree.create_node(self.style.clone())
+            let node = tree.create_node(self.style.clone());
+            if let Some(baseline) = baseline {
+                tree.set_text_baseline(node, baseline);
+            }
+            node
         }
     }
 
@@ -695,6 +725,7 @@ impl ElementBuilder for Text {
             word_spacing: self.word_spacing,
             letter_spacing: self.letter_spacing,
             ascender: self.ascender,
+            half_leading: self.half_leading,
             strikethrough: self.strikethrough,
             underline: self.underline,
         })
