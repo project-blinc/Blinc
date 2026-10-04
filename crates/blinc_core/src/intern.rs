@@ -76,13 +76,35 @@ mod tests {
         assert_eq!(&*b, "bar");
     }
 
+    /// Interning the same string repeatedly adds one entry, however
+    /// many times it is asked for.
+    ///
+    /// Asserted through the pool's own bookkeeping rather than its
+    /// total size. The pool is process-global, so a sibling test
+    /// interning its own keys moves the total between two reads of it;
+    /// under `cargo test`, which runs a binary's tests as threads, that
+    /// made `pool_size() <= before + 1` fail intermittently. `nextest`
+    /// gives each test its own process and hid it.
     #[test]
     fn pool_size_is_deduped() {
-        let before = pool_size();
-        let _x = intern("dedup-test-key-aaaa");
-        let _y = intern("dedup-test-key-aaaa");
-        let _z = intern("dedup-test-key-aaaa");
-        // Only one new entry, regardless of how many times we interned it.
-        assert!(pool_size() <= before + 1);
+        const KEY: &str = "dedup-test-key-aaaa";
+        let x = intern(KEY);
+        let y = intern(KEY);
+        let z = intern(KEY);
+
+        // One entry: all three handles are the same allocation.
+        assert!(Arc::ptr_eq(&x, &y));
+        assert!(Arc::ptr_eq(&y, &z));
+
+        // And the pool holds that one, not three.
+        assert_eq!(
+            pool()
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|k| &***k == KEY)
+                .count(),
+            1
+        );
     }
 }
