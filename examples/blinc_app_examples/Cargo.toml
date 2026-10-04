@@ -198,6 +198,10 @@ name = "notch_border_capture"
 required-features = ["cn"]
 
 [[example]]
+name = "rte_capture"
+required-features = ["cn"]
+
+[[example]]
 name = "spinner_test"
 required-features = ["cn"]
 

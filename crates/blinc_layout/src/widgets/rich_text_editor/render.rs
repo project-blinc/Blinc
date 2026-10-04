@@ -325,9 +325,44 @@ fn absolute_positioned_line(
         if bstart >= bend {
             continue;
         }
-        let run_line = slice_styled_line(visual_line, bstart, bend);
         let font_family = if is_code { &code_font } else { &body_font };
-        let width = super::state::measure_width(
+        // Advance by the run's FULL width, spaces included, so the next
+        // run starts where this one really ends.
+        let full = slice_styled_line(visual_line, bstart, bend);
+        let width =
+            super::state::measure_width(&full.text, font_size, weight, italic, Some(font_family));
+
+        // Draw the run without its edge spaces, and shift it right by
+        // the leading space's width. Text rendering drops a leading or
+        // trailing space, so a run whose box merely reserved room for
+        // one came out butted against its neighbour: "a`code`via". The
+        // space is now spent on position rather than left to the
+        // renderer to honour.
+        let lead = bstart + (full.text.len() - full.text.trim_start().len());
+        let trail = bend - (full.text.len() - full.text.trim_end().len());
+        let (draw_start, draw_end) = if lead < trail {
+            (lead, trail)
+        } else {
+            // All whitespace: nothing to draw, but still advance.
+            (bstart, bstart)
+        };
+        if draw_start >= draw_end {
+            x_cursor += width;
+            continue;
+        }
+        let run_line = slice_styled_line(visual_line, draw_start, draw_end);
+        let lead_w = if draw_start > bstart {
+            super::state::measure_width(
+                &visual_line.text[bstart..draw_start],
+                font_size,
+                weight,
+                italic,
+                Some(font_family),
+            )
+        } else {
+            0.0
+        };
+        let draw_w = super::state::measure_width(
             &run_line.text,
             font_size,
             weight,
@@ -336,13 +371,14 @@ fn absolute_positioned_line(
         );
         let positioned = div()
             .absolute()
-            .left(x_cursor)
+            .left(x_cursor + lead_w)
             .top(0.0)
+            .w(draw_w.ceil())
             .h(line_height_px)
             .child(if is_code {
-                make_code_run(&run_line, theme, font_size, weight, italic)
+                make_code_run(&run_line, theme, font_size, weight, italic).w(draw_w.ceil())
             } else {
-                make_rich_text(&run_line, theme, font_size, weight, italic)
+                make_rich_text(&run_line, theme, font_size, weight, italic).w(draw_w.ceil())
             });
         container = container.child(positioned);
         x_cursor += width;
