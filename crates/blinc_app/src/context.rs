@@ -802,6 +802,15 @@ struct DebugBoundsElement {
     depth: u32,
 }
 
+/// Atlas fullness, by shelf extent, above which a walk tries to reclaim.
+/// Below it the atlas has room and a GC would only cost re-rasterisation.
+const ATLAS_GC_PRESSURE: f32 = 0.85;
+
+/// Walks a glyph may go undrawn before it is reclaimable. Generous
+/// because reclaiming forces a re-walk, and a glyph that reappears has
+/// to be rasterised again.
+const ATLAS_GC_MAX_AGE: u64 = 120;
+
 impl RenderContext {
     /// Create a new render context
     pub(crate) fn new(
@@ -5930,6 +5939,20 @@ impl RenderContext {
         Vec<ImageElement>,
         Vec<FlowElement>,
     ) {
+        // One atlas epoch per walk, bumped before anything is drawn so
+        // this walk's glyphs land in the new epoch. Reclaim first, while
+        // nothing from this walk has been touched yet: a glyph the last
+        // walk drew is one epoch old and safe.
+        self.text_ctx.begin_atlas_epoch();
+        if self.text_ctx.atlas_utilization() >= ATLAS_GC_PRESSURE
+            && self.text_ctx.gc_atlas(ATLAS_GC_MAX_AGE)
+        {
+            // Reclaimed space is zeroed and reused, so any cached batch
+            // holding baked PRIM_TEXT UVs into it would sample whatever
+            // lands there next. This walk rebuilds them.
+            self.renderer.invalidate_static_layer();
+        }
+
         // Reuse scratch buffers - take them, clear, populate, and return
         // On next call they'll be reallocated if not returned
         let mut texts = std::mem::take(&mut self.scratch_texts);

@@ -132,6 +132,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .unwrap_or_else(|| "baseline_capture.png".to_string());
 
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
+        )
+        .init();
+
     ThemeState::init(
         blinc_theme::themes::universal::HybridTheme::bundle(),
         ColorScheme::Dark,
@@ -143,7 +150,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let pixels = app.render_to_rgba8(&scene(), W, H)?;
+    // Repeat the walk so anything epoch-driven (the glyph atlas GC) has
+    // previous walks to act on. One render exercises none of it.
+    let walks: u32 = std::env::args()
+        .nth(2)
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(1);
+    let mut pixels = Vec::new();
+    for _ in 0..walks {
+        pixels = app.render_to_rgba8(&scene(), W, H)?;
+    }
 
     let img: image::RgbaImage = image::ImageBuffer::from_raw(W, H, pixels)
         .ok_or("pixel buffer did not match the requested size")?;

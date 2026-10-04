@@ -152,6 +152,43 @@ impl TextRenderingContext {
         std::mem::replace(&mut self.atlas_grew_since_last_take, false)
     }
 
+    /// Start a new atlas epoch, so `gc_atlas` can tell a glyph still in
+    /// use from one that has gone cold.
+    ///
+    /// Call once per full text walk, NOT per frame. A cached batch
+    /// serves frames without re-preparing its text, so its glyphs go
+    /// untouched; counting frames would age out glyphs that are still
+    /// on screen. Counting walks ages a glyph only when a walk that
+    /// could have drawn it did not.
+    pub fn begin_atlas_epoch(&mut self) {
+        self.renderer.begin_atlas_epoch();
+    }
+
+    /// Reclaim atlas space from glyphs unused for `max_age` walks.
+    ///
+    /// Returns true when anything was reclaimed, which means any cached
+    /// primitive holding baked `PRIM_TEXT` UVs may now point at freed
+    /// space and the caller must invalidate its render cache.
+    pub fn gc_atlas(&mut self, max_age: u64) -> bool {
+        let report = self.renderer.gc_atlas(max_age);
+        if report.is_empty() {
+            return false;
+        }
+        tracing::debug!(
+            shelves = report.shelves_reclaimed,
+            glyphs = report.glyphs_dropped,
+            bytes = report.bytes_reclaimed,
+            occupancy = self.renderer.atlas_occupancy(),
+            "glyph atlas reclaimed"
+        );
+        true
+    }
+
+    /// How full the glyph atlas is, by shelf extent.
+    pub fn atlas_utilization(&self) -> f32 {
+        self.renderer.atlas_utilization()
+    }
+
     /// Load the default font from a file path
     pub fn load_font(&mut self, path: &std::path::Path) -> Result<(), blinc_text::TextError> {
         self.renderer.load_default_font(path)
