@@ -164,6 +164,14 @@ pub struct FontFace {
     weight: FontWeight,
     /// Font style
     style: FontStyle,
+    /// `wght` axis value to apply, for a variable face asked for a
+    /// weight its default instance does not provide.
+    ///
+    /// A variable file carries every weight in one face, so selecting by
+    /// weight picks the same file each time and the axis has to be set
+    /// explicitly. `None` for a static face, which carries its weight in
+    /// the file itself.
+    variation_weight: Option<f32>,
 }
 
 impl FontFace {
@@ -233,6 +241,7 @@ impl FontFace {
             family_name,
             weight,
             style,
+            variation_weight: None,
         })
     }
 
@@ -256,6 +265,33 @@ impl FontFace {
     /// Get font family name
     pub fn family_name(&self) -> &str {
         &self.family_name
+    }
+    /// The `wght` axis value to apply when shaping and rasterizing, if
+    /// this face is variable and was asked for a weight its default
+    /// instance does not provide.
+    pub fn variation_weight(&self) -> Option<f32> {
+        self.variation_weight
+    }
+
+    /// Ask for `weight` from this face's `wght` axis.
+    ///
+    /// A no-op on a static face: there is no axis to move, and the
+    /// registry already picked the file whose own weight was closest.
+    pub fn set_variation_weight(&mut self, weight: u16) {
+        if self.has_weight_axis() {
+            self.variation_weight = Some(weight as f32);
+        }
+    }
+
+    /// Whether the face carries a `wght` variation axis.
+    pub fn has_weight_axis(&self) -> bool {
+        ttf_parser::Face::parse(self.data(), self.face_index)
+            .map(|f| {
+                f.variation_axes()
+                    .into_iter()
+                    .any(|a| a.tag == ttf_parser::Tag::from_bytes(b"wght"))
+            })
+            .unwrap_or(false)
     }
 
     /// Get font weight

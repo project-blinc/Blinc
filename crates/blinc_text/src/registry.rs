@@ -337,7 +337,12 @@ impl FontRegistry {
         };
 
         // Get the font data
-        let face = self.load_face_by_id(id)?;
+        let mut face = self.load_face_by_id(id)?;
+        // A variable file answers every weight with the same face, so
+        // ask its `wght` axis for the one requested. A no-op on a static
+        // face, where the id above already chose by weight. The cache
+        // key carries the weight, so each gets its own axis value.
+        face.set_variation_weight(weight);
         let face = Arc::new(face);
 
         // Cache it
@@ -739,7 +744,12 @@ impl FontRegistry {
             }
         };
 
-        let face = self.load_face_by_id(id)?;
+        let mut face = self.load_face_by_id(id)?;
+        // A variable file answers every weight with the same face, so
+        // ask its `wght` axis for the one requested. A no-op on a static
+        // face, where the id above already chose by weight. The cache
+        // key carries the weight, so each gets its own axis value.
+        face.set_variation_weight(weight);
         let face = Arc::new(face);
 
         // Cache it

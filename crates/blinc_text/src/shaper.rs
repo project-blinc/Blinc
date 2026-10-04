@@ -66,7 +66,16 @@ impl TextShaper {
     pub fn shape(&self, text: &str, font_face: &FontFace, font_size: f32) -> ShapedText {
         // Create rustybuzz Face from font data with correct face index
         let face = match Face::from_slice(font_face.data(), font_face.face_index()) {
-            Some(f) => f,
+            Some(mut f) => {
+                // A variable face carries every weight in one file, so
+                // the axis has to be set or it shapes at its default
+                // instance. Advances differ per weight, so this has to
+                // happen before shaping, not only before rasterizing.
+                if let Some(w) = font_face.variation_weight() {
+                    f.set_variation(ttf_parser::Tag::from_bytes(b"wght"), w);
+                }
+                f
+            }
             None => {
                 // Fallback: return basic glyph sequence without shaping
                 return self.fallback_shape(text, font_face, font_size);
@@ -155,7 +164,16 @@ impl TextShaper {
         features: &[rustybuzz::Feature],
     ) -> ShapedText {
         let face = match Face::from_slice(font_face.data(), font_face.face_index()) {
-            Some(f) => f,
+            Some(mut f) => {
+                // A variable face carries every weight in one file, so
+                // the axis has to be set or it shapes at its default
+                // instance. Advances differ per weight, so this has to
+                // happen before shaping, not only before rasterizing.
+                if let Some(w) = font_face.variation_weight() {
+                    f.set_variation(ttf_parser::Tag::from_bytes(b"wght"), w);
+                }
+                f
+            }
             None => return self.fallback_shape(text, font_face, font_size),
         };
 

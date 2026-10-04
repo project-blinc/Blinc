@@ -82,11 +82,14 @@ impl GlyphRasterizer {
             .ok_or(TextError::InvalidFontData)?;
 
         // Create a scaler for this font at the requested size
-        let mut scaler = self
-            .scale_context
-            .builder(swash_font)
-            .size(font_size)
-            .build();
+        // Same axis the shaper set: a variable face rasterizes at its
+        // default instance otherwise, so every weight would draw as
+        // regular.
+        let mut builder = self.scale_context.builder(swash_font).size(font_size);
+        if let Some(w) = font.variation_weight() {
+            builder = builder.variations([swash::Setting::from(("wght", w))]);
+        }
+        let mut scaler = builder.build();
 
         // Get advance width from font metrics (scale from font units to pixels)
         let metrics = swash_font.metrics(&[]);
@@ -162,11 +165,14 @@ impl GlyphRasterizer {
             .ok_or(TextError::InvalidFontData)?;
 
         // Create a scaler for this font at the requested size
-        let mut scaler = self
-            .scale_context
-            .builder(swash_font)
-            .size(font_size)
-            .build();
+        // Same axis the shaper set: a variable face rasterizes at its
+        // default instance otherwise, so every weight would draw as
+        // regular.
+        let mut builder = self.scale_context.builder(swash_font).size(font_size);
+        if let Some(w) = font.variation_weight() {
+            builder = builder.variations([swash::Setting::from(("wght", w))]);
+        }
+        let mut scaler = builder.build();
 
         // Get advance width from font metrics
         let metrics = swash_font.metrics(&[]);
