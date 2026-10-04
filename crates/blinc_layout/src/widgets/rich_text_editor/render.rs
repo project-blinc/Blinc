@@ -319,6 +319,21 @@ fn absolute_positioned_line(
     // absolute children at the precomputed x positions.
     let body_font = crate::div::FontFamily::default();
     let code_font = crate::div::FontFamily::monospace();
+
+    // Put every run on one baseline. Each is otherwise centred in its own
+    // box by half-leading, so the monospace of an inline code run draws
+    // above the prose beside it. `make_code_run` pins the weight to
+    // Normal, so its baseline is computed that way.
+    let body_baseline = run_baseline(font_size, theme.line_height, weight, italic, &body_font);
+    let code_baseline = run_baseline(
+        font_size,
+        theme.line_height,
+        FontWeight::Normal,
+        false,
+        &code_font,
+    );
+    let line_baseline = body_baseline.max(code_baseline);
+
     let mut x_cursor = 0.0_f32;
     let mut container = div().w(line_width).h(line_height_px).relative();
     for (bstart, bend, is_code) in byte_ranges {
@@ -369,10 +384,18 @@ fn absolute_positioned_line(
             italic,
             Some(font_family),
         );
+        // Drop the run so its own baseline meets the line's.
+        let own_baseline = if is_code {
+            code_baseline
+        } else {
+            body_baseline
+        };
         let positioned = div()
             .absolute()
             .left(x_cursor + lead_w)
-            .top(0.0)
+            // Rounded: an absolute top lands on a whole pixel anyway,
+            // and letting it round implicitly left the run a pixel off.
+            .top((line_baseline - own_baseline).round())
             .w(draw_w.ceil())
             .h(line_height_px)
             .child(if is_code {
@@ -514,6 +537,35 @@ fn render_line_row(
         }
     }
     row
+}
+
+/// Distance from a run box's top down to the baseline the text is drawn
+/// on, for one face at one size.
+///
+/// Text is centred in its line box by half-leading, so a face's baseline
+/// sits at half_leading + ascender. Two faces with the same line box but
+/// different ascent/descent splits therefore draw on DIFFERENT
+/// baselines: at 15px and line-height 1.5, the UI face lands at 16.92
+/// and monospace at 15.24. Runs sharing a line have to be offset onto a
+/// common baseline, which is what `paragraph_div` uses this for.
+fn run_baseline(
+    font_size: f32,
+    line_height: f32,
+    weight: FontWeight,
+    italic: bool,
+    family: &crate::div::FontFamily,
+) -> f32 {
+    let mut options = crate::text_measure::TextLayoutOptions::new();
+    options.font_weight = weight.weight();
+    options.italic = italic;
+    options.line_height = line_height;
+    options.font_name = family.name.clone();
+    options.generic_font = family.generic;
+    // The string only selects the face; the metrics are the face's.
+    let m = crate::text_measure::measure_text_with_options("Hxq", font_size, &options);
+    let line_box = m.height / m.line_count.max(1) as f32;
+    let half_leading = (line_box - (m.ascender - m.descender)) / 2.0;
+    half_leading + m.ascender
 }
 
 /// Build a monospace `RichText` for a code run. No chip background or
