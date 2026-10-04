@@ -172,7 +172,17 @@ impl TextLayoutEngine {
         options: &LayoutOptions,
     ) -> TextLayout {
         let metrics = font.metrics();
-        let line_height = metrics.line_height_px(font_size) * options.line_height;
+        // CSS counts line-height against the FONT SIZE, not the face's
+        // own ascent + descent + gap. Everywhere else in Blinc already
+        // does this — the measurers, the hit tester, the code editor and
+        // the rich-text renderer all compute font_size * line_height —
+        // so this was the one place that disagreed, including with its
+        // own fallback in FontTextMeasurer::estimate_size.
+        //
+        // It only showed up on a face whose natural line height is not
+        // 1em. Helvetica's is exactly 1em, which is why the default
+        // family hid it; monospace lines were 13% taller than asked for.
+        let line_height = font_size * options.line_height;
 
         if text.is_empty() {
             // Empty text should still have proper height based on font metrics
