@@ -305,13 +305,14 @@ fn absolute_positioned_line(
     // any absolute positioning. The line container still gets an
     // explicit width.
     if byte_ranges.len() == 1 && !byte_ranges[0].2 {
-        return div().w(line_width).h(line_height_px).child(make_rich_text(
-            visual_line,
-            theme,
-            font_size,
-            weight,
-            italic,
-        ));
+        // The child needs the width as well as the container: a
+        // content-sized child is handed min-content and wraps inside a
+        // box that is already the right size, so a heading broke across
+        // two lines inside a one-line box and overlapped what followed.
+        return div()
+            .w(line_width)
+            .h(line_height_px)
+            .child(make_rich_text(visual_line, theme, font_size, weight, italic).w(line_width));
     }
 
     // Multiple runs OR a code-only run — use a relative container with
