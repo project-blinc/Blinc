@@ -409,6 +409,20 @@ fn sd_notch(
     let inner_right = inner_origin.x + inner_size.x;
     let inner_bottom = inner_origin.y + inner_size.y;
 
+    // How far each added piece reaches INTO the body.
+    //
+    // The shape is a union of a body and added pieces, and each piece
+    // shares an edge with the body exactly. Inside the union near that
+    // shared edge, min/smin returns the distance to the piece's own
+    // edge, which is not part of the outline — so a border derived from
+    // the distance rings the join. Burying each piece a little way
+    // inside the body puts every point near a join deep within at least
+    // one piece, and the interior distance then measures to the outline.
+    //
+    // The buried part is hidden, so it changes no silhouette. Capped so
+    // a small shape cannot have a piece reach through it.
+    let join_depth = min(8.0, min(inner_size.x, inner_size.y) * 0.5);
+
     // `k` controls how wide the `smin` blend zone is. Keep it below `2 *
     // aa_width + 1` (~2 px) — too large and smin's blend region inflates
     // pixels that are actually just outside both sub-shapes, producing a
@@ -438,7 +452,7 @@ fn sd_notch(
 
     if tl_concave {
         let box_origin = vec2<f32>(outer_origin.x, inner_origin.y);
-        let box_size = vec2<f32>(left_offset, eff_tl_ry);
+        let box_size = vec2<f32>(left_offset + join_depth, eff_tl_ry);
         let box_sd = sd_rounded_rect(p, box_origin, box_size, vec4<f32>(0.0));
         // Elliptical arc: center on outer canvas edge, horizontal radius
         // stays at `left_offset`, vertical radius scales with available
@@ -453,8 +467,8 @@ fn sd_notch(
     }
     if tr_concave {
         let right_width = outer_origin.x + outer_size.x - inner_right;
-        let box_origin = vec2<f32>(inner_right, inner_origin.y);
-        let box_size = vec2<f32>(right_width, eff_tr_ry);
+        let box_origin = vec2<f32>(inner_right - join_depth, inner_origin.y);
+        let box_size = vec2<f32>(right_width + join_depth, eff_tr_ry);
         let box_sd = sd_rounded_rect(p, box_origin, box_size, vec4<f32>(0.0));
         let c = vec2<f32>(outer_origin.x + outer_size.x, inner_origin.y + eff_tr_ry);
         let ell_sd = sd_ellipse(p, c, vec2<f32>(right_width, eff_tr_ry));
@@ -463,8 +477,8 @@ fn sd_notch(
     }
     if br_concave {
         let right_width = outer_origin.x + outer_size.x - inner_right;
-        let box_origin = vec2<f32>(inner_right, inner_bottom - eff_br_ry);
-        let box_size = vec2<f32>(right_width, eff_br_ry);
+        let box_origin = vec2<f32>(inner_right - join_depth, inner_bottom - eff_br_ry);
+        let box_size = vec2<f32>(right_width + join_depth, eff_br_ry);
         let box_sd = sd_rounded_rect(p, box_origin, box_size, vec4<f32>(0.0));
         let c = vec2<f32>(outer_origin.x + outer_size.x, inner_bottom - eff_br_ry);
         let ell_sd = sd_ellipse(p, c, vec2<f32>(right_width, eff_br_ry));
@@ -473,7 +487,7 @@ fn sd_notch(
     }
     if bl_concave {
         let box_origin = vec2<f32>(outer_origin.x, inner_bottom - eff_bl_ry);
-        let box_size = vec2<f32>(left_offset, eff_bl_ry);
+        let box_size = vec2<f32>(left_offset + join_depth, eff_bl_ry);
         let box_sd = sd_rounded_rect(p, box_origin, box_size, vec4<f32>(0.0));
         let c = vec2<f32>(outer_origin.x, inner_bottom - eff_bl_ry);
         let ell_sd = sd_ellipse(p, c, vec2<f32>(left_offset, eff_bl_ry));
@@ -544,10 +558,17 @@ fn sd_notch(
             let disk_cy = base_y + top_h - disk_r;
             let disk_sd = length(p - vec2<f32>(cx, disk_cy)) - disk_r;
             let disk_lower = max(disk_sd, disk_cy - p.y);
-            let rect_origin = vec2<f32>(cx - half_w, base_y);
-            let rect_h = max(disk_cy - base_y, 0.001);
-            let rect_sd = sd_rounded_rect(p, rect_origin, vec2<f32>(top_w, rect_h), vec4<f32>(0.0));
-            let hollow_sd = min(rect_sd, disk_lower);
+            // When depth <= half_w the disk fills the bowl and the rect
+            // has no height; unioning it anyway pulls the top edge down
+            // across the scoop's full width through the smax below.
+            let rect_h = disk_cy - base_y;
+            var hollow_sd = disk_lower;
+            if rect_h > 0.001 {
+                let rect_origin = vec2<f32>(cx - half_w, base_y);
+                let rect_sd =
+                    sd_rounded_rect(p, rect_origin, vec2<f32>(top_w, rect_h), vec4<f32>(0.0));
+                hollow_sd = min(rect_sd, disk_lower);
+            }
             d = smax(d, -hollow_sd, max(top_cr, 0.001));
         } else if top_type < 2.5 { // bulge — circular arc cap with smooth ears
             // The cap is the segment of a disk passing through
@@ -563,7 +584,7 @@ fn sd_notch(
             let r_bulge = (half_w * half_w + top_h * top_h) / max(2.0 * top_h, 0.001);
             let y_c = base_y - top_h + r_bulge;
             let disk_sd = length(p - vec2<f32>(cx, y_c)) - r_bulge;
-            let bulge_sd = max(disk_sd, p.y - base_y);
+            let bulge_sd = max(disk_sd, p.y - base_y - join_depth);
             d = smin(d, bulge_sd, max(top_cr, 0.001));
         } else if top_type < 3.5 { // cut — subtract a V-triangle
             d = smax(d, -sd_triangle(
@@ -573,11 +594,14 @@ fn sd_notch(
                 vec2<f32>(cx + top_w * 0.5, base_y)
             ), smin_k);
         } else { // peak — union a V-triangle protrusion
+            // Extend along the sides, so the apex and the slopes are
+            // unchanged and only the buried base moves.
+            let spread = half_w * (top_h + join_depth) / max(top_h, 0.001);
             d = smin(d, sd_triangle(
                 p,
-                vec2<f32>(cx - top_w * 0.5, base_y),
+                vec2<f32>(cx - spread, base_y + join_depth),
                 vec2<f32>(cx, base_y - top_h),
-                vec2<f32>(cx + top_w * 0.5, base_y)
+                vec2<f32>(cx + spread, base_y + join_depth)
             ), smin_k);
         }
     }
@@ -601,16 +625,20 @@ fn sd_notch(
             let disk_cy = base_y - bot_h + disk_r;
             let disk_sd = length(p - vec2<f32>(cx, disk_cy)) - disk_r;
             let disk_upper = max(disk_sd, p.y - disk_cy);
-            let rect_h = max(base_y - disk_cy, 0.001);
-            let rect_origin = vec2<f32>(cx - half_w, disk_cy);
-            let rect_sd = sd_rounded_rect(p, rect_origin, vec2<f32>(bot_w, rect_h), vec4<f32>(0.0));
-            let hollow_sd = min(rect_sd, disk_upper);
+            let rect_h = base_y - disk_cy;
+            var hollow_sd = disk_upper;
+            if rect_h > 0.001 {
+                let rect_origin = vec2<f32>(cx - half_w, disk_cy);
+                let rect_sd =
+                    sd_rounded_rect(p, rect_origin, vec2<f32>(bot_w, rect_h), vec4<f32>(0.0));
+                hollow_sd = min(rect_sd, disk_upper);
+            }
             d = smax(d, -hollow_sd, max(bot_cr, 0.001));
         } else if bot_type < 2.5 { // bulge — circular arc cap with smooth ears
             let r_bulge = (half_w * half_w + bot_h * bot_h) / max(2.0 * bot_h, 0.001);
             let y_c = base_y + bot_h - r_bulge;
             let disk_sd = length(p - vec2<f32>(cx, y_c)) - r_bulge;
-            let bulge_sd = max(disk_sd, base_y - p.y);
+            let bulge_sd = max(disk_sd, base_y - p.y - join_depth);
             d = smin(d, bulge_sd, max(bot_cr, 0.001));
         } else if bot_type < 3.5 { // cut
             d = smax(d, -sd_triangle(
@@ -620,11 +648,12 @@ fn sd_notch(
                 vec2<f32>(cx + bot_w * 0.5, base_y)
             ), smin_k);
         } else { // peak
+            let spread = half_w * (bot_h + join_depth) / max(bot_h, 0.001);
             d = smin(d, sd_triangle(
                 p,
-                vec2<f32>(cx - bot_w * 0.5, base_y),
+                vec2<f32>(cx - spread, base_y - join_depth),
                 vec2<f32>(cx, base_y + bot_h),
-                vec2<f32>(cx + bot_w * 0.5, base_y)
+                vec2<f32>(cx + spread, base_y - join_depth)
             ), smin_k);
         }
     }

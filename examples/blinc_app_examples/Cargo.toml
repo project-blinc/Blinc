@@ -194,6 +194,10 @@ name = "baseline_capture"
 required-features = ["cn"]
 
 [[example]]
+name = "notch_border_capture"
+required-features = ["cn"]
+
+[[example]]
 name = "spinner_test"
 required-features = ["cn"]
 
