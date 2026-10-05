@@ -400,3 +400,93 @@ fn an_absolute_child_does_not_define_a_container_baseline() {
         "chip aligned by its floating child instead of its text: {a:.2} vs {b:.2}"
     );
 }
+
+/// A wrapping row aligns each LINE on its own baseline.
+///
+/// The pass groups items into lines by whether their boxes overlap
+/// vertically, because taffy exposes no line assignment. That is untested
+/// reasoning until a row actually wraps: two lines, mixed sizes on each,
+/// and the items of one line must not be pulled onto the other's baseline.
+#[test]
+fn a_wrapping_row_aligns_each_line_on_its_own_baseline() {
+    let mut tree = LayoutTree::new();
+
+    // Wide enough for two items per line, not three: the estimator gives
+    // roughly 0.55em per character, so "paragraph" is about 158px at 32px,
+    // 59px at 12px and 99px at 20px.
+    let root = tree.create_node(Style {
+        display: Display::Flex,
+        flex_direction: FlexDirection::Row,
+        flex_wrap: FlexWrap::Wrap,
+        align_items: Some(AlignItems::Baseline),
+        size: Size {
+            width: length(260.0_f32),
+            height: length(300.0_f32),
+        },
+        ..Default::default()
+    });
+
+    let specs = [
+        ("paragraph", 32.0_f32, GenericFont::SansSerif),
+        ("paragraph", 12.0, GenericFont::SansSerif),
+        ("paragraph", 20.0, GenericFont::SansSerif),
+        ("code", 14.0, GenericFont::Monospace),
+    ];
+    let items: Vec<_> = specs
+        .iter()
+        .map(|&(t, size, g)| {
+            let n = tree.create_text_node(Style::default(), context(t, size, g));
+            tree.add_child(root, n);
+            n
+        })
+        .collect();
+
+    tree.compute_layout(
+        root,
+        Size {
+            width: AvailableSpace::Definite(260.0),
+            height: AvailableSpace::Definite(300.0),
+        },
+    );
+
+    let tops: Vec<f32> = items
+        .iter()
+        .map(|&n| tree.get_absolute_bounds(n).expect("laid out").y)
+        .collect();
+    let base: Vec<f32> = items
+        .iter()
+        .zip(specs.iter())
+        .map(|(&n, &(_, size, g))| drawn_baseline(&mut tree, n, size, g, 0.0))
+        .collect();
+
+    // The row really did wrap into two lines: the third item starts a new
+    // line below the first two. Without this the test proves nothing.
+    assert!(
+        tops[2] > tops[0].max(tops[1]) + 1.0,
+        "the row did not wrap; item tops {tops:?}"
+    );
+
+    // Each line shares a baseline within it.
+    assert!(
+        (base[0] - base[1]).abs() <= 0.5,
+        "line 1 diverges by {:.2}px: {:.2} vs {:.2}",
+        (base[0] - base[1]).abs(),
+        base[0],
+        base[1]
+    );
+    assert!(
+        (base[2] - base[3]).abs() <= 0.5,
+        "line 2 diverges by {:.2}px: {:.2} vs {:.2}",
+        (base[2] - base[3]).abs(),
+        base[2],
+        base[3]
+    );
+
+    // And the two lines stay apart: line 2 was not dragged up to line 1.
+    assert!(
+        base[2] > base[0] + 1.0,
+        "lines were aligned to each other: line 1 at {:.2}, line 2 at {:.2}",
+        base[0],
+        base[2]
+    );
+}
