@@ -367,3 +367,54 @@ fn a_character_the_first_cjk_face_lacks_takes_a_later_one() {
     }
     eprintln!("checked {checked} glyphs against {} faces", faces.cjk_len());
 }
+
+/// Each CJK glyph reaches the atlas with ink in it. Faces differ in outline
+/// format (TrueType on one platform, CFF on another), so a face that lays out
+/// fine can still rasterize to nothing.
+#[test]
+fn cjk_glyphs_are_rasterized_with_ink() {
+    let mut registry = FontRegistry::new();
+    let Ok(primary) = registry.load_generic_with_style(GenericFont::System, 400, false) else {
+        return;
+    };
+    if cjk_faces(&mut registry, &primary).is_none() {
+        return;
+    }
+
+    let mut renderer = TextRenderer::new();
+    let Ok(prepared) = renderer.prepare_text_with_style(
+        CJK_TEXT,
+        24.0,
+        [1.0; 4],
+        &LayoutOptions::default(),
+        None,
+        GenericFont::System,
+        400,
+        false,
+    ) else {
+        panic!("a CJK run failed to rasterize");
+    };
+
+    let visible = CJK_TEXT.chars().filter(|c| !c.is_whitespace()).count();
+    assert_eq!(prepared.glyphs.len(), visible, "a glyph was not drawn");
+
+    let atlas = renderer.atlas();
+    let (aw, ah) = atlas.dimensions();
+    let pixels = atlas.pixels();
+    let bpp = pixels.len() / (aw as usize * ah as usize);
+    for (glyph, c) in prepared
+        .glyphs
+        .iter()
+        .zip(CJK_TEXT.chars().filter(|c| !c.is_whitespace()))
+    {
+        // The rect is in atlas pixels, not normalised.
+        let [u0, v0, u1, v1] = glyph.uv_bounds;
+        let (x0, x1) = (u0 as usize, (u1.ceil() as usize).min(aw as usize));
+        let (y0, y1) = (v0 as usize, (v1.ceil() as usize).min(ah as usize));
+        let ink = (y0..y1)
+            .flat_map(|y| (x0..x1).map(move |x| (x, y)))
+            .filter(|&(x, y)| pixels[(y * aw as usize + x) * bpp] > 0)
+            .count();
+        assert!(ink >= 20, "{c:?} rasterized with only {ink} inked pixels");
+    }
+}
