@@ -11,6 +11,9 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
+    env:
+      # A missing CJK face fails the fallback tests instead of skipping them.
+      BLINC_REQUIRE_CJK: "1"
     steps:
       - uses: actions/checkout@v4
       - name: Strip local-dev [patch] block (CI-only)
@@ -43,6 +46,7 @@ jobs:
             libxdo-dev \
             libasound2-dev \
             fonts-dejavu-core \
+            fonts-noto-cjk \
             xvfb
 
       - name: Cache cargo registry

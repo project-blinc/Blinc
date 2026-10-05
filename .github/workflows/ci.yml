@@ -119,6 +119,9 @@ jobs:
   test:
     name: Test
     runs-on: ${{ matrix.os }}
+    env:
+      # A missing CJK face fails the fallback tests instead of skipping them.
+      BLINC_REQUIRE_CJK: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -149,6 +152,7 @@ jobs:
             mesa-vulkan-drivers \
             libfontconfig1-dev \
             fonts-dejavu-core \
+            fonts-noto-cjk \
             libglib2.0-dev \
             libatk1.0-dev \
             libgtk-3-dev \

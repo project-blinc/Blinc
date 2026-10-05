@@ -226,11 +226,22 @@ fn a_symbol_with_its_variation_selector_is_still_one_glyph() {
 
 const CJK_TEXT: &str = "你好 こんにちは 안녕";
 
+/// Called when this machine has no CJK face. Those tests have nothing to check
+/// then and skip; CI sets `BLINC_REQUIRE_CJK` so a missing face fails there
+/// instead of passing vacuously.
+fn skip_without_cjk(what: &str) {
+    assert!(
+        std::env::var_os("BLINC_REQUIRE_CJK").is_none(),
+        "{what}: no CJK face found, but BLINC_REQUIRE_CJK is set"
+    );
+    eprintln!("SKIP {what}: no CJK face on this machine");
+}
+
 /// Resolve the CJK faces for `CJK_TEXT`, or say the machine has none.
 fn cjk_faces(registry: &mut FontRegistry, primary: &blinc_text::FontFace) -> Option<FallbackFaces> {
     let faces = FallbackFaces::resolve(registry, primary, CJK_TEXT);
     if faces.cjk_len() == 0 {
-        eprintln!("SKIP: no CJK face on this machine");
+        skip_without_cjk("cjk_faces");
         return None;
     }
     Some(faces)
@@ -308,7 +319,9 @@ fn layout_width_matches_the_renderer_for_cjk() {
         }
     }
     eprintln!("checked {checked} CJK runs");
-    assert!(checked > 0, "nothing was checked: no CJK face here");
+    if checked == 0 {
+        skip_without_cjk("layout_width_matches_the_renderer_for_cjk");
+    }
 }
 
 /// A face is only loaded for what the text needs: Latin text pulls in none, and
@@ -340,7 +353,7 @@ fn a_character_the_first_cjk_face_lacks_takes_a_later_one() {
     let text = "这长标 안녕";
     let faces = FallbackFaces::resolve(&mut registry, &primary, text);
     if faces.cjk_len() == 0 {
-        eprintln!("SKIP: no CJK face on this machine");
+        skip_without_cjk("a_character_the_first_cjk_face_lacks_takes_a_later_one");
         return;
     }
     let layout =
