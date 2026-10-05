@@ -1,23 +1,15 @@
-//! Reproducer for a taffy 0.6 flexbox defect, so the decision about it
-//! rests on evidence rather than a report.
-//!
 //! A content-sized row whose items carry `flex-shrink: 0` and a negative
-//! main-axis margin measures 0 wide instead of the sum of its items.
-//! Reported by the ashui session: three 40px avatars overlapped by 10px
-//! should be 100 wide.
+//! main-axis margin measures the sum of its items.
 //!
-//! Narrowed here: it takes the MAX-CONTENT sizing path. The same row
-//! measured against definite available space comes out at 100, so a
-//! layout that never asks for max-content is unaffected.
-//!
-//! Ignored because fixing it needs a taffy upgrade or a patched
-//! dependency, which is a decision rather than a code change.
+//! Three 40px avatars overlapped by 10px are 100 wide. taffy 0.6 measured
+//! the row 0 wide at max-content, because its shrink factor was divided by
+//! one quantity and multiplied back by another; the same row measured
+//! against definite space was unaffected. Fixed in taffy 0.14.
 
 use blinc_layout::LayoutTree;
 use taffy::prelude::*;
 
 #[test]
-#[ignore = "taffy 0.6 defect; fixed upstream in 0.14. Needs a dependency decision, see git-bug"]
 fn an_overlapped_avatar_row_measures_its_real_width() {
     let mut tree = LayoutTree::new();
 
@@ -55,7 +47,7 @@ fn an_overlapped_avatar_row_measures_its_real_width() {
     let outer = tree.create_node(Style {
         display: Display::Flex,
         flex_direction: FlexDirection::Column,
-        align_items: Some(AlignItems::Start),
+        align_items: Some(AlignItems::START),
         ..Default::default()
     });
     tree.add_child(outer, row);
