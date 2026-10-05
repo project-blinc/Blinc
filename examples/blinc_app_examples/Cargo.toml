@@ -114,7 +114,7 @@ blinc_media = { path = "../../crates/blinc_media", optional = true }
 # is optional + gated, and the gitignored `/packages/` directory
 # isn't present.
 blinc_canvas_kit = { git = "https://github.com/project-blinc/blinc_canvas_kit.git", rev = "61f2ea3d666656fc3c704a31445f6e71b1aa321e", optional = true }
-blinc_node_editor = { git = "https://github.com/project-blinc/blinc_node_editor.git", rev = "abcc7da70011773dd981bb73c82936bcb91a11b3", optional = true }
+blinc_node_editor = { git = "https://github.com/project-blinc/blinc_node_editor.git", rev = "248be85d54d2c0b1b02e872a02a1e43a962373e0", optional = true }
 blinc_portal_ui = { git = "https://github.com/project-blinc/blinc_portal_ui.git", rev = "41c40a9e3da33148eb789e096debbd8ac9eb56a8", optional = true }
 # `blinc_game_kit` — merged glTF loader (formerly `blinc_gltf`) +
 # runtime skeleton poser (formerly `blinc_skeleton`). Same API behind
