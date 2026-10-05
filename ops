@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1791193366,"nonce":"iBXWW4QRE13g9fBJLdbn+gi4orw=","message":"Landed in 1a678ec9, CI green on d9768d6c. Includes a fix for ColorGlyphAtlas::clear marking an unallocated atlas dirty, which would have uploaded from an empty slice.","files":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1791193367,"nonce":"gjJqX+Qmdoh1w6BLeLcQqpYJPSM=","status":2}]}
