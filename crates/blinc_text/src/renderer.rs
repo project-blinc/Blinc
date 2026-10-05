@@ -645,6 +645,12 @@ impl TextRenderer {
                 FaceChoice::Emoji => fallbacks
                     .face(FaceChoice::Emoji)
                     .map(|f| (f, emoji_font_id, true)),
+                // Each CJK face keys the glyph cache on its own id, or two
+                // faces' glyphs with the same glyph id would collide.
+                FaceChoice::Cjk(i) => fallbacks.face(FaceChoice::Cjk(i)).and_then(|f| {
+                    let name = fallbacks.cjk_name(i)?;
+                    Some((f, self.font_id(Some(name), GenericFont::SansSerif), false))
+                }),
             };
             if let Some((fallback_font, fallback_font_id, is_color)) = fallback {
                 let info = if is_color {

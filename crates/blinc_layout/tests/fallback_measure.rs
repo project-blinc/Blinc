@@ -85,3 +85,34 @@ fn ascii_measures_exactly_as_the_plain_engine_does() {
         );
     }
 }
+
+/// What a CJK character adds to a measured run is what it adds to a drawn one.
+#[test]
+fn a_measured_cjk_run_is_as_wide_as_a_drawn_one() {
+    blinc_layout::text_measurer::init_text_measurer();
+    let mut renderer = TextRenderer::new();
+    let mut checked = 0;
+
+    for (generic, text_generic) in [
+        (GenericFont::Monospace, TextGeneric::Monospace),
+        (GenericFont::Serif, TextGeneric::Serif),
+        (GenericFont::System, TextGeneric::System),
+    ] {
+        let Some(base) = drawn_x_of_last(&mut renderer, text_generic, "ab") else {
+            continue;
+        };
+        for text in ["a你b", "aこんにちはb", "a안녕b"] {
+            let Some(with) = drawn_x_of_last(&mut renderer, text_generic, text) else {
+                continue;
+            };
+            let drawn = with - base;
+            let measured_delta = measured(generic, text) - measured(generic, "ab");
+            assert!(
+                (drawn - measured_delta).abs() < 0.5,
+                "{generic:?} {text:?}: draws {drawn:.2}px wide but measures {measured_delta:.2}px"
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "nothing was checked");
+}

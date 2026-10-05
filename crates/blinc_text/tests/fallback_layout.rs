@@ -223,3 +223,147 @@ fn a_symbol_with_its_variation_selector_is_still_one_glyph() {
         "the variation selector drew a glyph of its own"
     );
 }
+
+const CJK_TEXT: &str = "你好 こんにちは 안녕";
+
+/// Resolve the CJK faces for `CJK_TEXT`, or say the machine has none.
+fn cjk_faces(registry: &mut FontRegistry, primary: &blinc_text::FontFace) -> Option<FallbackFaces> {
+    let faces = FallbackFaces::resolve(registry, primary, CJK_TEXT);
+    if faces.cjk_len() == 0 {
+        eprintln!("SKIP: no CJK face on this machine");
+        return None;
+    }
+    Some(faces)
+}
+
+/// Han, kana and Hangul are all drawn from a CJK face and none is left as the
+/// primary's missing-glyph box.
+#[test]
+fn cjk_text_takes_a_cjk_face_for_every_visible_glyph() {
+    let mut registry = FontRegistry::new();
+    let engine = TextLayoutEngine::new();
+    let Ok(primary) = registry.load_generic_with_style(GenericFont::System, 400, false) else {
+        return;
+    };
+    let Some(faces) = cjk_faces(&mut registry, &primary) else {
+        return;
+    };
+    let layout =
+        engine.layout_with_fallbacks(CJK_TEXT, &primary, SIZE, &LayoutOptions::default(), &faces);
+    for glyph in layout.lines.iter().flat_map(|l| &l.glyphs) {
+        if glyph.codepoint.is_whitespace() {
+            continue;
+        }
+        assert!(
+            matches!(glyph.face, blinc_text::FaceChoice::Cjk(_)),
+            "{:?} was laid out with {:?}",
+            glyph.codepoint,
+            glyph.face
+        );
+        assert_ne!(
+            glyph.glyph_id, 0,
+            "{:?} is a missing-glyph box",
+            glyph.codepoint
+        );
+    }
+}
+
+/// The width layout predicts for CJK text is where the renderer puts the next
+/// glyph, under every primary.
+#[test]
+fn layout_width_matches_the_renderer_for_cjk() {
+    let mut renderer = TextRenderer::new();
+    let mut registry = FontRegistry::new();
+    let engine = TextLayoutEngine::new();
+    let opts = LayoutOptions::default();
+    let mut checked = 0;
+
+    for generic in PRIMARIES {
+        let Ok(primary) = registry.load_generic_with_style(generic, 400, false) else {
+            continue;
+        };
+        let Some(base_drawn) = drawn_x_of_last(&mut renderer, generic, "ab") else {
+            continue;
+        };
+        let base_laid = engine.layout("ab", &primary, SIZE, &opts).width;
+
+        for text in ["a你b", "aこb", "a안b", "a你好こんにちは안녕b"] {
+            let Some(drawn) = drawn_x_of_last(&mut renderer, generic, text) else {
+                continue;
+            };
+            let faces = FallbackFaces::resolve(&mut registry, &primary, text);
+            if faces.cjk_len() == 0 {
+                continue;
+            }
+            let laid = engine
+                .layout_with_fallbacks(text, &primary, SIZE, &opts, &faces)
+                .width;
+            let drawn_delta = drawn - base_drawn;
+            let laid_delta = laid - base_laid;
+            assert!(
+                (drawn_delta - laid_delta).abs() < 0.5,
+                "{generic:?} {text:?}: drawn {drawn_delta:.2}px, layout says {laid_delta:.2}px"
+            );
+            checked += 1;
+        }
+    }
+    eprintln!("checked {checked} CJK runs");
+    assert!(checked > 0, "nothing was checked: no CJK face here");
+}
+
+/// A face is only loaded for what the text needs: Latin text pulls in none, and
+/// the lookup is by character so Hangul alone does not need the Han face first.
+#[test]
+fn no_cjk_face_is_loaded_for_text_that_has_no_cjk() {
+    let mut registry = FontRegistry::new();
+    let Ok(primary) = registry.load_generic_with_style(GenericFont::System, 400, false) else {
+        return;
+    };
+    for text in ["hello", "héllo wörld", "a\u{1F600}b", "a\u{2605}b"] {
+        let faces = FallbackFaces::resolve(&mut registry, &primary, text);
+        assert!(faces.cjk_len() == 0, "{text:?} loaded a CJK face");
+    }
+}
+
+/// No single CJK face covers every script, and the faces tried first need not
+/// cover what a later one does. A character the first face lacks is drawn from
+/// whichever resolved face has it.
+#[test]
+fn a_character_the_first_cjk_face_lacks_takes_a_later_one() {
+    let mut registry = FontRegistry::new();
+    let engine = TextLayoutEngine::new();
+    let Ok(primary) = registry.load_generic_with_style(GenericFont::System, 400, false) else {
+        return;
+    };
+    // Simplified-only Han, then Hangul: kana-first or Japanese faces lack the
+    // first, Chinese faces the second.
+    let text = "这长标 안녕";
+    let faces = FallbackFaces::resolve(&mut registry, &primary, text);
+    if faces.cjk_len() == 0 {
+        eprintln!("SKIP: no CJK face on this machine");
+        return;
+    }
+    let layout =
+        engine.layout_with_fallbacks(text, &primary, SIZE, &LayoutOptions::default(), &faces);
+    let mut checked = 0;
+    for glyph in layout.lines.iter().flat_map(|l| &l.glyphs) {
+        let c = glyph.codepoint;
+        if c.is_whitespace() {
+            continue;
+        }
+        let drawable = (0..faces.cjk_len() as u8).any(|i| {
+            faces
+                .face(blinc_text::FaceChoice::Cjk(i))
+                .is_some_and(|f| f.glyph_id(c).is_some_and(|g| g != 0))
+        });
+        if drawable {
+            assert!(
+                matches!(glyph.face, blinc_text::FaceChoice::Cjk(_)) && glyph.glyph_id != 0,
+                "{c:?} has a CJK face that draws it but was laid out as {:?}",
+                glyph.face
+            );
+            checked += 1;
+        }
+    }
+    eprintln!("checked {checked} glyphs against {} faces", faces.cjk_len());
+}
