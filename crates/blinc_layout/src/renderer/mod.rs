@@ -2079,8 +2079,8 @@ impl RenderTree {
     pub fn resize_root(&mut self, width: f32, height: f32) {
         if let Some(root_id) = self.root {
             if let Some(mut style) = self.layout_tree.get_style(root_id) {
-                style.size.width = Dimension::Length(width);
-                style.size.height = Dimension::Length(height);
+                style.size.width = Dimension::length(width);
+                style.size.height = Dimension::length(height);
                 self.layout_tree.set_style(root_id, style);
             }
         }
@@ -2235,10 +2235,10 @@ impl RenderTree {
 
             // Override size to animated bounds (the larger size during collapse)
             if anim_state.is_width_collapsing() {
-                style.size.width = Dimension::Length(constraint_bounds.width);
+                style.size.width = Dimension::length(constraint_bounds.width);
             }
             if anim_state.is_height_collapsing() {
-                style.size.height = Dimension::Length(constraint_bounds.height);
+                style.size.height = Dimension::length(constraint_bounds.height);
             }
 
             // Apply overridden style
@@ -2267,10 +2267,10 @@ impl RenderTree {
             let constraint_bounds = anim_state.layout_constraint_bounds();
 
             if anim_state.is_width_collapsing() {
-                style.size.width = Dimension::Length(constraint_bounds.width);
+                style.size.width = Dimension::length(constraint_bounds.width);
             }
             if anim_state.is_height_collapsing() {
-                style.size.height = Dimension::Length(constraint_bounds.height);
+                style.size.height = Dimension::length(constraint_bounds.height);
             }
 
             self.layout_tree.set_style(node_id, style);

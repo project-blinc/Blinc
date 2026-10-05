@@ -448,13 +448,13 @@ impl RichText {
 
     /// Set width
     pub fn w(mut self, width: f32) -> Self {
-        self.style.size.width = Dimension::Length(width);
+        self.style.size.width = Dimension::length(width);
         self
     }
 
     /// Set height
     pub fn h(mut self, height: f32) -> Self {
-        self.style.size.height = Dimension::Length(height);
+        self.style.size.height = Dimension::length(height);
         self
     }
 
@@ -478,15 +478,15 @@ impl RichText {
             crate::text_measure::measure_text_with_options(&self.content, self.font_size, &options);
         self.measured_width = metrics.width;
         self.ascender = metrics.ascender;
-        self.style.size.width = Dimension::Length(metrics.width);
-        self.style.size.height = Dimension::Length(metrics.height);
-        self.style.max_size.width = Dimension::Length(max_width.max(0.0));
+        self.style.size.width = Dimension::length(metrics.width);
+        self.style.size.height = Dimension::length(metrics.height);
+        self.style.max_size.width = LengthPercentageAuto::length(max_width.max(0.0));
         self
     }
 
     /// Set margin on all sides (in 4px units)
     pub fn m(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin = Rect {
             left: px,
             right: px,
@@ -498,7 +498,7 @@ impl RichText {
 
     /// Set horizontal margin (in 4px units)
     pub fn mx(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin.left = px;
         self.style.margin.right = px;
         self
@@ -506,7 +506,7 @@ impl RichText {
 
     /// Set vertical margin (in 4px units)
     pub fn my(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin.top = px;
         self.style.margin.bottom = px;
         self
@@ -520,18 +520,18 @@ impl RichText {
 
         self.measured_width = metrics.width;
         self.ascender = metrics.ascender;
-        self.style.max_size.width = Dimension::Percent(1.0);
+        self.style.max_size.width = LengthPercentageAuto::percent(1.0);
 
         if self.wrap {
             // Auto on both axes so taffy queries the measure function with
             // the width actually available, and the node grows to however
             // many lines that width produces.
-            self.style.size.width = Dimension::Auto;
-            self.style.size.height = Dimension::Auto;
+            self.style.size.width = Dimension::auto();
+            self.style.size.height = Dimension::auto();
             self.style.flex_shrink = 1.0;
         } else {
-            self.style.size.width = Dimension::Length(metrics.width);
-            self.style.size.height = Dimension::Length(self.font_size * self.line_height);
+            self.style.size.width = Dimension::length(metrics.width);
+            self.style.size.height = Dimension::length(self.font_size * self.line_height);
             self.style.flex_shrink = 0.0;
         }
     }

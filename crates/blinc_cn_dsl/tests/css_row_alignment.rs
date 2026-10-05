@@ -58,7 +58,7 @@ fn row_geometry(src: &str, name: &str, kids: usize) -> (f32, Vec<(f32, f32)>) {
         let centred = tree
             .layout_tree
             .get_style(id)
-            .is_some_and(|s| s.align_items == Some(taffy::style::AlignItems::Center));
+            .is_some_and(|s| s.align_items == Some(taffy::style::AlignItems::CENTER));
         let children = tree.layout_tree.children(id);
         if centred && children.len() == kids {
             let row_h = tree.get_absolute_bounds(id).expect("row").height;

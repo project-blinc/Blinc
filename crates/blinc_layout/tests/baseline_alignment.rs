@@ -1,9 +1,8 @@
 //! `align-items: baseline` across fonts and sizes.
 //!
-//! taffy 0.6 never receives a first baseline for a text leaf:
-//! `compute/leaf.rs` returns `first_baselines: Point::NONE`, and a
-//! measure function can only return a size. `compute/flexbox.rs` then
-//! falls back to `first_baselines.y.unwrap_or(size.height)`, so
+//! taffy never receives a first baseline for a text leaf:
+//! `compute_leaf_layout` returns no baselines, so `compute/flexbox.rs`
+//! falls back to `first_baselines.y.unwrap_or(size.height)` and
 //! `align-items: baseline` aligns box bottoms.
 //!
 //! Blinc hides that for same-size text by giving single-line text a box
@@ -70,7 +69,7 @@ fn different_sizes_share_a_baseline() {
     let root = tree.create_node(Style {
         display: Display::Flex,
         flex_direction: FlexDirection::Row,
-        align_items: Some(AlignItems::Baseline),
+        align_items: Some(AlignItems::BASELINE),
         size: Size {
             width: length(400.0_f32),
             height: length(200.0_f32),
@@ -125,7 +124,7 @@ fn the_same_face_at_the_same_size_already_aligns() {
     let root = tree.create_node(Style {
         display: Display::Flex,
         flex_direction: FlexDirection::Row,
-        align_items: Some(AlignItems::Baseline),
+        align_items: Some(AlignItems::BASELINE),
         size: Size {
             width: length(400.0_f32),
             height: length(200.0_f32),
@@ -167,7 +166,7 @@ fn a_wide_size_spread_shares_a_baseline() {
     let root = tree.create_node(Style {
         display: Display::Flex,
         flex_direction: FlexDirection::Row,
-        align_items: Some(AlignItems::Baseline),
+        align_items: Some(AlignItems::BASELINE),
         size: Size {
             width: length(400.0_f32),
             height: length(200.0_f32),
@@ -222,7 +221,7 @@ fn a_padded_container_aligns_by_its_text() {
     let root = tree.create_node(Style {
         display: Display::Flex,
         flex_direction: FlexDirection::Row,
-        align_items: Some(AlignItems::Baseline),
+        align_items: Some(AlignItems::BASELINE),
         size: Size {
             width: length(400.0_f32),
             height: length(200.0_f32),
@@ -285,7 +284,7 @@ fn an_absolute_child_is_not_shifted() {
     let root = tree.create_node(Style {
         display: Display::Flex,
         flex_direction: FlexDirection::Row,
-        align_items: Some(AlignItems::Baseline),
+        align_items: Some(AlignItems::BASELINE),
         size: Size {
             width: length(400.0_f32),
             height: length(200.0_f32),
@@ -345,7 +344,7 @@ fn an_absolute_child_does_not_define_a_container_baseline() {
     let root = tree.create_node(Style {
         display: Display::Flex,
         flex_direction: FlexDirection::Row,
-        align_items: Some(AlignItems::Baseline),
+        align_items: Some(AlignItems::BASELINE),
         size: Size {
             width: length(400.0_f32),
             height: length(200.0_f32),
@@ -418,7 +417,7 @@ fn a_wrapping_row_aligns_each_line_on_its_own_baseline() {
         display: Display::Flex,
         flex_direction: FlexDirection::Row,
         flex_wrap: FlexWrap::Wrap,
-        align_items: Some(AlignItems::Baseline),
+        align_items: Some(AlignItems::BASELINE),
         size: Size {
             width: length(260.0_f32),
             height: length(300.0_f32),

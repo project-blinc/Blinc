@@ -251,8 +251,8 @@ impl Image {
             filter: ImageFilter::none(),
             style: Style {
                 size: taffy::Size {
-                    width: Dimension::Length(100.0),
-                    height: Dimension::Length(100.0),
+                    width: Dimension::length(100.0),
+                    height: Dimension::length(100.0),
                 },
                 ..Default::default()
             },
@@ -275,8 +275,8 @@ impl Image {
     pub fn size(mut self, width: f32, height: f32) -> Self {
         self.width = width;
         self.height = height;
-        self.style.size.width = Dimension::Length(width);
-        self.style.size.height = Dimension::Length(height);
+        self.style.size.width = Dimension::length(width);
+        self.style.size.height = Dimension::length(height);
         self
     }
 
@@ -284,34 +284,34 @@ impl Image {
     pub fn square(mut self, size: f32) -> Self {
         self.width = size;
         self.height = size;
-        self.style.size.width = Dimension::Length(size);
-        self.style.size.height = Dimension::Length(size);
+        self.style.size.width = Dimension::length(size);
+        self.style.size.height = Dimension::length(size);
         self
     }
 
     /// Set width
     pub fn w(mut self, width: f32) -> Self {
         self.width = width;
-        self.style.size.width = Dimension::Length(width);
+        self.style.size.width = Dimension::length(width);
         self
     }
 
     /// Set height
     pub fn h(mut self, height: f32) -> Self {
         self.height = height;
-        self.style.size.height = Dimension::Length(height);
+        self.style.size.height = Dimension::length(height);
         self
     }
 
     /// Set width to 100%
     pub fn w_full(mut self) -> Self {
-        self.style.size.width = Dimension::Percent(1.0);
+        self.style.size.width = Dimension::percent(1.0);
         self
     }
 
     /// Set height to 100%
     pub fn h_full(mut self) -> Self {
-        self.style.size.height = Dimension::Percent(1.0);
+        self.style.size.height = Dimension::percent(1.0);
         self
     }
 
@@ -531,7 +531,7 @@ impl Image {
 
     /// Set margin on all sides (in 4px units)
     pub fn m(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin = Rect {
             left: px,
             right: px,
@@ -543,7 +543,7 @@ impl Image {
 
     /// Set horizontal margin (in 4px units)
     pub fn mx(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin.left = px;
         self.style.margin.right = px;
         self
@@ -551,7 +551,7 @@ impl Image {
 
     /// Set vertical margin (in 4px units)
     pub fn my(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin.top = px;
         self.style.margin.bottom = px;
         self
@@ -571,7 +571,7 @@ impl Image {
 
     /// Align self center
     pub fn self_center(mut self) -> Self {
-        self.style.align_self = Some(AlignSelf::Center);
+        self.style.align_self = Some(AlignSelf::CENTER);
         self
     }
 

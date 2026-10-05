@@ -140,32 +140,32 @@ impl Canvas {
 
     /// Set fixed width
     pub fn w(mut self, width: f32) -> Self {
-        self.style.size.width = Dimension::Length(width);
+        self.style.size.width = Dimension::length(width);
         self
     }
 
     /// Set fixed height
     pub fn h(mut self, height: f32) -> Self {
-        self.style.size.height = Dimension::Length(height);
+        self.style.size.height = Dimension::length(height);
         self
     }
 
     /// Set both width and height
     pub fn size(mut self, width: f32, height: f32) -> Self {
-        self.style.size.width = Dimension::Length(width);
-        self.style.size.height = Dimension::Length(height);
+        self.style.size.width = Dimension::length(width);
+        self.style.size.height = Dimension::length(height);
         self
     }
 
     /// Set width to 100% of parent
     pub fn w_full(mut self) -> Self {
-        self.style.size.width = Dimension::Percent(1.0);
+        self.style.size.width = Dimension::percent(1.0);
         self
     }
 
     /// Set height to 100% of parent
     pub fn h_full(mut self) -> Self {
-        self.style.size.height = Dimension::Percent(1.0);
+        self.style.size.height = Dimension::percent(1.0);
         self
     }
 
@@ -189,13 +189,13 @@ impl Canvas {
 
     /// Set left position (for absolute positioning)
     pub fn left(mut self, value: f32) -> Self {
-        self.style.inset.left = LengthPercentageAuto::Length(value);
+        self.style.inset.left = LengthPercentageAuto::length(value);
         self
     }
 
     /// Set top position (for absolute positioning)
     pub fn top(mut self, value: f32) -> Self {
-        self.style.inset.top = LengthPercentageAuto::Length(value);
+        self.style.inset.top = LengthPercentageAuto::length(value);
         self
     }
 
@@ -339,8 +339,12 @@ mod tests {
         .w(100.0)
         .h(50.0);
 
-        assert!(matches!(c.style.size.width, Dimension::Length(w) if (w - 100.0).abs() < 0.001));
-        assert!(matches!(c.style.size.height, Dimension::Length(h) if (h - 50.0).abs() < 0.001));
+        assert!(
+            matches!(c.style.size.width.expand(), taffy::style::ExpandedDimension::Length(w) if (w - 100.0).abs() < 0.001)
+        );
+        assert!(
+            matches!(c.style.size.height.expand(), taffy::style::ExpandedDimension::Length(h) if (h - 50.0).abs() < 0.001)
+        );
         assert!(c.render_fn.is_some());
     }
 

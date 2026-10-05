@@ -3557,7 +3557,10 @@ impl ElementBuilder for TextInput {
         {
             let mut shared = self.stateful_state.lock().unwrap();
             shared.base_render_props = Some(self.inner.inner_render_props());
-            shared.base_style = self.inner.inner_layout_style();
+            shared.base_style = self
+                .inner
+                .inner_layout_style()
+                .map(crate::stateful::SharedStyle);
         }
 
         self.inner.build(tree)
@@ -3764,7 +3767,7 @@ mod tests {
         let root = input.build(&mut tree);
         let style = tree.get_style(root).unwrap();
 
-        assert_eq!(style.size.width, Dimension::Length(42.0));
+        assert_eq!(style.size.width, Dimension::length(42.0));
     }
 
     // Global focus statics (PENDING_FOCUS_INPUT, FOCUSED_TEXT_INPUT, ...)

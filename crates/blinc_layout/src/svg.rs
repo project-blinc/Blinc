@@ -106,8 +106,8 @@ impl Svg {
             stroke_w: None,
             style: Style {
                 size: taffy::Size {
-                    width: Dimension::Length(24.0),
-                    height: Dimension::Length(24.0),
+                    width: Dimension::length(24.0),
+                    height: Dimension::length(24.0),
                 },
                 ..Default::default()
             },
@@ -124,8 +124,8 @@ impl Svg {
     pub fn size(mut self, width: f32, height: f32) -> Self {
         self.width = width;
         self.height = height;
-        self.style.size.width = Dimension::Length(width);
-        self.style.size.height = Dimension::Length(height);
+        self.style.size.width = Dimension::length(width);
+        self.style.size.height = Dimension::length(height);
         self
     }
 
@@ -133,8 +133,8 @@ impl Svg {
     pub fn square(mut self, size: f32) -> Self {
         self.width = size;
         self.height = size;
-        self.style.size.width = Dimension::Length(size);
-        self.style.size.height = Dimension::Length(size);
+        self.style.size.width = Dimension::length(size);
+        self.style.size.height = Dimension::length(size);
         self
     }
 
@@ -219,7 +219,7 @@ impl Svg {
 
     /// Set margin on all sides (in 4px units)
     pub fn m(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin = Rect {
             left: px,
             right: px,
@@ -231,7 +231,7 @@ impl Svg {
 
     /// Set horizontal margin (in 4px units)
     pub fn mx(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin.left = px;
         self.style.margin.right = px;
         self
@@ -239,7 +239,7 @@ impl Svg {
 
     /// Set vertical margin (in 4px units)
     pub fn my(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin.top = px;
         self.style.margin.bottom = px;
         self
@@ -247,25 +247,25 @@ impl Svg {
 
     /// Set left margin (in 4px units)
     pub fn ml(mut self, units: f32) -> Self {
-        self.style.margin.left = LengthPercentageAuto::Length(units * 4.0);
+        self.style.margin.left = LengthPercentageAuto::length(units * 4.0);
         self
     }
 
     /// Set right margin (in 4px units)
     pub fn mr(mut self, units: f32) -> Self {
-        self.style.margin.right = LengthPercentageAuto::Length(units * 4.0);
+        self.style.margin.right = LengthPercentageAuto::length(units * 4.0);
         self
     }
 
     /// Set top margin (in 4px units)
     pub fn mt(mut self, units: f32) -> Self {
-        self.style.margin.top = LengthPercentageAuto::Length(units * 4.0);
+        self.style.margin.top = LengthPercentageAuto::length(units * 4.0);
         self
     }
 
     /// Set bottom margin (in 4px units)
     pub fn mb(mut self, units: f32) -> Self {
-        self.style.margin.bottom = LengthPercentageAuto::Length(units * 4.0);
+        self.style.margin.bottom = LengthPercentageAuto::length(units * 4.0);
         self
     }
 
@@ -289,7 +289,7 @@ impl Svg {
 
     /// Align self center
     pub fn self_center(mut self) -> Self {
-        self.style.align_self = Some(AlignSelf::Center);
+        self.style.align_self = Some(AlignSelf::CENTER);
         self
     }
 

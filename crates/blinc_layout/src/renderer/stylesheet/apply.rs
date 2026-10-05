@@ -363,60 +363,60 @@ impl RenderTree {
 
         if let Some(w) = es.width {
             taffy_style.size.width = match w {
-                crate::element_style::StyleDimension::Length(px) => Dimension::Length(px),
-                crate::element_style::StyleDimension::Percent(p) => Dimension::Percent(p),
-                crate::element_style::StyleDimension::Auto => Dimension::Auto,
+                crate::element_style::StyleDimension::Length(px) => Dimension::length(px),
+                crate::element_style::StyleDimension::Percent(p) => Dimension::percent(p),
+                crate::element_style::StyleDimension::Auto => Dimension::auto(),
             };
             if matches!(w, crate::element_style::StyleDimension::Auto) {
-                taffy_style.flex_basis = Dimension::Auto;
+                taffy_style.flex_basis = Dimension::auto();
                 taffy_style.flex_grow = 0.0;
                 taffy_style.flex_shrink = 0.0;
             }
         }
         if let Some(h) = es.height {
             taffy_style.size.height = match h {
-                crate::element_style::StyleDimension::Length(px) => Dimension::Length(px),
-                crate::element_style::StyleDimension::Percent(p) => Dimension::Percent(p),
-                crate::element_style::StyleDimension::Auto => Dimension::Auto,
+                crate::element_style::StyleDimension::Length(px) => Dimension::length(px),
+                crate::element_style::StyleDimension::Percent(p) => Dimension::percent(p),
+                crate::element_style::StyleDimension::Auto => Dimension::auto(),
             };
             if matches!(h, crate::element_style::StyleDimension::Auto) {
-                taffy_style.flex_basis = Dimension::Auto;
+                taffy_style.flex_basis = Dimension::auto();
                 taffy_style.flex_grow = 0.0;
                 taffy_style.flex_shrink = 0.0;
             }
         }
         if let Some(v) = es.min_width {
-            taffy_style.min_size.width = Dimension::Length(v);
+            taffy_style.min_size.width = LengthPercentageAuto::length(v);
         }
         if let Some(v) = es.max_width {
-            taffy_style.max_size.width = Dimension::Length(v);
+            taffy_style.max_size.width = LengthPercentageAuto::length(v);
         }
         if let Some(v) = es.min_height {
-            taffy_style.min_size.height = Dimension::Length(v);
+            taffy_style.min_size.height = LengthPercentageAuto::length(v);
         }
         if let Some(v) = es.max_height {
-            taffy_style.max_size.height = Dimension::Length(v);
+            taffy_style.max_size.height = LengthPercentageAuto::length(v);
         }
         if let Some(ref p) = es.padding {
             taffy_style.padding = taffy::geometry::Rect {
-                top: LengthPercentage::Length(p.top),
-                right: LengthPercentage::Length(p.right),
-                bottom: LengthPercentage::Length(p.bottom),
-                left: LengthPercentage::Length(p.left),
+                top: LengthPercentage::length(p.top),
+                right: LengthPercentage::length(p.right),
+                bottom: LengthPercentage::length(p.bottom),
+                left: LengthPercentage::length(p.left),
             };
         }
         if let Some(ref m) = es.margin {
             taffy_style.margin = taffy::geometry::Rect {
-                top: LengthPercentageAuto::Length(m.top),
-                right: LengthPercentageAuto::Length(m.right),
-                bottom: LengthPercentageAuto::Length(m.bottom),
-                left: LengthPercentageAuto::Length(m.left),
+                top: LengthPercentageAuto::length(m.top),
+                right: LengthPercentageAuto::length(m.right),
+                bottom: LengthPercentageAuto::length(m.bottom),
+                left: LengthPercentageAuto::length(m.left),
             };
         }
         if let Some(g) = es.gap {
             taffy_style.gap = taffy::geometry::Size {
-                width: LengthPercentage::Length(g),
-                height: LengthPercentage::Length(g),
+                width: LengthPercentage::length(g),
+                height: LengthPercentage::length(g),
             };
         }
         if let Some(v) = es.flex_grow {
@@ -426,16 +426,16 @@ impl RenderTree {
             taffy_style.flex_shrink = v;
         }
         if let Some(v) = es.top {
-            taffy_style.inset.top = LengthPercentageAuto::Length(v);
+            taffy_style.inset.top = LengthPercentageAuto::length(v);
         }
         if let Some(v) = es.right {
-            taffy_style.inset.right = LengthPercentageAuto::Length(v);
+            taffy_style.inset.right = LengthPercentageAuto::length(v);
         }
         if let Some(v) = es.bottom {
-            taffy_style.inset.bottom = LengthPercentageAuto::Length(v);
+            taffy_style.inset.bottom = LengthPercentageAuto::length(v);
         }
         if let Some(v) = es.left {
-            taffy_style.inset.left = LengthPercentageAuto::Length(v);
+            taffy_style.inset.left = LengthPercentageAuto::length(v);
         }
         // visibility: hidden collapses element from layout (Blinc is always flex)
         if let Some(vis) = es.visibility {
@@ -465,10 +465,10 @@ impl RenderTree {
 
         // Also extract layout properties from taffy style
         if let Some(style) = self.layout_tree.get_style(node_id) {
-            if let taffy::Dimension::Length(w) = style.size.width {
+            if let taffy::style::ExpandedDimension::Length(w) = style.size.width.expand() {
                 kp.width = Some(w);
             }
-            if let taffy::Dimension::Length(h) = style.size.height {
+            if let taffy::style::ExpandedDimension::Length(h) = style.size.height.expand() {
                 kp.height = Some(h);
             }
             // Extract padding
@@ -498,20 +498,28 @@ impl RenderTree {
                 ]);
             }
             // Extract gap
-            if let taffy::LengthPercentage::Length(g) = style.gap.width {
+            if let taffy::style::ExpandedLengthPercentage::Length(g) = style.gap.width.expand() {
                 kp.gap = Some(g);
             }
             // Extract min/max constraints
-            if let taffy::Dimension::Length(v) = style.min_size.width {
+            if let taffy::style::ExpandedLengthPercentageAuto::Length(v) =
+                style.min_size.width.expand()
+            {
                 kp.min_width = Some(v);
             }
-            if let taffy::Dimension::Length(v) = style.max_size.width {
+            if let taffy::style::ExpandedLengthPercentageAuto::Length(v) =
+                style.max_size.width.expand()
+            {
                 kp.max_width = Some(v);
             }
-            if let taffy::Dimension::Length(v) = style.min_size.height {
+            if let taffy::style::ExpandedLengthPercentageAuto::Length(v) =
+                style.min_size.height.expand()
+            {
                 kp.min_height = Some(v);
             }
-            if let taffy::Dimension::Length(v) = style.max_size.height {
+            if let taffy::style::ExpandedLengthPercentageAuto::Length(v) =
+                style.max_size.height.expand()
+            {
                 kp.max_height = Some(v);
             }
             // Extract flex grow/shrink
@@ -603,15 +611,15 @@ impl RenderTree {
     }
 
     fn taffy_lp_to_f32(lp: &taffy::LengthPercentage) -> Option<f32> {
-        match lp {
-            taffy::LengthPercentage::Length(v) => Some(*v),
+        match lp.expand() {
+            taffy::style::ExpandedLengthPercentage::Length(v) => Some(v),
             _ => None,
         }
     }
 
     fn taffy_lpa_to_f32(lpa: &taffy::LengthPercentageAuto) -> Option<f32> {
-        match lpa {
-            taffy::LengthPercentageAuto::Length(v) => Some(*v),
+        match lpa.expand() {
+            taffy::style::ExpandedLengthPercentageAuto::Length(v) => Some(v),
             _ => None,
         }
     }

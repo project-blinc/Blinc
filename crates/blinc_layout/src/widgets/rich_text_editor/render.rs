@@ -762,8 +762,8 @@ fn make_code_chip(
     {
         use taffy::LengthPercentageAuto;
         let s = chip.style_mut();
-        s.margin.left = LengthPercentageAuto::Length(3.0);
-        s.margin.right = LengthPercentageAuto::Length(3.0);
+        s.margin.left = LengthPercentageAuto::length(3.0);
+        s.margin.right = LengthPercentageAuto::length(3.0);
     }
     chip
 }

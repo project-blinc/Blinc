@@ -1567,6 +1567,18 @@ pub struct Stateful<S: StateTransitions> {
     layout_bounds_cb: Option<crate::renderer::LayoutBoundsCallback>,
 }
 
+/// A [`taffy::Style`] held in state that is shared across threads.
+///
+/// taffy stores each length as a tagged `*const ()`, so `Style` is neither
+/// `Send` nor `Sync`. Blinc never builds a `calc()` length, so every length in
+/// a style held here is a scalar tag and value: plain data, nothing pointed at.
+#[derive(Clone, Debug)]
+pub(crate) struct SharedStyle(pub(crate) taffy::Style);
+
+// SAFETY: no length Blinc stores points at anything, see the type's note.
+unsafe impl Send for SharedStyle {}
+unsafe impl Sync for SharedStyle {}
+
 /// Internal state for `Stateful<S>`, wrapped in `Arc<Mutex<...>>` for event handler access
 ///
 /// This is exposed publicly so that `SharedState<S>` can be created externally
@@ -1591,7 +1603,7 @@ pub struct StatefulInner<S: StateTransitions> {
     /// Base taffy Style (before state callback is applied)
     /// This captures layout properties like width, height, overflow, padding, etc.
     /// When rebuilding subtree, we start from base style to preserve container properties.
-    pub(crate) base_style: Option<taffy::Style>,
+    pub(crate) base_style: Option<SharedStyle>,
 
     /// The layout node ID for this element (set on first event)
     /// Used to apply incremental prop updates without tree rebuild
@@ -3421,7 +3433,7 @@ impl<S: StateTransitions> Stateful<S> {
             let mut inner = self.shared_state.lock().unwrap();
             inner.state_callback = Some(Arc::new(callback));
             inner.base_render_props = Some(base_props);
-            inner.base_style = base_style;
+            inner.base_style = base_style.map(SharedStyle);
         }
 
         // Register event handlers BEFORE applying state callback
@@ -3661,7 +3673,7 @@ impl<S: StateTransitions> Stateful<S> {
             let state_copy = guard.state;
             let cached_node_id = guard.node_id;
             let base_props = guard.base_render_props.clone();
-            let base_style = guard.base_style.clone();
+            let base_style = guard.base_style.clone().map(|s| s.0);
             drop(guard); // Release lock before calling callback
 
             // Create temp div with base style to preserve container properties (overflow, etc.)
@@ -3746,7 +3758,7 @@ impl<S: StateTransitions> Stateful<S> {
                 let callback = Arc::clone(cb);
                 let state = guard.state;
                 let base = guard.base_render_props.clone();
-                let style = guard.base_style.clone();
+                let style = guard.base_style.clone().map(|s| s.0);
                 let refresh_cb = guard.refresh_callback.clone();
                 let classes = guard.base_classes.clone();
                 let elt_id = guard.base_element_id.clone();

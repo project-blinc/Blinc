@@ -122,9 +122,9 @@ impl RenderTree {
     /// Get the resolved padding for a layout node as [top, right, bottom, left] in px.
     pub fn get_node_padding(&self, node: LayoutNodeId) -> [f32; 4] {
         if let Some(style) = self.layout_tree.get_style(node) {
-            let to_px = |lp: &taffy::LengthPercentage| match lp {
-                taffy::LengthPercentage::Length(v) => *v,
-                taffy::LengthPercentage::Percent(_) => 0.0, // approx
+            let to_px = |lp: &taffy::LengthPercentage| match lp.expand() {
+                taffy::style::ExpandedLengthPercentage::Length(v) => v,
+                _ => 0.0, // percent: approx
             };
             [
                 to_px(&style.padding.top),

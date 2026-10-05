@@ -36,8 +36,8 @@ impl LayoutStyle {
     pub fn centered() -> Style {
         Style {
             display: Display::Flex,
-            justify_content: Some(JustifyContent::Center),
-            align_items: Some(AlignItems::Center),
+            justify_content: Some(JustifyContent::CENTER),
+            align_items: Some(AlignItems::CENTER),
             ..Default::default()
         }
     }
@@ -46,8 +46,8 @@ impl LayoutStyle {
     pub fn fixed_size(width: f32, height: f32) -> Style {
         Style {
             size: Size {
-                width: Dimension::Length(width),
-                height: Dimension::Length(height),
+                width: Dimension::length(width),
+                height: Dimension::length(height),
             },
             ..Default::default()
         }

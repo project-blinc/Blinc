@@ -162,8 +162,8 @@ impl VirtualList {
             use crate::div::ElementBuilder as _;
             self.inner
                 .layout_style()
-                .and_then(|s| match s.size.height {
-                    taffy::Dimension::Length(h) => Some(h),
+                .and_then(|s| match s.size.height.expand() {
+                    taffy::style::ExpandedDimension::Length(h) => Some(h),
                     _ => None,
                 })
                 .unwrap_or(400.0)

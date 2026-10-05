@@ -491,17 +491,17 @@ impl Text {
             // Set width to Auto so Taffy queries the measure function,
             // max_width to 100% so text doesn't overflow parent,
             // and height to Auto so it's determined by measurement.
-            self.style.size.width = Dimension::Auto;
-            self.style.size.height = Dimension::Auto;
-            self.style.max_size.width = Dimension::Percent(1.0);
+            self.style.size.width = Dimension::auto();
+            self.style.size.height = Dimension::auto();
+            self.style.max_size.width = LengthPercentageAuto::percent(1.0);
             // Allow text to shrink if needed
             self.style.flex_shrink = 1.0;
         } else {
             // For non-wrapping text, use fixed dimensions based on measurement
-            self.style.size.width = Dimension::Length(metrics.width);
+            self.style.size.width = Dimension::length(metrics.width);
             let standardized_height = self.font_size * self.line_height;
-            self.style.size.height = Dimension::Length(standardized_height);
-            self.style.max_size.width = Dimension::Percent(1.0);
+            self.style.size.height = Dimension::length(standardized_height);
+            self.style.max_size.width = LengthPercentageAuto::percent(1.0);
             // No wrapping: don't shrink, keep natural size
             self.style.flex_shrink = 0.0;
         }
@@ -513,7 +513,7 @@ impl Text {
 
     /// Set margin on all sides (in 4px units)
     pub fn m(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin = Rect {
             left: px,
             right: px,
@@ -525,7 +525,7 @@ impl Text {
 
     /// Set horizontal margin (in 4px units)
     pub fn mx(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin.left = px;
         self.style.margin.right = px;
         self
@@ -533,7 +533,7 @@ impl Text {
 
     /// Set vertical margin (in 4px units)
     pub fn my(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin.top = px;
         self.style.margin.bottom = px;
         self

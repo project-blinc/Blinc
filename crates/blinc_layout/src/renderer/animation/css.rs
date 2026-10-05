@@ -543,51 +543,51 @@ impl RenderTree {
                 let mut changed = false;
 
                 if let Some(w) = anim_props.width {
-                    style.size.width = Dimension::Length(w);
+                    style.size.width = Dimension::length(w);
                     changed = true;
                 }
                 if let Some(h) = anim_props.height {
-                    style.size.height = Dimension::Length(h);
+                    style.size.height = Dimension::length(h);
                     changed = true;
                 }
                 if let Some(v) = anim_props.min_width {
-                    style.min_size.width = Dimension::Length(v);
+                    style.min_size.width = LengthPercentageAuto::length(v);
                     changed = true;
                 }
                 if let Some(v) = anim_props.max_width {
-                    style.max_size.width = Dimension::Length(v);
+                    style.max_size.width = LengthPercentageAuto::length(v);
                     changed = true;
                 }
                 if let Some(v) = anim_props.min_height {
-                    style.min_size.height = Dimension::Length(v);
+                    style.min_size.height = LengthPercentageAuto::length(v);
                     changed = true;
                 }
                 if let Some(v) = anim_props.max_height {
-                    style.max_size.height = Dimension::Length(v);
+                    style.max_size.height = LengthPercentageAuto::length(v);
                     changed = true;
                 }
                 if let Some([top, right, bottom, left]) = anim_props.padding {
                     style.padding = taffy::geometry::Rect {
-                        top: LengthPercentage::Length(top),
-                        right: LengthPercentage::Length(right),
-                        bottom: LengthPercentage::Length(bottom),
-                        left: LengthPercentage::Length(left),
+                        top: LengthPercentage::length(top),
+                        right: LengthPercentage::length(right),
+                        bottom: LengthPercentage::length(bottom),
+                        left: LengthPercentage::length(left),
                     };
                     changed = true;
                 }
                 if let Some([top, right, bottom, left]) = anim_props.margin {
                     style.margin = taffy::geometry::Rect {
-                        top: LengthPercentageAuto::Length(top),
-                        right: LengthPercentageAuto::Length(right),
-                        bottom: LengthPercentageAuto::Length(bottom),
-                        left: LengthPercentageAuto::Length(left),
+                        top: LengthPercentageAuto::length(top),
+                        right: LengthPercentageAuto::length(right),
+                        bottom: LengthPercentageAuto::length(bottom),
+                        left: LengthPercentageAuto::length(left),
                     };
                     changed = true;
                 }
                 if let Some(g) = anim_props.gap {
                     style.gap = taffy::geometry::Size {
-                        width: LengthPercentage::Length(g),
-                        height: LengthPercentage::Length(g),
+                        width: LengthPercentage::length(g),
+                        height: LengthPercentage::length(g),
                     };
                     changed = true;
                 }
@@ -605,16 +605,16 @@ impl RenderTree {
                     || anim_props.inset_left.is_some()
                 {
                     if let Some(v) = anim_props.inset_top {
-                        style.inset.top = LengthPercentageAuto::Length(v);
+                        style.inset.top = LengthPercentageAuto::length(v);
                     }
                     if let Some(v) = anim_props.inset_right {
-                        style.inset.right = LengthPercentageAuto::Length(v);
+                        style.inset.right = LengthPercentageAuto::length(v);
                     }
                     if let Some(v) = anim_props.inset_bottom {
-                        style.inset.bottom = LengthPercentageAuto::Length(v);
+                        style.inset.bottom = LengthPercentageAuto::length(v);
                     }
                     if let Some(v) = anim_props.inset_left {
-                        style.inset.left = LengthPercentageAuto::Length(v);
+                        style.inset.left = LengthPercentageAuto::length(v);
                     }
                     changed = true;
                 }

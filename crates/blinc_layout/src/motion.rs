@@ -591,8 +591,8 @@ pub fn motion() -> Motion {
             // centre) should size their parent explicitly or use a
             // sized inner div under motion.
             size: taffy::Size {
-                width: taffy::Dimension::Percent(1.0),
-                height: taffy::Dimension::Auto,
+                width: taffy::Dimension::percent(1.0),
+                height: taffy::Dimension::auto(),
             },
             flex_grow: 1.0,
             ..Style::default()
@@ -649,8 +649,8 @@ pub fn motion_derived(parent_key: &str) -> Motion {
             display: Display::Flex,
             flex_direction: FlexDirection::Column,
             size: taffy::Size {
-                width: taffy::Dimension::Percent(1.0),
-                height: taffy::Dimension::Auto,
+                width: taffy::Dimension::percent(1.0),
+                height: taffy::Dimension::auto(),
             },
             flex_grow: 1.0,
             ..Style::default()
@@ -1036,8 +1036,8 @@ impl Motion {
     /// Set the gap between children (in pixels)
     pub fn gap(mut self, gap: f32) -> Self {
         self.style.gap = taffy::Size {
-            width: taffy::LengthPercentage::Length(gap),
-            height: taffy::LengthPercentage::Length(gap),
+            width: taffy::LengthPercentage::length(gap),
+            height: taffy::LengthPercentage::length(gap),
         };
         self
     }
@@ -1056,37 +1056,37 @@ impl Motion {
 
     /// Align items to center (cross-axis)
     pub fn items_center(mut self) -> Self {
-        self.style.align_items = Some(taffy::AlignItems::Center);
+        self.style.align_items = Some(taffy::AlignItems::CENTER);
         self
     }
 
     /// Align items to start (cross-axis)
     pub fn items_start(mut self) -> Self {
-        self.style.align_items = Some(taffy::AlignItems::FlexStart);
+        self.style.align_items = Some(taffy::AlignItems::FLEX_START);
         self
     }
 
     /// Justify content to center (main-axis)
     pub fn justify_center(mut self) -> Self {
-        self.style.justify_content = Some(taffy::JustifyContent::Center);
+        self.style.justify_content = Some(taffy::JustifyContent::CENTER);
         self
     }
 
     /// Justify content with space between (main-axis)
     pub fn justify_between(mut self) -> Self {
-        self.style.justify_content = Some(taffy::JustifyContent::SpaceBetween);
+        self.style.justify_content = Some(taffy::JustifyContent::SPACE_BETWEEN);
         self
     }
 
     /// Set width to 100% of parent
     pub fn w_full(mut self) -> Self {
-        self.style.size.width = taffy::Dimension::Percent(1.0);
+        self.style.size.width = taffy::Dimension::percent(1.0);
         self
     }
 
     /// Set height to 100% of parent
     pub fn h_full(mut self) -> Self {
-        self.style.size.height = taffy::Dimension::Percent(1.0);
+        self.style.size.height = taffy::Dimension::percent(1.0);
         self
     }
 
@@ -1103,8 +1103,8 @@ impl Motion {
     /// the motion expands to fill the centering container and the panel
     /// ends up flush against the start edge.
     pub fn fit_content(mut self) -> Self {
-        self.style.size.width = taffy::Dimension::Auto;
-        self.style.size.height = taffy::Dimension::Auto;
+        self.style.size.width = taffy::Dimension::auto();
+        self.style.size.height = taffy::Dimension::auto();
         self.style.flex_grow = 0.0;
         self
     }

@@ -2247,7 +2247,10 @@ impl ElementBuilder for CodeEditor {
             let shared_state = self.inner.shared_state();
             let mut shared = shared_state.lock().unwrap();
             shared.base_render_props = Some(self.inner.inner_render_props());
-            shared.base_style = self.inner.inner_layout_style();
+            shared.base_style = self
+                .inner
+                .inner_layout_style()
+                .map(crate::stateful::SharedStyle);
         }
         self.inner.build(tree)
     }

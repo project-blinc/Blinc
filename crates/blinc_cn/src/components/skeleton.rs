@@ -190,16 +190,15 @@ impl ElementBuilder for AnimatedSkeleton {
             .layout_style()
             .cloned()
             .unwrap_or_default();
-        let width = match skeleton_style.size.width {
-            taffy::Dimension::Length(l) => Some(l),
+        let width = match skeleton_style.size.width.expand() {
+            taffy::style::ExpandedDimension::Length(l) => Some(l),
             _ => None,
         };
-        let height = match skeleton_style.size.height {
-            taffy::Dimension::Length(l) => Some(l),
+        let height = match skeleton_style.size.height.expand() {
+            taffy::style::ExpandedDimension::Length(l) => Some(l),
             _ => None,
         };
-        let is_full_width =
-            matches!(skeleton_style.size.width, taffy::Dimension::Percent(p) if p >= 0.99);
+        let is_full_width = matches!(skeleton_style.size.width.expand(), taffy::style::ExpandedDimension::Percent(p) if p >= 0.99);
 
         // Build canvas with animated rendering
         let mut canvas_builder = canvas(move |ctx: &mut dyn DrawContext, bounds: CanvasBounds| {

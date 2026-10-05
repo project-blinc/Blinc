@@ -119,7 +119,7 @@ gpu-alloc = "=0.6.0"
 bytemuck = { version = "1.14", features = ["derive"] }
 
 # Layout engine
-taffy = { version = "0.6", features = ["content_size"] }
+taffy = { version = "0.14", features = ["content_size"] }
 
 # Windowing
 winit = "0.30"

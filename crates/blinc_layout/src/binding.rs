@@ -1423,7 +1423,7 @@ mod tests {
         // Sanity: initial value seeded into taffy style.
         let style = tree.get_style(node_id).expect("style");
         assert!(
-            matches!(style.size.width, taffy::Dimension::Length(v) if (v - 100.0).abs() < 1e-6)
+            matches!(style.size.width.expand(), taffy::style::ExpandedDimension::Length(v) if (v - 100.0).abs() < 1e-6)
         );
 
         let _ = crate::stateful::take_pending_partial_prop_updates();
@@ -1447,7 +1447,7 @@ mod tests {
         let mut style = tree.get_style(node_id).unwrap();
         (upd.layout_write.unwrap())(&mut style);
         assert!(
-            matches!(style.size.width, taffy::Dimension::Length(v) if (v - 250.0).abs() < 1e-6)
+            matches!(style.size.width.expand(), taffy::style::ExpandedDimension::Length(v) if (v - 250.0).abs() < 1e-6)
         );
     }
 
@@ -1492,8 +1492,8 @@ mod tests {
         let mut style = tree.get_style(node_id).unwrap();
         (upd.layout_write.unwrap())(&mut style);
         // gap units are 4px each — gap(4.0) → 16.0
-        match style.gap.width {
-            taffy::LengthPercentage::Length(v) => assert!((v - 16.0).abs() < 1e-6),
+        match style.gap.width.expand() {
+            taffy::style::ExpandedLengthPercentage::Length(v) => assert!((v - 16.0).abs() < 1e-6),
             other => panic!("expected Length, got {other:?}"),
         }
     }
@@ -1518,8 +1518,8 @@ mod tests {
 
         let mut style = tree.get_style(node_id).unwrap();
         (upd.layout_write.unwrap())(&mut style);
-        match style.padding.left {
-            taffy::LengthPercentage::Length(v) => assert!((v - 24.0).abs() < 1e-6),
+        match style.padding.left.expand() {
+            taffy::style::ExpandedLengthPercentage::Length(v) => assert!((v - 24.0).abs() < 1e-6),
             other => panic!("expected Length, got {other:?}"),
         }
     }

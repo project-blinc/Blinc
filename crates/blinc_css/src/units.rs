@@ -65,10 +65,10 @@ impl Default for Length {
 impl From<Length> for LengthPercentage {
     fn from(len: Length) -> Self {
         match len {
-            Length::Px(v) => LengthPercentage::Length(v),
-            Length::Sp(v) => LengthPercentage::Length(v * 4.0),
-            Length::Pct(v) => LengthPercentage::Percent(v / 100.0),
-            Length::Auto => LengthPercentage::Length(0.0),
+            Length::Px(v) => LengthPercentage::length(v),
+            Length::Sp(v) => LengthPercentage::length(v * 4.0),
+            Length::Pct(v) => LengthPercentage::percent(v / 100.0),
+            Length::Auto => LengthPercentage::length(0.0),
         }
     }
 }
@@ -76,10 +76,10 @@ impl From<Length> for LengthPercentage {
 impl From<Length> for LengthPercentageAuto {
     fn from(len: Length) -> Self {
         match len {
-            Length::Px(v) => LengthPercentageAuto::Length(v),
-            Length::Sp(v) => LengthPercentageAuto::Length(v * 4.0),
-            Length::Pct(v) => LengthPercentageAuto::Percent(v / 100.0),
-            Length::Auto => LengthPercentageAuto::Auto,
+            Length::Px(v) => LengthPercentageAuto::length(v),
+            Length::Sp(v) => LengthPercentageAuto::length(v * 4.0),
+            Length::Pct(v) => LengthPercentageAuto::percent(v / 100.0),
+            Length::Auto => LengthPercentageAuto::auto(),
         }
     }
 }
@@ -165,12 +165,18 @@ mod tests {
     #[test]
     fn test_taffy_conversion() {
         let lp: LengthPercentage = px(16.0).into();
-        assert!(matches!(lp, LengthPercentage::Length(v) if (v - 16.0).abs() < 0.001));
+        assert!(
+            matches!(lp.expand(), taffy::style::ExpandedLengthPercentage::Length(v) if (v - 16.0).abs() < 0.001)
+        );
 
         let lp: LengthPercentage = sp(4.0).into();
-        assert!(matches!(lp, LengthPercentage::Length(v) if (v - 16.0).abs() < 0.001));
+        assert!(
+            matches!(lp.expand(), taffy::style::ExpandedLengthPercentage::Length(v) if (v - 16.0).abs() < 0.001)
+        );
 
         let lp: LengthPercentage = pct(50.0).into();
-        assert!(matches!(lp, LengthPercentage::Percent(v) if (v - 0.5).abs() < 0.001));
+        assert!(
+            matches!(lp.expand(), taffy::style::ExpandedLengthPercentage::Percent(v) if (v - 0.5).abs() < 0.001)
+        );
     }
 }

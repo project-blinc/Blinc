@@ -3,6 +3,7 @@
 use slotmap::{Key, SlotMap, new_key_type};
 use std::collections::HashMap;
 use taffy::prelude::*;
+use taffy::{LayoutInput, LayoutOutput, compute_leaf_layout};
 
 use crate::element::ElementBounds;
 use crate::text_measure::{TextLayoutOptions, measure_text_with_options};
@@ -157,11 +158,26 @@ impl LayoutNodeId {
 /// a TextMeasureContext. It measures the text with the actual available
 /// width to get proper multi-line height.
 fn text_measure_function(
-    known_dimensions: Size<Option<f32>>,
-    available_space: Size<AvailableSpace>,
+    inputs: LayoutInput,
     _node_id: NodeId,
     node_context: Option<&mut TextMeasureContext>,
-    _style: &Style,
+    style: &Style,
+) -> LayoutOutput {
+    compute_leaf_layout(
+        inputs,
+        style,
+        |_, _| 0.0,
+        |known_dimensions, available_space| {
+            measure_text_node(known_dimensions, available_space, node_context)
+        },
+    )
+}
+
+/// The content size of a text node given what taffy already knows of it.
+fn measure_text_node(
+    known_dimensions: Size<Option<f32>>,
+    available_space: Size<AvailableSpace>,
+    node_context: Option<&mut TextMeasureContext>,
 ) -> Size<f32> {
     // If dimensions are already known, use them
     let width = known_dimensions.width;
@@ -500,9 +516,8 @@ impl LayoutTree {
 
     // ── Baseline alignment ──────────────────────────────────────────
     //
-    // taffy 0.6 never gives a text leaf a first baseline: compute/leaf.rs
-    // returns `Point::NONE`, and a measure function can only return a
-    // size. Its flexbox then falls back to `unwrap_or(size.height)`, so
+    // taffy's `compute_leaf_layout` gives a text leaf no first baseline,
+    // and its flexbox then falls back to `unwrap_or(size.height)`, so
     // `align-items: baseline` aligns box bottoms. Since a text box is
     // `font_size * line_height` tall, that puts each item's baseline at
     // `row_bottom - 0.4 * font_size` or so: the bigger the text, the
@@ -596,8 +611,8 @@ impl LayoutTree {
             .filter(|_| !self.incidental_align_self.contains(&child));
 
         match authored {
-            Some(a) => a == AlignSelf::Baseline,
-            None => parent_align == Some(AlignItems::Baseline),
+            Some(a) => a == AlignSelf::BASELINE,
+            None => parent_align == Some(AlignItems::BASELINE),
         }
     }
 
@@ -704,8 +719,12 @@ impl LayoutTree {
     /// inside this node. This may be larger than the node's size when content overflows.
     /// Useful for computing scroll bounds.
     pub fn get_content_size(&self, id: LayoutNodeId) -> Option<(f32, f32)> {
-        self.get_layout(id)
-            .map(|layout| (layout.content_size.width, layout.content_size.height))
+        self.get_layout(id).map(|layout| {
+            (
+                layout.scrollable_overflow_rect.right,
+                layout.scrollable_overflow_rect.bottom,
+            )
+        })
     }
 
     /// Get the number of nodes in the tree

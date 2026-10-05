@@ -919,68 +919,68 @@ impl Notch {
 
     /// Set fixed width
     pub fn w(mut self, width: f32) -> Self {
-        self.style.size.width = Dimension::Length(width);
+        self.style.size.width = Dimension::length(width);
         self
     }
 
     /// Set fixed height
     pub fn h(mut self, height: f32) -> Self {
-        self.style.size.height = Dimension::Length(height);
+        self.style.size.height = Dimension::length(height);
         self
     }
 
     /// Set both width and height to the same value
     pub fn size(mut self, size: f32) -> Self {
-        self.style.size.width = Dimension::Length(size);
-        self.style.size.height = Dimension::Length(size);
+        self.style.size.width = Dimension::length(size);
+        self.style.size.height = Dimension::length(size);
         self
     }
 
     /// Set width to 100%
     pub fn w_full(mut self) -> Self {
-        self.style.size.width = Dimension::Percent(1.0);
+        self.style.size.width = Dimension::percent(1.0);
         self
     }
 
     /// Set height to 100%
     pub fn h_full(mut self) -> Self {
-        self.style.size.height = Dimension::Percent(1.0);
+        self.style.size.height = Dimension::percent(1.0);
         self
     }
 
     /// Set width to fit content
     pub fn w_fit(mut self) -> Self {
-        self.style.size.width = Dimension::Auto;
+        self.style.size.width = Dimension::auto();
         self
     }
 
     /// Set height to fit content
     pub fn h_fit(mut self) -> Self {
-        self.style.size.height = Dimension::Auto;
+        self.style.size.height = Dimension::auto();
         self
     }
 
     /// Set minimum width
     pub fn min_w(mut self, width: f32) -> Self {
-        self.style.min_size.width = Dimension::Length(width);
+        self.style.min_size.width = LengthPercentageAuto::length(width);
         self
     }
 
     /// Set minimum height
     pub fn min_h(mut self, height: f32) -> Self {
-        self.style.min_size.height = Dimension::Length(height);
+        self.style.min_size.height = LengthPercentageAuto::length(height);
         self
     }
 
     /// Set maximum width
     pub fn max_w(mut self, width: f32) -> Self {
-        self.style.max_size.width = Dimension::Length(width);
+        self.style.max_size.width = LengthPercentageAuto::length(width);
         self
     }
 
     /// Set maximum height
     pub fn max_h(mut self, height: f32) -> Self {
-        self.style.max_size.height = Dimension::Length(height);
+        self.style.max_size.height = LengthPercentageAuto::length(height);
         self
     }
 
@@ -991,49 +991,49 @@ impl Notch {
     /// Set uniform padding on all sides
     pub fn p(mut self, padding: f32) -> Self {
         self.style.padding = taffy::Rect {
-            left: LengthPercentage::Length(padding),
-            right: LengthPercentage::Length(padding),
-            top: LengthPercentage::Length(padding),
-            bottom: LengthPercentage::Length(padding),
+            left: LengthPercentage::length(padding),
+            right: LengthPercentage::length(padding),
+            top: LengthPercentage::length(padding),
+            bottom: LengthPercentage::length(padding),
         };
         self
     }
 
     /// Set horizontal padding (left and right)
     pub fn px(mut self, padding: f32) -> Self {
-        self.style.padding.left = LengthPercentage::Length(padding);
-        self.style.padding.right = LengthPercentage::Length(padding);
+        self.style.padding.left = LengthPercentage::length(padding);
+        self.style.padding.right = LengthPercentage::length(padding);
         self
     }
 
     /// Set vertical padding (top and bottom)
     pub fn py(mut self, padding: f32) -> Self {
-        self.style.padding.top = LengthPercentage::Length(padding);
-        self.style.padding.bottom = LengthPercentage::Length(padding);
+        self.style.padding.top = LengthPercentage::length(padding);
+        self.style.padding.bottom = LengthPercentage::length(padding);
         self
     }
 
     /// Set top padding
     pub fn pt(mut self, padding: f32) -> Self {
-        self.style.padding.top = LengthPercentage::Length(padding);
+        self.style.padding.top = LengthPercentage::length(padding);
         self
     }
 
     /// Set bottom padding
     pub fn pb(mut self, padding: f32) -> Self {
-        self.style.padding.bottom = LengthPercentage::Length(padding);
+        self.style.padding.bottom = LengthPercentage::length(padding);
         self
     }
 
     /// Set left padding
     pub fn pl(mut self, padding: f32) -> Self {
-        self.style.padding.left = LengthPercentage::Length(padding);
+        self.style.padding.left = LengthPercentage::length(padding);
         self
     }
 
     /// Set right padding
     pub fn pr(mut self, padding: f32) -> Self {
-        self.style.padding.right = LengthPercentage::Length(padding);
+        self.style.padding.right = LengthPercentage::length(padding);
         self
     }
 
@@ -1044,32 +1044,32 @@ impl Notch {
     /// Set uniform margin on all sides
     pub fn m(mut self, margin: f32) -> Self {
         self.style.margin = taffy::Rect {
-            left: LengthPercentageAuto::Length(margin),
-            right: LengthPercentageAuto::Length(margin),
-            top: LengthPercentageAuto::Length(margin),
-            bottom: LengthPercentageAuto::Length(margin),
+            left: LengthPercentageAuto::length(margin),
+            right: LengthPercentageAuto::length(margin),
+            top: LengthPercentageAuto::length(margin),
+            bottom: LengthPercentageAuto::length(margin),
         };
         self
     }
 
     /// Set horizontal margin (left and right)
     pub fn mx(mut self, margin: f32) -> Self {
-        self.style.margin.left = LengthPercentageAuto::Length(margin);
-        self.style.margin.right = LengthPercentageAuto::Length(margin);
+        self.style.margin.left = LengthPercentageAuto::length(margin);
+        self.style.margin.right = LengthPercentageAuto::length(margin);
         self
     }
 
     /// Set vertical margin (top and bottom)
     pub fn my(mut self, margin: f32) -> Self {
-        self.style.margin.top = LengthPercentageAuto::Length(margin);
-        self.style.margin.bottom = LengthPercentageAuto::Length(margin);
+        self.style.margin.top = LengthPercentageAuto::length(margin);
+        self.style.margin.bottom = LengthPercentageAuto::length(margin);
         self
     }
 
     /// Center horizontally with auto margins
     pub fn mx_auto(mut self) -> Self {
-        self.style.margin.left = LengthPercentageAuto::Auto;
-        self.style.margin.right = LengthPercentageAuto::Auto;
+        self.style.margin.left = LengthPercentageAuto::auto();
+        self.style.margin.right = LengthPercentageAuto::auto();
         self
     }
 
@@ -1094,8 +1094,8 @@ impl Notch {
     /// Set gap between children
     pub fn gap(mut self, gap: f32) -> Self {
         self.style.gap = taffy::Size {
-            width: LengthPercentage::Length(gap),
-            height: LengthPercentage::Length(gap),
+            width: LengthPercentage::length(gap),
+            height: LengthPercentage::length(gap),
         };
         self
     }
@@ -1103,50 +1103,50 @@ impl Notch {
     /// Center children both horizontally and vertically
     pub fn flex_center(mut self) -> Self {
         self.style.display = Display::Flex;
-        self.style.justify_content = Some(JustifyContent::Center);
-        self.style.align_items = Some(AlignItems::Center);
+        self.style.justify_content = Some(JustifyContent::CENTER);
+        self.style.align_items = Some(AlignItems::CENTER);
         self
     }
 
     /// Justify content to start
     pub fn justify_start(mut self) -> Self {
-        self.style.justify_content = Some(JustifyContent::Start);
+        self.style.justify_content = Some(JustifyContent::START);
         self
     }
 
     /// Justify content to center
     pub fn justify_center(mut self) -> Self {
-        self.style.justify_content = Some(JustifyContent::Center);
+        self.style.justify_content = Some(JustifyContent::CENTER);
         self
     }
 
     /// Justify content to end
     pub fn justify_end(mut self) -> Self {
-        self.style.justify_content = Some(JustifyContent::End);
+        self.style.justify_content = Some(JustifyContent::END);
         self
     }
 
     /// Justify content with space between
     pub fn justify_between(mut self) -> Self {
-        self.style.justify_content = Some(JustifyContent::SpaceBetween);
+        self.style.justify_content = Some(JustifyContent::SPACE_BETWEEN);
         self
     }
 
     /// Align items to start
     pub fn items_start(mut self) -> Self {
-        self.style.align_items = Some(AlignItems::Start);
+        self.style.align_items = Some(AlignItems::START);
         self
     }
 
     /// Align items to center
     pub fn items_center(mut self) -> Self {
-        self.style.align_items = Some(AlignItems::Center);
+        self.style.align_items = Some(AlignItems::CENTER);
         self
     }
 
     /// Align items to end
     pub fn items_end(mut self) -> Self {
-        self.style.align_items = Some(AlignItems::End);
+        self.style.align_items = Some(AlignItems::END);
         self
     }
 
@@ -1187,25 +1187,25 @@ impl Notch {
 
     /// Set top offset
     pub fn top(mut self, offset: f32) -> Self {
-        self.style.inset.top = LengthPercentageAuto::Length(offset);
+        self.style.inset.top = LengthPercentageAuto::length(offset);
         self
     }
 
     /// Set bottom offset
     pub fn bottom(mut self, offset: f32) -> Self {
-        self.style.inset.bottom = LengthPercentageAuto::Length(offset);
+        self.style.inset.bottom = LengthPercentageAuto::length(offset);
         self
     }
 
     /// Set left offset
     pub fn left(mut self, offset: f32) -> Self {
-        self.style.inset.left = LengthPercentageAuto::Length(offset);
+        self.style.inset.left = LengthPercentageAuto::length(offset);
         self
     }
 
     /// Set right offset
     pub fn right(mut self, offset: f32) -> Self {
-        self.style.inset.right = LengthPercentageAuto::Length(offset);
+        self.style.inset.right = LengthPercentageAuto::length(offset);
         self
     }
 
@@ -2353,18 +2353,18 @@ impl Notch {
     /// taffy got at original build time.
     fn apply_scoop_padding(&self, style: &mut Style) {
         if let Some(scoop) = &self.top_center_scoop {
-            let current_top = match style.padding.top {
-                LengthPercentage::Length(v) => v,
-                LengthPercentage::Percent(_) => 0.0,
+            let current_top = match style.padding.top.expand() {
+                taffy::style::ExpandedLengthPercentage::Length(v) => v,
+                _ => 0.0,
             };
-            style.padding.top = LengthPercentage::Length(current_top + scoop.depth);
+            style.padding.top = LengthPercentage::length(current_top + scoop.depth);
         }
         if let Some(scoop) = &self.bottom_center_scoop {
-            let current_bottom = match style.padding.bottom {
-                LengthPercentage::Length(v) => v,
-                LengthPercentage::Percent(_) => 0.0,
+            let current_bottom = match style.padding.bottom.expand() {
+                taffy::style::ExpandedLengthPercentage::Length(v) => v,
+                _ => 0.0,
             };
-            style.padding.bottom = LengthPercentage::Length(current_bottom + scoop.depth);
+            style.padding.bottom = LengthPercentage::length(current_bottom + scoop.depth);
         }
         // NOTE: concave corner padding is intentionally NOT auto-added
         // here. Existing callers (e.g. the notch_demo dropdown) already

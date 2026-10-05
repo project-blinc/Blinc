@@ -905,15 +905,15 @@ impl Div {
     /// Set horizontal padding without consuming self
     #[inline]
     pub fn set_padding_x(&mut self, px: f32) {
-        self.style.padding.left = taffy::LengthPercentage::Length(px);
-        self.style.padding.right = taffy::LengthPercentage::Length(px);
+        self.style.padding.left = taffy::LengthPercentage::length(px);
+        self.style.padding.right = taffy::LengthPercentage::length(px);
     }
 
     /// Set vertical padding without consuming self
     #[inline]
     pub fn set_padding_y(&mut self, px: f32) {
-        self.style.padding.top = taffy::LengthPercentage::Length(px);
-        self.style.padding.bottom = taffy::LengthPercentage::Length(px);
+        self.style.padding.top = taffy::LengthPercentage::length(px);
+        self.style.padding.bottom = taffy::LengthPercentage::length(px);
     }
 
     /// Clear all children and add a single child
@@ -935,19 +935,19 @@ impl Div {
     /// layout properties without using the swap pattern.
     #[inline]
     pub fn set_w(&mut self, px: f32) {
-        self.style.size.width = taffy::Dimension::Length(px);
+        self.style.size.width = taffy::Dimension::length(px);
     }
 
     /// Set height in pixels without consuming self
     #[inline]
     pub fn set_h(&mut self, px: f32) {
-        self.style.size.height = taffy::Dimension::Length(px);
+        self.style.size.height = taffy::Dimension::length(px);
     }
 
     /// Set height to auto without consuming self
     #[inline]
     pub fn set_h_auto(&mut self) {
-        self.style.size.height = taffy::Dimension::Auto;
+        self.style.size.height = taffy::Dimension::auto();
     }
 
     // =========================================================================
@@ -1030,14 +1030,14 @@ impl Div {
         if let Some(w) = style.width {
             match w {
                 crate::element_style::StyleDimension::Length(px) => {
-                    self.style.size.width = Dimension::Length(px);
+                    self.style.size.width = Dimension::length(px);
                 }
                 crate::element_style::StyleDimension::Percent(p) => {
-                    self.style.size.width = Dimension::Percent(p);
+                    self.style.size.width = Dimension::percent(p);
                 }
                 crate::element_style::StyleDimension::Auto => {
-                    self.style.size.width = Dimension::Auto;
-                    self.style.flex_basis = Dimension::Auto;
+                    self.style.size.width = Dimension::auto();
+                    self.style.flex_basis = Dimension::auto();
                     self.style.flex_grow = 0.0;
                     self.style.flex_shrink = 0.0;
                 }
@@ -1046,30 +1046,30 @@ impl Div {
         if let Some(h) = style.height {
             match h {
                 crate::element_style::StyleDimension::Length(px) => {
-                    self.style.size.height = Dimension::Length(px);
+                    self.style.size.height = Dimension::length(px);
                 }
                 crate::element_style::StyleDimension::Percent(p) => {
-                    self.style.size.height = Dimension::Percent(p);
+                    self.style.size.height = Dimension::percent(p);
                 }
                 crate::element_style::StyleDimension::Auto => {
-                    self.style.size.height = Dimension::Auto;
-                    self.style.flex_basis = Dimension::Auto;
+                    self.style.size.height = Dimension::auto();
+                    self.style.flex_basis = Dimension::auto();
                     self.style.flex_grow = 0.0;
                     self.style.flex_shrink = 0.0;
                 }
             }
         }
         if let Some(w) = style.min_width {
-            self.style.min_size.width = Dimension::Length(w);
+            self.style.min_size.width = LengthPercentageAuto::length(w);
         }
         if let Some(h) = style.min_height {
-            self.style.min_size.height = Dimension::Length(h);
+            self.style.min_size.height = LengthPercentageAuto::length(h);
         }
         if let Some(w) = style.max_width {
-            self.style.max_size.width = Dimension::Length(w);
+            self.style.max_size.width = LengthPercentageAuto::length(w);
         }
         if let Some(h) = style.max_height {
-            self.style.max_size.height = Dimension::Length(h);
+            self.style.max_size.height = LengthPercentageAuto::length(h);
         }
 
         // Layout: display & flex direction
@@ -1105,30 +1105,30 @@ impl Div {
         // Layout: alignment
         if let Some(align) = style.align_items {
             self.style.align_items = Some(match align {
-                StyleAlign::Start => AlignItems::Start,
-                StyleAlign::Center => AlignItems::Center,
-                StyleAlign::End => AlignItems::End,
-                StyleAlign::Stretch => AlignItems::Stretch,
-                StyleAlign::Baseline => AlignItems::Baseline,
+                StyleAlign::Start => AlignItems::START,
+                StyleAlign::Center => AlignItems::CENTER,
+                StyleAlign::End => AlignItems::END,
+                StyleAlign::Stretch => AlignItems::STRETCH,
+                StyleAlign::Baseline => AlignItems::BASELINE,
             });
         }
         if let Some(justify) = style.justify_content {
             self.style.justify_content = Some(match justify {
-                StyleJustify::Start => JustifyContent::Start,
-                StyleJustify::Center => JustifyContent::Center,
-                StyleJustify::End => JustifyContent::End,
-                StyleJustify::SpaceBetween => JustifyContent::SpaceBetween,
-                StyleJustify::SpaceAround => JustifyContent::SpaceAround,
-                StyleJustify::SpaceEvenly => JustifyContent::SpaceEvenly,
+                StyleJustify::Start => JustifyContent::START,
+                StyleJustify::Center => JustifyContent::CENTER,
+                StyleJustify::End => JustifyContent::END,
+                StyleJustify::SpaceBetween => JustifyContent::SPACE_BETWEEN,
+                StyleJustify::SpaceAround => JustifyContent::SPACE_AROUND,
+                StyleJustify::SpaceEvenly => JustifyContent::SPACE_EVENLY,
             });
         }
         if let Some(align) = style.align_self {
             self.style.align_self = Some(match align {
-                StyleAlign::Start => AlignSelf::Start,
-                StyleAlign::Center => AlignSelf::Center,
-                StyleAlign::End => AlignSelf::End,
-                StyleAlign::Stretch => AlignSelf::Stretch,
-                StyleAlign::Baseline => AlignSelf::Baseline,
+                StyleAlign::Start => AlignSelf::START,
+                StyleAlign::Center => AlignSelf::CENTER,
+                StyleAlign::End => AlignSelf::END,
+                StyleAlign::Stretch => AlignSelf::STRETCH,
+                StyleAlign::Baseline => AlignSelf::BASELINE,
             });
         }
 
@@ -1141,10 +1141,10 @@ impl Div {
         }) = style.padding
         {
             self.style.padding = Rect {
-                top: LengthPercentage::Length(top),
-                right: LengthPercentage::Length(right),
-                bottom: LengthPercentage::Length(bottom),
-                left: LengthPercentage::Length(left),
+                top: LengthPercentage::length(top),
+                right: LengthPercentage::length(right),
+                bottom: LengthPercentage::length(bottom),
+                left: LengthPercentage::length(left),
             };
         }
         if let Some(SpacingRect {
@@ -1155,16 +1155,16 @@ impl Div {
         }) = style.margin
         {
             self.style.margin = Rect {
-                top: LengthPercentageAuto::Length(top),
-                right: LengthPercentageAuto::Length(right),
-                bottom: LengthPercentageAuto::Length(bottom),
-                left: LengthPercentageAuto::Length(left),
+                top: LengthPercentageAuto::length(top),
+                right: LengthPercentageAuto::length(right),
+                bottom: LengthPercentageAuto::length(bottom),
+                left: LengthPercentageAuto::length(left),
             };
         }
         if let Some(gap) = style.gap {
             self.style.gap = taffy::Size {
-                width: LengthPercentage::Length(gap),
-                height: LengthPercentage::Length(gap),
+                width: LengthPercentage::length(gap),
+                height: LengthPercentage::length(gap),
             };
         }
 
@@ -1647,7 +1647,7 @@ impl Div {
     pub fn flex_auto(mut self) -> Self {
         self.style.flex_grow = 1.0;
         self.style.flex_shrink = 1.0;
-        self.style.flex_basis = Dimension::Auto;
+        self.style.flex_basis = Dimension::auto();
         self
     }
 
@@ -1655,7 +1655,7 @@ impl Div {
     pub fn flex_1(mut self) -> Self {
         self.style.flex_grow = 1.0;
         self.style.flex_shrink = 1.0;
-        self.style.flex_basis = Dimension::Length(0.0);
+        self.style.flex_basis = Dimension::length(0.0);
         self
     }
 
@@ -1671,113 +1671,113 @@ impl Div {
 
     /// Center items both horizontally and vertically
     pub fn items_center(mut self) -> Self {
-        self.style.align_items = Some(AlignItems::Center);
+        self.style.align_items = Some(AlignItems::CENTER);
         self
     }
 
     /// Align items to start
     pub fn items_start(mut self) -> Self {
-        self.style.align_items = Some(AlignItems::Start);
+        self.style.align_items = Some(AlignItems::START);
         self
     }
 
     /// Align items to end
     pub fn items_end(mut self) -> Self {
-        self.style.align_items = Some(AlignItems::End);
+        self.style.align_items = Some(AlignItems::END);
         self
     }
 
     /// Stretch items to fill (default)
     pub fn items_stretch(mut self) -> Self {
-        self.style.align_items = Some(AlignItems::Stretch);
+        self.style.align_items = Some(AlignItems::STRETCH);
         self
     }
 
     /// Align items to baseline
     pub fn items_baseline(mut self) -> Self {
-        self.style.align_items = Some(AlignItems::Baseline);
+        self.style.align_items = Some(AlignItems::BASELINE);
         self
     }
 
     /// Align self to start (overrides parent's align_items for this element)
     pub fn align_self_start(mut self) -> Self {
-        self.style.align_self = Some(AlignSelf::Start);
+        self.style.align_self = Some(AlignSelf::START);
         self.incidental_align_self = false;
         self
     }
 
     /// Align self to center (overrides parent's align_items for this element)
     pub fn align_self_center(mut self) -> Self {
-        self.style.align_self = Some(AlignSelf::Center);
+        self.style.align_self = Some(AlignSelf::CENTER);
         self.incidental_align_self = false;
         self
     }
 
     /// Align self to end (overrides parent's align_items for this element)
     pub fn align_self_end(mut self) -> Self {
-        self.style.align_self = Some(AlignSelf::End);
+        self.style.align_self = Some(AlignSelf::END);
         self.incidental_align_self = false;
         self
     }
 
     /// Stretch self to fill (overrides parent's align_items for this element)
     pub fn align_self_stretch(mut self) -> Self {
-        self.style.align_self = Some(AlignSelf::Stretch);
+        self.style.align_self = Some(AlignSelf::STRETCH);
         self.incidental_align_self = false;
         self
     }
 
     /// Justify content to start
     pub fn justify_start(mut self) -> Self {
-        self.style.justify_content = Some(JustifyContent::Start);
+        self.style.justify_content = Some(JustifyContent::START);
         self
     }
 
     /// Justify content to center
     pub fn justify_center(mut self) -> Self {
-        self.style.justify_content = Some(JustifyContent::Center);
+        self.style.justify_content = Some(JustifyContent::CENTER);
         self
     }
 
     /// Justify content to end
     pub fn justify_end(mut self) -> Self {
-        self.style.justify_content = Some(JustifyContent::End);
+        self.style.justify_content = Some(JustifyContent::END);
         self
     }
 
     /// Space between items
     pub fn justify_between(mut self) -> Self {
-        self.style.justify_content = Some(JustifyContent::SpaceBetween);
+        self.style.justify_content = Some(JustifyContent::SPACE_BETWEEN);
         self
     }
 
     /// Space around items
     pub fn justify_around(mut self) -> Self {
-        self.style.justify_content = Some(JustifyContent::SpaceAround);
+        self.style.justify_content = Some(JustifyContent::SPACE_AROUND);
         self
     }
 
     /// Space evenly between items
     pub fn justify_evenly(mut self) -> Self {
-        self.style.justify_content = Some(JustifyContent::SpaceEvenly);
+        self.style.justify_content = Some(JustifyContent::SPACE_EVENLY);
         self
     }
 
     /// Align content to start (for multi-line flex containers)
     pub fn content_start(mut self) -> Self {
-        self.style.align_content = Some(taffy::AlignContent::Start);
+        self.style.align_content = Some(taffy::AlignContent::START);
         self
     }
 
     /// Align content to center (for multi-line flex containers)
     pub fn content_center(mut self) -> Self {
-        self.style.align_content = Some(taffy::AlignContent::Center);
+        self.style.align_content = Some(taffy::AlignContent::CENTER);
         self
     }
 
     /// Align content to end (for multi-line flex containers)
     pub fn content_end(mut self) -> Self {
-        self.style.align_content = Some(taffy::AlignContent::End);
+        self.style.align_content = Some(taffy::AlignContent::END);
         self
     }
 
@@ -1786,25 +1786,25 @@ impl Div {
     /// In a flex-row parent, this prevents height stretching.
     /// In a flex-col parent, this prevents width stretching.
     pub fn self_start(mut self) -> Self {
-        self.style.align_self = Some(AlignSelf::FlexStart);
+        self.style.align_self = Some(AlignSelf::FLEX_START);
         self
     }
 
     /// Align this element to center on cross-axis (overrides parent's align-items)
     pub fn self_center(mut self) -> Self {
-        self.style.align_self = Some(AlignSelf::Center);
+        self.style.align_self = Some(AlignSelf::CENTER);
         self
     }
 
     /// Align this element to end on cross-axis (overrides parent's align-items)
     pub fn self_end(mut self) -> Self {
-        self.style.align_self = Some(AlignSelf::FlexEnd);
+        self.style.align_self = Some(AlignSelf::FLEX_END);
         self
     }
 
     /// Stretch this element on cross-axis (overrides parent's align-items)
     pub fn self_stretch(mut self) -> Self {
-        self.style.align_self = Some(AlignSelf::Stretch);
+        self.style.align_self = Some(AlignSelf::STRETCH);
         self
     }
 
@@ -1824,31 +1824,31 @@ impl Div {
         use crate::binding::{LayoutPendingBinding, Reactive};
         match value.into_reactive() {
             Reactive::Const(px) => {
-                self.style.size.width = Dimension::Length(px);
+                self.style.size.width = Dimension::length(px);
             }
             Reactive::Bound(state) => {
                 if let Some(px) = state.try_get() {
-                    self.style.size.width = Dimension::Length(px);
+                    self.style.size.width = Dimension::length(px);
                 }
                 self.pending_bindings
                     .push(Box::new(LayoutPendingBinding::new(
                         state,
                         crate::property::PropertyId::Width,
                         |style, px: f32| {
-                            style.size.width = Dimension::Length(px);
+                            style.size.width = Dimension::length(px);
                         },
                     )));
             }
             Reactive::Computed(computed) => {
                 if let Some(px) = computed.try_get() {
-                    self.style.size.width = Dimension::Length(px);
+                    self.style.size.width = Dimension::length(px);
                 }
                 self.pending_bindings
                     .push(Box::new(LayoutPendingBinding::from_computed(
                         computed,
                         crate::property::PropertyId::Width,
                         |style, px: f32| {
-                            style.size.width = Dimension::Length(px);
+                            style.size.width = Dimension::length(px);
                         },
                     )));
             }
@@ -1858,13 +1858,13 @@ impl Div {
 
     /// Set width to 100%
     pub fn w_full(mut self) -> Self {
-        self.style.size.width = Dimension::Percent(1.0);
+        self.style.size.width = Dimension::percent(1.0);
         self
     }
 
     /// Set width to auto
     pub fn w_auto(mut self) -> Self {
-        self.style.size.width = Dimension::Auto;
+        self.style.size.width = Dimension::auto();
         self
     }
 
@@ -1888,12 +1888,12 @@ impl Div {
     /// [`Self::flex_shrink_0`] instead when the parent is a row -- width
     /// there is the main axis and already hugs.
     pub fn w_fit(mut self) -> Self {
-        self.style.size.width = Dimension::Auto;
+        self.style.size.width = Dimension::auto();
         self.style.flex_grow = 0.0;
         self.style.flex_shrink = 0.0;
         // Only to stop a content-sized item stretching. Marked soft so a
         // parent that states `align_items` still wins.
-        self.style.align_self = Some(AlignSelf::Start);
+        self.style.align_self = Some(AlignSelf::START);
         self.incidental_align_self = true;
         self
     }
@@ -1906,31 +1906,31 @@ impl Div {
         use crate::binding::{LayoutPendingBinding, Reactive};
         match value.into_reactive() {
             Reactive::Const(px) => {
-                self.style.size.height = Dimension::Length(px);
+                self.style.size.height = Dimension::length(px);
             }
             Reactive::Bound(state) => {
                 if let Some(px) = state.try_get() {
-                    self.style.size.height = Dimension::Length(px);
+                    self.style.size.height = Dimension::length(px);
                 }
                 self.pending_bindings
                     .push(Box::new(LayoutPendingBinding::new(
                         state,
                         crate::property::PropertyId::Height,
                         |style, px: f32| {
-                            style.size.height = Dimension::Length(px);
+                            style.size.height = Dimension::length(px);
                         },
                     )));
             }
             Reactive::Computed(computed) => {
                 if let Some(px) = computed.try_get() {
-                    self.style.size.height = Dimension::Length(px);
+                    self.style.size.height = Dimension::length(px);
                 }
                 self.pending_bindings
                     .push(Box::new(LayoutPendingBinding::from_computed(
                         computed,
                         crate::property::PropertyId::Height,
                         |style, px: f32| {
-                            style.size.height = Dimension::Length(px);
+                            style.size.height = Dimension::length(px);
                         },
                     )));
             }
@@ -1940,13 +1940,13 @@ impl Div {
 
     /// Set height to 100%
     pub fn h_full(mut self) -> Self {
-        self.style.size.height = Dimension::Percent(1.0);
+        self.style.size.height = Dimension::percent(1.0);
         self
     }
 
     /// Set height to auto
     pub fn h_auto(mut self) -> Self {
-        self.style.size.height = Dimension::Auto;
+        self.style.size.height = Dimension::auto();
         self
     }
 
@@ -1967,11 +1967,11 @@ impl Div {
     /// its cost: in a ROW this overrides the parent's `align-items` and
     /// pins the box to the top.
     pub fn h_fit(mut self) -> Self {
-        self.style.size.height = Dimension::Auto;
+        self.style.size.height = Dimension::auto();
         self.style.flex_grow = 0.0;
         self.style.flex_shrink = 0.0;
         // See `w_fit`.
-        self.style.align_self = Some(AlignSelf::Start);
+        self.style.align_self = Some(AlignSelf::START);
         self.incidental_align_self = true;
         self
     }
@@ -1982,49 +1982,49 @@ impl Div {
     /// direction. See [`Self::w_fit`] / [`Self::h_fit`] for the
     /// rationale on `align_self` and the `flex_basis` omission.
     pub fn size_fit(mut self) -> Self {
-        self.style.size.width = Dimension::Auto;
-        self.style.size.height = Dimension::Auto;
+        self.style.size.width = Dimension::auto();
+        self.style.size.height = Dimension::auto();
         self.style.flex_grow = 0.0;
         self.style.flex_shrink = 0.0;
-        self.style.align_self = Some(AlignSelf::Start);
+        self.style.align_self = Some(AlignSelf::START);
         self
     }
 
     /// Set both width and height in pixels
     pub fn size(mut self, w: f32, h: f32) -> Self {
-        self.style.size.width = Dimension::Length(w);
-        self.style.size.height = Dimension::Length(h);
+        self.style.size.width = Dimension::length(w);
+        self.style.size.height = Dimension::length(h);
         self
     }
 
     /// Set square size (width and height equal)
     pub fn square(mut self, size: f32) -> Self {
-        self.style.size.width = Dimension::Length(size);
-        self.style.size.height = Dimension::Length(size);
+        self.style.size.width = Dimension::length(size);
+        self.style.size.height = Dimension::length(size);
         self
     }
 
     /// Set min-width in pixels
     pub fn min_w(mut self, px: f32) -> Self {
-        self.style.min_size.width = Dimension::Length(px);
+        self.style.min_size.width = LengthPercentageAuto::length(px);
         self
     }
 
     /// Set min-height in pixels
     pub fn min_h(mut self, px: f32) -> Self {
-        self.style.min_size.height = Dimension::Length(px);
+        self.style.min_size.height = LengthPercentageAuto::length(px);
         self
     }
 
     /// Set max-width in pixels
     pub fn max_w(mut self, px: f32) -> Self {
-        self.style.max_size.width = Dimension::Length(px);
+        self.style.max_size.width = LengthPercentageAuto::length(px);
         self
     }
 
     /// Set max-height in pixels
     pub fn max_h(mut self, px: f32) -> Self {
-        self.style.max_size.height = Dimension::Length(px);
+        self.style.max_size.height = LengthPercentageAuto::length(px);
         self
     }
 
@@ -2043,16 +2043,16 @@ impl Div {
             Reactive::Const(units) => {
                 let px = units * 4.0;
                 self.style.gap = taffy::Size {
-                    width: LengthPercentage::Length(px),
-                    height: LengthPercentage::Length(px),
+                    width: LengthPercentage::length(px),
+                    height: LengthPercentage::length(px),
                 };
             }
             Reactive::Bound(state) => {
                 if let Some(units) = state.try_get() {
                     let px = units * 4.0;
                     self.style.gap = taffy::Size {
-                        width: LengthPercentage::Length(px),
-                        height: LengthPercentage::Length(px),
+                        width: LengthPercentage::length(px),
+                        height: LengthPercentage::length(px),
                     };
                 }
                 self.pending_bindings
@@ -2062,8 +2062,8 @@ impl Div {
                         |style, units: f32| {
                             let px = units * 4.0;
                             style.gap = taffy::Size {
-                                width: LengthPercentage::Length(px),
-                                height: LengthPercentage::Length(px),
+                                width: LengthPercentage::length(px),
+                                height: LengthPercentage::length(px),
                             };
                         },
                     )));
@@ -2072,8 +2072,8 @@ impl Div {
                 if let Some(units) = computed.try_get() {
                     let px = units * 4.0;
                     self.style.gap = taffy::Size {
-                        width: LengthPercentage::Length(px),
-                        height: LengthPercentage::Length(px),
+                        width: LengthPercentage::length(px),
+                        height: LengthPercentage::length(px),
                     };
                 }
                 self.pending_bindings
@@ -2083,8 +2083,8 @@ impl Div {
                         |style, units: f32| {
                             let px = units * 4.0;
                             style.gap = taffy::Size {
-                                width: LengthPercentage::Length(px),
-                                height: LengthPercentage::Length(px),
+                                width: LengthPercentage::length(px),
+                                height: LengthPercentage::length(px),
                             };
                         },
                     )));
@@ -2096,21 +2096,21 @@ impl Div {
     /// Set gap in pixels directly
     pub fn gap_px(mut self, px: f32) -> Self {
         self.style.gap = taffy::Size {
-            width: LengthPercentage::Length(px),
-            height: LengthPercentage::Length(px),
+            width: LengthPercentage::length(px),
+            height: LengthPercentage::length(px),
         };
         self
     }
 
     /// Set column gap (horizontal spacing between items)
     pub fn gap_x(mut self, units: f32) -> Self {
-        self.style.gap.width = LengthPercentage::Length(units * 4.0);
+        self.style.gap.width = LengthPercentage::length(units * 4.0);
         self
     }
 
     /// Set row gap (vertical spacing between items)
     pub fn gap_y(mut self, units: f32) -> Self {
-        self.style.gap.height = LengthPercentage::Length(units * 4.0);
+        self.style.gap.height = LengthPercentage::length(units * 4.0);
         self
     }
 
@@ -2177,7 +2177,7 @@ impl Div {
         use crate::binding::{LayoutPendingBinding, Reactive};
         match value.into_reactive() {
             Reactive::Const(units) => {
-                let px = LengthPercentage::Length(units * 4.0);
+                let px = LengthPercentage::length(units * 4.0);
                 self.style.padding = Rect {
                     left: px,
                     right: px,
@@ -2187,7 +2187,7 @@ impl Div {
             }
             Reactive::Bound(state) => {
                 if let Some(units) = state.try_get() {
-                    let px = LengthPercentage::Length(units * 4.0);
+                    let px = LengthPercentage::length(units * 4.0);
                     self.style.padding = Rect {
                         left: px,
                         right: px,
@@ -2200,7 +2200,7 @@ impl Div {
                         state,
                         crate::property::PropertyId::Padding,
                         |style, units: f32| {
-                            let px = LengthPercentage::Length(units * 4.0);
+                            let px = LengthPercentage::length(units * 4.0);
                             style.padding = Rect {
                                 left: px,
                                 right: px,
@@ -2212,7 +2212,7 @@ impl Div {
             }
             Reactive::Computed(computed) => {
                 if let Some(units) = computed.try_get() {
-                    let px = LengthPercentage::Length(units * 4.0);
+                    let px = LengthPercentage::length(units * 4.0);
                     self.style.padding = Rect {
                         left: px,
                         right: px,
@@ -2225,7 +2225,7 @@ impl Div {
                         computed,
                         crate::property::PropertyId::Padding,
                         |style, units: f32| {
-                            let px = LengthPercentage::Length(units * 4.0);
+                            let px = LengthPercentage::length(units * 4.0);
                             style.padding = Rect {
                                 left: px,
                                 right: px,
@@ -2241,7 +2241,7 @@ impl Div {
 
     /// Set padding in pixels
     pub fn p_px(mut self, px: f32) -> Self {
-        let val = LengthPercentage::Length(px);
+        let val = LengthPercentage::length(px);
         self.style.padding = Rect {
             left: val,
             right: val,
@@ -2253,7 +2253,7 @@ impl Div {
 
     /// Set horizontal padding (in 4px units)
     pub fn px(mut self, units: f32) -> Self {
-        let px = LengthPercentage::Length(units * 4.0);
+        let px = LengthPercentage::length(units * 4.0);
         self.style.padding.left = px;
         self.style.padding.right = px;
         self
@@ -2261,7 +2261,7 @@ impl Div {
 
     /// Set vertical padding (in 4px units)
     pub fn py(mut self, units: f32) -> Self {
-        let px = LengthPercentage::Length(units * 4.0);
+        let px = LengthPercentage::length(units * 4.0);
         self.style.padding.top = px;
         self.style.padding.bottom = px;
         self
@@ -2269,25 +2269,25 @@ impl Div {
 
     /// Set left padding (in 4px units)
     pub fn pl(mut self, units: f32) -> Self {
-        self.style.padding.left = LengthPercentage::Length(units * 4.0);
+        self.style.padding.left = LengthPercentage::length(units * 4.0);
         self
     }
 
     /// Set right padding (in 4px units)
     pub fn pr(mut self, units: f32) -> Self {
-        self.style.padding.right = LengthPercentage::Length(units * 4.0);
+        self.style.padding.right = LengthPercentage::length(units * 4.0);
         self
     }
 
     /// Set top padding (in 4px units)
     pub fn pt(mut self, units: f32) -> Self {
-        self.style.padding.top = LengthPercentage::Length(units * 4.0);
+        self.style.padding.top = LengthPercentage::length(units * 4.0);
         self
     }
 
     /// Set bottom padding (in 4px units)
     pub fn pb(mut self, units: f32) -> Self {
-        self.style.padding.bottom = LengthPercentage::Length(units * 4.0);
+        self.style.padding.bottom = LengthPercentage::length(units * 4.0);
         self
     }
 
@@ -2355,7 +2355,7 @@ impl Div {
 
     /// Set horizontal padding in raw pixels (no unit conversion)
     pub fn padding_x_px(mut self, pixels: f32) -> Self {
-        let px = LengthPercentage::Length(pixels);
+        let px = LengthPercentage::length(pixels);
         self.style.padding.left = px;
         self.style.padding.right = px;
         self
@@ -2363,7 +2363,7 @@ impl Div {
 
     /// Set vertical padding in raw pixels (no unit conversion)
     pub fn padding_y_px(mut self, pixels: f32) -> Self {
-        let px = LengthPercentage::Length(pixels);
+        let px = LengthPercentage::length(pixels);
         self.style.padding.top = px;
         self.style.padding.bottom = px;
         self
@@ -2411,7 +2411,7 @@ impl Div {
 
     /// Set margin on all sides (in 4px units)
     pub fn m(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin = Rect {
             left: px,
             right: px,
@@ -2423,7 +2423,7 @@ impl Div {
 
     /// Set margin in pixels
     pub fn m_px(mut self, px: f32) -> Self {
-        let val = LengthPercentageAuto::Length(px);
+        let val = LengthPercentageAuto::length(px);
         self.style.margin = Rect {
             left: val,
             right: val,
@@ -2435,7 +2435,7 @@ impl Div {
 
     /// Set horizontal margin (in 4px units)
     pub fn mx(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin.left = px;
         self.style.margin.right = px;
         self
@@ -2443,7 +2443,7 @@ impl Div {
 
     /// Set vertical margin (in 4px units)
     pub fn my(mut self, units: f32) -> Self {
-        let px = LengthPercentageAuto::Length(units * 4.0);
+        let px = LengthPercentageAuto::length(units * 4.0);
         self.style.margin.top = px;
         self.style.margin.bottom = px;
         self
@@ -2451,32 +2451,32 @@ impl Div {
 
     /// Set auto horizontal margin (centering)
     pub fn mx_auto(mut self) -> Self {
-        self.style.margin.left = LengthPercentageAuto::Auto;
-        self.style.margin.right = LengthPercentageAuto::Auto;
+        self.style.margin.left = LengthPercentageAuto::auto();
+        self.style.margin.right = LengthPercentageAuto::auto();
         self
     }
 
     /// Set left margin (in 4px units)
     pub fn ml(mut self, units: f32) -> Self {
-        self.style.margin.left = LengthPercentageAuto::Length(units * 4.0);
+        self.style.margin.left = LengthPercentageAuto::length(units * 4.0);
         self
     }
 
     /// Set right margin (in 4px units)
     pub fn mr(mut self, units: f32) -> Self {
-        self.style.margin.right = LengthPercentageAuto::Length(units * 4.0);
+        self.style.margin.right = LengthPercentageAuto::length(units * 4.0);
         self
     }
 
     /// Set top margin (in 4px units)
     pub fn mt(mut self, units: f32) -> Self {
-        self.style.margin.top = LengthPercentageAuto::Length(units * 4.0);
+        self.style.margin.top = LengthPercentageAuto::length(units * 4.0);
         self
     }
 
     /// Set bottom margin (in 4px units)
     pub fn mb(mut self, units: f32) -> Self {
-        self.style.margin.bottom = LengthPercentageAuto::Length(units * 4.0);
+        self.style.margin.bottom = LengthPercentageAuto::length(units * 4.0);
         self
     }
 
@@ -2554,7 +2554,7 @@ impl Div {
 
     /// Set inset (position from all edges)
     pub fn inset(mut self, px: f32) -> Self {
-        let val = LengthPercentageAuto::Length(px);
+        let val = LengthPercentageAuto::length(px);
         self.style.inset = Rect {
             left: val,
             right: val,
@@ -2566,25 +2566,25 @@ impl Div {
 
     /// Set top position
     pub fn top(mut self, px: f32) -> Self {
-        self.style.inset.top = LengthPercentageAuto::Length(px);
+        self.style.inset.top = LengthPercentageAuto::length(px);
         self
     }
 
     /// Set bottom position
     pub fn bottom(mut self, px: f32) -> Self {
-        self.style.inset.bottom = LengthPercentageAuto::Length(px);
+        self.style.inset.bottom = LengthPercentageAuto::length(px);
         self
     }
 
     /// Set left position
     pub fn left(mut self, px: f32) -> Self {
-        self.style.inset.left = LengthPercentageAuto::Length(px);
+        self.style.inset.left = LengthPercentageAuto::length(px);
         self
     }
 
     /// Set right position
     pub fn right(mut self, px: f32) -> Self {
-        self.style.inset.right = LengthPercentageAuto::Length(px);
+        self.style.inset.right = LengthPercentageAuto::length(px);
         self
     }
 
@@ -5399,7 +5399,7 @@ mod tests {
 
         // Read from the ref
         let width = div_ref.with(|d| d.style.size.width);
-        assert!(matches!(width, Some(Dimension::Length(100.0))));
+        assert_eq!(width, Some(Dimension::length(100.0)));
     }
 
     #[test]
@@ -5415,7 +5415,7 @@ mod tests {
 
         // Verify modification
         let height = div_ref.with(|d| d.style.size.height);
-        assert!(matches!(height, Some(Dimension::Length(200.0))));
+        assert_eq!(height, Some(Dimension::length(200.0)));
     }
 
     #[test]
@@ -5429,7 +5429,7 @@ mod tests {
         // Should be visible on clone (shared storage)
         assert!(div_ref_clone.is_bound());
         let width = div_ref_clone.with(|d| d.style.size.width);
-        assert!(matches!(width, Some(Dimension::Length(100.0))));
+        assert_eq!(width, Some(Dimension::length(100.0)));
     }
 
     /// `h_fit()` on a child in a flex-row parent must actually shrink

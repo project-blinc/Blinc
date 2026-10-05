@@ -152,39 +152,39 @@ impl RenderTree {
             // Sizing
             if let Some(w) = es.width {
                 style.size.width = match w {
-                    crate::element_style::StyleDimension::Length(px) => Dimension::Length(px),
-                    crate::element_style::StyleDimension::Percent(p) => Dimension::Percent(p),
-                    crate::element_style::StyleDimension::Auto => Dimension::Auto,
+                    crate::element_style::StyleDimension::Length(px) => Dimension::length(px),
+                    crate::element_style::StyleDimension::Percent(p) => Dimension::percent(p),
+                    crate::element_style::StyleDimension::Auto => Dimension::auto(),
                 };
                 if matches!(w, crate::element_style::StyleDimension::Auto) {
-                    style.flex_basis = Dimension::Auto;
+                    style.flex_basis = Dimension::auto();
                     style.flex_grow = 0.0;
                     style.flex_shrink = 0.0;
                 }
             }
             if let Some(h) = es.height {
                 style.size.height = match h {
-                    crate::element_style::StyleDimension::Length(px) => Dimension::Length(px),
-                    crate::element_style::StyleDimension::Percent(p) => Dimension::Percent(p),
-                    crate::element_style::StyleDimension::Auto => Dimension::Auto,
+                    crate::element_style::StyleDimension::Length(px) => Dimension::length(px),
+                    crate::element_style::StyleDimension::Percent(p) => Dimension::percent(p),
+                    crate::element_style::StyleDimension::Auto => Dimension::auto(),
                 };
                 if matches!(h, crate::element_style::StyleDimension::Auto) {
-                    style.flex_basis = Dimension::Auto;
+                    style.flex_basis = Dimension::auto();
                     style.flex_grow = 0.0;
                     style.flex_shrink = 0.0;
                 }
             }
             if let Some(w) = es.min_width {
-                style.min_size.width = Dimension::Length(w);
+                style.min_size.width = LengthPercentageAuto::length(w);
             }
             if let Some(h) = es.min_height {
-                style.min_size.height = Dimension::Length(h);
+                style.min_size.height = LengthPercentageAuto::length(h);
             }
             if let Some(w) = es.max_width {
-                style.max_size.width = Dimension::Length(w);
+                style.max_size.width = LengthPercentageAuto::length(w);
             }
             if let Some(h) = es.max_height {
-                style.max_size.height = Dimension::Length(h);
+                style.max_size.height = LengthPercentageAuto::length(h);
             }
 
             // Display & flex direction
@@ -220,30 +220,30 @@ impl RenderTree {
             // Alignment
             if let Some(align) = es.align_items {
                 style.align_items = Some(match align {
-                    StyleAlign::Start => AlignItems::Start,
-                    StyleAlign::Center => AlignItems::Center,
-                    StyleAlign::End => AlignItems::End,
-                    StyleAlign::Stretch => AlignItems::Stretch,
-                    StyleAlign::Baseline => AlignItems::Baseline,
+                    StyleAlign::Start => AlignItems::START,
+                    StyleAlign::Center => AlignItems::CENTER,
+                    StyleAlign::End => AlignItems::END,
+                    StyleAlign::Stretch => AlignItems::STRETCH,
+                    StyleAlign::Baseline => AlignItems::BASELINE,
                 });
             }
             if let Some(justify) = es.justify_content {
                 style.justify_content = Some(match justify {
-                    StyleJustify::Start => JustifyContent::Start,
-                    StyleJustify::Center => JustifyContent::Center,
-                    StyleJustify::End => JustifyContent::End,
-                    StyleJustify::SpaceBetween => JustifyContent::SpaceBetween,
-                    StyleJustify::SpaceAround => JustifyContent::SpaceAround,
-                    StyleJustify::SpaceEvenly => JustifyContent::SpaceEvenly,
+                    StyleJustify::Start => JustifyContent::START,
+                    StyleJustify::Center => JustifyContent::CENTER,
+                    StyleJustify::End => JustifyContent::END,
+                    StyleJustify::SpaceBetween => JustifyContent::SPACE_BETWEEN,
+                    StyleJustify::SpaceAround => JustifyContent::SPACE_AROUND,
+                    StyleJustify::SpaceEvenly => JustifyContent::SPACE_EVENLY,
                 });
             }
             if let Some(align) = es.align_self {
                 style.align_self = Some(match align {
-                    StyleAlign::Start => AlignSelf::Start,
-                    StyleAlign::Center => AlignSelf::Center,
-                    StyleAlign::End => AlignSelf::End,
-                    StyleAlign::Stretch => AlignSelf::Stretch,
-                    StyleAlign::Baseline => AlignSelf::Baseline,
+                    StyleAlign::Start => AlignSelf::START,
+                    StyleAlign::Center => AlignSelf::CENTER,
+                    StyleAlign::End => AlignSelf::END,
+                    StyleAlign::Stretch => AlignSelf::STRETCH,
+                    StyleAlign::Baseline => AlignSelf::BASELINE,
                 });
                 // Written by an author, so it outranks the parent even if
                 // `w_fit` had already marked this node's `align_self` as
@@ -260,10 +260,10 @@ impl RenderTree {
                 left,
             }) = es.padding
             {
-                style.padding.top = LengthPercentage::Length(top);
-                style.padding.right = LengthPercentage::Length(right);
-                style.padding.bottom = LengthPercentage::Length(bottom);
-                style.padding.left = LengthPercentage::Length(left);
+                style.padding.top = LengthPercentage::length(top);
+                style.padding.right = LengthPercentage::length(right);
+                style.padding.bottom = LengthPercentage::length(bottom);
+                style.padding.left = LengthPercentage::length(left);
             }
             if let Some(SpacingRect {
                 top,
@@ -272,15 +272,15 @@ impl RenderTree {
                 left,
             }) = es.margin
             {
-                style.margin.top = LengthPercentageAuto::Length(top);
-                style.margin.right = LengthPercentageAuto::Length(right);
-                style.margin.bottom = LengthPercentageAuto::Length(bottom);
-                style.margin.left = LengthPercentageAuto::Length(left);
+                style.margin.top = LengthPercentageAuto::length(top);
+                style.margin.right = LengthPercentageAuto::length(right);
+                style.margin.bottom = LengthPercentageAuto::length(bottom);
+                style.margin.left = LengthPercentageAuto::length(left);
             }
             if let Some(gap) = es.gap {
                 style.gap = taffy::Size {
-                    width: LengthPercentage::Length(gap),
-                    height: LengthPercentage::Length(gap),
+                    width: LengthPercentage::length(gap),
+                    height: LengthPercentage::length(gap),
                 };
             }
 
@@ -339,16 +339,16 @@ impl RenderTree {
             let is_sticky = es.position == Some(StylePosition::Sticky);
             if !is_sticky {
                 if let Some(top) = es.top {
-                    style.inset.top = LengthPercentageAuto::Length(top);
+                    style.inset.top = LengthPercentageAuto::length(top);
                 }
                 if let Some(right) = es.right {
-                    style.inset.right = LengthPercentageAuto::Length(right);
+                    style.inset.right = LengthPercentageAuto::length(right);
                 }
                 if let Some(bottom) = es.bottom {
-                    style.inset.bottom = LengthPercentageAuto::Length(bottom);
+                    style.inset.bottom = LengthPercentageAuto::length(bottom);
                 }
                 if let Some(left) = es.left {
-                    style.inset.left = LengthPercentageAuto::Length(left);
+                    style.inset.left = LengthPercentageAuto::length(left);
                 }
             }
 
@@ -689,39 +689,39 @@ impl RenderTree {
             // Sizing
             if let Some(w) = es.width {
                 style.size.width = match w {
-                    crate::element_style::StyleDimension::Length(px) => Dimension::Length(px),
-                    crate::element_style::StyleDimension::Percent(p) => Dimension::Percent(p),
-                    crate::element_style::StyleDimension::Auto => Dimension::Auto,
+                    crate::element_style::StyleDimension::Length(px) => Dimension::length(px),
+                    crate::element_style::StyleDimension::Percent(p) => Dimension::percent(p),
+                    crate::element_style::StyleDimension::Auto => Dimension::auto(),
                 };
                 if matches!(w, crate::element_style::StyleDimension::Auto) {
-                    style.flex_basis = Dimension::Auto;
+                    style.flex_basis = Dimension::auto();
                     style.flex_grow = 0.0;
                     style.flex_shrink = 0.0;
                 }
             }
             if let Some(h) = es.height {
                 style.size.height = match h {
-                    crate::element_style::StyleDimension::Length(px) => Dimension::Length(px),
-                    crate::element_style::StyleDimension::Percent(p) => Dimension::Percent(p),
-                    crate::element_style::StyleDimension::Auto => Dimension::Auto,
+                    crate::element_style::StyleDimension::Length(px) => Dimension::length(px),
+                    crate::element_style::StyleDimension::Percent(p) => Dimension::percent(p),
+                    crate::element_style::StyleDimension::Auto => Dimension::auto(),
                 };
                 if matches!(h, crate::element_style::StyleDimension::Auto) {
-                    style.flex_basis = Dimension::Auto;
+                    style.flex_basis = Dimension::auto();
                     style.flex_grow = 0.0;
                     style.flex_shrink = 0.0;
                 }
             }
             if let Some(w) = es.min_width {
-                style.min_size.width = Dimension::Length(w);
+                style.min_size.width = LengthPercentageAuto::length(w);
             }
             if let Some(h) = es.min_height {
-                style.min_size.height = Dimension::Length(h);
+                style.min_size.height = LengthPercentageAuto::length(h);
             }
             if let Some(w) = es.max_width {
-                style.max_size.width = Dimension::Length(w);
+                style.max_size.width = LengthPercentageAuto::length(w);
             }
             if let Some(h) = es.max_height {
-                style.max_size.height = Dimension::Length(h);
+                style.max_size.height = LengthPercentageAuto::length(h);
             }
 
             // Display & flex direction
@@ -757,30 +757,30 @@ impl RenderTree {
             // Alignment
             if let Some(align) = es.align_items {
                 style.align_items = Some(match align {
-                    StyleAlign::Start => AlignItems::Start,
-                    StyleAlign::Center => AlignItems::Center,
-                    StyleAlign::End => AlignItems::End,
-                    StyleAlign::Stretch => AlignItems::Stretch,
-                    StyleAlign::Baseline => AlignItems::Baseline,
+                    StyleAlign::Start => AlignItems::START,
+                    StyleAlign::Center => AlignItems::CENTER,
+                    StyleAlign::End => AlignItems::END,
+                    StyleAlign::Stretch => AlignItems::STRETCH,
+                    StyleAlign::Baseline => AlignItems::BASELINE,
                 });
             }
             if let Some(justify) = es.justify_content {
                 style.justify_content = Some(match justify {
-                    StyleJustify::Start => JustifyContent::Start,
-                    StyleJustify::Center => JustifyContent::Center,
-                    StyleJustify::End => JustifyContent::End,
-                    StyleJustify::SpaceBetween => JustifyContent::SpaceBetween,
-                    StyleJustify::SpaceAround => JustifyContent::SpaceAround,
-                    StyleJustify::SpaceEvenly => JustifyContent::SpaceEvenly,
+                    StyleJustify::Start => JustifyContent::START,
+                    StyleJustify::Center => JustifyContent::CENTER,
+                    StyleJustify::End => JustifyContent::END,
+                    StyleJustify::SpaceBetween => JustifyContent::SPACE_BETWEEN,
+                    StyleJustify::SpaceAround => JustifyContent::SPACE_AROUND,
+                    StyleJustify::SpaceEvenly => JustifyContent::SPACE_EVENLY,
                 });
             }
             if let Some(align) = es.align_self {
                 style.align_self = Some(match align {
-                    StyleAlign::Start => AlignSelf::Start,
-                    StyleAlign::Center => AlignSelf::Center,
-                    StyleAlign::End => AlignSelf::End,
-                    StyleAlign::Stretch => AlignSelf::Stretch,
-                    StyleAlign::Baseline => AlignSelf::Baseline,
+                    StyleAlign::Start => AlignSelf::START,
+                    StyleAlign::Center => AlignSelf::CENTER,
+                    StyleAlign::End => AlignSelf::END,
+                    StyleAlign::Stretch => AlignSelf::STRETCH,
+                    StyleAlign::Baseline => AlignSelf::BASELINE,
                 });
                 // Written by an author, so it outranks the parent even if
                 // `w_fit` had already marked this node's `align_self` as
@@ -797,10 +797,10 @@ impl RenderTree {
                 left,
             }) = es.padding
             {
-                style.padding.top = LengthPercentage::Length(top);
-                style.padding.right = LengthPercentage::Length(right);
-                style.padding.bottom = LengthPercentage::Length(bottom);
-                style.padding.left = LengthPercentage::Length(left);
+                style.padding.top = LengthPercentage::length(top);
+                style.padding.right = LengthPercentage::length(right);
+                style.padding.bottom = LengthPercentage::length(bottom);
+                style.padding.left = LengthPercentage::length(left);
             }
             if let Some(SpacingRect {
                 top,
@@ -809,15 +809,15 @@ impl RenderTree {
                 left,
             }) = es.margin
             {
-                style.margin.top = LengthPercentageAuto::Length(top);
-                style.margin.right = LengthPercentageAuto::Length(right);
-                style.margin.bottom = LengthPercentageAuto::Length(bottom);
-                style.margin.left = LengthPercentageAuto::Length(left);
+                style.margin.top = LengthPercentageAuto::length(top);
+                style.margin.right = LengthPercentageAuto::length(right);
+                style.margin.bottom = LengthPercentageAuto::length(bottom);
+                style.margin.left = LengthPercentageAuto::length(left);
             }
             if let Some(gap) = es.gap {
                 style.gap = taffy::Size {
-                    width: LengthPercentage::Length(gap),
-                    height: LengthPercentage::Length(gap),
+                    width: LengthPercentage::length(gap),
+                    height: LengthPercentage::length(gap),
                 };
             }
 
@@ -873,16 +873,16 @@ impl RenderTree {
             let is_sticky = es.position == Some(StylePosition::Sticky);
             if !is_sticky {
                 if let Some(top) = es.top {
-                    style.inset.top = LengthPercentageAuto::Length(top);
+                    style.inset.top = LengthPercentageAuto::length(top);
                 }
                 if let Some(right) = es.right {
-                    style.inset.right = LengthPercentageAuto::Length(right);
+                    style.inset.right = LengthPercentageAuto::length(right);
                 }
                 if let Some(bottom) = es.bottom {
-                    style.inset.bottom = LengthPercentageAuto::Length(bottom);
+                    style.inset.bottom = LengthPercentageAuto::length(bottom);
                 }
                 if let Some(left) = es.left {
-                    style.inset.left = LengthPercentageAuto::Length(left);
+                    style.inset.left = LengthPercentageAuto::length(left);
                 }
             }
 

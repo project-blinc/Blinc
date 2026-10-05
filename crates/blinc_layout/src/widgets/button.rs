@@ -596,7 +596,10 @@ impl Button {
             container.merge(update);
         }));
         shared.base_render_props = Some(self.inner.inner_render_props());
-        shared.base_style = self.inner.inner_layout_style();
+        shared.base_style = self
+            .inner
+            .inner_layout_style()
+            .map(crate::stateful::SharedStyle);
         shared.needs_visual_update = true;
     }
 }

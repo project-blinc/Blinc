@@ -1122,8 +1122,8 @@ fn hash_style(style: &Style, hasher: &mut impl Hasher) {
 
     // Size
     hash_taffy_size_dim(&style.size, hasher);
-    hash_taffy_size_dim(&style.min_size, hasher);
-    hash_taffy_size_dim(&style.max_size, hasher);
+    hash_taffy_size_lpa(&style.min_size, hasher);
+    hash_taffy_size_lpa(&style.max_size, hasher);
     hash_option_f32(&style.aspect_ratio, hasher);
 
     // Spacing
@@ -1135,49 +1135,40 @@ fn hash_style(style: &Style, hasher: &mut impl Hasher) {
 
 // Taffy type hashers
 fn hash_dimension(dim: &taffy::Dimension, hasher: &mut impl Hasher) {
-    match dim {
-        taffy::Dimension::Auto => 0u8.hash(hasher),
-        taffy::Dimension::Length(v) => {
-            1u8.hash(hasher);
-            hash_f32(*v, hasher);
-        }
-        taffy::Dimension::Percent(v) => {
-            2u8.hash(hasher);
-            hash_f32(*v, hasher);
-        }
+    use taffy::style::ExpandedDimension as D;
+    let d = dim.expand();
+    std::mem::discriminant(&d).hash(hasher);
+    if let D::Length(v) | D::Percent(v) | D::FitContentPx(v) | D::FitContentPercent(v) = d {
+        hash_f32(v, hasher);
     }
 }
 
 fn hash_length_percentage(lp: &taffy::LengthPercentage, hasher: &mut impl Hasher) {
-    match lp {
-        taffy::LengthPercentage::Length(v) => {
-            0u8.hash(hasher);
-            hash_f32(*v, hasher);
-        }
-        taffy::LengthPercentage::Percent(v) => {
-            1u8.hash(hasher);
-            hash_f32(*v, hasher);
-        }
+    use taffy::style::ExpandedLengthPercentage as L;
+    let l = lp.expand();
+    std::mem::discriminant(&l).hash(hasher);
+    if let L::Length(v) | L::Percent(v) = l {
+        hash_f32(v, hasher);
     }
 }
 
 fn hash_length_percentage_auto(lpa: &taffy::LengthPercentageAuto, hasher: &mut impl Hasher) {
-    match lpa {
-        taffy::LengthPercentageAuto::Auto => 0u8.hash(hasher),
-        taffy::LengthPercentageAuto::Length(v) => {
-            1u8.hash(hasher);
-            hash_f32(*v, hasher);
-        }
-        taffy::LengthPercentageAuto::Percent(v) => {
-            2u8.hash(hasher);
-            hash_f32(*v, hasher);
-        }
+    use taffy::style::ExpandedLengthPercentageAuto as L;
+    let l = lpa.expand();
+    std::mem::discriminant(&l).hash(hasher);
+    if let L::Length(v) | L::Percent(v) = l {
+        hash_f32(v, hasher);
     }
 }
 
 fn hash_taffy_size_dim(size: &taffy::Size<taffy::Dimension>, hasher: &mut impl Hasher) {
     hash_dimension(&size.width, hasher);
     hash_dimension(&size.height, hasher);
+}
+
+fn hash_taffy_size_lpa(size: &taffy::Size<taffy::LengthPercentageAuto>, hasher: &mut impl Hasher) {
+    hash_length_percentage_auto(&size.width, hasher);
+    hash_length_percentage_auto(&size.height, hasher);
 }
 
 fn hash_taffy_size_lp(size: &taffy::Size<taffy::LengthPercentage>, hasher: &mut impl Hasher) {
@@ -1213,7 +1204,8 @@ fn hash_option_justify(opt: &Option<taffy::JustifyContent>, hasher: &mut impl Ha
     match opt {
         Some(v) => {
             1u8.hash(hasher);
-            std::mem::discriminant(v).hash(hasher);
+            std::mem::discriminant(&v.keyword()).hash(hasher);
+            v.is_safe().hash(hasher);
         }
         None => 0u8.hash(hasher),
     }
@@ -1223,7 +1215,8 @@ fn hash_option_align(opt: &Option<taffy::AlignItems>, hasher: &mut impl Hasher) 
     match opt {
         Some(v) => {
             1u8.hash(hasher);
-            std::mem::discriminant(v).hash(hasher);
+            std::mem::discriminant(&v.keyword()).hash(hasher);
+            v.is_safe().hash(hasher);
         }
         None => 0u8.hash(hasher),
     }
@@ -1233,7 +1226,8 @@ fn hash_option_align_content(opt: &Option<taffy::AlignContent>, hasher: &mut imp
     match opt {
         Some(v) => {
             1u8.hash(hasher);
-            std::mem::discriminant(v).hash(hasher);
+            std::mem::discriminant(&v.keyword()).hash(hasher);
+            v.is_safe().hash(hasher);
         }
         None => 0u8.hash(hasher),
     }
@@ -1243,7 +1237,8 @@ fn hash_option_align_self(opt: &Option<taffy::AlignSelf>, hasher: &mut impl Hash
     match opt {
         Some(v) => {
             1u8.hash(hasher);
-            std::mem::discriminant(v).hash(hasher);
+            std::mem::discriminant(&v.keyword()).hash(hasher);
+            v.is_safe().hash(hasher);
         }
         None => 0u8.hash(hasher),
     }

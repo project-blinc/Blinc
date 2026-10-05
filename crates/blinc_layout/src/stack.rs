@@ -1013,10 +1013,10 @@ impl StackChild {
             // Set all inset values to 0 to fill the entire containing block
             // This stretches the wrapper to match the Stack's size
             inset: Rect {
-                left: LengthPercentageAuto::Length(0.0),
-                right: LengthPercentageAuto::Length(0.0),
-                top: LengthPercentageAuto::Length(0.0),
-                bottom: LengthPercentageAuto::Length(0.0),
+                left: LengthPercentageAuto::length(0.0),
+                right: LengthPercentageAuto::length(0.0),
+                top: LengthPercentageAuto::length(0.0),
+                bottom: LengthPercentageAuto::length(0.0),
             },
             // Clip children to this layer's bounds - important for z-ordering
             // Each Stack layer clips its own content so text doesn't bleed through
