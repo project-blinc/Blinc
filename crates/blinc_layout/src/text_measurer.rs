@@ -67,6 +67,20 @@ impl FontTextMeasurer {
         }
     }
 
+    /// The fallback faces `text` needs, loaded if they are not yet.
+    ///
+    /// Measurement has to use the faces the text is drawn with, or a box is
+    /// sized for glyphs that are not the ones painted in it. ASCII needs none
+    /// and never takes the lock. Must not be called while the registry lock is
+    /// held: it is not reentrant.
+    fn fallbacks_for(&self, font: &blinc_text::FontFace, text: &str) -> blinc_text::FallbackFaces {
+        if text.is_ascii() {
+            return blinc_text::FallbackFaces::none();
+        }
+        let mut registry = self.font_registry.lock().unwrap();
+        blinc_text::FallbackFaces::resolve(&mut registry, font, text)
+    }
+
     /// Fallback when the registry has no face for what was asked.
     fn estimate_size(text: &str, font_size: f32, options: &TextLayoutOptions) -> TextMetrics {
         let char_count = text.chars().count() as f32;
@@ -184,6 +198,7 @@ impl TextMeasurer for FontTextMeasurer {
         //   exact bug this block exists to prevent.
         //
         // - MaxContent: no wrap, single line height. Unchanged.
+        let fallbacks = self.fallbacks_for(&font, text);
         let layout_engine = self.layout_engine.lock().unwrap();
 
         let probe = LayoutOptions {
@@ -193,7 +208,8 @@ impl TextMeasurer for FontTextMeasurer {
             line_break: blinc_text::LineBreakMode::None,
             ..LayoutOptions::default()
         };
-        let single_line = layout_engine.layout(text, &font, font_size, &probe);
+        let single_line =
+            layout_engine.layout_with_fallbacks(text, &font, font_size, &probe, &fallbacks);
 
         let (width, height, line_count) = match options.max_width {
             Some(mw) if mw > 0.0 => {
@@ -204,14 +220,24 @@ impl TextMeasurer for FontTextMeasurer {
                     line_break: blinc_text::LineBreakMode::Word,
                     ..LayoutOptions::default()
                 };
-                let laid = layout_engine.layout(text, &font, font_size, &layout_opts);
+                let laid = layout_engine.layout_with_fallbacks(
+                    text,
+                    &font,
+                    font_size,
+                    &layout_opts,
+                    &fallbacks,
+                );
                 (laid.width, laid.height, laid.lines.len() as u32)
             }
             Some(_) => {
                 // MinContent: width = longest word, height = one line.
                 let longest_word = text
                     .split_whitespace()
-                    .map(|w| layout_engine.layout(w, &font, font_size, &probe).width)
+                    .map(|w| {
+                        layout_engine
+                            .layout_with_fallbacks(w, &font, font_size, &probe, &fallbacks)
+                            .width
+                    })
                     .fold(0.0_f32, f32::max);
                 let mc_width = longest_word.max(1.0).min(single_line.width.max(1.0));
                 (mc_width, single_line.height, 1)
@@ -271,11 +297,14 @@ impl TextMeasurer for FontTextMeasurer {
             line_break: blinc_text::LineBreakMode::Word,
             ..LayoutOptions::default()
         };
-        let laid = self
-            .layout_engine
-            .lock()
-            .unwrap()
-            .layout(text, &font, font_size, &layout_opts);
+        let fallbacks = self.fallbacks_for(&font, text);
+        let laid = self.layout_engine.lock().unwrap().layout_with_fallbacks(
+            text,
+            &font,
+            font_size,
+            &layout_opts,
+            &fallbacks,
+        );
 
         laid.line_byte_ranges(text.len())
             .into_iter()

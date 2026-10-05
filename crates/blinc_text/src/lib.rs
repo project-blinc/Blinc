@@ -22,6 +22,7 @@
 
 pub mod atlas;
 pub mod emoji;
+pub mod fallback;
 pub mod font;
 pub mod layout;
 pub mod rasterizer;
@@ -34,6 +35,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 pub use atlas::{AtlasRegion, ColorGlyphAtlas, GlyphAtlas, GlyphInfo};
 pub use emoji::{EmojiRenderer, EmojiSprite, contains_emoji, is_emoji};
+pub use fallback::{FaceChoice, FallbackFaces, FallbackNeeds};
 pub use font::{Font, FontFace, FontMetrics, FontStyle, FontWeight};
 
 /// Global shared font registry singleton.

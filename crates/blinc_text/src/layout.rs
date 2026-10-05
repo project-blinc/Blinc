@@ -2,6 +2,7 @@
 //!
 //! Handles line breaking, text measurement, and multi-line layout.
 
+use crate::fallback::FallbackFaces;
 use crate::font::FontFace;
 use crate::shaper::{ShapedGlyph, ShapedText, TextShaper};
 
@@ -81,6 +82,9 @@ pub struct PositionedGlyph {
     pub codepoint: char,
     /// Byte offset of this glyph's cluster in the source string
     pub byte_offset: usize,
+    /// Which face `glyph_id` belongs to. `Primary` unless the layout was
+    /// given fallback faces and substituted one.
+    pub face: crate::fallback::FaceChoice,
 }
 
 /// A line of positioned glyphs
@@ -163,13 +167,37 @@ impl TextLayoutEngine {
         }
     }
 
-    /// Layout text with the given options
+    /// Layout text with the given options, every glyph on `font`.
+    ///
+    /// A character `font` lacks gets `font`'s own missing-glyph advance here,
+    /// which is not what is drawn when something else supplies it. Use
+    /// [`Self::layout_with_fallbacks`] where the text will be drawn through a
+    /// fallback chain.
     pub fn layout(
         &self,
         text: &str,
         font: &FontFace,
         font_size: f32,
         options: &LayoutOptions,
+    ) -> TextLayout {
+        self.layout_with_fallbacks(text, font, font_size, options, &FallbackFaces::none())
+    }
+
+    /// Layout text with the given options, substituting `fallbacks` for the
+    /// glyphs `font` cannot draw.
+    ///
+    /// The substitution happens right after shaping, so widths, line breaks
+    /// and glyph positions all use the advances of the faces the text is
+    /// really drawn from, by the same rules the renderer uses. Each glyph in
+    /// the result records which face it is from. Resolve the faces for a
+    /// string with [`FallbackFaces::resolve`].
+    pub fn layout_with_fallbacks(
+        &self,
+        text: &str,
+        font: &FontFace,
+        font_size: f32,
+        options: &LayoutOptions,
+        fallbacks: &FallbackFaces,
     ) -> TextLayout {
         let metrics = font.metrics();
         // CSS counts line-height against the FONT SIZE, not the face's
@@ -199,8 +227,11 @@ impl TextLayoutEngine {
         // Check for explicit newlines - these are always respected regardless of wrap mode
         let has_newlines = text.contains('\n');
 
-        // Shape the entire text first
-        let shaped = self.shaper.shape(text, font, font_size);
+        // Shape the entire text first, then put the fallback glyphs and
+        // advances in. Every path below reads `shaped`, so this is the one
+        // place the substitution has to happen.
+        let mut shaped = self.shaper.shape(text, font, font_size);
+        fallbacks.apply(&mut shaped, font, font_size);
 
         // If no wrapping AND no explicit newlines, return single line
         if (options.max_width.is_none() || options.line_break == LineBreakMode::None)
@@ -400,6 +431,7 @@ impl TextLayoutEngine {
                 y: baseline_y,
                 codepoint: glyph.codepoint,
                 byte_offset: glyph.cluster as usize,
+                face: glyph.face,
             });
 
             x += advance;
@@ -605,6 +637,7 @@ mod tests {
                 x_offset: 0,
                 y_offset: 0,
                 codepoint: c,
+                face: crate::fallback::FaceChoice::Primary,
             });
         }
 

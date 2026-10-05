@@ -23,6 +23,9 @@ pub struct ShapedGlyph {
     pub y_advance: i32,
     /// Index in the original string (cluster)
     pub cluster: u32,
+    /// Which face this glyph is drawn from. `Primary` until fallback
+    /// layout substitutes another.
+    pub face: crate::fallback::FaceChoice,
 }
 
 /// Result of shaping a text string
@@ -112,6 +115,7 @@ impl TextShaper {
                 x_advance: pos.x_advance,
                 y_advance: pos.y_advance,
                 cluster: info.cluster,
+                face: crate::fallback::FaceChoice::Primary,
             });
 
             total_advance += pos.x_advance;
@@ -142,6 +146,7 @@ impl TextShaper {
                 x_advance: advance,
                 y_advance: 0,
                 cluster: cluster as u32,
+                face: crate::fallback::FaceChoice::Primary,
             });
 
             total_advance += advance;
@@ -203,6 +208,7 @@ impl TextShaper {
                 x_advance: pos.x_advance,
                 y_advance: pos.y_advance,
                 cluster: info.cluster,
+                face: crate::fallback::FaceChoice::Primary,
             });
 
             total_advance += pos.x_advance;
