@@ -43,6 +43,7 @@ pub mod binding;
 pub mod event_handler;
 pub mod event_router;
 pub mod image;
+pub mod interaction;
 pub mod interactive;
 pub mod layout_animation;
 pub mod motion;
@@ -144,6 +145,7 @@ pub use diff::{
 };
 pub use event_handler::{EventCallback, EventContext, EventHandlers, HandlerRegistry};
 pub use event_router::{EventRouter, HitTestResult, MouseButton};
+pub use interaction::Interaction;
 pub use interactive::{DirtyTracker, InteractiveContext, NodeState};
 pub use style::LayoutStyle;
 pub use tree::{LayoutNodeId, LayoutTree, TextMeasureContext};
@@ -260,6 +262,7 @@ pub mod prelude {
         emoji_sized, image, img,
     };
     // Interactive state management
+    pub use crate::interaction::Interaction;
     pub use crate::interactive::{DirtyTracker, InteractiveContext, NodeState};
     // Unified element styling
     pub use crate::element_style::{
