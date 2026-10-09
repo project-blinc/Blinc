@@ -1642,6 +1642,7 @@ pub fn host_effect() -> Effect {
     if !defers_writes() {
         drain_deferred_writes();
     }
+    crate::owner::record_effect(handle.id());
     handle
 }
 
@@ -2134,15 +2135,18 @@ pub fn signal<T: Send + 'static>(initial: T) -> Signal<T> {
     // evaluation sees it and records it as a dependency.
     //
     // Checked before moving `initial`, since the closure would consume it.
-    if is_in_flush() {
-        if let Some(s) = with_in_flight_graph(|g| g.create_signal(initial)) {
-            return s;
+    let created = if is_in_flush() {
+        match with_in_flight_graph(|g| g.create_signal(initial)) {
+            Some(s) => s,
+            None => unreachable!("is_in_flush() was true, so the pointer is non-null"),
         }
-        unreachable!("is_in_flush() was true, so the pointer is non-null");
-    }
-    let graph = global_graph();
-    let g = graph.lock().unwrap();
-    g.create_signal(initial)
+    } else {
+        let graph = global_graph();
+        let g = graph.lock().unwrap();
+        g.create_signal(initial)
+    };
+    crate::owner::record_signal(created.id());
+    created
 }
 
 /// Create a derived (computed) value that auto-tracks every signal
@@ -2169,16 +2173,16 @@ where
     // Inside a derived or effect closure the mutex is already held by this
     // thread, so go through the in-flight graph as reads do. Checked
     // before the move, since the closure would consume `compute`.
-    if is_in_flush() {
-        if let Some(derived) = with_in_flight_graph(|g| g.create_derived(compute)) {
-            return Computed::new(derived, graph);
+    let derived = if is_in_flush() {
+        match with_in_flight_graph(|g| g.create_derived(compute)) {
+            Some(derived) => derived,
+            None => unreachable!("is_in_flush() was true, so the pointer is non-null"),
         }
-        unreachable!("is_in_flush() was true, so the pointer is non-null");
-    }
-    let derived = {
+    } else {
         let g = graph.lock().unwrap();
         g.create_derived(compute)
     };
+    crate::owner::record_derived(derived.id());
     Computed::new(derived, graph)
 }
 
@@ -2280,6 +2284,7 @@ where
     // outside the in-flight window — so the writes actually take
     // effect.
     drain_deferred_writes();
+    crate::owner::record_effect(handle.id());
     handle
 }
 
