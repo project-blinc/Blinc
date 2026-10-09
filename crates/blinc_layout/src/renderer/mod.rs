@@ -552,6 +552,44 @@ pub struct CompositeBindingMeta {
     pub last_screen_aabb: Option<[f32; 4]>,
 }
 
+/// The font properties a text node is measured and drawn at.
+#[derive(Clone, Copy, PartialEq)]
+struct TextLook {
+    font_size: f32,
+    line_height: f32,
+    weight: crate::div::FontWeight,
+    italic: bool,
+    letter_spacing: f32,
+}
+
+impl TextLook {
+    /// What a text node was last measured at.
+    fn of(text: &crate::renderer::TextData) -> Self {
+        Self {
+            font_size: text.font_size,
+            line_height: text.line_height,
+            weight: text.weight,
+            italic: text.italic,
+            letter_spacing: text.letter_spacing,
+        }
+    }
+
+    /// What it should be measured at: the overrides in `props`, over what it
+    /// was built with.
+    fn wanted(text: &crate::renderer::TextData, props: &RenderProps) -> Self {
+        let built = Self::of(text);
+        Self {
+            font_size: props.font_size.unwrap_or(built.font_size),
+            line_height: props.line_height.unwrap_or(built.line_height),
+            weight: props.font_weight.unwrap_or(built.weight),
+            italic: props
+                .font_style
+                .map_or(built.italic, |style| style.is_italic()),
+            letter_spacing: props.letter_spacing.unwrap_or(built.letter_spacing),
+        }
+    }
+}
+
 /// RenderTree - bridges layout computation and rendering
 pub struct RenderTree {
     /// The underlying layout tree
@@ -2086,31 +2124,86 @@ impl RenderTree {
         }
     }
 
-    /// Push CSS letter-spacing into the text measure contexts.
+    /// Bring each text node's measured state in line with the overrides on
+    /// its `RenderProps`.
     ///
-    /// The stylesheet pass puts it on `RenderProps` after `build()` has
-    /// already made each text node's context, so the measurer would
-    /// otherwise never see it and Taffy would size the box to unspaced
-    /// text.
+    /// The stylesheet pass and bound text properties write font size, weight,
+    /// style, line height and letter spacing into `RenderProps` after
+    /// `build()`, and paint draws with them. Everything measured at build
+    /// still describes the built text: the measure context, the fixed size of
+    /// non-wrapping text, the baseline the builder reported, and the node's
+    /// own measured width and ascender. Left alone, the box is sized for one
+    /// text and the glyphs drawn from another.
     ///
-    /// Writes only on a change: `update_text` marks the node dirty, and
-    /// doing that unconditionally would re-measure every text node every
-    /// frame.
+    /// A node is compared with its own text data, which holds what it was
+    /// last measured at, and written only on a change: updating a context
+    /// marks the node dirty, and doing it every frame would measure every text
+    /// node every frame.
     fn sync_text_measure_contexts(&mut self) {
-        let pending: Vec<(LayoutNodeId, f32)> = self
+        let pending: Vec<(LayoutNodeId, TextLook)> = self
             .render_nodes
             .iter()
             .filter_map(|(&id, render_node)| {
-                let spacing = render_node.props.letter_spacing?;
-                let ctx = self.layout_tree.text_context(id)?;
-                (ctx.letter_spacing != spacing).then_some((id, spacing))
+                let ElementType::Text(text) = &render_node.element_type else {
+                    return None;
+                };
+                let wanted = TextLook::wanted(text, &render_node.props);
+                (wanted != TextLook::of(text)).then_some((id, wanted))
             })
             .collect();
 
-        for (id, spacing) in pending {
-            self.layout_tree
-                .update_text(id, |ctx| ctx.letter_spacing = spacing);
+        for (id, look) in pending {
+            self.apply_text_look(id, look);
         }
+    }
+
+    /// Measure a text node at `look` and bring everything that depends on it
+    /// to match: its text data, its measure context or fixed size, and its
+    /// baseline.
+    fn apply_text_look(&mut self, id: LayoutNodeId, look: TextLook) {
+        let Some(render_node) = self.render_nodes.get_mut(&id) else {
+            return;
+        };
+        let ElementType::Text(text) = &mut render_node.element_type else {
+            return;
+        };
+
+        let mut options = crate::text_measure::TextLayoutOptions::new();
+        options.font_name = text.font_family.name.clone();
+        options.generic_font = text.font_family.generic;
+        options.font_weight = look.weight.weight();
+        options.italic = look.italic;
+        options.line_height = look.line_height;
+        options.letter_spacing = look.letter_spacing;
+        let metrics =
+            crate::text_measure::measure_text_with_options(&text.content, look.font_size, &options);
+
+        text.font_size = look.font_size;
+        text.line_height = look.line_height;
+        text.weight = look.weight;
+        text.italic = look.italic;
+        text.letter_spacing = look.letter_spacing;
+        text.measured_width = metrics.width;
+        text.ascender = metrics.ascender;
+        text.half_leading = crate::tree::half_leading(&metrics);
+        let baseline = text.half_leading + text.ascender;
+
+        let measured_by_taffy = self.layout_tree.update_text(id, |context| {
+            context.font_size = look.font_size;
+            context.line_height = look.line_height;
+            context.font_weight = look.weight.weight();
+            context.italic = look.italic;
+            context.letter_spacing = look.letter_spacing;
+        });
+        if !measured_by_taffy {
+            // Non-wrapping text has no context: it is a fixed-size box.
+            if let Some(mut style) = self.layout_tree.get_style(id) {
+                style.size.width = Dimension::length(metrics.width);
+                style.size.height = Dimension::length(look.font_size * look.line_height);
+                self.layout_tree.set_style(id, style);
+            }
+        }
+        self.layout_tree.refresh_text_baseline(id, baseline);
     }
 
     /// Compute layout for the given viewport size

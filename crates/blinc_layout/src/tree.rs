@@ -429,6 +429,14 @@ impl LayoutTree {
         self.text_baseline.insert(id, offset);
     }
 
+    /// Replace the baseline a text node's builder reported, if it reported
+    /// one: the metrics it came from have changed.
+    pub fn refresh_text_baseline(&mut self, id: LayoutNodeId, offset: f32) {
+        if let Some(reported) = self.text_baseline.get_mut(&id) {
+            *reported = offset;
+        }
+    }
+
     /// Record that this node's `align_self` was set as a side effect of
     /// sizing (`w_fit`/`h_fit`), not because an author asked for it.
     pub fn mark_incidental_align_self(&mut self, id: LayoutNodeId) {
