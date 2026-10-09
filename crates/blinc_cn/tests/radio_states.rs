@@ -35,12 +35,14 @@ fn describe_radio(tree: &RenderTree, group: LayoutNodeId, out: &mut String) {
 fn scenario(
     name: &str,
     css: &str,
+    in_place: bool,
     build: impl FnOnce(&blinc_core::reactive::State<String>) -> Box<dyn ElementBuilder>,
 ) -> String {
     set_active_stylesheet(Arc::new(Stylesheet::parse(css).expect("css")));
     let selected = string_state("a");
     let widget = build(&selected);
     let mut h = Harness::new(widget, vec![selected.signal_id()], describe_radio);
+    h.in_place = in_place;
     // Option b: the ring of the second row.
     let at = h.center(&[1, 0]);
     h.walk(at, (300.0, 180.0));
@@ -52,7 +54,7 @@ fn a_radio_group_looks_the_same_in_every_state() {
     init();
     let got = guarded(|| {
         let mut out = String::new();
-        out += &scenario("core", "", |s| {
+        out += &scenario("core", "", true, |s| {
             Box::new(
                 blinc_layout::widgets::radio_group(s)
                     .option("a", "Alpha")
@@ -60,7 +62,7 @@ fn a_radio_group_looks_the_same_in_every_state() {
                     .option("c", "Gamma"),
             )
         });
-        out += &scenario("core with a disabled option", "", |s| {
+        out += &scenario("core with a disabled option", "", true, |s| {
             Box::new(
                 blinc_layout::widgets::radio_group(s)
                     .option("a", "Alpha")
@@ -71,6 +73,7 @@ fn a_radio_group_looks_the_same_in_every_state() {
         out += &scenario(
             "core under hover and checked rules",
             "#g-b { opacity: 0.8 } #g-b:hover { border-color: #ff0000; background: #223344 } #g-b:checked { background: #335577 }",
+            true,
             |s| {
                 Box::new(
                     blinc_layout::widgets::radio_group(s)
@@ -81,7 +84,7 @@ fn a_radio_group_looks_the_same_in_every_state() {
                 )
             },
         );
-        out += &scenario("cn", "", |s| {
+        out += &scenario("cn", "", false, |s| {
             Box::new(
                 blinc_cn::radio_group(s)
                     .option("a", "Alpha")

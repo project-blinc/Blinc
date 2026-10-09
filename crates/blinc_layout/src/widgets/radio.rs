@@ -19,6 +19,7 @@
 
 use std::sync::Arc;
 
+use blinc_core::reactive::{Computed, ReactiveGraph, Signal, computed};
 use blinc_core::{Color, State, Transform};
 use blinc_theme::{ColorToken, ThemeState};
 
@@ -26,8 +27,8 @@ use crate::css_parser::{ElementState, Stylesheet, active_stylesheet};
 use crate::div::{ElementBuilder, div};
 use crate::element::RenderProps;
 use crate::element_style::ElementStyle;
+use crate::interaction::Interaction;
 use crate::key::InstanceKey;
-use crate::stateful::{ButtonState, stateful_with_key};
 use crate::text::text;
 use crate::tree::{LayoutNodeId, LayoutTree};
 
@@ -176,18 +177,142 @@ fn apply_css_overrides_radio(
     }
 }
 
-/// Build a single radio button with hover/selected state handling
+/// What a radio button resolves its look from, apart from its state.
+struct RadioContext {
+    option_value: String,
+    option_disabled: bool,
+    css_id: Option<String>,
+    selected_color: Option<Color>,
+    border_color: Option<Color>,
+    hover_border_color: Option<Color>,
+    label_color: Option<Color>,
+}
+
+/// What a radio button draws in one state.
+#[derive(Clone)]
+struct Look {
+    border_color: Color,
+    background: Color,
+    ring_scale: Transform,
+    dot_color: Color,
+    dot_scale: Transform,
+    label_color: Color,
+    opacity: f32,
+}
+
+impl Look {
+    fn resolve(
+        ctx: &RadioContext,
+        selected_value: &str,
+        is_hovered: bool,
+        is_pressed: bool,
+    ) -> Self {
+        let theme = ThemeState::get();
+        let is_selected = selected_value == ctx.option_value;
+
+        // Resolve colors from theme
+        let mut overrides = RadioStyleOverrides {
+            selected_color: ctx
+                .selected_color
+                .unwrap_or_else(|| theme.color(ColorToken::Primary)),
+            border_color: ctx
+                .border_color
+                .unwrap_or_else(|| theme.color(ColorToken::BorderSecondary)),
+            hover_border_color: ctx
+                .hover_border_color
+                .unwrap_or_else(|| theme.color(ColorToken::Primary)),
+            label_color: ctx.label_color.unwrap_or_else(|| {
+                if ctx.option_disabled {
+                    theme.color(ColorToken::TextTertiary)
+                } else {
+                    theme.color(ColorToken::TextPrimary)
+                }
+            }),
+            opacity: None,
+            background: None,
+        };
+
+        // Apply CSS overrides if we have an element ID
+        if let Some(ref css_id) = ctx.css_id {
+            if let Some(stylesheet) = active_stylesheet() {
+                apply_css_overrides_radio(
+                    &stylesheet,
+                    css_id,
+                    is_selected,
+                    is_hovered,
+                    ctx.option_disabled,
+                    &mut overrides,
+                );
+            }
+        }
+
+        // Border color based on state
+        let border_color = if is_selected {
+            overrides.selected_color
+        } else if is_hovered && !ctx.option_disabled {
+            overrides.hover_border_color
+        } else {
+            overrides.border_color
+        };
+
+        // Scale effect on hover
+        let scale = if is_hovered && !ctx.option_disabled {
+            1.05
+        } else {
+            1.0
+        };
+
+        // Scale effect on press for inner dot
+        let inner_scale = if is_pressed && !ctx.option_disabled {
+            0.8
+        } else {
+            1.0
+        };
+
+        Self {
+            border_color,
+            background: overrides.background.unwrap_or(Color::TRANSPARENT),
+            ring_scale: Transform::scale(scale, scale),
+            dot_color: overrides.selected_color,
+            dot_scale: Transform::scale(inner_scale, inner_scale),
+            label_color: overrides.label_color,
+            opacity: overrides
+                .opacity
+                .unwrap_or(if ctx.option_disabled { 0.5 } else { 1.0 }),
+        }
+    }
+}
+
+/// A value taken from the look, kept current by the signals it is resolved from.
+fn follow_look<T: Clone + Send + 'static>(
+    ctx: Arc<RadioContext>,
+    selected: Signal<String>,
+    hovered: Signal<bool>,
+    pressed: Signal<bool>,
+    pick: fn(&Look) -> T,
+) -> Computed<T> {
+    computed(move |g: &ReactiveGraph| {
+        pick(&Look::resolve(
+            &ctx,
+            &g.get(selected).unwrap_or_default(),
+            g.get(hovered).unwrap_or(false),
+            g.get(pressed).unwrap_or(false),
+        ))
+    })
+}
+
+/// Build a single radio button. Selection and the pointer state are signals,
+/// and what they change is bound, so a change patches the nodes in place.
 fn build_radio_button(
     config: &RadioGroupConfig,
     option: &RadioOption,
     instance_key: &InstanceKey,
     button_css_id: Option<String>,
-) -> crate::stateful::Stateful<ButtonState> {
+) -> crate::div::Div {
     let outer_size = config.outer_size;
     let inner_size = config.inner_size;
     let border_width = config.border_width;
 
-    let option_value = option.value.clone();
     let option_disabled = option.disabled || config.disabled;
     let option_label = option.label.clone();
     let selected_state = config.selected.clone();
@@ -195,137 +320,79 @@ fn build_radio_button(
     let on_change = config.on_change.clone();
     let value_for_click = option.value.clone();
 
-    // Config values for the closure
-    let cfg_selected_color = config.selected_color;
-    let cfg_border_color = config.border_color;
-    let cfg_hover_border_color = config.hover_border_color;
-    let cfg_label_color = config.label_color;
-    let cfg_label_font_size = config.label_font_size;
+    let ctx = Arc::new(RadioContext {
+        option_value: option.value.clone(),
+        option_disabled,
+        css_id: button_css_id.clone(),
+        selected_color: config.selected_color,
+        border_color: config.border_color,
+        hover_border_color: config.hover_border_color,
+        label_color: config.label_color,
+    });
+    let label_font_size = config.label_font_size;
 
-    let css_id_for_state = button_css_id.clone();
+    // Derive the interaction key from the group's instance key + option value
+    let interaction = Interaction::keyed(&instance_key.derive(&option.value));
 
-    // Derive stateful key from the group's instance key + option value
-    let stateful_key = instance_key.derive(&option.value);
+    let (selected, hovered, pressed) = (
+        selected_state.signal(),
+        interaction.hovered().signal(),
+        interaction.pressed().signal(),
+    );
+    macro_rules! follow {
+        ($pick:expr) => {
+            follow_look(Arc::clone(&ctx), selected, hovered, pressed, $pick)
+        };
+    }
+    let is_selected = {
+        let ctx = Arc::clone(&ctx);
+        computed(move |g: &ReactiveGraph| g.get(selected).unwrap_or_default() == ctx.option_value)
+    };
 
-    let mut radio = stateful_with_key::<ButtonState>(&stateful_key)
-        .deps([selected_state.signal_id()])
-        .on_state(move |ctx| {
-            let state = ctx.state();
-            let theme = ThemeState::get();
-            let is_selected = selected_state.get() == option_value;
-            let is_hovered = matches!(state, ButtonState::Hovered | ButtonState::Pressed);
-            let is_pressed = matches!(state, ButtonState::Pressed);
+    // Build the radio circle (outer ring)
+    let circle = div()
+        .w(outer_size)
+        .h(outer_size)
+        .rounded(outer_size / 2.0)
+        .border_width(border_width)
+        .border_color(follow!(|l| l.border_color))
+        .bg(follow!(|l| l.background))
+        .items_center()
+        .justify_center()
+        .transform(follow!(|l| l.ring_scale.clone()))
+        // The dot is always there and shown while selected.
+        .child(
+            div()
+                .w(inner_size)
+                .h(inner_size)
+                .rounded(inner_size / 2.0)
+                .bg(follow!(|l| l.dot_color))
+                .transform(follow!(|l| l.dot_scale.clone()))
+                .visible(&is_selected),
+        );
 
-            // Resolve colors from theme
-            let mut overrides = RadioStyleOverrides {
-                selected_color: cfg_selected_color
-                    .unwrap_or_else(|| theme.color(ColorToken::Primary)),
-                border_color: cfg_border_color
-                    .unwrap_or_else(|| theme.color(ColorToken::BorderSecondary)),
-                hover_border_color: cfg_hover_border_color
-                    .unwrap_or_else(|| theme.color(ColorToken::Primary)),
-                label_color: cfg_label_color.unwrap_or_else(|| {
-                    if option_disabled {
-                        theme.color(ColorToken::TextTertiary)
-                    } else {
-                        theme.color(ColorToken::TextPrimary)
-                    }
-                }),
-                opacity: None,
-                background: None,
-            };
+    // Build row with label
+    let mut radio = div()
+        .flex_row()
+        .gap(8.0)
+        .items_center()
+        .cursor_pointer()
+        .opacity(follow!(|l| l.opacity))
+        .track(&interaction)
+        .child(circle)
+        .child(
+            text(&option_label)
+                .size(label_font_size)
+                .color(follow!(|l| l.label_color)),
+        );
 
-            // Apply CSS overrides if we have an element ID
-            if let Some(ref css_id) = css_id_for_state {
-                if let Some(stylesheet) = active_stylesheet() {
-                    apply_css_overrides_radio(
-                        &stylesheet,
-                        css_id,
-                        is_selected,
-                        is_hovered,
-                        option_disabled,
-                        &mut overrides,
-                    );
-                }
-            }
-
-            // Border color based on state
-            let border_color = if is_selected {
-                overrides.selected_color
-            } else if is_hovered && !option_disabled {
-                overrides.hover_border_color
-            } else {
-                overrides.border_color
-            };
-
-            // Scale effect on hover
-            let scale = if is_hovered && !option_disabled {
-                1.05
-            } else {
-                1.0
-            };
-
-            // Scale effect on press for inner dot
-            let inner_scale = if is_pressed && !option_disabled {
-                0.8
-            } else {
-                1.0
-            };
-
-            // Build the radio circle (outer ring)
-            let mut circle = div()
-                .w(outer_size)
-                .h(outer_size)
-                .rounded(outer_size / 2.0)
-                .border(border_width, border_color)
-                .items_center()
-                .justify_center()
-                .transform(Transform::scale(scale, scale));
-
-            if let Some(bg) = overrides.background {
-                circle = circle.bg(bg);
-            }
-
-            // Add inner dot if selected
-            if is_selected {
-                let inner_dot = div()
-                    .w(inner_size)
-                    .h(inner_size)
-                    .rounded(inner_size / 2.0)
-                    .bg(overrides.selected_color)
-                    .transform(Transform::scale(inner_scale, inner_scale));
-                circle = circle.child(inner_dot);
-            }
-
-            // Build row with label
-            let mut visual = div()
-                .flex_row()
-                .gap(8.0)
-                .items_center()
-                .cursor_pointer()
-                .child(circle)
-                .child(
-                    text(&option_label)
-                        .size(cfg_label_font_size)
-                        .color(overrides.label_color),
-                );
-
-            if let Some(opacity) = overrides.opacity {
-                visual = visual.opacity(opacity);
-            } else if option_disabled {
-                visual = visual.opacity(0.5);
-            }
-
-            visual
-        });
-
-    // Set CSS element ID on the Stateful for element registry matching
+    // Set CSS element ID for element registry matching
     if let Some(ref css_id) = button_css_id {
         radio = radio.id(css_id);
     }
 
     // Click handler
-    radio = radio.on_click(move |_| {
+    radio.on_click(move |_| {
         if option_disabled {
             return;
         }
@@ -336,9 +403,7 @@ fn build_radio_button(
                 callback(&value_for_click);
             }
         }
-    });
-
-    radio
+    })
 }
 
 /// The fully-built radio group component (Div containing radio buttons and optional label)
