@@ -129,9 +129,10 @@ thread_local! {
 
     /// Writes deferred while [`IN_FLIGHT_GRAPH`] was non-null.
     /// Drained by [`drain_deferred_writes`] from the outer
-    /// `Signal<T>::set` after notifications complete.
-    static DEFERRED_WRITES: std::cell::RefCell<Vec<Box<dyn FnOnce() + Send>>> =
-        const { std::cell::RefCell::new(Vec::new()) };
+    /// `Signal<T>::set` after notifications complete, in the order they were
+    /// made so the last write to a signal is the one that stays.
+    static DEFERRED_WRITES: std::cell::RefCell<VecDeque<Box<dyn FnOnce() + Send>>> =
+        const { std::cell::RefCell::new(VecDeque::new()) };
 
     /// How many host effect scopes are open on this thread. See
     /// [`ReactiveGraph::begin_effect`].
@@ -176,7 +177,7 @@ fn drain_deferred_writes() {
     // Loop until the queue is empty. Don't hold the borrow across
     // the call.
     loop {
-        let next = DEFERRED_WRITES.with(|q| q.borrow_mut().pop());
+        let next = DEFERRED_WRITES.with(|q| q.borrow_mut().pop_front());
         match next {
             Some(f) => f(),
             None => break,
@@ -242,7 +243,7 @@ impl<T: Clone + Send + 'static> Signal<T> {
         if defers_writes() {
             DEFERRED_WRITES.with(|q| {
                 q.borrow_mut()
-                    .push(Box::new(move || Signal::<T>::from_id(id.id).set(value)));
+                    .push_back(Box::new(move || Signal::<T>::from_id(id.id).set(value)));
             });
             return;
         }
@@ -268,7 +269,7 @@ impl<T: Clone + Send + 'static> Signal<T> {
         let id = *self;
         if defers_writes() {
             DEFERRED_WRITES.with(|q| {
-                q.borrow_mut().push(Box::new(move || {
+                q.borrow_mut().push_back(Box::new(move || {
                     Signal::<T>::from_id(id.id).set_rebuild(value)
                 }));
             });
@@ -2194,7 +2195,7 @@ pub fn dispose_derived(id: DerivedId) {
 
 fn dispose(node: Disposed) {
     if is_in_flush() {
-        DEFERRED_WRITES.with(|q| q.borrow_mut().push(Box::new(move || dispose(node))));
+        DEFERRED_WRITES.with(|q| q.borrow_mut().push_back(Box::new(move || dispose(node))));
         return;
     }
     let removed = {
@@ -3008,6 +3009,37 @@ mod in_flight_creation_tests {
                 global_graph().lock().unwrap().take_due_host_effects(),
                 vec![effect.id()]
             );
+            global_graph().lock().unwrap().dispose_effect(effect);
+        }
+
+        /// Writes made in a scope apply in the order they were made, so the
+        /// value left is the last one written.
+        #[test]
+        fn two_writes_in_a_scope_leave_the_last() {
+            let _only = global_only();
+            let sig = signal(0_i32);
+            let effect = host_effect();
+            take_due_host_effects();
+
+            assert!(begin_host_effect(effect.id()));
+            sig.set(1);
+            sig.set(2);
+            end_host_effect(effect.id());
+
+            assert_eq!(sig.get(), 2, "an earlier write was applied last");
+            dispose_host_effect(effect.id());
+        }
+
+        #[test]
+        fn two_writes_in_a_closure_effect_leave_the_last() {
+            let _only = global_only();
+            let sig = signal(0_i32);
+            let effect = effect(move |_| {
+                sig.set(1);
+                sig.set(2);
+            });
+
+            assert_eq!(sig.get(), 2, "an earlier write was applied last");
             global_graph().lock().unwrap().dispose_effect(effect);
         }
 
