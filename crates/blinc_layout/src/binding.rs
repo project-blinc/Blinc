@@ -2381,7 +2381,7 @@ mod tests {
     // Display bindings
     // ---------------------------------------------------------------------
 
-    mod show_when {
+    mod visible {
         use super::*;
         use crate::div::{Div, div};
         use crate::renderer::RenderTree;
@@ -2419,10 +2419,10 @@ mod tests {
         #[test]
         fn a_constant_decides_the_display_at_build() {
             let _guard = lock_and_reset();
-            let (_, hidden) = build(content().show_when(false));
-            let (tree, shown) = build(content().show_when(true));
+            let (_, hidden) = build(content().visible(false));
+            let (tree, shown) = build(content().visible(true));
             assert_eq!(display(&tree, shown), Display::Flex);
-            let (tree, hidden_node) = build(content().show_when(false));
+            let (tree, hidden_node) = build(content().visible(false));
             assert_eq!(display(&tree, hidden_node), Display::None);
             let _ = hidden;
             assert_eq!(
@@ -2436,7 +2436,7 @@ mod tests {
         fn a_signal_flips_the_display_in_place() {
             let _guard = lock_and_reset();
             let visible = fresh_state::<bool>(true);
-            let (mut tree, node) = build(content().w_fit().show_when(&visible));
+            let (mut tree, node) = build(content().w_fit().visible(&visible));
             assert!(width(&tree, node) > 0.0, "sanity: shown at build");
 
             visible.set(false);
@@ -2465,7 +2465,7 @@ mod tests {
         fn a_false_signal_builds_hidden() {
             let _guard = lock_and_reset();
             let visible = fresh_state::<bool>(false);
-            let (mut tree, node) = build(content().show_when(&visible));
+            let (mut tree, node) = build(content().visible(&visible));
             assert_eq!(display(&tree, node), Display::None);
 
             visible.set(true);
@@ -2479,9 +2479,9 @@ mod tests {
             for grid_first in [true, false] {
                 let visible = fresh_state::<bool>(true);
                 let element = if grid_first {
-                    content().grid().show_when(&visible)
+                    content().grid().visible(&visible)
                 } else {
-                    content().show_when(&visible).grid()
+                    content().visible(&visible).grid()
                 };
                 let (mut tree, node) = build(element);
                 assert_eq!(display(&tree, node), Display::Grid);
@@ -2501,7 +2501,7 @@ mod tests {
         #[test]
         fn a_later_layout_method_does_not_undo_a_hide() {
             let _guard = lock_and_reset();
-            let (tree, node) = build(content().show_when(false).flex_row());
+            let (tree, node) = build(content().visible(false).flex_row());
             assert_eq!(display(&tree, node), Display::None);
         }
 
@@ -2518,7 +2518,7 @@ mod tests {
                 .create_derived(move |g: &ReactiveGraph| g.get(signal).unwrap_or(0) > 0);
             let computed = blinc_core::Computed::new(derived, Arc::clone(&graph));
 
-            let (mut tree, node) = build(content().show_when(&computed));
+            let (mut tree, node) = build(content().visible(&computed));
             // The first read records the dependency, as for any computed binding.
             let _ = computed.try_get();
             assert_eq!(display(&tree, node), Display::None);

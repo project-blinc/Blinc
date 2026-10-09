@@ -483,13 +483,13 @@ pub struct Div {
     /// the new node id in the global property-binding registry.
     /// ([[project-reactive-architecture-v2]] Phase 2.)
     pub(crate) pending_bindings: Vec<Box<dyn crate::binding::PendingBinding>>,
-    /// What [`Div::show_when`] follows. Acted on in `build()`, once the
+    /// What [`Div::visible`] follows. Acted on in `build()`, once the
     /// display mode the element has when shown is final.
-    pub(crate) show_when: Option<ShowSource>,
+    pub(crate) visible_source: Option<VisibleSource>,
 }
 
 /// The source `Div::show_when` follows.
-pub(crate) enum ShowSource {
+pub(crate) enum VisibleSource {
     Const(bool),
     State(blinc_core::reactive::State<bool>),
     Computed(blinc_core::reactive::Computed<bool>),
@@ -560,7 +560,7 @@ impl Div {
             visual_animation: None,
             stateful_context_key: None,
             pending_bindings: Vec::new(),
-            show_when: None,
+            visible_source: None,
         }
     }
 
@@ -625,7 +625,7 @@ impl Div {
             visual_animation: None,
             stateful_context_key: None,
             pending_bindings: Vec::new(),
-            show_when: None,
+            visible_source: None,
         }
     }
 
@@ -1436,8 +1436,8 @@ impl Div {
         // cn widget that mixes its own bindings with the user's
         // `.bg(&signal)` doesn't drop either set.
         self.pending_bindings.extend(other.pending_bindings);
-        if other.show_when.is_some() {
-            self.show_when = other.show_when;
+        if other.visible_source.is_some() {
+            self.visible_source = other.visible_source;
         }
     }
 
@@ -1600,18 +1600,19 @@ impl Div {
     }
 
     /// Show this element while `visible` is true, and take it out of layout
-    /// (`display: none`) while it is false.
+    /// (`display: none`) while it is false, as `visibility: hidden` does in a
+    /// stylesheet. Unlike `hidden()` it can follow a signal.
     ///
     /// A signal or computed source is followed in place: each change flips
     /// the node's display and has layout run, with no rebuild of the subtree.
     /// When shown again the element has the display mode it was built with
     /// (flex, grid, ...), whatever order the builder methods were called in.
-    pub fn show_when(mut self, visible: impl crate::binding::IntoReactive<bool>) -> Self {
+    pub fn visible(mut self, visible: impl crate::binding::IntoReactive<bool>) -> Self {
         use crate::binding::Reactive;
-        self.show_when = Some(match visible.into_reactive() {
-            Reactive::Const(v) => ShowSource::Const(v),
-            Reactive::Bound(state) => ShowSource::State(state),
-            Reactive::Computed(computed) => ShowSource::Computed(computed),
+        self.visible_source = Some(match visible.into_reactive() {
+            Reactive::Const(v) => VisibleSource::Const(v),
+            Reactive::Bound(state) => VisibleSource::State(state),
+            Reactive::Computed(computed) => VisibleSource::Computed(computed),
         });
         self
     }
@@ -5031,11 +5032,11 @@ impl ElementBuilder for Div {
         } else {
             style.display
         };
-        let visible = match &self.show_when {
+        let visible = match &self.visible_source {
             None => None,
-            Some(ShowSource::Const(v)) => Some(*v),
-            Some(ShowSource::State(state)) => state.try_get(),
-            Some(ShowSource::Computed(computed)) => computed.try_get(),
+            Some(VisibleSource::Const(v)) => Some(*v),
+            Some(VisibleSource::State(state)) => state.try_get(),
+            Some(VisibleSource::Computed(computed)) => computed.try_get(),
         };
         if visible == Some(false) {
             style.display = Display::None;
@@ -5067,11 +5068,11 @@ impl ElementBuilder for Div {
                 style.display = if show { shown } else { Display::None };
             };
             let property = crate::property::PropertyId::Display;
-            match &self.show_when {
-                Some(ShowSource::State(state)) => {
+            match &self.visible_source {
+                Some(VisibleSource::State(state)) => {
                     LayoutPendingBinding::new(state.clone(), property, write).register(node);
                 }
-                Some(ShowSource::Computed(computed)) => {
+                Some(VisibleSource::Computed(computed)) => {
                     LayoutPendingBinding::from_computed(computed.clone(), property, write)
                         .register(node);
                 }
