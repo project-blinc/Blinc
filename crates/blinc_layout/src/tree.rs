@@ -523,6 +523,15 @@ impl LayoutTree {
             .unwrap_or(0)
     }
 
+    /// Whether a node is laid out as `display: none`: it takes no space, and
+    /// neither it nor anything under it is drawn.
+    pub fn is_display_none(&self, id: LayoutNodeId) -> bool {
+        self.node_map
+            .get(id)
+            .and_then(|&node| self.taffy.style(node).ok())
+            .is_some_and(|style| style.display == Display::None)
+    }
+
     /// Get computed layout as ElementBounds with parent offset
     pub fn get_bounds(&self, id: LayoutNodeId, parent_offset: (f32, f32)) -> Option<ElementBounds> {
         self.get_layout(id)

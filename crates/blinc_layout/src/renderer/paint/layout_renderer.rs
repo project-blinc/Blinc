@@ -547,7 +547,7 @@ impl RenderTree {
         };
 
         // CSS visibility: hidden — skip text rendering but preserve layout space
-        if !render_node.props.visible {
+        if !render_node.props.visible || self.layout_tree.is_display_none(node) {
             return;
         }
 

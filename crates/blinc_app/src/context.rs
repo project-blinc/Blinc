@@ -6318,7 +6318,7 @@ impl RenderContext {
 
         // CSS visibility: hidden — skip rendering but preserve layout space
         if let Some(render_node) = tree.get_render_node(node) {
-            if !render_node.props.visible {
+            if !render_node.props.visible || tree.layout_tree.is_display_none(node) {
                 return;
             }
         }

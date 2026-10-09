@@ -993,3 +993,45 @@ fn render_to_rgba8_does_not_double_encode_gamma() {
         );
     }
 }
+
+/// A `display: none` subtree draws nothing, text included.
+///
+/// Taffy gives a hidden node and everything under it a zero-size layout, but
+/// text drawn into a zero-width box still lands on screen, one letter per
+/// line at the corner. Painting has to stop at the hidden node.
+#[test]
+fn a_display_none_subtree_draws_nothing() {
+    require_gpu!(app);
+    blinc_layout::text_measurer::init_text_measurer();
+
+    let scene = |with_hidden: bool| {
+        let mut column = div()
+            .w(160.0)
+            .h(80.0)
+            .bg(Color::BLACK)
+            .flex_col()
+            .child(text("one").size(20.0).color(Color::WHITE));
+        if with_hidden {
+            column = column.child(
+                div()
+                    .hidden()
+                    .bg(Color::RED)
+                    .child(text("GONE text").size(20.0).color(Color::WHITE)),
+            );
+        }
+        column.child(text("two").size(20.0).color(Color::WHITE))
+    };
+
+    let without = app.render_to_rgba8(&scene(false), 160, 80).expect("render");
+    let with = app.render_to_rgba8(&scene(true), 160, 80).expect("render");
+
+    let differing = without
+        .chunks_exact(4)
+        .zip(with.chunks_exact(4))
+        .filter(|(a, b)| a != b)
+        .count();
+    assert_eq!(
+        differing, 0,
+        "a hidden subtree changed {differing} pixels: its content was drawn"
+    );
+}
