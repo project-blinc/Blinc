@@ -63,8 +63,10 @@ fn texts(tree: &RenderTree) -> Vec<String> {
 }
 
 /// One frame of the windowed loop: apply whatever the last event
-/// queued, then lay out.
+/// queued, on both queues, then lay out.
 fn frame(tree: &mut RenderTree) {
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    tree.apply_partial_property_updates(updates);
     tree.process_pending_subtree_rebuilds();
     tree.compute_layout(720.0, 820.0);
 }

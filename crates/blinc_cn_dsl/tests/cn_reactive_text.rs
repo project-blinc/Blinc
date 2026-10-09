@@ -83,6 +83,10 @@ fn widths(src: &str, file: &str, signal: &str) -> (f32, f32) {
     let before = widest_leaf(&tree);
 
     dsl.set_signal_string(signal, "a considerably longer string");
+    // The frame loop drains both queues: bound text arrives as a text
+    // update, the rest as rebuilds.
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    tree.apply_partial_property_updates(updates);
     tree.process_pending_subtree_rebuilds();
     tree.compute_layout(600.0, 200.0);
     (before, widest_leaf(&tree))

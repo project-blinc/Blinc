@@ -274,6 +274,10 @@ fn a_bound_badge_follows_the_signal() {
     let before = width(&tree);
 
     dsl.set_signal_string("chip_text", "a much longer chip label");
+    // The frame loop drains both queues: a bound label arrives as a text
+    // update, the rest as rebuilds.
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    tree.apply_partial_property_updates(updates);
     tree.process_pending_subtree_rebuilds();
     tree.compute_layout(400.0, 200.0);
     let after = width(&tree);

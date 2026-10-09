@@ -63,7 +63,8 @@ pub fn clone_reactive<T: Clone>(r: &Reactive<T>) -> Reactive<T> {
 
 /// An element that follows a reactive source.
 ///
-/// The general form behind [`reactive_text`]: a `Const` builds once
+/// The general form of [`reactive_text`], for content a property write can't
+/// express: a `Const` builds once
 /// with no wrapper at all, and a bound source gets a `Stateful`
 /// subscribed to the signal that re-runs `build` on every change. Use
 /// it for content a property write can't express -- text, an image
@@ -124,25 +125,20 @@ where
 
 /// A text node that follows a reactive source.
 ///
-/// Text content has no property writer, so a changed string needs a new
-/// text node: bound sources get a `Stateful` subscribed to the signal,
-/// and a `Const` is built once with no wrapper at all.
+/// A signal or computed registers a text binding: a change replaces the
+/// text in place and has it measured again, with no rebuild of anything
+/// around it. A `Const` is a plain text.
 ///
-/// `style` runs on every rebuild and MUST set everything the text
-/// needs -- size, colour, weight. Content built inside a stateful
-/// callback is created after the stylesheet pass has walked the tree,
-/// so it cannot rely on inheriting anything from an ancestor's class;
-/// it would render unstyled until some later event triggered another
-/// pass. See `gotcha_stateful_content_loses_css_inheritance`.
+/// `style` runs once, on the text as built, so the node is an ordinary one
+/// that the stylesheet pass reaches like any other.
 pub fn reactive_text<F>(
     src: &Reactive<String>,
     style: F,
 ) -> Box<dyn blinc_layout::div::ElementBuilder>
 where
-    F: Fn(blinc_layout::text::Text) -> blinc_layout::text::Text + Send + Sync + 'static,
+    F: FnOnce(blinc_layout::text::Text) -> blinc_layout::text::Text,
 {
-    use blinc_layout::text::text;
-    reactive_node(src, move |s| Box::new(style(text(s))))
+    Box::new(style(blinc_layout::text::Text::bound(clone_reactive(src))))
 }
 
 // =====================================================================

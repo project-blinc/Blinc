@@ -91,6 +91,9 @@ fn images(tree: &RenderTree) -> Vec<String> {
 fn refresh(tree: &mut RenderTree, changed: &blinc_core::reactive::SignalId) {
     blinc_layout::stateful::check_stateful_deps(&[*changed]);
     tree.process_pending_subtree_rebuilds();
+    // A bound property or text arrives on the other queue.
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    tree.apply_partial_property_updates(updates);
     tree.compute_layout(400.0, 200.0);
 }
 
@@ -197,5 +200,83 @@ fn a_bound_spinner_colour_does_not_queue_a_rebuild() {
     assert!(
         !blinc_layout::stateful::has_pending_subtree_rebuilds(),
         "a bound spinner colour must patch in place, not rebuild"
+    );
+}
+
+/// Ids of every text node, in tree order.
+fn text_ids(tree: &RenderTree) -> Vec<blinc_layout::LayoutNodeId> {
+    let mut out = Vec::new();
+    let mut stack = vec![tree.root().unwrap()];
+    while let Some(id) = stack.pop() {
+        if let Some(node) = tree.get_render_node(id)
+            && matches!(node.element_type, ElementType::Text(_))
+        {
+            out.push(id);
+        }
+        stack.extend(tree.layout_tree.children(id));
+    }
+    out
+}
+
+/// A bound label changes the text it has. Nothing around it is rebuilt, and
+/// the text node is the same one.
+#[test]
+fn a_bound_label_updates_in_place_with_no_rebuild() {
+    init();
+    let _guard = QUEUE.lock().unwrap_or_else(|e| e.into_inner());
+    let _ = blinc_layout::stateful::take_pending_subtree_rebuilds();
+    let _ = blinc_layout::take_pending_partial_prop_updates();
+
+    let key = state("Ctrl");
+    let mut tree = build(blinc_cn::kbd(Reactive::Bound(key.clone())));
+    let before = text_ids(&tree);
+    assert_eq!(before.len(), 1, "one text node: {:?}", texts(&tree));
+
+    key.set("Shift".to_string());
+    blinc_layout::stateful::check_stateful_deps(&[key.signal_id()]);
+    assert!(
+        blinc_layout::stateful::take_pending_subtree_rebuilds().is_empty(),
+        "a bound label queued a subtree rebuild"
+    );
+
+    refresh(&mut tree, &key.signal_id());
+    assert_eq!(texts(&tree), vec!["Shift".to_string()]);
+    assert_eq!(text_ids(&tree), before, "the text node was replaced");
+}
+
+/// A computed source drives the text too. It used to freeze: a computed
+/// has no signal id for `deps()` to subscribe to.
+#[test]
+fn a_computed_label_follows_its_source() {
+    init();
+    let _guard = QUEUE.lock().unwrap_or_else(|e| e.into_inner());
+    let _ = blinc_layout::stateful::take_pending_subtree_rebuilds();
+    let _ = blinc_layout::take_pending_partial_prop_updates();
+
+    let source = state("a");
+    let signal = source.signal();
+    let derived = global_graph().lock().unwrap().create_derived(
+        move |g: &blinc_core::reactive::ReactiveGraph| {
+            format!("<{}>", g.get(signal).unwrap_or_default())
+        },
+    );
+    let computed = blinc_core::Computed::new(derived, global_graph());
+
+    let mut tree = build(blinc_cn::label(Reactive::Computed(computed.clone())));
+    // The first read records the dependency, as for any computed binding.
+    let _ = computed.try_get();
+    assert!(
+        texts(&tree).contains(&"<a>".to_string()),
+        "{:?}",
+        texts(&tree)
+    );
+    let _ = blinc_layout::take_pending_partial_prop_updates();
+
+    source.set("b".to_string());
+    refresh(&mut tree, &source.signal_id());
+    assert!(
+        texts(&tree).contains(&"<b>".to_string()),
+        "a computed label stayed at its first value: {:?}",
+        texts(&tree)
     );
 }
