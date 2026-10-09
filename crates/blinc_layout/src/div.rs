@@ -3215,8 +3215,37 @@ impl Div {
     }
 
     /// Set border width only
-    pub fn border_width(mut self, width: f32) -> Self {
-        self.border_width = width;
+    ///
+    /// Accepts a number, or a `State<f32>` / `Computed<f32>` that the width
+    /// follows in place.
+    pub fn border_width(mut self, width: impl crate::binding::IntoReactive<f32>) -> Self {
+        use crate::binding::{Reactive, TypedPendingBinding};
+        let write = |props: &mut RenderProps, w: f32| props.border_width = w;
+        match width.into_reactive() {
+            Reactive::Const(w) => self.border_width = w,
+            Reactive::Bound(state) => {
+                if let Some(w) = state.try_get() {
+                    self.border_width = w;
+                }
+                self.pending_bindings
+                    .push(Box::new(TypedPendingBinding::new(
+                        state,
+                        crate::property::PropertyId::BorderWidth,
+                        write,
+                    )));
+            }
+            Reactive::Computed(computed) => {
+                if let Some(w) = computed.try_get() {
+                    self.border_width = w;
+                }
+                self.pending_bindings
+                    .push(Box::new(TypedPendingBinding::from_computed(
+                        computed,
+                        crate::property::PropertyId::BorderWidth,
+                        write,
+                    )));
+            }
+        }
         self
     }
 
@@ -3420,6 +3449,42 @@ impl Div {
     // =========================================================================
     // Shadow
     // =========================================================================
+
+    /// Set the whole drop shadow stack (replaces any existing one).
+    ///
+    /// Accepts a `Vec<Shadow>`, or a `State<Vec<Shadow>>` /
+    /// `Computed<Vec<Shadow>>` the stack follows in place. An empty stack is
+    /// no shadow, so a signal can take a shadow away and give it back.
+    pub fn shadows(mut self, value: impl crate::binding::IntoReactive<Vec<Shadow>>) -> Self {
+        use crate::binding::{Reactive, TypedPendingBinding};
+        let write = |props: &mut RenderProps, stack: Vec<Shadow>| props.shadow = stack;
+        match value.into_reactive() {
+            Reactive::Const(stack) => self.shadow = stack,
+            Reactive::Bound(state) => {
+                if let Some(stack) = state.try_get() {
+                    self.shadow = stack;
+                }
+                self.pending_bindings
+                    .push(Box::new(TypedPendingBinding::new(
+                        state,
+                        crate::property::PropertyId::Shadow,
+                        write,
+                    )));
+            }
+            Reactive::Computed(computed) => {
+                if let Some(stack) = computed.try_get() {
+                    self.shadow = stack;
+                }
+                self.pending_bindings
+                    .push(Box::new(TypedPendingBinding::from_computed(
+                        computed,
+                        crate::property::PropertyId::Shadow,
+                        write,
+                    )));
+            }
+        }
+        self
+    }
 
     /// Apply a single drop shadow to this element (replaces any existing stack).
     ///
