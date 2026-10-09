@@ -381,17 +381,8 @@ impl Button {
         let font_size = config.btn_size.font_size();
         let variant = config.variant;
         let disabled = current(&config.disabled);
-        let disabled_dep = dep_signal(&config.disabled);
 
-        // Get persistent state for this button
-        let state_key = format!("_cn_btn_{}", instance_key);
-        let btn_state = use_button_state(&state_key);
-        if disabled {
-            let mut inner = btn_state.lock().unwrap();
-            inner.state = ButtonState::Disabled;
-        }
-
-        // Variant colors for the layout button's FSM
+        // Variant colors for the layout button
         let bg = variant.base_background(theme);
         let hover_bg = variant.background(theme, ButtonState::Hovered);
         let pressed_bg = variant.background(theme, ButtonState::Pressed);
@@ -399,11 +390,10 @@ impl Button {
         // Content closure — returns ONLY the text/icon content.
         // The layout button handles bg, rounded, padding, etc.
         let label = current(&config.label);
-        // The label text follows its source in place: the state callback
-        // builds it as a bound text, so a change patches that one node and
-        // the button measures it again, with no rebuild. The snapshot above
-        // is for the structural icon-only decision, which cannot change
-        // without a rebuild anyway.
+        // The label text follows its source in place: it is built as a bound
+        // text, so a change patches that one node and the button measures it
+        // again, with no rebuild. The snapshot above is for the structural
+        // icon-only decision, which cannot change without a rebuild anyway.
         let label_src = clone_reactive(&config.label);
         let icon = config.icon.clone();
         let icon_position = config.icon_position;
@@ -418,24 +408,94 @@ impl Button {
         let is_icon_only = config.icon.is_some() && label.is_empty();
         let resolved_icon_size = config.icon_size.unwrap_or(font_size + 2.0);
 
-        // Create button with empty content — we'll set up on_state below
-        // to read CSS-resolved text_color for both label and icon.
-        let mut btn = layout_button::Button::with_content(btn_state, |_state| div())
-            .text_color(default_fg)
-            .bg_color(bg)
-            .hover_color(hover_bg)
-            .pressed_color(pressed_bg)
-            // Pull the corner radius from the active theme's
-            // `RadiusTokens` so Universal HID variants etc. each get
-            // their own corner-reach. CSS `.cn-button--{size}` rules
-            // can still cascade to override per-size.
-            .rounded(theme.radii().get(config.btn_size.radius_token()))
-            .items_center()
-            .justify_center()
-            // CSS classes for user overrides
-            .class("cn-button")
-            .class(variant.css_class())
-            .class(config.btn_size.css_class());
+        // Filled tonal disabled treatment — matches the disabled select /
+        // input look. Solid muted surface + muted text reads as a button
+        // (still has identity) but clearly inert. Opacity dimming on a
+        // saturated bg (e.g. Primary blue at 50%) washed out to pale lavender
+        // against white, losing all contrast. A thin BorderSecondary outline
+        // gives the button a sharper silhouette against the page without
+        // re-introducing depth, and it is flat: no shadow.
+        let disabled_bg = theme.color(ColorToken::InputBgDisabled);
+        let disabled_fg = theme.color(ColorToken::TextTertiary);
+        let disabled_border = theme.color(ColorToken::BorderSecondary);
+
+        // The text and the icon take the colour the button resolves for its
+        // state, after stylesheet overrides, so they follow it in place.
+        let mut btn = layout_button::Button::with_content(move |look| -> Box<dyn ElementBuilder> {
+            let fg = look.text_color();
+            if is_icon_only {
+                // Icon-only: the SVG is the button's only child. The button's
+                // items_center + justify_center + explicit w/h centre it — no
+                // content wrapper needed.
+                let icon_size = custom_icon_size.unwrap_or(font_size + 2.0);
+                return match icon {
+                    Some(ref icon_str) => {
+                        let svg_str = blinc_icons::to_svg(icon_str, icon_size);
+                        Box::new(svg(&svg_str).size(icon_size, icon_size).color(fg))
+                    }
+                    None => Box::new(div()),
+                };
+            }
+            // With label: use content wrapper for flex_row layout
+            let label_text = Text::bound(clone_reactive(&label_src))
+                .size(font_size)
+                .color(fg)
+                .no_wrap()
+                .v_center()
+                .pointer_events_none()
+                .no_cursor();
+
+            let pad_x = btn_size.padding_x();
+            let pad_y = btn_size.padding_y();
+            let mut content = div()
+                .flex_row()
+                .items_center()
+                .justify_center()
+                .gap_px(6.0)
+                .padding_x_px(pad_x)
+                .padding_y_px(pad_y)
+                .pointer_events_none();
+
+            if let Some(ref icon_str) = icon {
+                let icon_size = custom_icon_size.unwrap_or(font_size + 2.0);
+                let svg_str = blinc_icons::to_svg(icon_str, icon_size);
+                let icon_svg = svg(&svg_str).size(icon_size, icon_size).color(fg);
+
+                match icon_position {
+                    IconPosition::Start => {
+                        content = content.child(icon_svg).child(label_text);
+                    }
+                    IconPosition::End => {
+                        content = content.child(label_text).child(icon_svg);
+                    }
+                }
+            } else {
+                content = content.child(label_text);
+            }
+            Box::new(content)
+        })
+        .key(format!("_cn_btn_{}", instance_key))
+        .text_color(default_fg)
+        .bg_color(bg)
+        .hover_color(hover_bg)
+        .pressed_color(pressed_bg)
+        .disabled_color(disabled_bg)
+        .disabled_text_color(disabled_fg)
+        .disabled_border(1.0, disabled_border)
+        .flat_when_disabled(true)
+        // A signal that disables the button restyles it in place.
+        .disabled(clone_reactive(&config.disabled))
+        // Pull the corner radius from the active theme's
+        // `RadiusTokens` so Universal HID variants etc. each get
+        // their own corner-reach. CSS `.cn-button--{size}` rules
+        // can still cascade to override per-size.
+        .rounded(theme.radii().get(config.btn_size.radius_token()))
+        .items_center()
+        .justify_center()
+        // CSS classes for user overrides
+        .class("cn-button")
+        .class(variant.css_class())
+        .class(config.btn_size.css_class());
 
         // Icon-only: explicit square dimensions so items_center/justify_center
         // can center the icon. `flex_shrink_0` pins both axes — without it
@@ -457,111 +517,23 @@ impl Button {
             btn = btn.w_fit();
         }
 
-        // Capture config arc so the on_state callback can read CSS-resolved text_color
-        let cfg_arc = btn.config_arc();
-        btn = btn.on_state(move |_state, container| {
-            // Read CSS-resolved text_color — apply_css_overrides_button has already run
-            let fg = cfg_arc.lock().unwrap().text_color;
-
-            if is_icon_only {
-                // Icon-only: place SVG directly as child of the Stateful container.
-                // The container's items_center + justify_center + explicit w/h
-                // handles centering — no content wrapper needed.
-                if let Some(ref icon_str) = icon {
-                    let icon_size = custom_icon_size.unwrap_or(font_size + 2.0);
-                    let svg_str = blinc_icons::to_svg(icon_str, icon_size);
-                    let icon_svg = svg(&svg_str).size(icon_size, icon_size).color(fg);
-                    container.merge(div().child(icon_svg));
-                }
-            } else {
-                // With label: use content wrapper for flex_row layout
-                let label_text = Text::bound(clone_reactive(&label_src))
-                    .size(font_size)
-                    .color(fg)
-                    .no_wrap()
-                    .v_center()
-                    .pointer_events_none()
-                    .no_cursor();
-
-                let pad_x = btn_size.padding_x();
-                let pad_y = btn_size.padding_y();
-                let mut content = div()
-                    .flex_row()
-                    .items_center()
-                    .justify_center()
-                    .gap_px(6.0)
-                    .padding_x_px(pad_x)
-                    .padding_y_px(pad_y)
-                    .pointer_events_none();
-
-                if let Some(ref icon_str) = icon {
-                    let icon_size = custom_icon_size.unwrap_or(font_size + 2.0);
-                    let svg_str = blinc_icons::to_svg(icon_str, icon_size);
-                    let icon_svg = svg(&svg_str).size(icon_size, icon_size).color(fg);
-
-                    match icon_position {
-                        IconPosition::Start => {
-                            content = content.child(icon_svg).child(label_text);
-                        }
-                        IconPosition::End => {
-                            content = content.child(label_text).child(icon_svg);
-                        }
-                    }
-                } else {
-                    content = content.child(label_text);
-                }
-
-                container.merge(div().child(content));
-            }
-        });
-
         if disabled {
-            // Filled tonal disabled treatment — matches the disabled
-            // select / input look. Solid muted surface + muted text reads
-            // as a button (still has identity) but clearly inert.
-            // Opacity dimming on a saturated bg (e.g. Primary blue at 50%)
-            // washed out to pale lavender against white, losing all contrast.
-            // A thin BorderSecondary outline gives the button a sharper
-            // silhouette against the page without re-introducing depth.
-            let disabled_bg = theme.color(ColorToken::InputBgDisabled);
-            let disabled_fg = theme.color(ColorToken::TextTertiary);
-            let disabled_border = theme.color(ColorToken::BorderSecondary);
-            btn = btn
-                .class("cn-button--disabled")
-                .bg_color(disabled_bg)
-                .hover_color(disabled_bg)
-                .pressed_color(disabled_bg)
-                .text_color(disabled_fg)
-                .border(1.0, disabled_border)
-                .disabled(true);
+            btn = btn.class("cn-button--disabled");
         }
 
-        // Shadow — disabled is intentionally flat (no shadow_md / shadow_sm)
-        // so the inert tonal fill reads as non-interactive.
-        if !disabled {
-            if variant != ButtonVariant::Link && variant != ButtonVariant::Ghost {
-                btn = btn.shadow_md();
-            }
-            if variant == ButtonVariant::Outline {
-                btn = btn.shadow_sm();
-            }
+        // Shadow. The layout button takes it away while disabled, so the
+        // inert tonal fill reads as non-interactive.
+        if variant != ButtonVariant::Link && variant != ButtonVariant::Ghost {
+            btn = btn.shadow_md();
+        }
+        if variant == ButtonVariant::Outline {
+            btn = btn.shadow_sm();
         }
 
-        // Border for outline variant (skip when disabled — disabled already
-        // applied its own BorderSecondary outline above).
-        if !disabled {
-            if let Some(border_color) = variant.border(theme) {
-                btn = btn.border(1.0, border_color);
-            }
-        }
-
-        // A bound `disabled` rebuilds the subtree: the value picks
-        // different backgrounds, borders, shadows and FSM start state,
-        // none of which a single property write can express. The label is
-        // not here: it is a bound text and needs no rebuild.
-        let deps: Vec<_> = [disabled_dep].into_iter().flatten().collect();
-        if !deps.is_empty() {
-            btn = btn.deps(&deps);
+        // Border for outline variant. While disabled the layout button swaps
+        // in the disabled border above.
+        if let Some(border_color) = variant.border(theme) {
+            btn = btn.border(1.0, border_color);
         }
 
         // Click handler

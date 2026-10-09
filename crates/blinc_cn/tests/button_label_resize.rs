@@ -395,11 +395,11 @@ fn label_text(tree: &blinc_layout::renderer::RenderTree) -> String {
     panic!("no text node");
 }
 
-/// The label is a bound text inside content that a bound `disabled` rebuilds.
-/// After the button has been through rebuilds the label must still follow its
-/// signal, and the rebuilds must not leave subscriptions behind.
+/// A bound `disabled` restyles the button in place. After it has flipped a
+/// few times the label must still follow its signal, nothing must have been
+/// rebuilt, and nothing must have been subscribed again.
 #[test]
-fn a_bound_label_still_follows_after_the_button_rebuilds() {
+fn a_bound_label_still_follows_after_disabled_flips() {
     let _guard = rebuild_lock();
     use blinc_core::reactive::State;
     init();
@@ -444,15 +444,15 @@ fn a_bound_label_still_follows_after_the_button_rebuilds() {
         let now = !disabled.get();
         blinc_core::reactive::Signal::<bool>::from_id(disabled.signal_id()).set(now);
         assert!(
-            blinc_layout::stateful::has_pending_subtree_rebuilds(),
-            "toggling disabled queued no rebuild"
+            !blinc_layout::stateful::has_pending_subtree_rebuilds(),
+            "toggling disabled queued a rebuild"
         );
         frame(&mut tree);
     }
     assert_eq!(
         subscribers(),
         first,
-        "rebuilds left label subscriptions behind"
+        "flipping disabled changed the label's subscriptions"
     );
 
     blinc_core::reactive::Signal::<String>::from_id(label.signal_id()).set("Changed".to_string());
@@ -460,7 +460,7 @@ fn a_bound_label_still_follows_after_the_button_rebuilds() {
     assert_eq!(
         label_text(&tree),
         "Changed",
-        "the label stopped following after rebuilds"
+        "the label stopped following after disabled flipped"
     );
 }
 

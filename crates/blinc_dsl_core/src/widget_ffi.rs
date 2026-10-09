@@ -1345,13 +1345,9 @@ pub(crate) extern "C" fn blinc_button_view(
     ensure_context_state();
     let label = decode_string_arg(label_ptr);
     // Key by call_id (span-derived) so dup-labelled buttons at distinct
-    // call sites hold distinct FSM state.
+    // call sites hold distinct pointer state.
     let key = dsl_state_key("button", call_id);
-    let state = blinc_layout::use_fsm_keyed::<_, blinc_layout::stateful::ButtonState>(
-        &key,
-        blinc_layout::stateful::ButtonState::Idle,
-    );
-    let mut widget = blinc_layout::widgets::button(state, label);
+    let mut widget = blinc_layout::widgets::button(label).key(key);
     for name in decoded_class_names(class_str) {
         widget = widget.class(&name);
     }

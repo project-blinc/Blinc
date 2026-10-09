@@ -408,8 +408,8 @@ div | fill 0.200,0.400,0.600,1.000 | border 0.067,0.133,0.200,1.000 w2.0 | opaci
 == pressed
 div | fill 0.133,0.267,0.400,1.000 | border 1.000,0.533,0.000,1.000 w2.0 | opacity 1.00 | radius 6.0 | scale - | 85.0x33.0 | shadow [Shadow { offset_x: 0.0, offset_y: 4.0, blur: 6.0, spread: -1.0, color: Color { r: 0.0, g: 0.0, b: 0.0, a: 0.3 } }] | cursor None | passes pointer false
   div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 85.0x33.0 | shadow [] | cursor None | passes pointer true
-    svg tint 1.000,0.933,0.867,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 16.0x16.0 | shadow [] | cursor None | passes pointer false
-    text "Save" color 1.000,0.933,0.867,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x17.0 | shadow [] | cursor None | passes pointer true
+    svg tint 0.114,0.114,0.122,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 16.0x16.0 | shadow [] | cursor None | passes pointer false
+    text "Save" color 0.114,0.114,0.122,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x17.0 | shadow [] | cursor None | passes pointer true
 == released
 div | fill 0.200,0.400,0.600,1.000 | border 0.067,0.133,0.200,1.000 w2.0 | opacity 1.00 | radius 6.0 | scale - | 85.0x33.0 | shadow [Shadow { offset_x: 0.0, offset_y: 4.0, blur: 6.0, spread: -1.0, color: Color { r: 0.0, g: 0.0, b: 0.0, a: 0.3 } }] | cursor None | passes pointer false
   div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 85.0x33.0 | shadow [] | cursor None | passes pointer true
@@ -418,8 +418,8 @@ div | fill 0.200,0.400,0.600,1.000 | border 0.067,0.133,0.200,1.000 w2.0 | opaci
 == left
 div | fill 0.039,0.518,1.000,1.000 | border 0.067,0.133,0.200,1.000 w2.0 | opacity 1.00 | radius 6.0 | scale - | 85.0x33.0 | shadow [Shadow { offset_x: 0.0, offset_y: 4.0, blur: 6.0, spread: -1.0, color: Color { r: 0.0, g: 0.0, b: 0.0, a: 0.3 } }] | cursor None | passes pointer false
   div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 85.0x33.0 | shadow [] | cursor None | passes pointer true
-    svg tint 1.000,0.933,0.867,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 16.0x16.0 | shadow [] | cursor None | passes pointer false
-    text "Save" color 1.000,0.933,0.867,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x17.0 | shadow [] | cursor None | passes pointer true
+    svg tint 0.114,0.114,0.122,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 16.0x16.0 | shadow [] | cursor None | passes pointer false
+    text "Save" color 0.114,0.114,0.122,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x17.0 | shadow [] | cursor None | passes pointer true
 == hover again
 div | fill 0.200,0.400,0.600,1.000 | border 0.067,0.133,0.200,1.000 w2.0 | opacity 1.00 | radius 6.0 | scale - | 85.0x33.0 | shadow [Shadow { offset_x: 0.0, offset_y: 4.0, blur: 6.0, spread: -1.0, color: Color { r: 0.0, g: 0.0, b: 0.0, a: 0.3 } }] | cursor None | passes pointer false
   div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 85.0x33.0 | shadow [] | cursor None | passes pointer true
@@ -428,8 +428,8 @@ div | fill 0.200,0.400,0.600,1.000 | border 0.067,0.133,0.200,1.000 w2.0 | opaci
 == pressed again
 div | fill 0.133,0.267,0.400,1.000 | border 1.000,0.533,0.000,1.000 w2.0 | opacity 1.00 | radius 6.0 | scale - | 85.0x33.0 | shadow [Shadow { offset_x: 0.0, offset_y: 4.0, blur: 6.0, spread: -1.0, color: Color { r: 0.0, g: 0.0, b: 0.0, a: 0.3 } }] | cursor None | passes pointer false
   div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 85.0x33.0 | shadow [] | cursor None | passes pointer true
-    svg tint 1.000,0.933,0.867,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 16.0x16.0 | shadow [] | cursor None | passes pointer false
-    text "Save" color 1.000,0.933,0.867,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x17.0 | shadow [] | cursor None | passes pointer true
+    svg tint 0.114,0.114,0.122,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 16.0x16.0 | shadow [] | cursor None | passes pointer false
+    text "Save" color 0.114,0.114,0.122,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x17.0 | shadow [] | cursor None | passes pointer true
 == released again
 div | fill 0.200,0.400,0.600,1.000 | border 0.067,0.133,0.200,1.000 w2.0 | opacity 1.00 | radius 6.0 | scale - | 85.0x33.0 | shadow [Shadow { offset_x: 0.0, offset_y: 4.0, blur: 6.0, spread: -1.0, color: Color { r: 0.0, g: 0.0, b: 0.0, a: 0.3 } }] | cursor None | passes pointer false
   div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 85.0x33.0 | shadow [] | cursor None | passes pointer true

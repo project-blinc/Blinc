@@ -13,7 +13,6 @@
 
 use blinc_app::prelude::*;
 use blinc_app::windowed::WindowedContext;
-use blinc_layout::stateful::{ButtonState, SharedState};
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<()> {
@@ -35,11 +34,6 @@ fn main() -> Result<()> {
 pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
     let overlay_mgr = ctx.overlay_manager();
 
-    // Create button states via context for persistence across rebuilds
-    let modal_btn = ctx.use_fsm_keyed("modal_btn", ButtonState::Idle);
-    let toast_btn = ctx.use_fsm_keyed("toast_btn", ButtonState::Idle);
-    let dialog_btn = ctx.use_fsm_keyed("dialog_btn", ButtonState::Idle);
-
     div()
         .w(ctx.width)
         .h(ctx.height)
@@ -60,13 +54,14 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                 .size(20.0)
                 .color(Color::rgba(1.0, 1.0, 1.0, 0.6)),
         )
-        // Button row - using real button() widgets with context-managed state
+        // Button row - using real button() widgets
         .child(
             div()
                 .flex_row()
                 .gap(16.0)
                 .child(
-                    button(modal_btn, "Open Modal")
+                    button("Open Modal")
+                        .key("modal_btn")
                         .rounded(8.0)
                         .bg_color(Color::rgba(0.3, 0.5, 1.0, 1.0))
                         .hover_color(Color::rgba(0.4, 0.6, 1.0, 1.0))
@@ -83,7 +78,8 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                         }),
                 )
                 .child(
-                    button(toast_btn, "Show Toast")
+                    button("Show Toast")
+                        .key("toast_btn")
                         .rounded(8.0)
                         .bg_color(Color::rgba(0.3, 0.7, 0.4, 1.0))
                         .hover_color(Color::rgba(0.4, 0.8, 0.5, 1.0))
@@ -101,7 +97,8 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                         }),
                 )
                 .child(
-                    button(dialog_btn, "Open Dialog")
+                    button("Open Dialog")
+                        .key("dialog_btn")
                         .rounded(8.0)
                         .bg_color(Color::rgba(0.8, 0.4, 0.3, 1.0))
                         .hover_color(Color::rgba(0.9, 0.5, 0.4, 1.0))
@@ -163,14 +160,10 @@ fn instruction(text_content: &str) -> impl ElementBuilder + use<> {
         )
 }
 
-/// Create an ephemeral button for overlay content (no context persistence needed)
+/// A button for overlay content. The overlay is built again each time it
+/// opens, so the key is the label, not where it was made.
 fn overlay_button(label: &str) -> blinc_layout::widgets::Button {
-    use blinc_layout::stateful::StatefulInner;
-    use std::sync::{Arc, Mutex};
-
-    let state: SharedState<ButtonState> =
-        Arc::new(Mutex::new(StatefulInner::new(ButtonState::Idle)));
-    button(state, label)
+    button(label).key(format!("overlay_btn:{label}"))
 }
 
 fn modal_content(mgr: OverlayManager) -> Div {

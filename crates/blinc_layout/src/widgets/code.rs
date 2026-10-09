@@ -3027,18 +3027,15 @@ fn search_icon_button(
     let theme = ThemeState::get();
     let hover = theme.color(ColorToken::SurfaceElevated);
     let pressed = theme.color(ColorToken::SurfaceOverlay);
-    let btn_state = crate::stateful::use_fsm_keyed::<_, crate::stateful::ButtonState>(
-        key,
-        crate::stateful::ButtonState::default(),
-    );
     let s = icon_size + 4.0;
-    crate::widgets::button::Button::with_content(btn_state, move |_| {
+    crate::widgets::button::Button::with_content(move |_| {
         div().w(s).h(s).items_center().justify_center().child(
             crate::svg::svg(icon_svg)
                 .size(icon_size, icon_size)
                 .color(color),
         )
     })
+    .key(key)
     .bg_color(Color::TRANSPARENT)
     .hover_color(hover)
     .pressed_color(pressed)
@@ -3061,10 +3058,6 @@ fn search_toggle_button(
     let theme = ThemeState::get();
     let hover = theme.color(ColorToken::SurfaceElevated);
     let border_color = theme.color(ColorToken::Border);
-    let btn_state = crate::stateful::use_fsm_keyed::<_, crate::stateful::ButtonState>(
-        key,
-        crate::stateful::ButtonState::default(),
-    );
 
     let (bg, border, tc) = if active {
         (accent.with_alpha(0.15), accent, accent)
@@ -3072,12 +3065,13 @@ fn search_toggle_button(
         (Color::TRANSPARENT, border_color, color)
     };
 
-    crate::widgets::button::Button::with_content(btn_state, move |_| {
+    crate::widgets::button::Button::with_content(move |_| {
         div()
             .items_center()
             .justify_center()
             .child(text(label).size(font_size).color(tc).monospace().no_wrap())
     })
+    .key(key)
     .bg_color(bg)
     .hover_color(hover)
     .pressed_color(accent.with_alpha(0.3))

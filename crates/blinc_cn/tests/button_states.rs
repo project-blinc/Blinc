@@ -68,14 +68,14 @@ fn a_button_looks_the_same_in_every_state() {
             ("ghost", ButtonVariant::Ghost),
             ("link", ButtonVariant::Link),
         ] {
-            out += &scenario(name, "", false, || {
+            out += &scenario(name, "", true, || {
                 Box::new(blinc_cn::button("Save").variant(variant))
             });
         }
-        out += &scenario("small", "", false, || {
+        out += &scenario("small", "", true, || {
             Box::new(blinc_cn::button("Save").size(ButtonSize::Small))
         });
-        out += &scenario("large with an icon after the label", "", false, || {
+        out += &scenario("large with an icon after the label", "", true, || {
             Box::new(
                 blinc_cn::button("Save")
                     .size(ButtonSize::Large)
@@ -83,20 +83,20 @@ fn a_button_looks_the_same_in_every_state() {
                     .icon_position(blinc_cn::IconPosition::End),
             )
         });
-        out += &scenario("icon only", "", false, || {
+        out += &scenario("icon only", "", true, || {
             Box::new(
                 blinc_cn::button("")
                     .size(ButtonSize::Icon)
                     .icon(blinc_icons::icons::CHECK),
             )
         });
-        out += &scenario("custom size", "", false, || {
+        out += &scenario("custom size", "", true, || {
             Box::new(blinc_cn::button("Save").size(ButtonSize::Custom(120.0, 48.0)))
         });
-        out += &scenario("disabled", "", false, || {
+        out += &scenario("disabled", "", true, || {
             Box::new(blinc_cn::button("Save").disabled(true))
         });
-        out += &scenario("text colour", "", false, || {
+        out += &scenario("text colour", "", true, || {
             Box::new(blinc_cn::button("Save").color(blinc_core::Color::rgb(1.0, 0.5, 0.0)))
         });
         out += &scenario(
@@ -104,13 +104,13 @@ fn a_button_looks_the_same_in_every_state() {
             ".cn-button--primary:hover { background: #336699; color: #ffeedd } \
              .cn-button--primary:active { background: #224466; border-color: #ff8800 } \
              .cn-button--primary { border-width: 2px; border-color: #112233 }",
-            false,
+            true,
             || Box::new(blinc_cn::button("Save").icon(blinc_icons::icons::CHECK)),
         );
         out += &scenario(
             "state rules for a disabled button",
             ".cn-button--primary:disabled { background: #553322; color: #ddccbb }",
-            false,
+            true,
             || Box::new(blinc_cn::button("Save").disabled(true)),
         );
         out
