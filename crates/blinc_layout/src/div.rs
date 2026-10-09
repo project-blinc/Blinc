@@ -486,13 +486,29 @@ pub struct Div {
     /// What [`Div::visible`] follows. Acted on in `build()`, once the
     /// display mode the element has when shown is final.
     pub(crate) visible_source: Option<VisibleSource>,
+    /// Children shown only while a condition holds, by index into
+    /// `children`: what a signal-bound [`Div::when`] added. A child can
+    /// appear under several conditions, and is shown while all hold.
+    pub(crate) child_visibility: Vec<(usize, VisibleSource)>,
 }
 
-/// The source `Div::show_when` follows.
+/// The source `Div::visible` follows.
+#[derive(Clone)]
 pub(crate) enum VisibleSource {
     Const(bool),
     State(blinc_core::reactive::State<bool>),
     Computed(blinc_core::reactive::Computed<bool>),
+}
+
+impl VisibleSource {
+    /// The value now. A source that cannot be read counts as visible.
+    fn current(&self) -> bool {
+        match self {
+            VisibleSource::Const(v) => *v,
+            VisibleSource::State(state) => state.try_get().unwrap_or(true),
+            VisibleSource::Computed(computed) => computed.try_get().unwrap_or(true),
+        }
+    }
 }
 
 impl Default for Div {
@@ -561,6 +577,7 @@ impl Div {
             stateful_context_key: None,
             pending_bindings: Vec::new(),
             visible_source: None,
+            child_visibility: Vec::new(),
         }
     }
 
@@ -626,6 +643,7 @@ impl Div {
             stateful_context_key: None,
             pending_bindings: Vec::new(),
             visible_source: None,
+            child_visibility: Vec::new(),
         }
     }
 
@@ -847,12 +865,38 @@ impl Div {
     /// // Write:
     /// div().when(is_collapsed, |d| d.h(0.0))
     /// ```
+    ///
+    /// # Following a signal
+    ///
+    /// `condition` can also be a `State<bool>` or a `Computed<bool>`. The
+    /// children `f` adds are then built either way and shown while it holds:
+    /// each is taken out of layout (`display: none`) while it is false, and
+    /// put back with the display it was built with when it turns true, in
+    /// place and with no rebuild. They need no wrapper, so they lay out as
+    /// the element's own children.
+    ///
+    /// Only the children can follow a signal. Whatever else `f` sets on the
+    /// element applies as if the condition were true, so bind the property
+    /// itself (`.h(&computed)`) for that. Both outcomes are built, so keep
+    /// what `f` adds cheap.
     #[inline]
-    pub fn when<F>(self, condition: bool, f: F) -> Self
+    pub fn when<F>(self, condition: impl crate::binding::IntoReactive<bool>, f: F) -> Self
     where
         F: FnOnce(Self) -> Self,
     {
-        if condition { f(self) } else { self }
+        use crate::binding::Reactive;
+        let source = match condition.into_reactive() {
+            Reactive::Const(true) => return f(self),
+            Reactive::Const(false) => return self,
+            Reactive::Bound(state) => VisibleSource::State(state),
+            Reactive::Computed(computed) => VisibleSource::Computed(computed),
+        };
+        let before = self.children.len();
+        let mut grown = f(self);
+        for index in before..grown.children.len() {
+            grown.child_visibility.push((index, source.clone()));
+        }
+        grown
     }
 
     /// Set the background color/brush without consuming self
@@ -932,6 +976,7 @@ impl Div {
     #[inline]
     pub fn set_child(&mut self, child: impl ElementBuilder + 'static) {
         self.children.clear();
+        self.child_visibility.clear();
         self.children.push(Box::new(child));
     }
 
@@ -939,6 +984,7 @@ impl Div {
     #[inline]
     pub fn clear_children(&mut self) {
         self.children.clear();
+        self.child_visibility.clear();
     }
 
     /// Set width in pixels without consuming self
@@ -1359,6 +1405,7 @@ impl Div {
         // Merge children - if other has children, replace ours
         if !other.children.is_empty() {
             self.children = other.children;
+            self.child_visibility = other.child_visibility;
         }
 
         // Merge stateful context key - take other's if set
@@ -5014,6 +5061,61 @@ impl<T: ?Sized + ElementBuilder> ElementBuilder for Box<T> {
     }
 }
 
+impl Div {
+    /// Show the child built from `children[index]` only while every
+    /// condition a [`Div::when`] put on it holds.
+    fn bind_child_visibility(&self, tree: &mut LayoutTree, index: usize, child: LayoutNodeId) {
+        use crate::binding::{LayoutPendingBinding, PendingBinding};
+        let sources: Vec<VisibleSource> = self
+            .child_visibility
+            .iter()
+            .filter(|(i, _)| *i == index)
+            .map(|(_, source)| source.clone())
+            .collect();
+        if sources.is_empty() {
+            return;
+        }
+        let Some(mut style) = tree.get_style(child) else {
+            return;
+        };
+        // The display the child has when shown.
+        let shown = if style.display == Display::None {
+            Display::Flex
+        } else {
+            style.display
+        };
+        if !sources.iter().all(VisibleSource::current) {
+            style.display = Display::None;
+            tree.set_style(child, style);
+        }
+
+        // Each change re-reads all the conditions, so a child under two of
+        // them is shown only while both hold.
+        let all = Arc::new(sources);
+        for source in all.iter() {
+            let all = Arc::clone(&all);
+            let write = move |style: &mut Style, _changed: bool| {
+                style.display = if all.iter().all(VisibleSource::current) {
+                    shown
+                } else {
+                    Display::None
+                };
+            };
+            let property = crate::property::PropertyId::Display;
+            match source {
+                VisibleSource::State(state) => {
+                    LayoutPendingBinding::new(state.clone(), property, write).register(child);
+                }
+                VisibleSource::Computed(computed) => {
+                    LayoutPendingBinding::from_computed(computed.clone(), property, write)
+                        .register(child);
+                }
+                VisibleSource::Const(_) => {}
+            }
+        }
+    }
+}
+
 impl ElementBuilder for Div {
     fn bound_scroll_ref(&self) -> Option<&crate::selector::ScrollRef> {
         self.scroll_ref.as_ref()
@@ -5047,9 +5149,10 @@ impl ElementBuilder for Div {
         }
 
         // Build and add children
-        for child in &self.children {
+        for (index, child) in self.children.iter().enumerate() {
             let child_node = child.build(tree);
             tree.add_child(node, child_node);
+            self.bind_child_visibility(tree, index, child_node);
         }
 
         // Register signal-bound property bindings against the freshly
