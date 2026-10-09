@@ -395,6 +395,9 @@ pub struct RenderProps {
     pub stroke_dashoffset: Option<f32>,
     /// SVG path `d` attribute data (for path morphing animations)
     pub svg_path_data: Option<String>,
+    /// SVG tint written after build, by a signal-bound colour. Paint uses it
+    /// in place of the tint the element was built with.
+    pub svg_tint: Option<[f32; 4]>,
     /// Transform origin as percentages [x%, y%] (default 50%, 50% = center)
     pub transform_origin: Option<[f32; 2]>,
     /// Layer effects applied to this element (blur, drop shadow, glow, color matrix)
@@ -550,6 +553,7 @@ impl Default for RenderProps {
             stroke_dasharray: None,
             stroke_dashoffset: None,
             svg_path_data: None,
+            svg_tint: None,
             transform_origin: None,
             visible: true,
             object_fit: None,

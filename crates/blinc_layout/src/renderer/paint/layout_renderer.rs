@@ -33,6 +33,15 @@ use crate::tree::LayoutNodeId;
 
 use super::super::{ElementType, LayoutRenderer, RenderTree};
 
+/// The tint an SVG is drawn with: a bound colour, written after build, wins
+/// over the one the element was built with.
+fn effective_svg_tint(props: &crate::element::RenderProps, built: Option<Color>) -> Option<Color> {
+    props
+        .svg_tint
+        .map(|[r, g, b, a]| Color::rgba(r, g, b, a))
+        .or(built)
+}
+
 impl RenderTree {
     /// Render the tree using a LayoutRenderer
     ///
@@ -720,6 +729,7 @@ impl RenderTree {
             // Absolute position for SVG
             let abs_x = parent_offset.0 + bounds.x;
             let abs_y = parent_offset.1 + bounds.y;
+            let svg_tint = effective_svg_tint(&render_node.props, svg_data.tint);
 
             if to_foreground {
                 renderer.render_svg_foreground(
@@ -728,7 +738,7 @@ impl RenderTree {
                     abs_y,
                     bounds.width,
                     bounds.height,
-                    svg_data.tint,
+                    svg_tint,
                 );
             } else {
                 renderer.render_svg_background(
@@ -737,7 +747,7 @@ impl RenderTree {
                     abs_y,
                     bounds.width,
                     bounds.height,
-                    svg_data.tint,
+                    svg_tint,
                 );
             }
         }
@@ -809,5 +819,30 @@ impl RenderTree {
                 child_cumulative,
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod svg_tint_tests {
+    use super::*;
+    use crate::element::RenderProps;
+
+    #[test]
+    fn a_bound_colour_wins_over_the_built_tint() {
+        let props = RenderProps {
+            svg_tint: Some([0.0, 1.0, 0.0, 1.0]),
+            ..Default::default()
+        };
+        assert_eq!(
+            effective_svg_tint(&props, Some(Color::rgb(1.0, 0.0, 0.0))),
+            Some(Color::rgb(0.0, 1.0, 0.0))
+        );
+    }
+
+    #[test]
+    fn without_one_the_built_tint_is_used() {
+        let built = Some(Color::rgb(1.0, 0.0, 0.0));
+        assert_eq!(effective_svg_tint(&RenderProps::default(), built), built);
+        assert_eq!(effective_svg_tint(&RenderProps::default(), None), None);
     }
 }

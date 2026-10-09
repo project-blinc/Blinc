@@ -91,6 +91,8 @@ pub struct Svg {
     classes: Vec<std::sync::Arc<str>>,
     /// Internal SVGs (widget checkmarks, icons) don't match type selectors
     is_internal: bool,
+    /// Signal bindings registered against the node when it is built
+    pending_bindings: Vec<Box<dyn crate::binding::PendingBinding>>,
 }
 
 impl Svg {
@@ -117,6 +119,7 @@ impl Svg {
             element_id: None,
             classes: Vec::new(),
             is_internal: false,
+            pending_bindings: Vec::new(),
         }
     }
 
@@ -148,8 +151,36 @@ impl Svg {
     ///
     /// Maps to the CSS `color` property. During rasterization, any `currentColor`
     /// references in the SVG source are replaced with this value.
-    pub fn color(self, color: Color) -> Self {
-        self.tint(color)
+    ///
+    /// Takes a colour, a `State<Color>` or a `Computed<Color>`; a signal
+    /// changes the colour in place, with no rebuild.
+    pub fn color(mut self, color: impl crate::binding::IntoReactive<Color>) -> Self {
+        use crate::binding::{Reactive, TypedPendingBinding};
+        let write = |props: &mut RenderProps, c: Color| {
+            props.svg_tint = Some([c.r, c.g, c.b, c.a]);
+        };
+        match color.into_reactive() {
+            Reactive::Const(c) => self.tint = Some(c),
+            Reactive::Bound(state) => {
+                self.tint = state.try_get().or(self.tint);
+                self.pending_bindings
+                    .push(Box::new(TypedPendingBinding::new(
+                        state,
+                        crate::property::PropertyId::Color,
+                        write,
+                    )));
+            }
+            Reactive::Computed(computed) => {
+                self.tint = computed.try_get().or(self.tint);
+                self.pending_bindings
+                    .push(Box::new(TypedPendingBinding::from_computed(
+                        computed,
+                        crate::property::PropertyId::Color,
+                        write,
+                    )));
+            }
+        }
+        self
     }
 
     /// Set the fill color (overrides SVG fill without affecting stroke)
@@ -348,7 +379,11 @@ impl Svg {
 
 impl ElementBuilder for Svg {
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        tree.create_node(self.style.clone())
+        let node = tree.create_node(self.style.clone());
+        for binding in &self.pending_bindings {
+            binding.register(node);
+        }
+        node
     }
 
     #[allow(deprecated)]
