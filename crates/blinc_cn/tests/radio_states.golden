@@ -1,0 +1,420 @@
+######## core
+== idle
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== hover
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== pressed
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== released
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== left
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== hover again
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== pressed again
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [0.8, 0.0, 0.0, 0.8, 0.0, 0.0] }) | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== released again
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+######## core with a disabled option
+== idle
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.50 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== hover
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.50 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== pressed
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.50 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== released
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.50 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== left
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.50 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== hover again
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.50 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== pressed again
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.50 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== released again
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.50 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+######## core under hover and checked rules
+== idle
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.80 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== hover
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.80 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill 0.133,0.200,0.267,1.000 | border 1.000,0.000,0.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== pressed
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.80 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill 0.133,0.200,0.267,1.000 | border 1.000,0.000,0.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== released
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.80 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill 0.133,0.200,0.267,1.000 | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== left
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.80 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill 0.200,0.333,0.467,1.000 | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== hover again
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.80 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill 0.133,0.200,0.267,1.000 | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== pressed again
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.80 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill 0.133,0.200,0.267,1.000 | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [0.8, 0.0, 0.0, 0.8, 0.0, 0.0] }) | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== released again
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 0.80 | radius 0.0 | scale - | 89.0x18.0
+option 1 ring: div | fill 0.133,0.200,0.267,1.000 | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 89.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+######## cn
+== idle
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 1 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== hover
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 1 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== pressed
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 0 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 0 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 1 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 1 dot: none
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== released
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 1 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== left
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 1 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== hover again
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 1 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== pressed again
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 1 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+== released again
+option 0 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 0 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 0 dot: none
+option 0 label: text "Alpha" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
+option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 1 ring: div | fill - | border 0.039,0.518,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 1 dot: div | fill 0.039,0.518,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
+option 1 label: text "Beta" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
+option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
+option 2 ring: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 2 dot: none
+option 2 label: text "Gamma" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
