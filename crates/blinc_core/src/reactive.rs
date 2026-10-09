@@ -429,8 +429,14 @@ struct SignalNode {
     value: Box<dyn Any + Send>,
     /// Version counter for change detection
     version: u64,
-    /// Subscribers to notify on change
+    /// Subscribers to notify on change, in the order they subscribed.
+    ///
+    /// May still hold ids of subscribers that have been disposed, until the
+    /// list is compacted: notification looks each one up and ignores the
+    /// ones that no longer exist. See [`ReactiveGraph::retire_subscriber`].
     subscribers: SmallVec<[SubscriberId; 4]>,
+    /// How many entries of `subscribers` are known to be disposed.
+    dead: u32,
 }
 
 /// Internal derived node storage
@@ -568,6 +574,7 @@ impl ReactiveGraph {
             value: Box::new(initial),
             version: 0,
             subscribers: SmallVec::new(),
+            dead: 0,
         });
         Signal {
             id,
@@ -849,33 +856,20 @@ impl ReactiveGraph {
         // Get tracked dependencies, give the reader its tracking back, and
         // make the reader depend on them too, as a read of a clean derived
         // does.
-        let deps = self.tracking.replace(outer_tracking).unwrap_or_default();
+        let mut deps = self.tracking.replace(outer_tracking).unwrap_or_default();
         if let Some(outer) = self.tracking.borrow_mut().as_mut() {
             outer.extend(deps.iter().copied());
         }
+        deps.sort_unstable();
+        deps.dedup();
 
         // Update the node
         // Subscription bookkeeping. Collected first, then applied, so no
         // borrow spans the signals map's own borrow.
         let mut derived_map = self.derived.borrow_mut();
         if let Some(node) = derived_map.get_mut(derived.id) {
-            // Unsubscribe from old dependencies
-            for &dep_id in &node.dependencies {
-                if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
-                    sig.subscribers
-                        .retain(|s| *s != SubscriberId::Derived(derived.id));
-                }
-            }
-
-            // Subscribe to new dependencies
-            for &dep_id in &deps {
-                if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
-                    let sub = SubscriberId::Derived(derived.id);
-                    if !sig.subscribers.contains(&sub) {
-                        sig.subscribers.push(sub);
-                    }
-                }
-            }
+            // Only what it reads now differs from what it read before.
+            self.rebind_subscriptions(SubscriberId::Derived(derived.id), &node.dependencies, &deps);
 
             // Update depth based on dependencies
             let max_dep_depth = {
@@ -927,14 +921,11 @@ impl ReactiveGraph {
 
     /// Dispose of an effect, removing it from the graph
     pub fn dispose_effect(&mut self, effect: Effect) {
-        self.due_host_effects.retain(|id| *id != effect.id);
+        // A disposed effect that was due is dropped by `take_due_host_effects`.
         if let Some(node) = self.effects.remove(effect.id) {
-            // Unsubscribe from all dependencies
+            // Leave every signal it read
             for &dep_id in &node.dependencies {
-                if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
-                    sig.subscribers
-                        .retain(|s| *s != SubscriberId::Effect(effect.id));
-                }
+                self.retire_subscriber(dep_id);
             }
         }
     }
@@ -979,10 +970,13 @@ impl ReactiveGraph {
         if self.batch_depth.get() == 0 {
             self.flush_effects();
         }
-        let mut due = std::mem::take(&mut self.due_host_effects);
-        // One that was disposed, or already run, is no longer due.
-        due.retain(|id| self.effects.get(*id).is_some_and(|n| n.dirty.get()));
-        due
+        let due = std::mem::take(&mut self.due_host_effects);
+        // One that was disposed, or already run, is no longer due, and one
+        // that became due twice is handed out once, in its first place.
+        let mut seen = std::collections::HashSet::with_capacity(due.len());
+        due.into_iter()
+            .filter(|id| self.effects.get(*id).is_some_and(|n| n.dirty.get()) && seen.insert(*id))
+            .collect()
     }
 
     /// Open a tracking scope for a host effect.
@@ -1078,28 +1072,79 @@ impl ReactiveGraph {
 
     /// Replace an effect's subscriptions with `deps`.
     fn resubscribe_effect(&mut self, effect_id: EffectId, deps: Vec<SignalId>) {
+        let mut deps = deps;
+        deps.sort_unstable();
+        deps.dedup();
         let Some(node) = self.effects.get_mut(effect_id) else {
             return;
         };
-        // Unsubscribe from old dependencies
-        for &dep_id in &node.dependencies {
-            if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
-                sig.subscribers
-                    .retain(|s| *s != SubscriberId::Effect(effect_id));
+        let old = std::mem::take(&mut node.dependencies);
+        // Only what it reads now differs from what it read before.
+        self.rebind_subscriptions(SubscriberId::Effect(effect_id), &old, &deps);
+        if let Some(node) = self.effects.get_mut(effect_id) {
+            node.dependencies = deps.into_iter().collect();
+        }
+    }
+
+    /// Whether a subscriber is still in the graph.
+    fn subscriber_exists(
+        &self,
+        derived: &SlotMap<DerivedId, DerivedNode>,
+        sub: SubscriberId,
+    ) -> bool {
+        match sub {
+            SubscriberId::Derived(id) => derived.contains_key(id),
+            SubscriberId::Effect(id) => self.effects.contains_key(id),
+        }
+    }
+
+    /// A subscriber of `signal` has been removed from the graph.
+    ///
+    /// Taking it out of the signal's list at once costs a pass over the list,
+    /// so disposing N subscribers of one signal was quadratic. A short list is
+    /// still edited at once. A long one only counts the departure, because
+    /// notification already ignores an id whose node is gone, and is compacted
+    /// when half of it is stale: linear in total, and the order of the
+    /// survivors is untouched.
+    ///
+    /// The subscriber must already be removed from its own map.
+    fn retire_subscriber(&self, signal: SignalId) {
+        const EAGER: usize = 16;
+        let mut signals = self.signals.borrow_mut();
+        let Some(node) = signals.get_mut(signal) else {
+            return;
+        };
+        node.dead += 1;
+        if node.subscribers.len() <= EAGER || (node.dead as usize) * 2 > node.subscribers.len() {
+            let derived = self.derived.borrow();
+            node.subscribers
+                .retain(|sub| self.subscriber_exists(&derived, *sub));
+            node.dead = 0;
+        }
+    }
+
+    /// Move a live subscriber's subscriptions from the signals it read to the
+    /// signals it reads now, touching only the ones that differ. Both lists
+    /// are sorted and without duplicates.
+    ///
+    /// A re-run that reads what it read before changes nothing, so it keeps
+    /// its place in each signal's list and costs nothing per subscriber.
+    fn rebind_subscriptions(&self, sub: SubscriberId, old: &[SignalId], new: &[SignalId]) {
+        let mut signals = self.signals.borrow_mut();
+        for dep_id in old {
+            if new.binary_search(dep_id).is_err()
+                && let Some(sig) = signals.get_mut(*dep_id)
+            {
+                sig.subscribers.retain(|s| *s != sub);
             }
         }
-
-        // Subscribe to new dependencies
-        for &dep_id in &deps {
-            if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
-                let sub = SubscriberId::Effect(effect_id);
-                if !sig.subscribers.contains(&sub) {
-                    sig.subscribers.push(sub);
-                }
+        for dep_id in new {
+            if old.binary_search(dep_id).is_err()
+                && let Some(sig) = signals.get_mut(*dep_id)
+            {
+                sig.subscribers.push(sub);
             }
         }
-
-        node.dependencies = deps.into_iter().collect();
     }
 
     /// Remove a signal. Deriveds and effects that read it stop depending
@@ -1137,9 +1182,7 @@ impl ReactiveGraph {
             return false;
         };
         for &dep_id in &node.dependencies {
-            if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
-                sig.subscribers.retain(|s| *s != SubscriberId::Derived(id));
-            }
+            self.retire_subscriber(dep_id);
         }
         self.derived_dirty_buffer.borrow_mut().retain(|d| *d != id);
         true
@@ -1226,9 +1269,7 @@ impl ReactiveGraph {
         for effect_id in effects {
             // A host effect has no body to run: it becomes due.
             if self.effects.get(effect_id).is_some_and(|n| n.run.is_none()) {
-                if self.effects.get(effect_id).is_some_and(|n| n.dirty.get())
-                    && !self.due_host_effects.contains(&effect_id)
-                {
+                if self.effects.get(effect_id).is_some_and(|n| n.dirty.get()) {
                     self.due_host_effects.push(effect_id);
                 }
                 continue;
@@ -2903,6 +2944,196 @@ mod in_flight_creation_tests {
                 vec![effect.id()]
             );
             global_graph().lock().unwrap().dispose_effect(effect);
+        }
+    }
+
+    /// Disposing subscribers of one signal, and re-running them.
+    mod subscribers {
+        use super::*;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        fn subscriber_count(g: &ReactiveGraph, sig: Signal<i32>) -> usize {
+            g.signals.borrow()[sig.id()].subscribers.len()
+        }
+
+        /// N deriveds reading one signal used to cost O(N^2) to subscribe and
+        /// to dispose, because each step scanned the signal's whole list.
+        /// 100k took tens of seconds before; now it is milliseconds, so a
+        /// generous bound separates the two even on a slow, instrumented run.
+        #[test]
+        fn many_subscribers_of_one_signal_subscribe_and_dispose_in_linear_time() {
+            let n = 100_000usize;
+            let mut g = ReactiveGraph::new();
+            let shared = g.create_signal(0i32);
+            let started = std::time::Instant::now();
+            let ids: Vec<_> = (0..n)
+                .map(|i| {
+                    let d = g.create_derived(move |g| g.get(shared).unwrap_or(0) + i as i32);
+                    let _ = g.get_derived(d);
+                    d
+                })
+                .collect();
+            for d in ids {
+                g.dispose_derived(d.id());
+            }
+            let took = started.elapsed();
+            assert!(
+                took < std::time::Duration::from_secs(8),
+                "subscribing and disposing {n} subscribers took {took:?}"
+            );
+            assert_eq!(subscriber_count(&g, shared), 0);
+        }
+
+        /// A long list is not edited per departure, so it has to be compacted
+        /// as subscribers leave or it would only grow.
+        #[test]
+        fn a_long_list_is_compacted_as_subscribers_leave() {
+            let mut g = ReactiveGraph::new();
+            let shared = g.create_signal(0i32);
+            let ids: Vec<_> = (0..1000)
+                .map(|i| {
+                    let d = g.create_derived(move |g| g.get(shared).unwrap_or(0) + i);
+                    let _ = g.get_derived(d);
+                    d
+                })
+                .collect();
+            assert_eq!(subscriber_count(&g, shared), 1000);
+
+            for d in &ids[10..] {
+                g.dispose_derived(d.id());
+            }
+            let left = subscriber_count(&g, shared);
+            assert!(
+                left <= 2 * 10 + 16,
+                "{left} entries kept for 10 live subscribers"
+            );
+        }
+
+        /// A disposed effect never runs again, and the survivors keep the
+        /// order they subscribed in, through compaction.
+        #[test]
+        fn a_disposed_effect_is_never_notified_and_the_rest_keep_their_order() {
+            let mut g = ReactiveGraph::new();
+            let shared = g.create_signal(0i32);
+            let order = Arc::new(Mutex::new(Vec::<usize>::new()));
+            let effects: Vec<_> = (0..200)
+                .map(|i| {
+                    let order = Arc::clone(&order);
+                    g.create_effect(move |g| {
+                        let _ = g.get(shared);
+                        order.lock().unwrap().push(i);
+                    })
+                })
+                .collect();
+            for (i, effect) in effects.into_iter().enumerate() {
+                if i % 2 == 1 {
+                    g.dispose_effect(effect);
+                }
+            }
+            order.lock().unwrap().clear();
+
+            g.set(shared, 1);
+
+            let ran = order.lock().unwrap().clone();
+            let expected: Vec<usize> = (0..200).filter(|i| i % 2 == 0).collect();
+            assert_eq!(ran, expected, "a disposed effect ran, or the order changed");
+        }
+
+        /// A re-run that reads what it read before keeps its place, so the
+        /// order effects run in does not shuffle from one change to the next.
+        #[test]
+        fn a_rerun_that_reads_the_same_signals_keeps_its_place() {
+            let mut g = ReactiveGraph::new();
+            let x = g.create_signal(0i32);
+            let order = Arc::new(Mutex::new(Vec::<&'static str>::new()));
+            for name in ["a", "b", "c"] {
+                let order = Arc::clone(&order);
+                g.create_effect(move |g| {
+                    let _ = g.get(x);
+                    order.lock().unwrap().push(name);
+                });
+            }
+            for round in 1..=3 {
+                order.lock().unwrap().clear();
+                g.set(x, round);
+                assert_eq!(*order.lock().unwrap(), vec!["a", "b", "c"], "round {round}");
+            }
+        }
+
+        /// What it reads now, not what it read before, decides what wakes it.
+        #[test]
+        fn a_changed_dependency_moves_the_subscription() {
+            let mut g = ReactiveGraph::new();
+            let (flag, a, b) = (
+                g.create_signal(true),
+                g.create_signal(0i32),
+                g.create_signal(0i32),
+            );
+            let runs = Arc::new(AtomicUsize::new(0));
+            let counted = Arc::clone(&runs);
+            g.create_effect(move |g| {
+                counted.fetch_add(1, Ordering::SeqCst);
+                if g.get(flag).unwrap_or(false) {
+                    let _ = g.get(a);
+                } else {
+                    let _ = g.get(b);
+                }
+            });
+
+            g.set(a, 1);
+            assert_eq!(
+                runs.load(Ordering::SeqCst),
+                2,
+                "a did not wake it while it read a"
+            );
+            g.set(flag, false);
+            let after_switch = runs.load(Ordering::SeqCst);
+
+            g.set(a, 2);
+            assert_eq!(
+                runs.load(Ordering::SeqCst),
+                after_switch,
+                "still woken by what it stopped reading"
+            );
+            g.set(b, 1);
+            assert_eq!(
+                runs.load(Ordering::SeqCst),
+                after_switch + 1,
+                "not woken by what it now reads"
+            );
+            assert_eq!(
+                subscriber_count(&g, a),
+                0,
+                "left behind in the old signal's list"
+            );
+        }
+
+        #[test]
+        fn reading_a_signal_twice_subscribes_once() {
+            let mut g = ReactiveGraph::new();
+            let x = g.create_signal(0i32);
+            g.create_effect(move |g| {
+                let _ = g.get(x);
+                let _ = g.get(x);
+            });
+            assert_eq!(subscriber_count(&g, x), 1);
+        }
+
+        /// An effect that became due twice before the host took it is handed
+        /// out once.
+        #[test]
+        fn a_host_effect_that_became_due_twice_is_handed_out_once() {
+            let mut g = ReactiveGraph::new();
+            let x = g.create_signal(0i32);
+            let e = g.create_host_effect();
+
+            // Run it without taking it first, then make it due again.
+            assert!(g.begin_effect(e.id()));
+            let _ = g.get(x);
+            g.end_effect(e.id());
+            g.set(x, 1);
+
+            assert_eq!(g.take_due_host_effects(), vec![e.id()]);
         }
     }
 }
