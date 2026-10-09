@@ -734,24 +734,32 @@ impl Slider {
                     } else {
                         theme.color(ColorToken::TextSecondary)
                     };
+                    // The shown text follows the value in place: a string
+                    // derived from the number, bound to the text node.
                     let value_state_for_display = config.value_state.clone();
                     let step_for_display = config.step;
-
-                    // Use Stateful with deps to make value text reactive
-                    let value_display_key = format!("{}_value_display", instance_key);
-                    let value_display = stateful_with_key::<NoState>(&value_display_key)
-                        .deps([config.value_state.signal_id()])
-                        .on_state(move |_ctx| {
+                    let shown: State<String> = State::mapped(
+                        config.value_state.signal_id(),
+                        Arc::new(move || {
                             let current_value = value_state_for_display.get();
-                            let value_text =
-                                if step_for_display.is_some() && step_for_display.unwrap() >= 1.0 {
-                                    format!("{:.0}", current_value)
-                                } else {
-                                    format!("{:.2}", current_value)
-                                };
-                            div().child(text(&value_text).size(14.0).color(value_color))
-                        });
-                    header = header.child(value_display);
+                            Some(if step_for_display.is_some_and(|step| step >= 1.0) {
+                                format!("{:.0}", current_value)
+                            } else {
+                                format!("{:.2}", current_value)
+                            })
+                        }),
+                        blinc_core::reactive::global_graph(),
+                        blinc_core::reactive::global_dirty_flag(),
+                    );
+                    header = header.child(
+                        div().child(
+                            blinc_layout::text::Text::bound(
+                                blinc_layout::binding::Reactive::Bound(shown),
+                            )
+                            .size(14.0)
+                            .color(value_color),
+                        ),
+                    );
                 }
 
                 outer = outer.child(header);

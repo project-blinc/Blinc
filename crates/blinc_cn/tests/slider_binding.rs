@@ -127,3 +127,64 @@ fn the_spring_survives_a_rebuild() {
         "and it still follows writes after a rebuild: {actual} vs {expected}"
     );
 }
+
+/// Every text node's content, in tree order.
+fn texts(tree: &RenderTree) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut stack = vec![tree.root().unwrap()];
+    while let Some(id) = stack.pop() {
+        if let Some(node) = tree.get_render_node(id)
+            && let blinc_layout::renderer::ElementType::Text(t) = &node.element_type
+        {
+            out.push(t.content.clone());
+        }
+        stack.extend(tree.layout_tree.children(id));
+    }
+    out
+}
+
+/// The number the slider shows follows its state. The text is bound, so a
+/// write changes it in place and queues no rebuild of anything.
+#[test]
+fn the_shown_value_follows_the_state_in_place() {
+    init();
+    let _ = blinc_layout::stateful::take_pending_subtree_rebuilds();
+    let _ = blinc_layout::take_pending_partial_prop_updates();
+
+    let value = State::new(signal::<f32>(35.0), global_graph(), global_dirty_flag());
+    let host = div().w(400.0).h(80.0).child(
+        blinc_cn::slider(value.clone())
+            .min(0.0)
+            .max(100.0)
+            .w(WIDTH)
+            .label("Volume")
+            .show_value(),
+    );
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(400.0, 80.0);
+    assert!(
+        texts(&tree).contains(&"35.00".to_string()),
+        "{:?}",
+        texts(&tree)
+    );
+
+    value.set(80.0);
+    blinc_layout::stateful::check_stateful_deps(&[value.signal_id()]);
+    assert!(
+        blinc_layout::stateful::take_pending_subtree_rebuilds().is_empty(),
+        "writing the value queued a subtree rebuild"
+    );
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    tree.apply_partial_property_updates(updates);
+    tree.compute_layout(400.0, 80.0);
+
+    assert!(
+        texts(&tree).contains(&"80.00".to_string()),
+        "{:?}",
+        texts(&tree)
+    );
+    assert!(
+        !texts(&tree).contains(&"35.00".to_string()),
+        "the old value is still shown"
+    );
+}
