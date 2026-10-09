@@ -28,11 +28,11 @@
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use blinc_layout::InstanceKey;
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
 use blinc_layout::element::CursorStyle;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, stateful_with_key};
+use blinc_layout::{InstanceKey, Interaction};
 use blinc_theme::{ColorToken, ThemeState};
 
 /// Default separator SVG (chevron right)
@@ -169,50 +169,51 @@ impl Breadcrumb {
                 let icon = item.icon.clone();
                 let on_click = item.on_click.clone();
 
-                let clickable_item = stateful_with_key::<ButtonState>(&item_key)
-                    .on_state(move |ctx| {
-                        let state = ctx.state();
-                        let theme = ThemeState::get();
+                // The colour follows the pointer, so hovering patches the
+                // text and the icon instead of rebuilding the item.
+                let interaction = Interaction::keyed(&item_key);
+                let hovered = interaction.hovered().signal();
+                let (hover_color, rest_color) = (theme.color(ColorToken::Primary), text_secondary);
+                let text_color = computed(move |g: &ReactiveGraph| {
+                    if g.get(hovered).unwrap_or(false) {
+                        hover_color
+                    } else {
+                        rest_color
+                    }
+                });
 
-                        let text_color = match state {
-                            ButtonState::Hovered | ButtonState::Pressed => {
-                                theme.color(ColorToken::Primary)
-                            }
-                            _ => theme.color(ColorToken::TextSecondary),
-                        };
+                let mut item_div = div()
+                    .class("cn-breadcrumb-item")
+                    .flex_row()
+                    .items_center()
+                    .gap(4.0)
+                    .track(&interaction);
 
-                        let mut item_div = div()
-                            .class("cn-breadcrumb-item")
-                            .flex_row()
-                            .items_center()
-                            .gap(4.0);
+                // Add icon if present
+                if let Some(ref icon_svg) = icon {
+                    item_div = item_div.child(
+                        div()
+                            .self_center()
+                            .child(svg(icon_svg).size(icon_size, icon_size).color(&text_color)),
+                    );
+                }
 
-                        // Add icon if present
-                        if let Some(ref icon_svg) = icon {
-                            item_div =
-                                item_div.child(div().self_center().child(
-                                    svg(icon_svg).size(icon_size, icon_size).color(text_color),
-                                ));
-                        }
+                // Add label
+                item_div = item_div.child(
+                    div().self_center().child(
+                        text(&label)
+                            .size(font_size)
+                            .color(&text_color)
+                            .no_cursor()
+                            .no_wrap(),
+                    ),
+                );
 
-                        // Add label
-                        item_div = item_div.child(
-                            div().self_center().child(
-                                text(&label)
-                                    .size(font_size)
-                                    .color(text_color)
-                                    .no_cursor()
-                                    .no_wrap(),
-                            ),
-                        );
-
-                        item_div.cursor(CursorStyle::Pointer)
-                    })
-                    .on_click(move |_| {
-                        if let Some(ref handler) = on_click {
-                            handler();
-                        }
-                    });
+                let clickable_item = item_div.cursor(CursorStyle::Pointer).on_click(move |_| {
+                    if let Some(ref handler) = on_click {
+                        handler();
+                    }
+                });
 
                 container = container.child(clickable_item);
             } else {
