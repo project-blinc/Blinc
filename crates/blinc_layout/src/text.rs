@@ -23,12 +23,15 @@ use blinc_core::{Color, Shadow, Transform};
 use html_escape::decode_html_entities;
 use taffy::prelude::*;
 
-use crate::binding::{PendingBinding, Reactive, TextPendingBinding};
+use crate::binding::{
+    IntoReactive, PendingBinding, Reactive, TextPendingBinding, TypedPendingBinding,
+};
 use crate::div::{
     ElementBuilder, ElementTypeId, FontFamily, FontWeight, TextAlign, TextRenderInfo,
     TextVerticalAlign,
 };
 use crate::element::{RenderLayer, RenderProps};
+use crate::property::PropertyId;
 use crate::tree::{LayoutNodeId, LayoutTree};
 
 /// A text element builder
@@ -199,19 +202,67 @@ impl Text {
         self
     }
 
-    /// Set the font size
-    pub fn size(mut self, size: f32) -> Self {
-        self.font_size = size;
-        // Update estimated layout size based on font size
-        // This is a rough estimate; actual size depends on text content
-        self.update_size_estimate();
-        self
+    /// Set the font size, or follow a signal or computed.
+    pub fn size(self, size: impl IntoReactive<f32>) -> Self {
+        self.follow(
+            size.into_reactive(),
+            PropertyId::FontSize,
+            |text, size| {
+                text.font_size = *size;
+                // Update estimated layout size based on font size
+                // This is a rough estimate; actual size depends on text content
+                text.update_size_estimate();
+            },
+            |props, size| props.font_size = Some(size),
+        )
     }
 
-    /// Set the text color
-    pub fn color(mut self, color: Color) -> Self {
-        self.color = color;
-        self.explicit_color = true;
+    /// Set the text color, or follow a signal or computed.
+    pub fn color(self, color: impl IntoReactive<Color>) -> Self {
+        self.follow(
+            color.into_reactive(),
+            PropertyId::Color,
+            |text, color| {
+                text.color = *color;
+                text.explicit_color = true;
+            },
+            |props, color| props.text_color = Some([color.r, color.g, color.b, color.a]),
+        )
+    }
+
+    /// Take a property from `source`.
+    ///
+    /// A constant is applied to the builder with `apply`. A signal or computed
+    /// applies its current value the same way and registers a binding, so each
+    /// change writes `write` into the node's `RenderProps` overrides: paint
+    /// draws with them, and the measured state follows at the next layout. A
+    /// text with a binding is measured through a context, so its box follows.
+    fn follow<T: Clone + Send + Sync + 'static>(
+        mut self,
+        source: Reactive<T>,
+        property: PropertyId,
+        apply: impl Fn(&mut Self, &T),
+        write: impl Fn(&mut RenderProps, T) + Send + Sync + 'static,
+    ) -> Self {
+        match source {
+            Reactive::Const(value) => apply(&mut self, &value),
+            Reactive::Bound(state) => {
+                if let Some(value) = state.try_get() {
+                    apply(&mut self, &value);
+                }
+                self.pending_bindings
+                    .push(Box::new(TypedPendingBinding::new(state, property, write)));
+            }
+            Reactive::Computed(computed) => {
+                if let Some(value) = computed.try_get() {
+                    apply(&mut self, &value);
+                }
+                self.pending_bindings
+                    .push(Box::new(TypedPendingBinding::from_computed(
+                        computed, property, write,
+                    )));
+            }
+        }
         self
     }
 
@@ -283,10 +334,14 @@ impl Text {
     // Font Weight
     // =========================================================================
 
-    /// Set font weight
-    pub fn weight(mut self, weight: FontWeight) -> Self {
-        self.weight = weight;
-        self
+    /// Set font weight, or follow a signal or computed.
+    pub fn weight(self, weight: impl IntoReactive<FontWeight>) -> Self {
+        self.follow(
+            weight.into_reactive(),
+            PropertyId::FontWeight,
+            |text, weight| text.weight = *weight,
+            |props, weight| props.font_weight = Some(weight),
+        )
     }
 
     /// Set font weight to thin (100)
@@ -462,10 +517,15 @@ impl Text {
         self
     }
 
-    /// Set letter spacing in pixels (space between characters)
-    pub fn letter_spacing(mut self, spacing: f32) -> Self {
-        self.letter_spacing = spacing;
-        self
+    /// Set letter spacing in pixels (space between characters), or follow a
+    /// signal or computed.
+    pub fn letter_spacing(self, spacing: impl IntoReactive<f32>) -> Self {
+        self.follow(
+            spacing.into_reactive(),
+            PropertyId::LetterSpacing,
+            |text, spacing| text.letter_spacing = *spacing,
+            |props, spacing| props.letter_spacing = Some(spacing),
+        )
     }
 
     /// Set the render layer
@@ -637,12 +697,16 @@ impl Text {
         self
     }
 
-    /// Set line height multiplier
+    /// Set line height multiplier, or follow a signal or computed.
     ///
     /// Default is 1.2. Increase for more spacing between lines.
-    pub fn line_height(mut self, multiplier: f32) -> Self {
-        self.line_height = multiplier;
-        self
+    pub fn line_height(self, multiplier: impl IntoReactive<f32>) -> Self {
+        self.follow(
+            multiplier.into_reactive(),
+            PropertyId::LineHeight,
+            |text, multiplier| text.line_height = *multiplier,
+            |props, multiplier| props.line_height = Some(multiplier),
+        )
     }
 }
 

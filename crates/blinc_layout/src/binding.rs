@@ -2529,4 +2529,170 @@ mod tests {
             assert_eq!(display(&tree, node), Display::Flex);
         }
     }
+
+    // ---------------------------------------------------------------------
+    // Text style bindings
+    // ---------------------------------------------------------------------
+
+    #[cfg(feature = "text_measurer")]
+    mod bound_text_style {
+        use super::*;
+        use crate::div::{FontWeight, div};
+        use crate::renderer::{ElementType, RenderTree};
+        use crate::text::Text;
+        use blinc_core::Color;
+
+        fn build(text: impl FnOnce() -> Text) -> (RenderTree, LayoutNodeId) {
+            // A text is measured when it is built, so the measurer comes first.
+            crate::text_measurer::init_text_measurer();
+            let mut tree = RenderTree::from_element(&div().w(600.0).child(text()));
+            tree.compute_layout(600.0, 300.0);
+            let root = tree.root().expect("root");
+            let node = tree.layout_tree.children(root)[0];
+            (tree, node)
+        }
+
+        /// Apply what the signals queued and lay out, as a runner does.
+        fn drain(tree: &mut RenderTree) -> SideEffects {
+            let updates = crate::stateful::take_pending_partial_prop_updates();
+            let effects = tree.apply_partial_property_updates(updates);
+            tree.compute_layout(600.0, 300.0);
+            effects
+        }
+
+        fn width(tree: &RenderTree, node: LayoutNodeId) -> f32 {
+            tree.get_absolute_bounds(node).expect("laid out").width
+        }
+
+        fn data(tree: &RenderTree, node: LayoutNodeId) -> crate::renderer::TextData {
+            match &tree.get_render_node(node).unwrap().element_type {
+                ElementType::Text(t) => t.clone(),
+                _ => panic!("not a text node"),
+            }
+        }
+
+        #[test]
+        fn a_bound_size_resizes_the_box_in_place() {
+            let _guard = lock_and_reset();
+            let size = fresh_state::<f32>(14.0);
+            let (mut tree, node) = build(|| Text::new("Hello").size(&size).no_wrap());
+            let before = width(&tree, node);
+
+            size.set(40.0);
+            let effects = drain(&mut tree);
+
+            let root = tree.root().unwrap();
+            assert_eq!(
+                tree.layout_tree.children(root)[0],
+                node,
+                "the node was replaced"
+            );
+            assert!(effects.needs_layout && effects.needs_text_remeasure);
+            assert!(
+                width(&tree, node) > before * 2.4,
+                "the box did not follow the size: {before} -> {}",
+                width(&tree, node)
+            );
+            assert_eq!(data(&tree, node).font_size, 40.0);
+        }
+
+        #[test]
+        fn a_computed_size_works_too() {
+            let _guard = lock_and_reset();
+            with_registry(|_| {});
+            let graph: Arc<Mutex<ReactiveGraph>> = Arc::new(Mutex::new(ReactiveGraph::new()));
+            let steps = state_in_graph::<i32>(&graph, 1);
+            let signal = steps.signal();
+            let derived = graph
+                .lock()
+                .unwrap()
+                .create_derived(move |g: &ReactiveGraph| 12.0 * g.get(signal).unwrap_or(1) as f32);
+            let computed = blinc_core::Computed::new(derived, Arc::clone(&graph));
+
+            let (mut tree, node) = build(|| Text::new("Hello").size(&computed).no_wrap());
+            // The first read records the dependency, as for any computed binding.
+            let _ = computed.try_get();
+            let before = width(&tree, node);
+            let _ = crate::stateful::take_pending_partial_prop_updates();
+
+            steps.set(3);
+            drain(&mut tree);
+
+            assert!(
+                width(&tree, node) > before * 2.4,
+                "{before} -> {}",
+                width(&tree, node)
+            );
+        }
+
+        #[test]
+        fn a_bound_weight_is_measured_at_that_weight() {
+            let _guard = lock_and_reset();
+            let weight = fresh_state::<FontWeight>(FontWeight::Normal);
+            let (mut tree, node) = build(|| Text::new("Weighted text").weight(&weight).no_wrap());
+            let before = width(&tree, node);
+
+            weight.set(FontWeight::Black);
+            drain(&mut tree);
+
+            assert!(
+                width(&tree, node) > before,
+                "black measured no wider than regular: {before}"
+            );
+        }
+
+        #[test]
+        fn a_bound_color_repaints_without_asking_for_layout() {
+            let _guard = lock_and_reset();
+            let color = fresh_state::<Color>(Color::RED);
+            let (mut tree, node) = build(|| Text::new("Hello").color(&color).no_wrap());
+            let before = width(&tree, node);
+
+            color.set(Color::BLUE);
+            let effects = drain(&mut tree);
+
+            let drawn = tree.get_render_node(node).unwrap().props.text_color;
+            assert_eq!(
+                drawn,
+                Some([0.0, 0.0, 1.0, 1.0]),
+                "paint was not given the colour"
+            );
+            assert!(!effects.needs_layout, "a colour change asked for layout");
+            assert_eq!(width(&tree, node), before);
+        }
+
+        #[test]
+        fn a_bound_letter_spacing_widens_a_non_wrapping_box() {
+            let _guard = lock_and_reset();
+            let spacing = fresh_state::<f32>(0.0);
+            let (mut tree, node) = build(|| Text::new("abcd").letter_spacing(&spacing).no_wrap());
+            let before = width(&tree, node);
+
+            spacing.set(4.0);
+            drain(&mut tree);
+
+            assert!(
+                width(&tree, node) > before + 12.0,
+                "{before} -> {}",
+                width(&tree, node)
+            );
+        }
+
+        #[test]
+        fn constants_behave_as_they_did() {
+            let _guard = lock_and_reset();
+            let (tree, node) = build(|| {
+                Text::new("Hello")
+                    .size(20.0)
+                    .weight(FontWeight::Bold)
+                    .no_wrap()
+            });
+            assert_eq!(data(&tree, node).font_size, 20.0);
+            assert_eq!(
+                with_registry(|r| r.signal_count()),
+                0,
+                "a constant registered a binding"
+            );
+        }
+    }
 }
