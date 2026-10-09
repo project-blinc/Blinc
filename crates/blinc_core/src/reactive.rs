@@ -1043,6 +1043,21 @@ impl ReactiveGraph {
     /// waiting; the caller drains them once the graph is unlocked, which
     /// [`end_host_effect`] does for the global graph.
     pub fn end_effect(&mut self, effect: EffectId) {
+        self.end_scope(effect, std::iter::empty());
+    }
+
+    /// [`Self::end_effect`], with the signals the host read reported in one
+    /// call instead of one read at a time.
+    ///
+    /// They are added to what the scope tracked itself, so a derived read
+    /// through the graph still counts as it does for `end_effect`. Duplicates
+    /// are fine, and a signal that no longer exists is ignored, so the host
+    /// can pass the raw list of keys it collected during the run.
+    pub fn end_effect_with_reads(&mut self, effect: EffectId, reads: &[SignalId]) {
+        self.end_scope(effect, reads.iter().copied());
+    }
+
+    fn end_scope(&mut self, effect: EffectId, reads: impl Iterator<Item = SignalId>) {
         let Some(at) = self.effect_scopes.iter().rposition(|s| s.effect == effect) else {
             return;
         };
@@ -1061,11 +1076,15 @@ impl ReactiveGraph {
             std::thread::current().id(),
             "end_effect on a different thread from begin_effect"
         );
-        let deps = self
+        let mut deps = self
             .tracking
             .replace(scope.outer_tracking)
             .unwrap_or_default();
         HOST_EFFECT_DEPTH.with(|d| d.set(d.get().saturating_sub(abandoned as u32 + 1)));
+        {
+            let signals = self.signals.borrow();
+            deps.extend(reads.filter(|id| signals.contains_key(*id)));
+        }
 
         // A signal this effect read was written while it ran, before it was
         // subscribed to it: the change would otherwise be lost.
@@ -1587,6 +1606,22 @@ pub fn end_host_effect(effect: EffectId) {
         let graph = global_graph();
         let mut g = graph.lock().expect("reactive graph poisoned");
         g.end_effect(effect);
+    }
+    if !defers_writes() {
+        drain_deferred_writes();
+    }
+}
+
+/// [`end_host_effect`] with the signals the host read reported as raw keys
+/// (the [`SignalId::to_raw`] form), instead of one read at a time.
+///
+/// See [`ReactiveGraph::end_effect_with_reads`]: duplicates are fine, and a
+/// key that is not a live signal is ignored.
+pub fn end_host_effect_with_reads(effect: EffectId, reads: &[u64]) {
+    {
+        let graph = global_graph();
+        let mut g = graph.lock().expect("reactive graph poisoned");
+        g.end_scope(effect, reads.iter().map(|raw| SignalId::from_raw(*raw)));
     }
     if !defers_writes() {
         drain_deferred_writes();
@@ -2792,6 +2827,151 @@ mod in_flight_creation_tests {
                 vec![e.id()],
                 "the change made during the run was lost"
             );
+        }
+
+        /// End a scope that read nothing through the graph and report `reads`.
+        fn run_reported(g: &mut ReactiveGraph, effect: EffectId, reads: &[SignalId]) {
+            assert!(g.begin_effect(effect));
+            g.end_effect_with_reads(effect, reads);
+        }
+
+        #[test]
+        fn reported_reads_make_the_effect_due_when_one_changes() {
+            let mut g = ReactiveGraph::new();
+            let (a, b) = (g.create_signal(1), g.create_signal(1));
+            let e = g.create_host_effect();
+            due(&mut g);
+            run_reported(&mut g, e.id(), &[a.id(), b.id()]);
+            assert!(due(&mut g).is_empty(), "due with nothing changed");
+
+            g.set(b, 2);
+            assert_eq!(due(&mut g), vec![e.id()]);
+        }
+
+        #[test]
+        fn reported_reads_join_what_the_scope_tracked_itself() {
+            let mut g = ReactiveGraph::new();
+            let (a, b, c) = (g.create_signal(1), g.create_signal(1), g.create_signal(1));
+            let e = g.create_host_effect();
+            due(&mut g);
+
+            assert!(g.begin_effect(e.id()));
+            let _ = g.get(a);
+            g.end_effect_with_reads(e.id(), &[b.id()]);
+
+            g.set(c, 2);
+            assert!(due(&mut g).is_empty(), "woken by a signal nobody read");
+            g.set(a, 2);
+            assert_eq!(due(&mut g), vec![e.id()], "the tracked read was lost");
+            run_reported(&mut g, e.id(), &[]);
+            g.set(b, 2);
+            assert!(
+                due(&mut g).is_empty(),
+                "reads of a run replace the last run's"
+            );
+        }
+
+        #[test]
+        fn a_reported_read_of_a_derived_dependency_still_goes_through_the_graph() {
+            let mut g = ReactiveGraph::new();
+            let (a, b) = (g.create_signal(1), g.create_signal(1));
+            let d = g.create_derived(move |g| g.get(a).unwrap_or(0));
+            let e = g.create_host_effect();
+            due(&mut g);
+
+            assert!(g.begin_effect(e.id()));
+            let _ = g.get_derived(d);
+            g.end_effect_with_reads(e.id(), &[b.id()]);
+
+            g.set(a, 2);
+            assert_eq!(due(&mut g), vec![e.id()], "the derived's source was lost");
+        }
+
+        #[test]
+        fn duplicate_and_stale_keys_are_ignored() {
+            let mut g = ReactiveGraph::new();
+            let (a, gone) = (g.create_signal(1), g.create_signal(1));
+            let e = g.create_host_effect();
+            due(&mut g);
+            let stale = gone.id();
+            g.dispose_signal(stale);
+
+            run_reported(&mut g, e.id(), &[a.id(), stale, a.id(), a.id(), stale]);
+
+            let node = &g.effects[e.id()];
+            assert_eq!(node.dependencies.len(), 1, "kept {:?}", node.dependencies);
+            assert_eq!(g.signals.borrow()[a.id()].subscribers.len(), 1);
+        }
+
+        #[test]
+        fn a_reported_signal_written_during_the_run_wakes_the_effect() {
+            let mut g = ReactiveGraph::new();
+            let a = g.create_signal(1);
+            let e = g.create_host_effect();
+            due(&mut g);
+
+            assert!(g.begin_effect(e.id()));
+            g.set(a, 2);
+            g.end_effect_with_reads(e.id(), &[a.id()]);
+
+            assert_eq!(
+                due(&mut g),
+                vec![e.id()],
+                "the change made during the run was lost"
+            );
+        }
+
+        #[test]
+        fn reporting_reads_for_a_scope_that_is_not_open_does_nothing() {
+            let mut g = ReactiveGraph::new();
+            let a = g.create_signal(1);
+            let e = g.create_host_effect();
+            due(&mut g);
+
+            g.end_effect_with_reads(e.id(), &[a.id()]);
+
+            assert!(g.effects[e.id()].dependencies.is_empty());
+            assert_eq!(g.signals.borrow()[a.id()].subscribers.len(), 0);
+        }
+
+        #[test]
+        fn the_global_raw_form_takes_keys_as_u64_and_ignores_garbage() {
+            let _only = global_only();
+            let (a, gone) = (signal(0_i32), signal(0_i32));
+            let effect = host_effect();
+            take_due_host_effects();
+            let stale = gone.id().to_raw();
+            global_graph().lock().unwrap().dispose_signal(gone.id());
+
+            assert!(begin_host_effect(effect.id()));
+            end_host_effect_with_reads(
+                effect.id(),
+                &[a.id().to_raw(), stale, 0, u64::MAX, a.id().to_raw()],
+            );
+            assert!(
+                take_due_host_effects().is_empty(),
+                "due with nothing changed"
+            );
+
+            a.set(1);
+            assert_eq!(take_due_host_effects(), vec![effect.id()]);
+            dispose_host_effect(effect.id());
+        }
+
+        #[test]
+        fn the_global_raw_form_applies_the_writes_made_during_the_scope() {
+            let _only = global_only();
+            let (a, out) = (signal(0_i32), signal(0_i32));
+            let effect = host_effect();
+            take_due_host_effects();
+
+            assert!(begin_host_effect(effect.id()));
+            out.set(5);
+            assert_eq!(out.get(), 0, "the write was not deferred");
+            end_host_effect_with_reads(effect.id(), &[a.id().to_raw()]);
+
+            assert_eq!(out.get(), 5, "the write never applied");
+            dispose_host_effect(effect.id());
         }
 
         #[test]
