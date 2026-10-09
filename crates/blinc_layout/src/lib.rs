@@ -193,12 +193,12 @@ pub use render_state::{
 
 // Stateful elements
 pub use stateful::{
-    PartialPropertyUpdate, PendingSubtreeRebuild, RenderPropsWrite, SharedState, StateTransitions,
-    StatefulInner, TaffyStyleWrite, check_stateful_animations, check_stateful_deps,
-    clear_stateful_animations, clear_stateful_base_updaters, clear_stateful_deps,
-    has_animating_statefuls, has_pending_partial_prop_updates, has_pending_subtree_rebuilds,
-    has_stateful_base_updater, has_visible_animating_statefuls, peek_needs_redraw,
-    queue_layout_update_partial, queue_prop_update, queue_prop_update_partial,
+    BeneathWrite, PartialPropertyUpdate, PendingSubtreeRebuild, RenderPropsWrite, SharedState,
+    StateTransitions, StatefulInner, TaffyStyleWrite, check_stateful_animations,
+    check_stateful_deps, clear_stateful_animations, clear_stateful_base_updaters,
+    clear_stateful_deps, has_animating_statefuls, has_pending_partial_prop_updates,
+    has_pending_subtree_rebuilds, has_stateful_base_updater, has_visible_animating_statefuls,
+    peek_needs_redraw, queue_layout_update_partial, queue_prop_update, queue_prop_update_partial,
     queue_subtree_rebuild, queue_text_update, request_animation_tick, request_redraw,
     take_animation_tick_request, take_needs_redraw, take_pending_partial_prop_updates,
     take_pending_subtree_rebuilds, update_stateful_base_props, use_fsm, use_fsm_keyed,

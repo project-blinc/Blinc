@@ -440,6 +440,7 @@ impl RenderTree {
         }
 
         for &node_id in &prev_affected {
+            self.state_layers.remove(&node_id);
             if let Some(base) = self.base_styles.get(&node_id) {
                 if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
                     render_node.props = base.clone();
@@ -569,6 +570,10 @@ impl RenderTree {
 
                     if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
                         Self::apply_element_style_to_props(&mut render_node.props, style);
+                        self.state_layers
+                            .entry(node_id)
+                            .or_default()
+                            .push(style.clone());
                         any_applied = true;
                     }
                     // Apply layout changes from complex selector styles
@@ -724,6 +729,10 @@ impl RenderTree {
                 self.complex_state_affected.insert(node_id);
                 if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
                     Self::apply_element_style_to_props(&mut render_node.props, style);
+                    self.state_layers
+                        .entry(node_id)
+                        .or_default()
+                        .push(style.clone());
                     any_applied = true;
                 }
             }

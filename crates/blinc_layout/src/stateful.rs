@@ -418,6 +418,13 @@ pub type RenderPropsWrite = Box<dyn FnOnce(&mut RenderProps) + Send>;
 /// layout-affecting property bindings (`.w`, `.h`, `.padding`, etc.).
 pub type TaffyStyleWrite = Box<dyn FnOnce(&mut taffy::Style) + Send>;
 
+/// A bound write made again to what a node returns to when its stylesheet
+/// state rules stop applying: its render properties or its layout style.
+pub enum BeneathWrite {
+    Render(RenderPropsWrite),
+    Layout(TaffyStyleWrite),
+}
+
 /// A queued property update — at least one of `render_write` /
 /// `layout_write` / `text_content` must be `Some`. Side-effect metadata tells the drain
 /// step whether to schedule layout / text remeasure / clip work.
@@ -439,6 +446,10 @@ pub struct PartialPropertyUpdate {
     /// Closure that mutates `RenderProps` in place. Present for
     /// Tier-1 visual props; absent for pure layout props.
     pub render_write: Option<RenderPropsWrite>,
+    /// The same change again, for the properties a node returns to when its
+    /// stylesheet state rules stop applying. Present for signal-bound writes,
+    /// so a value written while a `:hover` rule holds survives the hover.
+    pub beneath_write: Option<BeneathWrite>,
     /// Closure that mutates the live taffy `Style` in place. Present
     /// for Tier-2 layout props; absent for visual-only props.
     pub layout_write: Option<TaffyStyleWrite>,
@@ -1044,6 +1055,35 @@ pub fn queue_prop_update_partial<F>(
             property,
             effects,
             render_write: Some(Box::new(write)),
+            beneath_write: None,
+            layout_write: None,
+            text_content: None,
+        });
+    request_redraw();
+}
+
+/// [`queue_prop_update_partial`] for a signal-bound write: `beneath` makes the
+/// same change to the properties the node returns to when its stylesheet
+/// state rules stop applying.
+pub(crate) fn queue_prop_update_partial_beneath<F, G>(
+    node_id: LayoutNodeId,
+    property: crate::property::PropertyId,
+    effects: crate::property::SideEffects,
+    write: F,
+    beneath: G,
+) where
+    F: FnOnce(&mut RenderProps) + Send + 'static,
+    G: FnOnce(&mut RenderProps) + Send + 'static,
+{
+    PENDING_PARTIAL_PROP_UPDATES
+        .lock()
+        .unwrap()
+        .push(PartialPropertyUpdate {
+            node_id,
+            property,
+            effects,
+            render_write: Some(Box::new(write)),
+            beneath_write: Some(BeneathWrite::Render(Box::new(beneath))),
             layout_write: None,
             text_content: None,
         });
@@ -1077,6 +1117,35 @@ pub fn queue_layout_update_partial<F>(
             property,
             effects,
             render_write: None,
+            beneath_write: None,
+            layout_write: Some(Box::new(write)),
+            text_content: None,
+        });
+    request_redraw();
+}
+
+/// [`queue_layout_update_partial`] for a signal-bound write: `beneath` makes
+/// the same change to the layout style the node returns to when its
+/// stylesheet state rules stop applying.
+pub(crate) fn queue_layout_update_partial_beneath<F, G>(
+    node_id: LayoutNodeId,
+    property: crate::property::PropertyId,
+    effects: crate::property::SideEffects,
+    write: F,
+    beneath: G,
+) where
+    F: FnOnce(&mut taffy::Style) + Send + 'static,
+    G: FnOnce(&mut taffy::Style) + Send + 'static,
+{
+    PENDING_PARTIAL_PROP_UPDATES
+        .lock()
+        .unwrap()
+        .push(PartialPropertyUpdate {
+            node_id,
+            property,
+            effects,
+            render_write: None,
+            beneath_write: Some(BeneathWrite::Layout(Box::new(beneath))),
             layout_write: Some(Box::new(write)),
             text_content: None,
         });
@@ -1102,6 +1171,7 @@ pub fn queue_text_update(
             property,
             effects: property.side_effects(),
             render_write: None,
+            beneath_write: None,
             layout_write: None,
             text_content: Some(content),
         });

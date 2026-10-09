@@ -46,7 +46,7 @@ use blinc_core::reactive::{Computed, DerivedId, Signal, SignalId, State};
 
 use crate::element::RenderProps;
 use crate::property::{PropertyId, SideEffects};
-use crate::stateful::{queue_prop_update_partial, queue_text_update};
+use crate::stateful::{queue_prop_update_partial_beneath, queue_text_update};
 use crate::tree::LayoutNodeId;
 
 /// Reads the current value out of a signal's reactive graph and packages
@@ -849,21 +849,27 @@ impl PropertyBindingRegistry {
             };
             match &sub.write {
                 SubscriberWrite::Render(write) => {
-                    let write = Arc::clone(write);
-                    queue_prop_update_partial(
+                    let (write, beneath) = (Arc::clone(write), Arc::clone(write));
+                    let value = Arc::new(value);
+                    let beneath_value = Arc::clone(&value);
+                    queue_prop_update_partial_beneath(
                         sub.node_id,
                         sub.property,
                         sub.property.side_effects(),
                         move |props| write(props, &value),
+                        move |props| beneath(props, &beneath_value),
                     );
                 }
                 SubscriberWrite::Layout(write) => {
-                    let write = Arc::clone(write);
-                    crate::stateful::queue_layout_update_partial(
+                    let (write, beneath) = (Arc::clone(write), Arc::clone(write));
+                    let value = Arc::new(value);
+                    let beneath_value = Arc::clone(&value);
+                    crate::stateful::queue_layout_update_partial_beneath(
                         sub.node_id,
                         sub.property,
                         sub.property.side_effects(),
                         move |style| write(style, &value),
+                        move |style| beneath(style, &beneath_value),
                     );
                 }
                 SubscriberWrite::Text(text_of) => {

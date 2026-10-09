@@ -12,6 +12,7 @@ fn visual(node: LayoutNodeId, opacity: f32) -> PartialPropertyUpdate {
         property: PropertyId::Opacity,
         effects: SideEffects::VISUAL,
         render_write: Some(Box::new(move |p| p.opacity = opacity)),
+        beneath_write: None,
         layout_write: None,
         text_content: None,
     }
@@ -23,6 +24,7 @@ fn width(node: LayoutNodeId, px: f32) -> PartialPropertyUpdate {
         property: PropertyId::Width,
         effects: SideEffects::LAYOUT,
         render_write: None,
+        beneath_write: None,
         layout_write: Some(Box::new(move |s| {
             s.size.width = taffy::style_helpers::length(px)
         })),
@@ -104,6 +106,7 @@ fn a_text_update_replaces_the_text_and_asks_for_layout() {
         property: PropertyId::TextContent,
         effects: SideEffects::TEXT,
         render_write: None,
+        beneath_write: None,
         layout_write: None,
         text_content: Some("after, and longer".to_string()),
     }]);

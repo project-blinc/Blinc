@@ -539,6 +539,7 @@ impl RenderTree {
         }
         if classes_changed {
             self.base_styles.remove(&node_id);
+            self.state_layers.remove(&node_id);
         }
 
         let own_hash = DivHash::compute_element(element);

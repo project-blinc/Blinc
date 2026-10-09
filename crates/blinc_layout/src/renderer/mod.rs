@@ -856,6 +856,11 @@ pub struct RenderTree {
     /// Base styles for elements (before state modifiers)
     /// Used to restore original styles when state changes
     base_styles: HashMap<LayoutNodeId, RenderProps>,
+    /// The stylesheet state rules (`:hover`, `:active`, `:focus`) currently
+    /// applied over each node's properties, in the order applied. A bound
+    /// write made while one holds is put back under it, so the rule keeps
+    /// winning and the written value is what the node returns to.
+    state_layers: HashMap<LayoutNodeId, Vec<crate::element_style::ElementStyle>>,
     /// Base taffy layout styles for elements (before state modifiers)
     /// Used to restore original layout when state changes affect layout properties
     base_taffy_styles: HashMap<LayoutNodeId, taffy::Style>,
@@ -1040,6 +1045,7 @@ impl RenderTree {
             stylesheet: None,
             state_style_table: RefCell::new(crate::state_style_table::StateStyleTable::empty()),
             base_styles: HashMap::new(),
+            state_layers: HashMap::new(),
             base_taffy_styles: HashMap::new(),
             layout_animation_configs: HashMap::new(),
             layout_animations: HashMap::new(),
@@ -2916,6 +2922,9 @@ impl RenderTree {
                     write(&mut style);
                     self.layout_tree.set_style(update.node_id, style);
                 }
+            }
+            if let Some(beneath) = update.beneath_write {
+                self.write_beneath_state_layers(update.node_id, beneath);
             }
             if let Some(content) = update.text_content {
                 self.set_text_content(update.node_id, content);

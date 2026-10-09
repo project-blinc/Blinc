@@ -224,8 +224,11 @@ impl RenderTree {
             applied = true;
         }
 
+        let mut layers: Vec<ElementStyle> = Vec::new();
+
         // Apply hover style
         if let Some(hover_style) = hover_lookup.as_deref() {
+            layers.push(hover_style.clone());
             Self::apply_element_style_to_props(&mut render_node.props, hover_style);
             if hover_style.has_layout_props() {
                 if let Some(mut taffy_style) = self.layout_tree.get_style(node_id) {
@@ -238,6 +241,7 @@ impl RenderTree {
 
         // Apply active/pressed style (takes precedence over hover)
         if let Some(active_style) = active_lookup.as_deref() {
+            layers.push(active_style.clone());
             Self::apply_element_style_to_props(&mut render_node.props, active_style);
             if active_style.has_layout_props() {
                 if let Some(mut taffy_style) = self.layout_tree.get_style(node_id) {
@@ -250,6 +254,7 @@ impl RenderTree {
 
         // Apply focus style
         if let Some(focus_style) = focus_lookup.as_deref() {
+            layers.push(focus_style.clone());
             Self::apply_element_style_to_props(&mut render_node.props, focus_style);
             if focus_style.has_layout_props() {
                 if let Some(mut taffy_style) = self.layout_tree.get_style(node_id) {
@@ -258,6 +263,12 @@ impl RenderTree {
                 }
             }
             applied = true;
+        }
+
+        if layers.is_empty() {
+            self.state_layers.remove(&node_id);
+        } else {
+            self.state_layers.insert(node_id, layers);
         }
 
         // Detect and start transitions for changed properties (visual + layout)
@@ -518,6 +529,61 @@ impl RenderTree {
 
                 for dp in &dynamic_props {
                     dp.apply(&mut render_node.props, &ctx);
+                }
+            }
+        }
+    }
+}
+
+impl RenderTree {
+    /// Make a bound write to the properties a node returns to when its state
+    /// rules stop applying, then put the rules that are applying back on top
+    /// of the node, so one that sets the same property keeps winning.
+    pub(crate) fn write_beneath_state_layers(
+        &mut self,
+        node_id: LayoutNodeId,
+        beneath: crate::stateful::BeneathWrite,
+    ) {
+        use crate::stateful::BeneathWrite;
+        let Some(layers) = self.state_layers.get(&node_id) else {
+            // No rule is applying, so the node is not holding anything over
+            // what was written. A copy it keeps for later still takes it.
+            match beneath {
+                BeneathWrite::Render(write) => {
+                    if let Some(base) = self.base_styles.get_mut(&node_id) {
+                        write(base);
+                    }
+                }
+                BeneathWrite::Layout(write) => {
+                    if let Some(base) = self.base_taffy_styles.get_mut(&node_id) {
+                        write(base);
+                    }
+                }
+            }
+            return;
+        };
+        match beneath {
+            BeneathWrite::Render(write) => {
+                if let Some(base) = self.base_styles.get_mut(&node_id) {
+                    write(base);
+                }
+                if let Some(node) = self.render_nodes.get_mut(&node_id) {
+                    for style in layers {
+                        Self::apply_element_style_to_props(&mut node.props, style);
+                    }
+                }
+            }
+            BeneathWrite::Layout(write) => {
+                if let Some(base) = self.base_taffy_styles.get_mut(&node_id) {
+                    write(base);
+                }
+                if layers.iter().any(|s| s.has_layout_props()) {
+                    if let Some(mut style) = self.layout_tree.get_style(node_id) {
+                        for layer in layers.iter().filter(|s| s.has_layout_props()) {
+                            Self::apply_element_style_to_taffy(&mut style, layer);
+                        }
+                        self.layout_tree.set_style(node_id, style);
+                    }
                 }
             }
         }
