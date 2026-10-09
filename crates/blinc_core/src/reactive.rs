@@ -376,6 +376,20 @@ impl DerivedId {
     }
 }
 
+impl EffectId {
+    /// Convert to raw u64 for storage outside Rust, such as a handle an SDK
+    /// hands back to its host.
+    pub fn to_raw(&self) -> u64 {
+        use slotmap::Key;
+        self.data().as_ffi()
+    }
+
+    /// Reconstruct from raw u64.
+    pub fn from_raw(raw: u64) -> Self {
+        slotmap::KeyData::from_ffi(raw).into()
+    }
+}
+
 /// A derived/computed value handle
 #[derive(Debug)]
 pub struct Derived<T> {
@@ -1578,6 +1592,48 @@ pub fn end_host_effect(effect: EffectId) {
     }
 }
 
+/// Create a host effect on the process-global graph.
+///
+/// The global-graph form of [`ReactiveGraph::create_host_effect`]. Creating
+/// it flushes the graph, which can run closure effects; the writes those
+/// made are applied here, after the lock is released, as [`effect`] does.
+pub fn host_effect() -> Effect {
+    let handle = {
+        let graph = global_graph();
+        let mut g = graph.lock().expect("reactive graph poisoned");
+        g.create_host_effect()
+    };
+    if !defers_writes() {
+        drain_deferred_writes();
+    }
+    handle
+}
+
+/// The host effects on the process-global graph that are due.
+///
+/// The global-graph form of [`ReactiveGraph::take_due_host_effects`], with
+/// the writes of any closure effect its flush ran applied after the lock is
+/// released. Those writes can make more host effects due: call again until
+/// it returns none.
+pub fn take_due_host_effects() -> Vec<EffectId> {
+    let due = {
+        let graph = global_graph();
+        let mut g = graph.lock().expect("reactive graph poisoned");
+        g.take_due_host_effects()
+    };
+    if !defers_writes() {
+        drain_deferred_writes();
+    }
+    due
+}
+
+/// Dispose a host effect on the process-global graph.
+pub fn dispose_host_effect(effect: EffectId) {
+    let graph = global_graph();
+    let mut g = graph.lock().expect("reactive graph poisoned");
+    g.dispose_effect(Effect { id: effect });
+}
+
 // =============================================================================
 // Process-global default reactive graph
 //
@@ -2603,6 +2659,14 @@ mod in_flight_creation_tests {
         use super::*;
         use std::sync::atomic::{AtomicUsize, Ordering};
 
+        /// The tests on the process-global graph share its due list, and
+        /// each takes everything that is due.
+        static GLOBAL: Mutex<()> = Mutex::new(());
+
+        fn global_only() -> std::sync::MutexGuard<'static, ()> {
+            GLOBAL.lock().unwrap_or_else(|p| p.into_inner())
+        }
+
         fn due(g: &mut ReactiveGraph) -> Vec<EffectId> {
             g.take_due_host_effects()
         }
@@ -2926,6 +2990,7 @@ mod in_flight_creation_tests {
         /// wait, and apply once it ends.
         #[test]
         fn signal_writes_wait_inside_a_scope_and_apply_after_it() {
+            let _only = global_only();
             let sig = signal(0_i32);
             let effect = global_graph().lock().unwrap().create_host_effect();
             global_graph().lock().unwrap().take_due_host_effects();
@@ -2943,6 +3008,77 @@ mod in_flight_creation_tests {
                 global_graph().lock().unwrap().take_due_host_effects(),
                 vec![effect.id()]
             );
+            global_graph().lock().unwrap().dispose_effect(effect);
+        }
+
+        #[test]
+        fn the_global_forms_create_hand_out_and_dispose() {
+            let _only = global_only();
+            take_due_host_effects();
+
+            let kept = host_effect();
+            let dropped = host_effect();
+            dispose_host_effect(dropped.id());
+
+            assert_eq!(take_due_host_effects(), vec![kept.id()]);
+            assert!(take_due_host_effects().is_empty());
+            dispose_host_effect(kept.id());
+        }
+
+        #[test]
+        fn an_effect_id_survives_a_trip_through_a_raw_value() {
+            let _only = global_only();
+            let e = host_effect();
+            let back = EffectId::from_raw(e.id().to_raw());
+            assert_eq!(back, e.id());
+
+            take_due_host_effects();
+            assert!(begin_host_effect(back), "the rebuilt id is not the effect");
+            end_host_effect(back);
+            dispose_host_effect(back);
+        }
+
+        /// Leave a closure effect woken but not yet run, as a caller that
+        /// holds the lock and ends a batch itself would find the graph.
+        fn wake_a_closure_effect(trigger: Signal<i32>, out: Signal<i32>) -> Effect {
+            let effect = effect(move |g| {
+                let v = g.get(trigger).unwrap_or(0);
+                out.set(v + 100);
+            });
+            let graph = global_graph();
+            let mut g = graph.lock().unwrap();
+            g.batch_start();
+            g.set(trigger, 1);
+            g.batch_depth.set(0);
+            effect
+        }
+
+        /// The flush these calls make runs closure effects, whose `Signal`
+        /// writes wait for the lock to be released.
+        #[test]
+        fn taking_due_effects_applies_the_writes_of_the_closure_effects_it_ran() {
+            let _only = global_only();
+            let (trigger, out) = (signal(0_i32), signal(0_i32));
+            let effect = wake_a_closure_effect(trigger, out);
+            assert_eq!(out.get(), 100, "the first run did not apply");
+
+            take_due_host_effects();
+
+            assert_eq!(out.get(), 101, "the woken effect's write never applied");
+            global_graph().lock().unwrap().dispose_effect(effect);
+        }
+
+        #[test]
+        fn creating_a_host_effect_applies_the_writes_of_the_closure_effects_it_ran() {
+            let _only = global_only();
+            let (trigger, out) = (signal(0_i32), signal(0_i32));
+            let effect = wake_a_closure_effect(trigger, out);
+            assert_eq!(out.get(), 100, "the first run did not apply");
+
+            let host = host_effect();
+
+            assert_eq!(out.get(), 101, "the woken effect's write never applied");
+            dispose_host_effect(host.id());
             global_graph().lock().unwrap().dispose_effect(effect);
         }
     }
