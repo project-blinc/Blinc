@@ -19,6 +19,7 @@
 
 use std::sync::Arc;
 
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_core::{Color, State};
 use blinc_theme::{ColorToken, ThemeState};
 
@@ -26,8 +27,8 @@ use crate::css_parser::{ElementState, Stylesheet, active_stylesheet};
 use crate::div::{ElementBuilder, div};
 use crate::element::RenderProps;
 use crate::element_style::ElementStyle;
+use crate::interaction::Interaction;
 use crate::key::InstanceKey;
-use crate::stateful::{ButtonState, stateful_with_key};
 use crate::svg::svg;
 use crate::text::text;
 use crate::tree::{LayoutNodeId, LayoutTree};
@@ -213,6 +214,61 @@ pub struct Checkbox {
     inner: crate::div::Div,
 }
 
+/// What a checkbox draws in one state: the part the state can change.
+#[derive(Clone)]
+struct Look {
+    bg: Color,
+    border_color: Color,
+    check_color: Color,
+    /// Config after stylesheet overrides, for the parts fixed at build.
+    cfg: CheckboxConfig,
+}
+
+impl Look {
+    fn resolve(config: &CheckboxConfig, is_checked: bool, is_hovered: bool) -> Self {
+        let is_disabled = config.disabled;
+
+        // Query theme fresh each time for reactive theme support
+        let theme = ThemeState::get();
+        let mut colors = ResolvedColors::from_config(config, theme);
+        let mut cfg = config.clone();
+
+        // Apply CSS overrides if element has an ID
+        if let Some(ref element_id) = config.css_element_id {
+            if let Some(stylesheet) = active_stylesheet() {
+                apply_css_overrides_checkbox(
+                    &mut colors,
+                    &mut cfg,
+                    &stylesheet,
+                    element_id,
+                    is_checked,
+                    is_hovered,
+                    is_disabled,
+                );
+            }
+        }
+
+        let bg = if is_checked {
+            if is_hovered && !is_disabled {
+                lighten(colors.checked_bg, cfg.hover_tint)
+            } else {
+                colors.checked_bg
+            }
+        } else if is_hovered && !is_disabled {
+            lighten(colors.unchecked_bg, cfg.hover_tint)
+        } else {
+            colors.unchecked_bg
+        };
+
+        Self {
+            bg,
+            border_color: colors.border_color,
+            check_color: colors.check_color,
+            cfg,
+        }
+    }
+}
+
 impl Checkbox {
     /// Build from a full configuration
     fn with_config(instance_key: &InstanceKey, config: CheckboxConfig) -> Self {
@@ -223,81 +279,68 @@ impl Checkbox {
 
         // Derive a unique key from the instance key
         let key = instance_key.get().to_string();
+        let interaction = Interaction::keyed(&key);
 
-        let css_element_id = config.css_element_id.clone();
         let label_text = config.label.clone();
         let gap = config.gap;
 
-        // Build the stateful checkbox box (handles hover/pressed transitions)
-        // Connect checked signal via .deps() so callback re-runs on toggle
-        let mut checkbox = stateful_with_key::<ButtonState>(&key)
-            .deps([checked_state.signal_id()])
-            .on_state(move |ctx| {
-                let button_state = ctx.state();
-                let is_hovered =
-                    matches!(button_state, ButtonState::Hovered | ButtonState::Pressed);
-                let is_checked = checked_state.get();
-                let is_disabled = config.disabled;
+        // The part fixed at build: sizes and shapes cannot follow a state
+        // without a layout, so they are resolved once, as the box stands.
+        let first = Look::resolve(&config, checked_state.get(), false);
+        let cfg = &first.cfg;
+        let icon_size = cfg.size * 0.7;
 
-                // Query theme fresh each frame for reactive theme support
-                let theme = ThemeState::get();
-                let mut colors = ResolvedColors::from_config(&config, theme);
-                let mut cfg = config.clone();
+        // What a state changes is bound: each is a computed over the checked
+        // signal and the element's hover, so a change patches the node
+        // instead of rebuilding it.
+        let (checked, hovered) = (checked_state.signal(), interaction.hovered().signal());
+        let follow = |pick: fn(&Look) -> Color| {
+            let config = config.clone();
+            computed(move |g: &ReactiveGraph| {
+                pick(&Look::resolve(
+                    &config,
+                    g.get(checked).unwrap_or(false),
+                    g.get(hovered).unwrap_or(false),
+                ))
+            })
+        };
+        let bg = follow(|l| l.bg);
+        let border_color = follow(|l| l.border_color);
+        let check_color = follow(|l| l.check_color);
 
-                // Apply CSS overrides if element has an ID
-                if let Some(ref element_id) = css_element_id {
-                    if let Some(stylesheet) = active_stylesheet() {
-                        apply_css_overrides_checkbox(
-                            &mut colors,
-                            &mut cfg,
-                            &stylesheet,
-                            element_id,
-                            is_checked,
-                            is_hovered,
-                            is_disabled,
-                        );
-                    }
-                }
-
-                // Calculate background color
-                let bg = if is_checked {
-                    if is_hovered && !is_disabled {
-                        lighten(colors.checked_bg, cfg.hover_tint)
-                    } else {
-                        colors.checked_bg
-                    }
-                } else if is_hovered && !is_disabled {
-                    lighten(colors.unchecked_bg, cfg.hover_tint)
-                } else {
-                    colors.unchecked_bg
-                };
-
-                let icon_size = cfg.size * 0.7;
-
-                // Build the checkbox box with border directly from theme
-                // Always render a child (SVG or empty div) so toggling clears properly
+        // The mark is always there and shown while checked, so toggling
+        // changes what is visible and nothing is rebuilt.
+        let checkmark_svg = format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{icon_size}" height="{icon_size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>"#
+        );
+        let mut checkbox = div()
+            .w(cfg.size)
+            .h(cfg.size)
+            .bg(&bg)
+            .rounded(cfg.corner_radius)
+            .border_width(cfg.border_width)
+            .border_color(&border_color)
+            .items_center()
+            .justify_center()
+            .track(&interaction)
+            .child(
                 div()
-                    .w(cfg.size)
-                    .h(cfg.size)
-                    .bg(bg)
-                    .rounded(cfg.corner_radius)
-                    .border(cfg.border_width, colors.border_color)
-                    .items_center()
-                    .justify_center()
-                    .when(is_checked, |d| {
-                        let checkmark_svg = format!(
-                            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{icon_size}" height="{icon_size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>"#
-                        );
-                        d.child(svg(&checkmark_svg).size(icon_size, icon_size).color(colors.check_color).internal())
-                    })
-                    .when(!is_checked, |d| {
-                        d.child(div().w(icon_size).h(icon_size))
-                    })
-                    .when(is_disabled, |d| d.opacity(cfg.disabled_opacity))
-            });
+                    .w(icon_size)
+                    .h(icon_size)
+                    .visible(&checked_state)
+                    .child(
+                        svg(&checkmark_svg)
+                            .size(icon_size, icon_size)
+                            .color(&check_color)
+                            .internal(),
+                    ),
+            );
+        if disabled {
+            checkbox = checkbox.opacity(cfg.disabled_opacity);
+        }
 
         // Add click handler — toggles the reactive signal
-        checkbox = checkbox.on_click(move |_| {
+        let checkbox = checkbox.on_click(move |_| {
             if disabled {
                 return;
             }

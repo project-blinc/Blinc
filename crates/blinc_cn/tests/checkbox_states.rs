@@ -28,12 +28,14 @@ fn describe_checkbox(tree: &RenderTree, widget: LayoutNodeId, out: &mut String) 
 fn scenario(
     name: &str,
     css: &str,
+    in_place: bool,
     build: impl FnOnce(&blinc_core::reactive::State<bool>) -> Box<dyn ElementBuilder>,
 ) -> String {
     set_active_stylesheet(Arc::new(Stylesheet::parse(css).expect("css")));
     let checked = bool_state(false);
     let widget = build(&checked);
     let mut h = Harness::new(widget, vec![checked.signal_id()], describe_checkbox);
+    h.in_place = in_place;
     let at = h.center(&[0]);
     h.walk(at, (300.0, 180.0));
     format!("######## {name}\n{}", h.out)
@@ -44,13 +46,13 @@ fn a_checkbox_looks_the_same_in_every_state() {
     init();
     let got = guarded(|| {
         let mut out = String::new();
-        out += &scenario("core with a label", "", |c| {
+        out += &scenario("core with a label", "", true, |c| {
             Box::new(blinc_layout::widgets::checkbox(c).label("Accept"))
         });
-        out += &scenario("core without a label", "", |c| {
+        out += &scenario("core without a label", "", true, |c| {
             Box::new(blinc_layout::widgets::checkbox(c))
         });
-        out += &scenario("core disabled", "", |c| {
+        out += &scenario("core disabled", "", true, |c| {
             Box::new(
                 blinc_layout::widgets::checkbox(c)
                     .label("Accept")
@@ -60,9 +62,10 @@ fn a_checkbox_looks_the_same_in_every_state() {
         out += &scenario(
             "core under hover and checked rules",
             "#cb:hover { background: #336699; border-color: #ff8800 } #cb:checked { background: #228844; accent-color: #ff0000 }",
+            true,
             |c| Box::new(blinc_layout::widgets::checkbox(c).id("cb").label("Accept")),
         );
-        out += &scenario("cn", "", |c| {
+        out += &scenario("cn", "", false, |c| {
             Box::new(blinc_cn::checkbox(c).label("Accept"))
         });
         out
