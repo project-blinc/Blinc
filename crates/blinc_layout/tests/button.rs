@@ -25,7 +25,10 @@ const GREY: Color = Color::rgb(0.5, 0.5, 0.5);
 fn init() -> std::sync::MutexGuard<'static, ()> {
     static I: std::sync::Once = std::sync::Once::new();
     I.call_once(|| {
-        blinc_theme::ThemeState::init_default();
+        blinc_theme::ThemeState::init(
+            blinc_theme::HybridTheme::bundle(),
+            blinc_theme::ColorScheme::Dark,
+        );
         if !blinc_core::BlincContextState::is_initialized() {
             blinc_core::BlincContextState::init(
                 global_graph(),

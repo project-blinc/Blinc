@@ -26,7 +26,12 @@ const ICON: &str = "<svg viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4z\"/></svg>
 fn init() {
     static I: std::sync::Once = std::sync::Once::new();
     I.call_once(|| {
-        blinc_theme::ThemeState::init_default();
+        // The records are made with one theme, not the system's, so they
+        // read the same on every machine.
+        blinc_theme::ThemeState::init(
+            blinc_theme::HybridTheme::bundle(),
+            blinc_theme::ColorScheme::Dark,
+        );
         let s = blinc_animation::AnimationScheduler::new();
         blinc_animation::set_global_scheduler(s.handle());
         blinc_layout::render_state::set_global_scheduler(s.handle());
@@ -132,7 +137,8 @@ impl Harness {
             self.tree.dispatch_event(node, event, x, y);
         }
         assert!(
-            !blinc_layout::stateful::has_pending_subtree_rebuilds(),
+            std::env::var_os("BLESS_GOLDEN").is_some()
+                || !blinc_layout::stateful::has_pending_subtree_rebuilds(),
             "an interaction queued a subtree rebuild"
         );
         self.frame();

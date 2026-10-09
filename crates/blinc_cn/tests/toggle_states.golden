@@ -1,148 +1,148 @@
 ######## default with a label
 == idle
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 1.00 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 1.00 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == hover
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 1.000,1.000,1.000,0.050 | border - | opacity 1.00 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.925,0.933,0.957,0.050 | border - | opacity 1.00 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == pressed
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 1.000,1.000,1.000,0.100 | border - | opacity 1.00 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.925,0.933,0.957,0.100 | border - | opacity 1.00 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == released, flipped
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 0.238,0.238,0.238,1.000 | border - | opacity 1.00 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.177,0.191,0.239,1.000 | border - | opacity 1.00 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == left
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 0.206,0.206,0.206,1.000 | border - | opacity 1.00 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == hover again
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 0.238,0.238,0.238,1.000 | border - | opacity 1.00 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.177,0.191,0.239,1.000 | border - | opacity 1.00 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == pressed again
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 0.269,0.269,0.269,1.000 | border - | opacity 1.00 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.208,0.222,0.268,1.000 | border - | opacity 1.00 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == released, flipped back
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 1.000,1.000,1.000,0.050 | border - | opacity 1.00 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.925,0.933,0.957,0.050 | border - | opacity 1.00 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 ######## outline with an icon and a label
 == idle
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 0.000,0.000,0.000,0.000 | border 0.388,0.388,0.400,1.000 w1.0 | opacity 1.00 | radius 6.0 | 95.0x36.0
-    svg tint 1.000,1.000,1.000,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.000,0.000,0.000,0.000 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 12.0 | 93.0x36.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == hover
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 1.000,1.000,1.000,0.050 | border 0.388,0.388,0.400,1.000 w1.0 | opacity 1.00 | radius 6.0 | 95.0x36.0
-    svg tint 1.000,1.000,1.000,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.925,0.933,0.957,0.050 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 12.0 | 93.0x36.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == pressed
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 1.000,1.000,1.000,0.100 | border 0.388,0.388,0.400,1.000 w1.0 | opacity 1.00 | radius 6.0 | 95.0x36.0
-    svg tint 1.000,1.000,1.000,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.925,0.933,0.957,0.100 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 12.0 | 93.0x36.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == released, flipped
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 0.238,0.238,0.238,1.000 | border 0.388,0.388,0.400,1.000 w1.0 | opacity 1.00 | radius 6.0 | 95.0x36.0
-    svg tint 1.000,1.000,1.000,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.177,0.191,0.239,1.000 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 12.0 | 93.0x36.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == left
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 0.206,0.206,0.206,1.000 | border 0.388,0.388,0.400,1.000 w1.0 | opacity 1.00 | radius 6.0 | 95.0x36.0
-    svg tint 1.000,1.000,1.000,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.145,0.160,0.209,1.000 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 12.0 | 93.0x36.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == hover again
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 0.238,0.238,0.238,1.000 | border 0.388,0.388,0.400,1.000 w1.0 | opacity 1.00 | radius 6.0 | 95.0x36.0
-    svg tint 1.000,1.000,1.000,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.177,0.191,0.239,1.000 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 12.0 | 93.0x36.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == pressed again
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 0.269,0.269,0.269,1.000 | border 0.388,0.388,0.400,1.000 w1.0 | opacity 1.00 | radius 6.0 | 95.0x36.0
-    svg tint 1.000,1.000,1.000,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.208,0.222,0.268,1.000 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 12.0 | 93.0x36.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == released, flipped back
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 1.000,1.000,1.000,0.050 | border 0.388,0.388,0.400,1.000 w1.0 | opacity 1.00 | radius 6.0 | 95.0x36.0
-    svg tint 1.000,1.000,1.000,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.925,0.933,0.957,0.050 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 12.0 | 93.0x36.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 ######## disabled
 == idle
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == hover
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == pressed
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == released, flipped
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == left
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == hover again
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == pressed again
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == released, flipped back
-div | fill - | border - | opacity 1.00 | radius 0.0 | 55.0x36.0
-  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 6.0 | 55.0x36.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 53.0x36.0
+  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 0.50 | radius 12.0 | 53.0x36.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 ######## hover and checked rules in a stylesheet
 == idle
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 1.00 | radius 4.0 | 95.0x36.0
-    svg tint 1.000,1.000,1.000,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.000,0.000,0.000,0.000 | border - | opacity 1.00 | radius 4.0 | 93.0x36.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == hover
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 0.240,0.430,0.620,1.000 | border - | opacity 1.00 | radius 4.0 | 95.0x36.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.236,0.427,0.618,1.000 | border - | opacity 1.00 | radius 4.0 | 93.0x36.0
     svg tint 1.000,0.933,0.867,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,0.933,0.867,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+    text "Bold" color 1.000,0.933,0.867,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == pressed
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 0.280,0.460,0.640,1.000 | border - | opacity 1.00 | radius 4.0 | 95.0x36.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.273,0.453,0.636,1.000 | border - | opacity 1.00 | radius 4.0 | 93.0x36.0
     svg tint 1.000,0.933,0.867,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,0.933,0.867,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+    text "Bold" color 1.000,0.933,0.867,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == released, flipped
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 0.232,0.424,0.616,1.000 | border - | opacity 1.00 | radius 4.0 | 95.0x36.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.229,0.421,0.614,1.000 | border - | opacity 1.00 | radius 4.0 | 93.0x36.0
     svg tint 1.000,0.933,0.867,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,0.933,0.867,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+    text "Bold" color 1.000,0.933,0.867,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == left
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 0.206,0.206,0.206,1.000 | border - | opacity 1.00 | radius 4.0 | 95.0x36.0
-    svg tint 1.000,1.000,1.000,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 4.0 | 93.0x36.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
+    text "Bold" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == hover again
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 0.232,0.424,0.616,1.000 | border - | opacity 1.00 | radius 4.0 | 95.0x36.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.229,0.421,0.614,1.000 | border - | opacity 1.00 | radius 4.0 | 93.0x36.0
     svg tint 1.000,0.933,0.867,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,0.933,0.867,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+    text "Bold" color 1.000,0.933,0.867,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == pressed again
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 0.264,0.448,0.632,1.000 | border - | opacity 1.00 | radius 4.0 | 95.0x36.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.258,0.443,0.629,1.000 | border - | opacity 1.00 | radius 4.0 | 93.0x36.0
     svg tint 1.000,0.933,0.867,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,0.933,0.867,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+    text "Bold" color 1.000,0.933,0.867,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0
 == released, flipped back
-div | fill - | border - | opacity 1.00 | radius 0.0 | 95.0x36.0
-  div | fill 0.240,0.430,0.620,1.000 | border - | opacity 1.00 | radius 4.0 | 95.0x36.0
+div | fill - | border - | opacity 1.00 | radius 0.0 | 93.0x36.0
+  div | fill 0.236,0.427,0.618,1.000 | border - | opacity 1.00 | radius 4.0 | 93.0x36.0
     svg tint 1.000,0.933,0.867,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | 16.0x16.0
-    text "Bold" color 1.000,0.933,0.867,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | 31.0x16.0
+    text "Bold" color 1.000,0.933,0.867,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | 29.0x16.0

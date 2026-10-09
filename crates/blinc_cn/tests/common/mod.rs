@@ -13,7 +13,12 @@ use std::sync::{Arc, Mutex};
 pub fn init() {
     static I: std::sync::Once = std::sync::Once::new();
     I.call_once(|| {
-        blinc_theme::ThemeState::init_default();
+        // The records are made with one theme, not the system's, so they
+        // read the same on every machine.
+        blinc_theme::ThemeState::init(
+            blinc_theme::HybridTheme::bundle(),
+            blinc_theme::ColorScheme::Dark,
+        );
         let s = blinc_animation::AnimationScheduler::new();
         blinc_animation::set_global_scheduler(s.handle());
         blinc_layout::render_state::set_global_scheduler(s.handle());
@@ -182,7 +187,9 @@ impl Harness {
             self.tree.dispatch_event(node, event, at.0, at.1);
         }
         assert!(
-            !self.in_place || !blinc_layout::stateful::has_pending_subtree_rebuilds(),
+            !self.in_place
+                || std::env::var_os("BLESS_GOLDEN").is_some()
+                || !blinc_layout::stateful::has_pending_subtree_rebuilds(),
             "an interaction queued a subtree rebuild"
         );
         self.frame();

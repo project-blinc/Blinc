@@ -1,157 +1,157 @@
 ######## core with a label
 == idle
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == hover
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == pressed
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == released
-box: div | fill 0.139,0.618,1.000,1.000 | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
-mark: 0.114,0.114,0.122,1.000
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+box: div | fill 0.590,0.759,1.000,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+mark: 0.059,0.075,0.125,1.000
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == left
-box: div | fill 0.039,0.518,1.000,1.000 | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
-mark: 0.114,0.114,0.122,1.000
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+box: div | fill 0.490,0.659,1.000,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+mark: 0.059,0.075,0.125,1.000
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == hover again
-box: div | fill 0.139,0.618,1.000,1.000 | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
-mark: 0.114,0.114,0.122,1.000
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+box: div | fill 0.590,0.759,1.000,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+mark: 0.059,0.075,0.125,1.000
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == pressed again
-box: div | fill 0.139,0.618,1.000,1.000 | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
-mark: 0.114,0.114,0.122,1.000
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+box: div | fill 0.590,0.759,1.000,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+mark: 0.059,0.075,0.125,1.000
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == released again
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 ######## core without a label
 == idle
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: none
 == hover
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: none
 == pressed
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: none
 == released
-box: div | fill 0.139,0.618,1.000,1.000 | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
-mark: 0.114,0.114,0.122,1.000
+box: div | fill 0.590,0.759,1.000,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+mark: 0.059,0.075,0.125,1.000
 == left
-box: div | fill 0.039,0.518,1.000,1.000 | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
-mark: 0.114,0.114,0.122,1.000
+box: div | fill 0.490,0.659,1.000,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+mark: 0.059,0.075,0.125,1.000
 == hover again
-box: div | fill 0.139,0.618,1.000,1.000 | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
-mark: 0.114,0.114,0.122,1.000
+box: div | fill 0.590,0.759,1.000,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+mark: 0.059,0.075,0.125,1.000
 == pressed again
-box: div | fill 0.139,0.618,1.000,1.000 | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
-mark: 0.114,0.114,0.122,1.000
+box: div | fill 0.590,0.759,1.000,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+mark: 0.059,0.075,0.125,1.000
 == released again
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: none
 ######## core disabled
 == idle
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == hover
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == pressed
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == released
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == left
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == hover again
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == pressed again
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == released again
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 0.50 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 0.388,0.388,0.400,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.451,0.478,0.549,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 ######## core under hover and checked rules
 == idle
-box: div | fill - | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == hover
 box: div | fill 0.300,0.500,0.700,1.000 | border 1.000,0.533,0.000,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == pressed
 box: div | fill 0.300,0.500,0.700,1.000 | border 1.000,0.533,0.000,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == released
 box: div | fill 0.300,0.500,0.700,1.000 | border 1.000,0.533,0.000,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: 1.000,0.000,0.000,1.000
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == left
-box: div | fill 0.133,0.533,0.267,1.000 | border 0.388,0.388,0.400,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
+box: div | fill 0.133,0.533,0.267,1.000 | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: 1.000,0.000,0.000,1.000
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == hover again
 box: div | fill 0.300,0.500,0.700,1.000 | border 1.000,0.533,0.000,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: 1.000,0.000,0.000,1.000
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == pressed again
 box: div | fill 0.300,0.500,0.700,1.000 | border 1.000,0.533,0.000,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: 1.000,0.000,0.000,1.000
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 == released again
 box: div | fill 0.300,0.500,0.700,1.000 | border 1.000,0.533,0.000,1.000 w2.0 | opacity 1.00 | radius 4.0 | scale - | 20.0x20.0
 mark: none
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
 ######## cn
 == idle
-box: div | fill 0.176,0.176,0.176,1.000 | border 1.000,1.000,1.000,0.100 w2.0 | opacity 1.00 | radius 2.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+box: div | fill 0.102,0.122,0.180,1.000 | border 1.000,1.000,1.000,0.100 w2.0 | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
 mark: none
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
 == hover
-box: div | fill 0.176,0.176,0.176,1.000 | border 1.000,1.000,1.000,0.150 w2.0 | opacity 1.00 | radius 2.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+box: div | fill 0.102,0.122,0.180,1.000 | border 1.000,1.000,1.000,0.180 w2.0 | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
 mark: none
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
 == pressed
-box: div | fill 0.176,0.176,0.176,1.000 | border 1.000,1.000,1.000,0.150 w2.0 | opacity 1.00 | radius 2.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+box: div | fill 0.102,0.122,0.180,1.000 | border 1.000,1.000,1.000,0.180 w2.0 | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
 mark: none
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
 == released
-box: div | fill 0.039,0.518,1.000,1.000 | border 1.000,1.000,1.000,0.150 w2.0 | opacity 1.00 | radius 2.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
-mark: 0.114,0.114,0.122,1.000
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+box: div | fill 0.490,0.659,1.000,1.000 | border 1.000,1.000,1.000,0.180 w2.0 | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+mark: 0.059,0.075,0.125,1.000
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
 == left
-box: div | fill 0.039,0.518,1.000,1.000 | border 1.000,1.000,1.000,0.100 w2.0 | opacity 1.00 | radius 2.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
-mark: 0.114,0.114,0.122,1.000
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+box: div | fill 0.490,0.659,1.000,1.000 | border 1.000,1.000,1.000,0.100 w2.0 | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0] }) | 18.0x18.0
+mark: 0.059,0.075,0.125,1.000
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
 == hover again
-box: div | fill 0.039,0.518,1.000,1.000 | border 1.000,1.000,1.000,0.150 w2.0 | opacity 1.00 | radius 2.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
-mark: 0.114,0.114,0.122,1.000
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+box: div | fill 0.490,0.659,1.000,1.000 | border 1.000,1.000,1.000,0.180 w2.0 | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+mark: 0.059,0.075,0.125,1.000
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
 == pressed again
-box: div | fill 0.039,0.518,1.000,1.000 | border 1.000,1.000,1.000,0.150 w2.0 | opacity 1.00 | radius 2.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
-mark: 0.114,0.114,0.122,1.000
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+box: div | fill 0.490,0.659,1.000,1.000 | border 1.000,1.000,1.000,0.180 w2.0 | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+mark: 0.059,0.075,0.125,1.000
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
 == released again
-box: div | fill 0.176,0.176,0.176,1.000 | border 1.000,1.000,1.000,0.150 w2.0 | opacity 1.00 | radius 2.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+box: div | fill 0.102,0.122,0.180,1.000 | border 1.000,1.000,1.000,0.180 w2.0 | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
 mark: none
-label: text "Accept" color 1.000,1.000,1.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 46.0x16.0
+label: text "Accept" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
