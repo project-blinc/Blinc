@@ -1,26 +1,22 @@
 //! `align-items: baseline` across fonts and sizes.
 //!
-//! taffy never receives a first baseline for a text leaf:
-//! `compute_leaf_layout` returns no baselines, so `compute/flexbox.rs`
-//! falls back to `first_baselines.y.unwrap_or(size.height)` and
-//! `align-items: baseline` aligns box bottoms.
+//! A text leaf reports its first baseline from the measure function, and
+//! taffy's flexbox aligns by it: through nested containers, each wrapped
+//! line on its own baseline, ignoring out-of-flow children. The line is
+//! sized to hold the aligned items, so none spill out of their container.
 //!
-//! Blinc hides that for same-size text by giving single-line text a box
-//! of `font_size * line_height` and drawing at `top + ascender`. Two
-//! faces at different sizes have different ascenders, so their drawn
-//! baselines diverge.
-//!
-//! `LayoutTree::align_baselines` corrects this after taffy runs: it
-//! measures each baseline-aligned item's own baseline and shifts the
-//! items of a line onto the deepest one. taffy is left alone, because
-//! the dispatch that would carry a baseline lives on `TaffyView`, which
-//! is `pub(crate)` and reaches into private tree state, so no wrapper
-//! can override it.
+//! taffy snaps every box to a whole pixel on its own, so two baselines it
+//! aligned exactly can end up to a pixel apart; `ROUNDING` is that
+//! allowance.
 
 use blinc_layout::div::GenericFont;
 use blinc_layout::text_measure::{TextLayoutOptions, measure_text_with_options};
 use blinc_layout::{LayoutNodeId, LayoutTree, TextMeasureContext};
 use taffy::prelude::*;
+
+/// How far two baselines taffy aligned can differ once it has snapped each
+/// box to a whole pixel.
+const ROUNDING: f32 = 1.0;
 
 fn options(generic: GenericFont) -> TextLayoutOptions {
     let mut o = TextLayoutOptions::new();
@@ -108,7 +104,7 @@ fn different_sizes_share_a_baseline() {
     let b = drawn_baseline(&mut tree, mono, 14.0, GenericFont::Monospace, 1.0);
 
     assert!(
-        (a - b).abs() <= 0.5,
+        (a - b).abs() <= ROUNDING,
         "baselines diverge by {:.2}px: sans at {a:.2}, mono at {b:.2}",
         (a - b).abs()
     );
@@ -153,7 +149,7 @@ fn the_same_face_at_the_same_size_already_aligns() {
 
     let a = drawn_baseline(&mut tree, left, 16.0, GenericFont::SansSerif, 0.0);
     let b = drawn_baseline(&mut tree, right, 16.0, GenericFont::SansSerif, 0.0);
-    assert!((a - b).abs() <= 0.5, "{a} vs {b}");
+    assert!((a - b).abs() <= ROUNDING, "{a} vs {b}");
 }
 
 /// The widest spread in the request's spirit: a heading beside small
@@ -196,7 +192,7 @@ fn a_wide_size_spread_shares_a_baseline() {
     let a = drawn_baseline(&mut tree, tall, 32.0, GenericFont::SansSerif, 0.0);
     let b = drawn_baseline(&mut tree, short, 12.0, GenericFont::SansSerif, 0.0);
     assert!(
-        (a - b).abs() <= 0.5,
+        (a - b).abs() <= ROUNDING,
         "baselines diverge by {:.2}px: 32px at {a:.2}, 12px at {b:.2}",
         (a - b).abs()
     );
@@ -266,7 +262,7 @@ fn a_padded_container_aligns_by_its_text() {
     let b = drawn_baseline(&mut tree, chip_text, 14.0, GenericFont::Monospace, 0.0);
 
     assert!(
-        (a - b).abs() <= 0.5,
+        (a - b).abs() <= ROUNDING,
         "chip text diverges by {:.2}px: prose at {a:.2}, code at {b:.2}",
         (a - b).abs()
     );
@@ -395,17 +391,15 @@ fn an_absolute_child_does_not_define_a_container_baseline() {
     let a = drawn_baseline(&mut tree, prose, 16.0, GenericFont::SansSerif, 0.0);
     let b = drawn_baseline(&mut tree, chip_text, 14.0, GenericFont::Monospace, 0.0);
     assert!(
-        (a - b).abs() <= 0.5,
+        (a - b).abs() <= ROUNDING,
         "chip aligned by its floating child instead of its text: {a:.2} vs {b:.2}"
     );
 }
 
 /// A wrapping row aligns each LINE on its own baseline.
 ///
-/// The pass groups items into lines by whether their boxes overlap
-/// vertically, because taffy exposes no line assignment. That is untested
-/// reasoning until a row actually wraps: two lines, mixed sizes on each,
-/// and the items of one line must not be pulled onto the other's baseline.
+/// Two lines, mixed sizes on each: the items of one line must not be
+/// pulled onto the other line's baseline.
 #[test]
 fn a_wrapping_row_aligns_each_line_on_its_own_baseline() {
     let mut tree = LayoutTree::new();
@@ -467,14 +461,14 @@ fn a_wrapping_row_aligns_each_line_on_its_own_baseline() {
 
     // Each line shares a baseline within it.
     assert!(
-        (base[0] - base[1]).abs() <= 0.5,
+        (base[0] - base[1]).abs() <= ROUNDING,
         "line 1 diverges by {:.2}px: {:.2} vs {:.2}",
         (base[0] - base[1]).abs(),
         base[0],
         base[1]
     );
     assert!(
-        (base[2] - base[3]).abs() <= 0.5,
+        (base[2] - base[3]).abs() <= ROUNDING,
         "line 2 diverges by {:.2}px: {:.2} vs {:.2}",
         (base[2] - base[3]).abs(),
         base[2],
@@ -487,5 +481,122 @@ fn a_wrapping_row_aligns_each_line_on_its_own_baseline() {
         "lines were aligned to each other: line 1 at {:.2}, line 2 at {:.2}",
         base[0],
         base[2]
+    );
+}
+
+/// Baseline-aligned items stay inside their container's padding box.
+///
+/// Aligning baselines moves a smaller item down inside its line, so the
+/// line has to be tall enough for the result. Where the container's height
+/// came from the tallest item alone, the aligned content spilled past the
+/// bottom padding.
+#[test]
+fn aligned_items_stay_inside_the_containers_padding() {
+    let pad = 8.0_f32;
+
+    for specs in [
+        vec![
+            ("Hxq", 32.0_f32, GenericFont::SansSerif),
+            ("Hxq", 12.0, GenericFont::SansSerif),
+            ("Hxq", 20.0, GenericFont::SansSerif),
+        ],
+        vec![
+            ("Hxq sans", 16.0, GenericFont::SansSerif),
+            ("Hxq mono", 16.0, GenericFont::Monospace),
+        ],
+    ] {
+        let mut tree = LayoutTree::new();
+        let root = tree.create_node(Style {
+            display: Display::Flex,
+            flex_direction: FlexDirection::Row,
+            align_items: Some(AlignItems::BASELINE),
+            padding: Rect {
+                left: length(pad),
+                right: length(pad),
+                top: length(pad),
+                bottom: length(pad),
+            },
+            ..Default::default()
+        });
+        let items: Vec<_> = specs
+            .iter()
+            .map(|&(t, size, g)| {
+                let n = tree.create_text_node(Style::default(), context(t, size, g));
+                tree.add_child(root, n);
+                n
+            })
+            .collect();
+
+        tree.compute_layout(
+            root,
+            Size {
+                width: AvailableSpace::Definite(400.0),
+                height: AvailableSpace::MaxContent,
+            },
+        );
+
+        let row = tree.get_absolute_bounds(root).expect("laid out");
+        for (&item, &(text, ..)) in items.iter().zip(specs.iter()) {
+            let b = tree.get_absolute_bounds(item).expect("laid out");
+            assert!(
+                b.y >= row.y + pad - 0.01 && b.y + b.height <= row.y + row.height - pad + 0.01,
+                "{text:?} spans {:.2}..{:.2}, outside the padding box {:.2}..{:.2}",
+                b.y,
+                b.y + b.height,
+                row.y + pad,
+                row.y + row.height - pad
+            );
+        }
+    }
+}
+
+/// A baseline derived from a node's measure context follows changes to it.
+///
+/// Two 16px items align; one then grows to 32px. Its baseline is a
+/// property of the new size, so the pair must align again.
+#[test]
+fn a_baseline_follows_an_update_to_the_text() {
+    let mut tree = LayoutTree::new();
+
+    let root = tree.create_node(Style {
+        display: Display::Flex,
+        flex_direction: FlexDirection::Row,
+        align_items: Some(AlignItems::BASELINE),
+        size: Size {
+            width: length(400.0_f32),
+            height: length(200.0_f32),
+        },
+        ..Default::default()
+    });
+    let small = tree.create_text_node(
+        Style::default(),
+        context("paragraph", 16.0, GenericFont::SansSerif),
+    );
+    let grown = tree.create_text_node(
+        Style::default(),
+        context("paragraph", 16.0, GenericFont::SansSerif),
+    );
+    tree.add_child(root, small);
+    tree.add_child(root, grown);
+
+    let layout = |tree: &mut LayoutTree| {
+        tree.compute_layout(
+            root,
+            Size {
+                width: AvailableSpace::Definite(400.0),
+                height: AvailableSpace::Definite(200.0),
+            },
+        );
+    };
+    layout(&mut tree);
+
+    assert!(tree.update_text(grown, |c| c.font_size = 32.0));
+    layout(&mut tree);
+
+    let a = drawn_baseline(&mut tree, small, 16.0, GenericFont::SansSerif, 0.0);
+    let b = drawn_baseline(&mut tree, grown, 32.0, GenericFont::SansSerif, 0.0);
+    assert!(
+        (a - b).abs() <= ROUNDING,
+        "the grown item kept its old baseline: {a:.2} vs {b:.2}"
     );
 }

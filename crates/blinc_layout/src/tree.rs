@@ -3,7 +3,7 @@
 use slotmap::{Key, SlotMap, new_key_type};
 use std::collections::HashMap;
 use taffy::prelude::*;
-use taffy::{LayoutInput, LayoutOutput, compute_leaf_layout};
+use taffy::{Baselines, LayoutInput, LayoutOutput, compute_leaf_layout};
 
 use crate::element::ElementBounds;
 use crate::text_measure::{TextLayoutOptions, measure_text_with_options};
@@ -159,18 +159,52 @@ impl LayoutNodeId {
 /// width to get proper multi-line height.
 fn text_measure_function(
     inputs: LayoutInput,
-    _node_id: NodeId,
     node_context: Option<&mut TextMeasureContext>,
     style: &Style,
+    content_baseline: Option<f32>,
 ) -> LayoutOutput {
-    compute_leaf_layout(
+    let mut output = compute_leaf_layout(
         inputs,
         style,
         |_, _| 0.0,
         |known_dimensions, available_space| {
             measure_text_node(known_dimensions, available_space, node_context)
         },
-    )
+    );
+
+    if let Some(baseline) = content_baseline {
+        // taffy measures a baseline from the border-box top.
+        let lead_in = resolve_length(style.border.top, inputs.parent_size.width)
+            + resolve_length(style.padding.top, inputs.parent_size.width);
+        output.baselines = Baselines::from_first(Some(lead_in + baseline));
+    }
+    output
+}
+
+/// A border or padding length in pixels. A percentage resolves against
+/// the parent's width, as CSS specifies.
+fn resolve_length(length: LengthPercentage, basis: Option<f32>) -> f32 {
+    match length.expand() {
+        taffy::style::ExpandedLengthPercentage::Length(v) => v,
+        taffy::style::ExpandedLengthPercentage::Percent(p) => basis.map_or(0.0, |b| p * b),
+        _ => 0.0,
+    }
+}
+
+/// Distance from a text node's content-box top to its first baseline,
+/// worked out from its measure context: half-leading plus the ascender,
+/// which is where the paint path puts the first line.
+fn context_baseline(ctx: &TextMeasureContext) -> f32 {
+    let mut options = TextLayoutOptions::new();
+    options.font_name = ctx.font_name.clone();
+    options.generic_font = ctx.generic_font;
+    options.font_weight = ctx.font_weight;
+    options.italic = ctx.italic;
+    options.line_height = ctx.line_height;
+    options.letter_spacing = ctx.letter_spacing;
+
+    let metrics = measure_text_with_options(&ctx.content, ctx.font_size, &options);
+    half_leading(&metrics) + metrics.ascender
 }
 
 /// The content size of a text node given what taffy already knows of it.
@@ -261,16 +295,17 @@ pub struct LayoutTree {
     /// still beats the parent, because only the incidental one is
     /// listed here. See [`Self::resolve_incidental_align_self`].
     incidental_align_self: std::collections::HashSet<LayoutNodeId>,
-    /// Downward shift applied to a node after taffy, so baseline-aligned
-    /// items in a flex line share a baseline. See `align_baselines`.
-    baseline_shift: std::collections::HashMap<LayoutNodeId, f32>,
     /// Distance from a text node's content-box top to its first
     /// baseline, as the element that built it measured.
     ///
     /// Non-wrapping text gets fixed dimensions rather than a measure
-    /// context, so there is nothing for `baseline_offset` to measure
-    /// from. The builder already has the metrics, so it reports them.
+    /// context, so there is nothing to measure from at layout time. The
+    /// builder already has the metrics, so it reports them, and layout
+    /// hands them to taffy as the node's first baseline.
     text_baseline: std::collections::HashMap<LayoutNodeId, f32>,
+    /// First baselines worked out from a text node's measure context, for
+    /// nodes whose builder reported none. Dropped when the context changes.
+    derived_baseline: std::collections::HashMap<NodeId, f32>,
 }
 
 impl LayoutTree {
@@ -280,8 +315,8 @@ impl LayoutTree {
             node_map: SlotMap::with_key(),
             reverse_map: HashMap::new(),
             incidental_align_self: std::collections::HashSet::new(),
-            baseline_shift: std::collections::HashMap::new(),
             text_baseline: std::collections::HashMap::new(),
+            derived_baseline: std::collections::HashMap::new(),
         }
     }
 
@@ -321,6 +356,7 @@ impl LayoutTree {
             return false;
         };
         f(context);
+        self.derived_baseline.remove(&taffy_node);
         // `get_node_context_mut` leaves taffy's cached layout in place.
         let _ = self.taffy.mark_dirty(taffy_node);
         true
@@ -360,15 +396,31 @@ impl LayoutTree {
     /// Compute layout for a tree rooted at the given node
     pub fn compute_layout(&mut self, root: LayoutNodeId, available_space: Size<AvailableSpace>) {
         self.resolve_incidental_align_self(root);
-        self.baseline_shift.clear();
+        let text_baseline = &self.text_baseline;
+        let reverse_map = &self.reverse_map;
+        let derived_baseline = &mut self.derived_baseline;
         if let Some(&taffy_node) = self.node_map.get(root) {
             let _ = self.taffy.compute_layout_with_measure(
                 taffy_node,
                 available_space,
-                text_measure_function,
+                |inputs, node, context, style| {
+                    // A baseline the builder reported wins; a node with only
+                    // a measure context derives one from it.
+                    let baseline = reverse_map
+                        .get(&node)
+                        .and_then(|id| text_baseline.get(id))
+                        .copied()
+                        .or_else(|| {
+                            context.as_deref().map(|ctx| {
+                                *derived_baseline
+                                    .entry(node)
+                                    .or_insert_with(|| context_baseline(ctx))
+                            })
+                        });
+                    text_measure_function(inputs, context, style, baseline)
+                },
             );
         }
-        self.align_baselines(root);
     }
 
     /// Record where a text node's first baseline sits below its
@@ -473,14 +525,8 @@ impl LayoutTree {
 
     /// Get computed layout as ElementBounds with parent offset
     pub fn get_bounds(&self, id: LayoutNodeId, parent_offset: (f32, f32)) -> Option<ElementBounds> {
-        self.get_layout(id).map(|layout| {
-            let mut bounds = ElementBounds::from_layout(layout, parent_offset);
-            // Only this node's own shift: the paint walk accumulates
-            // parent offsets itself, and a parent's bounds already
-            // carried its shift when the walk passed through it.
-            bounds.y += self.shift_of(id);
-            bounds
-        })
+        self.get_layout(id)
+            .map(|layout| ElementBounds::from_layout(layout, parent_offset))
     }
 
     /// Get absolute bounds by walking up the taffy parent chain to accumulate offsets.
@@ -491,211 +537,27 @@ impl LayoutTree {
         // Walk up parent chain to accumulate absolute offset
         let mut offset_x = 0.0f32;
         let mut offset_y = 0.0f32;
-        // A baseline shift moves a node and everything under it, so an
-        // ancestor's shift accumulates the same way its position does.
-        let mut shift = self.shift_of(id);
         let mut current = taffy_node;
         while let Some(parent) = self.taffy.parent(current) {
             if let Ok(parent_layout) = self.taffy.layout(parent) {
                 offset_x += parent_layout.location.x;
                 offset_y += parent_layout.location.y;
             }
-            if let Some(&parent_id) = self.reverse_map.get(&parent) {
-                shift += self.shift_of(parent_id);
-            }
             current = parent;
         }
 
         Some(ElementBounds {
             x: offset_x + layout.location.x,
-            y: offset_y + layout.location.y + shift,
+            y: offset_y + layout.location.y,
             width: layout.size.width,
             height: layout.size.height,
         })
     }
 
-    // ── Baseline alignment ──────────────────────────────────────────
-    //
-    // taffy's `compute_leaf_layout` gives a text leaf no first baseline,
-    // and its flexbox then falls back to `unwrap_or(size.height)`, so
-    // `align-items: baseline` aligns box bottoms. Since a text box is
-    // `font_size * line_height` tall, that puts each item's baseline at
-    // `row_bottom - 0.4 * font_size` or so: the bigger the text, the
-    // higher its baseline sits.
-    //
-    // The shifts are computed here and added in `get_absolute_bounds`,
-    // which is the only path anything positions from. taffy's own stored
-    // layout is left alone, because there is no public way to write it.
-
-    /// Distance from a node's border-box top down to the baseline its
-    /// text is drawn on, or `None` for a node that has no baseline of
-    /// its own.
-    ///
-    /// A text leaf: top border + top padding + half-leading + ascender,
-    /// which is where the paint path puts the first line. A container:
-    /// its first baseline-bearing child's, in this node's coordinates,
-    /// which is what CSS means by a box's first baseline.
-    fn baseline_offset(&self, id: LayoutNodeId) -> Option<f32> {
-        let layout = self.get_layout(id)?;
-        let lead_in = layout.border.top + layout.padding.top;
-
-        if let Some(&reported) = self.text_baseline.get(&id) {
-            return Some(lead_in + reported);
-        }
-
-        if let Some(ctx) = self.text_context(id) {
-            let mut options = crate::text_measure::TextLayoutOptions::new();
-            options.font_name = ctx.font_name.clone();
-            options.generic_font = ctx.generic_font;
-            options.font_weight = ctx.font_weight;
-            options.italic = ctx.italic;
-            options.line_height = ctx.line_height;
-            options.letter_spacing = ctx.letter_spacing;
-
-            let metrics = crate::text_measure::measure_text_with_options(
-                &ctx.content,
-                ctx.font_size,
-                &options,
-            );
-            return Some(lead_in + half_leading(&metrics) + metrics.ascender);
-        }
-
-        // A container takes its first child's baseline. Walking in order
-        // rather than taking child 0 skips children that have none, such
-        // as an icon beside a label. Out-of-flow children are skipped
-        // for the same reason they are not aligned: they are not flex
-        // items, so they do not define the container's first baseline.
-        for child in self.children(id) {
-            if !self.is_in_flow(child) {
-                continue;
-            }
-            if let (Some(child_layout), Some(offset)) =
-                (self.get_layout(child), self.baseline_offset(child))
-            {
-                return Some(child_layout.location.y + offset + self.shift_of(child));
-            }
-        }
-
-        None
-    }
-
-    /// The shift already assigned to a node, zero if none.
-    fn shift_of(&self, id: LayoutNodeId) -> f32 {
-        self.baseline_shift.get(&id).copied().unwrap_or(0.0)
-    }
-
-    /// Whether a child takes part in its parent's baseline alignment.
-    ///
-    /// `align_self` outranks the parent's `align_items`, except where
-    /// `w_fit`/`h_fit` set it as a side effect: that is not an author
-    /// asking to opt out, so such a node follows the parent.
-    /// Whether a child is in flow, and so a flex item at all.
-    ///
-    /// An absolutely positioned child of a flex container is not a flex
-    /// item: it is positioned against the container's padding box and
-    /// takes no part in alignment. Shifting one would move a box whose
-    /// position its author computed.
-    fn is_in_flow(&self, child: LayoutNodeId) -> bool {
-        self.get_style(child)
-            .is_none_or(|s| s.position != Position::Absolute)
-    }
-
-    fn aligns_to_baseline(&self, parent_align: Option<AlignItems>, child: LayoutNodeId) -> bool {
-        if !self.is_in_flow(child) {
-            return false;
-        }
-
-        let authored = self
-            .get_style(child)
-            .and_then(|s| s.align_self)
-            .filter(|_| !self.incidental_align_self.contains(&child));
-
-        match authored {
-            Some(a) => a == AlignSelf::BASELINE,
-            None => parent_align == Some(AlignItems::BASELINE),
-        }
-    }
-
-    /// Line up the baselines of every baseline-aligned flex line in the
-    /// subtree, deepest first so a container's own baseline already
-    /// reflects its aligned children.
-    fn align_baselines(&mut self, id: LayoutNodeId) {
-        for child in self.children(id) {
-            self.align_baselines(child);
-        }
-
-        let Some(style) = self.get_style(id) else {
-            return;
-        };
-        if style.display != Display::Flex {
-            return;
-        }
-        // Baselines run along the cross axis of a row. In a column the
-        // cross axis is horizontal, where CSS aligns by a vertical
-        // baseline Blinc has no notion of, so leave those alone.
-        if matches!(
-            style.flex_direction,
-            FlexDirection::Column | FlexDirection::ColumnReverse
-        ) {
-            return;
-        }
-
-        let participants: Vec<LayoutNodeId> = self
-            .children(id)
-            .into_iter()
-            .filter(|&c| self.aligns_to_baseline(style.align_items, c))
-            .collect();
-        if participants.len() < 2 {
-            return;
-        }
-
-        // Each wrapped line aligns on its own baseline, so group by the
-        // row a child was placed on before shifting anything.
-        let mut lines: Vec<Vec<(LayoutNodeId, f32)>> = Vec::new();
-        for child in participants {
-            let Some(offset) = self.baseline_offset(child) else {
-                continue;
-            };
-            let Some(layout) = self.get_layout(child) else {
-                continue;
-            };
-            let top = layout.location.y;
-            let height = layout.size.height;
-            // Where the baseline sits in the PARENT, not in the child:
-            // taffy has already placed the boxes at different tops, so
-            // aligning the within-box offsets alone would leave them
-            // apart by exactly that difference.
-            let baseline = top + offset;
-
-            match lines.iter_mut().find(|line| {
-                line.iter().any(|&(other, _)| {
-                    self.get_layout(other).is_some_and(|l| {
-                        // Same line when the boxes overlap vertically.
-                        top < l.location.y + l.size.height && l.location.y < top + height
-                    })
-                })
-            }) {
-                Some(line) => line.push((child, baseline)),
-                None => lines.push(vec![(child, baseline)]),
-            }
-        }
-
-        for line in lines {
-            let Some(deepest) = line
-                .iter()
-                .map(|&(_, baseline)| baseline)
-                .fold(None::<f32>, |acc, b| Some(acc.map_or(b, |a: f32| a.max(b))))
-            else {
-                continue;
-            };
-            for (child, baseline) in line {
-                let shift = deepest - baseline;
-                if shift.abs() > f32::EPSILON {
-                    *self.baseline_shift.entry(child).or_insert(0.0) += shift;
-                }
-            }
-        }
-    }
+    // Baseline alignment is taffy's: a text leaf reports its first baseline
+    // from the measure function, and taffy's flexbox and block layout carry
+    // it up through containers and align `align-items: baseline` rows, each
+    // wrapped line on its own baseline, ignoring out-of-flow children.
 
     /// Iterate over ancestors of a node (parent, grandparent, ...) as LayoutNodeIds.
     pub fn ancestors(&self, id: LayoutNodeId) -> Vec<LayoutNodeId> {
