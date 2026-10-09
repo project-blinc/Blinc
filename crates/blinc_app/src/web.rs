@@ -2669,18 +2669,7 @@ impl WebApp {
             let prop_updates = blinc_layout::take_pending_partial_prop_updates();
             let mut prop_effects = blinc_layout::SideEffects::default();
             if let Some(ref mut tree) = self.current_tree {
-                for upd in prop_updates {
-                    prop_effects = prop_effects.or(upd.effects);
-                    if let Some(write) = upd.render_write {
-                        tree.update_render_props(upd.node_id, |p| write(p));
-                    }
-                    if let Some(write) = upd.layout_write {
-                        if let Some(mut style) = tree.layout_tree.get_style(upd.node_id) {
-                            write(&mut style);
-                            tree.layout_tree.set_style(upd.node_id, style);
-                        }
-                    }
-                }
+                prop_effects = tree.apply_partial_property_updates(prop_updates);
             }
             let mut needs_relayout = prop_effects.needs_layout;
             if let Some(ref mut tree) = self.current_tree {
@@ -2869,18 +2858,7 @@ impl WebApp {
             let prop_updates = blinc_layout::take_pending_partial_prop_updates();
             let mut animation_prop_effects = blinc_layout::SideEffects::default();
             if let Some(ref mut tree) = self.current_tree {
-                for upd in prop_updates {
-                    animation_prop_effects = animation_prop_effects.or(upd.effects);
-                    if let Some(write) = upd.render_write {
-                        tree.update_render_props(upd.node_id, |p| write(p));
-                    }
-                    if let Some(write) = upd.layout_write {
-                        if let Some(mut style) = tree.layout_tree.get_style(upd.node_id) {
-                            write(&mut style);
-                            tree.layout_tree.set_style(upd.node_id, style);
-                        }
-                    }
-                }
+                animation_prop_effects = tree.apply_partial_property_updates(prop_updates);
             }
             if blinc_layout::has_pending_subtree_rebuilds() || animation_prop_effects.needs_layout {
                 let mut needs_relayout = animation_prop_effects.needs_layout;

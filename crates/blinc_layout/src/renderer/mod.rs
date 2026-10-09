@@ -2800,6 +2800,34 @@ impl RenderTree {
         }
     }
 
+    /// Apply queued property updates and return their combined side
+    /// effects.
+    ///
+    /// The one place the property channel is drained. A visual write goes
+    /// into the node's `RenderProps`; a layout write is read, changed and
+    /// put back through the live taffy `Style`, because taffy keeps styles
+    /// in its own arena and offers only a setter. The caller decides from
+    /// the returned effects whether layout has to run.
+    pub fn apply_partial_property_updates(
+        &mut self,
+        updates: Vec<crate::stateful::PartialPropertyUpdate>,
+    ) -> crate::property::SideEffects {
+        let mut effects = crate::property::SideEffects::default();
+        for update in updates {
+            effects = effects.or(update.effects);
+            if let Some(write) = update.render_write {
+                self.update_render_props(update.node_id, |p| write(p));
+            }
+            if let Some(write) = update.layout_write {
+                if let Some(mut style) = self.layout_tree.get_style(update.node_id) {
+                    write(&mut style);
+                    self.layout_tree.set_style(update.node_id, style);
+                }
+            }
+        }
+        effects
+    }
+
     // =========================================================================
     // Stylesheet Integration
     // =========================================================================

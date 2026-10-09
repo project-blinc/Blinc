@@ -5747,26 +5747,8 @@ impl WindowedApp {
                                 let had_prop_updates = !prop_updates.is_empty();
                                 let mut prop_effects = blinc_layout::SideEffects::default();
                                 if let Some(ref mut tree) = ws.render_tree {
-                                    for upd in prop_updates {
-                                        prop_effects = prop_effects.or(upd.effects);
-                                        // Tier-1 visual write into RenderProps, if any.
-                                        if let Some(write) = upd.render_write {
-                                            tree.update_render_props(upd.node_id, |p| write(p));
-                                        }
-                                        // Tier-2 layout write into the live taffy Style.
-                                        // Read-modify-write because taffy stores styles
-                                        // inside its own arena and exposes setter-only
-                                        // API; the clone-and-replace round trip is the
-                                        // cost of supporting `.w(&signal)`-style bindings.
-                                        if let Some(write) = upd.layout_write {
-                                            if let Some(mut style) =
-                                                tree.layout_tree.get_style(upd.node_id)
-                                            {
-                                                write(&mut style);
-                                                tree.layout_tree.set_style(upd.node_id, style);
-                                            }
-                                        }
-                                    }
+                                    prop_effects = prop_effects
+                                        .or(tree.apply_partial_property_updates(prop_updates));
                                 }
 
                                 // Process subtree rebuilds (from stateful changes OR overlay changes).
@@ -5860,24 +5842,9 @@ impl WindowedApp {
                                     !post_focus_updates.is_empty();
                                 if had_post_focus_updates {
                                     if let Some(ref mut tree) = ws.render_tree {
-                                        for upd in post_focus_updates {
-                                            prop_effects = prop_effects.or(upd.effects);
-                                            if let Some(write) = upd.render_write {
-                                                tree.update_render_props(
-                                                    upd.node_id,
-                                                    |p| write(p),
-                                                );
-                                            }
-                                            if let Some(write) = upd.layout_write {
-                                                if let Some(mut style) =
-                                                    tree.layout_tree.get_style(upd.node_id)
-                                                {
-                                                    write(&mut style);
-                                                    tree.layout_tree
-                                                        .set_style(upd.node_id, style);
-                                                }
-                                            }
-                                        }
+                                        prop_effects = prop_effects.or(
+                                            tree.apply_partial_property_updates(post_focus_updates),
+                                        );
                                     }
                                     needs_layout |= prop_effects.needs_layout;
                                     blinc_app.invalidate_render_cache_tagged(
