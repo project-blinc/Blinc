@@ -46,7 +46,7 @@ use blinc_core::reactive::{Computed, DerivedId, Signal, SignalId, State};
 
 use crate::element::RenderProps;
 use crate::property::{PropertyId, SideEffects};
-use crate::stateful::queue_prop_update_partial;
+use crate::stateful::{queue_prop_update_partial, queue_text_update};
 use crate::tree::LayoutNodeId;
 
 /// Reads the current value out of a signal's reactive graph and packages
@@ -60,6 +60,10 @@ pub type WriteFn = Arc<dyn Fn(&mut RenderProps, &BoundValue) + Send + Sync>;
 /// Writes a [`BoundValue`] into the right taffy `Style` field. Mirror
 /// of [`WriteFn`] for layout-affecting bindings.
 pub type LayoutWriteFn = Arc<dyn Fn(&mut taffy::Style, &BoundValue) + Send + Sync>;
+
+/// Turns a [`BoundValue`] into the text a text node should show, or `None`
+/// when the value is not text.
+pub type TextWriteFn = Arc<dyn Fn(&BoundValue) -> Option<String> + Send + Sync>;
 
 /// A reactive value source — what an [`IntoReactive<T>`] impl resolves to.
 ///
@@ -494,6 +498,63 @@ impl<T: Clone + Send + Sync + 'static> PendingBinding for LayoutPendingBinding<T
     }
 }
 
+/// Text-content variant of [`TypedPendingBinding`]: every change of a
+/// `String` source queues the new content for the node, so a text element
+/// follows its signal without its subtree being rebuilt.
+pub struct TextPendingBinding {
+    source: BindingSource<String>,
+    /// Applied to each new value before it is shown, so updated text is
+    /// treated like the text the element was built with.
+    normalize: fn(String) -> String,
+}
+
+impl TextPendingBinding {
+    /// Follow a `State<String>`.
+    pub fn new(state: State<String>, normalize: fn(String) -> String) -> Self {
+        Self {
+            source: BindingSource::Signal(state),
+            normalize,
+        }
+    }
+
+    /// Follow a `Computed<String>`.
+    pub fn from_computed(computed: Computed<String>, normalize: fn(String) -> String) -> Self {
+        Self {
+            source: BindingSource::Derived(computed),
+            normalize,
+        }
+    }
+}
+
+impl PendingBinding for TextPendingBinding {
+    fn register(&self, node_id: LayoutNodeId) {
+        let normalize = self.normalize;
+        let write: TextWriteFn = Arc::new(move |value: &BoundValue| {
+            value
+                .downcast_ref::<String>()
+                .map(|text| normalize(text.clone()))
+        });
+        let property = PropertyId::TextContent;
+        match &self.source {
+            BindingSource::Signal(state) => {
+                let state_for_read = state.clone();
+                let read: ReadFn = Arc::new(move || state_for_read.try_get().map(BoundValue::new));
+                with_registry(|reg| {
+                    reg.register_text(state.signal_id(), node_id, property, read, write)
+                });
+            }
+            BindingSource::Derived(computed) => {
+                let computed_for_read = computed.clone();
+                let read: ReadFn =
+                    Arc::new(move || computed_for_read.try_get().map(BoundValue::new));
+                with_registry(|reg| {
+                    reg.register_derived_text(computed.derived_id(), node_id, property, read, write)
+                });
+            }
+        }
+    }
+}
+
 // =========================================================================
 // Registry
 // =========================================================================
@@ -505,6 +566,7 @@ impl<T: Clone + Send + Sync + 'static> PendingBinding for LayoutPendingBinding<T
 enum SubscriberWrite {
     Render(WriteFn),
     Layout(LayoutWriteFn),
+    Text(TextWriteFn),
 }
 
 struct Subscriber {
@@ -655,6 +717,53 @@ impl PropertyBindingRegistry {
         self.by_node.entry(node_id).or_default().push(signal_id);
     }
 
+    /// Register a signal-bound subscription that replaces a text node's
+    /// content. Counterpart to [`Self::register`] for text.
+    pub fn register_text(
+        &mut self,
+        signal_id: SignalId,
+        node_id: LayoutNodeId,
+        property: PropertyId,
+        read: ReadFn,
+        write: TextWriteFn,
+    ) {
+        self.bindings
+            .entry(signal_id)
+            .or_default()
+            .push(Subscriber {
+                node_id,
+                property,
+                read,
+                write: SubscriberWrite::Text(write),
+            });
+        self.by_node.entry(node_id).or_default().push(signal_id);
+    }
+
+    /// Register a derived-bound subscription that replaces a text node's
+    /// content. Counterpart to [`Self::register_derived`] for text.
+    pub fn register_derived_text(
+        &mut self,
+        derived_id: DerivedId,
+        node_id: LayoutNodeId,
+        property: PropertyId,
+        read: ReadFn,
+        write: TextWriteFn,
+    ) {
+        self.derived_bindings
+            .entry(derived_id)
+            .or_default()
+            .push(Subscriber {
+                node_id,
+                property,
+                read,
+                write: SubscriberWrite::Text(write),
+            });
+        self.derived_by_node
+            .entry(node_id)
+            .or_default()
+            .push(derived_id);
+    }
+
     /// Evict every subscription belonging to the given node. Called by
     /// `remove_subtree_nodes` so stale subscribers can't fire on the
     /// next signal change after a structural rebuild dropped the node.
@@ -756,6 +865,11 @@ impl PropertyBindingRegistry {
                         sub.property.side_effects(),
                         move |style| write(style, &value),
                     );
+                }
+                SubscriberWrite::Text(text_of) => {
+                    if let Some(content) = text_of(&value) {
+                        queue_text_update(sub.node_id, sub.property, content);
+                    }
                 }
             }
         }
@@ -2066,6 +2180,200 @@ mod tests {
                 .rounded(8.0)
                 .w(120.0);
             let _ = crate::prelude::div().opacity(&f64_state).w(120.0_f64);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Text content bindings
+    // ---------------------------------------------------------------------
+
+    #[cfg(feature = "text_measurer")]
+    mod bound_text {
+        use super::*;
+        use crate::div::div;
+        use crate::renderer::{ElementType, RenderTree};
+        use crate::text::Text;
+
+        /// A tree with `text` as the only child of a `width`-wide box, and
+        /// that child's node.
+        fn build(text: Text, width: f32) -> (RenderTree, LayoutNodeId) {
+            crate::text_measurer::init_text_measurer();
+            let tree = RenderTree::from_element(&div().w(width).child(text));
+            let root = tree.root().expect("root");
+            let node = tree.layout_tree.children(root)[0];
+            (tree, node)
+        }
+
+        /// Apply what the signals queued, as a runner does, and lay out.
+        fn drain(tree: &mut RenderTree) -> SideEffects {
+            let updates = crate::stateful::take_pending_partial_prop_updates();
+            let effects = tree.apply_partial_property_updates(updates);
+            tree.compute_layout(400.0, 300.0);
+            effects
+        }
+
+        fn shown(tree: &RenderTree, node: LayoutNodeId) -> String {
+            match &tree
+                .get_render_node(node)
+                .expect("render node")
+                .element_type
+            {
+                ElementType::Text(t) => t.content.clone(),
+                _ => panic!("not a text node"),
+            }
+        }
+
+        fn width_of(tree: &RenderTree, node: LayoutNodeId) -> f32 {
+            tree.get_absolute_bounds(node).expect("laid out").width
+        }
+
+        fn height_of(tree: &RenderTree, node: LayoutNodeId) -> f32 {
+            tree.get_absolute_bounds(node).expect("laid out").height
+        }
+
+        #[test]
+        fn bound_text_follows_its_signal_in_place() {
+            let _guard = lock_and_reset();
+            let state = fresh_state::<String>("short".to_string());
+            let (mut tree, node) =
+                build(Text::bound(Reactive::Bound(state.clone())).no_wrap(), 400.0);
+            tree.compute_layout(400.0, 300.0);
+            let before = width_of(&tree, node);
+            assert_eq!(shown(&tree, node), "short");
+
+            state.set("a much longer line of text".to_string());
+            let effects = drain(&mut tree);
+
+            // The same node, now showing the new text and wide enough for it.
+            let root = tree.root().unwrap();
+            assert_eq!(
+                tree.layout_tree.children(root)[0],
+                node,
+                "the node was replaced"
+            );
+            assert_eq!(shown(&tree, node), "a much longer line of text");
+            assert!(
+                width_of(&tree, node) > before + 20.0,
+                "the box did not grow with its content: {before} -> {}",
+                width_of(&tree, node)
+            );
+            assert!(effects.needs_layout && effects.needs_text_remeasure);
+            assert_eq!(
+                tree.layout_tree.text_context(node).unwrap().content,
+                "a much longer line of text"
+            );
+        }
+
+        #[test]
+        fn wrapping_bound_text_grows_taller_with_its_content() {
+            let _guard = lock_and_reset();
+            let state = fresh_state::<String>("one line".to_string());
+            let (mut tree, node) = build(Text::bound(Reactive::Bound(state.clone())), 90.0);
+            tree.compute_layout(400.0, 300.0);
+            let before = height_of(&tree, node);
+
+            state.set("this text is long enough to need several lines in a narrow box".to_string());
+            drain(&mut tree);
+
+            assert!(
+                height_of(&tree, node) > before * 1.5,
+                "the box did not grow taller: {before} -> {}",
+                height_of(&tree, node)
+            );
+        }
+
+        #[test]
+        fn a_computed_source_updates_the_text_too() {
+            let _guard = lock_and_reset();
+            with_registry(|_| {});
+            let graph: Arc<Mutex<ReactiveGraph>> = Arc::new(Mutex::new(ReactiveGraph::new()));
+            let source = state_in_graph::<String>(&graph, "x".to_string());
+            let signal = source.signal();
+            let derived = graph
+                .lock()
+                .unwrap()
+                .create_derived(move |g: &ReactiveGraph| {
+                    format!("<{}>", g.get(signal).unwrap_or_default())
+                });
+            let computed = blinc_core::Computed::new(derived, Arc::clone(&graph));
+
+            let (mut tree, node) = build(
+                Text::bound(Reactive::Computed(computed.clone())).no_wrap(),
+                400.0,
+            );
+            // The first read records the dependency, as for any computed binding.
+            let _ = computed.try_get();
+            assert_eq!(shown(&tree, node), "<x>");
+            let _ = crate::stateful::take_pending_partial_prop_updates();
+
+            source.set("wide".to_string());
+            drain(&mut tree);
+
+            assert_eq!(shown(&tree, node), "<wide>");
+        }
+
+        #[test]
+        fn updated_text_is_decoded_like_the_text_it_was_built_with() {
+            let _guard = lock_and_reset();
+            let state = fresh_state::<String>("a &amp; b".to_string());
+            let (mut tree, node) =
+                build(Text::bound(Reactive::Bound(state.clone())).no_wrap(), 400.0);
+            assert_eq!(shown(&tree, node), "a & b", "the built text is decoded");
+
+            state.set("c &lt; d".to_string());
+            drain(&mut tree);
+
+            assert_eq!(shown(&tree, node), "c < d");
+        }
+
+        #[test]
+        fn the_measured_width_the_paint_path_compares_follows_the_content() {
+            let _guard = lock_and_reset();
+            let state = fresh_state::<String>("hi".to_string());
+            let (mut tree, node) = build(Text::bound(Reactive::Bound(state.clone())), 400.0);
+            let measured =
+                |tree: &RenderTree| match &tree.get_render_node(node).unwrap().element_type {
+                    ElementType::Text(t) => t.measured_width,
+                    _ => panic!("not a text node"),
+                };
+            let before = measured(&tree);
+
+            state.set("considerably longer than before".to_string());
+            drain(&mut tree);
+
+            assert!(
+                measured(&tree) > before * 4.0,
+                "measured width stayed at {before}, now {}",
+                measured(&tree)
+            );
+        }
+
+        #[test]
+        fn an_unchanged_value_is_not_applied() {
+            let _guard = lock_and_reset();
+            let state = fresh_state::<String>("same".to_string());
+            let (mut tree, node) = build(Text::bound(Reactive::Bound(state)).no_wrap(), 400.0);
+            assert!(!tree.set_text_content(node, "same".to_string()));
+            assert!(tree.set_text_content(node, "different".to_string()));
+        }
+
+        #[test]
+        fn a_constant_source_stays_a_plain_text() {
+            let _guard = lock_and_reset();
+            let (tree, node) = build(
+                Text::bound(Reactive::Const("fixed".to_string())).no_wrap(),
+                400.0,
+            );
+
+            assert_eq!(
+                with_registry(|r| r.signal_count()),
+                0,
+                "a constant registered a binding"
+            );
+            assert!(
+                tree.layout_tree.text_context(node).is_none(),
+                "a constant non-wrapping text should keep its fixed size, not get a context"
+            );
         }
     }
 }

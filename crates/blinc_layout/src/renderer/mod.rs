@@ -2824,8 +2824,40 @@ impl RenderTree {
                     self.layout_tree.set_style(update.node_id, style);
                 }
             }
+            if let Some(content) = update.text_content {
+                self.set_text_content(update.node_id, content);
+            }
         }
         effects
+    }
+
+    /// Replace the text a text node shows, in place.
+    ///
+    /// The layout node's measure context takes the new content so it is
+    /// measured again, and the node's own text and measured width follow, so
+    /// the paint path wraps and decorates what is now there. False when the
+    /// node is not a text node or the content is unchanged.
+    pub fn set_text_content(&mut self, node_id: LayoutNodeId, content: String) -> bool {
+        let Some(render_node) = self.render_nodes.get_mut(&node_id) else {
+            return false;
+        };
+        let ElementType::Text(text) = &mut render_node.element_type else {
+            return false;
+        };
+        if text.content == content {
+            return false;
+        }
+        text.measured_width = crate::text::measured_content_width(
+            &content,
+            text.font_size,
+            &text.font_family,
+            text.weight,
+            text.italic,
+        );
+        text.content = content.clone();
+        self.layout_tree
+            .update_text(node_id, |context| context.content = content);
+        true
     }
 
     // =========================================================================

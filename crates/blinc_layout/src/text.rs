@@ -23,6 +23,7 @@ use blinc_core::{Color, Shadow, Transform};
 use html_escape::decode_html_entities;
 use taffy::prelude::*;
 
+use crate::binding::{PendingBinding, Reactive, TextPendingBinding};
 use crate::div::{
     ElementBuilder, ElementTypeId, FontFamily, FontWeight, TextAlign, TextRenderInfo,
     TextVerticalAlign,
@@ -90,6 +91,10 @@ pub struct Text {
     semantic_type: Option<&'static str>,
     /// CSS class names for selector matching
     classes: Vec<std::sync::Arc<str>>,
+    /// Signal subscriptions registered against the node when it is built.
+    /// A text with any is measured through a context so its size follows
+    /// its content.
+    pending_bindings: Vec<Box<dyn PendingBinding>>,
 }
 
 impl Text {
@@ -109,12 +114,7 @@ impl Text {
         // nothing it could possibly change. For a UI with hundreds of
         // text labels rebuilt on every state change, this drops one
         // allocation per text element per build.
-        let raw_content = content.into();
-        let decoded_content = if raw_content.contains('&') {
-            decode_html_entities(&raw_content).into_owned()
-        } else {
-            raw_content
-        };
+        let decoded_content = decode_content(content.into());
 
         let mut text = Self {
             content: decoded_content,
@@ -144,9 +144,38 @@ impl Text {
             element_id: None,
             semantic_type: None,
             classes: Vec::new(),
+            pending_bindings: Vec::new(),
         };
         text.update_size_estimate();
         text
+    }
+
+    /// A text element whose content follows a reactive source.
+    ///
+    /// A constant builds a plain text. A signal or computed registers a
+    /// subscription when the element is built, so each change replaces the
+    /// shown text in place and has it measured again, with no rebuild of the
+    /// subtree around it. The text is measured through a context even when it
+    /// does not wrap, so its box follows its content.
+    pub fn bound(source: Reactive<String>) -> Self {
+        match source {
+            Reactive::Const(content) => Self::new(content),
+            Reactive::Bound(state) => {
+                let mut text = Self::new(state.try_get().unwrap_or_default());
+                text.pending_bindings
+                    .push(Box::new(TextPendingBinding::new(state, decode_content)));
+                text
+            }
+            Reactive::Computed(computed) => {
+                let mut text = Self::new(computed.try_get().unwrap_or_default());
+                text.pending_bindings
+                    .push(Box::new(TextPendingBinding::from_computed(
+                        computed,
+                        decode_content,
+                    )));
+                text
+            }
+        }
     }
 
     /// Set the element ID for CSS selector matching and programmatic queries
@@ -468,11 +497,7 @@ impl Text {
     /// Update size using actual text measurement if available, otherwise estimate
     fn update_size_estimate(&mut self) {
         // Use the global text measurer with font family info
-        let mut options = crate::text_measure::TextLayoutOptions::new();
-        options.font_name = self.font_family.name.clone();
-        options.generic_font = self.font_family.generic;
-        options.font_weight = self.weight.weight();
-        options.italic = self.italic;
+        let options = estimate_options(&self.font_family, self.weight, self.italic);
 
         let metrics =
             crate::text_measure::measure_text_with_options(&self.content, self.font_size, &options);
@@ -644,21 +669,33 @@ impl ElementBuilder for Text {
             TextVerticalAlign::Center => None,
         };
 
-        if self.wrap {
+        // Bound text is measured through a context even when it does not
+        // wrap, and without the fixed size an unbound one gets, so the box
+        // follows the content as it changes.
+        let measured = self.wrap || !self.pending_bindings.is_empty();
+        if measured {
             let context = TextMeasureContext {
                 content: self.content.clone(),
                 font_size: self.font_size,
                 line_height: self.line_height,
                 letter_spacing: self.letter_spacing,
-                wrap: true,
+                wrap: self.wrap,
                 font_name: self.font_family.name.clone(),
                 generic_font: self.font_family.generic,
                 font_weight: self.weight.weight(),
                 italic: self.italic,
             };
-            let node = tree.create_text_node(self.style.clone(), context);
+            let mut style = self.style.clone();
+            if !self.wrap {
+                style.size.width = Dimension::auto();
+                style.size.height = Dimension::auto();
+            }
+            let node = tree.create_text_node(style, context);
             if let Some(baseline) = baseline {
                 tree.set_text_baseline(node, baseline);
+            }
+            for binding in &self.pending_bindings {
+                binding.register(node);
             }
             node
         } else {
@@ -763,6 +800,48 @@ impl Text {
             color: [self.color.r, self.color.g, self.color.b, self.color.a],
         }
     }
+}
+
+/// Decode HTML entities in text content, as [`Text::new`] does. Skips the
+/// decoder when there is no `&` it could change.
+pub(crate) fn decode_content(raw: String) -> String {
+    if raw.contains('&') {
+        decode_html_entities(&raw).into_owned()
+    } else {
+        raw
+    }
+}
+
+/// Measuring options for a face, as the size estimate uses them.
+fn estimate_options(
+    family: &FontFamily,
+    weight: FontWeight,
+    italic: bool,
+) -> crate::text_measure::TextLayoutOptions {
+    let mut options = crate::text_measure::TextLayoutOptions::new();
+    options.font_name = family.name.clone();
+    options.generic_font = family.generic;
+    options.font_weight = weight.weight();
+    options.italic = italic;
+    options
+}
+
+/// The width `content` takes on one line in the given face: the
+/// `measured_width` a text element carries, which the paint path compares
+/// against its box to decide whether it has to wrap.
+pub(crate) fn measured_content_width(
+    content: &str,
+    font_size: f32,
+    family: &FontFamily,
+    weight: FontWeight,
+    italic: bool,
+) -> f32 {
+    crate::text_measure::measure_text_with_options(
+        content,
+        font_size,
+        &estimate_options(family, weight, italic),
+    )
+    .width
 }
 
 #[cfg(test)]

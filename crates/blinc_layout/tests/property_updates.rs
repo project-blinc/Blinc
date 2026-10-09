@@ -13,6 +13,7 @@ fn visual(node: LayoutNodeId, opacity: f32) -> PartialPropertyUpdate {
         effects: SideEffects::VISUAL,
         render_write: Some(Box::new(move |p| p.opacity = opacity)),
         layout_write: None,
+        text_content: None,
     }
 }
 
@@ -25,6 +26,7 @@ fn width(node: LayoutNodeId, px: f32) -> PartialPropertyUpdate {
         layout_write: Some(Box::new(move |s| {
             s.size.width = taffy::style_helpers::length(px)
         })),
+        text_content: None,
     }
 }
 
@@ -87,4 +89,28 @@ fn an_update_for_a_node_that_is_gone_is_skipped() {
 
     assert!(effects.needs_layout);
     assert_eq!(tree.get_render_node(node).unwrap().props.opacity, 0.5);
+}
+
+#[test]
+fn a_text_update_replaces_the_text_and_asks_for_layout() {
+    use blinc_layout::text::text;
+
+    let mut tree = RenderTree::from_element(&div().w(200.0).child(text("before").no_wrap()));
+    let root = tree.root().expect("root");
+    let node = tree.layout_tree.children(root)[0];
+
+    let effects = tree.apply_partial_property_updates(vec![PartialPropertyUpdate {
+        node_id: node,
+        property: PropertyId::TextContent,
+        effects: SideEffects::TEXT,
+        render_write: None,
+        layout_write: None,
+        text_content: Some("after, and longer".to_string()),
+    }]);
+
+    assert!(effects.needs_layout && effects.needs_text_remeasure);
+    match &tree.get_render_node(node).unwrap().element_type {
+        blinc_layout::renderer::ElementType::Text(t) => assert_eq!(t.content, "after, and longer"),
+        _ => panic!("not a text node"),
+    }
 }

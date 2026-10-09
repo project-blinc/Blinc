@@ -197,10 +197,10 @@ pub use stateful::{
     has_animating_statefuls, has_pending_partial_prop_updates, has_pending_subtree_rebuilds,
     has_stateful_base_updater, has_visible_animating_statefuls, peek_needs_redraw,
     queue_layout_update_partial, queue_prop_update, queue_prop_update_partial,
-    queue_subtree_rebuild, request_animation_tick, request_redraw, take_animation_tick_request,
-    take_needs_redraw, take_pending_partial_prop_updates, take_pending_subtree_rebuilds,
-    update_stateful_base_props, use_fsm, use_fsm_keyed, use_shared_state, use_shared_state_with,
-    use_state_for, use_state_for_keyed,
+    queue_subtree_rebuild, queue_text_update, request_animation_tick, request_redraw,
+    take_animation_tick_request, take_needs_redraw, take_pending_partial_prop_updates,
+    take_pending_subtree_rebuilds, update_stateful_base_props, use_fsm, use_fsm_keyed,
+    use_shared_state, use_shared_state_with, use_state_for, use_state_for_keyed,
 };
 
 // Animation integration

@@ -419,7 +419,7 @@ pub type RenderPropsWrite = Box<dyn FnOnce(&mut RenderProps) + Send>;
 pub type TaffyStyleWrite = Box<dyn FnOnce(&mut taffy::Style) + Send>;
 
 /// A queued property update — at least one of `render_write` /
-/// `layout_write` must be `Some`. Side-effect metadata tells the drain
+/// `layout_write` / `text_content` must be `Some`. Side-effect metadata tells the drain
 /// step whether to schedule layout / text remeasure / clip work.
 ///
 /// Foundation of the unified property channel
@@ -442,6 +442,9 @@ pub struct PartialPropertyUpdate {
     /// Closure that mutates the live taffy `Style` in place. Present
     /// for Tier-2 layout props; absent for visual-only props.
     pub layout_write: Option<TaffyStyleWrite>,
+    /// New text content for a text node. Updates its measure context and
+    /// the text it draws, and makes the node measure again.
+    pub text_content: Option<String>,
 }
 
 /// Process-global queue of pending property updates. Drained by every
@@ -1042,6 +1045,7 @@ pub fn queue_prop_update_partial<F>(
             effects,
             render_write: Some(Box::new(write)),
             layout_write: None,
+            text_content: None,
         });
     request_redraw();
 }
@@ -1074,6 +1078,32 @@ pub fn queue_layout_update_partial<F>(
             effects,
             render_write: None,
             layout_write: Some(Box::new(write)),
+            text_content: None,
+        });
+    request_redraw();
+}
+
+/// Queue new text content for a text node.
+///
+/// The text counterpart to [`queue_prop_update_partial`] and
+/// [`queue_layout_update_partial`]: the drain replaces the node's content in
+/// place and has it measured again, so a bound label changes without its
+/// subtree being rebuilt.
+pub fn queue_text_update(
+    node_id: LayoutNodeId,
+    property: crate::property::PropertyId,
+    content: String,
+) {
+    PENDING_PARTIAL_PROP_UPDATES
+        .lock()
+        .unwrap()
+        .push(PartialPropertyUpdate {
+            node_id,
+            property,
+            effects: property.side_effects(),
+            render_write: None,
+            layout_write: None,
+            text_content: Some(content),
         });
     request_redraw();
 }
