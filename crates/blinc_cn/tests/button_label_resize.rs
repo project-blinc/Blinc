@@ -245,9 +245,12 @@ fn bound_label_resizes_on_signal_set() {
     // stateful-deps notifier.
     blinc_core::reactive::Signal::<String>::from_id(label.signal_id()).set("Saving...".to_string());
 
-    // Next frame: the refresh queues a subtree rebuild, the host
-    // applies it, then layout runs again on the SAME tree.
+    // Next frame: the host drains both queues, then layout runs again on
+    // the SAME tree. The bound label arrives as a text update; a rebuild is
+    // only queued for what needs one.
     let applied = tree.process_pending_subtree_rebuilds();
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    tree.apply_partial_property_updates(updates);
     tree.apply_stylesheet_layout_overrides();
     tree.compute_layout(800.0, 200.0);
     let after = width(&tree);
@@ -302,6 +305,8 @@ fn bound_label_shrinks_on_signal_set() {
     blinc_core::reactive::Signal::<String>::from_id(label.signal_id())
         .set("Close Menu".to_string());
     tree.process_pending_subtree_rebuilds();
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    tree.apply_partial_property_updates(updates);
     tree.apply_stylesheet_layout_overrides();
     tree.compute_layout(800.0, 200.0);
     let short = width(&tree);
@@ -373,5 +378,120 @@ fn parent_stateful_swapping_button_labels_resizes() {
     assert!(
         opened < closed,
         "the trigger must narrow when its label shortens: {closed} -> {opened}"
+    );
+}
+
+/// The text of the first text node in the tree, which is the button's label.
+fn label_text(tree: &blinc_layout::renderer::RenderTree) -> String {
+    let mut stack = vec![tree.root().expect("root")];
+    while let Some(id) = stack.pop() {
+        if let Some(node) = tree.get_render_node(id)
+            && let blinc_layout::renderer::ElementType::Text(t) = &node.element_type
+        {
+            return t.content.clone();
+        }
+        stack.extend(tree.layout_tree.children(id).into_iter().rev());
+    }
+    panic!("no text node");
+}
+
+/// The label is a bound text inside content that a bound `disabled` rebuilds.
+/// After the button has been through rebuilds the label must still follow its
+/// signal, and the rebuilds must not leave subscriptions behind.
+#[test]
+fn a_bound_label_still_follows_after_the_button_rebuilds() {
+    let _guard = rebuild_lock();
+    use blinc_core::reactive::State;
+    init();
+
+    static NOTIFIER: std::sync::Once = std::sync::Once::new();
+    NOTIFIER.call_once(|| {
+        blinc_core::reactive::set_stateful_deps_notifier(|ids| {
+            blinc_layout::check_stateful_deps(ids);
+        });
+    });
+
+    let label = State::new(
+        blinc_core::reactive::signal::<String>("Save".to_string()),
+        blinc_core::reactive::global_graph(),
+        blinc_core::reactive::global_dirty_flag(),
+    );
+    let disabled = State::new(
+        blinc_core::reactive::signal::<bool>(false),
+        blinc_core::reactive::global_graph(),
+        blinc_core::reactive::global_dirty_flag(),
+    );
+
+    let host = div()
+        .w(800.0)
+        .h(200.0)
+        .child(button(&label).disabled(&disabled));
+    let mut tree = blinc_layout::renderer::RenderTree::from_element(&host);
+    tree.compute_layout(800.0, 200.0);
+    let frame = |tree: &mut blinc_layout::renderer::RenderTree| {
+        tree.process_pending_subtree_rebuilds();
+        let updates = blinc_layout::take_pending_partial_prop_updates();
+        tree.apply_partial_property_updates(updates);
+        tree.compute_layout(800.0, 200.0);
+    };
+
+    let subscribers =
+        || blinc_layout::binding::with_registry(|r| r.subscriber_count(label.signal_id()));
+    let first = subscribers();
+    assert!(first >= 1, "the bound label registered nothing");
+
+    for _ in 0..4 {
+        let now = !disabled.get();
+        blinc_core::reactive::Signal::<bool>::from_id(disabled.signal_id()).set(now);
+        assert!(
+            blinc_layout::stateful::has_pending_subtree_rebuilds(),
+            "toggling disabled queued no rebuild"
+        );
+        frame(&mut tree);
+    }
+    assert_eq!(
+        subscribers(),
+        first,
+        "rebuilds left label subscriptions behind"
+    );
+
+    blinc_core::reactive::Signal::<String>::from_id(label.signal_id()).set("Changed".to_string());
+    frame(&mut tree);
+    assert_eq!(
+        label_text(&tree),
+        "Changed",
+        "the label stopped following after rebuilds"
+    );
+}
+
+/// Changing a bound label rebuilds nothing: the text is patched in place.
+#[test]
+fn a_bound_label_change_queues_no_rebuild() {
+    let _guard = rebuild_lock();
+    use blinc_core::reactive::State;
+    init();
+
+    static NOTIFIER: std::sync::Once = std::sync::Once::new();
+    NOTIFIER.call_once(|| {
+        blinc_core::reactive::set_stateful_deps_notifier(|ids| {
+            blinc_layout::check_stateful_deps(ids);
+        });
+    });
+
+    let label = State::new(
+        blinc_core::reactive::signal::<String>("Save".to_string()),
+        blinc_core::reactive::global_graph(),
+        blinc_core::reactive::global_dirty_flag(),
+    );
+    let host = div().w(800.0).h(200.0).child(button(&label));
+    let mut tree = blinc_layout::renderer::RenderTree::from_element(&host);
+    tree.compute_layout(800.0, 200.0);
+    let _ = blinc_layout::stateful::take_pending_subtree_rebuilds();
+
+    blinc_core::reactive::Signal::<String>::from_id(label.signal_id()).set("Saving...".to_string());
+
+    assert!(
+        !blinc_layout::stateful::has_pending_subtree_rebuilds(),
+        "changing the label queued a rebuild of the button"
     );
 }

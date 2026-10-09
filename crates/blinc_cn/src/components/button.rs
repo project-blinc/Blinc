@@ -32,6 +32,7 @@ use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::ElementBuilder;
 use blinc_layout::prelude::*;
 use blinc_layout::stateful::{ButtonState, SharedState, use_fsm_keyed};
+use blinc_layout::text::Text;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::button as layout_button;
 use blinc_theme::{ColorToken, ThemeState};
@@ -398,13 +399,10 @@ impl Button {
         // Content closure — returns ONLY the text/icon content.
         // The layout button handles bg, rounded, padding, etc.
         let label = current(&config.label);
-        let label_dep = dep_signal(&config.label);
-        // The state callback re-reads the label rather than closing over
-        // this snapshot. A `deps()` notification refreshes the existing
-        // Stateful in place -- the tree is not rebuilt -- so a captured
-        // String would keep rendering the build-time text and the
-        // container would keep measuring it. The snapshot above stays
-        // for the structural icon-only decision, which cannot change
+        // The label text follows its source in place: the state callback
+        // builds it as a bound text, so a change patches that one node and
+        // the button measures it again, with no rebuild. The snapshot above
+        // is for the structural icon-only decision, which cannot change
         // without a rebuild anyway.
         let label_src = clone_reactive(&config.label);
         let icon = config.icon.clone();
@@ -477,8 +475,7 @@ impl Button {
                 }
             } else {
                 // With label: use content wrapper for flex_row layout
-                let label = current(&label_src);
-                let label_text = text(&label)
+                let label_text = Text::bound(clone_reactive(&label_src))
                     .size(font_size)
                     .color(fg)
                     .no_wrap()
@@ -560,8 +557,9 @@ impl Button {
 
         // A bound `disabled` rebuilds the subtree: the value picks
         // different backgrounds, borders, shadows and FSM start state,
-        // none of which a single property write can express.
-        let deps: Vec<_> = [disabled_dep, label_dep].into_iter().flatten().collect();
+        // none of which a single property write can express. The label is
+        // not here: it is a bound text and needs no rebuild.
+        let deps: Vec<_> = [disabled_dep].into_iter().flatten().collect();
         if !deps.is_empty() {
             btn = btn.deps(&deps);
         }
@@ -797,7 +795,7 @@ mod reactive_disabled_tests {
     }
 
     #[test]
-    fn bound_label_produces_rebuild_dep() {
+    fn a_bound_label_exposes_its_signal() {
         let graph = Arc::new(Mutex::new(blinc_core::reactive::ReactiveGraph::new()));
         let signal = graph.lock().unwrap().create_signal(String::from("Save"));
         let state =
