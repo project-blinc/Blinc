@@ -955,7 +955,7 @@ impl ReactiveGraph {
     // ---------------------------------------------------------------------
 
     /// Create an effect with no Rust body. It starts due, like any effect.
-    /// [`Self::flush_effects`] never runs it: it is handed out by
+    /// A flush never runs it: it is handed out by
     /// [`Self::take_due_host_effects`] instead.
     pub fn create_host_effect(&mut self) -> Effect {
         let id = self.effects.insert(EffectNode {
