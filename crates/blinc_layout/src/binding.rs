@@ -2376,4 +2376,157 @@ mod tests {
             );
         }
     }
+
+    // ---------------------------------------------------------------------
+    // Display bindings
+    // ---------------------------------------------------------------------
+
+    mod show_when {
+        use super::*;
+        use crate::div::{Div, div};
+        use crate::renderer::RenderTree;
+        use taffy::Display;
+
+        /// A tree with `element` as the only child of a fixed box, and that
+        /// child's node.
+        fn build(element: Div) -> (RenderTree, LayoutNodeId) {
+            let mut tree = RenderTree::from_element(&div().w(200.0).h(100.0).child(element));
+            tree.compute_layout(200.0, 100.0);
+            let root = tree.root().expect("root");
+            let node = tree.layout_tree.children(root)[0];
+            (tree, node)
+        }
+
+        /// Apply what the signals queued, as a runner does, and lay out.
+        fn drain(tree: &mut RenderTree) {
+            let updates = crate::stateful::take_pending_partial_prop_updates();
+            tree.apply_partial_property_updates(updates);
+            tree.compute_layout(200.0, 100.0);
+        }
+
+        fn display(tree: &RenderTree, node: LayoutNodeId) -> Display {
+            tree.layout_tree.get_style(node).expect("style").display
+        }
+
+        fn width(tree: &RenderTree, node: LayoutNodeId) -> f32 {
+            tree.get_absolute_bounds(node).expect("laid out").width
+        }
+
+        fn content() -> Div {
+            div().child(div().w(50.0).h(20.0))
+        }
+
+        #[test]
+        fn a_constant_decides_the_display_at_build() {
+            let _guard = lock_and_reset();
+            let (_, hidden) = build(content().show_when(false));
+            let (tree, shown) = build(content().show_when(true));
+            assert_eq!(display(&tree, shown), Display::Flex);
+            let (tree, hidden_node) = build(content().show_when(false));
+            assert_eq!(display(&tree, hidden_node), Display::None);
+            let _ = hidden;
+            assert_eq!(
+                with_registry(|r| r.signal_count()),
+                0,
+                "a constant registered a binding"
+            );
+        }
+
+        #[test]
+        fn a_signal_flips_the_display_in_place() {
+            let _guard = lock_and_reset();
+            let visible = fresh_state::<bool>(true);
+            let (mut tree, node) = build(content().w_fit().show_when(&visible));
+            assert!(width(&tree, node) > 0.0, "sanity: shown at build");
+
+            visible.set(false);
+            drain(&mut tree);
+            assert_eq!(display(&tree, node), Display::None);
+            assert_eq!(
+                width(&tree, node),
+                0.0,
+                "a hidden element still takes space"
+            );
+
+            visible.set(true);
+            drain(&mut tree);
+            assert_eq!(display(&tree, node), Display::Flex);
+            assert!(width(&tree, node) > 0.0, "it did not come back");
+
+            let root = tree.root().unwrap();
+            assert_eq!(
+                tree.layout_tree.children(root)[0],
+                node,
+                "the node was replaced"
+            );
+        }
+
+        #[test]
+        fn a_false_signal_builds_hidden() {
+            let _guard = lock_and_reset();
+            let visible = fresh_state::<bool>(false);
+            let (mut tree, node) = build(content().show_when(&visible));
+            assert_eq!(display(&tree, node), Display::None);
+
+            visible.set(true);
+            drain(&mut tree);
+            assert_eq!(display(&tree, node), Display::Flex);
+        }
+
+        #[test]
+        fn it_comes_back_as_the_display_it_was_built_with_whatever_the_call_order() {
+            let _guard = lock_and_reset();
+            for grid_first in [true, false] {
+                let visible = fresh_state::<bool>(true);
+                let element = if grid_first {
+                    content().grid().show_when(&visible)
+                } else {
+                    content().show_when(&visible).grid()
+                };
+                let (mut tree, node) = build(element);
+                assert_eq!(display(&tree, node), Display::Grid);
+
+                visible.set(false);
+                drain(&mut tree);
+                visible.set(true);
+                drain(&mut tree);
+                assert_eq!(
+                    display(&tree, node),
+                    Display::Grid,
+                    "grid_first = {grid_first}: it came back as the wrong display"
+                );
+            }
+        }
+
+        #[test]
+        fn a_later_layout_method_does_not_undo_a_hide() {
+            let _guard = lock_and_reset();
+            let (tree, node) = build(content().show_when(false).flex_row());
+            assert_eq!(display(&tree, node), Display::None);
+        }
+
+        #[test]
+        fn a_computed_source_flips_it_too() {
+            let _guard = lock_and_reset();
+            with_registry(|_| {});
+            let graph: Arc<Mutex<ReactiveGraph>> = Arc::new(Mutex::new(ReactiveGraph::new()));
+            let count = state_in_graph::<i32>(&graph, 0);
+            let signal = count.signal();
+            let derived = graph
+                .lock()
+                .unwrap()
+                .create_derived(move |g: &ReactiveGraph| g.get(signal).unwrap_or(0) > 0);
+            let computed = blinc_core::Computed::new(derived, Arc::clone(&graph));
+
+            let (mut tree, node) = build(content().show_when(&computed));
+            // The first read records the dependency, as for any computed binding.
+            let _ = computed.try_get();
+            assert_eq!(display(&tree, node), Display::None);
+            let _ = crate::stateful::take_pending_partial_prop_updates();
+
+            count.set(3);
+            drain(&mut tree);
+            assert_eq!(display(&tree, node), Display::Flex);
+        }
+    }
 }
