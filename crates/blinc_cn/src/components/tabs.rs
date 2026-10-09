@@ -66,19 +66,20 @@ use std::cell::OnceCell;
 use std::sync::Arc;
 
 use blinc_animation::{AnimationPreset, MultiKeyframeAnimation};
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_core::{Color, State};
 use blinc_layout::div::ElementTypeId;
 // For query_motion to trigger suspended animations
 use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::motion::motion_derived;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, NoState, stateful_with_key};
+use blinc_layout::stateful::{NoState, stateful_with_key};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorScheme, ColorToken, RadiusToken, ThemeState};
 
-use blinc_layout::InstanceKey;
 use blinc_layout::selector::query_motion;
 use blinc_layout::stateful::request_redraw;
+use blinc_layout::{InstanceKey, Interaction};
 
 // =============================================================================
 // Tab Transition Tracking (simple cross-fade)
@@ -601,45 +602,34 @@ impl TabsBuilder {
         let trigger_key = self.key.derive("tab_triggers");
         // Create motion base key for triggering animations from tab buttons (already a String)
         let motion_base_key_str = self.key.derive("motion");
-        let button_area_key = self.key.derive("button_area");
 
-        let tab_button_area = stateful_with_key::<NoState>(&button_area_key)
-            .deps([config.state.signal_id()])
-            .on_state(move |_ctx| {
-                let active_value = state_for_buttons.get();
+        // The strip is built once. Each trigger follows the selected tab, so
+        // a change patches the triggers instead of rebuilding the strip.
+        let mut tab_button_area = div()
+            .class("cn-tabs-list")
+            .w_full()
+            .flex_row()
+            .items_center();
 
-                let mut buttons = div()
-                    .class("cn-tabs-list")
-                    .w_full()
-                    .flex_row()
-                    .items_center();
+        for tab in tabs_for_buttons.iter() {
+            let value = tab.menu_item.value();
 
-                for tab in tabs_for_buttons.iter() {
-                    let is_active = tab.menu_item.value() == active_value;
-                    let value = tab.menu_item.value();
+            // Build motion key for this tab's content
+            let tab_motion_key = if transition != TabsTransition::None {
+                Some(format!("{}:{}", motion_base_key_str, value))
+            } else {
+                None
+            };
 
-                    // Build motion key for this tab's content
-                    let tab_motion_key = if transition != TabsTransition::None {
-                        Some(format!("{}:{}", motion_base_key_str, value))
-                    } else {
-                        None
-                    };
-
-                    let tab_trigger = build_tab_trigger(
-                        &trigger_key,
-                        &tab.menu_item,
-                        is_active,
-                        size,
-                        state_for_buttons.clone(),
-                        on_change.clone(),
-                        tab_motion_key,
-                    );
-
-                    buttons = buttons.child(tab_trigger);
-                }
-
-                buttons
-            });
+            tab_button_area = tab_button_area.child(build_tab_trigger(
+                &trigger_key,
+                &tab.menu_item,
+                size,
+                state_for_buttons.clone(),
+                on_change.clone(),
+                tab_motion_key,
+            ));
+        }
 
         // ========================================
         // Container 2: Tab Content Area
@@ -762,124 +752,134 @@ impl TabsBuilder {
     }
 }
 
-/// Build a simple tab trigger without nested Stateful (no hover effects)
+/// Build a tab trigger. Its colour, weight and active class follow the
+/// selected tab and the pointer, in place.
 #[allow(clippy::type_complexity)]
 fn build_tab_trigger(
     trigger_key: &str,
     menu_item: &TabMenuItem,
-    is_active: bool,
     size: TabsSize,
     tab_state: State<String>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
     motion_key: Option<String>,
-) -> impl ElementBuilder + use<> {
+) -> Div {
     let theme = ThemeState::get();
     let text_primary = theme.color(ColorToken::TextPrimary);
     let text_secondary = theme.color(ColorToken::TextSecondary);
     let value = menu_item.value.clone();
     let disabled = menu_item.disabled;
 
-    // Clone menu_item data for closure
     let icon_svg = menu_item.icon.clone();
     let label_text = menu_item.label.clone();
     let badge_text = menu_item.badge.clone();
-    let trigger_state_key = format!("{}:{}", trigger_key, value);
 
-    let mut trigger = stateful_with_key::<ButtonState>(&trigger_state_key).on_state(move |ctx| {
-        let state = ctx.state();
-        let theme = ThemeState::get();
-
-        // Determine colors based on active and hover state
-        let is_hovered = matches!(state, ButtonState::Hovered | ButtonState::Pressed);
-
-        let text_color = if disabled {
-            text_secondary.with_alpha(0.5)
-        } else if is_active {
-            text_primary
-        } else if is_hovered {
-            text_primary.with_alpha(0.8)
-        } else {
-            text_secondary
-        };
-
-        // Build content
-        // `gap_px`, not `gap`: a spacing token is already pixels, while
-        // `gap` takes 4px units and would space these four times apart.
-        let mut content = div()
-            .flex_row()
-            .items_center()
-            .gap_px(theme.spacing().space_2);
-
-        // Add icon if present
-        if let Some(ref icon) = icon_svg {
-            content = content.child(
-                svg(icon)
-                    .size(size.icon_size(), size.icon_size())
-                    .color(text_color),
-            );
-        }
-
-        // Add label if present
-        if let Some(ref label) = label_text {
-            content = content.child(
-                text(label)
-                    .size(size.font_size())
-                    .color(text_color)
-                    .weight(if is_active {
-                        FontWeight::Medium
-                    } else {
-                        FontWeight::Normal
-                    })
-                    .no_cursor(),
-            );
-        }
-
-        // Add badge if present. The shared widget rather than a pill of
-        // its own, so a count in a tab reads like a count anywhere else.
-        if let Some(ref badge_label) = badge_text {
-            content = content.child(
-                crate::components::badge::badge(badge_label)
-                    .variant(crate::components::badge::BadgeVariant::Default),
-            );
-        }
-
-        // Determine size CSS class for trigger
-        let trigger_size_class = match size {
-            TabsSize::Small => "cn-tabs-trigger--sm",
-            TabsSize::Medium => "cn-tabs-trigger--md",
-            TabsSize::Large => "cn-tabs-trigger--lg",
-        };
-
-        let mut trigger_div = div()
-            .class("cn-tabs-trigger")
-            .class(trigger_size_class)
-            .flex_row()
-            .items_center()
-            .justify_center()
-            .cursor(if disabled {
-                CursorStyle::Default
+    let interaction = Interaction::keyed(&format!("{}:{}", trigger_key, value));
+    let (selected, hovered) = (tab_state.signal(), interaction.hovered().signal());
+    // Each reads the selected tab itself, so each is woken by it.
+    let is_selected = move |g: &ReactiveGraph, selected_value: &str| {
+        g.get(selected).unwrap_or_default() == selected_value
+    };
+    // The active class is for a tab that can be used.
+    let is_active = {
+        let value = value.clone();
+        computed(move |g: &ReactiveGraph| !disabled && is_selected(g, &value))
+    };
+    let text_color = {
+        let value = value.clone();
+        computed(move |g: &ReactiveGraph| {
+            if disabled {
+                text_secondary.with_alpha(0.5)
+            } else if is_selected(g, &value) {
+                text_primary
+            } else if g.get(hovered).unwrap_or(false) {
+                text_primary.with_alpha(0.8)
             } else {
-                CursorStyle::Pointer
-            })
-            .child(content);
+                text_secondary
+            }
+        })
+    };
+    let weight = {
+        let value = value.clone();
+        computed(move |g: &ReactiveGraph| {
+            if is_selected(g, &value) {
+                FontWeight::Medium
+            } else {
+                FontWeight::Normal
+            }
+        })
+    };
 
-        // Add active class for active tab
-        if is_active && !disabled {
-            trigger_div = trigger_div.class("cn-tabs-trigger--active");
-        }
+    // Build content
+    // `gap_px`, not `gap`: a spacing token is already pixels, while
+    // `gap` takes 4px units and would space these four times apart.
+    let mut content = div()
+        .flex_row()
+        .items_center()
+        .gap_px(theme.spacing().space_2);
 
-        // Add disabled class
-        if disabled {
-            trigger_div = trigger_div.class("cn-tabs-trigger--disabled");
-        }
+    // Add icon if present
+    if let Some(ref icon) = icon_svg {
+        content = content.child(
+            svg(icon)
+                .size(size.icon_size(), size.icon_size())
+                .color(&text_color),
+        );
+    }
 
-        trigger_div
-    });
+    // Add label if present
+    if let Some(ref label) = label_text {
+        content = content.child(
+            text(label)
+                .size(size.font_size())
+                .color(&text_color)
+                .weight(&weight)
+                .no_cursor(),
+        );
+    }
 
-    // Add click handler if not disabled and not active
-    if !disabled && !is_active {
+    // Add badge if present. The shared widget rather than a pill of
+    // its own, so a count in a tab reads like a count anywhere else.
+    if let Some(ref badge_label) = badge_text {
+        content = content.child(
+            crate::components::badge::badge(badge_label)
+                .variant(crate::components::badge::BadgeVariant::Default),
+        );
+    }
+
+    // Determine size CSS class for trigger
+    let trigger_size_class = match size {
+        TabsSize::Small => "cn-tabs-trigger--sm",
+        TabsSize::Medium => "cn-tabs-trigger--md",
+        TabsSize::Large => "cn-tabs-trigger--lg",
+    };
+
+    let mut trigger = div()
+        .class("cn-tabs-trigger")
+        .class(trigger_size_class)
+        .class_when("cn-tabs-trigger--active", &is_active)
+        .flex_row()
+        .items_center()
+        .justify_center()
+        .cursor(if disabled {
+            CursorStyle::Default
+        } else {
+            CursorStyle::Pointer
+        })
+        .track(&interaction)
+        .child(content);
+
+    // Add disabled class
+    if disabled {
+        trigger = trigger.class("cn-tabs-trigger--disabled");
+    }
+
+    // Clicking the tab that is already selected does nothing.
+    if !disabled {
         let value_for_click = value.clone();
         trigger = trigger.on_click(move |_| {
+            if tab_state.get() == value_for_click {
+                return;
+            }
             // Start the motion animation for the new tab content
             if let Some(ref mk) = motion_key {
                 let full_motion_key = format!("motion:{}:child:0", mk);

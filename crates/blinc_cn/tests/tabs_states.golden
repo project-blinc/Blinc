@@ -1,0 +1,291 @@
+######## three tabs
+== idle
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Alpha" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+      text "Beta" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Gamma" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+weights: ["Medium", "Normal", "Normal"]
+== hover
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Alpha" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+      text "Beta" color 0.925,0.933,0.957,0.800 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Gamma" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+weights: ["Medium", "Normal", "Normal"]
+== pressed
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Alpha" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+      text "Beta" color 0.925,0.933,0.957,0.800 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Gamma" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+weights: ["Medium", "Normal", "Normal"]
+== released
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Gamma" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+weights: ["Normal", "Medium", "Normal"]
+== left
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Gamma" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+weights: ["Normal", "Medium", "Normal"]
+== hover again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Gamma" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+weights: ["Normal", "Medium", "Normal"]
+== pressed again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Gamma" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+weights: ["Normal", "Medium", "Normal"]
+== released again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 30.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+      text "Gamma" color 0.678,0.702,0.761,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+weights: ["Normal", "Medium", "Normal"]
+######## icons, a badge, a disabled tab, small
+== idle
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+      svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+      text "Alpha" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+      text "Beta" color 0.678,0.702,0.761,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 28.0x15.0
+      div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+        text "3" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+      text "Gamma" color 0.678,0.702,0.761,0.500 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+weights: ["Medium", "Normal", "Medium", "Normal"]
+== hover
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+      svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+      text "Alpha" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+      text "Beta" color 0.925,0.933,0.957,0.800 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 28.0x15.0
+      div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+        text "3" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+      text "Gamma" color 0.678,0.702,0.761,0.500 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+weights: ["Medium", "Normal", "Medium", "Normal"]
+== pressed
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+      svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+      text "Alpha" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+      text "Beta" color 0.925,0.933,0.957,0.800 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 28.0x15.0
+      div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+        text "3" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+      text "Gamma" color 0.678,0.702,0.761,0.500 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+weights: ["Medium", "Normal", "Medium", "Normal"]
+== released
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+      svg tint 0.678,0.702,0.761,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 28.0x15.0
+      div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+        text "3" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+      text "Gamma" color 0.678,0.702,0.761,0.500 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+weights: ["Normal", "Medium", "Medium", "Normal"]
+== left
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+      svg tint 0.678,0.702,0.761,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 28.0x15.0
+      div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+        text "3" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+      text "Gamma" color 0.678,0.702,0.761,0.500 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+weights: ["Normal", "Medium", "Medium", "Normal"]
+== hover again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+      svg tint 0.678,0.702,0.761,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 28.0x15.0
+      div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+        text "3" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+      text "Gamma" color 0.678,0.702,0.761,0.500 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+weights: ["Normal", "Medium", "Medium", "Normal"]
+== pressed again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+      svg tint 0.678,0.702,0.761,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 28.0x15.0
+      div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+        text "3" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+      text "Gamma" color 0.678,0.702,0.761,0.500 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+weights: ["Normal", "Medium", "Medium", "Normal"]
+== released again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 58.0x15.0
+      svg tint 0.678,0.702,0.761,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x17.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 28.0x15.0
+      div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+        text "3" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 8.0x17.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+      text "Gamma" color 0.678,0.702,0.761,0.500 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 36.0x15.0
+weights: ["Normal", "Medium", "Medium", "Normal"]
+######## large
+== idle
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+      text "Alpha" color 0.925,0.933,0.957,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+      text "Beta" color 0.678,0.702,0.761,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+weights: ["Medium", "Normal"]
+== hover
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+      text "Alpha" color 0.925,0.933,0.957,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+      text "Beta" color 0.925,0.933,0.957,0.800 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+weights: ["Medium", "Normal"]
+== pressed
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+      text "Alpha" color 0.925,0.933,0.957,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+      text "Beta" color 0.925,0.933,0.957,0.800 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+weights: ["Medium", "Normal"]
+== released
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+weights: ["Normal", "Medium"]
+== left
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+weights: ["Normal", "Medium"]
+== hover again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+weights: ["Normal", "Medium"]
+== pressed again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+weights: ["Normal", "Medium"]
+== released again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+      text "Alpha" color 0.678,0.702,0.761,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 44.0x19.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+      text "Beta" color 0.925,0.933,0.957,1.000 size 16.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x19.0
+weights: ["Normal", "Medium"]
