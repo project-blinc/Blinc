@@ -679,6 +679,36 @@ impl Div {
         self
     }
 
+    /// Give the element `name` as a class while `condition` holds.
+    ///
+    /// With a `State<bool>` or a `Computed<bool>` the class comes and goes in
+    /// place: the stylesheet's rules for it apply when it is added and stop
+    /// applying when it is removed, with no rebuild of the subtree. A constant
+    /// is the same as [`Self::class`] or nothing.
+    ///
+    /// The rules that change are the ones whose subject is this element. A
+    /// rule about another element that depends on this class (a descendant or
+    /// sibling selector) waits for the next full style pass.
+    pub fn class_when(
+        mut self,
+        name: impl AsRef<str>,
+        condition: impl crate::binding::IntoReactive<bool>,
+    ) -> Self {
+        use crate::binding::{ClassPendingBinding, Reactive};
+        let name = blinc_core::intern::intern(name.as_ref());
+        match condition.into_reactive() {
+            Reactive::Const(true) => self.classes.push(name),
+            Reactive::Const(false) => {}
+            Reactive::Bound(state) => self
+                .pending_bindings
+                .push(Box::new(ClassPendingBinding::new(state, name))),
+            Reactive::Computed(computed) => self
+                .pending_bindings
+                .push(Box::new(ClassPendingBinding::from_computed(computed, name))),
+        }
+        self
+    }
+
     /// Get the element's class list
     pub fn classes(&self) -> &[std::sync::Arc<str>] {
         &self.classes

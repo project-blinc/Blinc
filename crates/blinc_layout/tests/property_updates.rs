@@ -15,6 +15,7 @@ fn visual(node: LayoutNodeId, opacity: f32) -> PartialPropertyUpdate {
         beneath_write: None,
         layout_write: None,
         text_content: None,
+        class_toggle: None,
     }
 }
 
@@ -29,6 +30,7 @@ fn width(node: LayoutNodeId, px: f32) -> PartialPropertyUpdate {
             s.size.width = taffy::style_helpers::length(px)
         })),
         text_content: None,
+        class_toggle: None,
     }
 }
 
@@ -109,6 +111,7 @@ fn a_text_update_replaces_the_text_and_asks_for_layout() {
         beneath_write: None,
         layout_write: None,
         text_content: Some("after, and longer".to_string()),
+        class_toggle: None,
     }]);
 
     assert!(effects.needs_layout && effects.needs_text_remeasure);

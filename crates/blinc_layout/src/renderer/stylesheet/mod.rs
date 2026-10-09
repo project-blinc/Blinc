@@ -31,6 +31,7 @@
 
 pub mod apply;
 pub mod base;
+pub mod classes;
 pub mod layout;
 pub mod selectors;
 pub mod state;

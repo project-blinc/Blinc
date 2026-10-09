@@ -456,6 +456,9 @@ pub struct PartialPropertyUpdate {
     /// New text content for a text node. Updates its measure context and
     /// the text it draws, and makes the node measure again.
     pub text_content: Option<String>,
+    /// A class the node gains (`true`) or loses (`false`), which has the
+    /// stylesheet's rules for it apply or stop applying.
+    pub class_toggle: Option<(std::sync::Arc<str>, bool)>,
 }
 
 /// Process-global queue of pending property updates. Drained by every
@@ -1058,6 +1061,7 @@ pub fn queue_prop_update_partial<F>(
             beneath_write: None,
             layout_write: None,
             text_content: None,
+            class_toggle: None,
         });
     request_redraw();
 }
@@ -1086,6 +1090,7 @@ pub(crate) fn queue_prop_update_partial_beneath<F, G>(
             beneath_write: Some(BeneathWrite::Render(Box::new(beneath))),
             layout_write: None,
             text_content: None,
+            class_toggle: None,
         });
     request_redraw();
 }
@@ -1120,6 +1125,7 @@ pub fn queue_layout_update_partial<F>(
             beneath_write: None,
             layout_write: Some(Box::new(write)),
             text_content: None,
+            class_toggle: None,
         });
     request_redraw();
 }
@@ -1148,6 +1154,7 @@ pub(crate) fn queue_layout_update_partial_beneath<F, G>(
             beneath_write: Some(BeneathWrite::Layout(Box::new(beneath))),
             layout_write: Some(Box::new(write)),
             text_content: None,
+            class_toggle: None,
         });
     request_redraw();
 }
@@ -1174,6 +1181,26 @@ pub fn queue_text_update(
             beneath_write: None,
             layout_write: None,
             text_content: Some(content),
+            class_toggle: None,
+        });
+    request_redraw();
+}
+
+/// Queue a class a node gains or loses. The drain restyles the node from the
+/// stylesheet, in place.
+pub fn queue_class_toggle(node_id: LayoutNodeId, class: std::sync::Arc<str>, on: bool) {
+    PENDING_PARTIAL_PROP_UPDATES
+        .lock()
+        .unwrap()
+        .push(PartialPropertyUpdate {
+            node_id,
+            property: crate::property::PropertyId::Class,
+            effects: crate::property::PropertyId::Class.side_effects(),
+            render_write: None,
+            beneath_write: None,
+            layout_write: None,
+            text_content: None,
+            class_toggle: Some((class, on)),
         });
     request_redraw();
 }

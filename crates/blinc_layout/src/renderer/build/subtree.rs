@@ -235,6 +235,7 @@ impl RenderTree {
         // Remove CSS state tracking data (prevents accumulation across rebuilds)
         self.base_styles.remove(&node_id);
         self.state_layers.remove(&node_id);
+        self.dynamic_classes.remove(&node_id);
         self.base_taffy_styles.remove(&node_id);
         self.node_hashes.remove(&node_id);
         self.layout_bounds_storages.remove(&node_id);
@@ -464,6 +465,7 @@ impl RenderTree {
                 }
                 self.base_styles.remove(&rebuild.parent_id);
                 self.state_layers.remove(&rebuild.parent_id);
+                self.dynamic_classes.remove(&rebuild.parent_id);
                 // Also update the taffy layout style (width, height, padding, etc.)
                 if let Some(style) = rebuild.new_child.layout_style() {
                     self.layout_tree.set_style(rebuild.parent_id, style.clone());
@@ -740,6 +742,7 @@ impl RenderTree {
                 if classes_changed {
                     self.base_styles.remove(child_id);
                     self.state_layers.remove(child_id);
+                    self.dynamic_classes.remove(child_id);
                 }
 
                 // Recursively update grandchildren

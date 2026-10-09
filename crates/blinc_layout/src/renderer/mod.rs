@@ -861,6 +861,8 @@ pub struct RenderTree {
     /// write made while one holds is put back under it, so the rule keeps
     /// winning and the written value is what the node returns to.
     state_layers: HashMap<LayoutNodeId, Vec<crate::element_style::ElementStyle>>,
+    /// Classes that follow a signal, and the rules applied for them.
+    dynamic_classes: HashMap<LayoutNodeId, stylesheet::classes::DynamicClasses>,
     /// Base taffy layout styles for elements (before state modifiers)
     /// Used to restore original layout when state changes affect layout properties
     base_taffy_styles: HashMap<LayoutNodeId, taffy::Style>,
@@ -1046,6 +1048,7 @@ impl RenderTree {
             state_style_table: RefCell::new(crate::state_style_table::StateStyleTable::empty()),
             base_styles: HashMap::new(),
             state_layers: HashMap::new(),
+            dynamic_classes: HashMap::new(),
             base_taffy_styles: HashMap::new(),
             layout_animation_configs: HashMap::new(),
             layout_animations: HashMap::new(),
@@ -2922,6 +2925,9 @@ impl RenderTree {
                     write(&mut style);
                     self.layout_tree.set_style(update.node_id, style);
                 }
+            }
+            if let Some((class, on)) = update.class_toggle {
+                self.set_dynamic_class(update.node_id, class, on);
             }
             if let Some(beneath) = update.beneath_write {
                 self.write_beneath_state_layers(update.node_id, beneath);

@@ -171,6 +171,9 @@ impl RenderTree {
             }
         }
 
+        // Classes that follow a signal take the rules they match now.
+        self.sync_dynamic_classes();
+
         // Update Stateful base_render_props with CSS-applied values.
         // This ensures that state changes (hover, press) start from CSS-enhanced
         // base props, preserving CSS overrides like border-radius across state changes.
@@ -501,6 +504,9 @@ impl RenderTree {
                 }
             }
         }
+
+        // Classes that follow a signal take the rules they match now.
+        self.sync_dynamic_classes();
 
         // Propagate inherited text properties (color, text-decoration,
         // etc.) down the rebuilt subtree, seeded from what the subtree's

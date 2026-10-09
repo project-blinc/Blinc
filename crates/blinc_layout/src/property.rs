@@ -70,6 +70,9 @@ pub enum PropertyId {
     TextAlign,
     TextContent,
 
+    // ── membership of a class, which restyles from the stylesheet ────
+    Class,
+
     // ── catch-all for compound mutations ─────────────────────────────
     /// Used by full `RenderProps` replacements where the diff isn't
     /// property-granular. Drain conservatively assumes layout-affecting.
@@ -170,8 +173,9 @@ impl PropertyId {
             FontSize | FontFamily | FontWeight | FontStyle | LetterSpacing | LineHeight
             | TextAlign | TextContent => SideEffects::TEXT,
 
-            // compound / unknown — conservative worst case
-            Compound => SideEffects::ALL,
+            // compound / unknown — conservative worst case. A class decides
+            // which rules apply, and a rule can set anything.
+            Class | Compound => SideEffects::ALL,
         }
     }
 

@@ -555,6 +555,55 @@ impl PendingBinding for TextPendingBinding {
     }
 }
 
+/// A class that a node has while a `bool` source holds.
+pub struct ClassPendingBinding {
+    source: BindingSource<bool>,
+    class: Arc<str>,
+}
+
+impl ClassPendingBinding {
+    /// Follow a `State<bool>`.
+    pub fn new(state: State<bool>, class: Arc<str>) -> Self {
+        Self {
+            source: BindingSource::Signal(state),
+            class,
+        }
+    }
+
+    /// Follow a `Computed<bool>`.
+    pub fn from_computed(computed: Computed<bool>, class: Arc<str>) -> Self {
+        Self {
+            source: BindingSource::Derived(computed),
+            class,
+        }
+    }
+}
+
+impl PendingBinding for ClassPendingBinding {
+    fn register(&self, node_id: LayoutNodeId) {
+        let class = Arc::clone(&self.class);
+        match &self.source {
+            BindingSource::Signal(state) => {
+                let initial = state.try_get().unwrap_or(false);
+                let state_for_read = state.clone();
+                let read: ReadFn = Arc::new(move || state_for_read.try_get().map(BoundValue::new));
+                with_registry(|reg| {
+                    reg.register_class(state.signal_id(), node_id, initial, read, class)
+                });
+            }
+            BindingSource::Derived(computed) => {
+                let initial = computed.try_get().unwrap_or(false);
+                let computed_for_read = computed.clone();
+                let read: ReadFn =
+                    Arc::new(move || computed_for_read.try_get().map(BoundValue::new));
+                with_registry(|reg| {
+                    reg.register_derived_class(computed.derived_id(), node_id, initial, read, class)
+                });
+            }
+        }
+    }
+}
+
 // =========================================================================
 // Registry
 // =========================================================================
@@ -567,6 +616,26 @@ enum SubscriberWrite {
     Render(WriteFn),
     Layout(LayoutWriteFn),
     Text(TextWriteFn),
+    /// Adds or removes this class on the node, by the bool the source holds.
+    Class(Arc<str>),
+}
+
+/// A class a node has while a source holds.
+#[derive(Clone)]
+pub struct ClassToggleInfo {
+    pub class: Arc<str>,
+    /// Whether the source held when the binding was made.
+    pub initial: bool,
+    read: ReadFn,
+}
+
+impl ClassToggleInfo {
+    /// Whether the source holds now.
+    pub fn current(&self) -> bool {
+        (self.read)()
+            .and_then(|value| value.downcast_ref::<bool>().copied())
+            .unwrap_or(self.initial)
+    }
 }
 
 struct Subscriber {
@@ -598,6 +667,9 @@ pub struct PropertyBindingRegistry {
     /// Parallel reverse index for derived subscriptions — same role
     /// as `by_node` but for the `derived_bindings` map.
     derived_by_node: HashMap<LayoutNodeId, Vec<DerivedId>>,
+    /// The classes each node has while a source holds. The tree reads this
+    /// to know which nodes restyle when a class comes and goes.
+    class_toggles: HashMap<LayoutNodeId, Vec<ClassToggleInfo>>,
 }
 
 impl PropertyBindingRegistry {
@@ -607,7 +679,77 @@ impl PropertyBindingRegistry {
             derived_bindings: HashMap::new(),
             by_node: HashMap::new(),
             derived_by_node: HashMap::new(),
+            class_toggles: HashMap::new(),
         }
+    }
+
+    /// Nodes that have a class which follows a source, with those classes.
+    pub fn class_toggles(&self) -> Vec<(LayoutNodeId, Vec<ClassToggleInfo>)> {
+        self.class_toggles
+            .iter()
+            .map(|(node, infos)| (*node, infos.clone()))
+            .collect()
+    }
+
+    /// Follow a `State<bool>` that adds and removes `class` on a node.
+    pub fn register_class(
+        &mut self,
+        signal_id: SignalId,
+        node_id: LayoutNodeId,
+        initial: bool,
+        read: ReadFn,
+        class: Arc<str>,
+    ) {
+        self.class_toggles
+            .entry(node_id)
+            .or_default()
+            .push(ClassToggleInfo {
+                class: Arc::clone(&class),
+                initial,
+                read: Arc::clone(&read),
+            });
+        self.bindings
+            .entry(signal_id)
+            .or_default()
+            .push(Subscriber {
+                node_id,
+                property: PropertyId::Class,
+                read,
+                write: SubscriberWrite::Class(class),
+            });
+        self.by_node.entry(node_id).or_default().push(signal_id);
+    }
+
+    /// Counterpart of [`Self::register_class`] for a `Computed<bool>`.
+    pub fn register_derived_class(
+        &mut self,
+        derived_id: DerivedId,
+        node_id: LayoutNodeId,
+        initial: bool,
+        read: ReadFn,
+        class: Arc<str>,
+    ) {
+        self.class_toggles
+            .entry(node_id)
+            .or_default()
+            .push(ClassToggleInfo {
+                class: Arc::clone(&class),
+                initial,
+                read: Arc::clone(&read),
+            });
+        self.derived_bindings
+            .entry(derived_id)
+            .or_default()
+            .push(Subscriber {
+                node_id,
+                property: PropertyId::Class,
+                read,
+                write: SubscriberWrite::Class(class),
+            });
+        self.derived_by_node
+            .entry(node_id)
+            .or_default()
+            .push(derived_id);
     }
 
     /// Register a signal-bound subscription. Called by `Div::build` (or
@@ -768,6 +910,7 @@ impl PropertyBindingRegistry {
     /// `remove_subtree_nodes` so stale subscribers can't fire on the
     /// next signal change after a structural rebuild dropped the node.
     pub fn unregister_node(&mut self, node_id: LayoutNodeId) {
+        self.class_toggles.remove(&node_id);
         if let Some(signal_ids) = self.by_node.remove(&node_id) {
             for sig_id in signal_ids {
                 if let Some(subs) = self.bindings.get_mut(&sig_id) {
@@ -875,6 +1018,11 @@ impl PropertyBindingRegistry {
                 SubscriberWrite::Text(text_of) => {
                     if let Some(content) = text_of(&value) {
                         queue_text_update(sub.node_id, sub.property, content);
+                    }
+                }
+                SubscriberWrite::Class(class) => {
+                    if let Some(on) = value.downcast_ref::<bool>() {
+                        crate::stateful::queue_class_toggle(sub.node_id, Arc::clone(class), *on);
                     }
                 }
             }

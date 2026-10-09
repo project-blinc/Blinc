@@ -212,6 +212,19 @@ impl RenderTree {
             self.layout_tree.set_style(node_id, base_taffy.clone());
         }
 
+        // The rules of the classes the node has now are part of its base.
+        if let Some(dynamic) = self.dynamic_classes.get(&node_id) {
+            for style in dynamic.layers() {
+                Self::apply_element_style_to_props(&mut render_node.props, style);
+                if style.has_layout_props() {
+                    if let Some(mut taffy_style) = self.layout_tree.get_style(node_id) {
+                        Self::apply_element_style_to_taffy(&mut taffy_style, style);
+                        self.layout_tree.set_style(node_id, taffy_style);
+                    }
+                }
+            }
+        }
+
         // Apply base stylesheet style (if any)
         if let Some(base_style) = base_lookup.as_deref() {
             Self::apply_element_style_to_props(&mut render_node.props, base_style);
@@ -545,30 +558,23 @@ impl RenderTree {
         beneath: crate::stateful::BeneathWrite,
     ) {
         use crate::stateful::BeneathWrite;
-        let Some(layers) = self.state_layers.get(&node_id) else {
-            // No rule is applying, so the node is not holding anything over
-            // what was written. A copy it keeps for later still takes it.
-            match beneath {
-                BeneathWrite::Render(write) => {
-                    if let Some(base) = self.base_styles.get_mut(&node_id) {
-                        write(base);
-                    }
-                }
-                BeneathWrite::Layout(write) => {
-                    if let Some(base) = self.base_taffy_styles.get_mut(&node_id) {
-                        write(base);
-                    }
-                }
-            }
-            return;
-        };
+        // What sits over the node: the rules of its classes, then the state
+        // rules that apply.
+        let layers: Vec<ElementStyle> = self
+            .dynamic_classes
+            .get(&node_id)
+            .map(|d| d.layers().cloned().collect::<Vec<_>>())
+            .unwrap_or_default()
+            .into_iter()
+            .chain(self.state_layers.get(&node_id).cloned().unwrap_or_default())
+            .collect();
         match beneath {
             BeneathWrite::Render(write) => {
                 if let Some(base) = self.base_styles.get_mut(&node_id) {
                     write(base);
                 }
                 if let Some(node) = self.render_nodes.get_mut(&node_id) {
-                    for style in layers {
+                    for style in &layers {
                         Self::apply_element_style_to_props(&mut node.props, style);
                     }
                 }
