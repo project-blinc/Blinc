@@ -84,7 +84,7 @@ fn a_radio_group_looks_the_same_in_every_state() {
                 )
             },
         );
-        out += &scenario("cn", "", false, |s| {
+        out += &scenario("cn", "", true, |s| {
             Box::new(
                 blinc_cn::radio_group(s)
                     .option("a", "Alpha")
