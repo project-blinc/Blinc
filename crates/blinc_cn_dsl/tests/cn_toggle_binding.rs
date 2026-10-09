@@ -198,19 +198,22 @@ fn toggles_bind_two_ways_to_an_fsm_context_field() {
 
 /// The other direction: setting the bound signal must move the widget.
 ///
-/// `cn::checkbox` registers `deps([checked_state.signal_id()])`, so a
-/// write reaches its `Stateful` and queues a rebuild -- but only if the
-/// state is backed by the signal the DSL wrote, which is exactly what a
-/// LITERAL fallback breaks. The checkmark is a child element, so the
-/// node count moves when the box ticks.
+/// `cn::checkbox` shows its checkmark while the state it was given is
+/// checked, and that is only true of a write to the signal the DSL wrote --
+/// which is exactly what a LITERAL fallback breaks. The mark is always
+/// there and hidden while unchecked, so what moves is the count of nodes
+/// that are shown.
 #[test]
 fn setting_the_signal_moves_the_checkbox() {
     use blinc_layout::renderer::RenderTree;
 
-    fn node_count(tree: &RenderTree) -> usize {
+    fn shown_nodes(tree: &RenderTree) -> usize {
         let mut n = 0;
         let mut stack = vec![tree.root().unwrap()];
         while let Some(id) = stack.pop() {
+            if tree.layout_tree.is_display_none(id) {
+                continue;
+            }
             n += 1;
             stack.extend(tree.layout_tree.children(id));
         }
@@ -234,16 +237,18 @@ fn setting_the_signal_moves_the_checkbox() {
         .child_box(dsl.view_widget());
     let mut tree = RenderTree::from_element(&host);
     tree.compute_layout(400.0, 200.0);
-    let unchecked = node_count(&tree);
+    let unchecked = shown_nodes(&tree);
 
     dsl.set_signal_bool("cb_lit", true);
     tree.process_pending_subtree_rebuilds();
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    tree.apply_partial_property_updates(updates);
     tree.compute_layout(400.0, 200.0);
-    let checked = node_count(&tree);
+    let checked = shown_nodes(&tree);
 
     assert!(
         checked > unchecked,
-        "ticking the signal must add the checkmark ({unchecked} -> {checked} nodes)"
+        "ticking the signal must show the checkmark ({unchecked} -> {checked} shown nodes)"
     );
 }
 

@@ -65,7 +65,7 @@ fn a_checkbox_looks_the_same_in_every_state() {
             true,
             |c| Box::new(blinc_layout::widgets::checkbox(c).id("cb").label("Accept")),
         );
-        out += &scenario("cn", "", false, |c| {
+        out += &scenario("cn", "", true, |c| {
             Box::new(blinc_cn::checkbox(c).label("Accept"))
         });
         out

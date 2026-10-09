@@ -31,6 +31,7 @@
 //!     .border_color(Color::GRAY)
 //! ```
 
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_core::{Color, State};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
@@ -39,8 +40,7 @@ use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, ThemeState};
 use std::sync::Arc;
 
-use blinc_layout::InstanceKey;
-use blinc_layout::stateful::{ButtonState, stateful};
+use blinc_layout::{InstanceKey, Interaction};
 
 /// SVG checkmark path - simple checkmark that fits in a 16x16 viewBox
 const CHECKMARK_SVG: &str = r#"<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -102,12 +102,16 @@ impl Checkbox {
     /// let checked = ctx.use_state_for("my_checkbox", false);
     /// cn::checkbox(&checked)
     /// ```
+    #[track_caller]
     pub fn new(checked_state: &State<bool>) -> Self {
-        Self::with_config(CheckboxConfig::new(checked_state.clone()))
+        Self::with_config(
+            InstanceKey::new("checkbox").get(),
+            CheckboxConfig::new(checked_state.clone()),
+        )
     }
 
     /// Create from a full configuration
-    fn with_config(config: CheckboxConfig) -> Self {
+    fn with_config(instance_key: &str, config: CheckboxConfig) -> Self {
         let theme = ThemeState::get();
         let box_size = config.size.size();
         let border_width = config.size.border_width();
@@ -139,71 +143,83 @@ impl Checkbox {
         let checked_state = config.checked_state.clone();
         let checked_state_for_click = config.checked_state.clone();
 
-        let mut checkbox = stateful::<ButtonState>()
-            .deps([checked_state.signal_id()])
-            .on_state(move |ctx| {
-                let state = ctx.state();
-                let is_checked = checked_state.get();
-                let is_hovered = matches!(state, ButtonState::Hovered | ButtonState::Pressed);
+        // What a state changes is bound: each is a computed over the checked
+        // signal and the box's hover, so a change patches the node instead of
+        // rebuilding it. Disabled uses the shared disabled-surface palette
+        // (InputBgDisabled / BorderSecondary), which matches button / select
+        // / switch so all inert controls read as the same UI tier.
+        let interaction = Interaction::keyed(&format!("{instance_key}:box"));
+        let (checked, hovered) = (checked_state.signal(), interaction.hovered().signal());
+        let disabled_bg = theme.color(ColorToken::InputBgDisabled);
+        let disabled_border = theme.color(ColorToken::BorderSecondary);
 
-                // Disabled uses the shared disabled-surface palette
-                // (InputBgDisabled / BorderSecondary). Matches button / select
-                // / switch so all inert controls read as the same UI tier.
-                let bg = if disabled {
-                    theme.color(ColorToken::InputBgDisabled)
-                } else if is_checked {
-                    checked_bg
-                } else {
-                    unchecked_bg
-                };
-                let current_border = if disabled {
-                    theme.color(ColorToken::BorderSecondary)
-                } else if is_hovered {
-                    hover_border
-                } else {
-                    border
-                };
-                let scale = if is_hovered && !disabled { 1.05 } else { 1.0 };
+        let bg = computed(move |g: &ReactiveGraph| {
+            if disabled {
+                disabled_bg
+            } else if g.get(checked).unwrap_or(false) {
+                checked_bg
+            } else {
+                unchecked_bg
+            }
+        });
+        let current_border = computed(move |g: &ReactiveGraph| {
+            if disabled {
+                disabled_border
+            } else if g.get(hovered).unwrap_or(false) {
+                hover_border
+            } else {
+                border
+            }
+        });
+        let scale = computed(move |g: &ReactiveGraph| {
+            let by = if g.get(hovered).unwrap_or(false) && !disabled {
+                1.05
+            } else {
+                1.0
+            };
+            blinc_core::Transform::scale(by, by)
+        });
 
-                let mut visual = div()
-                    .class("cn-checkbox")
-                    .w(box_size)
-                    .h(box_size)
-                    // Pin box to its explicit dimensions — without this a
-                    // narrow flex-row parent (e.g. a settings list) would let
-                    // taffy compress the checkbox while the label keeps its
-                    // natural width.
-                    .flex_shrink_0()
-                    .rounded(radius)
-                    .cursor_pointer()
-                    .items_center()
-                    .justify_center()
-                    .bg(bg)
-                    .border(border_width, current_border)
-                    .transform(blinc_core::Transform::scale(scale, scale));
-
-                if is_checked {
-                    visual = visual.class("cn-checkbox--checked");
-                }
-
-                if disabled {
-                    // No opacity dim — the InputBgDisabled / BorderSecondary
-                    // palette above already conveys the inert state without
-                    // washing out the silhouette.
-                    visual = visual.class("cn-checkbox--disabled");
-                }
-
-                // Add checkmark if checked using SVG
-                if is_checked {
-                    visual = visual.child(
+        let mut checkbox = div()
+            .class("cn-checkbox")
+            // Added and taken away with the state, so the stylesheet's
+            // `.cn-checkbox--checked` rules follow it in place.
+            .class_when("cn-checkbox--checked", &checked_state)
+            .w(box_size)
+            .h(box_size)
+            // Pin box to its explicit dimensions — without this a
+            // narrow flex-row parent (e.g. a settings list) would let
+            // taffy compress the checkbox while the label keeps its
+            // natural width.
+            .flex_shrink_0()
+            .rounded(radius)
+            .cursor_pointer()
+            .items_center()
+            .justify_center()
+            .bg(&bg)
+            .border_width(border_width)
+            .border_color(&current_border)
+            .transform(&scale)
+            .track(&interaction)
+            // The mark is always there and shown while checked.
+            .child(
+                div()
+                    .w(checkmark_size)
+                    .h(checkmark_size)
+                    .visible(&checked_state)
+                    .child(
                         svg(CHECKMARK_SVG)
                             .size(checkmark_size, checkmark_size)
                             .tint(check_mark_color),
-                    );
-                }
+                    ),
+            );
 
-                visual
-            });
+        if disabled {
+            // No opacity dim — the InputBgDisabled / BorderSecondary
+            // palette above already conveys the inert state without
+            // washing out the silhouette.
+            checkbox = checkbox.class("cn-checkbox--disabled");
+        }
 
         // Add click handler to toggle the state (only if not disabled)
         checkbox = checkbox.on_click(move |_| {
@@ -335,7 +351,6 @@ impl CheckboxConfig {
 
 /// Builder for creating Checkbox components with fluent API
 pub struct CheckboxBuilder {
-    #[allow(dead_code)]
     key: InstanceKey,
     config: CheckboxConfig,
     /// Cached built Checkbox - built lazily on first access
@@ -365,7 +380,7 @@ impl CheckboxBuilder {
     /// Get or build the inner Checkbox
     fn get_or_build(&self) -> &Checkbox {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            Checkbox::with_config(self.config.clone())
+            Checkbox::with_config(self.key.get(), self.config.clone())
         })
     }
 
@@ -430,7 +445,7 @@ impl CheckboxBuilder {
 
     /// Build the final Checkbox component
     pub fn build_component(self) -> Checkbox {
-        Checkbox::with_config(self.config)
+        Checkbox::with_config(self.key.get(), self.config)
     }
 }
 
