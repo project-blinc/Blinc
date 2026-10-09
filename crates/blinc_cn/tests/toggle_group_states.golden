@@ -1,0 +1,203 @@
+######## default
+== idle
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== hover
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill 0.925,0.933,0.957,0.050 | border - | opacity 1.00 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== pressed
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill 0.925,0.933,0.957,0.100 | border - | opacity 1.00 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== released
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill 0.177,0.191,0.239,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== left
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== hover again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill 0.177,0.191,0.239,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== pressed again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill 0.208,0.222,0.268,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== released again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill 0.177,0.191,0.239,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+######## outline and small, with icons
+== idle
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 166.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 74.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+    text "Add" color 0.925,0.933,0.957,1.000 size 12.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 20.0x14.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+== hover
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 166.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+  div | fill 0.925,0.933,0.957,0.050 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 74.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+    text "Add" color 0.925,0.933,0.957,1.000 size 12.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 20.0x14.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+== pressed
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 166.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+  div | fill 0.925,0.933,0.957,0.100 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 74.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+    text "Add" color 0.925,0.933,0.957,1.000 size 12.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 20.0x14.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+== released
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 166.0x200.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+  div | fill 0.177,0.191,0.239,1.000 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 74.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+    text "Add" color 0.925,0.933,0.957,1.000 size 12.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 20.0x14.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+== left
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 166.0x200.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+  div | fill 0.145,0.160,0.209,1.000 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 74.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+    text "Add" color 0.925,0.933,0.957,1.000 size 12.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 20.0x14.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+== hover again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 166.0x200.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+  div | fill 0.177,0.191,0.239,1.000 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 74.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+    text "Add" color 0.925,0.933,0.957,1.000 size 12.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 20.0x14.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+== pressed again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 166.0x200.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+  div | fill 0.208,0.222,0.268,1.000 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 74.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+    text "Add" color 0.925,0.933,0.957,1.000 size 12.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 20.0x14.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+== released again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 166.0x200.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+  div | fill 0.177,0.191,0.239,1.000 | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 74.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+    text "Add" color 0.925,0.933,0.957,1.000 size 12.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 20.0x14.0
+  div | fill - | border 0.227,0.251,0.333,1.000 w1.0 | opacity 1.00 | radius 4.0 | scale - | 30.0x32.0
+    svg tint 0.925,0.933,0.957,1.000 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 14.0x14.0
+######## one item disabled
+== idle
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill - | border - | opacity 0.50 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== hover
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill - | border - | opacity 0.50 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== pressed
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill - | border - | opacity 0.50 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== released
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill - | border - | opacity 0.50 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== left
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill - | border - | opacity 0.50 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== hover again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill - | border - | opacity 0.50 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== pressed again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill - | border - | opacity 0.50 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
+== released again
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 211.0x200.0
+  div | fill 0.145,0.160,0.209,1.000 | border - | opacity 1.00 | radius 12.0 | scale - | 53.0x36.0
+    text "Left" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 29.0x16.0
+  div | fill - | border - | opacity 0.50 | radius 12.0 | scale - | 67.0x36.0
+    text "Centre" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 43.0x16.0
+  div | fill - | border - | opacity 1.00 | radius 12.0 | scale - | 59.0x36.0
+    text "Right" color 0.925,0.933,0.957,1.000 size 13.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 35.0x16.0
