@@ -26,13 +26,13 @@
 //! `State<Vec<String>>` overload + a different click-handler that
 //! toggles set membership.
 
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_core::{Color, State};
 use blinc_layout::div::ElementBuilder;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, stateful_with_key};
 use blinc_layout::svg::svg;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
-use blinc_layout::{InstanceKey, units};
+use blinc_layout::{InstanceKey, Interaction, units};
 use blinc_theme::{ColorToken, ThemeState};
 use std::sync::Arc;
 
@@ -142,78 +142,80 @@ fn build_item(
     let key = instance_key.derive(&item.value);
     let _ = item.aria_label.clone(); // future a11y plumb
 
-    let mut item_el = stateful_with_key::<ButtonState>(&key)
-        .deps([group_state.signal_id()])
-        .on_state(move |ctx| {
-            let button_state = ctx.state();
-            let is_hovered = matches!(button_state, ButtonState::Hovered | ButtonState::Pressed);
-            let is_pressed = matches!(button_state, ButtonState::Pressed);
-            let is_on = group_state.get() == item_value;
+    let theme = ThemeState::get();
+    // Match `cn::toggle`'s per-size radius — Small uses `radius_sm`, Medium /
+    // Large use `radius_default`, so a Small icon item is rounded like a
+    // matching Small standalone toggle (which picks up `radius_sm` via the
+    // `.cn-toggle--sm` CSS rule).
+    let radius = theme.radius(size.radius_token());
+    let surface = theme.color(ColorToken::Background);
+    let text_primary = theme.color(ColorToken::TextPrimary);
 
-            let theme = ThemeState::get();
-            // Match `cn::toggle`'s per-size radius — Small uses
-            // `radius_sm`, Medium / Large use `radius_default`. Pre-fix,
-            // group items always used `radius_default` so a Small icon
-            // item rendered with noticeably more rounding than a
-            // matching Small standalone toggle (which picks up
-            // `radius_sm` via the `.cn-toggle--sm` CSS rule).
-            let radius = theme.radius(size.radius_token());
-            let surface = theme.color(ColorToken::Background);
-            let text_primary = theme.color(ColorToken::TextPrimary);
+    let on_bg = mix(surface, text_primary, 0.10);
+    let off_bg = Color::TRANSPARENT;
+    let border_color = theme.color(ColorToken::BorderSecondary);
+    let fg = text_primary;
 
-            let on_bg = mix(surface, text_primary, 0.10);
-            let off_bg = Color::TRANSPARENT;
-            let border_color = theme.color(ColorToken::BorderSecondary);
-
-            let bg = if is_on {
-                if is_pressed && !item_disabled {
-                    mix(on_bg, text_primary, 0.08)
-                } else if is_hovered && !item_disabled {
-                    mix(on_bg, text_primary, 0.04)
-                } else {
-                    on_bg
-                }
-            } else if is_pressed && !item_disabled {
-                mix(off_bg, text_primary, 0.10)
+    // The fill follows the group's value and the item's hover and press, so
+    // a change patches the node instead of rebuilding it.
+    let interaction = Interaction::keyed(&key);
+    let (group, hovered, pressed) = (
+        group_state.signal(),
+        interaction.hovered().signal(),
+        interaction.pressed().signal(),
+    );
+    let bg = computed(move |g: &ReactiveGraph| {
+        let is_on = g.get(group).unwrap_or_default() == item_value;
+        let is_hovered = g.get(hovered).unwrap_or(false);
+        let is_pressed = g.get(pressed).unwrap_or(false);
+        if is_on {
+            if is_pressed && !item_disabled {
+                mix(on_bg, text_primary, 0.08)
             } else if is_hovered && !item_disabled {
-                mix(off_bg, text_primary, 0.05)
+                mix(on_bg, text_primary, 0.04)
             } else {
-                off_bg
-            };
-
-            let fg = text_primary;
-
-            let mut body = div()
-                .h(height)
-                .padding_x(units::px(padding_x))
-                .flex_row()
-                .items_center()
-                .justify_center()
-                .gap(6.0)
-                .bg(bg)
-                .rounded(radius)
-                .cursor_pointer();
-
-            if matches!(variant, ToggleVariant::Outline) {
-                body = body.border(1.0, border_color);
+                on_bg
             }
+        } else if is_pressed && !item_disabled {
+            mix(off_bg, text_primary, 0.10)
+        } else if is_hovered && !item_disabled {
+            mix(off_bg, text_primary, 0.05)
+        } else {
+            off_bg
+        }
+    });
 
-            if let Some(ref icon_svg) = item_icon {
-                body = body.child(
-                    svg(icon_svg)
-                        .size(icon_size, icon_size)
-                        .color(fg)
-                        .internal(),
-                );
-            }
-            if let Some(ref label_text) = item_label {
-                body = body.child(text(label_text).size(font_size_token).color(fg));
-            }
-            if item_disabled {
-                body = body.opacity(0.5);
-            }
-            body
-        });
+    let mut body = div()
+        .h(height)
+        .padding_x(units::px(padding_x))
+        .flex_row()
+        .items_center()
+        .justify_center()
+        .gap(6.0)
+        .bg(&bg)
+        .rounded(radius)
+        .cursor_pointer()
+        .track(&interaction);
+
+    if matches!(variant, ToggleVariant::Outline) {
+        body = body.border(1.0, border_color);
+    }
+
+    if let Some(ref icon_svg) = item_icon {
+        body = body.child(
+            svg(icon_svg)
+                .size(icon_size, icon_size)
+                .color(fg)
+                .internal(),
+        );
+    }
+    if let Some(ref label_text) = item_label {
+        body = body.child(text(label_text).size(font_size_token).color(fg));
+    }
+    if item_disabled {
+        body = body.opacity(0.5);
+    }
+    let mut item_el = body;
 
     item_el = item_el.on_click(move |_| {
         if item_disabled {
