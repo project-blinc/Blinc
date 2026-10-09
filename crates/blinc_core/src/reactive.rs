@@ -132,6 +132,10 @@ thread_local! {
     /// `Signal<T>::set` after notifications complete.
     static DEFERRED_WRITES: std::cell::RefCell<Vec<Box<dyn FnOnce() + Send>>> =
         const { std::cell::RefCell::new(Vec::new()) };
+
+    /// How many host effect scopes are open on this thread. See
+    /// [`ReactiveGraph::begin_effect`].
+    static HOST_EFFECT_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
 /// Returns `true` if a `flush_effects` callback is currently running
@@ -139,6 +143,14 @@ thread_local! {
 /// it took the mutex.
 fn is_in_flush() -> bool {
     IN_FLIGHT_GRAPH.with(|c| !c.get().is_null())
+}
+
+/// Whether a write made now has to wait: inside an effect or derived that
+/// holds the graph, or inside a host effect scope. A host scope holds no
+/// lock and sets no in-flight pointer, so [`is_in_flush`] is false there and
+/// reads take the ordinary locked path; only the write waits.
+fn defers_writes() -> bool {
+    is_in_flush() || HOST_EFFECT_DEPTH.with(|d| d.get() > 0)
 }
 
 /// Run `f` against the in-flight graph if one is set; otherwise
@@ -227,7 +239,7 @@ impl<T: Clone + Send + 'static> Signal<T> {
     /// in-this-fire reads — matching the SolidJS / Leptos semantics.
     pub fn set(&self, value: T) {
         let id = *self;
-        if is_in_flush() {
+        if defers_writes() {
             DEFERRED_WRITES.with(|q| {
                 q.borrow_mut()
                     .push(Box::new(move || Signal::<T>::from_id(id.id).set(value)));
@@ -254,7 +266,7 @@ impl<T: Clone + Send + 'static> Signal<T> {
     /// children, swapping branches); prefer [`Self::set`] otherwise.
     pub fn set_rebuild(&self, value: T) {
         let id = *self;
-        if is_in_flush() {
+        if defers_writes() {
             DEFERRED_WRITES.with(|q| {
                 q.borrow_mut().push(Box::new(move || {
                     Signal::<T>::from_id(id.id).set_rebuild(value)
@@ -285,7 +297,7 @@ impl<T: Clone + Send + 'static> Signal<T> {
         // (off the in-flight graph), apply `f`, and queue a `set` of
         // the result. Without this, deferring `update` would lose the
         // closure's snapshot semantics.
-        if is_in_flush() {
+        if defers_writes() {
             // Read current value via the in-flight graph fast path,
             // apply f, queue the resulting set.
             let current = self.try_get();
@@ -311,7 +323,7 @@ impl<T: Clone + Send + 'static> Signal<T> {
 
     /// Update the value AND flip the global dirty flag.
     pub fn update_rebuild(&self, f: impl FnOnce(T) -> T) {
-        if is_in_flush() {
+        if defers_writes() {
             let current = self.try_get();
             let Some(current) = current else { return };
             let next = f(current);
@@ -452,8 +464,10 @@ struct DerivedNode {
 
 /// Internal effect node storage
 struct EffectNode {
-    /// The effect function
-    run: Box<dyn FnMut(&ReactiveGraph) + Send>,
+    /// The effect function. `None` for a host-run effect, whose body lives in
+    /// another language and is driven through
+    /// [`ReactiveGraph::begin_effect`] and [`ReactiveGraph::end_effect`].
+    run: Option<Box<dyn FnMut(&ReactiveGraph) + Send>>,
     /// Dependencies (signals this effect reads from)
     dependencies: SmallVec<[SignalId; 4]>,
     /// Whether the effect needs to run
@@ -497,6 +511,28 @@ pub struct ReactiveGraph {
     /// affected derived (Phase 8 follow-up: Derived ↔ property-binding
     /// bridge, [[project-reactive-architecture-v2]]).
     derived_dirty_buffer: RefCell<SmallVec<[DerivedId; 4]>>,
+    /// Host effects that are due, in the order they became due. Handed out
+    /// by [`Self::take_due_host_effects`] rather than run.
+    due_host_effects: Vec<EffectId>,
+    /// Open host effect scopes, innermost last.
+    effect_scopes: Vec<EffectScope>,
+    /// Signals written while any host scope was open, so an effect can see
+    /// at `end_effect` that something it read changed before it was
+    /// subscribed. Emptied when the outermost scope closes.
+    scope_writes: Vec<SignalId>,
+}
+
+/// An open host effect scope.
+struct EffectScope {
+    effect: EffectId,
+    /// The tracking buffer that was active when the scope began, put back
+    /// when it ends.
+    outer_tracking: Option<Vec<SignalId>>,
+    /// How many entries `scope_writes` held at the start.
+    writes_from: usize,
+    /// The thread that began it. The tracking buffer and the write-deferral
+    /// flag are per thread, so a scope ended elsewhere would corrupt both.
+    thread: std::thread::ThreadId,
 }
 
 impl ReactiveGraph {
@@ -511,6 +547,9 @@ impl ReactiveGraph {
             tracking: RefCell::new(None),
             global_version: Cell::new(0),
             derived_dirty_buffer: RefCell::new(SmallVec::new()),
+            due_host_effects: Vec::new(),
+            effect_scopes: Vec::new(),
+            scope_writes: Vec::new(),
         }
     }
 
@@ -577,6 +616,9 @@ impl ReactiveGraph {
             node.version += 1;
             node.subscribers.clone()
         };
+        if !self.effect_scopes.is_empty() {
+            self.scope_writes.push(signal.id);
+        }
         {
             self.global_version.set(self.global_version.get() + 1);
 
@@ -754,14 +796,20 @@ impl ReactiveGraph {
             let node = map.get(derived.id)?;
             if !node.dirty.get() {
                 if let Some(ref cached) = node.value {
+                    // The reader comes to depend on the derived's signals,
+                    // as it does when the derived has to be recomputed.
+                    if let Some(tracking) = self.tracking.borrow_mut().as_mut() {
+                        tracking.extend(node.dependencies.iter().copied());
+                    }
                     return cached.downcast_ref::<T>().cloned();
                 }
             }
             node.dirty.set(false);
         }
 
-        // Need to recompute - track dependencies
-        self.tracking.replace(Some(Vec::new()));
+        // Need to recompute - track dependencies. The reader's own tracking
+        // (an effect or host scope in progress) is kept and put back below.
+        let outer_tracking = self.tracking.replace(Some(Vec::new()));
 
         // Set the in-flight pointer around the compute call, mirroring
         // run_effect: a JIT'd DSL closure (or any nested code) reading a
@@ -785,15 +833,26 @@ impl ReactiveGraph {
         // create a signal or another computed. Previously this was a raw
         // pointer into the map, which an insert could have reallocated
         // under.
-        let value = self.with_compute(derived.id, |compute| compute(self))?;
+        let value = self.with_compute(derived.id, |compute| compute(self));
+        let Some(value) = value else {
+            drop(_in_flight_guard);
+            IN_FLIGHT_GRAPH.with(|c| c.set(prev_in_flight));
+            self.tracking.replace(outer_tracking);
+            return None;
+        };
 
         drop(_in_flight_guard);
         // Restore an enclosing in-flight scope (nested evaluation inside
         // an effect) rather than leaving it cleared.
         IN_FLIGHT_GRAPH.with(|c| c.set(prev_in_flight));
 
-        // Get tracked dependencies
-        let deps = self.tracking.take().unwrap_or_default();
+        // Get tracked dependencies, give the reader its tracking back, and
+        // make the reader depend on them too, as a read of a clean derived
+        // does.
+        let deps = self.tracking.replace(outer_tracking).unwrap_or_default();
+        if let Some(outer) = self.tracking.borrow_mut().as_mut() {
+            outer.extend(deps.iter().copied());
+        }
 
         // Update the node
         // Subscription bookkeeping. Collected first, then applied, so no
@@ -850,7 +909,7 @@ impl ReactiveGraph {
         F: FnMut(&ReactiveGraph) + Send + 'static,
     {
         let id = self.effects.insert(EffectNode {
-            run: Box::new(run),
+            run: Some(Box::new(run)),
             dependencies: SmallVec::new(),
             dirty: Cell::new(true), // Run immediately
             depth: 0,
@@ -868,6 +927,7 @@ impl ReactiveGraph {
 
     /// Dispose of an effect, removing it from the graph
     pub fn dispose_effect(&mut self, effect: Effect) {
+        self.due_host_effects.retain(|id| *id != effect.id);
         if let Some(node) = self.effects.remove(effect.id) {
             // Unsubscribe from all dependencies
             for &dep_id in &node.dependencies {
@@ -877,6 +937,169 @@ impl ReactiveGraph {
                 }
             }
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Host-run effects
+    //
+    // An effect whose body is code in another language. The graph holds no
+    // closure for it: it knows only the effect's id, its dependencies and
+    // whether it is due. The host asks which are due, runs each between
+    // `begin_effect` and `end_effect`, and the graph tracks what it read.
+    // ---------------------------------------------------------------------
+
+    /// Create an effect with no Rust body. It starts due, like any effect.
+    /// [`Self::flush_effects`] never runs it: it is handed out by
+    /// [`Self::take_due_host_effects`] instead.
+    pub fn create_host_effect(&mut self) -> Effect {
+        let id = self.effects.insert(EffectNode {
+            run: None,
+            dependencies: SmallVec::new(),
+            dirty: Cell::new(true),
+            depth: 0,
+        });
+        self.pending_effects.borrow_mut().push_back(id);
+        if self.batch_depth.get() == 0 {
+            self.flush_effects();
+        }
+        Effect { id }
+    }
+
+    /// The host effects that are due, in the order they became due (the
+    /// order `run_effect` would have used), clearing the list. Closure
+    /// effects are not returned: they run as they always did.
+    ///
+    /// Every id returned should be run between [`Self::begin_effect`] and
+    /// [`Self::end_effect`]. Until it is, the effect stays dirty and is not
+    /// handed out again.
+    ///
+    /// Not called from inside the graph's own flush: flush runs under the
+    /// graph lock and the host must not be called there.
+    pub fn take_due_host_effects(&mut self) -> Vec<EffectId> {
+        if self.batch_depth.get() == 0 {
+            self.flush_effects();
+        }
+        let mut due = std::mem::take(&mut self.due_host_effects);
+        // One that was disposed, or already run, is no longer due.
+        due.retain(|id| self.effects.get(*id).is_some_and(|n| n.dirty.get()));
+        due
+    }
+
+    /// Open a tracking scope for a host effect.
+    ///
+    /// Until the matching [`Self::end_effect`], every signal read through the
+    /// graph is recorded as a dependency of `effect`, and writes made through
+    /// the `Signal` API wait, as inside a closure effect. Unlike a closure
+    /// effect the scope holds no lock and sets no in-flight pointer, so the
+    /// host is free to call back into the graph, which takes the ordinary
+    /// locked path.
+    ///
+    /// Scopes nest: the tracking that was active is saved and put back by
+    /// `end_effect`, so a host effect can run while another scope is open.
+    /// False if `effect` does not exist or is not a host effect.
+    ///
+    /// The scope belongs to the thread that began it; begin and end on the
+    /// same one.
+    pub fn begin_effect(&mut self, effect: EffectId) -> bool {
+        let Some(node) = self.effects.get(effect) else {
+            return false;
+        };
+        if node.run.is_some() {
+            return false;
+        }
+        // Clean from here, as in `run_effect`: a change made while it runs
+        // must queue it again.
+        node.dirty.set(false);
+        let outer_tracking = self.tracking.replace(Some(Vec::new()));
+        self.effect_scopes.push(EffectScope {
+            effect,
+            outer_tracking,
+            writes_from: self.scope_writes.len(),
+            thread: std::thread::current().id(),
+        });
+        HOST_EFFECT_DEPTH.with(|d| d.set(d.get() + 1));
+        true
+    }
+
+    /// Close the scope `begin_effect` opened for `effect`: record what it
+    /// read as its dependencies and restore the tracking that was active
+    /// before.
+    ///
+    /// Safe to call when the host went wrong between begin and end. A scope
+    /// above `effect` that was never ended is abandoned (its reads are
+    /// discarded and the tracking beneath it restored), and calling it for
+    /// an effect with no open scope, or twice, does nothing.
+    ///
+    /// Writes made through the `Signal` API during the scope are still
+    /// waiting; the caller drains them once the graph is unlocked, which
+    /// [`end_host_effect`] does for the global graph.
+    pub fn end_effect(&mut self, effect: EffectId) {
+        let Some(at) = self.effect_scopes.iter().rposition(|s| s.effect == effect) else {
+            return;
+        };
+        let abandoned = self.effect_scopes.len() - at - 1;
+
+        // Scopes above this one were never ended: drop them, putting each
+        // one's outer tracking back as we go.
+        for _ in 0..abandoned {
+            if let Some(scope) = self.effect_scopes.pop() {
+                self.tracking.replace(scope.outer_tracking);
+            }
+        }
+        let scope = self.effect_scopes.pop().expect("found above");
+        debug_assert_eq!(
+            scope.thread,
+            std::thread::current().id(),
+            "end_effect on a different thread from begin_effect"
+        );
+        let deps = self
+            .tracking
+            .replace(scope.outer_tracking)
+            .unwrap_or_default();
+        HOST_EFFECT_DEPTH.with(|d| d.set(d.get().saturating_sub(abandoned as u32 + 1)));
+
+        // A signal this effect read was written while it ran, before it was
+        // subscribed to it: the change would otherwise be lost.
+        let changed = self.scope_writes[scope.writes_from.min(self.scope_writes.len())..]
+            .iter()
+            .any(|written| deps.contains(written));
+        if self.effect_scopes.is_empty() {
+            self.scope_writes.clear();
+        }
+
+        self.resubscribe_effect(effect, deps);
+        if changed {
+            self.mark_dirty(SubscriberId::Effect(effect));
+            if self.batch_depth.get() == 0 {
+                self.flush_effects();
+            }
+        }
+    }
+
+    /// Replace an effect's subscriptions with `deps`.
+    fn resubscribe_effect(&mut self, effect_id: EffectId, deps: Vec<SignalId>) {
+        let Some(node) = self.effects.get_mut(effect_id) else {
+            return;
+        };
+        // Unsubscribe from old dependencies
+        for &dep_id in &node.dependencies {
+            if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
+                sig.subscribers
+                    .retain(|s| *s != SubscriberId::Effect(effect_id));
+            }
+        }
+
+        // Subscribe to new dependencies
+        for &dep_id in &deps {
+            if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
+                let sub = SubscriberId::Effect(effect_id);
+                if !sig.subscribers.contains(&sub) {
+                    sig.subscribers.push(sub);
+                }
+            }
+        }
+
+        node.dependencies = deps.into_iter().collect();
     }
 
     /// Remove a signal. Deriveds and effects that read it stop depending
@@ -1001,6 +1224,15 @@ impl ReactiveGraph {
         effects.sort_by_key(|id| self.effects.get(*id).map(|n| n.depth).unwrap_or(0));
 
         for effect_id in effects {
+            // A host effect has no body to run: it becomes due.
+            if self.effects.get(effect_id).is_some_and(|n| n.run.is_none()) {
+                if self.effects.get(effect_id).is_some_and(|n| n.dirty.get())
+                    && !self.due_host_effects.contains(&effect_id)
+                {
+                    self.due_host_effects.push(effect_id);
+                }
+                continue;
+            }
             self.run_effect(effect_id);
         }
     }
@@ -1018,19 +1250,25 @@ impl ReactiveGraph {
             return;
         }
 
-        // Start tracking dependencies
-        self.tracking.replace(Some(Vec::new()));
-
         // Get the run function - we need to be careful with mutability
         // For now, we'll use a simple approach that requires unsafe
         let run_ptr: *mut Box<dyn FnMut(&ReactiveGraph) + Send> = {
-            if let Some(node) = self.effects.get_mut(effect_id) {
-                node.dirty.set(false);
-                &mut node.run as *mut _
-            } else {
-                return;
+            match self.effects.get_mut(effect_id) {
+                Some(node) => match node.run.as_mut() {
+                    Some(run) => {
+                        node.dirty.set(false);
+                        run as *mut _
+                    }
+                    // A host effect: the host runs it.
+                    None => return,
+                },
+                None => return,
             }
         };
+
+        // Start tracking dependencies. Whatever was being tracked (a host
+        // effect scope this was called from) is put back afterwards.
+        let outer_tracking = self.tracking.replace(Some(Vec::new()));
 
         // Set the thread-local in-flight graph pointer so `Signal<T>::get`
         // / `set` / `update` calls inside the effect closure take the
@@ -1038,14 +1276,15 @@ impl ReactiveGraph {
         // writes for post-flush draining) instead of re-acquiring the
         // global mutex. Cleared in a guard's Drop so a panic inside the
         // closure can't leak the pointer to subsequent code.
-        struct InFlightGuard;
+        struct InFlightGuard(*const ReactiveGraph);
         impl Drop for InFlightGuard {
             fn drop(&mut self) {
-                IN_FLIGHT_GRAPH.with(|c| c.set(std::ptr::null()));
+                IN_FLIGHT_GRAPH.with(|c| c.set(self.0));
             }
         }
+        let prev_in_flight = IN_FLIGHT_GRAPH.with(|c| c.get());
         IN_FLIGHT_GRAPH.with(|c| c.set(self as *const _));
-        let _guard = InFlightGuard;
+        let _guard = InFlightGuard(prev_in_flight);
 
         // SAFETY: We're not modifying the effect while running it
         // (though the effect can modify signals, which is fine)
@@ -1055,30 +1294,9 @@ impl ReactiveGraph {
         drop(_guard);
 
         // Get tracked dependencies
-        let deps = self.tracking.take().unwrap_or_default();
+        let deps = self.tracking.replace(outer_tracking).unwrap_or_default();
 
-        // Update subscriptions
-        if let Some(node) = self.effects.get_mut(effect_id) {
-            // Unsubscribe from old dependencies
-            for &dep_id in &node.dependencies {
-                if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
-                    sig.subscribers
-                        .retain(|s| *s != SubscriberId::Effect(effect_id));
-                }
-            }
-
-            // Subscribe to new dependencies
-            for &dep_id in &deps {
-                if let Some(sig) = self.signals.borrow_mut().get_mut(dep_id) {
-                    let sub = SubscriberId::Effect(effect_id);
-                    if !sig.subscribers.contains(&sub) {
-                        sig.subscribers.push(sub);
-                    }
-                }
-            }
-
-            node.dependencies = deps.into_iter().collect();
-        }
+        self.resubscribe_effect(effect_id, deps);
     }
 
     /// Get statistics about the reactive graph
@@ -1286,6 +1504,37 @@ pub fn with_read_tracking<R>(f: impl FnOnce() -> R) -> (R, Vec<SignalId>) {
         g.tracking.replace(prev).unwrap_or_default()
     };
     (result, deps)
+}
+
+/// Open a tracking scope for a host effect on the process-global graph.
+///
+/// The global-graph form of [`ReactiveGraph::begin_effect`]. The graph lock
+/// is held only for this call, so the host can run its effect body, reading
+/// and writing signals, before calling [`end_host_effect`].
+pub fn begin_host_effect(effect: EffectId) -> bool {
+    let graph = global_graph();
+    let mut g = graph.lock().expect("reactive graph poisoned");
+    g.begin_effect(effect)
+}
+
+/// Close a host effect's scope on the process-global graph, then run the
+/// writes that waited while it was open.
+///
+/// The global-graph form of [`ReactiveGraph::end_effect`], with the one
+/// thing that cannot be done under the lock: the writes the host made during
+/// the scope were deferred, and applying them takes the graph lock again, so
+/// they are drained after it is released. Only the outermost scope drains.
+/// Call this on every path out of the effect body, including after the host
+/// throws.
+pub fn end_host_effect(effect: EffectId) {
+    {
+        let graph = global_graph();
+        let mut g = graph.lock().expect("reactive graph poisoned");
+        g.end_effect(effect);
+    }
+    if !defers_writes() {
+        drain_deferred_writes();
+    }
 }
 
 // =============================================================================
@@ -2306,5 +2555,354 @@ mod in_flight_creation_tests {
         assert_eq!(c.try_get(), Some(10));
         dep.set(3);
         assert_eq!(c.try_get(), Some(30), "the computed did not re-fire");
+    }
+
+    /// Host-run effects: effects whose body is code in another language.
+    mod host_effects {
+        use super::*;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        fn due(g: &mut ReactiveGraph) -> Vec<EffectId> {
+            g.take_due_host_effects()
+        }
+
+        /// Run an effect body that reads `reads`, between begin and end.
+        fn run(g: &mut ReactiveGraph, effect: EffectId, reads: &[Signal<i32>]) {
+            assert!(g.begin_effect(effect));
+            for sig in reads {
+                let _ = g.get(*sig);
+            }
+            g.end_effect(effect);
+        }
+
+        #[test]
+        fn a_new_host_effect_is_due_once() {
+            let mut g = ReactiveGraph::new();
+            let e = g.create_host_effect();
+            assert_eq!(due(&mut g), vec![e.id()]);
+            assert!(due(&mut g).is_empty(), "it was handed out twice");
+        }
+
+        #[test]
+        fn it_is_due_again_when_something_it_read_changes() {
+            let mut g = ReactiveGraph::new();
+            let a = g.create_signal(1);
+            let e = g.create_host_effect();
+            due(&mut g);
+            run(&mut g, e.id(), &[a]);
+            assert!(due(&mut g).is_empty(), "due with nothing changed");
+
+            g.set(a, 2);
+            assert_eq!(due(&mut g), vec![e.id()]);
+        }
+
+        #[test]
+        fn a_write_to_something_it_did_not_read_leaves_it_alone() {
+            let mut g = ReactiveGraph::new();
+            let (a, b) = (g.create_signal(1), g.create_signal(1));
+            let e = g.create_host_effect();
+            due(&mut g);
+            run(&mut g, e.id(), &[a]);
+
+            g.set(b, 2);
+            assert!(due(&mut g).is_empty());
+        }
+
+        #[test]
+        fn what_it_reads_is_replaced_on_every_run() {
+            let mut g = ReactiveGraph::new();
+            let (a, b) = (g.create_signal(1), g.create_signal(1));
+            let e = g.create_host_effect();
+            due(&mut g);
+            run(&mut g, e.id(), &[a]);
+            run(&mut g, e.id(), &[b]);
+
+            g.set(a, 2);
+            assert!(
+                due(&mut g).is_empty(),
+                "still subscribed to what it stopped reading"
+            );
+            g.set(b, 2);
+            assert_eq!(due(&mut g), vec![e.id()]);
+        }
+
+        #[test]
+        fn closure_effects_run_in_the_same_flush_and_host_ones_are_handed_out() {
+            let mut g = ReactiveGraph::new();
+            let a = g.create_signal(1);
+            let hits = Arc::new(AtomicUsize::new(0));
+            let counted = Arc::clone(&hits);
+            g.create_effect(move |g| {
+                let _ = g.get(a);
+                counted.fetch_add(1, Ordering::SeqCst);
+            });
+            let e = g.create_host_effect();
+            due(&mut g);
+            run(&mut g, e.id(), &[a]);
+            let before = hits.load(Ordering::SeqCst);
+
+            g.set(a, 2);
+
+            assert_eq!(
+                hits.load(Ordering::SeqCst),
+                before + 1,
+                "the closure effect did not run"
+            );
+            assert_eq!(due(&mut g), vec![e.id()]);
+        }
+
+        #[test]
+        fn host_effects_are_handed_out_in_the_order_they_became_due() {
+            let mut g = ReactiveGraph::new();
+            let a = g.create_signal(1);
+            let first = g.create_host_effect();
+            let second = g.create_host_effect();
+            let third = g.create_host_effect();
+            due(&mut g);
+            // Subscribe in a different order from creation.
+            run(&mut g, third.id(), &[a]);
+            run(&mut g, first.id(), &[a]);
+            run(&mut g, second.id(), &[a]);
+
+            g.set(a, 2);
+            assert_eq!(due(&mut g).len(), 3);
+        }
+
+        #[test]
+        fn a_write_made_while_it_runs_is_not_lost() {
+            let mut g = ReactiveGraph::new();
+            let a = g.create_signal(1);
+            let e = g.create_host_effect();
+            due(&mut g);
+
+            assert!(g.begin_effect(e.id()));
+            let _ = g.get(a);
+            // Written before the effect is subscribed to it.
+            g.set(a, 2);
+            g.end_effect(e.id());
+
+            assert_eq!(
+                due(&mut g),
+                vec![e.id()],
+                "the change made during the run was lost"
+            );
+        }
+
+        #[test]
+        fn scopes_nest_and_each_keeps_its_own_reads() {
+            let mut g = ReactiveGraph::new();
+            let (x, y, z) = (g.create_signal(0), g.create_signal(0), g.create_signal(0));
+            let (outer, inner) = (g.create_host_effect(), g.create_host_effect());
+            due(&mut g);
+
+            assert!(g.begin_effect(outer.id()));
+            let _ = g.get(x);
+            assert!(g.begin_effect(inner.id()));
+            let _ = g.get(y);
+            g.end_effect(inner.id());
+            let _ = g.get(z);
+            g.end_effect(outer.id());
+
+            g.set(y, 1);
+            assert_eq!(
+                due(&mut g),
+                vec![inner.id()],
+                "the inner read leaked into the outer"
+            );
+            run(&mut g, inner.id(), &[y]);
+            g.set(x, 1);
+            g.set(z, 1);
+            let mut now = due(&mut g);
+            now.dedup();
+            assert_eq!(now, vec![outer.id()]);
+        }
+
+        #[test]
+        fn an_inner_scope_that_never_ended_does_not_wedge_the_outer() {
+            let mut g = ReactiveGraph::new();
+            let (x, p) = (g.create_signal(0), g.create_signal(0));
+            let (outer, inner) = (g.create_host_effect(), g.create_host_effect());
+            due(&mut g);
+
+            assert!(g.begin_effect(outer.id()));
+            let _ = g.get(x);
+            assert!(g.begin_effect(inner.id()));
+            let _ = g.get(p);
+            // The host threw inside the inner body and only the outer ends.
+            g.end_effect(outer.id());
+
+            assert!(!defers_writes(), "a scope was left open");
+            assert!(g.tracking.borrow().is_none(), "tracking was left on");
+            g.set(x, 1);
+            assert_eq!(due(&mut g), vec![outer.id()]);
+            g.set(p, 1);
+            assert!(
+                due(&mut g).is_empty(),
+                "the abandoned scope's reads were recorded"
+            );
+            // And the graph is still usable.
+            run(&mut g, inner.id(), &[p]);
+        }
+
+        #[test]
+        fn ending_twice_or_a_scope_that_is_not_open_does_nothing() {
+            let mut g = ReactiveGraph::new();
+            let a = g.create_signal(0);
+            let e = g.create_host_effect();
+            due(&mut g);
+            run(&mut g, e.id(), &[a]);
+
+            g.end_effect(e.id());
+            g.end_effect(e.id());
+
+            assert!(!defers_writes());
+            g.set(a, 1);
+            assert_eq!(
+                due(&mut g),
+                vec![e.id()],
+                "a stray end disturbed the subscriptions"
+            );
+        }
+
+        #[test]
+        fn a_closure_effect_run_inside_a_scope_does_not_take_the_hosts_reads() {
+            let mut g = ReactiveGraph::new();
+            let (x, w, y) = (g.create_signal(0), g.create_signal(0), g.create_signal(0));
+            let e = g.create_host_effect();
+            due(&mut g);
+
+            assert!(g.begin_effect(e.id()));
+            let _ = g.get(x);
+            // Created inside the scope, so it runs at once.
+            g.create_effect(move |g| {
+                let _ = g.get(w);
+            });
+            let _ = g.get(y);
+            g.end_effect(e.id());
+
+            g.set(w, 1);
+            assert!(
+                due(&mut g).is_empty(),
+                "the closure effect's read became the host's"
+            );
+            g.set(x, 1);
+            assert_eq!(
+                due(&mut g),
+                vec![e.id()],
+                "a read before the closure effect was lost"
+            );
+            run(&mut g, e.id(), &[x, y]);
+            g.set(y, 1);
+            assert_eq!(
+                due(&mut g),
+                vec![e.id()],
+                "a read after the closure effect was lost"
+            );
+        }
+
+        #[test]
+        fn a_derived_recomputed_inside_a_scope_keeps_the_hosts_reads() {
+            let mut g = ReactiveGraph::new();
+            let (x, s) = (g.create_signal(1), g.create_signal(1));
+            let d = g.create_derived(move |g| g.get(s).unwrap_or(0) * 2);
+            let e = g.create_host_effect();
+            due(&mut g);
+
+            assert!(g.begin_effect(e.id()));
+            let _ = g.get(x);
+            assert_eq!(g.get_derived(d), Some(2));
+            g.end_effect(e.id());
+
+            g.set(x, 2);
+            assert_eq!(
+                due(&mut g),
+                vec![e.id()],
+                "the read before the derived was lost"
+            );
+            run(&mut g, e.id(), &[x]);
+            let _ = {
+                assert!(g.begin_effect(e.id()));
+                let v = g.get_derived(d);
+                g.end_effect(e.id());
+                v
+            };
+            g.set(s, 5);
+            assert_eq!(
+                due(&mut g),
+                vec![e.id()],
+                "the host did not come to depend on the derived's signals"
+            );
+        }
+
+        #[test]
+        fn disposing_an_effect_while_it_runs_is_safe() {
+            let mut g = ReactiveGraph::new();
+            let a = g.create_signal(0);
+            let e = g.create_host_effect();
+            due(&mut g);
+
+            assert!(g.begin_effect(e.id()));
+            let _ = g.get(a);
+            g.dispose_effect(e);
+            g.end_effect(e.id());
+
+            assert!(!defers_writes());
+            assert!(g.tracking.borrow().is_none());
+            assert!(due(&mut g).is_empty());
+        }
+
+        #[test]
+        fn a_disposed_effect_that_was_due_is_not_handed_out() {
+            let mut g = ReactiveGraph::new();
+            let e = g.create_host_effect();
+            g.dispose_effect(e);
+            assert!(due(&mut g).is_empty());
+        }
+
+        #[test]
+        fn a_closure_effect_cannot_be_begun_as_a_host_effect() {
+            let mut g = ReactiveGraph::new();
+            let closure = g.create_effect(|_| {});
+            assert!(!g.begin_effect(closure.id()));
+            assert!(!defers_writes());
+        }
+
+        /// A scope ended on another thread than it began on would corrupt
+        /// the per-thread tracking, so debug builds say so.
+        #[cfg(debug_assertions)]
+        #[test]
+        fn ending_a_scope_on_another_thread_is_caught_in_debug_builds() {
+            let mut g = ReactiveGraph::new();
+            let e = g.create_host_effect();
+            g.take_due_host_effects();
+            assert!(g.begin_effect(e.id()));
+
+            let ended = std::thread::spawn(move || g.end_effect(e.id())).join();
+            assert!(ended.is_err(), "a cross-thread end went unnoticed");
+        }
+
+        /// The global-graph forms: `Signal` writes made inside the scope
+        /// wait, and apply once it ends.
+        #[test]
+        fn signal_writes_wait_inside_a_scope_and_apply_after_it() {
+            let sig = signal(0_i32);
+            let effect = global_graph().lock().unwrap().create_host_effect();
+            global_graph().lock().unwrap().take_due_host_effects();
+
+            assert!(begin_host_effect(effect.id()));
+            let _ = sig.get();
+            sig.set(5);
+            assert_eq!(sig.get(), 0, "the write was not deferred");
+            end_host_effect(effect.id());
+
+            assert_eq!(sig.get(), 5, "the write never applied");
+            assert!(!defers_writes());
+            // And the write made after the read woke the effect.
+            assert_eq!(
+                global_graph().lock().unwrap().take_due_host_effects(),
+                vec![effect.id()]
+            );
+            global_graph().lock().unwrap().dispose_effect(effect);
+        }
     }
 }
