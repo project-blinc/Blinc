@@ -24,6 +24,7 @@
 
 use std::sync::Arc;
 
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_core::{Color, State};
 use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState};
 
@@ -31,8 +32,8 @@ use crate::css_parser::{ElementState, Stylesheet, active_stylesheet};
 use crate::div::{ElementBuilder, div};
 use crate::element::RenderProps;
 use crate::element_style::ElementStyle;
+use crate::interaction::Interaction;
 use crate::key::InstanceKey;
-use crate::stateful::{ButtonState, stateful_with_key};
 use crate::svg::svg;
 use crate::text::text;
 use crate::tree::{LayoutNodeId, LayoutTree};
@@ -285,114 +286,167 @@ pub struct Toggle {
     inner: crate::div::Div,
 }
 
+/// What a toggle draws in one state: the part the state can change.
+#[derive(Clone)]
+struct Look {
+    bg: Color,
+    fg: Color,
+    border_color: Color,
+    /// Config after stylesheet overrides, for the parts fixed at build.
+    cfg: ToggleConfig,
+}
+
+/// The stylesheet a toggle reads its overrides from, and what it matches.
+struct Rules {
+    element_id: Option<String>,
+    classes: Vec<Arc<str>>,
+}
+
+impl Look {
+    fn resolve(
+        config: &ToggleConfig,
+        rules: &Rules,
+        is_on: bool,
+        is_hovered: bool,
+        is_pressed: bool,
+    ) -> Self {
+        let is_disabled = config.disabled;
+        let theme = ThemeState::get();
+        let mut colors = ResolvedColors::from_config(config, theme);
+        let mut cfg = config.clone();
+
+        if let Some(stylesheet) = active_stylesheet() {
+            apply_css_overrides(
+                &mut colors,
+                &mut cfg,
+                &stylesheet,
+                rules.element_id.as_deref(),
+                &rules.classes,
+                is_on,
+                is_hovered,
+                is_disabled,
+            );
+        }
+
+        // Background:
+        //   off  → transparent (or off_bg) + faint hover wash
+        //   on   → on_bg, mildly darkened on hover for affordance
+        //   pressed → mild darken regardless of on/off so the click
+        //             registers visually before the bool flips.
+        let bg = if is_on {
+            if is_pressed && !is_disabled {
+                mix(colors.on_bg, theme.color(ColorToken::TextPrimary), 0.08)
+            } else if is_hovered && !is_disabled {
+                mix(colors.on_bg, theme.color(ColorToken::TextPrimary), 0.04)
+            } else {
+                colors.on_bg
+            }
+        } else if is_pressed && !is_disabled {
+            mix(colors.off_bg, theme.color(ColorToken::TextPrimary), 0.10)
+        } else if is_hovered && !is_disabled {
+            mix(colors.off_bg, theme.color(ColorToken::TextPrimary), 0.05)
+        } else {
+            colors.off_bg
+        };
+
+        Self {
+            bg,
+            fg: if is_on { colors.on_fg } else { colors.off_fg },
+            border_color: colors.border_color,
+            cfg,
+        }
+    }
+}
+
 impl Toggle {
     fn with_config(instance_key: &InstanceKey, config: ToggleConfig) -> Self {
-        let on_state = config.on.clone();
         let on_state_for_click = config.on.clone();
         let on_change = config.on_change.clone();
         let disabled = config.disabled;
-        let css_element_id = config.css_element_id.clone();
-        let css_classes = config.css_classes.clone();
+        let rules = Arc::new(Rules {
+            element_id: config.css_element_id.clone(),
+            classes: config.css_classes.clone(),
+        });
 
         let key = instance_key.get().to_string();
+        let interaction = Interaction::keyed(&key);
 
-        let mut toggle_el = stateful_with_key::<ButtonState>(&key)
-            .deps([on_state.signal_id()])
-            .on_state(move |ctx| {
-                let button_state = ctx.state();
-                let is_hovered =
-                    matches!(button_state, ButtonState::Hovered | ButtonState::Pressed);
-                let is_pressed = matches!(button_state, ButtonState::Pressed);
-                let is_on = on_state.get();
-                let is_disabled = config.disabled;
+        // The part fixed at build: sizes and shapes cannot follow a state
+        // without a layout, so they are resolved once, as the toggle stands.
+        let first = Look::resolve(&config, &rules, config.on.get(), false, false);
+        let theme = ThemeState::get();
+        let cfg = &first.cfg;
+        let radius = cfg
+            .corner_radius
+            .unwrap_or_else(|| theme.radius(RadiusToken::Default));
+        let icon_size = cfg.icon_size.unwrap_or(cfg.height * 0.5);
+        let font_size = cfg.label_font_size.unwrap_or(theme.typography().text_sm);
 
-                let theme = ThemeState::get();
-                let mut colors = ResolvedColors::from_config(&config, theme);
-                let mut cfg = config.clone();
+        // What a state changes is bound: each is a computed over the on
+        // signal and the element's hover and press, so a change patches the
+        // node instead of rebuilding it.
+        let (on, hovered, pressed) = (
+            config.on.signal(),
+            interaction.hovered().signal(),
+            interaction.pressed().signal(),
+        );
+        let follow = |pick: fn(&Look) -> Color| {
+            let (config, rules) = (config.clone(), Arc::clone(&rules));
+            computed(move |g: &ReactiveGraph| {
+                let look = Look::resolve(
+                    &config,
+                    &rules,
+                    g.get(on).unwrap_or(false),
+                    g.get(hovered).unwrap_or(false),
+                    g.get(pressed).unwrap_or(false),
+                );
+                pick(&look)
+            })
+        };
+        let bg = follow(|l| l.bg);
+        let fg = follow(|l| l.fg);
+        let border_color = follow(|l| l.border_color);
 
-                if let Some(stylesheet) = active_stylesheet() {
-                    apply_css_overrides(
-                        &mut colors,
-                        &mut cfg,
-                        &stylesheet,
-                        css_element_id.as_deref(),
-                        &css_classes,
-                        is_on,
-                        is_hovered,
-                        is_disabled,
-                    );
-                }
+        let mut body = div()
+            .h(cfg.height)
+            .padding_x(crate::units::px(cfg.padding_x))
+            .flex_row()
+            .items_center()
+            .justify_center()
+            .gap(cfg.gap)
+            .bg(&bg)
+            .rounded(radius)
+            .track(&interaction);
 
-                // Resolve token defaults that weren't pinned by config.
-                let radius = cfg
-                    .corner_radius
-                    .unwrap_or_else(|| theme.radius(RadiusToken::Default));
-                let icon_size = cfg.icon_size.unwrap_or(cfg.height * 0.5);
-                let font_size = cfg.label_font_size.unwrap_or(theme.typography().text_sm);
+        // Border: only the outline variant (`bordered_off=true`)
+        // draws a border, and it draws in both off and on states.
+        // The default variant relies on the icon/label + bg-accent
+        // overlay to communicate state (matching shadcn's
+        // `<Toggle>`); adding a border-on-on for the default would
+        // make it look like the outline variant.
+        if cfg.bordered_off && cfg.border_width > 0.0 {
+            body = body
+                .border_width(cfg.border_width)
+                .border_color(&border_color);
+        }
 
-                // Background:
-                //   off  → transparent (or off_bg) + faint hover wash
-                //   on   → on_bg, mildly darkened on hover for affordance
-                //   pressed → mild darken regardless of on/off so the click
-                //             registers visually before the bool flips.
-                let bg = if is_on {
-                    if is_pressed && !is_disabled {
-                        mix(colors.on_bg, theme.color(ColorToken::TextPrimary), 0.08)
-                    } else if is_hovered && !is_disabled {
-                        mix(colors.on_bg, theme.color(ColorToken::TextPrimary), 0.04)
-                    } else {
-                        colors.on_bg
-                    }
-                } else if is_pressed && !is_disabled {
-                    mix(colors.off_bg, theme.color(ColorToken::TextPrimary), 0.10)
-                } else if is_hovered && !is_disabled {
-                    mix(colors.off_bg, theme.color(ColorToken::TextPrimary), 0.05)
-                } else {
-                    colors.off_bg
-                };
+        if let Some(ref icon_svg) = cfg.icon {
+            body = body.child(
+                svg(icon_svg)
+                    .size(icon_size, icon_size)
+                    .color(&fg)
+                    .internal(),
+            );
+        }
+        if let Some(ref label_text) = cfg.label {
+            body = body.child(text(label_text).size(font_size).color(&fg));
+        }
 
-                let fg = if is_on { colors.on_fg } else { colors.off_fg };
+        if disabled {
+            body = body.opacity(cfg.disabled_opacity);
+        }
 
-                let mut body = div()
-                    .h(cfg.height)
-                    .padding_x(crate::units::px(cfg.padding_x))
-                    .flex_row()
-                    .items_center()
-                    .justify_center()
-                    .gap(cfg.gap)
-                    .bg(bg)
-                    .rounded(radius);
-
-                // Border: only the outline variant (`bordered_off=true`)
-                // draws a border, and it draws in both off and on states.
-                // The default variant relies on the icon/label + bg-accent
-                // overlay to communicate state (matching shadcn's
-                // `<Toggle>`); adding a border-on-on for the default would
-                // make it look like the outline variant.
-                if cfg.bordered_off && cfg.border_width > 0.0 {
-                    body = body.border(cfg.border_width, colors.border_color);
-                }
-
-                if let Some(ref icon_svg) = cfg.icon {
-                    body = body.child(
-                        svg(icon_svg)
-                            .size(icon_size, icon_size)
-                            .color(fg)
-                            .internal(),
-                    );
-                }
-                if let Some(ref label_text) = cfg.label {
-                    body = body.child(text(label_text).size(font_size).color(fg));
-                }
-
-                if is_disabled {
-                    body = body.opacity(cfg.disabled_opacity);
-                }
-
-                body
-            });
-
-        toggle_el = toggle_el.on_click(move |_| {
+        let body = body.on_click(move |_| {
             if disabled {
                 return;
             }
@@ -404,14 +458,13 @@ impl Toggle {
         });
 
         // Wrap in a slim container so the cursor + classes attach
-        // cleanly regardless of the inner Stateful.
-        let theme = ThemeState::get();
+        // cleanly regardless of the inner element.
         let inner = div()
             .h_fit()
             .w_fit()
             .gap(theme.spacing_value(SpacingToken::Space2))
             .cursor_pointer()
-            .child(toggle_el);
+            .child(body);
 
         Self { inner }
     }

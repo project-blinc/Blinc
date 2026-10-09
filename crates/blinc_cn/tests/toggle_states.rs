@@ -131,6 +131,10 @@ impl Harness {
         for (node, event) in events {
             self.tree.dispatch_event(node, event, x, y);
         }
+        assert!(
+            !blinc_layout::stateful::has_pending_subtree_rebuilds(),
+            "an interaction queued a subtree rebuild"
+        );
         self.frame();
     }
 
