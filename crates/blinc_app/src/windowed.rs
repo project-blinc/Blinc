@@ -5519,6 +5519,7 @@ impl WindowedApp {
 
                             // Get current time for animation updates (used in multiple phases)
                             let current_time = elapsed_ms();
+                            crate::motion_trace::begin(current_time);
 
                             // Clear overlays from previous frame (cursor, selection, focus ring)
                             // These are re-added during rendering if still active
@@ -6464,6 +6465,17 @@ impl WindowedApp {
                             // Sync motion states to shared store for query_motion API
                             rs.sync_shared_motion_states();
 
+                            if crate::motion_trace::enabled() {
+                                crate::motion_trace::note("dt_ms", dt_ms);
+                                crate::motion_trace::note("css_active", css_active);
+                                crate::motion_trace::note("css_promotable", css_only_composite_promotable);
+                                crate::motion_trace::note("motion_active_pre", motion_was_active_pre_tick);
+                                crate::motion_trace::note("motion_settled", motion_just_settled);
+                                if let Some(ref tree) = ws.render_tree {
+                                    crate::motion_trace::note_animations(tree, rs);
+                                }
+                            }
+
                             // Tick theme animation (handles color interpolation during theme transitions)
                             let theme_animating = blinc_theme::ThemeState::get().tick();
 
@@ -6579,7 +6591,12 @@ impl WindowedApp {
                                 }
                             }
 
+                            crate::motion_trace::note("did_rebuild", did_rebuild);
+                            crate::motion_trace::note("needs_vsync", needs_vsync);
+                            crate::motion_trace::note("since_paint", elapsed_since_paint);
+                            crate::motion_trace::note("drawn", should_render);
                             if !should_render {
+                                crate::motion_trace::end();
                                 // Schedule the next Frame for exactly the
                                 // moment the cap interval elapses. `wake_at`
                                 // routes through the platform shim's timer
@@ -6866,6 +6883,7 @@ impl WindowedApp {
                                     && !new_overlay_active
                                     && ws.last_paint_time_ms != 0
                                     && blinc_app.has_render_cache();
+                                crate::motion_trace::note("fast", try_fast_paint);
 
                                 // Render with motion animations
                                 // Use physical pixel dimensions for the render surface
@@ -7252,6 +7270,31 @@ impl WindowedApp {
                                 || pointer_query_active
                                 || flow_needs_redraw
                                 || image_fade_needs_redraw;
+                            if crate::motion_trace::enabled() {
+                                crate::motion_trace::note(
+                                    "ask",
+                                    serde_json::json!({
+                                        "scheduler": needs_animation_redraw,
+                                        "scheduler_raw": needs_animation_redraw_raw,
+                                        "external": external_anim_tick,
+                                        "motion": needs_motion_redraw,
+                                        "scroll": scroll_animating,
+                                        "overlay": needs_overlay_redraw,
+                                        "theme": theme_animating,
+                                        "css": css_needs_redraw,
+                                        "overlay_css": overlay_css_needs_redraw,
+                                        "pointer_query": pointer_query_active,
+                                        "flow": flow_needs_redraw,
+                                        "image_fade": image_fade_needs_redraw,
+                                        "cursor": needs_cursor_redraw,
+                                    }),
+                                );
+                                crate::motion_trace::note("another_frame", any_redraw_signal);
+                                crate::motion_trace::note(
+                                    "fps_cap",
+                                    animation_fps_cap_atomic.load(Ordering::Relaxed),
+                                );
+                            }
                             if any_redraw_signal {
                                 // Cursor-only: a focused text input is the
                                 // only redraw signal. Pace at the blink
@@ -7326,6 +7369,7 @@ impl WindowedApp {
                                         let delay = std::time::Duration::from_millis(
                                             1000 / live_cap_chain as u64,
                                         );
+                                        crate::motion_trace::note("wake_in_ms", delay.as_millis() as u64);
                                         frame_dirty.store(true, Ordering::Release);
                                         wake_proxy_for_pacing.wake_at(delay);
                                     } else {
@@ -7398,6 +7442,20 @@ impl WindowedApp {
                                 dirty_springs = dirty_spring_count,
                                 "frame"
                             );
+                            if crate::motion_trace::enabled() {
+                                crate::motion_trace::note(
+                                    "cost_us",
+                                    serde_json::json!({
+                                        "total": t_total.as_micros() as u64,
+                                        "p1": t_phase1.as_micros() as u64,
+                                        "p2": t_phase2.as_micros() as u64,
+                                        "p3": t_phase3.as_micros() as u64,
+                                        "p4": t_phase4.as_micros() as u64,
+                                        "p5": t_phase5.as_micros() as u64,
+                                    }),
+                                );
+                            }
+                            crate::motion_trace::end();
                         }
                     }
 

@@ -236,6 +236,32 @@ impl RenderTree {
         self.css_anim_store.lock().unwrap().animations.is_empty()
     }
 
+    /// Every playing CSS animation and transition, for a motion trace: the
+    /// node's stable id, which kind, how far through it is, its opacity now,
+    /// and whether the last paint reached the node.
+    pub fn css_samples(&self) -> Vec<(u64, &'static str, f32, Option<f32>, bool)> {
+        let painted = self.painted_stable_ids();
+        let store = self.css_anim_store.lock().unwrap();
+        let mut out: Vec<_> = store
+            .animations
+            .iter()
+            .map(|entry| (entry, "animation"))
+            .chain(store.transitions.iter().map(|entry| (entry, "transition")))
+            .filter(|((_, a), _)| a.is_playing)
+            .map(|((stable, a), kind)| {
+                (
+                    stable.to_raw(),
+                    kind,
+                    a.animation.progress(),
+                    a.current_properties.opacity,
+                    painted.contains(stable),
+                )
+            })
+            .collect();
+        out.sort_by_key(|sample| sample.0);
+        out
+    }
+
     /// Check if the CSS animation store has any active work (animations or transitions)
     pub fn css_has_active(&self) -> bool {
         let store = self.css_anim_store.lock().unwrap();

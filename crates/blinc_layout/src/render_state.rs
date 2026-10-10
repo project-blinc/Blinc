@@ -247,6 +247,33 @@ pub enum MotionState {
     Removed,
 }
 
+/// A motion as a motion trace records it.
+#[derive(Clone, Debug)]
+pub struct MotionSample {
+    /// The stable key, or `node:<id>` for a motion keyed by its node.
+    pub key: String,
+    pub state: &'static str,
+    /// How far through its enter or exit it is, 0 to 1; 1 when settled.
+    pub progress: f32,
+    pub opacity: Option<f32>,
+    pub translate: (Option<f32>, Option<f32>),
+    pub scale: (Option<f32>, Option<f32>),
+}
+
+impl MotionState {
+    /// The state's name and how far through it the motion is.
+    pub fn describe(&self) -> (&'static str, f32) {
+        match self {
+            MotionState::Suspended => ("suspended", 0.0),
+            MotionState::Waiting { .. } => ("waiting", 0.0),
+            MotionState::Entering { progress, .. } => ("entering", *progress),
+            MotionState::Visible => ("visible", 1.0),
+            MotionState::Exiting { progress, .. } => ("exiting", *progress),
+            MotionState::Removed => ("removed", 1.0),
+        }
+    }
+}
+
 /// Active motion animation for a node
 #[derive(Clone, Debug)]
 pub struct ActiveMotion {
@@ -707,6 +734,33 @@ pub struct RenderState {
 }
 
 impl RenderState {
+    /// Every motion that is not resting visible, for a motion trace.
+    pub fn motion_samples(&self) -> Vec<MotionSample> {
+        let sample = |key: String, m: &ActiveMotion| {
+            let (state, progress) = m.state.describe();
+            MotionSample {
+                key,
+                state,
+                progress,
+                opacity: m.current.opacity,
+                translate: (m.current.translate_x, m.current.translate_y),
+                scale: (m.current.scale_x, m.current.scale_y),
+            }
+        };
+        let mut out: Vec<MotionSample> = self
+            .stable_motions
+            .iter()
+            .filter(|(_, m)| !matches!(m.state, MotionState::Visible))
+            .map(|(key, m)| sample(key.clone(), m))
+            .collect();
+        out.extend(self.node_states.iter().filter_map(|(node, state)| {
+            let m = state.motion.as_ref()?;
+            (!matches!(m.state, MotionState::Visible)).then(|| sample(format!("node:{node:?}"), m))
+        }));
+        out.sort_by(|a, b| a.key.cmp(&b.key));
+        out
+    }
+
     /// Create a new render state with the given animation scheduler
     pub fn new(animations: Arc<Mutex<AnimationScheduler>>) -> Self {
         // Set global scheduler so components can access animations without context

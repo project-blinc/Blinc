@@ -156,6 +156,10 @@ pub mod windowed;
 /// when that chain doesn't engage on some Mesa + Wayland compositors.
 /// Opt-in via the `wayland-frame-gate` feature; module is a no-op
 /// elsewhere.
+/// Per-frame record of the frame loop's decisions and animation progress.
+#[cfg(all(feature = "windowed", not(target_os = "android")))]
+pub(crate) mod motion_trace;
+
 #[cfg(all(feature = "wayland-frame-gate", target_os = "linux"))]
 pub mod wayland_frame_gate;
 
