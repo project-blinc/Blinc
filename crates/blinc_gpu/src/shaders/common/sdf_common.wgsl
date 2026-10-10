@@ -799,6 +799,17 @@ fn shadow_circle(p: vec2<f32>, center: vec2<f32>, radius: f32, sigma: f32) -> f3
     return 0.5 * (1.0 + erf((radius - dist) / d));
 }
 
+// Corner radii of a box shadow grown by `spread`, as CSS does: a corner grows
+// by the spread only as far as it is already round, so a square corner stays
+// square.
+fn shadow_spread_radius(radius: vec4<f32>, spread: f32) -> vec4<f32> {
+    if spread > 0.0 {
+        let u = min(radius / spread, vec4<f32>(1.0)) - vec4<f32>(1.0);
+        return radius + spread * (vec4<f32>(1.0) + u * u * u);
+    }
+    return max(radius + vec4<f32>(spread), vec4<f32>(0.0));
+}
+
 fn shadow_rounded_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, corner_radius: vec4<f32>, sigma: f32) -> f32 {
     // Get signed distance to the rounded rectangle
     let sdf_dist = sd_rounded_rect(p, origin, size, corner_radius);

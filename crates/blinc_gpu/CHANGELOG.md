@@ -8,6 +8,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - Per-corner squircle / scoop / bevel support on `ClipShape::RoundedRect` propagated into the SDF clip primitive uniforms — all 12 SDF shader variants (`sdf_core` / `sdf_shadow` / `sdf_3d` / `sdf_notch` × `vb` / `dt` / msaa) now read and apply per-corner `n` when evaluating clip alpha.
 
 ### Fixed
+- Box shadows in `sdf_shadow` (all three variants): a spread-only shadow now draws (the quad grows by the spread), an offset-only shadow with no blur and no spread now draws, a spread grows a corner only as far as it is already round (a square box keeps square shadow corners), and an unblurred outer or inset edge is antialiased over a pixel. A zero-blur inset shadow is now a crisp ring instead of a soft one.
 - `pre_warm_pipelines` previously issued `pass.draw(...)` against the Path pipeline (and SDF pipelines on hosts without `VERTEX_STORAGE`) without first calling `set_vertex_buffer(0, ...)`. Both declare a vertex-buffer layout, so a missing slot 0 triggered the Vulkan validation panic `requires vertex buffer 0 to be set` on Linux at startup and prevented apps from launching. Binds a single-vertex dummy buffer for the warm-up draws.
 
 ### Changed

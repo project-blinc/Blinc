@@ -126,8 +126,9 @@ fn vs_main(
 ) -> VertexOutput {
     var out: VertexOutput;
 
-    // Expand bounds for shadow blur
-    let blur_expand = vb_shadow.z * 3.0 + abs(vb_shadow.x) + abs(vb_shadow.y);
+    // Expand the quad over the blur, the offset and the spread; the extra
+    // pixel is for the antialiased edge of a shadow with no blur.
+    let blur_expand = vb_shadow.z * 3.0 + abs(vb_shadow.x) + abs(vb_shadow.y) + max(vb_shadow.w, 0.0) + 1.0;
 
     let bounds = vec4<f32>(
         vb_bounds.x - blur_expand,
@@ -373,7 +374,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Calculate shadow first (rendered behind) - but NOT for inner shadow primitives
     // InnerShadow primitives handle their own shadow rendering differently
-    if (prim.shadow.z > 0.0 || prim.shadow.w != 0.0) && prim_type != 4u {
+    if prim_type != 4u {
         let shadow_offset = prim.shadow.xy;
         let blur = prim.shadow.z;
         let spread = prim.shadow.w;
@@ -381,14 +382,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let shadow_origin = origin + shadow_offset - vec2<f32>(spread);
         let shadow_size = size + vec2<f32>(spread * 2.0);
 
-        // Adjust corner radii for spread (expand corners proportionally)
-        let shadow_radii = prim.corner_radius + vec4<f32>(spread);
+        let shadow_radii = shadow_spread_radius(prim.corner_radius, spread);
 
         var shadow_sdf_dist: f32;
         shadow_sdf_dist = sd_shaped_rect(sp, shadow_origin, shadow_size, shadow_radii, prim.corner_shape);
         var shadow_alpha: f32;
         if blur < 0.001 {
-            shadow_alpha = select(0.0, 1.0, shadow_sdf_dist < 0.0);
+            // No blur: the edge, antialiased over a pixel.
+            shadow_alpha = clamp(0.5 - shadow_sdf_dist, 0.0, 1.0);
         } else {
             let sigma_d = 0.5 * sqrt(2.0) * blur;
             shadow_alpha = 0.5 * (1.0 + erf(-shadow_sdf_dist / sigma_d));
@@ -434,7 +435,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             // At edge (edge_dist ≈ 0): full shadow
             // Further inside (edge_dist > blur + spread): no shadow
             let shadow_range = blur + spread;
-            let shadow_alpha = 1.0 - smoothstep(0.0, shadow_range, edge_dist - spread);
+            var shadow_alpha: f32;
+            if prim.shadow.z < 0.001 {
+                // No blur: the edge of the spread, antialiased over a pixel.
+                shadow_alpha = clamp(0.5 + spread - edge_dist, 0.0, 1.0);
+            } else {
+                shadow_alpha = 1.0 - smoothstep(0.0, shadow_range, edge_dist - spread);
+            }
 
             // Apply offset by shifting the shadow calculation
             // Offset shifts which "edge" the shadow appears from
@@ -487,7 +494,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
             // Create shadow falloff from edge toward center
             let shadow_range = blur + spread;
-            let shadow_alpha = 1.0 - smoothstep(0.0, shadow_range, edge_dist - spread);
+            var shadow_alpha: f32;
+            if prim.shadow.z < 0.001 {
+                // No blur: the edge of the spread, antialiased over a pixel.
+                shadow_alpha = clamp(0.5 + spread - edge_dist, 0.0, 1.0);
+            } else {
+                shadow_alpha = 1.0 - smoothstep(0.0, shadow_range, edge_dist - spread);
+            }
 
             // Apply offset
             let offset_effect = dot(normalize(offset + vec2<f32>(0.001)), sp - center);

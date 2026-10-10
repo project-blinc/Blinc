@@ -125,6 +125,68 @@ pub fn suite() -> TestSuite {
         );
     });
 
+    // Shadows with no blur: spread only, offset only, spread on a square box,
+    // and a zero-blur inset ring.
+    suite.add("shadow_edges", |ctx| {
+        let c = ctx.ctx();
+
+        c.fill_rect(
+            Rect::new(0.0, 0.0, 400.0, 300.0),
+            0.0.into(),
+            Color::rgba(0.92, 0.92, 0.94, 1.0).into(),
+        );
+
+        let green = Color::rgba(0.1, 0.65, 0.2, 1.0);
+        let blue = Color::rgba(0.15, 0.3, 0.9, 1.0);
+        let sharp = |x: f32, y: f32| Rect::new(x, y, 90.0, 60.0);
+
+        // Top row: spread only on a square box, spread only on a rounded
+        // box, offset only on a square box.
+        let shadow = |dx: f32, dy: f32, spread: f32, color: Color| Shadow {
+            offset_x: dx,
+            offset_y: dy,
+            blur: 0.0,
+            spread,
+            color,
+        };
+        c.draw_shadow(sharp(25.0, 40.0), 0.0.into(), shadow(0.0, 0.0, 8.0, green));
+        c.draw_shadow(
+            sharp(155.0, 40.0),
+            14.0.into(),
+            shadow(0.0, 0.0, 8.0, green),
+        );
+        c.draw_shadow(
+            sharp(285.0, 40.0),
+            0.0.into(),
+            shadow(10.0, 10.0, 0.0, blue),
+        );
+        // Bottom row: offset only on a rounded box, spread and offset on a
+        // square box, an inset ring on a square and a rounded box.
+        c.draw_shadow(
+            sharp(25.0, 170.0),
+            14.0.into(),
+            shadow(10.0, 10.0, 0.0, blue),
+        );
+        c.draw_shadow(
+            sharp(155.0, 170.0),
+            0.0.into(),
+            shadow(6.0, 6.0, 6.0, green),
+        );
+
+        for (x, y, radius) in [
+            (25.0, 40.0, 0.0),
+            (155.0, 40.0, 14.0),
+            (285.0, 40.0, 0.0),
+            (25.0, 170.0, 14.0),
+            (155.0, 170.0, 0.0),
+        ] {
+            c.fill_rect(sharp(x, y), radius.into(), Color::WHITE.into());
+        }
+
+        c.fill_rect(sharp(285.0, 170.0), 0.0.into(), Color::WHITE.into());
+        c.draw_inner_shadow(sharp(285.0, 170.0), 0.0.into(), shadow(0.0, 0.0, 4.0, blue));
+    });
+
     // Inner shadow effect using draw_inner_shadow API
     suite.add("shadow_inner_effect", |ctx| {
         let c = ctx.ctx();
