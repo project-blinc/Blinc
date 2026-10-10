@@ -922,7 +922,7 @@ impl AnimationScheduler {
             return self.has_active_animations();
         }
 
-        let (has_active, tick_callbacks_to_call, dt) = {
+        let dt = {
             let mut inner = self.inner.lock().unwrap();
             let now = Instant::now();
             // Same per-tick dt cap as `tick_frame_inner` — prevents
@@ -931,7 +931,31 @@ impl AnimationScheduler {
             let raw_dt = (now - inner.last_frame).as_secs_f32().min(MAX_TICK_DT);
             inner.last_frame = now;
             // EMA-smooth dt before stepping. See [`smooth_dt`] for why.
-            let dt = smooth_dt(raw_dt, &mut inner.smoothed_dt);
+            smooth_dt(raw_dt, &mut inner.smoothed_dt)
+        };
+        self.step(dt)
+    }
+
+    /// Advance every spring, keyframe and timeline by `dt` seconds and run
+    /// the tick callbacks, as [`Self::tick`] does with the time since the
+    /// last tick.
+    ///
+    /// A fixed step makes a run reproducible: an offscreen render or a test
+    /// sees the same values every time. Like `tick`, it does nothing while
+    /// the background thread owns ticking.
+    pub fn tick_by(&self, dt: f32) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.thread_handle.is_some() {
+            return self.has_active_animations();
+        }
+        self.inner.lock().unwrap().last_frame = Instant::now();
+        self.step(dt.max(0.0))
+    }
+
+    /// One tick of `dt` seconds, shared by `tick` and `tick_by`.
+    fn step(&self, dt: f32) -> bool {
+        let (has_active, tick_callbacks_to_call) = {
+            let mut inner = self.inner.lock().unwrap();
             let dt_ms = dt * 1000.0;
 
             // Step springs and record those whose value actually
@@ -969,7 +993,7 @@ impl AnimationScheduler {
                 || inner.timelines.iter().any(|(_, t)| t.is_playing())
                 || !inner.tick_callbacks.is_empty();
 
-            (has_active, callbacks, dt)
+            (has_active, callbacks)
         };
 
         // Run callbacks outside the lock to avoid deadlocks if a
@@ -2599,7 +2623,32 @@ impl Drop for AnimatedTimeline {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
+
+    /// The same steps give the same values, so an offscreen run can be
+    /// compared frame by frame.
+    #[test]
+    fn a_fixed_step_tick_is_reproducible() {
+        let run = || {
+            let scheduler = AnimationScheduler::new();
+            let mut value = AnimatedValue::new(scheduler.handle(), 0.0, SpringConfig::snappy());
+            value.set_target(100.0);
+            let mut seen = Vec::new();
+            for _ in 0..30 {
+                scheduler.tick_by(1.0 / 60.0);
+                seen.push(value.get());
+            }
+            seen
+        };
+        let first = run();
+        // A snappy spring overshoots a little; it moves and arrives.
+        assert!(
+            first[0] > 0.0 && (first[29] - 100.0).abs() < 1.0,
+            "{first:?}"
+        );
+        assert_eq!(first, run());
+    }
 
     #[test]
     fn test_scheduler_tick() {
