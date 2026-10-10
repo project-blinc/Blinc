@@ -42,11 +42,13 @@ use std::sync::Arc;
 
 use blinc_core::State;
 use blinc_core::context_state::BlincContextState;
+use blinc_core::owner::Owner;
+use blinc_core::reactive::{ReactiveGraph, computed};
+use blinc_layout::IntoReactive;
 use blinc_layout::click_outside;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, stateful_with_key};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::text_input::SharedTextInputData;
 use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState};
@@ -210,12 +212,118 @@ impl Combobox {
 
         let dropdown_width = config.width.unwrap_or(200.0);
 
-        // Clones for closures
-        let value_state_for_display = config.value_state.clone();
-        let open_state_for_display = open_state.clone();
+        // The combobox is built once. The trigger's text, colour and border
+        // follow the value, the search and the pointer; the list is built
+        // while it is open, and its rows follow the search.
+        let interaction = Interaction::keyed(&format!("{}_btn", instance_key));
+        let hovered = interaction.hovered().signal();
+        let (value, open, query) = (
+            config.value_state.signal(),
+            open_state.signal(),
+            search_query_state.signal(),
+        );
+
         let options_for_display = config.options.clone();
-        let placeholder_for_display = config.placeholder.clone();
-        let search_data_for_display = search_input_data.clone();
+        let placeholder = config
+            .placeholder
+            .clone()
+            .unwrap_or_else(|| "Search...".to_string());
+        let display_text = computed(move |g: &ReactiveGraph| {
+            let current = g.get(value).unwrap_or_default();
+            if let Some(opt) = options_for_display.iter().find(|o| o.value == current) {
+                return opt.label.clone();
+            }
+            if !current.is_empty() {
+                return current;
+            }
+            let search = g.get(query).unwrap_or_default();
+            if !search.is_empty() && g.get(open).unwrap_or(false) {
+                search
+            } else {
+                placeholder.clone()
+            }
+        });
+        let options_for_colour = config.options.clone();
+        let display_color = computed(move |g: &ReactiveGraph| {
+            let current = g.get(value).unwrap_or_default();
+            let chosen = options_for_colour.iter().any(|o| o.value == current);
+            if chosen || !current.is_empty() {
+                text_color
+            } else {
+                text_tertiary
+            }
+        });
+        let trigger_border = computed(move |g: &ReactiveGraph| {
+            if g.get(open).unwrap_or(false) {
+                border_focus
+            } else if g.get(hovered).unwrap_or(false) {
+                border_hover
+            } else {
+                border
+            }
+        });
+
+        // Chevron SVG (down arrow)
+        let chevron_svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
+
+        // Trigger button — click handler is on the trigger itself (not the wrapper)
+        // so clicking dropdown items does NOT re-toggle the dropdown.
+        let open_state_trigger = open_state.clone();
+        let search_data_trigger = search_input_data.clone();
+        let search_query_trigger = search_query_state.clone();
+        let trigger = div()
+            .class("cn-combobox-trigger")
+            .flex_row()
+            .w_full()
+            .items_center()
+            .h(height)
+            .p_px(padding)
+            .bg(bg)
+            .border_width(1.0)
+            .border_color(&trigger_border)
+            .rounded(radius)
+            .track(&interaction)
+            .child(
+                div().flex_1().overflow_clip().child(
+                    Text::bound(display_text.into_reactive())
+                        .size(font_size)
+                        .no_cursor()
+                        .color(&display_color),
+                ),
+            )
+            .flex_shrink_0()
+            .shadow_sm()
+            .child(
+                svg(chevron_svg)
+                    .size(16.0, 16.0)
+                    .tint(text_tertiary)
+                    .ml(1.0)
+                    .flex_shrink_0(),
+            )
+            .cursor_pointer()
+            .on_click(move |_ctx| {
+                if disabled {
+                    return;
+                }
+                let is_currently_open = open_state_trigger.get();
+                if is_currently_open {
+                    // Closing: clear search text
+                    if let Ok(mut data) = search_data_trigger.lock() {
+                        data.value.clear();
+                        data.cursor = 0;
+                    }
+                    search_query_trigger.set(String::new());
+                } else {
+                    // Opening: focus the search input so the user can
+                    // start typing at once.
+                    blinc_layout::widgets::text_input::focus_text_input(&search_data_trigger);
+                }
+                open_state_trigger.set(!is_currently_open);
+            });
+
+        // Unique element ID for click-outside detection
+        let wrapper_id = format!("cn-combobox-{}", instance_key);
+        let wrapper_id_for_list = wrapper_id.clone();
         let options_for_dropdown = config.options.clone();
         let on_change_for_dropdown = config.on_change.clone();
         let value_state_for_dropdown = config.value_state.clone();
@@ -224,189 +332,61 @@ impl Combobox {
         let search_query_for_dropdown = search_query_state.clone();
         let allow_custom = config.allow_custom;
         let placeholder_for_content = config.placeholder.clone();
-
-        // Chevron SVG (down arrow)
-        let chevron_svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
-
-        let select_btn_key = format!("{}_btn", instance_key);
         let instance_key_owned = instance_key.to_string();
-        // Unique element ID for click-outside detection
-        let wrapper_id = format!("cn-combobox-{}", instance_key);
-        let wrapper_id_for_state = wrapper_id.clone();
-        let open_state_for_dismiss = open_state.clone();
-        let search_data_for_dismiss = search_input_data.clone();
-        let search_query_for_dismiss = search_query_state.clone();
 
-        let combobox_element = stateful_with_key::<ButtonState>(&select_btn_key)
-            .deps([
-                config.value_state.signal_id(),
-                open_state.signal_id(),
-                search_query_state.signal_id(),
-            ])
-            .on_state(move |ctx| {
-                let state = ctx.state();
-                let is_open = open_state_for_display.get();
-
-                // Register/unregister click-outside based on open state
-                if is_open {
-                    let dismiss_state = open_state_for_dismiss.clone();
-                    let dismiss_search_data = search_data_for_dismiss.clone();
-                    let dismiss_search_query = search_query_for_dismiss.clone();
-                    click_outside::register_click_outside(
-                        &wrapper_id_for_state,
-                        &wrapper_id_for_state,
-                        move || {
-                            dismiss_state.set(false);
-                            // Clear search text on dismiss
-                            if let Ok(mut data) = dismiss_search_data.lock() {
-                                data.value.clear();
-                                data.cursor = 0;
-                            }
-                            dismiss_search_query.set(String::new());
-                        },
-                    );
-                } else {
-                    click_outside::unregister_click_outside(&wrapper_id_for_state);
-                }
-                let current_val = value_state_for_display.get();
-
-                let selected_option = options_for_display
-                    .iter()
-                    .find(|opt| opt.value == current_val);
-
-                let display_text = if let Some(opt) = selected_option {
-                    opt.label.clone()
-                } else if !current_val.is_empty() {
-                    current_val.clone()
-                } else {
-                    let search_text = search_data_for_display
-                        .lock()
-                        .ok()
-                        .map(|d| d.value.clone())
-                        .unwrap_or_default();
-                    if !search_text.is_empty() && is_open {
-                        search_text
-                    } else {
-                        placeholder_for_display
-                            .clone()
-                            .unwrap_or_else(|| "Search...".to_string())
-                    }
-                };
-
-                let is_placeholder = selected_option.is_none() && current_val.is_empty();
-                let text_clr = if is_placeholder {
-                    text_tertiary
-                } else {
-                    text_color
-                };
-
-                let bdr = if is_open {
-                    border_focus
-                } else if state == ButtonState::Hovered {
-                    border_hover
-                } else {
-                    border
-                };
-
-                let display_content = div().flex_1().overflow_clip().child(
-                    text(&display_text)
-                        .size(font_size)
-                        .no_cursor()
-                        .color(text_clr),
+        // The wrapper is positioned so the list can sit absolutely below the
+        // trigger.
+        let combobox_element = div()
+            .class("cn-combobox")
+            .id(&wrapper_id)
+            .relative()
+            .overflow_visible()
+            .w(dropdown_width)
+            .child(trigger)
+            .show(&open_state, move || {
+                // A click outside closes the list, and clears the search, for
+                // as long as it is open.
+                let dismiss_state = open_state_for_dropdown.clone();
+                let dismiss_search_data = search_data_for_dropdown.clone();
+                let dismiss_search_query = search_query_for_dropdown.clone();
+                click_outside::register_click_outside(
+                    &wrapper_id_for_list,
+                    &wrapper_id_for_list,
+                    move || {
+                        dismiss_state.set(false);
+                        if let Ok(mut data) = dismiss_search_data.lock() {
+                            data.value.clear();
+                            data.cursor = 0;
+                        }
+                        dismiss_search_query.set(String::new());
+                    },
                 );
+                let registered = wrapper_id_for_list.clone();
+                Owner::on_cleanup(move || click_outside::unregister_click_outside(&registered));
 
-                // Wrapper uses relative positioning so the dropdown can be absolutely positioned
-                let mut wrapper = div()
-                    .class("cn-combobox")
-                    .id(&wrapper_id)
-                    .relative()
-                    .overflow_visible()
-                    .w(dropdown_width);
-
-                // Trigger button — click handler is on the trigger itself (not the wrapper)
-                // so clicking dropdown items does NOT re-toggle the dropdown.
-                let open_state_trigger = open_state_for_display.clone();
-                let search_data_trigger = search_data_for_display.clone();
-                let search_query_trigger = search_query_for_dropdown.clone();
-                let trigger = div()
-                    .class("cn-combobox-trigger")
-                    .flex_row()
-                    .w_full()
-                    .items_center()
-                    .h(height)
-                    .p_px(padding)
-                    .bg(bg)
-                    .border(1.0, bdr)
-                    .rounded(radius)
-                    .child(display_content)
-                    .flex_shrink_0()
-                    .shadow_sm()
-                    .child(
-                        svg(chevron_svg)
-                            .size(16.0, 16.0)
-                            .tint(text_tertiary)
-                            .ml(1.0)
-                            .flex_shrink_0(),
-                    )
-                    .cursor_pointer()
-                    .on_click(move |_ctx| {
-                        if disabled {
-                            return;
-                        }
-                        let is_currently_open = open_state_trigger.get();
-                        if is_currently_open {
-                            // Closing: clear search text
-                            if let Ok(mut data) = search_data_trigger.lock() {
-                                data.value.clear();
-                                data.cursor = 0;
-                            }
-                            search_query_trigger.set(String::new());
-                        } else {
-                            // Opening: autofocus the search input so the
-                            // user can start typing immediately. Without
-                            // this they'd have to click the search field
-                            // first — unexpected for a "type to search"
-                            // affordance.
-                            blinc_layout::widgets::text_input::focus_text_input(
-                                &search_data_trigger,
-                            );
-                        }
-                        open_state_trigger.set(!is_currently_open);
-                    });
-
-                wrapper = wrapper.child(trigger);
-
-                // Dropdown content (only when open)
-                if is_open {
-                    let current_selected = value_state_for_dropdown.get();
-                    let dropdown = build_dropdown_content(
-                        &options_for_dropdown,
-                        &current_selected,
-                        &value_state_for_dropdown,
-                        &open_state_for_dropdown,
-                        &on_change_for_dropdown,
-                        &instance_key_owned,
-                        &search_data_for_dropdown,
-                        &search_query_for_dropdown,
-                        dropdown_width,
-                        height,
-                        font_size,
-                        padding,
-                        radius,
-                        bg,
-                        border,
-                        border_focus,
-                        text_color,
-                        text_tertiary,
-                        surface_elevated,
-                        allow_custom,
-                        &placeholder_for_content,
-                    );
-
-                    wrapper = wrapper.child(dropdown);
-                }
-
-                wrapper
+                build_dropdown_content(
+                    &options_for_dropdown,
+                    &value_state_for_dropdown.get(),
+                    &value_state_for_dropdown,
+                    &open_state_for_dropdown,
+                    &on_change_for_dropdown,
+                    &instance_key_owned,
+                    &search_data_for_dropdown,
+                    &search_query_for_dropdown,
+                    dropdown_width,
+                    height,
+                    font_size,
+                    padding,
+                    radius,
+                    bg,
+                    border,
+                    border_focus,
+                    text_color,
+                    text_tertiary,
+                    surface_elevated,
+                    allow_custom,
+                    &placeholder_for_content,
+                )
             });
 
         // Build the outer container with optional label
@@ -658,6 +638,17 @@ pub fn combobox(value_state: &State<String>) -> ComboboxBuilder {
     ComboboxBuilder::new(value_state)
 }
 
+/// A row of the open list.
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum ListRow {
+    /// The option at this index.
+    Option(usize),
+    /// Nothing matches the search.
+    NoResults,
+    /// Use the search text as the value.
+    Custom(String),
+}
+
 /// Build the dropdown content as an absolutely positioned child.
 ///
 /// This includes a search input and filtered options list.
@@ -755,153 +746,134 @@ fn build_dropdown_content(
 
     dropdown_div = dropdown_div.child(search_container);
 
-    // Build the options list inline. The outer combobox Stateful already lists
-    // search_query_state.signal_id() in its deps, so search-driven rebuilds flow
-    // through that — wrapping the option list in its own Stateful<NoState> just
-    // added a redundant subtree-rebuild layer that left class registrations
-    // out-of-sync with apply_complex_selector_styles' hover matching pass, so
-    // `.cn-combobox-item:hover` never lit up.
+    // The rows follow the search in place: the options that match, else a
+    // "no results" row and, when allowed, one to use the search as the value.
     let options_content_key = format!("{}_options_content", key);
-    let search_text = search_query_state.get();
+    let query = search_query_state.signal();
+    let options_for_rows = options.to_vec();
+    let rows = computed(move |g: &ReactiveGraph| {
+        let search = g.get(query).unwrap_or_default();
+        let mut rows: Vec<ListRow> = options_for_rows
+            .iter()
+            .enumerate()
+            .filter(|(_, opt)| opt.matches(&search))
+            .map(|(idx, _)| ListRow::Option(idx))
+            .collect();
+        if rows.is_empty() {
+            rows.push(ListRow::NoResults);
+            if allow_custom && !search.is_empty() {
+                rows.push(ListRow::Custom(search));
+            }
+        }
+        rows
+    });
 
-    let filtered_options: Vec<_> = options
-        .iter()
-        .filter(|opt| opt.matches(&search_text))
-        .collect();
+    let options = options.to_vec();
+    let current_selected = current_selected.to_string();
+    let value_state = value_state.clone();
+    let open_state = open_state.clone();
+    let on_change = on_change.clone();
+    let search_data = search_data.clone();
+    let search_query_state = search_query_state.clone();
+    let key = key.to_string();
+    // Choosing a value closes the list and clears the search.
+    let choose = Arc::new(move |chosen: String| {
+        value_state.set(chosen.clone());
+        open_state.set(false);
+        if let Ok(mut data) = search_data.lock() {
+            data.value.clear();
+            data.cursor = 0;
+        }
+        search_query_state.set(String::new());
+        if let Some(ref cb) = on_change {
+            cb(&chosen);
+        }
+    });
 
-    let mut options_content = div()
+    let options_content = div()
         .id(&options_content_key)
         .flex_col()
         .max_h(200.0)
         .overflow_y_scroll()
-        .w_full();
-
-    if filtered_options.is_empty() {
-        let no_results = div().w_full().p_px(padding).child(
-            text("No results found")
-                .size(font_size)
-                .color(text_tertiary),
-        );
-        options_content = options_content.child(no_results);
-
-        if allow_custom && !search_text.is_empty() {
-            let custom_value = search_text.clone();
-            let value_state_for_custom = value_state.clone();
-            let open_state_for_custom = open_state.clone();
-            let on_change_for_custom = on_change.clone();
-            let search_data_for_custom = search_data.clone();
-            let search_query_for_custom = search_query_state.clone();
-
-            let custom_item_id = format!("{}_custom", key);
-            let custom_item = div()
-                .id(&custom_item_id)
-                .class("cn-combobox-item")
-                .w_full()
-                .h_fit()
-                .cursor(CursorStyle::Pointer)
-                .flex_row()
-                .items_center()
-                .child(
-                    div().child(
-                        text(format!("Use \"{}\"", custom_value))
+        .w_full()
+        .for_each(
+            rows,
+            |row: &ListRow| row.clone(),
+            move |row: ListRow| -> Div {
+                match row {
+                    ListRow::NoResults => div().w_full().p_px(padding).child(
+                        text("No results found")
                             .size(font_size)
-                            .no_cursor()
-                            .color(text_color),
+                            .color(text_tertiary),
                     ),
-                )
-                .on_click(move |_ctx| {
-                    let custom_val = search_data_for_custom
-                        .lock()
-                        .ok()
-                        .map(|d| d.value.clone())
-                        .unwrap_or_default();
-                    value_state_for_custom.set(custom_val.clone());
-                    open_state_for_custom.set(false);
-
-                    if let Ok(mut data) = search_data_for_custom.lock() {
-                        data.value.clear();
-                        data.cursor = 0;
+                    ListRow::Custom(custom_value) => {
+                        let choose = choose.clone();
+                        div()
+                            .id(format!("{}_custom", key))
+                            .class("cn-combobox-item")
+                            .w_full()
+                            .h_fit()
+                            .cursor(CursorStyle::Pointer)
+                            .flex_row()
+                            .items_center()
+                            .child(
+                                div().child(
+                                    text(format!("Use \"{}\"", custom_value))
+                                        .size(font_size)
+                                        .no_cursor()
+                                        .color(text_color),
+                                ),
+                            )
+                            .on_click(move |_ctx| choose(custom_value.clone()))
                     }
-                    search_query_for_custom.set(String::new());
-
-                    if let Some(ref cb) = on_change_for_custom {
-                        cb(&custom_val);
-                    }
-                });
-
-            options_content = options_content.child(custom_item);
-        }
-    } else {
-        for (idx, opt) in filtered_options.iter().enumerate() {
-            let opt_value = opt.value.clone();
-            let opt_label = opt.label.clone();
-            let opt_content = opt.content.clone();
-            let is_selected = opt_value == current_selected;
-            let is_opt_disabled = opt.disabled;
-
-            let value_state_for_opt = value_state.clone();
-            let open_state_for_opt = open_state.clone();
-            let on_change_for_opt = on_change.clone();
-            let opt_value_for_click = opt_value.clone();
-            let search_data_for_opt = search_data.clone();
-            let search_query_for_opt = search_query_state.clone();
-
-            let option_text_color = if is_opt_disabled {
-                text_tertiary
-            } else {
-                text_color
-            };
-
-            // Background is owned by CSS (.cn-combobox-item /
-            // .cn-combobox-item:hover / .cn-combobox-item--selected) — an
-            // explicit `.bg(base_bg)` here overrides the :hover selector.
-            let item_id = format!("{}_opt_{}", key, idx);
-            let mut option_item = div()
-                .id(&item_id)
-                .class("cn-combobox-item")
-                .w_full()
-                .h_fit()
-                .cursor(if is_opt_disabled {
-                    CursorStyle::NotAllowed
-                } else {
-                    CursorStyle::Pointer
-                })
-                .flex_row()
-                .items_center();
-            if is_selected {
-                option_item = option_item.class("cn-combobox-item--selected");
-            }
-            let option_item = option_item
-                .child(if let Some(ref content_fn) = opt_content {
-                    content_fn()
-                } else {
-                    div().child(
-                        text(&opt_label)
-                            .size(font_size)
-                            .no_cursor()
-                            .color(option_text_color),
-                    )
-                })
-                .on_click(move |_ctx| {
-                    if !is_opt_disabled {
-                        value_state_for_opt.set(opt_value_for_click.clone());
-                        open_state_for_opt.set(false);
-
-                        if let Ok(mut data) = search_data_for_opt.lock() {
-                            data.value.clear();
-                            data.cursor = 0;
+                    ListRow::Option(idx) => {
+                        let opt = &options[idx];
+                        let is_opt_disabled = opt.disabled;
+                        let option_text_color = if is_opt_disabled {
+                            text_tertiary
+                        } else {
+                            text_color
+                        };
+                        // Background is owned by CSS (.cn-combobox-item /
+                        // .cn-combobox-item:hover / .cn-combobox-item--selected) — an
+                        // explicit `.bg(base_bg)` here overrides the :hover selector.
+                        let mut option_item = div()
+                            .id(format!("{}_opt_{}", key, idx))
+                            .class("cn-combobox-item")
+                            .w_full()
+                            .h_fit()
+                            .cursor(if is_opt_disabled {
+                                CursorStyle::NotAllowed
+                            } else {
+                                CursorStyle::Pointer
+                            })
+                            .flex_row()
+                            .items_center();
+                        if opt.value == current_selected {
+                            option_item = option_item.class("cn-combobox-item--selected");
                         }
-                        search_query_for_opt.set(String::new());
-
-                        if let Some(ref cb) = on_change_for_opt {
-                            cb(&opt_value_for_click);
-                        }
+                        let choose = choose.clone();
+                        let value = opt.value.clone();
+                        option_item
+                            .child(if let Some(ref content_fn) = opt.content {
+                                content_fn()
+                            } else {
+                                div().child(
+                                    text(&opt.label)
+                                        .size(font_size)
+                                        .no_cursor()
+                                        .color(option_text_color),
+                                )
+                            })
+                            .on_click(move |_ctx| {
+                                if !is_opt_disabled {
+                                    choose(value.clone());
+                                }
+                            })
                     }
-                });
-
-            options_content = options_content.child(option_item);
-        }
-    }
+                }
+            },
+        );
 
     let _ = surface_elevated;
     let _ = bg;
