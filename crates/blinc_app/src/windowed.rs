@@ -895,6 +895,41 @@ impl WindowedContext {
         }
     }
 
+    /// A context with no window, for building and rendering a UI offscreen:
+    /// profiling, tests and exports. It gets its own animation scheduler,
+    /// overlay manager and element registry; the reactive graph is the
+    /// process-wide one, as in a window.
+    pub fn headless(width: f32, height: f32) -> Self {
+        Self {
+            width,
+            height,
+            scale_factor: 1.0,
+            safe_area: (0.0, 0.0, 0.0, 0.0),
+            keyboard_inset: 0.0,
+            physical_width: width,
+            physical_height: height,
+            focused: true,
+            rebuild_count: 0,
+            event_router: EventRouter::new(),
+            animations: Arc::new(Mutex::new(AnimationScheduler::new())),
+            ref_dirty_flag: Arc::new(AtomicBool::new(false)),
+            reactive: blinc_core::reactive::global_graph(),
+            hooks: Arc::new(Mutex::new(blinc_core::context_state::HookState::new())),
+            overlay_manager: blinc_layout::widgets::overlay::overlay_manager(),
+            had_visible_overlays: false,
+            element_registry: Arc::new(blinc_layout::selector::ElementRegistry::new()),
+            ready_callbacks: Arc::new(Mutex::new(Vec::new())),
+            stylesheet: None,
+            css_sources: Vec::new(),
+            pointer_query: blinc_layout::pointer_query::PointerQueryState::new(),
+            open_window_fn: None,
+            close_fn: None,
+            drag_fn: None,
+            minimize_fn: None,
+            maximize_fn: None,
+        }
+    }
+
     /// Create a WindowedContext for Fuchsia
     ///
     /// This is used by the Fuchsia runner since it doesn't have a Window trait implementation.

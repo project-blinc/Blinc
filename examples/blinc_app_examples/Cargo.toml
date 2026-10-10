@@ -224,3 +224,7 @@ required-features = ["icons"]
 [[example]]
 name = "node_editor_demo"
 required-features = ["node-editor", "tabler-icons", "cn"]
+
+[[example]]
+name = "cn_profile"
+required-features = ["cn"]
