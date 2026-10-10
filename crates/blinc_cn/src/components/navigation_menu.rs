@@ -34,18 +34,16 @@ use std::sync::Arc;
 
 use blinc_core::State;
 use blinc_core::context_state::BlincContextState;
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
 use blinc_layout::element::CursorStyle;
 use blinc_layout::overlay_state::overlay_stack;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, NoState, stateful_with_key};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::overlay::AnchorDirection;
 use blinc_layout::widgets::overlay_stack::{OverlayBuilder, OverlayHandle};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
-
-use crate::button::reset_button_state;
 
 /// Navigation menu item type
 #[derive(Clone)]
@@ -88,206 +86,153 @@ impl NavigationMenu {
         let overlay_handle_state: State<Option<u64>> =
             BlincContextState::get().use_state_keyed(&format!("{}_handle", key_base), || None);
 
-        // Create stateful container that rebuilds when active menu changes
-        let container_key = format!("{}_container", key_base);
-        let active_menu_for_container = active_menu.clone();
+        // The bar is built once. Which menu is open, and what the pointer is
+        // over, are signals the items' classes and colours are bound to.
+        let mut nav = div()
+            .class("cn-nav-menu")
+            .flex_row()
+            .items_center()
+            .h_fit()
+            .gap(1.0);
 
-        let stateful_container = stateful_with_key::<NoState>(&container_key)
-            .deps([active_menu.signal_id()])
-            .on_state(move |_ctx| {
-                let current_active = active_menu_for_container.get();
-                let mut nav = div().class("cn-nav-menu").flex_row().items_center().h_fit().gap(1.0);
-
-                for (idx, item) in items.iter().enumerate() {
-                    let item_key = format!("{}_{}", key_base, idx);
-
-                    match item {
-                        NavMenuItem::Link { label, on_click } => {
-                            let label = label.clone();
-                            let on_click = on_click.clone();
-                            let active_menu_for_click = active_menu_for_container.clone();
-                            let overlay_handle_for_click = overlay_handle_state.clone();
-
-                            let link_item = stateful_with_key::<ButtonState>(&format!("{}_btn", item_key))
-                                .on_state(move |_ctx| {
-                                    // Background and text color driven by CSS .cn-nav-link / .cn-nav-link:hover
-                                    let bg = blinc_core::Color::TRANSPARENT;
-                                    let text_color = text_secondary;
-
-                                    div()
-                                        .class("cn-nav-link")
-                                        .flex_row()
-                                        .items_center()
-                                        .h_fit()
-                                        .px(3.0)
-                                        .py(2.0)
-                                        .bg(bg)
-                                        .cursor(CursorStyle::Pointer)
-                                        .child(
-                                            text(&label)
-                                                .size(14.0)
-                                                .medium()
-                                                .color(text_color)
-                                                .no_cursor()
-                                                .pointer_events_none(),
-                                        )
-                                })
-                                .on_click(move |_| {
-                                    if let Some(handle_id) = overlay_handle_for_click.get() {
-                                        OverlayHandle::from_raw(handle_id).close();
-                                    }
-                                    active_menu_for_click.set(None);
-                                    on_click();
-                                });
-
-                            nav = nav.child(link_item);
-                        }
-                        NavMenuItem::Trigger { label, content } => {
-                            let is_active = current_active == Some(idx);
-                            let label = label.clone();
-                            let content = content.clone();
-                            let menu_key = format!("{}_menu_{}", key_base, idx);
-
-                            // Clone states for different handlers
-                            let active_menu_for_hover = active_menu_for_container.clone();
-                            let overlay_handle_for_hover = overlay_handle_state.clone();
-                            let overlay_handle_for_leave = overlay_handle_state.clone();
-
-                            // Clone menu_key for different handlers
-                            let menu_key_for_hover = menu_key.clone();
-
-                            // For resetting other triggers' button states
-                            let key_base_for_reset = key_base.clone();
-                            let items_count = items.len();
-
-                            let trigger_item = stateful_with_key::<ButtonState>(&format!("{}_btn", item_key))
-                                .deps([active_menu_for_container.signal_id()])
-                                .on_state(move |_ctx| {
-                                    let theme = ThemeState::get();
-
-                                    // Background: highlight only when active (menu open).
-                                    // Hover background/color driven by CSS .cn-nav-link:hover
-                                    let (bg, text_color) = if is_active {
-                                        (
-                                            theme.color(ColorToken::SecondaryHover).with_alpha(0.5),
-                                            text_primary,
-                                        )
-                                    } else {
-                                        (blinc_core::Color::TRANSPARENT, text_secondary)
-                                    };
-
-                                    // Chevron down icon
-                                    let chevron = r#"<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
-
-                                    {
-                                        let mut trigger_div = div()
-                                            .class("cn-nav-link")
-                                            .flex_row()
-                                            .items_center()
-                                            .h_fit()
-                                            .gap(1.0)
-                                            .px(3.0)
-                                            .py(2.0)
-                                            .bg(bg)
-                                            .cursor(CursorStyle::Pointer)
-                                            .child(
-                                                text(&label)
-                                                    .size(14.0)
-                                                    .medium()
-                                                    .color(text_color)
-                                                    .no_cursor()
-                                                    .pointer_events_none(),
-                                            )
-                                            .child(div().pointer_events_none().child(svg(chevron).size(12.0, 12.0).color(text_color)));
-                                        if is_active {
-                                            trigger_div = trigger_div.class("cn-nav-link--active");
-                                        }
-                                        trigger_div
-                                    }
-                                })
-                                .on_hover_enter(move |ctx| {
-                                    let current_active = active_menu_for_hover.get();
-
-                                    // If this menu is already open, revive any in-flight exit
-                                    // and cancel any pending close countdown.
-                                    if current_active == Some(idx) {
-                                        if let Some(handle_id) = overlay_handle_for_hover.get() {
-                                            let handle = OverlayHandle::from_raw(handle_id);
-                                            if let Ok(mut stack) = overlay_stack().lock() {
-                                                let exiting = stack
-                                                    .iter_bottom_up()
-                                                    .any(|e| e.handle == handle && e.exiting);
-                                                if exiting {
-                                                    stack.revive(handle);
-                                                } else {
-                                                    stack.handle_mouse_enter(handle);
-                                                }
-                                            }
-                                        }
-                                        return;
-                                    }
-
-                                    // Reset all other triggers' button states to clear lingering hover
-                                    for i in 0..items_count {
-                                        if i != idx {
-                                            let other_key = format!("{}_{}_btn", key_base_for_reset, i);
-                                            reset_button_state(&other_key);
-                                        }
-                                    }
-
-                                    // Close any previously-open dropdown so only one is visible
-                                    // at a time when switching triggers.
-                                    if let Some(handle_id) = overlay_handle_for_hover.get() {
-                                        OverlayHandle::from_raw(handle_id).close();
-                                    }
-
-                                    // Calculate position (below the trigger)
-                                    let x = ctx.bounds_x;
-                                    let y = ctx.bounds_y + ctx.bounds_height + 4.0;
-
-                                    let handle = show_navigation_dropdown(
-                                        x,
-                                        y,
-                                        content.clone(),
-                                        min_content_width,
-                                        active_menu_for_hover.clone(),
-                                        overlay_handle_for_hover.clone(),
-                                        menu_key_for_hover.clone(),
-                                        surface,
-                                        border,
-                                        radius,
-                                    );
-
-                                    overlay_handle_for_hover.set(Some(handle.raw()));
-                                    active_menu_for_hover.set(Some(idx));
-                                })
-                                .on_hover_leave(move |_| {
-                                    // Start close delay when leaving trigger.
-                                    if let Some(handle_id) = overlay_handle_for_leave.get() {
-                                        let handle = OverlayHandle::from_raw(handle_id);
-                                        if let Ok(mut stack) = overlay_stack().lock() {
-                                            stack.handle_mouse_leave(handle);
-                                        }
-                                    }
-                                });
-
-                            nav = nav.child(trigger_item);
-                        }
-                    }
+        for (idx, item) in items.iter().enumerate() {
+            let interaction = Interaction::keyed(&format!("{}_{}_btn", key_base, idx));
+            let hovered = interaction.hovered().signal();
+            let label = match item {
+                NavMenuItem::Link { label, .. } | NavMenuItem::Trigger { label, .. } => {
+                    label.clone()
                 }
-
-                nav
+            };
+            // A trigger is open while its menu is shown; a link never is.
+            let is_trigger = matches!(item, NavMenuItem::Trigger { .. });
+            let active = active_menu.signal();
+            let open = computed(move |g: &ReactiveGraph| {
+                is_trigger && g.get(active).flatten() == Some(idx)
+            });
+            let text_color = computed(move |g: &ReactiveGraph| {
+                let open = is_trigger && g.get(active).flatten() == Some(idx);
+                if open || g.get(hovered).unwrap_or(false) {
+                    text_primary
+                } else {
+                    text_secondary
+                }
             });
 
-        let mut inner = div().child(stateful_container);
-        for c in &builder.classes {
-            inner = inner.class(c);
-        }
-        if let Some(ref id) = builder.user_id {
-            inner = inner.id(id);
+            let mut entry = div()
+                .class("cn-nav-link")
+                .class_when("cn-nav-link--active", &open)
+                .flex_row()
+                .items_center()
+                .h_fit()
+                .flex_shrink_0()
+                .gap(1.0)
+                .px(3.0)
+                .py(2.0)
+                .cursor(CursorStyle::Pointer)
+                .track(&interaction)
+                .child(
+                    text(&label)
+                        .size(14.0)
+                        .medium()
+                        .color(&text_color)
+                        .no_wrap()
+                        .no_cursor()
+                        .pointer_events_none(),
+                );
+
+            match item {
+                NavMenuItem::Link { on_click, .. } => {
+                    let on_click = on_click.clone();
+                    let active_menu_for_click = active_menu.clone();
+                    let overlay_handle_for_click = overlay_handle_state.clone();
+                    entry = entry.on_click(move |_| {
+                        if let Some(handle_id) = overlay_handle_for_click.get() {
+                            OverlayHandle::from_raw(handle_id).close();
+                        }
+                        active_menu_for_click.set(None);
+                        on_click();
+                    });
+                }
+                NavMenuItem::Trigger { content, .. } => {
+                    let content = content.clone();
+                    let menu_key = format!("{}_menu_{}", key_base, idx);
+                    let active_menu_for_hover = active_menu.clone();
+                    let overlay_handle_for_hover = overlay_handle_state.clone();
+                    let overlay_handle_for_leave = overlay_handle_state.clone();
+
+                    // Chevron down icon
+                    let chevron = r#"<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
+                    entry = entry
+                        .child(
+                            div()
+                                .pointer_events_none()
+                                .child(svg(chevron).size(12.0, 12.0).color(&text_color)),
+                        )
+                        .on_hover_enter(move |ctx| {
+                            // This menu is open already: revive an exit in
+                            // flight and cancel a pending close.
+                            if active_menu_for_hover.get() == Some(idx) {
+                                if let Some(handle_id) = overlay_handle_for_hover.get() {
+                                    let handle = OverlayHandle::from_raw(handle_id);
+                                    if let Ok(mut stack) = overlay_stack().lock() {
+                                        let exiting = stack
+                                            .iter_bottom_up()
+                                            .any(|e| e.handle == handle && e.exiting);
+                                        if exiting {
+                                            stack.revive(handle);
+                                        } else {
+                                            stack.handle_mouse_enter(handle);
+                                        }
+                                    }
+                                }
+                                return;
+                            }
+
+                            // One menu at a time: close the one open.
+                            if let Some(handle_id) = overlay_handle_for_hover.get() {
+                                OverlayHandle::from_raw(handle_id).close();
+                            }
+
+                            // Below the trigger.
+                            let x = ctx.bounds_x;
+                            let y = ctx.bounds_y + ctx.bounds_height + 4.0;
+                            let handle = show_navigation_dropdown(
+                                x,
+                                y,
+                                content.clone(),
+                                min_content_width,
+                                active_menu_for_hover.clone(),
+                                overlay_handle_for_hover.clone(),
+                                menu_key.clone(),
+                                surface,
+                                border,
+                                radius,
+                            );
+                            overlay_handle_for_hover.set(Some(handle.raw()));
+                            active_menu_for_hover.set(Some(idx));
+                        })
+                        .on_hover_leave(move |_| {
+                            // Start the close delay on leaving the trigger.
+                            if let Some(handle_id) = overlay_handle_for_leave.get() {
+                                let handle = OverlayHandle::from_raw(handle_id);
+                                if let Ok(mut stack) = overlay_stack().lock() {
+                                    stack.handle_mouse_leave(handle);
+                                }
+                            }
+                        });
+                }
+            }
+            nav = nav.child(entry);
         }
 
-        Self { inner }
+        for c in &builder.classes {
+            nav = nav.class(c);
+        }
+        if let Some(ref id) = builder.user_id {
+            nav = nav.id(id);
+        }
+
+        Self { inner: nav }
     }
 }
 
@@ -559,58 +504,46 @@ impl NavigationLink {
         let label = builder.label.clone();
         let description = builder.description.clone();
         let on_click = builder.on_click.clone();
-        let key = builder.key.get().to_string();
 
-        let link = stateful_with_key::<ButtonState>(&key)
-            .on_state(move |_ctx| {
-                // Background is handled by CSS .cn-nav-link:hover
-                let bg = blinc_core::Color::TRANSPARENT;
+        let mut link = div()
+            .class("cn-nav-link")
+            .flex_col()
+            .w_full()
+            .gap(1.0)
+            .px(3.0)
+            .py(2.0)
+            .cursor(CursorStyle::Pointer)
+            .child(
+                text(&label)
+                    .size(14.0)
+                    .medium()
+                    .color(text_primary)
+                    .no_cursor()
+                    .pointer_events_none(),
+            );
+        if let Some(ref desc) = description {
+            link = link.child(
+                text(desc)
+                    .size(12.0)
+                    .color(text_secondary)
+                    .no_cursor()
+                    .pointer_events_none(),
+            );
+        }
+        link = link.on_click(move |_| {
+            if let Some(ref cb) = on_click {
+                cb();
+            }
+        });
 
-                let mut content = div()
-                    .class("cn-nav-link")
-                    .flex_col()
-                    .w_full()
-                    .gap(1.0)
-                    .px(3.0) // Horizontal padding on item
-                    .py(2.0) // Vertical padding on item
-                    .bg(bg)
-                    .cursor(CursorStyle::Pointer)
-                    .child(
-                        text(&label)
-                            .size(14.0)
-                            .medium()
-                            .color(text_primary)
-                            .no_cursor()
-                            .pointer_events_none(),
-                    );
-
-                if let Some(ref desc) = description {
-                    content = content.child(
-                        text(desc)
-                            .size(12.0)
-                            .color(text_secondary)
-                            .no_cursor()
-                            .pointer_events_none(),
-                    );
-                }
-
-                content
-            })
-            .on_click(move |_| {
-                if let Some(ref cb) = on_click {
-                    cb();
-                }
-            });
-
-        let mut inner = div().child(link);
         for c in &builder.classes {
-            inner = inner.class(c);
+            link = link.class(c);
         }
         if let Some(ref id) = builder.user_id {
-            inner = inner.id(id);
+            link = link.id(id);
         }
 
-        Self { inner }
+        Self { inner: link }
     }
 }
 
@@ -664,7 +597,6 @@ impl ElementBuilder for NavigationLink {
 
 /// Builder for navigation link
 pub struct NavigationLinkBuilder {
-    key: InstanceKey,
     label: String,
     description: Option<String>,
     on_click: Option<Arc<dyn Fn() + Send + Sync>>,
@@ -680,7 +612,6 @@ impl NavigationLinkBuilder {
     #[track_caller]
     pub fn new(label: impl Into<String>) -> Self {
         Self {
-            key: InstanceKey::new("nav_link"),
             label: label.into(),
             description: None,
             on_click: None,
