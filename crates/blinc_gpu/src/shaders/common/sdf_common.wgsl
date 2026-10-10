@@ -423,13 +423,20 @@ fn sd_notch(
     // a small shape cannot have a piece reach through it.
     let join_depth = min(8.0, min(inner_size.x, inner_size.y) * 0.5);
 
-    // `k` controls how wide the `smin` blend zone is. Keep it below `2 *
-    // aa_width + 1` (~2 px) — too large and smin's blend region inflates
-    // pixels that are actually just outside both sub-shapes, producing a
-    // visible "halo" along the crease where the concave flare meets the
-    // inner body's side edge. At k=1.5 the crease value drops to -0.375
-    // (≈ 96% alpha after smoothstep, imperceptible seam) while points
-    // one pixel outside both shapes stay on the outside.
+    // A bulge or a peak is buried deeper, up to half the body's smaller
+    // side, so an inset ring wider than `join_depth` still lies inside the
+    // piece where it meets the body. Each is clipped to its own width below
+    // its base line, so the buried part cannot square off the body's
+    // rounded corners. A flare is not buried this far: its far end would
+    // bend the distance gradient.
+    let deep_depth = min(inner_size.x, inner_size.y) * 0.5;
+
+    // `k` controls how wide the `smin` blend zone is for the cut and the
+    // peak. Keep it below `2 * aa_width + 1` (~2 px) — too large and
+    // smin's blend region inflates pixels that are actually just outside
+    // both sub-shapes. A flare is joined with a plain `min` instead: its
+    // top edge lies along the body's edge, and a blend there would bulge
+    // the shared edge and leave a step where the flare rect ends.
     let smin_k = 1.5;
 
     // Effective vertical radius for each concave corner. Scales down when
@@ -463,7 +470,7 @@ fn sd_notch(
         let c = vec2<f32>(outer_origin.x, inner_origin.y + eff_tl_ry);
         let ell_sd = sd_ellipse(p, c, vec2<f32>(left_offset, eff_tl_ry));
         let flare = max(box_sd, -ell_sd);
-        d = smin(d, flare, smin_k);
+        d = min(d, flare);
     }
     if tr_concave {
         let right_width = outer_origin.x + outer_size.x - inner_right;
@@ -473,7 +480,7 @@ fn sd_notch(
         let c = vec2<f32>(outer_origin.x + outer_size.x, inner_origin.y + eff_tr_ry);
         let ell_sd = sd_ellipse(p, c, vec2<f32>(right_width, eff_tr_ry));
         let flare = max(box_sd, -ell_sd);
-        d = smin(d, flare, smin_k);
+        d = min(d, flare);
     }
     if br_concave {
         let right_width = outer_origin.x + outer_size.x - inner_right;
@@ -483,7 +490,7 @@ fn sd_notch(
         let c = vec2<f32>(outer_origin.x + outer_size.x, inner_bottom - eff_br_ry);
         let ell_sd = sd_ellipse(p, c, vec2<f32>(right_width, eff_br_ry));
         let flare = max(box_sd, -ell_sd);
-        d = smin(d, flare, smin_k);
+        d = min(d, flare);
     }
     if bl_concave {
         let box_origin = vec2<f32>(outer_origin.x, inner_bottom - eff_bl_ry);
@@ -492,7 +499,7 @@ fn sd_notch(
         let c = vec2<f32>(outer_origin.x, inner_bottom - eff_bl_ry);
         let ell_sd = sd_ellipse(p, c, vec2<f32>(left_offset, eff_bl_ry));
         let flare = max(box_sd, -ell_sd);
-        d = smin(d, flare, smin_k);
+        d = min(d, flare);
     }
 
     // ------------------------------------------------------------------
@@ -584,7 +591,10 @@ fn sd_notch(
             let r_bulge = (half_w * half_w + top_h * top_h) / max(2.0 * top_h, 0.001);
             let y_c = base_y - top_h + r_bulge;
             let disk_sd = length(p - vec2<f32>(cx, y_c)) - r_bulge;
-            let bulge_sd = max(disk_sd, p.y - base_y - join_depth);
+            // Above the base line the cap is the disk alone; below it, the
+            // buried part is clipped to the cap's own width.
+            let buried_clip = min(abs(p.x - cx) - half_w, p.y - base_y);
+            let bulge_sd = max(max(disk_sd, p.y - base_y - deep_depth), buried_clip);
             d = smin(d, bulge_sd, max(top_cr, 0.001));
         } else if top_type < 3.5 { // cut — subtract a V-triangle
             d = smax(d, -sd_triangle(
@@ -596,13 +606,14 @@ fn sd_notch(
         } else { // peak — union a V-triangle protrusion
             // Extend along the sides, so the apex and the slopes are
             // unchanged and only the buried base moves.
-            let spread = half_w * (top_h + join_depth) / max(top_h, 0.001);
-            d = smin(d, sd_triangle(
+            let spread = half_w * (top_h + deep_depth) / max(top_h, 0.001);
+            let peak_sd = max(sd_triangle(
                 p,
-                vec2<f32>(cx - spread, base_y + join_depth),
+                vec2<f32>(cx - spread, base_y + deep_depth),
                 vec2<f32>(cx, base_y - top_h),
-                vec2<f32>(cx + spread, base_y + join_depth)
-            ), smin_k);
+                vec2<f32>(cx + spread, base_y + deep_depth)
+            ), abs(p.x - cx) - half_w);
+            d = smin(d, peak_sd, smin_k);
         }
     }
 
@@ -638,7 +649,8 @@ fn sd_notch(
             let r_bulge = (half_w * half_w + bot_h * bot_h) / max(2.0 * bot_h, 0.001);
             let y_c = base_y + bot_h - r_bulge;
             let disk_sd = length(p - vec2<f32>(cx, y_c)) - r_bulge;
-            let bulge_sd = max(disk_sd, base_y - p.y - join_depth);
+            let buried_clip = min(abs(p.x - cx) - half_w, base_y - p.y);
+            let bulge_sd = max(max(disk_sd, base_y - p.y - deep_depth), buried_clip);
             d = smin(d, bulge_sd, max(bot_cr, 0.001));
         } else if bot_type < 3.5 { // cut
             d = smax(d, -sd_triangle(
@@ -648,13 +660,14 @@ fn sd_notch(
                 vec2<f32>(cx + bot_w * 0.5, base_y)
             ), smin_k);
         } else { // peak
-            let spread = half_w * (bot_h + join_depth) / max(bot_h, 0.001);
-            d = smin(d, sd_triangle(
+            let spread = half_w * (bot_h + deep_depth) / max(bot_h, 0.001);
+            let peak_sd = max(sd_triangle(
                 p,
-                vec2<f32>(cx - spread, base_y - join_depth),
+                vec2<f32>(cx - spread, base_y - deep_depth),
                 vec2<f32>(cx, base_y + bot_h),
-                vec2<f32>(cx + spread, base_y - join_depth)
-            ), smin_k);
+                vec2<f32>(cx + spread, base_y - deep_depth)
+            ), abs(p.x - cx) - half_w);
+            d = smin(d, peak_sd, smin_k);
         }
     }
 
