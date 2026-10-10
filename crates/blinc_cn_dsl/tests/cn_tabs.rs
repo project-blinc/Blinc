@@ -57,9 +57,12 @@ impl Harness {
         Self { tree }
     }
 
-    /// Apply whatever a signal write queued, as a frame would.
+    /// Apply whatever a signal write queued, as a frame would: the subtree
+    /// rebuilds, then the property updates (a tab panel swaps in place).
     fn frame(&mut self) {
         self.tree.process_pending_subtree_rebuilds();
+        let updates = blinc_layout::take_pending_partial_prop_updates();
+        self.tree.apply_partial_property_updates(updates);
         self.tree.compute_layout(600.0, 400.0);
     }
 
@@ -130,6 +133,11 @@ fn tabs_draw_their_strip_and_follow_the_bound_signal() {
     h.frame();
 
     assert!(h.shows("what we sent you"), "swapped: {:?}", h.texts());
+
+    // The panel that went stays for its exit animation, and is let go at the
+    // next frame that finds nothing animating. There is no paint pass here to
+    // start one.
+    h.frame();
     assert!(
         !h.shows("who you are"),
         "and the first panel went: {:?}",

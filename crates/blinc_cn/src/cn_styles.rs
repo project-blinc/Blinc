@@ -608,6 +608,16 @@ pub const CN_STYLES: &str = r#"
     cursor: not-allowed;
 }
 
+/* A panel leaving after a switch overlays the new one instead of sitting
+   above it, so the content does not jump while it fades out. */
+.cn-tabs-panel--leaving {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
 /* Tab trigger sizes — content + padding determines height (no fixed
    heights). Vertical padding kept tight to keep the tray compact. */
 .cn-tabs-trigger--sm { padding: var(--space-1) var(--space-3); font-size: var(--text-sm); }

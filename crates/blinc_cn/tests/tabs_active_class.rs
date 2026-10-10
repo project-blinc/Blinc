@@ -1,5 +1,5 @@
 //! The stylesheet's `.cn-tabs-trigger--active` rules move with the selected
-//! tab in place: the strip is not rebuilt when the selection changes.
+//! tab in place: nothing is rebuilt when the selection changes.
 
 mod common;
 
@@ -48,8 +48,7 @@ fn the_active_rules_move_with_the_selected_tab() {
         assert!(!rule_applies(&tree, triggers[1]));
 
         selected.set("b".to_string());
-        // The content area still swaps its panel with a rebuild; the strip
-        // takes none, so apply the property writes without it.
+        assert!(blinc_layout::stateful::take_pending_subtree_rebuilds().is_empty());
         let updates = blinc_layout::take_pending_partial_prop_updates();
         tree.apply_partial_property_updates(updates);
         tree.compute_layout(400.0, 200.0);

@@ -1,9 +1,8 @@
 //! What a tabs strip looks like in each state, recorded as text. See
 //! `common` for the walk; the record is `tabs_states.golden`.
 //!
-//! The content area swaps panels with a rebuild, which is not what is under
-//! test, so the walk is recorded without the no-rebuild check and a second
-//! test holds the strip to it for the pointer states.
+//! The walk holds the widget to taking no subtree rebuild, the click that
+//! changes the selection included.
 
 mod common;
 
@@ -46,12 +45,12 @@ fn describe_strip(tree: &RenderTree, widget: blinc_layout::LayoutNodeId, out: &m
     let _ = writeln!(out, "weights: {:?}", text_weights(tree, strip));
 }
 
-fn scenario(name: &str, in_place: bool, build: Build) -> String {
+fn scenario(name: &str, build: Build) -> String {
     set_active_stylesheet(Arc::new(Stylesheet::parse("").expect("css")));
     let selected = string_state("a");
     let widget = build(&selected);
     let mut h = Harness::new(widget, vec![selected.signal_id()], describe_strip);
-    h.in_place = in_place;
+    h.in_place = true;
     // The second trigger.
     let at = h.center(&[0, 1]);
     h.walk(at, (390.0, 195.0));
@@ -73,10 +72,9 @@ fn a_tabs_strip_looks_the_same_in_every_state() {
     init();
     let got = guarded(|| {
         let mut out = String::new();
-        out += &scenario("three tabs", false, Box::new(two_tabs));
+        out += &scenario("three tabs", Box::new(two_tabs));
         out += &scenario(
             "icons, a badge, a disabled tab, small",
-            false,
             Box::new(|state| {
                 Box::new(
                     tabs(state)
@@ -93,7 +91,6 @@ fn a_tabs_strip_looks_the_same_in_every_state() {
         );
         out += &scenario(
             "large",
-            false,
             Box::new(|state| {
                 Box::new(
                     tabs(state)
@@ -107,24 +104,4 @@ fn a_tabs_strip_looks_the_same_in_every_state() {
         out
     });
     check_golden("tabs_states.golden", &got);
-}
-
-#[test]
-fn the_pointer_alone_rebuilds_nothing() {
-    init();
-    guarded(|| {
-        set_active_stylesheet(Arc::new(Stylesheet::parse("").expect("css")));
-        let selected = string_state("a");
-        let mut h = Harness::new(
-            two_tabs(&selected),
-            vec![selected.signal_id()],
-            describe_strip,
-        );
-        h.in_place = true;
-        let at = h.center(&[0, 1]);
-        h.frame();
-        h.move_to(at);
-        h.press(at);
-        h.move_to((390.0, 195.0));
-    });
 }

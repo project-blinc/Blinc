@@ -1,0 +1,46 @@
+######## no transition
+== initial
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x179.0
+      text "alpha" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x179.0
+== selected b
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x179.0
+      text "beta" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x179.0
+== selected c
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x179.0
+      text "gamma" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x179.0
+== selected a
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x179.0
+      text "alpha" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x179.0
+######## fade
+== initial
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+      div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+        text "alpha" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+== selected b
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+      div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+        text "beta" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x17.0
+== selected c
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+      div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+        text "gamma" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
+== selected a
+div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+  div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+    div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x179.0
+      div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 400.0x17.0
+        text "alpha" color 0.000,0.000,0.000,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x17.0
