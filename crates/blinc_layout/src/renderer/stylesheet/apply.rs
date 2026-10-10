@@ -425,6 +425,15 @@ impl RenderTree {
         if let Some(v) = es.flex_shrink {
             taffy_style.flex_shrink = v;
         }
+        if let Some(pos) = es.position {
+            use crate::element_style::StylePosition;
+            taffy_style.position = match pos {
+                StylePosition::Static | StylePosition::Relative | StylePosition::Sticky => {
+                    taffy::Position::Relative
+                }
+                StylePosition::Absolute | StylePosition::Fixed => taffy::Position::Absolute,
+            };
+        }
         if let Some(v) = es.top {
             taffy_style.inset.top = LengthPercentageAuto::length(v);
         }

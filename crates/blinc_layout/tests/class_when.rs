@@ -73,6 +73,17 @@ fn scene(
     }
 }
 
+/// A tree's bindings are keyed by node id, and the next test's tree reuses the
+/// ids, so a scene takes its own away.
+impl Drop for Scene {
+    fn drop(&mut self) {
+        let root = self.tree.root().unwrap();
+        for node in std::iter::once(root).chain(self.tree.layout_tree.children(root)) {
+            blinc_layout::binding::unregister_node(node);
+        }
+    }
+}
+
 impl Scene {
     /// Apply what the signals queued and lay out, as a runner does.
     fn frame(&mut self) {
@@ -309,4 +320,22 @@ fn a_constant_condition_is_an_ordinary_class() {
     let s = scene(Some(RULES), |d| d.class_when("on", false));
     assert_eq!(s.fill(s.node), BLUE);
     assert!(!s.has_class(s.node, "on"));
+}
+
+#[test]
+fn a_class_that_takes_an_element_out_of_flow_and_back() {
+    let on = flag(false);
+    let mut s = scene(Some(".on { position: absolute; top: 0; left: 0 }"), |d| {
+        d.class_when("on", &on)
+    });
+    let top = |s: &Scene, node| s.tree.get_absolute_bounds(node).unwrap().y;
+    assert_eq!(top(&s, s.other), 50.0, "the second box is below the first");
+
+    on.set(true);
+    s.frame();
+    assert_eq!(top(&s, s.other), 0.0, "the first box is still in flow");
+
+    on.set(false);
+    s.frame();
+    assert_eq!(top(&s, s.other), 50.0, "the first box did not come back");
 }
