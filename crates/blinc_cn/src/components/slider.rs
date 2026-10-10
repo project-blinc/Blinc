@@ -40,13 +40,11 @@
 //! ```
 
 use blinc_animation::{AnimationContext, SpringConfig};
-use blinc_core::events::event_types;
 use blinc_core::{BlincContext, BlincContextState, Color, State};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::motion::motion;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{NoState, StateTransitions, stateful_with_key};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_macros::BlincComponent;
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
@@ -54,101 +52,6 @@ use std::sync::{Arc, Mutex};
 
 use super::label::{LabelSize, label};
 use blinc_layout::InstanceKey;
-
-/// Halo grow / shrink duration in milliseconds. FPS-independent —
-/// the framework's `on_next_animation_frame` provides the wall-clock
-/// delta each refresh, so the animation lasts the same wall time at
-/// 30 Hz, 60 Hz, or 120 Hz.
-const HALO_DURATION_MS: u32 = 220;
-
-/// Slider thumb interaction + halo-animation lifecycle.
-///
-/// `Idle / Hovered / Pressed / Dragging` are the user-facing
-/// interaction phases. `Entering { elapsed_ms }` / `Exiting { elapsed_ms }`
-/// are the transient animation phases — `elapsed_ms` accumulates
-/// the wall-clock delta each `on_next_animation_frame`, and the
-/// FSM transitions out once it reaches `HALO_DURATION_MS`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum SliderThumbState {
-    #[default]
-    Idle,
-    /// Halo growing in. `elapsed_ms` advances each frame via
-    /// `on_next_animation_frame`; transitions to `Hovered` once
-    /// it crosses `HALO_DURATION_MS`.
-    Entering {
-        elapsed_ms: u32,
-    },
-    Hovered,
-    Pressed,
-    Dragging,
-    /// Halo shrinking out. Same shape as `Entering`; transitions
-    /// to `Idle` once `elapsed_ms` crosses `HALO_DURATION_MS`.
-    Exiting {
-        elapsed_ms: u32,
-    },
-}
-
-impl StateTransitions for SliderThumbState {
-    fn on_event(&self, event: u32) -> Option<Self> {
-        use event_types::*;
-        match (self, event) {
-            // Enter / re-enter from any non-engaged state.
-            (Self::Idle, POINTER_ENTER) => Some(Self::Entering { elapsed_ms: 0 }),
-            (Self::Exiting { .. }, POINTER_ENTER) => Some(Self::Entering { elapsed_ms: 0 }),
-
-            // Engage on press from any visible state.
-            (Self::Entering { .. }, POINTER_DOWN) => Some(Self::Pressed),
-            (Self::Hovered, POINTER_DOWN) => Some(Self::Pressed),
-
-            // Release / drag transitions.
-            (Self::Pressed, POINTER_UP) => Some(Self::Hovered),
-            (Self::Pressed, DRAG) => Some(Self::Dragging),
-
-            // Exit from any visible state. `Dragging × POINTER_LEAVE`
-            // falls through (catch-all `_ => None`) so a drag that
-            // wanders off the track stays Dragging — the halo
-            // remains lit until DRAG_END.
-            (Self::Entering { .. }, POINTER_LEAVE) => Some(Self::Exiting { elapsed_ms: 0 }),
-            (Self::Hovered, POINTER_LEAVE) => Some(Self::Exiting { elapsed_ms: 0 }),
-            (Self::Pressed, POINTER_LEAVE) => Some(Self::Exiting { elapsed_ms: 0 }),
-
-            // Drag end. POINTER_UP is the fallback when the host
-            // event stream doesn't deliver a discrete DRAG_END.
-            (Self::Dragging, DRAG_END) => Some(Self::Exiting { elapsed_ms: 0 }),
-            (Self::Dragging, POINTER_UP) => Some(Self::Exiting { elapsed_ms: 0 }),
-
-            _ => None,
-        }
-    }
-
-    /// Time-driven transition. The framework hands us the wall-clock
-    /// delta since the previous refresh; accumulate it into the
-    /// variant's `elapsed_ms` and pop into the next steady state
-    /// once `HALO_DURATION_MS` has elapsed. FPS-invariant by
-    /// construction.
-    fn on_next_animation_frame(&self, delta_ms: f32) -> Option<Self> {
-        let advance = |e: u32| -> u32 { e.saturating_add(delta_ms.max(0.0).round() as u32) };
-        match self {
-            Self::Entering { elapsed_ms } => {
-                let next = advance(*elapsed_ms);
-                if next >= HALO_DURATION_MS {
-                    Some(Self::Hovered)
-                } else {
-                    Some(Self::Entering { elapsed_ms: next })
-                }
-            }
-            Self::Exiting { elapsed_ms } => {
-                let next = advance(*elapsed_ms);
-                if next >= HALO_DURATION_MS {
-                    Some(Self::Idle)
-                } else {
-                    Some(Self::Exiting { elapsed_ms: next })
-                }
-            }
-            _ => None,
-        }
-    }
-}
 
 /// BlincComponent for slider state and animations
 /// Generates type-safe hooks that persist across UI rebuilds:
@@ -374,8 +277,7 @@ impl Slider {
         let halo_bg = theme.color(ColorToken::Primary).with_alpha(0.08);
         let halo_offset = (halo_size - thumb_size) / 2.0;
 
-        // Thumb chrome builder. Captures are Copy/'static so the
-        // closure is Fn — callable each time the Stateful re-renders.
+        // Thumb chrome builder.
         let thumb_fill_override = config.thumb_color;
         let make_thumb_div = move || {
             let mut td = div()
@@ -403,170 +305,135 @@ impl Slider {
         let thumb_offset_for_fill_in = thumb_offset_for_fill.clone();
         let just_dragged_for_click = just_dragged.clone();
 
-        // Outer container is a `Stateful<SliderThumbState>` — the
-        // framework auto-dispatches POINTER_*/DRAG/DRAG_END from this
-        // host element to the FSM (`SliderThumbState::on_event`), so
-        // we don't dispatch manually. The on_state callback re-runs
-        // on every transition and reads `sctx.state()` to drive the
-        // halo's visibility.
-        let slider_state_key = format!("{}_state", instance_key);
-        let slider_container = stateful_with_key::<SliderThumbState>(&slider_state_key)
-            .initial(SliderThumbState::Idle)
-            .on_state(move |sctx| {
-                let state = sctx.state();
-
-                // Halo ticker — its duration is intentionally much
-                // longer than `HALO_DURATION_MS` so the kf is still
-                // playing through worst-case stall scenarios (where
-                // `delta_ms` clamping makes `elapsed_ms` lag wall-
-                // clock by up to ~3x). Without the buffer the kf
-                // could settle before the FSM transitions out,
-                // dropping the stateful from the animation refresh
-                // registry mid-animation and freezing the halo
-                // partway through the ramp.
-                //
-                // `loop_count(0)` is essential: it pins `iterations`
-                // at 0 so `KeyframeTrack::should_continue` returns
-                // `false`, which reduces `is_playing()` to just
-                // `animation.is_playing()`. With the default
-                // `iterations = 1`, a freshly-created (never
-                // started) kf reports `is_playing = true` (because
-                // `current_iteration(0) < iterations(1)`) and the
-                // stateful re-registers for animation refresh every
-                // frame from creation onward — pegging idle CPU.
-                // With `loop_count(-1)` (loop_infinite) the same
-                // bug persists forever even after `.stop()`.
-                let kf = sctx.use_keyframes("halo_ticker", |b| {
-                    b.at(0, 0.0)
-                        .at(HALO_DURATION_MS * 4, 1.0)
-                        .ease(Easing::Linear)
-                        .loop_count(0)
-                });
-
-                let halo_scale = match state {
-                    SliderThumbState::Idle => {
-                        if kf.is_playing() {
-                            kf.stop();
-                        }
-                        0.0
-                    }
-                    SliderThumbState::Entering { elapsed_ms } => {
-                        if !kf.is_playing() {
-                            kf.restart();
-                        }
-                        (elapsed_ms as f32 / HALO_DURATION_MS as f32).clamp(0.0, 1.0)
-                    }
-                    SliderThumbState::Hovered
-                    | SliderThumbState::Pressed
-                    | SliderThumbState::Dragging => {
-                        if kf.is_playing() {
-                            kf.stop();
-                        }
-                        1.0
-                    }
-                    SliderThumbState::Exiting { elapsed_ms } => {
-                        if !kf.is_playing() {
-                            kf.restart();
-                        }
-                        1.0 - (elapsed_ms as f32 / HALO_DURATION_MS as f32).clamp(0.0, 1.0)
-                    }
-                };
-                let halo_scale = if disabled { 0.0 } else { halo_scale };
-
-                // Halo — `Transform::scale` is a static CSS-style
-                // element transform applied at walker time, so
-                // corner_radius is freshly baked each frame.
-                let halo = div()
-                    .class("cn-slider-halo")
-                    .absolute()
-                    .top(-halo_offset)
-                    .left(-halo_offset)
-                    .w(halo_size)
-                    .h(halo_size)
-                    .rounded(halo_size / 2.0)
-                    .bg(halo_bg)
-                    .pointer_events_none()
-                    .transform(Transform::scale(halo_scale, halo_scale));
-
-                // Thumb assembly — halo + static thumb chrome, wrapped
-                // in motion for translate_x binding to thumb_offset.
-                let thumb_combo = div()
-                    .relative()
-                    .w(thumb_size)
-                    .h(thumb_size)
-                    .child(halo)
-                    .child(make_thumb_div());
-                let thumb_wrapper = div().absolute().left(0.0).top(0.0).child(
-                    motion()
-                        .translate_x(thumb_offset_for_state.clone())
-                        .child(thumb_combo),
-                );
-
-                // Fill bar.
-                let fill_bar = div()
-                    .class("cn-slider-fill")
-                    .w(track_width)
-                    .h(track_height)
-                    .rounded(radius)
-                    .bg(fill_bg);
-                let fill_positioned = div().absolute().left(fill_left).top(0.0).child(fill_bar);
-                let animated_fill = motion()
-                    .translate_x(thumb_offset_for_fill_in.clone())
-                    .child(fill_positioned);
-                let track_fill = div()
-                    .absolute()
-                    .left(0.0)
-                    .top((thumb_size - track_height) / 2.0)
-                    .w(track_width)
-                    .h(track_height)
-                    .overflow_clip()
-                    .rounded(radius)
-                    .relative()
-                    .child(animated_fill);
-
-                // Track visual — purely cosmetic now. Click-to-seek
-                // is on the Stateful host below so it catches clicks
-                // anywhere on the slider's bounds (including over
-                // the blue fill and the thumb, which stack above
-                // this element and would otherwise swallow events).
-                let track_visual = div()
-                    .class("cn-slider-track")
-                    .absolute()
-                    .left(0.0)
-                    .right(0.0)
-                    .top((thumb_size - track_height) / 2.0)
-                    .h(track_height)
-                    .rounded(radius)
-                    .bg(track_bg)
-                    .cursor_pointer();
-
-                let mut container = div()
-                    .relative()
-                    .h(thumb_size)
-                    .overflow_visible()
-                    .cursor(CursorStyle::Grab)
-                    .child(track_visual)
-                    .child(track_fill)
-                    .child(thumb_wrapper);
-                if let Some(w) = width {
-                    container = container.w(w);
-                } else {
-                    container = container.w_full();
+        // The halo is lit while the pointer is over the slider or a drag is
+        // under way. Its scale is a spring the handlers below point at 1 or
+        // 0, read by a motion container when painting, so nothing rebuilds.
+        let halo_scale = blinc_layout::stateful::persisted_animated_value(
+            &format!("cn-slider:{}:halo", instance_key),
+            0.0,
+            SpringConfig::snappy(),
+        );
+        let hovered = ctx.use_state_keyed(&format!("{}_hovered", instance_key), || false);
+        let dragging = ctx.use_state_keyed(&format!("{}_dragging", instance_key), || false);
+        let light = {
+            let halo_scale = halo_scale.clone();
+            move |on: bool| {
+                if !disabled {
+                    halo_scale
+                        .lock()
+                        .unwrap()
+                        .set_target(if on { 1.0 } else { 0.0 });
                 }
-                container
-            })
-            // POINTER_DOWN auto-dispatches Hovered → Pressed. This
-            // handler does only the drag-start bookkeeping.
+            }
+        };
+        let light_for_down = light.clone();
+        let light_for_drag_end = light.clone();
+        let light_for_enter = light.clone();
+        let light_for_leave = light.clone();
+        let light_for_up = light;
+        let hovered_for_enter = hovered.clone();
+        let hovered_for_leave = hovered.clone();
+        let hovered_for_drag_end = hovered.clone();
+        let hovered_for_up = hovered;
+        let dragging_for_drag = dragging.clone();
+        let dragging_for_drag_end = dragging.clone();
+        let dragging_for_leave = dragging.clone();
+        let dragging_for_up = dragging;
+
+        let halo = div()
+            .absolute()
+            .top(-halo_offset)
+            .left(-halo_offset)
+            .w(halo_size)
+            .h(halo_size)
+            .pointer_events_none()
+            .child(
+                motion().scale(halo_scale).child(
+                    div()
+                        .class("cn-slider-halo")
+                        .w(halo_size)
+                        .h(halo_size)
+                        .rounded(halo_size / 2.0)
+                        .bg(halo_bg),
+                ),
+            );
+
+        // Thumb assembly: halo and thumb chrome, moved along the track by
+        // the thumb's spring.
+        let thumb_combo = div()
+            .relative()
+            .w(thumb_size)
+            .h(thumb_size)
+            .child(halo)
+            .child(make_thumb_div());
+        let thumb_wrapper = div().absolute().left(0.0).top(0.0).child(
+            motion()
+                .translate_x(thumb_offset_for_state)
+                .child(thumb_combo),
+        );
+
+        // Fill bar.
+        let fill_bar = div()
+            .class("cn-slider-fill")
+            .w(track_width)
+            .h(track_height)
+            .rounded(radius)
+            .bg(fill_bg);
+        let fill_positioned = div().absolute().left(fill_left).top(0.0).child(fill_bar);
+        let animated_fill = motion()
+            .translate_x(thumb_offset_for_fill_in)
+            .child(fill_positioned);
+        let track_fill = div()
+            .absolute()
+            .left(0.0)
+            .top((thumb_size - track_height) / 2.0)
+            .w(track_width)
+            .h(track_height)
+            .overflow_clip()
+            .rounded(radius)
+            .relative()
+            .child(animated_fill);
+
+        // Track visual, purely cosmetic. Click-to-seek is on the container so
+        // it catches clicks anywhere on the slider's bounds, including over
+        // the fill and the thumb, which stack above this element.
+        let track_visual = div()
+            .class("cn-slider-track")
+            .absolute()
+            .left(0.0)
+            .right(0.0)
+            .top((thumb_size - track_height) / 2.0)
+            .h(track_height)
+            .rounded(radius)
+            .bg(track_bg)
+            .cursor_pointer();
+
+        let mut container = div()
+            .relative()
+            .h(thumb_size)
+            .overflow_visible()
+            .cursor(CursorStyle::Grab)
+            .child(track_visual)
+            .child(track_fill)
+            .child(thumb_wrapper);
+        if let Some(w) = width {
+            container = container.w(w);
+        } else {
+            container = container.w_full();
+        }
+
+        let slider_container = container
+            // A press lights the halo and records where a drag starts.
             .on_mouse_down(move |event| {
                 if disabled {
                     return;
                 }
+                light_for_down(true);
                 drag_start_x_for_down.set(event.mouse_x);
                 let current = thumb_offset_for_down.lock().unwrap().get();
                 drag_start_offset_for_down.set(current);
             })
-            // DRAG auto-dispatches Pressed → Dragging. This handler
-            // updates the thumb position + value_state from mouse delta.
+            // A drag moves the thumb and the value with the pointer.
             //
             // When `step` is set the thumb snaps to step positions —
             // the visible thumb tracks `value_state` (which is
@@ -579,6 +446,9 @@ impl Slider {
             .on_drag(move |event| {
                 if disabled {
                     return;
+                }
+                if !dragging_for_drag.get() {
+                    dragging_for_drag.set(true);
                 }
                 let start_x = drag_start_x_for_drag.get();
                 let delta_x = event.mouse_x - start_x;
@@ -614,15 +484,19 @@ impl Slider {
                     }
                 }
             })
-            // DRAG_END auto-dispatches Dragging → Idle. This handler
-            // sets the click-suppression flag for the click that
-            // fires immediately after.
+            // The end of a drag sets the click-suppression flag for the
+            // click that fires right after, and puts the halo out unless
+            // the pointer is still over the slider.
             .on_drag_end(move |_event| {
                 just_dragged_for_drag_end.set(true);
+                dragging_for_drag_end.set(false);
+                if !hovered_for_drag_end.get() {
+                    light_for_drag_end(false);
+                }
             })
             // Click-to-seek: a click anywhere on the slider container
             // (track, fill, or thumb) jumps the thumb to the click
-            // position. Attached to the Stateful host so it catches
+            // position. Attached to the container so it catches
             // clicks regardless of which child element they land on
             // — track_visual, track_fill, and thumb_wrapper all stack
             // above each other and would otherwise swallow events
@@ -688,6 +562,25 @@ impl Slider {
                     .set_immediate(target_offset);
                 if let Some(ref cb) = on_change_for_click {
                     cb(new_val);
+                }
+            })
+            .on_hover_enter(move |_| {
+                hovered_for_enter.set(true);
+                light_for_enter(true);
+            })
+            .on_hover_leave(move |_| {
+                hovered_for_leave.set(false);
+                if !dragging_for_leave.get() {
+                    light_for_leave(false);
+                }
+            })
+            // A release that comes without a drag end still ends the drag.
+            .on_mouse_up(move |_| {
+                if dragging_for_up.get() {
+                    dragging_for_up.set(false);
+                    if !hovered_for_up.get() {
+                        light_for_up(false);
+                    }
                 }
             });
 
