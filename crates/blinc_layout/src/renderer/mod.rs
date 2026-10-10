@@ -753,6 +753,12 @@ pub struct RenderTree {
     /// into the bg batch (the composited-layer path rasterizes it
     /// into a `LayerTexture` instead).
     composite_promotion: RefCell<std::collections::HashSet<LayoutNodeId>>,
+    /// Nodes a CSS animation that is not baked has written its values
+    /// onto, by stable id. When the animation stops, its final values are
+    /// written once more and the node leaves the set.
+    css_anim_written: HashSet<crate::tree::StableNodeId>,
+    /// The same for CSS transitions.
+    css_trans_written: HashSet<crate::tree::StableNodeId>,
     /// Subtree-as-texture candidates — Phase 4.1 of the unified property
     /// channel ([[project-reactive-architecture-v2]]).
     ///
@@ -1027,6 +1033,8 @@ impl RenderTree {
             previous_animation_status: RefCell::new(HashMap::new()),
             current_animation_status: RefCell::new(HashMap::new()),
             composite_promotion: RefCell::new(std::collections::HashSet::new()),
+            css_anim_written: HashSet::new(),
+            css_trans_written: HashSet::new(),
             subtree_texture_candidates: RefCell::new(std::collections::HashSet::new()),
             motion_subtree_bake_registry: RefCell::new(
                 crate::motion_texture_cache::MotionSubtreeBakeRegistry::empty(),
@@ -1695,7 +1703,7 @@ impl RenderTree {
                 if let Some(layout) = self.stable_to_layout.get(stable).copied() {
                     candidates.insert(layout);
                     css_animating.insert(layout);
-                    if anim.current_properties.is_composite_promotable() {
+                    if self.css_layer_bakeable(layout, &anim.current_properties) {
                         composite_promotion.insert(layout);
                     }
                 }
@@ -1707,7 +1715,7 @@ impl RenderTree {
                 if let Some(layout) = self.stable_to_layout.get(stable).copied() {
                     candidates.insert(layout);
                     css_animating.insert(layout);
-                    if trans.current_properties.is_composite_promotable() {
+                    if self.css_layer_bakeable(layout, &trans.current_properties) {
                         composite_promotion.insert(layout);
                     }
                 }

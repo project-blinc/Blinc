@@ -8036,7 +8036,8 @@ impl RenderContext {
             && !bindings_animating
             && self.cached_bg_batch.is_some()
             && self.renderer.static_layer_valid()
-            && !tree.css_anim_paint_records().is_empty();
+            && !tree.css_anim_paint_records().is_empty()
+            && tree.css_active_patchable();
         if !css_patch_eligible
             && tracing::enabled!(target: "blinc_app::frame_timing", tracing::Level::TRACE)
         {

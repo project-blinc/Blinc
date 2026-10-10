@@ -22,6 +22,8 @@
 //! `mod.rs` because the snapshot is part of the stylesheet flow,
 //! not the CSS-anim flow itself; they'd move with `stylesheet.rs`.
 
+use std::collections::HashSet;
+
 use blinc_core::{BlurQuality, LayerEffect, Shadow};
 
 use crate::css_parser::ElementState;
@@ -262,10 +264,65 @@ impl RenderTree {
         out
     }
 
-    /// Check if the CSS animation store has any active work (animations or transitions)
+    /// Check if the CSS animation store has any active work (animations or
+    /// transitions), or an animation has stopped whose final values are still
+    /// to be written (see [`Self::apply_all_css_animation_props`]).
     pub fn css_has_active(&self) -> bool {
+        if !self.css_anim_written.is_empty() || !self.css_trans_written.is_empty() {
+            return true;
+        }
         let store = self.css_anim_store.lock().unwrap();
         store.has_active_animations() || store.has_active_transitions()
+    }
+
+    /// Whether a CSS-animated subtree can be baked into a texture and moved
+    /// at composite time: its animated properties are ones a blit can apply,
+    /// and nothing under it is drawn outside the texture. Text, SVG, images
+    /// and canvas are drawn in passes of their own, which would not move,
+    /// scale, turn or fade with it about its `transform-origin`, so such a
+    /// subtree is painted with the animation applied instead.
+    pub(crate) fn css_layer_bakeable(
+        &self,
+        node: LayoutNodeId,
+        props: &blinc_animation::KeyframeProperties,
+    ) -> bool {
+        props.is_composite_promotable() && !self.subtree_draws_outside_layer(node)
+    }
+
+    fn subtree_draws_outside_layer(&self, node: LayoutNodeId) -> bool {
+        use crate::renderer::ElementType;
+        let mut stack = vec![node];
+        while let Some(current) = stack.pop() {
+            if let Some(render) = self.render_nodes.get(&current)
+                && !matches!(render.element_type, ElementType::Div)
+            {
+                return true;
+            }
+            stack.extend(self.layout_tree.children(current));
+        }
+        false
+    }
+
+    /// Whether every playing CSS animation and transition can be shown by
+    /// patching the primitives of the last paint. Text, SVG, images and
+    /// canvas are kept from that paint as they were, so a subtree holding
+    /// any of them has to be painted again on each frame.
+    pub fn css_active_patchable(&self) -> bool {
+        let store = self.css_anim_store.lock().unwrap();
+        store
+            .animations
+            .iter()
+            .filter(|(_, a)| a.is_playing)
+            .map(|(stable, _)| stable)
+            .chain(
+                store
+                    .transitions
+                    .iter()
+                    .filter(|(_, t)| t.is_playing)
+                    .map(|(stable, _)| stable),
+            )
+            .filter_map(|stable| self.stable_to_layout.get(stable).copied())
+            .all(|layout| !self.subtree_draws_outside_layer(layout))
     }
 
     /// Whether every currently-playing CSS animation / transition on
@@ -295,6 +352,12 @@ impl RenderTree {
     /// satisfied) so callers can use it as a single predicate without
     /// also checking `css_has_active`.
     pub fn css_active_all_composite_promotable(&self) -> bool {
+        // A node an animation wrote onto is painted with its values, not
+        // baked, and has its final values still to be painted when the
+        // animation stops.
+        if !self.css_anim_written.is_empty() || !self.css_trans_written.is_empty() {
+            return false;
+        }
         let painted = self.painted_node_ids.borrow();
         let store = self.css_anim_store.lock().unwrap();
         for (stable, anim) in store.animations.iter() {
@@ -319,7 +382,7 @@ impl RenderTree {
             if Self::keyframe_props_affect_layout(&anim.current_properties) {
                 return false;
             }
-            if !anim.current_properties.is_composite_promotable() {
+            if !self.css_layer_bakeable(layout, &anim.current_properties) {
                 return false;
             }
         }
@@ -336,7 +399,7 @@ impl RenderTree {
             if Self::keyframe_props_affect_layout(&trans.current_properties) {
                 return false;
             }
-            if !trans.current_properties.is_composite_promotable() {
+            if !self.css_layer_bakeable(layout, &trans.current_properties) {
                 return false;
             }
         }
@@ -450,59 +513,77 @@ impl RenderTree {
         }
     }
 
-    /// Apply all active CSS animation values to their respective render props
+    /// Write the playing CSS animations' current values onto their nodes.
     ///
-    /// This mutates render props in-place with current animation values (opacity, transform).
-    /// The background thread ticks animations; this reads the latest values and applies them.
+    /// A subtree that is baked is skipped: it is rasterized at its base
+    /// values and the composite applies the animated ones. An animation that
+    /// has stopped since it last wrote onto its node writes its final values
+    /// once more, so the node rests where the animation ends rather than at
+    /// the last frame it was sampled at.
     pub fn apply_all_css_animation_props(&mut self) {
-        // Collect animation data (stable-keyed) under the lock, then
-        // release before resolving back to layout ids for the
-        // render_nodes write. Filter on `is_playing`: settled
-        // animations sit in the store forever (the same-target
-        // guard keeps them) but their `current_properties` no longer
-        // change frame-to-frame, so re-applying them every frame is
-        // wasted work — and the heavy `KeyframeProperties::clone`
-        // (dozens of `Option<...>` fields) was running for every
-        // ever-played animation on `styling_demo` at idle.
-        // `apply_stylesheet_state_styles` resets base props to base
-        // before this runs, so skipping settled animations here means
-        // the element shows the base style — which matches the CSS
-        // default (no `animation-fill-mode: forwards`).
-        let anim_data: Vec<(
+        let written = std::mem::take(&mut self.css_anim_written);
+        self.css_anim_written = self.apply_css_driven_props(written, false);
+    }
+
+    /// Write the values of the store's animations (or, with `transitions`,
+    /// its transitions) onto their nodes: the playing ones that are not
+    /// baked, and the final values of those in `written` that have stopped.
+    /// Returns the ones written that are still playing.
+    ///
+    /// Settled entries stay in the store for the same-target restart guard;
+    /// re-applying their unchanging values each frame would be wasted work,
+    /// so only the ones that just stopped are applied.
+    fn apply_css_driven_props(
+        &mut self,
+        written: HashSet<crate::tree::StableNodeId>,
+        transitions: bool,
+    ) -> HashSet<crate::tree::StableNodeId> {
+        type Entry = (
             crate::tree::StableNodeId,
             blinc_animation::KeyframeProperties,
-        )> = {
+        );
+        let (playing, stopped): (Vec<Entry>, Vec<Entry>) = {
             let store = self.css_anim_store.lock().unwrap();
-            store
-                .animations
+            let entries = if transitions {
+                &store.transitions
+            } else {
+                &store.animations
+            };
+            let playing = entries
                 .iter()
                 .filter(|(_, a)| a.is_playing)
                 .map(|(sid, a)| (*sid, a.current_properties.clone()))
-                .collect()
+                .collect();
+            let stopped = written
+                .iter()
+                .filter_map(|sid| {
+                    let a = entries.get(sid).filter(|a| !a.is_playing)?;
+                    Some((*sid, a.current_properties.clone()))
+                })
+                .collect();
+            (playing, stopped)
         };
-        for (stable_id, anim_props) in anim_data {
+        for (stable_id, props) in stopped {
+            if let Some(node_id) = self.layout_id(stable_id)
+                && let Some(render_node) = self.render_nodes.get_mut(&node_id)
+            {
+                Self::apply_keyframe_props_to_render(&mut render_node.props, &props);
+            }
+        }
+        let mut still_playing = HashSet::new();
+        for (stable_id, props) in playing {
             let Some(node_id) = self.layout_id(stable_id) else {
                 continue;
             };
-            // Composite-promotable animations (only opacity / 2D
-            // transform) skip the per-frame property apply — the
-            // composite-layer path rasterizes the subtree at BASE
-            // state into a `LayerTexture` and applies the animated
-            // values at composite time via
-            // `blit_tight_texture_to_target` (dest_pos / dest_size /
-            // opacity). Writing animated values onto
-            // `render_node.props` here would bake them into the
-            // texture and double-apply at composite time. Mixed
-            // animations (any non-promotable property) keep the
-            // existing apply because `is_composite_promotable`
-            // returns false for them.
-            if anim_props.is_composite_promotable() {
+            if self.css_layer_bakeable(node_id, &props) {
                 continue;
             }
             if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
-                Self::apply_keyframe_props_to_render(&mut render_node.props, &anim_props);
+                Self::apply_keyframe_props_to_render(&mut render_node.props, &props);
+                still_playing.insert(stable_id);
             }
         }
+        still_playing
     }
 
     /// Apply animated layout properties from CSS animations/transitions to taffy styles
@@ -843,47 +924,11 @@ impl RenderTree {
         }
     }
 
-    /// Apply all active CSS transition values to their respective render props
-    ///
-    /// The background thread ticks transitions; this reads the latest values and applies them.
+    /// Write the playing CSS transitions' current values onto their nodes,
+    /// as [`Self::apply_all_css_animation_props`] does for animations.
     pub fn apply_all_css_transition_props(&mut self) {
-        // Collect transition data (stable-keyed) under the lock,
-        // then release before resolving back to layout ids. Filter
-        // on `is_playing`: settled transitions stay in the store for
-        // the same-target restart guard, but their final value also
-        // matches the post-transition base/state-style value that
-        // `apply_stylesheet_state_styles` already set this frame.
-        // Re-applying them every frame is wasted work + a per-entry
-        // `KeyframeProperties::clone` (large struct of Options) for
-        // each ever-hovered widget on cn_demo / styling_demo, which
-        // accumulated linearly with interaction history.
-        let trans_data: Vec<(
-            crate::tree::StableNodeId,
-            blinc_animation::KeyframeProperties,
-        )> = {
-            let store = self.css_anim_store.lock().unwrap();
-            store
-                .transitions
-                .iter()
-                .filter(|(_, a)| a.is_playing)
-                .map(|(sid, a)| (*sid, a.current_properties.clone()))
-                .collect()
-        };
-        for (stable_id, anim_props) in trans_data {
-            let Some(node_id) = self.layout_id(stable_id) else {
-                continue;
-            };
-            // See `apply_all_css_animation_props` above — composite-
-            // promotable transitions skip the apply for the same
-            // reason (texture rasterizes at base, composite applies
-            // animated values).
-            if anim_props.is_composite_promotable() {
-                continue;
-            }
-            if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
-                Self::apply_keyframe_props_to_render(&mut render_node.props, &anim_props);
-            }
-        }
+        let written = std::mem::take(&mut self.css_trans_written);
+        self.css_trans_written = self.apply_css_driven_props(written, true);
     }
 
     /// Check if there are no active CSS transitions

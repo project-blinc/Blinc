@@ -1035,3 +1035,224 @@ fn a_display_none_subtree_draws_nothing() {
         "a hidden subtree changed {differing} pixels: its content was drawn"
     );
 }
+
+/// Mount `panel` two frames in, under `css`, and render it through the
+/// windowed runner's frame order and fast-path decision into one surface
+/// across frames, 16ms apart. Returns the pixels of each frame in `sample`.
+fn animate_panel(
+    app: &mut BlincApp,
+    css: &str,
+    panel: impl Fn() -> blinc_layout::div::Div,
+    sample: &[u64],
+) -> Vec<Vec<u8>> {
+    use blinc_layout::css_parser::Stylesheet;
+    use blinc_layout::render_state::RenderState;
+    use std::sync::{Arc, Mutex};
+    blinc_layout::text_measurer::init_text_measurer();
+
+    let (w, h) = (300u32, 200u32);
+    let ui = div()
+        .w(w as f32)
+        .h(h as f32)
+        .bg(Color::BLACK)
+        .child(div().w(w as f32).h(h as f32));
+    let mut tree = RenderTree::from_element(&ui);
+    tree.set_stylesheet(Stylesheet::parse(css).expect("css"));
+    tree.apply_stylesheet_layout_overrides();
+    tree.apply_stylesheet_base_styles();
+    tree.compute_layout(w as f32, h as f32);
+    let host = tree.layout_tree.children(tree.root().unwrap())[0];
+
+    let mut rs = RenderState::new(Arc::new(Mutex::new(
+        blinc_animation::AnimationScheduler::new(),
+    )));
+    rs.set_viewport(0.0, 0.0, w as f32, h as f32);
+    let texture = app.device().create_texture(&wgpu::TextureDescriptor {
+        label: Some("surface"),
+        size: wgpu::Extent3d {
+            width: w,
+            height: h,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: app.texture_format(),
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+    let _ = blinc_layout::stateful::take_pending_subtree_rebuilds();
+    let last = sample.iter().copied().max().unwrap_or(0);
+    let mut out = Vec::new();
+    let mut was_active = false;
+    for frame in 0..=last {
+        if frame == 2 {
+            blinc_layout::stateful::queue_subtree_rebuild(host, div().child(panel()));
+        }
+        let did_rebuild = tree.process_pending_subtree_rebuilds();
+        if did_rebuild {
+            tree.apply_stylesheet_layout_overrides();
+            tree.apply_stylesheet_base_styles();
+            tree.compute_layout(w as f32, h as f32);
+            rs.begin_stable_motion_frame();
+            tree.initialize_motion_animations(&mut rs);
+            rs.end_stable_motion_frame();
+            tree.start_all_css_animations();
+        }
+        rs.tick(frame * 16);
+        let store = tree.css_anim_store();
+        let (anim, trans) = store.lock().unwrap().tick(16.0);
+        let css_active = anim || trans || tree.css_has_active();
+        let promotable = tree.css_active_all_composite_promotable();
+        if css_active || !tree.css_transitions_empty() {
+            tree.apply_all_css_animation_props();
+            tree.apply_all_css_transition_props();
+        }
+        let try_fast =
+            !did_rebuild && !(css_active && !promotable) && frame > 0 && app.has_render_cache();
+        app.render_tree_with_motion_opt(&tree, &rs, &view, Some(&texture), w, h, try_fast)
+            .expect("render");
+        // The runner repaints in full when CSS activity starts or stops.
+        let active = tree.css_has_active();
+        if active != was_active {
+            app.invalidate_render_cache();
+        }
+        was_active = active;
+        if sample.contains(&frame) {
+            out.push(app.read_texture_to_rgba8(&texture, w, h).expect("read"));
+        }
+    }
+    out
+}
+
+/// A panel animating `scale` about `transform-origin: top center` carries its
+/// text with it: mid-animation the text sits where it does at rest, relative
+/// to the panel.
+#[test]
+fn an_animated_panel_carries_its_text() {
+    require_gpu!(app);
+    let (w, h) = (300u32, 200u32);
+    let css = "@keyframes pop { from { transform: scale(0.5) translateY(-20px); } to { transform: scale(1) translateY(0); } } \
+               .panel { animation: pop 400ms linear; transform-origin: top center; }";
+    let panel = || {
+        div()
+            .class("panel")
+            .w(200.0)
+            .h(100.0)
+            .p(4.0)
+            .bg(Color::WHITE)
+            .child(text("MMMM").size(24.0).color(Color::BLACK))
+    };
+
+    // Where the text sits inside the panel, as fractions of the panel's
+    // width and height: the panel is the white area, the text the dark
+    // pixels inside it.
+    let measure = |px: &[u8]| -> Option<(f32, f32)> {
+        let at = |x: u32, y: u32| {
+            let i = ((y * w + x) * 4) as usize;
+            px[i] as u32 + px[i + 1] as u32 + px[i + 2] as u32
+        };
+        let (mut px0, mut py0, mut px1, mut py1) = (w, h, 0, 0);
+        for y in 0..h {
+            for x in 0..w {
+                if at(x, y) > 700 {
+                    px0 = px0.min(x);
+                    py0 = py0.min(y);
+                    px1 = px1.max(x);
+                    py1 = py1.max(y);
+                }
+            }
+        }
+        if px1 <= px0 || py1 <= py0 {
+            return None;
+        }
+        let (mut tx0, mut ty0) = (w, h);
+        for y in py0..=py1 {
+            for x in px0..=px1 {
+                if at(x, y) < 150 {
+                    tx0 = tx0.min(x);
+                    ty0 = ty0.min(y);
+                }
+            }
+        }
+        if tx0 == w {
+            return None;
+        }
+        Some((
+            (tx0 - px0) as f32 / (px1 - px0) as f32,
+            (ty0 - py0) as f32 / (py1 - py0) as f32,
+        ))
+    };
+
+    // About half way (200ms into a 400ms animation), and at rest.
+    let frames = animate_panel(&mut app, css, panel, &[2 + 13, 39]);
+    let mid = measure(&frames[0]).expect("panel mid-animation");
+    let rest = measure(&frames[1]).expect("panel at rest");
+    assert!(
+        (mid.0 - rest.0).abs() < 0.04 && (mid.1 - rest.1).abs() < 0.08,
+        "the text sits at {mid:?} of the panel mid-animation and at {rest:?} at rest"
+    );
+}
+
+/// A panel fading in fades its text with it: mid-animation the text is as
+/// transparent as the panel it sits on.
+#[test]
+fn an_animated_panel_fades_its_text() {
+    require_gpu!(app);
+    let w = 300u32;
+    let css = "@keyframes fade { from { opacity: 0; } to { opacity: 1; } } \
+               .panel { animation: fade 400ms linear; }";
+    let panel = || {
+        div()
+            .class("panel")
+            .w(200.0)
+            .h(100.0)
+            .p(4.0)
+            .bg(Color::WHITE)
+            .child(
+                text("MMMM")
+                    .size(24.0)
+                    .color(Color::rgba(1.0, 0.0, 0.0, 1.0)),
+            )
+    };
+    // The panel's and the text's alpha. The white panel over black reads
+    // as grey `P = 255 * a`. Red text at alpha `t` over it keeps
+    // `(1 - t) * P` of the panel's green, least where a glyph covers its
+    // pixel fully, so `t = 1 - min_green / P`.
+    let alphas = |px: &[u8]| -> Option<(f32, f32)> {
+        let at = |x: u32, y: u32| {
+            let i = ((y * w + x) * 4) as usize;
+            (px[i] as f32, px[i + 1] as f32)
+        };
+        let grey = at(195, 95).1;
+        let min_green = (0..100)
+            .flat_map(|y| (0..200).map(move |x| (x, y)))
+            .map(|(x, y)| at(x, y))
+            .filter(|(r, g)| *r > *g + 20.0)
+            .map(|(_, g)| g)
+            .reduce(f32::min)?;
+        Some((grey / 255.0, 1.0 - min_green / grey))
+    };
+
+    // About half way (200ms into a 400ms animation), and at rest.
+    let frames = animate_panel(&mut app, css, panel, &[2 + 13, 39]);
+    let (panel_mid, text_mid) = alphas(&frames[0]).expect("no text mid-animation");
+    let (panel_rest, text_rest) = alphas(&frames[1]).expect("no text at rest");
+    assert!(
+        panel_rest > 0.99 && text_rest > 0.95,
+        "at rest the panel's alpha is {panel_rest} and its text's {text_rest}"
+    );
+    assert!(
+        (0.3..0.8).contains(&panel_mid),
+        "the panel is not fading: alpha {panel_mid} mid-animation"
+    );
+    assert!(
+        (text_mid - panel_mid).abs() < 0.1,
+        "mid-animation the panel's alpha is {panel_mid} and its text's {text_mid}"
+    );
+}
