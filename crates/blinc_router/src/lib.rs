@@ -35,7 +35,7 @@ pub mod transition;
 use std::sync::{Arc, Mutex};
 
 use blinc_core::context_state::BlincContextState;
-use blinc_core::reactive::Signal;
+use blinc_core::reactive::{ReactiveGraph, Signal, computed};
 use history::RouterHistory;
 use route::RouteTrie;
 
@@ -65,11 +65,9 @@ struct RouterInner {
     /// The currently active route path (for suspension tracking)
     active_route_path: Option<String>,
     /// Monotonic counter bumped on every successful navigation
-    /// (`push`/`replace`/`back`/`forward`). The `outlet()` `Stateful`
-    /// subscribes via `.deps([signal.id()])`; bumping it triggers
-    /// `check_stateful_deps` → `refresh_stateful` →
-    /// `queue_subtree_rebuild` for just the outlet's node, leaving
-    /// the surrounding tree alone.
+    /// (`push`/`replace`/`back`/`forward`). Each `outlet()` follows it:
+    /// bumping it builds the new view as a row of the outlet and takes
+    /// the old one away, leaving the surrounding tree alone.
     ///
     /// Lazy-created — the reactive graph only exists after
     /// `BlincContextState::init`, which the windowed runner does
@@ -116,17 +114,9 @@ impl Router {
         Some(sig)
     }
 
-    /// Bump the route-version signal and notify subscribed
-    /// `Stateful`s. Called from every state-mutating navigation
-    /// method after the inner lock is released.
-    ///
-    /// `notify_stateful_deps` walks the registered deps and fires
-    /// `refresh_stateful` for each match. The outlet's stateful
-    /// reacts by queueing a `subtree_rebuild` against just its own
-    /// node — leaving the surrounding tree untouched. See GH #35 for
-    /// the bug this replaces (pre-fix: silent no-op; intermediate
-    /// fix: full-tree rebuild that re-rendered the outer scaffold
-    /// every navigation).
+    /// Bump the route-version signal, which every `outlet()` follows.
+    /// Called from every state-mutating navigation method after the
+    /// inner lock is released.
     fn notify_route_change(&self) {
         let Some(sig) = self.ensure_route_signal() else {
             // Pre-init navigation — first build will pick up
@@ -137,8 +127,7 @@ impl Router {
             return;
         };
         let cur = ctx.get_signal(sig).unwrap_or(0);
-        ctx.set_signal(sig, cur.wrapping_add(1));
-        ctx.notify_stateful_deps(&[sig.id()]);
+        sig.set(cur.wrapping_add(1));
     }
 
     /// Navigate to a path
@@ -324,9 +313,9 @@ impl Router {
     }
 
     /// Build the current route's view directly, without reactive
-    /// wrapping. Pulled out of `outlet()` so the latter can re-invoke
-    /// it from inside a `Stateful` callback on route change without
-    /// duplicating the suspension-scope bookkeeping.
+    /// wrapping. Pulled out of `outlet()` so the latter can build it
+    /// again on every route change without duplicating the
+    /// suspension-scope bookkeeping.
     fn build_current_view(&self) -> blinc_layout::div::Div {
         let view_and_ctx = {
             let state = self.inner.lock().unwrap();
@@ -384,35 +373,22 @@ impl Router {
 
             // Wrap in a motion container when the route declares a
             // `PageTransition` so the page actually animates on
-            // appear. The `Stateful` outlet builds a fresh subtree
-            // per navigation, so the new view's motion container
-            // is freshly minted on every route change → its
-            // `enter_animation` plays automatically.
+            // appear. The outlet builds a fresh row per navigation, so
+            // the new view's motion container is freshly minted on every
+            // route change and its `enter_animation` plays.
             //
             // `.transient()` is critical here: without it, motion
-            // defaults to `use_stable_key=true` and reuses the
-            // same `RenderState::stable_motions` entry on every
-            // navigation. The state machine (Waiting → Entering →
-            // Active → ...) accumulates partial transitions
-            // across rebuilds, and after ~5 navigations the
-            // residual state corrupts the transform/opacity
-            // applied to the new view (visible as ghosted /
-            // half-scaled glyphs in the GH #39 reproducer).
-            // With `transient`, motion state is keyed by the
-            // freshly-allocated `LayoutNodeId`, cleaned up on
-            // subtree removal, and every navigation starts from
-            // a clean Waiting state.
+            // defaults to `use_stable_key=true` and reuses the same
+            // `RenderState::stable_motions` entry on every navigation,
+            // and the state machine accumulates partial transitions
+            // across them (visible as ghosted / half-scaled glyphs after
+            // a few navigations). With `transient`, motion state is
+            // keyed by the freshly allocated `LayoutNodeId` and cleaned
+            // up on subtree removal.
             //
-            // The `exit_animation` is set for completeness but
-            // won't fire today: the previous view's subtree is
-            // removed wholesale on rebuild, before any exit
-            // motion could run. Proper exit playback needs the
-            // outlet to keep the outgoing view in the tree until
-            // the motion settles (the pattern used by
-            // `widgets::overlay::transition` which calls
-            // `query_motion(key).exit()` and defers the unmount).
-            // Filed as a follow-up; the enter half is what makes
-            // GH #39's reproducer visibly transition.
+            // The `exit_animation` is set for completeness but does not
+            // play: the outlet removes the outgoing view at once, and
+            // exit playback needs a stable-keyed motion it can address.
             if let Some(transition) = transition {
                 // The host `Div` + motion wrapper must size to fit
                 // their child (the view), not collapse to zero and
@@ -439,39 +415,29 @@ impl Router {
 
     /// Build the current route's view.
     ///
-    /// Returns a `Div` that hosts a `Stateful<()>` subscribed to the
-    /// router's internal route-version signal. `push`/`replace`/
-    /// `back`/`forward` bump the signal, the stateful's deps fire
-    /// `refresh_stateful` → `queue_subtree_rebuild` against the
-    /// stateful's own node, and the runner swaps just that subtree
-    /// on the next frame — the surrounding scaffold (header, nav
-    /// chrome, etc.) is left untouched (GH #35).
+    /// Returns a `Div` whose one child is the current view. `push`/
+    /// `replace`/`back`/`forward` bump the router's route-version
+    /// signal; the outlet then builds the new view and takes the old one
+    /// away, in place, and the surrounding scaffold (header, nav chrome,
+    /// etc.) is left untouched (GH #35). Each navigation builds the view
+    /// again, even to the same path.
     ///
-    /// The outer host `Div` is unstyled and exists only because the
-    /// `Stateful` would otherwise need to be the return type
-    /// directly; keeping `Div` preserves chainable methods callers
-    /// already use (`router.outlet().flex_grow()`).
+    /// The outer `Div` is unstyled and keeps the return type chainable
+    /// (`router.outlet().flex_grow()`).
     pub fn outlet(&self) -> blinc_layout::div::Div {
-        let router = self.clone();
-        // Stable per-router key so nested / re-entered outlets each
-        // get their own `Stateful` identity. `Arc::as_ptr` is unique
-        // per Router; collision across `Router::clone()`s is fine —
-        // clones share the same routing state.
-        let key = format!("router-outlet-{:p}", Arc::as_ptr(&self.inner));
-
-        // `deps()` lives on both `StatefulBuilder` (pre-`on_state`,
-        // `IntoIterator<Item=SignalId>`) and `Stateful` (post-
-        // `on_state`, `&[SignalId]`). Set the deps on the builder so
-        // the registration happens during `on_state` — at which
-        // point `register_stateful_deps` wires the refresh callback
-        // to the dep list in a single shot.
-        let builder = blinc_layout::stateful::stateful_with_key::<()>(key);
-        let builder = match self.ensure_route_signal() {
-            Some(sig) => builder.deps([sig.id()]),
-            None => builder,
+        let host = blinc_layout::div::div();
+        let Some(sig) = self.ensure_route_signal() else {
+            // Before the reactive graph exists there is nothing to follow,
+            // and the view is built once.
+            return host.child(self.build_current_view());
         };
-        let stateful = builder.on_state(move |_ctx| router.build_current_view());
-        blinc_layout::div::div().child(stateful)
+        let router = self.clone();
+        let version = computed(move |g: &ReactiveGraph| vec![g.get(sig).unwrap_or(0)]);
+        host.for_each(
+            &version,
+            |version: &u32| *version,
+            move |_| router.build_current_view(),
+        )
     }
 }
 
