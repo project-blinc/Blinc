@@ -253,6 +253,13 @@ impl TooltipBuilder {
                     TooltipSide::Left => AnchorDirection::Left,
                     TooltipSide::Right => AnchorDirection::Right,
                 };
+                // Picks the edge the enter animation grows out of.
+                let side_class = match side {
+                    TooltipSide::Top => "cn-tooltip--top",
+                    TooltipSide::Bottom => "cn-tooltip--bottom",
+                    TooltipSide::Left => "cn-tooltip--left",
+                    TooltipSide::Right => "cn-tooltip--right",
+                };
 
                 // No global `close_all_of_kind(Tooltip)` here — see the
                 // matching comment in `build_hover_card_overlay`. Each
@@ -277,18 +284,16 @@ impl TooltipBuilder {
                     .size(280.0, 32.0)
                     .anchor_direction(anchor_dir)
                     .dismissable_by_mouse_leave(true, close_delay_ms)
-                    // No motion_enter/_exit on the builder. Enter is driven by
-                    // the CSS `@keyframes cn-tooltip-enter` rule on
-                    // `.cn-tooltip` (defined in cn_styles.rs). Exit is instant
-                    // for now — tooltips snap-close. See OVERLAY_STACK_DESIGN.md
-                    // "explicit non-feature: no overlay-owned animation system"
-                    // for the rationale.
+                    // No motion_enter/_exit on the builder: the enter is the
+                    // `cn-tooltip-enter` keyframes on `.cn-tooltip` in
+                    // cn_styles.rs, and the tooltip closes at once.
                     .on_close(move |_reason| {
                         stored_close.set(None);
                     })
                     .content(move || {
                         div()
                             .class("cn-tooltip")
+                            .class(side_class)
                             .flex_row()
                             .items_center()
                             .bg(bg)

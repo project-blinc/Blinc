@@ -787,14 +787,18 @@ pub const CN_STYLES: &str = r#"
     border-radius: var(--radius-sm);
     font-size: var(--text-xs);
     padding: var(--space-1-5) var(--space-3);
-    /* Snap-in for now. An earlier CSS-driven fade-in (`@keyframes
-       cn-tooltip-enter`) was wired up but never actually fired — class-
-       only `@keyframes` animations didn't start until the class-anim
-       fix in `start_all_css_animations`. Re-enabling the fade exposed
-       a text-glyph opacity gap: the glyph pipeline doesn't pick up the
-       container's animated opacity mid-animation, so the tooltip text
-       disappears on desktop and looks laggy on web. Keep snap-in until
-       the glyph path honours animated opacity. */
+    /* Fades in, growing out of the edge that faces its trigger. */
+    animation: cn-tooltip-enter var(--duration-fast) var(--ease-out);
+    transform-origin: bottom center;
+}
+
+.cn-tooltip--bottom { transform-origin: top center; }
+.cn-tooltip--left { transform-origin: right center; }
+.cn-tooltip--right { transform-origin: left center; }
+
+@keyframes cn-tooltip-enter {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
 }
 
 /* ============================================================================
