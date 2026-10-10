@@ -179,6 +179,24 @@ let state = text_input_state();
 let current_text = state.lock().unwrap().value.clone();
 ```
 
+### Setting the Value from Code
+
+The field is built once. Typing, focus, hover and scrolling patch what it
+shows in place. After changing its data from outside the widget, as a
+stepper button does, call `refresh_text_input` so the field shows the
+change:
+
+```rust
+use blinc_layout::widgets::text_input::refresh_text_input;
+
+{
+    let mut data = state.lock().unwrap();
+    data.value = "42".to_string();
+    data.cursor = data.value.chars().count();
+}
+refresh_text_input(&state);
+```
+
 ---
 
 ## OTP Input

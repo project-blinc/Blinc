@@ -30,6 +30,8 @@ pub enum PropertyId {
     Opacity,
     Transform,
     Shadow,
+    /// Outline width, colour and offset, written together.
+    Outline,
     Color,
     Filter,
     AccentColor,
@@ -152,7 +154,7 @@ impl PropertyId {
         use PropertyId::*;
         match self {
             // visual cells — patched in RenderProps, no layout / text work
-            Background | BorderColor | Opacity | Transform | Shadow | Color | Filter
+            Background | BorderColor | Opacity | Transform | Shadow | Outline | Color | Filter
             | AccentColor => SideEffects::VISUAL,
 
             // border width affects content rect → layout

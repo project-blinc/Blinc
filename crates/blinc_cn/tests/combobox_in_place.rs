@@ -90,31 +90,12 @@ impl Scene {
         self.tree.layout_tree.children(search_row)[0]
     }
 
-    fn contains(&self, ancestor: LayoutNodeId, node: LayoutNodeId) -> bool {
-        let mut stack = vec![ancestor];
-        while let Some(n) = stack.pop() {
-            if n == node {
-                return true;
-            }
-            stack.extend(self.tree.layout_tree.children(n));
-        }
-        false
-    }
-
-    /// What the runner does after an event. The search field is a text
-    /// input, which still rebuilds itself on focus; a rebuild anywhere else
-    /// is the combobox's.
+    /// What the runner does after an event.
     fn frame(&mut self) {
-        let field = self.list().map(|_| self.search_field());
-        let rebuilds = blinc_layout::stateful::take_pending_subtree_rebuilds();
-        for rebuild in &rebuilds {
-            assert!(
-                field.is_some_and(|f| self.contains(f, rebuild.parent_id)),
-                "the combobox queued a subtree rebuild"
-            );
-        }
-        blinc_layout::stateful::requeue_subtree_rebuilds(rebuilds);
-        self.tree.process_pending_subtree_rebuilds();
+        assert!(
+            !blinc_layout::stateful::has_pending_subtree_rebuilds(),
+            "the combobox queued a subtree rebuild"
+        );
         let updates = blinc_layout::take_pending_partial_prop_updates();
         self.tree.apply_partial_property_updates(updates);
         self.tree.compute_layout(400.0, 400.0);

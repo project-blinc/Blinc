@@ -1,10 +1,10 @@
 //! Ready-to-use TextInput widget
 //!
 //! Single-line text input with:
-//! - Visual states: idle, hovered, focused (via FSM-driven Stateful)
-//! - Cursor blinking via AnimatedValue + Canvas (no rebuilds)
-//! - Incremental updates: prop updates for visuals, subtree rebuilds for content
-//! - No full UI rebuilds - uses queue_prop_update and queue_subtree_rebuild
+//! - Visual states: idle, hovered, focused
+//! - A caret drawn by a canvas that reads the field each paint
+//! - Built once: what it shows is bound to a revision signal, so an edit
+//!   patches the text, colours and scroll in place
 //!
 //! # Example
 //!
@@ -25,10 +25,7 @@ use crate::canvas::canvas;
 use crate::css_parser::{ElementState, Stylesheet, active_stylesheet};
 use crate::div::{Div, ElementBuilder, div};
 use crate::element::RenderProps;
-use crate::stateful::{
-    SharedState, StateTransitions, Stateful, StatefulInner, TextFieldState, refresh_stateful,
-};
-use crate::text::text;
+use crate::stateful::{StateTransitions, TextFieldState, refresh_stateful};
 use crate::text_selection::{SelectionSource, clear_selection, set_selection};
 use crate::tree::{LayoutNodeId, LayoutTree};
 use crate::widgets::cursor::{CursorAnimation, SharedCursorState, cursor_state};
@@ -206,8 +203,7 @@ const LONG_PRESS_MAX_DRIFT_PX: f32 = 10.0;
 /// under the press position so a long-press behaves the same as a
 /// double-tap (matches iOS UITextField / Android EditText UX). The
 /// closure should capture an `Arc` to the widget's data state and
-/// any state needed to update the selection (cursor position,
-/// stateful refresh handle).
+/// any state needed to update the selection.
 ///
 /// Calling this overwrites any previously armed timer — only the
 /// most recent press counts, mirroring the iOS UITextField behavior
@@ -301,7 +297,7 @@ pub fn fire_long_press_timer_if_due() -> bool {
         // Android EditText UX of selecting the word under the
         // finger on a long press (mirroring double-tap). The
         // callback is registered at arm time and captures an
-        // `Arc` to the widget's data + a stateful refresh handle.
+        // `Arc` to the widget's data.
         if let Some(cb) = arm.on_fire.as_ref() {
             cb();
         }
@@ -352,8 +348,7 @@ pub fn enqueue_pending_focus_area(state: Weak<Mutex<crate::widgets::text_area::T
 /// `focus_text_input_deferred(&data)` enqueues an entry here. The
 /// windowed-app frame loop calls [`process_pending_input_focus`] each
 /// tick AFTER the tree-build phase. The processor drains entries whose
-/// `stateful_state` has populated (i.e., the matching `TextInput` has
-/// been built into the live tree) and calls the regular
+/// `TextInput` has been built into the live tree and calls the regular
 /// [`focus_text_input`] on them; entries whose widget hasn't mounted
 /// yet stay queued for the next frame.
 ///
@@ -369,11 +364,6 @@ pub fn enqueue_pending_focus_area(state: Weak<Mutex<crate::widgets::text_area::T
 static PENDING_FOCUS_INPUT: Mutex<Vec<(u64, Weak<Mutex<TextInputData>>)>> = Mutex::new(Vec::new());
 /// Bumped by [`blur_all_text_inputs`] to cancel deferred focus queued before blur.
 static PENDING_FOCUS_GENERATION: AtomicU64 = AtomicU64::new(0);
-/// Slots to blur on the next `process_pending_input_focus`. Used when a
-/// click's FSM focus (from Stateful's auto POINTER_DOWN handler) must be
-/// undone AFTER the event dispatch that set it — see
-/// [`blur_text_input_deferred`].
-static PENDING_BLUR_INPUT: Mutex<Vec<Weak<Mutex<TextInputData>>>> = Mutex::new(Vec::new());
 static PENDING_FOCUS_AREA: Mutex<
     Vec<(u64, Weak<Mutex<crate::widgets::text_area::TextAreaState>>)>,
 > = Mutex::new(Vec::new());
@@ -625,39 +615,36 @@ pub fn decrement_focus_count() {
     }
 }
 
-/// Programmatically focus a text_input by its shared state handle.
-///
-/// Mirrors what the click handler does internally — sets the widget's
-/// visual state to `Focused`, marks it as the active focus target for
-/// keyboard / IME / cursor-blink machinery, blurs any previously-focused
-/// text_input or text_area, and increments the soft-keyboard refcount.
-/// Use from a parent widget's open-handler when an embedded text input
-/// should grab focus on appearance (e.g. cn::combobox's search field on
-/// dropdown open).
-/// Force the text input's stateful to re-run its on_state callback
-/// and queue the resulting prop / subtree updates. Use this after
-/// mutating [`TextInputData::value`] (or `cursor` / `selection_start`)
-/// from outside the widget — e.g. a `+` / `−` stepper on
-/// `cn::number_input` that updates the underlying state and needs the
-/// visible field to pick up the new value on the next frame.
-///
-/// Pre-fix, this only set `needs_visual_update = true` + requested a
-/// redraw, which marks intent but doesn't actually run the callback —
-/// the visible text stayed stale until something unrelated (mouse
-/// move, animation tick) drove a frame that happened to call
-/// `ensure_callback_invoked`. Now it routes through
-/// [`crate::stateful::refresh_stateful`] which both runs the
-/// callback AND queues the prop updates.
+/// Repaint a field after its [`TextInputData::value`], `cursor` or
+/// `selection_start` was changed from outside the widget, e.g. by the
+/// `+` / `−` stepper on `cn::number_input`.
 pub fn refresh_text_input(state: &SharedTextInputData) {
-    let stateful = {
-        let s = match state.lock() {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        s.stateful_state.clone()
+    notify_text_input(state);
+}
+
+/// The pointer entered or left a field: move its visual state.
+fn pointer_crossed(data: &SharedTextInputData, event: u32) {
+    let changed = match data.lock() {
+        Ok(mut d) if !d.disabled => match d.visual.on_event(event) {
+            Some(next) => {
+                d.visual = next;
+                true
+            }
+            None => false,
+        },
+        _ => false,
     };
-    if let Some(stateful) = stateful {
-        crate::stateful::refresh_stateful(&stateful);
+    if changed {
+        notify_text_input(data);
+    }
+}
+
+/// The field's data changed: have what it shows follow. Called with the data
+/// unlocked, since what follows reads it.
+pub(crate) fn notify_text_input(state: &SharedTextInputData) {
+    let revision = state.lock().ok().and_then(|d| d.revision);
+    if let Some(revision) = revision {
+        revision.update(|n| n.wrapping_add(1));
     }
     crate::stateful::request_redraw();
 }
@@ -684,7 +671,7 @@ pub fn focus_text_input_deferred(state: &SharedTextInputData) {
 }
 
 /// Drain the pending-focus queue, applying focus to entries whose
-/// widget has mounted (stateful_state populated). Entries whose widget
+/// widget has been built. Entries whose widget
 /// hasn't built yet are re-queued for the next frame. Entries with a
 /// stale generation (blurred before they drained) are dropped.
 ///
@@ -693,20 +680,6 @@ pub fn focus_text_input_deferred(state: &SharedTextInputData) {
 /// state flip is visible on the same frame the popover paints — no
 /// visual delay between popover appearance and focus indicator.
 pub fn process_pending_input_focus() {
-    // Apply deferred blurs first: these undo an auto POINTER_DOWN focus
-    // from the dispatch that just completed (e.g. an OTP slot whose
-    // click was redirected). Running before the focus drain keeps the
-    // two independent — blur and focus target different slots.
-    let blurs: Vec<Weak<Mutex<TextInputData>>> = match PENDING_BLUR_INPUT.lock() {
-        Ok(mut p) => std::mem::take(&mut *p),
-        Err(_) => Vec::new(),
-    };
-    for weak in blurs {
-        if let Some(strong) = weak.upgrade() {
-            blur_text_input(&strong);
-        }
-    }
-
     let drained: Vec<(u64, Weak<Mutex<TextInputData>>)> = {
         match PENDING_FOCUS_INPUT.lock() {
             Ok(mut p) => std::mem::take(&mut *p),
@@ -725,7 +698,7 @@ pub fn process_pending_input_focus() {
         let mounted = strong
             .lock()
             .ok()
-            .map(|d| d.stateful_state.is_some())
+            .map(|d| d.revision.is_some())
             .unwrap_or(false);
         if mounted {
             focus_text_input(&strong);
@@ -779,9 +752,18 @@ pub fn process_pending_area_focus() {
     }
 }
 
+/// Programmatically focus a text_input by its shared state handle.
+///
+/// Mirrors what the click handler does internally — sets the widget's
+/// visual state to `Focused`, marks it as the active focus target for
+/// keyboard / IME / cursor-blink machinery, blurs any previously-focused
+/// text_input or text_area, and increments the soft-keyboard refcount.
+/// Use from a parent widget's open-handler when an embedded text input
+/// should grab focus on appearance (e.g. cn::combobox's search field on
+/// dropdown open).
 pub fn focus_text_input(state: &SharedTextInputData) {
     use blinc_core::events::event_types;
-    let stateful_to_refresh = if let Ok(mut s) = state.lock() {
+    let did_change = if let Ok(mut s) = state.lock() {
         if !s.visual.is_focused() {
             if let Some(new_state) = s.visual.on_event(event_types::FOCUS) {
                 s.visual = new_state;
@@ -791,52 +773,17 @@ pub fn focus_text_input(state: &SharedTextInputData) {
             s.focus_time_ms = elapsed_ms();
             s.reset_cursor_blink();
             increment_focus_count();
-            // Bump the Stateful's shared FSM as well as data.visual.
-            // The Stateful's state_callback (the one that paints the
-            // focused bg/border) reads `shared.state`, NOT data.visual.
-            // If we only flip data.visual + needs_visual_update, the
-            // next build() reads the stale Idle shared.state and bakes
-            // Idle visuals into the render tree — so on first paint
-            // the focused popup looks unfocused until a pointer event
-            // (POINTER_ENTER) drives shared.state via the auto event
-            // handlers. Drive shared.state via the FOCUS event here so
-            // build() sees Focused, and call refresh_stateful after
-            // dropping the data lock so the callback queues a prop
-            // update for the current frame.
-            let stateful_ref = s.stateful_state.clone();
-            if let Some(ref stateful) = stateful_ref {
-                if let Ok(mut shared) = stateful.lock() {
-                    if let Some(new_fsm) = shared.state.on_event(event_types::FOCUS) {
-                        shared.state = new_fsm;
-                    } else {
-                        shared.state = TextFieldState::Focused;
-                    }
-                    shared.needs_visual_update = true;
-                }
-            }
-            stateful_ref
+            true
         } else {
-            None
+            false
         }
     } else {
-        None
+        false
     };
-    let did_change = stateful_to_refresh.is_some();
-    if let Some(ref stateful) = stateful_to_refresh {
-        refresh_stateful(stateful);
+    if did_change {
+        notify_text_input(state);
     }
     set_focused_text_input(state);
-    // Only request a redraw when this call ACTUALLY transitioned the
-    // input to focused. The deferred-focus drain calls focus_text_input
-    // every frame the queue is non-empty; firing request_redraw
-    // unconditionally pinned NEEDS_REDRAW across animation ticks and
-    // helped lock the windowed runner into the 30 fps cap branch even
-    // after the popover-enter animation settled. The branch covering
-    // an already-focused input is an idempotent no-op; no redraw is
-    // needed.
-    if did_change {
-        crate::stateful::request_redraw();
-    }
 }
 
 pub(crate) fn set_focused_text_input(state: &SharedTextInputData) {
@@ -857,26 +804,19 @@ pub(crate) fn set_focused_text_input(state: &SharedTextInputData) {
 fn blur_text_input_state(state: &SharedTextInputData) {
     use blinc_core::events::event_types;
 
-    let mut stateful_to_refresh = None;
-    if let Ok(mut s) = state.lock() {
+    let did_change = if let Ok(mut s) = state.lock() {
         if let Some(new_state) = s.visual.on_event(event_types::BLUR) {
             s.visual = new_state;
             decrement_focus_count();
+            true
+        } else {
+            false
         }
-
-        if let Some(ref stateful) = s.stateful_state {
-            if let Ok(mut shared) = stateful.lock() {
-                if let Some(new_fsm) = shared.state.on_event(event_types::BLUR) {
-                    shared.state = new_fsm;
-                    shared.needs_visual_update = true;
-                    stateful_to_refresh = Some(Arc::clone(stateful));
-                }
-            }
-        }
-    }
-
-    if let Some(ref stateful) = stateful_to_refresh {
-        refresh_stateful(stateful);
+    } else {
+        false
+    };
+    if did_change {
+        notify_text_input(state);
     }
 }
 
@@ -891,34 +831,11 @@ pub(crate) fn clear_focused_text_input(state: &SharedTextInputData) {
     }
 }
 
-/// Blur one specific text input, resetting its FSM + visual to a
-/// non-focused state and repainting it.
-///
-/// `Stateful` auto-registers a `POINTER_DOWN -> Focused` handler that
-/// runs on every click, independent of the manual focus path that
-/// updates the global `FOCUSED_TEXT_INPUT` tracker. When a widget
-/// intercepts a click and redirects focus elsewhere (e.g. an OTP slot
-/// bouncing focus to the first empty slot), the clicked slot's FSM
-/// still latches `Focused` — painting a `:focus` outline that
-/// `blur_all_text_inputs` (which only clears the single tracked input)
-/// can never reach. Widgets call this to blur such an orphaned slot.
+/// Blur one specific text input, resetting its visual to a non-focused
+/// state and repainting it.
 pub fn blur_text_input(state: &SharedTextInputData) {
     clear_focused_text_input(state);
     blur_text_input_state(state);
-}
-
-/// Queue a blur for the next [`process_pending_input_focus`].
-///
-/// Needed when the FSM focus to undo was set by Stateful's auto
-/// POINTER_DOWN handler DURING the current event dispatch: a synchronous
-/// [`blur_text_input`] from another handler on the same click can run
-/// before that auto handler and no-op. Deferring runs the blur after the
-/// dispatch, so it wins.
-pub fn blur_text_input_deferred(state: &SharedTextInputData) {
-    if let Ok(mut pending) = PENDING_BLUR_INPUT.lock() {
-        pending.push(Arc::downgrade(state));
-    }
-    crate::stateful::request_redraw();
 }
 
 pub(crate) fn set_focused_text_area(state: &crate::widgets::text_area::SharedTextAreaState) {
@@ -1025,28 +942,21 @@ pub fn blur_all_text_inputs() {
         let mut focused = FOCUSED_TEXT_INPUT.lock().unwrap();
         if let Some(weak) = focused.take() {
             if let Some(state) = weak.upgrade() {
-                if let Ok(mut s) = state.lock() {
+                let blurred = if let Ok(mut s) = state.lock() {
                     if s.visual.is_focused() {
                         if let Some(new_state) = s.visual.on_event(event_types::BLUR) {
                             s.visual = new_state;
                             decrement_focus_count();
                         }
-                        // Also update the FSM state to keep in sync
-                        let stateful_ref = s.stateful_state.clone();
-                        if let Some(ref stateful) = stateful_ref {
-                            if let Ok(mut shared) = stateful.lock() {
-                                if let Some(new_fsm) = shared.state.on_event(event_types::BLUR) {
-                                    shared.state = new_fsm;
-                                    shared.needs_visual_update = true;
-                                }
-                            }
-                        }
-                        // Trigger visual refresh after releasing the data lock
-                        drop(s);
-                        if let Some(ref stateful) = stateful_ref {
-                            refresh_stateful(stateful);
-                        }
+                        true
+                    } else {
+                        false
                     }
+                } else {
+                    false
+                };
+                if blurred {
+                    notify_text_input(&state);
                 }
             }
         }
@@ -1094,9 +1004,7 @@ pub fn focused_text_input_node_id() -> Option<LayoutNodeId> {
     let weak = focused.as_ref()?;
     let data = weak.upgrade()?;
     let guard = data.lock().ok()?;
-    let stateful = guard.stateful_state.as_ref()?;
-    let shared = stateful.lock().ok()?;
-    shared.node_id
+    guard.node_id
 }
 
 /// Get the layout node ID of the currently focused TextArea, if any.
@@ -1173,8 +1081,7 @@ pub type SharedTextInputData = Arc<Mutex<TextInputData>>;
 
 /// Text input data (content, cursor, validation)
 ///
-/// This is the EXTERNAL state that persists across rebuilds.
-/// Visual state (hover/focus) is managed by the Stateful FSM.
+/// The state the field shows, its visual state (hover/focus) included.
 #[derive(Clone)]
 pub struct TextInputData {
     pub value: String,
@@ -1198,8 +1105,11 @@ pub struct TextInputData {
     /// Layout bounds storage - updated after each layout computation
     /// Used to get the actual computed width for proper scroll behavior
     pub layout_bounds_storage: crate::renderer::LayoutBoundsStorage,
-    /// Reference to the Stateful's shared state for triggering incremental updates
-    pub(crate) stateful_state: Option<SharedState<TextFieldState>>,
+    /// Bumped whenever something the field shows changes; its content is
+    /// bound to it. `None` until a `TextInput` is made over the data.
+    pub(crate) revision: Option<blinc_core::reactive::Signal<u64>>,
+    /// The field's node, once built.
+    pub(crate) node_id: Option<LayoutNodeId>,
     /// Callback invoked when text value changes
     pub(crate) on_change_callback: Option<OnChangeCallback>,
     /// Optional stepper hook fired when the user presses ↑ / ↓ / + / −
@@ -1271,7 +1181,6 @@ impl std::fmt::Debug for TextInputData {
             .field("is_valid", &self.is_valid)
             .field("visual", &self.visual)
             .field("focus_time_ms", &self.focus_time_ms)
-            // Skip stateful_state since StatefulInner doesn't implement Debug
             .finish()
     }
 }
@@ -1300,7 +1209,8 @@ impl TextInputData {
             scroll_offset_x: 0.0,
             computed_width: None,
             layout_bounds_storage: Arc::new(Mutex::new(None)),
-            stateful_state: None,
+            revision: None,
+            node_id: None,
             on_change_callback: None,
             force_sync_once: false,
             on_step_callback: None,
@@ -2157,13 +2067,19 @@ impl Default for TextInputConfig {
 /// Callback type for on_change events
 pub type OnChangeCallback = Arc<dyn Fn(&str) + Send + Sync>;
 
-/// TextInput widget using FSM-driven Stateful for incremental updates
+/// A single-line text field.
+///
+/// Built once. Its handlers edit the shared [`TextInputData`] and bump its
+/// revision; what it shows (the text, the selection, the caret, the scroll,
+/// and the fill and border for its state) is bound to that revision, so
+/// typing, clicking and dragging patch the field in place.
 pub struct TextInput {
-    inner: Stateful<TextFieldState>,
+    /// The element as configured so far: layout calls and the handlers land
+    /// on it as they are made. The content is added when it is first built.
+    inner: std::cell::RefCell<Div>,
+    built: std::cell::OnceCell<Div>,
     data: SharedTextInputData,
     config: Arc<Mutex<TextInputConfig>>,
-    /// Reference to the Stateful's shared state for wiring up to TextInputData
-    stateful_state: SharedState<TextFieldState>,
     /// Callback invoked when text value changes
     on_change_callback: Option<OnChangeCallback>,
     /// Caller's handle onto this field, if bound.
@@ -2186,206 +2102,66 @@ impl TextInput {
     /// Create a text input with externally-managed data state
     pub fn new(data: SharedTextInputData) -> Self {
         let config = Arc::new(Mutex::new(TextInputConfig::default()));
+        // A field with a revision is one a deferred focus can land on.
+        if let Ok(mut d) = data.lock() {
+            d.revision
+                .get_or_insert_with(|| blinc_core::reactive::signal(0u64));
+        }
+        let mut inner = Self::create_inner_with_handlers(Arc::clone(&data), Arc::clone(&config));
 
-        // Get initial visual state and existing stateful_state from data
-        let (initial_visual, existing_stateful_state) = {
-            let d = data.lock().unwrap();
-            (d.visual, d.stateful_state.clone())
-        };
-
-        // Reuse existing stateful_state if available, otherwise create new one
-        // This ensures state persists across rebuilds (e.g., window resize)
-        let stateful_state: SharedState<TextFieldState> =
-            existing_stateful_state.unwrap_or_else(|| {
-                let new_state = Arc::new(Mutex::new(StatefulInner::new(initial_visual)));
-                // Store reference in TextInputData for triggering refreshes
-                if let Ok(mut d) = data.lock() {
-                    d.stateful_state = Some(Arc::clone(&new_state));
-                }
-                new_state
-            });
-
-        // Deliberately do NOT clear `node_id` here. `Stateful::build`
-        // overwrites it with the fresh node whenever a rebuild actually
-        // runs, so a full rebuild (e.g. window resize) still gets the
-        // right id. But when the incremental diff decides a reused slot
-        // is unchanged, `build` is skipped — its layout node persists,
-        // and the old `node_id` is still valid. Wiping it here left that
-        // node id at `None`, so a later out-of-band `refresh_stateful`
-        // (e.g. an OTP slot blurring when focus moves to a sibling) hit
-        // the `node_id == None` early-return in `refresh_props_internal`
-        // and dropped the repaint, leaving the slot's `:focus` outline
-        // ring baked on. Keeping the id lets that refresh land.
-
-        // Create inner Stateful with text input event handlers
-        let mut inner = Self::create_inner_with_handlers(
-            Arc::clone(&stateful_state),
-            Arc::clone(&data),
-            Arc::clone(&config),
-        );
-
-        // Set default width and height from config on the outer Stateful
-        // This ensures proper layout constraints even without explicit .w() call
-        // Also set overflow_clip to ensure children never visually exceed parent bounds
-        //
-        // HTML input behavior in flex layouts:
-        // 1. Inputs stretch to fill parent width in flex-col (align-items: stretch)
-        // 2. min-width: 0 - allows shrinking below content size in flex containers
-        // 3. flex-shrink: 1 - allows shrinking when container is constrained
+        // HTML input behaviour in flex layouts: stretch to the parent's
+        // width by default, and `min_w(0)` so the field can shrink below its
+        // content. The inner clip container does the clipping; clipping here
+        // would cut into the rounded border.
         {
             let cfg = config.lock().unwrap();
-            // By default, use w_full() to stretch like HTML inputs do in flex containers.
-            // The config.width serves as a fallback/minimum, not a fixed constraint.
-            // Users can override with .w(px) for fixed width behavior.
             if cfg.use_full_width {
                 inner = inner.w_full();
             }
-            // Note: When neither w() nor w_full() is called, the element uses auto width
-            // which allows it to stretch in flex containers (align-items: stretch default)
-
-            // Apply HTML input-like flex behavior:
-            // - min_w(0.0) allows the input to shrink below its content size
-            // - flex_shrink (default 1) allows shrinking in flex containers
-            // Note: Don't use overflow_clip() here - the inner clip_container handles clipping.
-            // Using overflow_clip on the outer container with rounded corners causes
-            // the clip to interfere with border rendering at the corners.
             inner = inner.h(cfg.height).min_w(0.0);
         }
 
-        // Register callback immediately so it's available for incremental diff
-        // The diff system calls children_builders() before build(), so the callback
-        // must be registered here, not in build()
-        {
-            let config_for_callback = Arc::clone(&config);
-            let data_for_callback = Arc::clone(&data);
-            let mut shared = stateful_state.lock().unwrap();
-
-            shared.state_callback = Some(Arc::new(
-                move |visual: &TextFieldState, container: &mut Div| {
-                    let mut cfg = config_for_callback.lock().unwrap().clone();
-                    let mut data_guard = data_for_callback.lock().unwrap();
-
-                    // Apply CSS stylesheet overrides (class-based and/or ID-based)
-                    let has_css_target =
-                        data_guard.css_element_id.is_some() || !data_guard.css_classes.is_empty();
-                    let css_outline = if has_css_target {
-                        if let Some(stylesheet) = active_stylesheet() {
-                            apply_css_overrides(
-                                &mut cfg,
-                                &stylesheet,
-                                data_guard.css_element_id.as_deref(),
-                                &data_guard.css_classes,
-                                visual,
-                            );
-                            // Extract outline properties for the inner div.
-                            // Pass both classes and the optional id so a
-                            // class-only target (cn::input attaches by
-                            // class) still picks up `.cn-input:focus {
-                            // outline: …; }` from the stylesheet.
-                            extract_outline_from_stylesheet(
-                                &stylesheet,
-                                data_guard.css_element_id.as_deref(),
-                                &data_guard.css_classes,
-                                visual,
-                            )
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    };
-
-                    // Update scroll offset to keep cursor visible
-                    let old_scroll = data_guard.scroll_offset_x;
-                    data_guard.ensure_cursor_visible(&cfg);
-                    if data_guard.scroll_offset_x != old_scroll {
-                        tracing::debug!(
-                            "TextInput scroll changed: {} -> {} (cursor={}, text_len={})",
-                            old_scroll,
-                            data_guard.scroll_offset_x,
-                            data_guard.cursor,
-                            data_guard.value.len()
-                        );
-                    }
-
-                    // Determine colors based on visual state
-                    let (bg, border_color) = match visual {
-                        TextFieldState::Idle => (cfg.bg_color, cfg.border_color),
-                        TextFieldState::Hovered => (cfg.hover_bg_color, cfg.hover_border_color),
-                        TextFieldState::Focused | TextFieldState::FocusedHovered => {
-                            (cfg.focused_bg_color, cfg.focused_border_color)
-                        }
-                        TextFieldState::Disabled => (
-                            Color::rgba(0.12, 0.12, 0.15, 0.5),
-                            Color::rgba(0.25, 0.25, 0.3, 0.5),
-                        ),
-                    };
-
-                    // Apply error state border if invalid
-                    let border_color = if !data_guard.is_valid && !data_guard.value.is_empty() {
-                        cfg.error_border_color
-                    } else {
-                        border_color
-                    };
-
-                    // Visual refresh must not rewrite width set on the outer Stateful.
-                    let mut inner = div()
-                        .bg(bg)
-                        .border(cfg.border_width, border_color)
-                        .rounded(cfg.corner_radius);
-
-                    // Apply CSS outline if specified
-                    if let Some((width, color, offset)) = css_outline {
-                        inner = inner
-                            .outline_width(width)
-                            .outline_color(color)
-                            .outline_offset(offset);
-                    }
-
-                    // Build and set content as a child (not merge)
-                    let content = TextInput::build_content(*visual, &data_guard, &cfg);
-                    container.merge(inner.child(content));
-                },
-            ));
-
-            shared.needs_visual_update = true;
-        }
-
-        // Ensure state handlers (hover/press) are registered immediately
-        // so they're available for incremental diff
-        inner.ensure_state_handlers_registered();
-
         Self {
-            inner,
+            inner: std::cell::RefCell::new(inner),
+            built: std::cell::OnceCell::new(),
             data,
             config,
-            stateful_state,
             on_change_callback: None,
             element_ref: None,
         }
     }
 
-    /// Create the inner Stateful element with all event handlers registered
+    /// The element, finished on first use: the content and the bound looks
+    /// added to what the builder calls made.
+    fn element(&self) -> &Div {
+        crate::build_once::build_once(&self.built, || {
+            let outer = self.inner.take();
+            let cfg = self.config.lock().unwrap().clone();
+            assemble(outer, &self.data, &cfg)
+        })
+    }
+
+    /// Create the element with all the event handlers registered
     fn create_inner_with_handlers(
-        stateful_state: SharedState<TextFieldState>,
         data: SharedTextInputData,
         config: Arc<Mutex<TextInputConfig>>,
-    ) -> Stateful<TextFieldState> {
+    ) -> Div {
         use blinc_core::events::event_types;
 
         let data_for_click = Arc::clone(&data);
         let data_for_drag = Arc::clone(&data);
         let config_for_drag = Arc::clone(&config);
-        let stateful_for_drag = Arc::clone(&stateful_state);
         let data_for_text = Arc::clone(&data);
         let data_for_key = Arc::clone(&data);
         let config_for_click = Arc::clone(&config);
-        let stateful_for_click = Arc::clone(&stateful_state);
-        let stateful_for_text = Arc::clone(&stateful_state);
-        let stateful_for_key = Arc::clone(&stateful_state);
+        let data_for_enter = Arc::clone(&data);
+        let data_for_leave = Arc::clone(&data);
 
-        Stateful::with_shared_state(stateful_state)
+        div()
             .w_full()
+            // The pointer over the field changes its look.
+            .on_hover_enter(move |_| pointer_crossed(&data_for_enter, event_types::POINTER_ENTER))
+            .on_hover_leave(move |_| pointer_crossed(&data_for_leave, event_types::POINTER_LEAVE))
             // Handle mouse down to focus and position cursor
             .on_mouse_down(move |ctx| {
                 let needs_refresh = {
@@ -2438,8 +2214,8 @@ impl TextInput {
                     // text content area inside the widget bounds.
                     // The widget renders a `padding_x`-wide spacer
                     // before the clip container that holds the text
-                    // (see [`build_text_input_inner`]), and the
-                    // border on the parent stateful adds another
+                    // (see `content`), and the
+                    // field's border adds another
                     // `border_width` on the left edge — so the very
                     // first glyph sits at
                     // `local_x = padding_x + border_width`, NOT at
@@ -2458,21 +2234,6 @@ impl TextInput {
                             matches!(cfg.text_align, blinc_core::TextAlign::Center),
                         )
                     };
-
-                    // Update FSM state
-                    {
-                        let mut shared = stateful_for_click.lock().unwrap();
-                        if !shared.state.is_focused() {
-                            if let Some(new_state) = shared
-                                .state
-                                .on_event(event_types::POINTER_DOWN)
-                                .or_else(|| shared.state.on_event(event_types::FOCUS))
-                            {
-                                shared.state = new_state;
-                                shared.needs_visual_update = true;
-                            }
-                        }
-                    }
 
                     // Update data state
                     if !d.visual.is_focused() {
@@ -2601,15 +2362,12 @@ impl TextInput {
                             // available — matching the iOS
                             // UITextField / Android EditText
                             // long-press-to-paste UX.
-                            // Capture clones of the data + stateful
-                            // refresh handle for the long-press
+                            // Capture the data for the long-press
                             // callback. The closure runs at
                             // deadline-fire time and selects the
                             // word at the captured cursor position,
                             // matching the double-tap UX.
                             let data_for_long_press = std::sync::Arc::clone(&data_for_click);
-                            let stateful_for_long_press =
-                                std::sync::Arc::clone(&stateful_for_click);
                             let captured_cursor = cursor_pos;
                             arm_long_press_timer(
                                 ctx.bounds_x + text_x,
@@ -2637,7 +2395,7 @@ impl TextInput {
                                         true
                                     };
                                     if did_update {
-                                        refresh_stateful(&stateful_for_long_press);
+                                        notify_text_input(&data_for_long_press);
                                     }
                                 })),
                             );
@@ -2651,7 +2409,7 @@ impl TextInput {
                 };
 
                 if needs_refresh {
-                    refresh_stateful(&stateful_for_click);
+                    notify_text_input(&data_for_click);
                 }
             })
             // Mouse drag to extend selection
@@ -2721,7 +2479,7 @@ impl TextInput {
                         true
                     };
                     if needs_refresh {
-                        refresh_stateful(&stateful_for_drag);
+                        notify_text_input(&data_for_drag);
                     }
                 }
             })
@@ -2772,7 +2530,7 @@ impl TextInput {
                 }
 
                 if needs_refresh {
-                    refresh_stateful(&stateful_for_text);
+                    notify_text_input(&data_for_text);
                 }
             })
             // Handle key down for navigation and deletion
@@ -2955,278 +2713,30 @@ impl TextInput {
                 if needs_refresh.1 {
                     blur_all_text_inputs();
                 } else if needs_refresh.0 {
-                    refresh_stateful(&stateful_for_key);
+                    notify_text_input(&data_for_key);
                 }
             })
             // Set text cursor (I-beam) for text input
             .cursor_text()
     }
 
-    /// Build the content div based on current visual state and data
-    ///
-    /// Note: Visual styling (bg, border, rounded) is now applied directly to the
-    /// container in the callback via set_* methods. This function only builds
-    /// the inner content structure (padding spacers, clip container, text, cursor).
-    fn build_content(
-        visual: TextFieldState,
-        data: &TextInputData,
-        config: &TextInputConfig,
-    ) -> Div {
-        let display = if data.value.is_empty() {
-            if !data.placeholder.is_empty() {
-                data.placeholder.clone()
-            } else {
-                config.placeholder.clone()
-            }
-        } else {
-            data.display_text()
-        };
-
-        let text_color = if data.value.is_empty() {
-            config.placeholder_color
-        } else if data.disabled {
-            Color::rgba(0.4, 0.4, 0.4, 1.0)
-        } else {
-            config.text_color
-        };
-
-        let is_focused = visual.is_focused();
-        let cursor_color = config.cursor_color;
-        let selection_color = config.selection_color;
-        let cursor_pos = data.cursor;
-        let cursor_height = config.font_size * 1.2;
-        let scroll_offset = data.scroll_offset_x;
-
-        let selection_range: Option<(usize, usize)> = data.selection_start.map(|start| {
-            if start < cursor_pos {
-                (start, cursor_pos)
-            } else {
-                (cursor_pos, start)
-            }
-        });
-
-        let cursor_state_for_canvas = Arc::clone(&data.cursor_state);
-
-        let cursor_x = if cursor_pos > 0 && !display.is_empty() {
-            let text_before: String = display.chars().take(cursor_pos).collect();
-            crate::text_measure::measure_text(&text_before, config.font_size).width
-        } else {
-            0.0
-        };
-
-        // Calculate dimensions - inner height accounts for border
-        let inner_height = config.height - config.border_width * 2.0;
-
-        // Build main content container - NO visual styling here (handled by callback)
-        // Always use w_full() so content fills the parent Stateful element.
-        // The parent's width is controlled by:
-        // - auto (default): stretches in flex containers via align-items: stretch
-        // - w_full(): explicitly fills parent width
-        // - w(px): user-specified fixed width
-        let mut main_content = div().h_full().w_full().relative().flex_row().items_center();
-
-        // Left padding spacer
-        main_content =
-            main_content.child(div().w(config.padding_x).h(inner_height).flex_shrink_0());
-
-        // Clip container - use flex_1 to fill available space
-        // This works for both full-width and fixed-width cases because:
-        // - The parent (main_content) already has the width constraint
-        // - flex_1 allows the clip container to fill remaining space after padding spacers
-        // - min_w(0) allows shrinking below content size (HTML input behavior)
-        let mut clip_container = div()
-            .h(inner_height)
-            .relative()
-            .overflow_clip()
-            .flex_1()
-            .min_w(0.0);
-
-        // When the field is set to `text_align: Center`, the text
-        // wrapper fills the clip container and centres its content
-        // horizontally — used by number / OTP / code inputs that want
-        // the value visually centred in a fixed-width cell. Otherwise
-        // the wrapper uses absolute positioning so `left(-scroll_offset)`
-        // can scroll long content horizontally.
-        let is_centered = matches!(config.text_align, blinc_core::TextAlign::Center);
-        let mut text_wrapper = if is_centered {
-            div()
-                .w_full()
-                .h(inner_height)
-                .flex_row()
-                .items_center()
-                .justify_center()
-        } else {
-            div()
-                .absolute()
-                .left(-scroll_offset)
-                .top(0.0)
-                .h(inner_height)
-                .flex_row()
-                .items_center()
-        };
-
-        if !display.is_empty() {
-            if let Some((sel_start, sel_end)) = selection_range {
-                let mut text_container = div().flex_row().items_center();
-
-                let before_sel: String = display.chars().take(sel_start).collect();
-                if !before_sel.is_empty() {
-                    text_container = text_container.child(
-                        text(&before_sel)
-                            .size(config.font_size)
-                            .color(text_color)
-                            .text_left()
-                            .no_wrap()
-                            .v_center(),
-                    );
-                }
-
-                let selected: String = display
-                    .chars()
-                    .skip(sel_start)
-                    .take(sel_end - sel_start)
-                    .collect();
-                if !selected.is_empty() {
-                    text_container = text_container.child(
-                        div()
-                            .bg(selection_color)
-                            .rounded(config.corner_radius)
-                            .child(
-                                text(&selected)
-                                    .size(config.font_size)
-                                    .color(text_color)
-                                    .text_left()
-                                    .no_wrap()
-                                    .v_center(),
-                            ),
-                    );
-                }
-
-                let after_sel: String = display.chars().skip(sel_end).collect();
-                if !after_sel.is_empty() {
-                    text_container = text_container.child(
-                        text(&after_sel)
-                            .size(config.font_size)
-                            .color(text_color)
-                            .text_left()
-                            .no_wrap()
-                            .v_center(),
-                    );
-                }
-
-                text_wrapper = text_wrapper.child(text_container);
-            } else {
-                text_wrapper = text_wrapper.child(
-                    text(&display)
-                        .size(config.font_size)
-                        .color(text_color)
-                        .text_left()
-                        .no_wrap()
-                        .v_center(),
-                );
-            }
-        }
-
-        // Add text wrapper to clip container
-        clip_container = clip_container.child(text_wrapper);
-
-        // Add cursor via canvas as a sibling to text_wrapper, also in clip_container
-        // The cursor position is adjusted for scroll offset since it's not inside text_wrapper.
-        //
-        // SKIP the cursor entirely when `text_align == Center` — the
-        // cursor's absolute `left(cursor_x)` math assumes the text
-        // starts at position 0 in the clip area, but a centred text
-        // wrapper sits at `(clip_w - text_w) / 2` (computed at
-        // runtime by the flex layout, not available here). Drawing
-        // the cursor at the un-centred position lands it to the left
-        // of the value, which is the "confused cursor" the user
-        // sees in number-input / OTP-style fields. Centred fields
-        // are predominantly read-only / stepper-driven anyway; a
-        // future text-measure-driven cursor placement can re-enable
-        // the caret if needed.
-        if is_focused && selection_range.is_none() && !is_centered {
-            let cursor_left = cursor_x - scroll_offset;
-            // Calculate proper vertical margins to center cursor (inner_height already defined above)
-            let cursor_margin = (inner_height - cursor_height) / 2.0;
-
-            {
-                if let Ok(mut cs) = cursor_state_for_canvas.lock() {
-                    cs.visible = true;
-                    cs.color = cursor_color;
-                    cs.x = cursor_left;
-                    cs.animation = CursorAnimation::SmoothFade;
-                }
-            }
-
-            let cursor_state_clone = Arc::clone(&cursor_state_for_canvas);
-            let cursor_canvas = canvas(
-                move |ctx: &mut dyn blinc_core::DrawContext,
-                      bounds: crate::canvas::CanvasBounds| {
-                    let cs = cursor_state_clone.lock().unwrap();
-                    if !cs.visible {
-                        return;
-                    }
-
-                    let opacity = cs.current_opacity();
-                    if opacity < 0.01 {
-                        return;
-                    }
-
-                    let color = blinc_core::Color::rgba(
-                        cs.color.r,
-                        cs.color.g,
-                        cs.color.b,
-                        cs.color.a * opacity,
-                    );
-                    // Draw cursor centered within the bounds
-                    ctx.fill_rect(
-                        blinc_core::Rect::new(0.0, 0.0, cs.width, bounds.height),
-                        blinc_core::CornerRadius::default(),
-                        blinc_core::Brush::Solid(color),
-                    );
-                },
-            )
-            .absolute()
-            .left(cursor_left)
-            .top(cursor_margin)
-            .w(2.0)
-            .h(cursor_height);
-
-            // Add cursor to clip_container (sibling to text_wrapper, doesn't scroll)
-            clip_container = clip_container.child(cursor_canvas);
-        } else if let Ok(mut cs) = cursor_state_for_canvas.lock() {
-            cs.visible = false;
-        }
-
-        // Add clip container to main content
-        main_content = main_content.child(clip_container);
-
-        // Right padding spacer
-        main_content =
-            main_content.child(div().w(config.padding_x).h(inner_height).flex_shrink_0());
-
-        // Return the main container with proper border
-        main_content
-    }
-
-    // Builder methods that forward to inner Stateful
     pub fn w(mut self, px: f32) -> Self {
         {
             let mut cfg = self.config.lock().unwrap();
             cfg.width = px;
         }
-        self.inner = std::mem::take(&mut self.inner).w(px);
+        self.inner = std::cell::RefCell::new(self.inner.take().w(px));
         self
     }
 
     pub fn w_full(mut self) -> Self {
         self.config.lock().unwrap().use_full_width = true;
-        self.inner = std::mem::take(&mut self.inner).w_full();
+        self.inner = std::cell::RefCell::new(self.inner.take().w_full());
         self
     }
 
     pub fn min_w(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).min_w(px);
+        self.inner = std::cell::RefCell::new(self.inner.take().min_w(px));
         self
     }
 
@@ -3235,7 +2745,7 @@ impl TextInput {
             let mut cfg = self.config.lock().unwrap();
             cfg.height = px;
         }
-        self.inner = std::mem::take(&mut self.inner).h(px);
+        self.inner = std::cell::RefCell::new(self.inner.take().h(px));
         self
     }
 
@@ -3361,37 +2871,37 @@ impl TextInput {
 
     pub fn rounded(mut self, radius: f32) -> Self {
         self.config.lock().unwrap().corner_radius = radius;
-        self.inner = std::mem::take(&mut self.inner).rounded(radius);
+        self.inner = std::cell::RefCell::new(self.inner.take().rounded(radius));
         self
     }
 
     pub fn border(mut self, width: f32, color: blinc_core::Color) -> Self {
-        self.inner = std::mem::take(&mut self.inner).border(width, color);
+        self.inner = std::cell::RefCell::new(self.inner.take().border(width, color));
         self
     }
 
     pub fn border_color(mut self, color: blinc_core::Color) -> Self {
-        self.inner = std::mem::take(&mut self.inner).border_color(color);
+        self.inner = std::cell::RefCell::new(self.inner.take().border_color(color));
         self
     }
 
     pub fn border_width(mut self, width: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).border_width(width);
+        self.inner = std::cell::RefCell::new(self.inner.take().border_width(width));
         self
     }
 
     pub fn shadow_sm(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).shadow_sm();
+        self.inner = std::cell::RefCell::new(self.inner.take().shadow_sm());
         self
     }
 
     pub fn shadow_md(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).shadow_md();
+        self.inner = std::cell::RefCell::new(self.inner.take().shadow_md());
         self
     }
 
     pub fn flex_grow(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).flex_grow();
+        self.inner = std::cell::RefCell::new(self.inner.take().flex_grow());
         self
     }
 
@@ -3404,7 +2914,7 @@ impl TextInput {
         if let Ok(mut d) = self.data.lock() {
             d.css_element_id = Some(id.to_string());
         }
-        self.inner = std::mem::take(&mut self.inner).id(id);
+        self.inner = std::cell::RefCell::new(self.inner.take().id(id));
         self
     }
 
@@ -3413,7 +2923,7 @@ impl TextInput {
         if let Ok(mut d) = self.data.lock() {
             d.css_classes.push(blinc_core::intern::intern(name));
         }
-        self.inner = std::mem::take(&mut self.inner).class(name);
+        self.inner = std::cell::RefCell::new(self.inner.take().class(name));
         self
     }
 
@@ -3537,6 +3047,382 @@ impl TextInput {
     }
 }
 
+/// The config with the stylesheet's rules for the field's state applied, and
+/// the outline those rules give it.
+fn resolved_config(
+    cfg: &TextInputConfig,
+    d: &TextInputData,
+) -> (TextInputConfig, Option<(f32, Color, f32)>) {
+    let mut cfg = cfg.clone();
+    let has_css_target = d.css_element_id.is_some() || !d.css_classes.is_empty();
+    let outline = if has_css_target {
+        active_stylesheet().and_then(|stylesheet| {
+            apply_css_overrides(
+                &mut cfg,
+                &stylesheet,
+                d.css_element_id.as_deref(),
+                &d.css_classes,
+                &d.visual,
+            );
+            extract_outline_from_stylesheet(
+                &stylesheet,
+                d.css_element_id.as_deref(),
+                &d.css_classes,
+                &d.visual,
+            )
+        })
+    } else {
+        None
+    };
+    (cfg, outline)
+}
+
+/// How the field's box looks in its state.
+#[derive(Clone)]
+struct BoxLook {
+    bg: Color,
+    border: Color,
+    border_width: f32,
+    radius: f32,
+    outline: (f32, Color, f32),
+}
+
+fn box_look(cfg: &TextInputConfig, d: &TextInputData) -> BoxLook {
+    let (cfg, outline) = resolved_config(cfg, d);
+    let (bg, border) = match d.visual {
+        TextFieldState::Idle => (cfg.bg_color, cfg.border_color),
+        TextFieldState::Hovered => (cfg.hover_bg_color, cfg.hover_border_color),
+        TextFieldState::Focused | TextFieldState::FocusedHovered => {
+            (cfg.focused_bg_color, cfg.focused_border_color)
+        }
+        TextFieldState::Disabled => (
+            Color::rgba(0.12, 0.12, 0.15, 0.5),
+            Color::rgba(0.25, 0.25, 0.3, 0.5),
+        ),
+    };
+    let border = if !d.is_valid && !d.value.is_empty() {
+        cfg.error_border_color
+    } else {
+        border
+    };
+    BoxLook {
+        bg,
+        border,
+        border_width: cfg.border_width,
+        radius: cfg.corner_radius,
+        outline: outline.unwrap_or((0.0, Color::TRANSPARENT, 0.0)),
+    }
+}
+
+/// The text a field shows: its value (masked if it is a password) or its
+/// placeholder.
+fn shown_text(d: &TextInputData, cfg: &TextInputConfig) -> String {
+    if !d.value.is_empty() {
+        d.display_text()
+    } else if !d.placeholder.is_empty() {
+        d.placeholder.clone()
+    } else {
+        cfg.placeholder.clone()
+    }
+}
+
+/// A run of the shown text: before the selection, in it, or after it. With
+/// no selection the whole text is the run before it.
+#[derive(Clone, Copy)]
+enum Run {
+    Before,
+    Selected,
+    After,
+}
+
+fn text_run(d: &TextInputData, cfg: &TextInputConfig, run: Run) -> String {
+    let shown = shown_text(d, cfg);
+    let selection = if d.value.is_empty() {
+        None
+    } else {
+        d.selection_start
+            .map(|start| (start.min(d.cursor), start.max(d.cursor)))
+    };
+    match (selection, run) {
+        (None, Run::Before) => shown,
+        (None, _) => String::new(),
+        (Some((start, _)), Run::Before) => shown.chars().take(start).collect(),
+        (Some((start, end)), Run::Selected) => {
+            shown.chars().skip(start).take(end - start).collect()
+        }
+        (Some((_, end)), Run::After) => shown.chars().skip(end).collect(),
+    }
+}
+
+/// Where the caret sits in the visible area, after scrolling the text to keep
+/// it in view.
+fn caret_x(d: &mut TextInputData, cfg: &TextInputConfig) -> f32 {
+    d.ensure_cursor_visible(cfg);
+    let shown = shown_text(d, cfg);
+    let before = if d.cursor > 0 && !d.value.is_empty() {
+        let text_before: String = shown.chars().take(d.cursor).collect();
+        crate::text_measure::measure_text(&text_before, cfg.font_size).width
+    } else {
+        0.0
+    };
+    before - d.scroll_offset_x
+}
+
+/// Add the field's content to `outer` and bind the box's look, once. Every
+/// bound value reads the data's revision first, so a handler's bump brings
+/// them all up to date.
+fn assemble(mut outer: Div, data: &SharedTextInputData, base: &TextInputConfig) -> Div {
+    use crate::binding::TypedPendingBinding;
+    use crate::property::PropertyId;
+    use blinc_core::reactive::{ReactiveGraph, computed, signal};
+
+    let revision = {
+        let mut d = data.lock().unwrap();
+        *d.revision.get_or_insert_with(|| signal(0u64))
+    };
+    // What the field is built with: the config as the stylesheet has it for
+    // the state the field starts in.
+    let (cfg, _) = resolved_config(base, &data.lock().unwrap());
+
+    // The box.
+    let look = {
+        let (data, base) = (Arc::clone(data), base.clone());
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            box_look(&base, &data.lock().unwrap())
+        })
+    };
+    // Read once, so the look is subscribed to the revision.
+    let first = look
+        .try_get()
+        .unwrap_or_else(|| box_look(base, &data.lock().unwrap()));
+    outer = outer
+        .bg(first.bg)
+        .border(first.border_width, first.border)
+        .rounded(first.radius)
+        .outline_width(first.outline.0)
+        .outline_color(first.outline.1)
+        .outline_offset(first.outline.2);
+    outer
+        .pending_bindings
+        .push(Box::new(TypedPendingBinding::from_computed(
+            look.clone(),
+            PropertyId::Background,
+            |props, look: BoxLook| props.background = Some(blinc_core::Brush::Solid(look.bg)),
+        )));
+    outer
+        .pending_bindings
+        .push(Box::new(TypedPendingBinding::from_computed(
+            look.clone(),
+            PropertyId::BorderColor,
+            |props, look: BoxLook| props.border_color = Some(look.border),
+        )));
+    outer
+        .pending_bindings
+        .push(Box::new(TypedPendingBinding::from_computed(
+            look.clone(),
+            PropertyId::CornerRadius,
+            |props, look: BoxLook| {
+                props.border_radius = blinc_core::CornerRadius::uniform(look.radius)
+            },
+        )));
+    outer
+        .pending_bindings
+        .push(Box::new(TypedPendingBinding::from_computed(
+            look.clone(),
+            PropertyId::Outline,
+            |props, look: BoxLook| {
+                props.outline_width = look.outline.0;
+                props.outline_color = Some(look.outline.1);
+                props.outline_offset = look.outline.2;
+            },
+        )));
+    // A border width a state's rule changes moves the content, so it is
+    // bound as layout.
+    let border_width = {
+        let (data, base) = (Arc::clone(data), base.clone());
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            box_look(&base, &data.lock().unwrap()).border_width
+        })
+    };
+    outer = outer.border_width(&border_width);
+
+    outer.child(content(data, &cfg, base, revision))
+}
+
+/// The inside of the field: the text in its three runs, scrolled to keep the
+/// caret in view, and the caret, all bound to the revision.
+fn content(
+    data: &SharedTextInputData,
+    cfg: &TextInputConfig,
+    base: &TextInputConfig,
+    revision: blinc_core::reactive::Signal<u64>,
+) -> Div {
+    use crate::binding::IntoReactive;
+    use blinc_core::reactive::{ReactiveGraph, computed};
+
+    let inner_height = cfg.height - cfg.border_width * 2.0;
+    let cursor_height = cfg.font_size * 1.2;
+    let is_centered = matches!(cfg.text_align, blinc_core::TextAlign::Center);
+
+    let run_text = |run: Run| {
+        let (data, base) = (Arc::clone(data), base.clone());
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            text_run(&data.lock().unwrap(), &base, run)
+        })
+    };
+    let text_color = {
+        let (data, base) = (Arc::clone(data), base.clone());
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            let d = data.lock().unwrap();
+            let (cfg, _) = resolved_config(&base, &d);
+            if d.value.is_empty() {
+                cfg.placeholder_color
+            } else if d.disabled {
+                Color::rgba(0.4, 0.4, 0.4, 1.0)
+            } else {
+                cfg.text_color
+            }
+        })
+    };
+    let run = |run: Run| {
+        crate::text::Text::bound(run_text(run).into_reactive())
+            .size(cfg.font_size)
+            .color(&text_color)
+            .text_left()
+            .no_wrap()
+            .v_center()
+    };
+
+    let runs = div()
+        .flex_row()
+        .items_center()
+        .child(run(Run::Before))
+        .child(
+            div()
+                .bg(cfg.selection_color)
+                .rounded(cfg.corner_radius)
+                .child(run(Run::Selected)),
+        )
+        .child(run(Run::After));
+
+    // Centred text (number, OTP and code cells) fills the clip area and is
+    // centred by the layout; otherwise it sits at the start and is moved
+    // left as far as the caret needs.
+    let text_wrapper = if is_centered {
+        div()
+            .w_full()
+            .h(inner_height)
+            .flex_row()
+            .items_center()
+            .justify_center()
+            .child(runs)
+    } else {
+        let scroll = {
+            let (data, base) = (Arc::clone(data), base.clone());
+            computed(move |g: &ReactiveGraph| {
+                g.get(revision);
+                let mut d = data.lock().unwrap();
+                let (cfg, _) = resolved_config(&base, &d);
+                d.ensure_cursor_visible(&cfg);
+                blinc_core::Transform::translate(-d.scroll_offset_x, 0.0)
+            })
+        };
+        div()
+            .absolute()
+            .left(0.0)
+            .top(0.0)
+            .h(inner_height)
+            .flex_row()
+            .items_center()
+            .transform(&scroll)
+            .child(runs)
+    };
+
+    let mut clip_container = div()
+        .h(inner_height)
+        .relative()
+        .overflow_clip()
+        .flex_1()
+        .min_w(0.0)
+        .child(text_wrapper);
+
+    // The caret. Not drawn for centred text: its position would need the
+    // centred text's offset, which only layout knows. It shows while the
+    // field is focused with nothing selected.
+    if !is_centered {
+        if let Ok(mut cs) = data.lock().unwrap().cursor_state.lock() {
+            cs.color = cfg.cursor_color;
+            cs.animation = CursorAnimation::SmoothFade;
+        }
+        let at = {
+            let (data, base) = (Arc::clone(data), base.clone());
+            computed(move |g: &ReactiveGraph| {
+                g.get(revision);
+                let mut d = data.lock().unwrap();
+                let (cfg, _) = resolved_config(&base, &d);
+                blinc_core::Transform::translate(caret_x(&mut d, &cfg), 0.0)
+            })
+        };
+        let data_for_caret = Arc::clone(data);
+        let caret = canvas(
+            move |ctx: &mut dyn blinc_core::DrawContext, bounds: crate::canvas::CanvasBounds| {
+                let (shown, cursor_state) = {
+                    let d = data_for_caret.lock().unwrap();
+                    (
+                        d.visual.is_focused() && d.selection_start.is_none(),
+                        Arc::clone(&d.cursor_state),
+                    )
+                };
+                if !shown {
+                    return;
+                }
+                let cs = cursor_state.lock().unwrap();
+                let opacity = cs.current_opacity();
+                if opacity < 0.01 {
+                    return;
+                }
+                let color = blinc_core::Color::rgba(
+                    cs.color.r,
+                    cs.color.g,
+                    cs.color.b,
+                    cs.color.a * opacity,
+                );
+                ctx.fill_rect(
+                    blinc_core::Rect::new(0.0, 0.0, cs.width, bounds.height),
+                    blinc_core::CornerRadius::default(),
+                    blinc_core::Brush::Solid(color),
+                );
+            },
+        )
+        .w(2.0)
+        .h(cursor_height);
+        clip_container = clip_container.child(
+            div()
+                .absolute()
+                .left(0.0)
+                .top((inner_height - cursor_height) / 2.0)
+                .w(2.0)
+                .h(cursor_height)
+                .transform(&at)
+                .child(caret),
+        );
+    }
+
+    div()
+        .h_full()
+        .w_full()
+        .relative()
+        .flex_row()
+        .items_center()
+        .child(div().w(cfg.padding_x).h(inner_height).flex_shrink_0())
+        .child(clip_container)
+        .child(div().w(cfg.padding_x).h(inner_height).flex_shrink_0())
+}
+
 /// Create a text input widget
 /// By default, uses the config's default width (200px).
 /// Use .w_full() to fill parent width, or .w() to set explicit width.
@@ -3551,27 +3437,19 @@ impl ElementBuilder for TextInput {
     }
 
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        // Set base render props and layout style for incremental updates
-        // Note: callback and handlers are registered in new() so they're available for incremental diff
-        // base_style must be updated here because on_state() captures it before .w()/.h() are applied
-        {
-            let mut shared = self.stateful_state.lock().unwrap();
-            shared.base_render_props = Some(self.inner.inner_render_props());
-            shared.base_style = self
-                .inner
-                .inner_layout_style()
-                .map(crate::stateful::SharedStyle);
+        let node = self.element().build(tree);
+        if let Ok(mut d) = self.data.lock() {
+            d.node_id = Some(node);
         }
-
-        self.inner.build(tree)
+        node
     }
 
     fn render_props(&self) -> RenderProps {
-        self.inner.render_props()
+        self.element().render_props()
     }
 
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
-        self.inner.children_builders()
+        self.element().children_builders()
     }
 
     fn element_type_id(&self) -> crate::div::ElementTypeId {
@@ -3583,30 +3461,24 @@ impl ElementBuilder for TextInput {
     }
 
     fn event_handlers(&self) -> Option<&crate::event_handler::EventHandlers> {
-        self.inner.event_handlers()
+        ElementBuilder::event_handlers(self.element())
     }
 
     fn layout_style(&self) -> Option<&taffy::Style> {
-        self.inner.layout_style()
+        ElementBuilder::layout_style(self.element())
     }
 
-    // Forward CSS class list / id from the inner Stateful so
-    // `text_input(...).class("foo")` / `.id("bar")` are visible to
-    // the renderer's selector matcher. Without these, the setters
-    // update the inner widget but the matcher queries the default
-    // `&[]` / `None`, so `.foo` or `#bar` stylesheet rules never
-    // match the input element. Same gotcha as the cn-wrapped
-    // versions had.
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
-        self.inner.element_classes()
+        self.element().element_classes()
     }
 
     fn element_id(&self) -> Option<&str> {
-        self.inner.element_id()
+        ElementBuilder::element_id(self.element())
     }
 
     fn layout_bounds_storage(&self) -> Option<crate::renderer::LayoutBoundsStorage> {
-        // Return the layout bounds storage from the data so it gets updated after layout
+        // Updated after layout, so the scroll can be worked out against the
+        // field's real width.
         if let Ok(data) = self.data.lock() {
             Some(Arc::clone(&data.layout_bounds_storage))
         } else {
@@ -3615,13 +3487,9 @@ impl ElementBuilder for TextInput {
     }
 
     fn layout_bounds_callback(&self) -> Option<crate::renderer::LayoutBoundsCallback> {
-        // When layout bounds change, trigger a refresh so the TextInput can
-        // recalculate scroll offset with the new width
-        let stateful_state = Arc::clone(&self.stateful_state);
-        Some(Arc::new(move |_bounds| {
-            // Trigger a visual update so ensure_cursor_visible runs with new bounds
-            refresh_stateful(&stateful_state);
-        }))
+        // A new width can scroll the text differently.
+        let data = Arc::clone(&self.data);
+        Some(Arc::new(move |_bounds| notify_text_input(&data)))
     }
 }
 
@@ -3644,7 +3512,6 @@ mod tests {
     #[test]
     fn test_text_input_data_insert() {
         let mut data = TextInputData::new();
-        data.stateful_state = None; // No refresh in tests
 
         data.insert("hello");
         assert_eq!(data.value, "hello");
@@ -3658,7 +3525,6 @@ mod tests {
     #[test]
     fn test_text_input_data_delete() {
         let mut data = TextInputData::with_value("hello");
-        data.stateful_state = None;
 
         data.cursor = 5;
         data.delete_backward();
@@ -3672,7 +3538,6 @@ mod tests {
     #[test]
     fn test_input_type_filtering() {
         let mut data = TextInputData::new();
-        data.stateful_state = None;
         data.input_type = InputType::Number;
 
         data.insert("123.45");
@@ -3690,7 +3555,6 @@ mod tests {
     #[test]
     fn force_sync_once_overrides_focus_guard_for_step_changes() {
         let mut data = TextInputData::with_value("5");
-        data.stateful_state = None;
         data.visual = TextFieldState::Focused;
 
         // Typing case: no flag, stays guarded.
@@ -3708,7 +3572,7 @@ mod tests {
     }
 
     #[test]
-    fn text_input_refresh_sees_value_normalized_by_on_change() {
+    fn the_shown_text_is_the_value_on_change_normalized() {
         ensure_theme_initialized();
 
         let data = text_input_data();
@@ -3726,34 +3590,32 @@ mod tests {
                 data.cursor = 0;
                 data.selection_start = None;
             });
-
-        let values_seen_by_refresh = Arc::new(Mutex::new(Vec::new()));
-        let values_for_spy = Arc::clone(&values_seen_by_refresh);
-        let data_for_spy = Arc::clone(&data);
-        let stateful_state = data
-            .lock()
-            .unwrap()
-            .stateful_state
-            .clone()
-            .expect("text_input should install a stateful state");
-
-        {
-            let mut shared = stateful_state.lock().unwrap();
-            shared.node_id = Some(LayoutNodeId::default());
-            shared.state_callback = Some(Arc::new(move |_, _| {
-                values_for_spy
-                    .lock()
-                    .unwrap()
-                    .push(data_for_spy.lock().unwrap().value.clone());
-            }));
-        }
+        let mut tree = crate::renderer::RenderTree::from_element(&input);
+        tree.compute_layout(300.0, 100.0);
 
         let ctx =
             EventContext::new(event_types::TEXT_INPUT, LayoutNodeId::default()).with_key_char('-');
-        input.event_handlers().unwrap().dispatch(&ctx);
+        ElementBuilder::event_handlers(&input)
+            .unwrap()
+            .dispatch(&ctx);
+        let updates = crate::stateful::take_pending_partial_prop_updates();
+        tree.apply_partial_property_updates(updates);
 
         assert_eq!(data.lock().unwrap().value, "");
-        assert_eq!(*values_seen_by_refresh.lock().unwrap(), vec![String::new()]);
+        let mut shown = Vec::new();
+        let mut stack = vec![tree.root().unwrap()];
+        while let Some(node) = stack.pop() {
+            if let Some(crate::renderer::ElementType::Text(t)) =
+                tree.get_render_node(node).map(|r| &r.element_type)
+            {
+                shown.push(t.content.clone());
+            }
+            stack.extend(tree.layout_tree.children(node));
+        }
+        assert!(
+            shown.iter().all(|t| t.is_empty()),
+            "the field shows {shown:?}, not the value on_change left"
+        );
     }
 
     #[test]
@@ -3824,15 +3686,6 @@ mod tests {
         focus_text_input(&first);
         focus_text_input(&second);
 
-        let first_stateful = first
-            .lock()
-            .unwrap()
-            .stateful_state
-            .as_ref()
-            .unwrap()
-            .clone();
-
         assert!(!first.lock().unwrap().visual.is_focused());
-        assert!(!first_stateful.lock().unwrap().state.is_focused());
     }
 }
