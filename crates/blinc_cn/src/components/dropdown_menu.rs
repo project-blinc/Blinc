@@ -48,13 +48,14 @@ use std::cell::OnceCell;
 use std::sync::Arc;
 
 use blinc_core::context_state::BlincContextState;
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_core::{Color, State};
 use blinc_layout::click_outside;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, ElementBounds, RenderProps};
 use blinc_layout::overlay_state::overlay_stack;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, Stateful, stateful_with_key};
+use blinc_layout::stateful::ButtonState;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::hr::hr;
 use blinc_layout::widgets::overlay_stack::{OverlayBuilder, OverlayHandle};
@@ -64,9 +65,7 @@ use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 const CHEVRON_DOWN_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
 
 /// Icon for chevron up
-const CHEVRON_UP_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>"#;
 use crate::ButtonVariant;
-use crate::button::use_button_state;
 use blinc_layout::InstanceKey;
 
 use super::context_menu::{ContextMenuItem, SubmenuBuilder};
@@ -318,63 +317,76 @@ impl DropdownMenuBuilder {
 
         // Build trigger element
         let open_state_for_trigger = open_state.clone();
-        let open_state_for_trigger_1 = open_state.clone();
         let overlay_handle_for_trigger = overlay_handle_state.clone();
         let items_for_show = items.clone();
 
-        let trigger = stateful_with_key::<ButtonState>(&button_key)
-            .deps([open_state.signal_id()])
-            .on_state(move |ctx| {
-                let state = ctx.state();
-                let is_open = open_state_for_trigger.get();
-                let bg = btn_variant.background(theme, state);
+        // The trigger is built once. Its fill follows the pointer, its
+        // chevron turns while the menu is open, and a custom trigger is
+        // swapped for the open or closed one it builds.
+        let interaction = Interaction::keyed(&button_key);
+        let (hovered, pressed) = (
+            interaction.hovered().signal(),
+            interaction.pressed().signal(),
+        );
+        let bg = computed(move |g: &ReactiveGraph| {
+            let state = if g.get(pressed).unwrap_or(false) {
+                ButtonState::Pressed
+            } else if g.get(hovered).unwrap_or(false) {
+                ButtonState::Hovered
+            } else {
+                ButtonState::Idle
+            };
+            btn_variant.background(ThemeState::get(), state)
+        });
 
-                // Build trigger content
-                let trigger_content: Div = if let Some(ref builder) = trigger_builder {
-                    builder(is_open)
-                } else if let Some(ref label) = trigger_label {
-                    // Default button trigger with chevron
-                    // Use a simple div-based button to avoid state persistence issues
-                    let theme = ThemeState::get();
-                    let chevron_svg = if is_open {
-                        CHEVRON_UP_SVG
-                    } else {
-                        CHEVRON_DOWN_SVG
-                    };
-
-                    div()
-                        .gap(8.0)
-                        .flex_row()
-                        .items_center()
-                        .justify_between()
-                        .px(4.0)
-                        .py(2.0)
-                        .rounded(theme.radius(RadiusToken::Md))
-                        .shadow_sm()
-                        .border(1.0, theme.color(ColorToken::Border))
-                        .bg(bg)
-                        .child(
-                            text(label)
-                                .size(theme.typography().text_sm)
-                                .color(theme.color(ColorToken::TextPrimary))
-                                .no_cursor()
-                                .pointer_events_none(),
-                        )
-                        .child(
-                            svg(chevron_svg)
-                                .size(16.0, 16.0)
-                                .color(theme.color(ColorToken::TextSecondary)),
-                        )
+        let trigger_content: Div = if let Some(builder) = trigger_builder {
+            let closed = builder.clone();
+            div().show_or(&open_state, move || builder(true), move || closed(false))
+        } else if let Some(label) = trigger_label {
+            let open = open_state.signal();
+            let chevron_angle = computed(move |g: &ReactiveGraph| {
+                if g.get(open).unwrap_or(false) {
+                    180.0
                 } else {
-                    div() // Fallback empty div
-                };
+                    0.0
+                }
+            });
+            div()
+                .gap(8.0)
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .px(4.0)
+                .py(2.0)
+                .rounded(theme.radius(RadiusToken::Md))
+                .shadow_sm()
+                .border(1.0, theme.color(ColorToken::Border))
+                .bg(&bg)
+                .child(
+                    text(&label)
+                        .size(theme.typography().text_sm)
+                        .color(theme.color(ColorToken::TextPrimary))
+                        .no_wrap()
+                        .no_cursor()
+                        .pointer_events_none(),
+                )
+                .child(
+                    div().rotate_deg(&chevron_angle).child(
+                        svg(CHEVRON_DOWN_SVG)
+                            .size(16.0, 16.0)
+                            .color(theme.color(ColorToken::TextSecondary)),
+                    ),
+                )
+        } else {
+            div()
+        };
 
-                div()
-                    .w_fit()
-                    .bg(btn_variant.background(theme, ButtonState::Idle))
-                    .cursor_pointer()
-                    .child(trigger_content)
-            })
+        let trigger = div()
+            .w_fit()
+            .bg(btn_variant.background(theme, ButtonState::Idle))
+            .cursor_pointer()
+            .track(&interaction)
+            .child(trigger_content)
             .on_click(move |ctx| {
                 let bounds = ElementBounds {
                     x: ctx.bounds_x,
@@ -383,7 +395,7 @@ impl DropdownMenuBuilder {
                     height: ctx.bounds_height,
                 };
 
-                let is_open = open_state_for_trigger_1.get();
+                let is_open = open_state_for_trigger.get();
                 if is_open {
                     if let Some(handle_id) = overlay_handle_for_trigger.get() {
                         OverlayHandle::from_raw(handle_id).close();
@@ -398,12 +410,12 @@ impl DropdownMenuBuilder {
                         &items_for_show,
                         min_width,
                         overlay_handle_for_trigger.clone(),
-                        open_state_for_trigger_1.clone(),
+                        open_state_for_trigger.clone(),
                         menu_key.clone(),
                     );
 
                     overlay_handle_for_trigger.set(Some(overlay_handle.raw()));
-                    open_state_for_trigger_1.set(true);
+                    open_state_for_trigger.set(true);
                 }
             });
 
@@ -880,7 +892,7 @@ fn build_dropdown_menu_div(
 
 /// The built dropdown menu component
 pub struct DropdownMenu {
-    inner: Stateful<ButtonState>,
+    inner: Div,
 }
 
 impl std::fmt::Debug for DropdownMenu {
@@ -911,7 +923,7 @@ impl ElementBuilder for DropdownMenuBuilder {
     }
 
     fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
-        self.get_or_build().inner.event_handlers()
+        ElementBuilder::event_handlers(&self.get_or_build().inner)
     }
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {

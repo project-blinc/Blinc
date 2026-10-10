@@ -31,7 +31,7 @@ use blinc_layout::InstanceKey;
 use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::ElementBuilder;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, SharedState, use_fsm_keyed};
+use blinc_layout::stateful::ButtonState;
 use blinc_layout::text::Text;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::button as layout_button;
@@ -69,9 +69,8 @@ impl ButtonVariant {
         }
     }
 
-    /// Get the background color for this variant and state.
-    ///
-    /// Used by components that still use `Stateful<ButtonState>` (dropdown menu, select).
+    /// The fill for this variant in a pointer state. The dropdown and select
+    /// triggers bind it to their pointer signals.
     pub(crate) fn background(&self, theme: &ThemeState, state: ButtonState) -> Color {
         match (self, state) {
             // Disabled keeps full bg alpha — the `.opacity(0.5)` applied
@@ -274,23 +273,6 @@ pub enum IconPosition {
     Start,
     /// Icon appears after the label (right in LTR)
     End,
-}
-
-/// Get or create a persistent `SharedState<ButtonState>` for the given key
-///
-/// Convenience wrapper around `use_fsm_keyed::<_, ButtonState>(key, default)`.
-/// Used by dropdown menus, menubars, and navigation menus.
-pub(crate) fn use_button_state(key: &str) -> SharedState<ButtonState> {
-    use_fsm_keyed(key, ButtonState::default())
-}
-
-/// Reset a button state to Idle
-///
-/// Call this when an overlay closes to clear any lingering hover/pressed states.
-pub(crate) fn reset_button_state(key: &str) {
-    let state = use_button_state(key);
-    let mut inner = state.lock().unwrap();
-    inner.state = ButtonState::Idle;
 }
 
 /// Create a button with a label
