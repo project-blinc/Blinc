@@ -459,6 +459,9 @@ pub struct PartialPropertyUpdate {
     /// A class the node gains (`true`) or loses (`false`), which has the
     /// stylesheet's rules for it apply or stop applying.
     pub class_toggle: Option<(std::sync::Arc<str>, bool)>,
+    /// A region of the node whose source changed: its rows are brought up to
+    /// date, in place.
+    pub region_update: Option<u64>,
 }
 
 /// Process-global queue of pending property updates. Drained by every
@@ -1062,6 +1065,7 @@ pub fn queue_prop_update_partial<F>(
             layout_write: None,
             text_content: None,
             class_toggle: None,
+            region_update: None,
         });
     request_redraw();
 }
@@ -1091,6 +1095,7 @@ pub(crate) fn queue_prop_update_partial_beneath<F, G>(
             layout_write: None,
             text_content: None,
             class_toggle: None,
+            region_update: None,
         });
     request_redraw();
 }
@@ -1126,6 +1131,7 @@ pub fn queue_layout_update_partial<F>(
             layout_write: Some(Box::new(write)),
             text_content: None,
             class_toggle: None,
+            region_update: None,
         });
     request_redraw();
 }
@@ -1155,6 +1161,7 @@ pub(crate) fn queue_layout_update_partial_beneath<F, G>(
             layout_write: Some(Box::new(write)),
             text_content: None,
             class_toggle: None,
+            region_update: None,
         });
     request_redraw();
 }
@@ -1182,6 +1189,7 @@ pub fn queue_text_update(
             layout_write: None,
             text_content: Some(content),
             class_toggle: None,
+            region_update: None,
         });
     request_redraw();
 }
@@ -1201,6 +1209,26 @@ pub fn queue_class_toggle(node_id: LayoutNodeId, class: std::sync::Arc<str>, on:
             layout_write: None,
             text_content: None,
             class_toggle: Some((class, on)),
+            region_update: None,
+        });
+    request_redraw();
+}
+
+/// Queue the rows of a region to be brought up to date with its source.
+pub fn queue_region_update(node_id: LayoutNodeId, region: u64) {
+    PENDING_PARTIAL_PROP_UPDATES
+        .lock()
+        .unwrap()
+        .push(PartialPropertyUpdate {
+            node_id,
+            property: crate::property::PropertyId::Region,
+            effects: crate::property::PropertyId::Region.side_effects(),
+            render_write: None,
+            beneath_write: None,
+            layout_write: None,
+            text_content: None,
+            class_toggle: None,
+            region_update: Some(region),
         });
     request_redraw();
 }

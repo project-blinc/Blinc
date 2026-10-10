@@ -490,6 +490,16 @@ pub struct Div {
     /// `children`: what a signal-bound [`Div::when`] added. A child can
     /// appear under several conditions, and is shown while all hold.
     pub(crate) child_visibility: Vec<(usize, VisibleSource)>,
+    /// The list or branch whose rows are among `children`, brought up to
+    /// date in place once the element is built.
+    pub(crate) region: Option<RegionDef>,
+}
+
+/// A region as the element holds it until it is built.
+pub(crate) struct RegionDef {
+    pub region: std::rc::Rc<crate::region::Region>,
+    /// The rows it started with, and whether each has a child among `children`.
+    pub rows: Vec<(crate::region::RowId, bool)>,
 }
 
 /// The source `Div::visible` follows.
@@ -578,6 +588,7 @@ impl Div {
             pending_bindings: Vec::new(),
             visible_source: None,
             child_visibility: Vec::new(),
+            region: None,
         }
     }
 
@@ -644,6 +655,7 @@ impl Div {
             pending_bindings: Vec::new(),
             visible_source: None,
             child_visibility: Vec::new(),
+            region: None,
         }
     }
 
@@ -706,6 +718,162 @@ impl Div {
                 .pending_bindings
                 .push(Box::new(ClassPendingBinding::from_computed(computed, name))),
         }
+        self
+    }
+
+    /// One child per item `each` yields, in order, kept up to date in place.
+    ///
+    /// `each` is read like the body of a `computed`, through the graph it is
+    /// given: when something it reads changes, the rows are brought up to date. `key` names an item; an item whose key was
+    /// there before keeps its element and everything it owns, a new key gets
+    /// `item(value)` built under a scope of its own, and a key that has gone
+    /// takes its element and its scope with it. Two items with one key show
+    /// the first only.
+    ///
+    /// The element is the container: the rows lay out as its own children,
+    /// with its direction, gap and alignment, and children added before or
+    /// after this call stay where they are. An element has one such region.
+    pub fn for_each<T, I, K, E>(
+        self,
+        each: impl Fn(&blinc_core::reactive::ReactiveGraph) -> I + Send + 'static,
+        key: impl Fn(&T) -> K + 'static,
+        item: impl Fn(T) -> E + 'static,
+    ) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        T: Clone + Send + Sync + 'static,
+        K: std::hash::Hash + Eq + Clone + 'static,
+        E: ElementBuilder + 'static,
+    {
+        let logic = crate::region::ForRegion::new(
+            move |graph| each(graph).into_iter().collect::<Vec<T>>(),
+            key,
+            move |value| Some(Box::new(item(value)) as Box<dyn ElementBuilder>),
+        );
+        self.with_region(logic)
+    }
+
+    /// `then()` as a child while `when` holds, built when it starts to and
+    /// torn down, with what it owns, when it stops.
+    ///
+    /// Unlike [`Self::when`], which builds its children either way and hides
+    /// them, nothing is built while the condition is false. A constant is
+    /// decided now.
+    pub fn show<E>(
+        self,
+        when: impl crate::binding::IntoReactive<bool>,
+        then: impl Fn() -> E + 'static,
+    ) -> Self
+    where
+        E: ElementBuilder + 'static,
+    {
+        self.show_branches(
+            when,
+            Box::new(move || Box::new(then()) as Box<dyn ElementBuilder>),
+            None,
+        )
+    }
+
+    /// [`Self::show`] with an element for the other case too.
+    pub fn show_or<E, F>(
+        self,
+        when: impl crate::binding::IntoReactive<bool>,
+        then: impl Fn() -> E + 'static,
+        otherwise: impl Fn() -> F + 'static,
+    ) -> Self
+    where
+        E: ElementBuilder + 'static,
+        F: ElementBuilder + 'static,
+    {
+        self.show_branches(
+            when,
+            Box::new(move || Box::new(then()) as Box<dyn ElementBuilder>),
+            Some(Box::new(move || {
+                Box::new(otherwise()) as Box<dyn ElementBuilder>
+            })),
+        )
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn show_branches(
+        self,
+        when: impl crate::binding::IntoReactive<bool>,
+        then: Box<dyn Fn() -> Box<dyn ElementBuilder>>,
+        otherwise: Option<Box<dyn Fn() -> Box<dyn ElementBuilder>>>,
+    ) -> Self {
+        use crate::binding::Reactive;
+        let each: Box<dyn Fn(&blinc_core::reactive::ReactiveGraph) -> Vec<bool> + Send> =
+            match when.into_reactive() {
+                Reactive::Const(shown) => {
+                    let branch = if shown { Some(then) } else { otherwise };
+                    return match branch {
+                        Some(build) => self.child_box(build()),
+                        None => self,
+                    };
+                }
+                Reactive::Bound(state) => {
+                    let signal = state.signal();
+                    Box::new(move |graph| vec![graph.get(signal).unwrap_or(false)])
+                }
+                Reactive::Computed(computed) => {
+                    Box::new(move |_| vec![computed.try_get().unwrap_or(false)])
+                }
+            };
+        let logic = crate::region::ForRegion::new(
+            move |graph| each(graph),
+            |shown: &bool| *shown,
+            move |shown| {
+                if shown {
+                    Some(then())
+                } else {
+                    otherwise.as_ref().map(|build| build())
+                }
+            },
+        );
+        self.with_region(logic)
+    }
+
+    fn with_region<T, K>(mut self, mut logic: crate::region::ForRegion<T, K>) -> Self
+    where
+        T: Clone + Send + Sync + 'static,
+        K: std::hash::Hash + Eq + Clone + 'static,
+    {
+        use crate::region::{RegionLogic, RowNode};
+        assert!(
+            self.region.is_none(),
+            "an element has one list or branch; put the second in a child"
+        );
+        let source = logic.source();
+        let id = crate::region::next_region_id();
+        let start = self.children.len();
+        let mut rows = Vec::new();
+        for plan in logic.evaluate().rows {
+            match plan.node {
+                RowNode::Build(builder) => {
+                    self.children.push(builder);
+                    rows.push((plan.id, true));
+                }
+                RowNode::Empty => rows.push((plan.id, false)),
+                RowNode::Keep => {}
+            }
+        }
+        // Read once, so the source is subscribed to what it reads.
+        let derived = source.derived_id();
+        self.pending_bindings
+            .push(Box::new(crate::binding::RegionPendingBinding::new(
+                derived,
+                id,
+                move || source.try_get().is_some(),
+            )));
+        self.region = Some(RegionDef {
+            region: std::rc::Rc::new(crate::region::Region {
+                id,
+                logic: std::cell::RefCell::new(Box::new(logic)),
+                start,
+                live: std::cell::RefCell::new(Vec::new()),
+            }),
+            rows,
+        });
         self
     }
 
@@ -1007,6 +1175,7 @@ impl Div {
     pub fn set_child(&mut self, child: impl ElementBuilder + 'static) {
         self.children.clear();
         self.child_visibility.clear();
+        self.region = None;
         self.children.push(Box::new(child));
     }
 
@@ -1015,6 +1184,7 @@ impl Div {
     pub fn clear_children(&mut self) {
         self.children.clear();
         self.child_visibility.clear();
+        self.region = None;
     }
 
     /// Set width in pixels without consuming self
@@ -1436,6 +1606,7 @@ impl Div {
         if !other.children.is_empty() {
             self.children = other.children;
             self.child_visibility = other.child_visibility;
+            self.region = other.region;
         }
 
         // Merge stateful context key - take other's if set
@@ -5157,6 +5328,27 @@ impl<T: ?Sized + ElementBuilder> ElementBuilder for Box<T> {
 }
 
 impl Div {
+    /// Tell the region among the children which node each row is.
+    fn register_region(&self, node: LayoutNodeId, built: &[LayoutNodeId]) {
+        let Some(def) = &self.region else {
+            return;
+        };
+        let mut live = Vec::with_capacity(def.rows.len());
+        let mut next = def.region.start;
+        for (row, has_node) in &def.rows {
+            if *has_node {
+                let child = built[next];
+                crate::region::set_row_key(child, def.region.id, *row);
+                live.push((*row, Some(child)));
+                next += 1;
+            } else {
+                live.push((*row, None));
+            }
+        }
+        *def.region.live.borrow_mut() = live;
+        crate::region::register(node, std::rc::Rc::clone(&def.region));
+    }
+
     /// Show the child built from `children[index]` only while every
     /// condition a [`Div::when`] put on it holds.
     fn bind_child_visibility(&self, tree: &mut LayoutTree, index: usize, child: LayoutNodeId) {
@@ -5244,11 +5436,14 @@ impl ElementBuilder for Div {
         }
 
         // Build and add children
+        let mut built: Vec<LayoutNodeId> = Vec::with_capacity(self.children.len());
         for (index, child) in self.children.iter().enumerate() {
             let child_node = child.build(tree);
             tree.add_child(node, child_node);
             self.bind_child_visibility(tree, index, child_node);
+            built.push(child_node);
         }
+        self.register_region(node, &built);
 
         // Register signal-bound property bindings against the freshly
         // minted node id. Each pending binding installs a subscription

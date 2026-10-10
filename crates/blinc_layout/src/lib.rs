@@ -49,6 +49,7 @@ pub mod layout_animation;
 pub mod motion;
 pub mod motion_texture_cache;
 pub mod property;
+pub mod region;
 pub mod render_state;
 pub mod renderer;
 pub mod rich_text;

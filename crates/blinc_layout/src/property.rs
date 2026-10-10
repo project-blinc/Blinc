@@ -73,6 +73,9 @@ pub enum PropertyId {
     // ── membership of a class, which restyles from the stylesheet ────
     Class,
 
+    // ── the rows of a list or branch, which come and go ──────────────
+    Region,
+
     // ── catch-all for compound mutations ─────────────────────────────
     /// Used by full `RenderProps` replacements where the diff isn't
     /// property-granular. Drain conservatively assumes layout-affecting.
@@ -175,7 +178,7 @@ impl PropertyId {
 
             // compound / unknown — conservative worst case. A class decides
             // which rules apply, and a rule can set anything.
-            Class | Compound => SideEffects::ALL,
+            Class | Region | Compound => SideEffects::ALL,
         }
     }
 

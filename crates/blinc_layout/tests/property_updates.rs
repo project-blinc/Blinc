@@ -16,6 +16,7 @@ fn visual(node: LayoutNodeId, opacity: f32) -> PartialPropertyUpdate {
         layout_write: None,
         text_content: None,
         class_toggle: None,
+        region_update: None,
     }
 }
 
@@ -31,6 +32,7 @@ fn width(node: LayoutNodeId, px: f32) -> PartialPropertyUpdate {
         })),
         text_content: None,
         class_toggle: None,
+        region_update: None,
     }
 }
 
@@ -112,6 +114,7 @@ fn a_text_update_replaces_the_text_and_asks_for_layout() {
         layout_write: None,
         text_content: Some("after, and longer".to_string()),
         class_toggle: None,
+        region_update: None,
     }]);
 
     assert!(effects.needs_layout && effects.needs_text_remeasure);

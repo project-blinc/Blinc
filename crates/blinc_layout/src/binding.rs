@@ -555,6 +555,38 @@ impl PendingBinding for TextPendingBinding {
     }
 }
 
+/// A region of a node, kept up to date with the derived it reads its rows from.
+pub struct RegionPendingBinding {
+    derived_id: DerivedId,
+    read: ReadFn,
+    region: u64,
+}
+
+impl RegionPendingBinding {
+    /// `touch` reads the source, which keeps it subscribed to what it reads
+    /// each time it changes.
+    pub fn new(
+        derived_id: DerivedId,
+        region: u64,
+        touch: impl Fn() -> bool + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            derived_id,
+            read: Arc::new(move || touch().then(|| BoundValue::new(()))),
+            region,
+        }
+    }
+}
+
+impl PendingBinding for RegionPendingBinding {
+    fn register(&self, node_id: LayoutNodeId) {
+        let read = Arc::clone(&self.read);
+        with_registry(|reg| {
+            reg.register_derived_region(self.derived_id, node_id, self.region, read)
+        });
+    }
+}
+
 /// A class that a node has while a `bool` source holds.
 pub struct ClassPendingBinding {
     source: BindingSource<bool>,
@@ -618,6 +650,8 @@ enum SubscriberWrite {
     Text(TextWriteFn),
     /// Adds or removes this class on the node, by the bool the source holds.
     Class(Arc<str>),
+    /// Brings the rows of this region of the node up to date.
+    Region(u64),
 }
 
 /// A class a node has while a source holds.
@@ -718,6 +752,29 @@ impl PropertyBindingRegistry {
                 write: SubscriberWrite::Class(class),
             });
         self.by_node.entry(node_id).or_default().push(signal_id);
+    }
+
+    /// Follow the derived that a region of a node reads its rows from.
+    pub fn register_derived_region(
+        &mut self,
+        derived_id: DerivedId,
+        node_id: LayoutNodeId,
+        region: u64,
+        read: ReadFn,
+    ) {
+        self.derived_bindings
+            .entry(derived_id)
+            .or_default()
+            .push(Subscriber {
+                node_id,
+                property: PropertyId::Region,
+                read,
+                write: SubscriberWrite::Region(region),
+            });
+        self.derived_by_node
+            .entry(node_id)
+            .or_default()
+            .push(derived_id);
     }
 
     /// Counterpart of [`Self::register_class`] for a `Computed<bool>`.
@@ -1024,6 +1081,9 @@ impl PropertyBindingRegistry {
                     if let Some(on) = value.downcast_ref::<bool>() {
                         crate::stateful::queue_class_toggle(sub.node_id, Arc::clone(class), *on);
                     }
+                }
+                SubscriberWrite::Region(region) => {
+                    crate::stateful::queue_region_update(sub.node_id, *region);
                 }
             }
         }

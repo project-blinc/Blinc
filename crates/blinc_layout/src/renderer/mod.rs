@@ -1307,18 +1307,32 @@ impl RenderTree {
             vec![(root_id, root_stable)];
         while let Some((node, stable)) = stack.pop() {
             let children = self.layout_tree.children(node);
-            let mut key_counts: HashMap<String, usize> = HashMap::new();
-            for &child in &children {
-                if let Some(key) = self.element_registry.get_id(child) {
-                    *key_counts.entry(key).or_default() += 1;
+            // A row of a list or branch is named by its row, so it keeps its
+            // id when rows come and go around it; the children that are not
+            // rows count their place among themselves.
+            let keys: Vec<(Option<String>, bool)> = children
+                .iter()
+                .map(|&child| match crate::region::row_key(child) {
+                    Some(key) => (Some(key), true),
+                    None => (self.element_registry.get_id(child), false),
+                })
+                .collect();
+            let mut key_counts: HashMap<&str, usize> = HashMap::new();
+            for (key, _) in &keys {
+                if let Some(key) = key {
+                    *key_counts.entry(key.as_str()).or_default() += 1;
                 }
             }
-            for (i, &child) in children.iter().enumerate() {
-                let widget_key = self.element_registry.get_id(child);
+            let mut slot = 0usize;
+            for (&child, (widget_key, is_row)) in children.iter().zip(&keys) {
                 let unique_key = widget_key
                     .as_deref()
                     .filter(|key| key_counts.get(*key) == Some(&1));
-                let child_stable = stable.derive_child(i, unique_key);
+                let index = if *is_row { 0 } else { slot };
+                if !*is_row {
+                    slot += 1;
+                }
+                let child_stable = stable.derive_child(index, unique_key);
                 self.register_stable(child_stable, child);
                 stack.push((child, child_stable));
             }
@@ -2934,6 +2948,9 @@ impl RenderTree {
             }
             if let Some(content) = update.text_content {
                 self.set_text_content(update.node_id, content);
+            }
+            if let Some(region) = update.region_update {
+                self.reconcile_region(update.node_id, region);
             }
         }
         effects

@@ -250,6 +250,7 @@ impl RenderTree {
         // dead LayoutNodeId. See [[project-reactive-architecture-v2]]
         // Phase 2.
         crate::binding::unregister_node(node_id);
+        crate::region::forget(node_id);
 
         // CSS animations/transitions are stable-keyed and intentionally
         // NOT drained here. The eager drain conflated "node removed"

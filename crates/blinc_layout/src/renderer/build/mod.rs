@@ -17,6 +17,8 @@
 //!   `props_visually_equal` per-node fast comparator, and
 //!   `update_render_props_in_place` / `rebuild_children_in_place`
 //!   patches that follow the diff.
+//! - [`regions`] — `reconcile_region`, bringing the rows of a list or
+//!   branch up to date in place.
 //! - [`subtree`] — `rebuild_changed_subtrees`, `rebuild_children`,
 //!   `remove_subtree_nodes`, `process_pending_subtree_rebuilds`, and
 //!   the `update_subtree_props_*` props-only fast path.
@@ -25,5 +27,6 @@ pub mod collect;
 pub mod diff;
 pub mod element_type;
 pub mod entry;
+pub mod regions;
 pub mod subtree;
 pub mod text;
