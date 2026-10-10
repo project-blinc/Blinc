@@ -438,8 +438,9 @@ impl RenderTree {
         let intersects_viewport = !viewport_known
             || match self.layout_tree.get_absolute_bounds(node) {
                 Some(abs) => {
-                    let on_screen_x = abs.x + cumulative_scroll.0;
-                    let on_screen_y = abs.y + cumulative_scroll.1;
+                    let scroll = self.paint_scroll.get();
+                    let on_screen_x = abs.x + scroll.0;
+                    let on_screen_y = abs.y + scroll.1;
                     on_screen_x < viewport.x() + viewport.width()
                         && on_screen_x + abs.width > viewport.x()
                         && on_screen_y < viewport.y() + viewport.height()
@@ -1992,19 +1993,26 @@ impl RenderTree {
         };
 
         // Viewport culling: when this node opted in (`scroll().viewport_cull(true)`),
-        // set the cull rect to its absolute layout bounds. The intersect
-        // test below also reads absolute bounds for each child, so both
-        // sides live in the same coordinate frame regardless of how
-        // deeply nested the child is. The scroll's *offset* (which moves
-        // children visually but not their layout coords) is applied to
-        // each child's absolute position before the test — that's what
-        // makes scrolled-out children fall outside the rect.
+        // the cull rect is where it sits on screen: its absolute layout
+        // bounds moved by its ancestors' scroll. Each child is tested at its
+        // absolute bounds moved by every scroll above it, this node's
+        // included, so both sides are in screen space however the scrolls
+        // nest.
+        let prev_paint_scroll = self.paint_scroll.get();
+        let child_paint_scroll = (
+            prev_paint_scroll.0 + scroll_offset.0,
+            prev_paint_scroll.1 + scroll_offset.1,
+        );
         let prev_cull_viewport = self.cull_viewport.get();
         let entered_cull = self.viewport_cull_scrolls.contains(&node);
         if entered_cull {
             if let Some(abs) = self.layout_tree.get_absolute_bounds(node) {
-                self.cull_viewport
-                    .set(Some((abs.x, abs.y, abs.width, abs.height)));
+                self.cull_viewport.set(Some((
+                    abs.x + prev_paint_scroll.0,
+                    abs.y + prev_paint_scroll.1,
+                    abs.width,
+                    abs.height,
+                )));
             }
         }
 
@@ -2018,15 +2026,9 @@ impl RenderTree {
             let child_is_fixed = child_render.map(|n| n.props.is_fixed).unwrap_or(false);
             let child_is_sticky = child_render.map(|n| n.props.is_sticky).unwrap_or(false);
 
-            // Viewport cull: skip painting children whose post-scroll
-            // *visual* position falls outside the active cull viewport.
-            // Both `cb` and the cull rect are in absolute layout coords;
-            // `new_cumulative_scroll` is the offset that the renderer
-            // will apply via the transform stack when drawing this
-            // descendant, so adding it to the absolute layout position
-            // gives the child's actual on-screen rect. Fixed and sticky
-            // children opt out — their visual position isn't determined
-            // by `new_cumulative_scroll` alone.
+            // Viewport cull: skip painting children whose on-screen
+            // position falls outside the active cull viewport. Fixed and
+            // sticky children opt out: scroll alone does not place them.
             if let Some((cx, cy, cw, ch)) = self.cull_viewport.get() {
                 if !child_is_fixed && !child_is_sticky {
                     if let Some(cb) = self.layout_tree.get_absolute_bounds(child_id) {
@@ -2037,8 +2039,8 @@ impl RenderTree {
                         let vy0 = cy - OVERSCAN;
                         let vx1 = cx + cw + OVERSCAN;
                         let vy1 = cy + ch + OVERSCAN;
-                        let bx0 = cb.x + new_cumulative_scroll.0;
-                        let by0 = cb.y + new_cumulative_scroll.1;
+                        let bx0 = cb.x + child_paint_scroll.0;
+                        let by0 = cb.y + child_paint_scroll.1;
                         let bx1 = bx0 + cb.width;
                         let by1 = by0 + cb.height;
                         let intersects = bx1 > vx0 && bx0 < vx1 && by1 > vy0 && by0 < vy1;
@@ -2081,6 +2083,11 @@ impl RenderTree {
             } else {
                 new_cumulative_scroll
             };
+            self.paint_scroll.set(if child_is_fixed {
+                (0.0, 0.0)
+            } else {
+                child_paint_scroll
+            });
 
             self.render_layer_with_motion(
                 ctx,
@@ -2104,8 +2111,9 @@ impl RenderTree {
             }
         }
 
-        // Restore the parent scope's cull viewport now that this
-        // subtree is fully rendered. Pairs with the `set` above.
+        // Restore the parent scope's cull viewport and scroll now that
+        // this subtree is fully rendered. Pairs with the `set`s above.
+        self.paint_scroll.set(prev_paint_scroll);
         if entered_cull {
             self.cull_viewport.set(prev_cull_viewport);
         }

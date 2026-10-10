@@ -613,14 +613,20 @@ pub struct RenderTree {
     /// intersect the viewport (plus a small overscan buffer). Layout
     /// is still computed for every child — only paint is culled.
     viewport_cull_scrolls: std::collections::HashSet<LayoutNodeId>,
-    /// Active cull rect (in tree-local coords) for the current paint
-    /// walk. Set when a viewport-cull scroll is entered, restored on
-    /// exit. Read by the child-recursion sites in `render_layer_with_motion`
-    /// / `render_node` to skip subtrees whose bounds (offset by the
-    /// cumulative scroll the child will inherit) don't intersect.
+    /// Active cull rect, in screen space, for the current paint walk. Set
+    /// when a viewport-cull scroll is entered, restored on exit. Read by
+    /// the child recursion in `render_layer_with_motion` to skip subtrees
+    /// whose bounds, moved by every scroll above them, don't intersect.
     /// `Cell` not `RefCell` because the value is `Copy` — read/write
     /// is one atomic load/store, no borrow tracking needed.
     cull_viewport: Cell<Option<(f32, f32, f32, f32)>>,
+    /// Every ancestor's scroll offset on the current paint walk, nested
+    /// scroll containers included: how far the walk's children are moved
+    /// on screen. The cull test and the painted-on-screen record read it.
+    /// The cumulative scroll passed down the walk restarts at each scroll
+    /// container, for sticky and fixed positioning, so it cannot place a
+    /// nested scroll's children.
+    paint_scroll: Cell<(f32, f32)>,
     /// Whether the current paint pass touched any node that drives a
     /// per-frame redraw — a `Canvas` element, a node with motion
     /// bindings, or a node with an active motion state. Reset to
@@ -1019,6 +1025,7 @@ impl RenderTree {
             scroll_physics: HashMap::new(),
             viewport_cull_scrolls: std::collections::HashSet::new(),
             cull_viewport: Cell::new(None),
+            paint_scroll: Cell::new((0.0, 0.0)),
             visible_anim_active: Cell::new(false),
             had_canvas_painted: Cell::new(false),
             skip_canvas_drawing: Cell::new(false),
