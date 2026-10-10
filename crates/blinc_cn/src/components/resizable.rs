@@ -45,16 +45,16 @@
 //!     )
 //! ```
 
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefCell};
 use std::sync::Arc;
 
 use blinc_core::State;
 use blinc_core::context_state::BlincContextState;
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::{Div, ElementBuilder};
 use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{NoState, stateful_with_key};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, ThemeState};
 
@@ -257,11 +257,7 @@ impl ResizableGroup {
 
         let direction = config.direction;
         let handle_config = config.handle;
-        let key = if config.key.is_empty() {
-            InstanceKey::new("resizable").get().to_string()
-        } else {
-            config.key
-        };
+        let key = config.key;
 
         // Extract constraints before consuming panels
         let constraints: Vec<PanelConstraints> = config
@@ -348,56 +344,32 @@ impl ResizableGroup {
                 }
                 panel_wrapper = wrapper;
             } else {
-                // Fixed size panel - use stateful to react to size changes
-                let panel_key = format!("{}_panel_wrapper_{}", key, i);
-                let size_for_stateful = size_state.clone();
-
-                // Create a stateful wrapper that adjusts its size based on state
-                let sized_wrapper = stateful_with_key::<NoState>(&panel_key)
-                    .deps([size_state.signal_id()])
-                    .on_state(move |_ctx| {
-                        let current_size = size_for_stateful.get();
-                        let mut sizing = div().overflow_clip();
-
-                        match direction {
-                            ResizeDirection::Horizontal => {
-                                sizing = sizing.w(current_size).h_full();
-                                if min_size > 0.0 {
-                                    sizing = sizing.min_w(min_size);
-                                }
-                                if let Some(max) = max_size {
-                                    sizing = sizing.max_w(max);
-                                }
-                            }
-                            ResizeDirection::Vertical => {
-                                sizing = sizing.h(current_size).w_full();
-                                if min_size > 0.0 {
-                                    sizing = sizing.min_h(min_size);
-                                }
-                                if let Some(max) = max_size {
-                                    sizing = sizing.max_h(max);
-                                }
-                            }
+                // A fixed panel's size is bound to its state, so a drag
+                // patches it in place and runs layout, with no rebuild.
+                let mut sized = div().overflow_clip().relative();
+                match direction {
+                    ResizeDirection::Horizontal => {
+                        sized = sized.w(&size_state).h_full();
+                        if min_size > 0.0 {
+                            sized = sized.min_w(min_size);
                         }
-
-                        sizing
-                    });
-
-                // For fixed panels, wrap content with the sized stateful container
-                if let Some(content) = panel_config.content {
-                    // Create outer container with sized_wrapper that handles sizing
-                    // and content as sibling - the sized wrapper dictates size
-                    let mut outer = div().overflow_clip();
-                    match direction {
-                        ResizeDirection::Horizontal => {
-                            outer = outer.h_full();
-                        }
-                        ResizeDirection::Vertical => {
-                            outer = outer.w_full();
+                        if let Some(max) = max_size {
+                            sized = sized.max_w(max);
                         }
                     }
-                    // Use position relative/absolute pattern for content overlay
-                    outer = outer.relative().child(sized_wrapper).child(
+                    ResizeDirection::Vertical => {
+                        sized = sized.h(&size_state).w_full();
+                        if min_size > 0.0 {
+                            sized = sized.min_h(min_size);
+                        }
+                        if let Some(max) = max_size {
+                            sized = sized.max_h(max);
+                        }
+                    }
+                }
+                // The content fills the panel whatever its own size.
+                if let Some(content) = panel_config.content {
+                    sized = sized.child(
                         div()
                             .absolute()
                             .left(0.0)
@@ -407,10 +379,8 @@ impl ResizableGroup {
                             .overflow_clip()
                             .child_box(content),
                     );
-                    panel_wrapper = outer;
-                } else {
-                    panel_wrapper = div().overflow_clip().child(sized_wrapper);
                 }
+                panel_wrapper = sized;
             }
 
             container = container.child(panel_wrapper);
@@ -424,13 +394,13 @@ impl ResizableGroup {
                     i,
                     direction,
                     &handle_config,
-                    &key,
                     &panel_sizes,
                     left_constraints,
                     right_constraints,
                     drag_index.clone(),
                     drag_start_pos.clone(),
                     drag_start_sizes.clone(),
+                    config.on_resize.clone(),
                 );
                 container = container.child(handle);
             }
@@ -452,13 +422,13 @@ impl ResizableGroup {
         index: usize,
         direction: ResizeDirection,
         handle_config: &ResizeHandleConfig,
-        key: &str,
         panel_sizes: &[State<f32>],
         left_constraints: PanelConstraints,
         right_constraints: PanelConstraints,
         drag_index: State<i32>,
         drag_start_pos: State<f32>,
         drag_start_sizes: State<Vec<f32>>,
+        on_resize: Option<Arc<dyn Fn(&[f32]) + Send + Sync>>,
     ) -> Div {
         let theme = ThemeState::get();
         let border_color = theme.color(ColorToken::Border);
@@ -467,140 +437,91 @@ impl ResizableGroup {
         let thickness = handle_config.thickness;
         let hit_padding = handle_config.hit_area_padding;
         let total_hit_area = thickness + hit_padding * 2.0;
+        let idx = index;
 
-        // Clones for closures
+        // The bar shows the primary colour while this handle is dragged.
+        let dragging = drag_index.signal();
+        let bar_color = computed(move |g: &ReactiveGraph| {
+            if g.get(dragging) == Some(idx as i32) {
+                primary_color
+            } else {
+                border_color
+            }
+        });
+
+        let (cursor, bar, hit_area) = match direction {
+            ResizeDirection::Horizontal => (
+                CursorStyle::ResizeEW,
+                div().w(thickness).h_full(),
+                div().w(total_hit_area).h_full(),
+            ),
+            ResizeDirection::Vertical => (
+                CursorStyle::ResizeNS,
+                div().w_full().h(thickness),
+                div().w_full().h(total_hit_area),
+            ),
+        };
+
         let drag_index_for_down = drag_index.clone();
         let drag_index_for_drag = drag_index.clone();
-        let drag_index_for_end = drag_index.clone();
-        let drag_index_for_visual = drag_index.clone();
-
+        let drag_index_for_end = drag_index;
         let drag_start_pos_for_down = drag_start_pos.clone();
-        let drag_start_pos_for_drag = drag_start_pos.clone();
-
+        let drag_start_pos_for_drag = drag_start_pos;
         let drag_start_sizes_for_down = drag_start_sizes.clone();
-        let drag_start_sizes_for_drag = drag_start_sizes.clone();
-
-        // Clone panel sizes for drag handler
+        let drag_start_sizes_for_drag = drag_start_sizes;
         let panel_sizes_for_down: Vec<State<f32>> = panel_sizes.to_vec();
         let panel_sizes_for_drag: Vec<State<f32>> = panel_sizes.to_vec();
 
-        // Extract constraints
         let left_min = left_constraints.min_size;
         let left_max = left_constraints.max_size;
         let right_min = right_constraints.min_size;
         let right_max = right_constraints.max_size;
 
-        let handle_key = format!("{}_handle_{}", key, index);
-        let idx = index;
-
-        // Use stateful to show visual feedback when dragging
-        let handle = stateful_with_key::<NoState>(&handle_key)
-            .deps([drag_index.signal_id()])
-            .on_state(move |_ctx| {
-                let is_dragging = drag_index_for_visual.get() == idx as i32;
-
-                let mut handle_visual = div();
-
-                match direction {
-                    ResizeDirection::Horizontal => {
-                        handle_visual = handle_visual
-                            .w(thickness)
-                            .h_full()
-                            .cursor(CursorStyle::ResizeEW);
-                    }
-                    ResizeDirection::Vertical => {
-                        handle_visual = handle_visual
-                            .w_full()
-                            .h(thickness)
-                            .cursor(CursorStyle::ResizeNS);
-                    }
-                }
-
-                if is_dragging {
-                    handle_visual = handle_visual.bg(primary_color);
-                } else {
-                    handle_visual = handle_visual.bg(border_color);
-                }
-
-                // Wrap in hit area container
-                let mut hit_area = div()
-                    .class("cn-resizable-handle")
-                    .items_center()
-                    .justify_center();
-
-                match direction {
-                    ResizeDirection::Horizontal => {
-                        hit_area = hit_area
-                            .w(total_hit_area)
-                            .h_full()
-                            .cursor(CursorStyle::ResizeEW);
-                    }
-                    ResizeDirection::Vertical => {
-                        hit_area = hit_area
-                            .w_full()
-                            .h(total_hit_area)
-                            .cursor(CursorStyle::ResizeNS);
-                    }
-                }
-
-                hit_area.child(handle_visual)
-            })
+        hit_area
+            .class("cn-resizable-handle")
+            .items_center()
+            .justify_center()
+            .cursor(cursor)
+            .child(bar.cursor(cursor).bg(&bar_color))
             .on_mouse_down(move |event| {
-                // Start drag
                 drag_index_for_down.set(idx as i32);
-
-                // Store start position
                 let pos = match direction {
                     ResizeDirection::Horizontal => event.mouse_x,
                     ResizeDirection::Vertical => event.mouse_y,
                 };
                 drag_start_pos_for_down.set(pos);
-
-                // Store current sizes
                 let sizes: Vec<f32> = panel_sizes_for_down.iter().map(|s| s.get()).collect();
                 drag_start_sizes_for_down.set(sizes);
             })
             .on_drag(move |event| {
-                let current_idx = drag_index_for_drag.get();
-                if current_idx < 0 {
+                if drag_index_for_drag.get() < 0 {
                     return;
                 }
-
                 let pos = match direction {
                     ResizeDirection::Horizontal => event.mouse_x,
                     ResizeDirection::Vertical => event.mouse_y,
                 };
-
-                let start_pos = drag_start_pos_for_drag.get();
-                let delta = pos - start_pos;
+                let delta = pos - drag_start_pos_for_drag.get();
 
                 let start_sizes = drag_start_sizes_for_drag.get();
                 if start_sizes.len() <= idx + 1 {
                     return;
                 }
-
-                // Calculate new sizes
                 let left_start = start_sizes[idx];
                 let right_start = start_sizes[idx + 1];
 
-                let mut new_left = left_start + delta;
-                let mut new_right = right_start - delta;
-
-                // Apply constraints
-                new_left = new_left.max(left_min);
+                let mut new_left = (left_start + delta).max(left_min);
                 if let Some(max) = left_max {
                     new_left = new_left.min(max);
                 }
-
-                new_right = new_right.max(right_min);
+                let mut new_right = (right_start - delta).max(right_min);
                 if let Some(max) = right_max {
                     new_right = new_right.min(max);
                 }
 
-                // Ensure total stays constant
+                // The two panels share the space they started with.
                 let total = left_start + right_start;
                 if new_left + new_right > total {
-                    // Adjust to fit
                     let overflow = (new_left + new_right) - total;
                     if delta > 0.0 {
                         new_right = (new_right - overflow).max(right_min);
@@ -611,15 +532,26 @@ impl ResizableGroup {
                     }
                 }
 
-                // Update sizes
-                panel_sizes_for_drag[idx].set(new_left);
-                panel_sizes_for_drag[idx + 1].set(new_right);
+                // Only a change is written, so a drag that is held at a
+                // bound wakes nothing.
+                let mut changed = false;
+                for (state, value) in [
+                    (&panel_sizes_for_drag[idx], new_left),
+                    (&panel_sizes_for_drag[idx + 1], new_right),
+                ] {
+                    if state.get() != value {
+                        state.set(value);
+                        changed = true;
+                    }
+                }
+                if changed && let Some(ref on_resize) = on_resize {
+                    let sizes: Vec<f32> = panel_sizes_for_drag.iter().map(|s| s.get()).collect();
+                    on_resize(&sizes);
+                }
             })
             .on_drag_end(move |_event| {
                 drag_index_for_end.set(-1);
-            });
-
-        div().child(handle)
+            })
     }
 }
 
@@ -648,7 +580,11 @@ impl ElementBuilder for ResizableGroup {
 /// Builder for resizable group
 pub struct ResizableGroupBuilder {
     config: ResizableGroupConfig,
-    #[allow(dead_code)]
+    /// The panels, taken by whichever of `build` or the element path builds
+    /// the group first.
+    panels: RefCell<Vec<ResizablePanelConfig>>,
+    /// Names the group's state when `.key(..)` is not given: where the
+    /// group was created.
     key: InstanceKey,
     built: OnceCell<ResizableGroup>,
 }
@@ -659,6 +595,7 @@ impl ResizableGroupBuilder {
     pub fn new() -> Self {
         Self {
             config: ResizableGroupConfig::default(),
+            panels: RefCell::new(Vec::new()),
             key: InstanceKey::new("resizable_group"),
             built: OnceCell::new(),
         }
@@ -696,7 +633,7 @@ impl ResizableGroupBuilder {
 
     /// Add a panel to the group
     pub fn panel(mut self, panel: ResizablePanelBuilder) -> Self {
-        self.config.panels.push(panel.build_config());
+        self.panels.get_mut().push(panel.build_config());
         self
     }
 
@@ -723,26 +660,32 @@ impl ResizableGroupBuilder {
         self
     }
 
+    /// The configuration to build from, with the panels and the key.
+    fn take_config(&self) -> ResizableGroupConfig {
+        ResizableGroupConfig {
+            direction: self.config.direction,
+            handle: self.config.handle.clone(),
+            panels: std::mem::take(&mut *self.panels.borrow_mut()),
+            key: if self.config.key.is_empty() {
+                self.key.get().to_string()
+            } else {
+                self.config.key.clone()
+            },
+            on_resize: self.config.on_resize.clone(),
+            classes: self.config.classes.clone(),
+            user_id: self.config.user_id.clone(),
+        }
+    }
+
     fn get_or_build(&self) -> &ResizableGroup {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            // We need to take ownership of config, but can't mutate self
-            // This is a limitation - we'll clone what we can
-            let config = ResizableGroupConfig {
-                direction: self.config.direction,
-                handle: self.config.handle.clone(),
-                panels: Vec::new(), // Empty - panels already consumed
-                key: self.config.key.clone(),
-                on_resize: self.config.on_resize.clone(),
-                classes: self.config.classes.clone(),
-                user_id: self.config.user_id.clone(),
-            };
-            ResizableGroup::from_config(config)
+            ResizableGroup::from_config(self.take_config())
         })
     }
 
     /// Build and consume the builder, returning the group
     pub fn build(self) -> ResizableGroup {
-        ResizableGroup::from_config(self.config)
+        ResizableGroup::from_config(self.take_config())
     }
 }
 
@@ -754,8 +697,6 @@ impl Default for ResizableGroupBuilder {
 
 impl ElementBuilder for ResizableGroupBuilder {
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        // For ElementBuilder impl, we need to build without consuming
-        // This means panels won't work through this path - use build() instead
         self.get_or_build().inner.build(tree)
     }
 
