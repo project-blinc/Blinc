@@ -37,20 +37,17 @@ use std::cell::OnceCell;
 use std::sync::Arc;
 
 use blinc_core::State;
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
 use blinc_layout::element::CursorStyle;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, NoState, stateful_with_key};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::visual_animation::VisualAnimationConfig;
 use blinc_theme::{ColorToken, ThemeState};
 
 /// Chevron left icon (collapse)
 const CHEVRON_LEFT_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>"#;
-
-/// Chevron right icon (expand)
-const CHEVRON_RIGHT_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>"#;
 
 /// Sidebar item definition
 #[derive(Clone)]
@@ -98,8 +95,7 @@ pub struct SidebarSection {
 
 /// Sidebar component with animated expand/collapse
 pub struct Sidebar {
-    /// The rail alone, or the rail beside a content area. Boxed because
-    /// those are different shapes and only the rail is a `Stateful`.
+    /// The rail alone, or the rail beside a content area.
     inner: Box<dyn ElementBuilder>,
 }
 
@@ -129,235 +125,178 @@ impl Sidebar {
         // writes on a click, and it survives the rail's rebuilds.
         let active_menu: State<Option<SidebarItem>> =
             blinc_core::context_state::use_state_keyed(&format!("{key}_active_menu"), || None);
-        let active_menu_for_rail = active_menu.clone();
+        // The rail is built once. Collapsing hides the labels and titles in
+        // place, so the rail's width changes and its keyed animation follows
+        // it; the selection moves the active class and icon colour.
+        let container_key = format!("{}_container", key);
+        let collapsed_sig = collapsed.signal();
+        let expanded = computed(move |g: &ReactiveGraph| !g.get(collapsed_sig).unwrap_or(false));
+        let active_sig = active_menu.signal();
 
-        // Create stateful container that rebuilds when collapsed state changes
-        let container_key = format!("{}_container", key.clone());
-        // let is_collapsed_for_container = is_collapsed.clone();
+        let layout_anim_key = format!("{}_layout", key);
+        let sidebar_anim_key = format!("{}_sidebar_container", key);
 
-        let stateful_container = stateful_with_key::<NoState>(&container_key)
-            // `active_menu` as well as the collapse flag: hoisting it out
-            // of this closure so the content area could read it also took
-            // it out of what the rail re-renders for, and the highlight
-            // stopped following the selection — pages swapped while the
-            // rail stayed on whichever item it drew first.
-            .deps([builder.is_collapsed.signal_id(), active_menu.signal_id()])
-            .on_state(move |ctx| {
-                let collapsed = collapsed.clone();
+        let sidebar_content = div().flex_col().h_full().overflow_clip().animate_bounds(
+            VisualAnimationConfig::size()
+                .with_key(&sidebar_anim_key)
+                .clip_to_animated()
+                .snappy(),
+        );
 
-                let mut sections = sections.clone();
+        // Sections and items container
+        // Uses w_fit() so width is determined by children content
+        let mut items_container = div()
+            .class("cn-sidebar")
+            .flex_col()
+            .border_right(1.0, border)
+            .bg(surface)
+            .h_full()
+            .w_fit()
+            .overflow_clip() // Critical for animation clipping
+            .py(2.0)
+            .animate_bounds(
+                VisualAnimationConfig::all()
+                    .with_key(&layout_anim_key)
+                    .clip_to_animated()
+                    .snappy(),
+            );
 
-                // Layout animation keys for smooth width transitions
-                let layout_anim_key = format!("{}_layout", key.clone());
-                let sidebar_anim_key = format!("{}_sidebar_container", key.clone());
-
-                let sidebar_content = div().flex_col().h_full().overflow_clip().animate_bounds(
-                    VisualAnimationConfig::size()
-                        .with_key(&sidebar_anim_key)
-                        .clip_to_animated()
-                        .snappy(),
-                );
-
-                // // Convert pixel widths to layout units (divide by 4)
-                let mut toggle_btn = div();
-                // Toggle button at the top
-                if show_toggle {
-                    let is_collapsed_for_state = collapsed.clone();
-                    let is_collapsed_for_click = collapsed.clone();
-                    let toggle_key = format!("{}_toggle", ctx.key());
-
-                    toggle_btn = toggle_btn.child(
-                        stateful_with_key::<ButtonState>(&toggle_key)
-                            .deps([collapsed.signal_id()])
-                            .on_state(move |ctx| {
-                                let collapsed_inner = is_collapsed_for_state.get();
-
-                                // Background is handled by CSS
-                                let bg = blinc_core::Color::TRANSPARENT;
-
-                                let icon = if collapsed_inner {
-                                    CHEVRON_RIGHT_SVG
-                                } else {
-                                    CHEVRON_LEFT_SVG
-                                };
-
-                                // Match item styling: w_fit, flex_row, same padding
-                                let toggle_anim_key = format!("{}_anim", ctx.key());
-                                div()
-                                    .w_fit()
-                                    .flex_row()
-                                    .items_center()
-                                    .gap(3.0)
-                                    .px(3.0)
-                                    .py(2.0)
-                                    .bg(bg)
-                                    .cursor(CursorStyle::Pointer)
-                                    .animate_bounds(
-                                        VisualAnimationConfig::size()
-                                            .with_key(&toggle_anim_key)
-                                            .clip_to_animated()
-                                            .snappy(),
-                                    )
-                                    .child(
-                                        div()
-                                            .flex_shrink_0()
-                                            .self_end()
-                                            .child(svg(icon).size(18.0, 18.0).color(text_secondary))
-                                            .pointer_events_none(),
-                                    )
-                            })
-                            .on_click(move |_| {
-                                // is_collapsed_for_click.set(!current);
-                                is_collapsed_for_click.update(|c| !c);
-                            }),
-                    );
+        if show_toggle {
+            let toggle_key = format!("{}_toggle", container_key);
+            let collapsed_for_click = collapsed.clone();
+            // The chevron points right while collapsed, left while open.
+            let chevron_angle = computed(move |g: &ReactiveGraph| {
+                if g.get(collapsed_sig).unwrap_or(false) {
+                    180.0
+                } else {
+                    0.0
                 }
+            });
+            items_container = items_container.child(
+                div().child(
+                    div()
+                        .w_fit()
+                        .flex_row()
+                        .items_center()
+                        .gap(3.0)
+                        .px(3.0)
+                        .py(2.0)
+                        .cursor(CursorStyle::Pointer)
+                        .animate_bounds(
+                            VisualAnimationConfig::size()
+                                .with_key(format!("{}_anim", toggle_key))
+                                .clip_to_animated()
+                                .snappy(),
+                        )
+                        .child(
+                            div()
+                                .flex_shrink_0()
+                                .self_end()
+                                .rotate_deg(&chevron_angle)
+                                .child(svg(CHEVRON_LEFT_SVG).size(18.0, 18.0).color(text_secondary))
+                                .pointer_events_none(),
+                        )
+                        .on_click(move |_| collapsed_for_click.update(|c| !c)),
+                ),
+            );
+        }
 
-                // Sections and items container
-                // Uses w_fit() so width is determined by children content
-                // Children conditionally render icon-only (collapsed) or icon+label (expanded)
-                // The infrastructure fix ensures children laid out at larger size during collapse
-                let mut items_container = div()
-                    .class("cn-sidebar")
-                    .flex_col()
-                    .border_right(1.0, border)
-                    .bg(surface)
-                    .h_full()
+        for (section_idx, section) in sections.iter().enumerate() {
+            // Section title: always present, shown while the rail is open.
+            if let Some(ref title) = section.title {
+                let title_anim_key = format!("{}_section_{}_title", container_key, section_idx);
+                let title_div = div()
                     .w_fit()
-                    .overflow_clip() // Critical for animation clipping
-                    .py(2.0)
+                    .h_fit()
+                    .overflow_clip()
                     .animate_bounds(
                         VisualAnimationConfig::all()
-                            .with_key(&layout_anim_key)
+                            .with_key(&title_anim_key)
                             .clip_to_animated()
                             .snappy(),
-                    );
+                    )
+                    .when(&expanded, |d| {
+                        d.child(
+                            div().px(3.0).py(2.0).child(
+                                text(title.to_uppercase())
+                                    .size(theme.typography().text_xs)
+                                    .color(text_tertiary)
+                                    .weight(FontWeight::SemiBold)
+                                    .no_cursor()
+                                    .no_wrap(),
+                            ),
+                        )
+                    });
+                items_container = items_container.child(title_div);
+            }
 
-                if show_toggle {
-                    items_container = items_container.child(toggle_btn);
-                }
-
-                let active_menu = active_menu_for_rail.clone();
-                for (section_idx, section) in sections.iter_mut().enumerate() {
-                    // Section title - animate height to 0 when collapsed
-                    if let Some(ref title) = section.title {
-                        let is_collapsed = collapsed.get();
-                        let title_anim_key = format!("{}_section_{}_title", ctx.key(), section_idx);
-
-                        // Always render title, but height animates to 0 when collapsed
-                        let title_div = div()
-                            .w_fit()
-                            .h_fit()
-                            .overflow_clip()
-                            .animate_bounds(
-                                VisualAnimationConfig::all()
-                                    .with_key(&title_anim_key)
-                                    .clip_to_animated()
-                                    .snappy(),
-                            )
-                            .when(!is_collapsed, |d| {
-                                d.px(3.0).py(2.0).child(
-                                    text(title.to_uppercase())
-                                        .size(theme.typography().text_xs)
-                                        .color(text_tertiary)
-                                        .weight(FontWeight::SemiBold)
-                                        .no_cursor()
-                                        .no_wrap(),
-                                )
-                            });
-                        // .when(is_collapsed, |d| d.p(0.0).h(0.0).w(0.0));
-
-                        items_container = items_container.child(title_div);
-                    }
-
-                    // Items - conditionally render icon-only (collapsed) or icon+label (expanded)
-                    for (item_idx, item) in section.items.iter_mut().enumerate() {
-                        let item_key = format!("{}_item_{}_{}", ctx.key(), section_idx, item_idx);
-                        let item_label = item.label.clone();
-                        let item_icon = item.icon.clone();
-                        let mut item_is_active = item.is_active;
-                        if item_is_active {
-                            item.is_active = false; // clear from loop
-                        }
-                        if let Some(active_item) = active_menu.get() {
-                            item_is_active = active_item.label == item.label;
-                        }
-
-                        let item_on_click = item.on_click.clone();
-                        let is_collapsed = collapsed.get();
-
-                        let active_menu_for_trigger = active_menu.clone();
-                        let item_for_trigger = item.clone();
-
-                        // Icon color: primary for active, text-secondary for default
-                        // Background and text color fully driven by CSS
-                        let icon_color = if item_is_active {
-                            primary
-                        } else {
-                            text_secondary
+            for (item_idx, item) in section.items.iter().enumerate() {
+                let item_key = format!("{}_item_{}_{}", container_key, section_idx, item_idx);
+                // Active when it is the selection, or, before anything is
+                // selected, when the builder marked it.
+                let label = item.label.clone();
+                let initially_active = item.is_active;
+                let active = computed(move |g: &ReactiveGraph| match g.get(active_sig).flatten() {
+                    Some(selected) => selected.label == label,
+                    None => initially_active,
+                });
+                let icon_color = {
+                    let label = item.label.clone();
+                    computed(move |g: &ReactiveGraph| {
+                        let is_active = match g.get(active_sig).flatten() {
+                            Some(selected) => selected.label == label,
+                            None => initially_active,
                         };
+                        if is_active { primary } else { text_secondary }
+                    })
+                };
 
-                        let item_anim_key = format!("{}_anim", item_key);
-                        let mut item_element = div()
-                            .class("cn-sidebar-item")
-                            // `w_full` so the hover / active bg stretches
-                            // across the full sidebar width. With `w_fit`
-                            // the bg only painted as wide as the item's
-                            // own content — so short labels like "Inbox"
-                            // got a noticeably narrower highlight than
-                            // long ones like "Dashboard". The parent
-                            // `items_container` is `w_fit` and resolves
-                            // its own width from the widest sibling, so
-                            // every item now matches that one width.
-                            .w_full()
-                            .h_fit()
-                            .flex_row()
-                            .items_center()
-                            .gap(3.0)
-                            .cursor(CursorStyle::Pointer)
-                            .overflow_clip()
-                            .animate_bounds(
-                                VisualAnimationConfig::all()
-                                    .with_key(&item_anim_key)
-                                    .clip_to_animated()
-                                    .snappy(),
-                            )
-                            .when(!is_collapsed, |d| {
-                                d.child(
-                                    div()
-                                        .flex_shrink_0()
-                                        .child(svg(&item_icon).size(18.0, 18.0).color(icon_color)),
-                                )
-                                .child(
-                                    div().child(
-                                        text(&item_label)
-                                            .size(theme.typography().text_sm)
-                                            .no_cursor()
-                                            .no_wrap(),
-                                    ),
-                                )
-                            })
-                            .when(is_collapsed, |d| {
-                                d.child(
-                                    div()
-                                        .flex_shrink_0()
-                                        .child(svg(&item_icon).size(18.0, 18.0).color(icon_color)),
-                                )
-                            })
-                            .on_click(move |_| {
-                                active_menu_for_trigger.update(|_| Some(item_for_trigger.clone()));
-                                item_on_click();
-                            });
-                        if item_is_active {
-                            item_element = item_element.class("cn-sidebar-item--active");
-                        }
+                let item_on_click = item.on_click.clone();
+                let active_menu_for_click = active_menu.clone();
+                let item_for_click = item.clone();
 
-                        items_container = items_container.child(item_element);
-                    }
-                }
+                let item_element = div()
+                    .class("cn-sidebar-item")
+                    .class_when("cn-sidebar-item--active", &active)
+                    // `w_full` so the hover / active bg stretches across the
+                    // full sidebar width; the parent is `w_fit` and takes its
+                    // width from the widest item.
+                    .w_full()
+                    .h_fit()
+                    .flex_row()
+                    .items_center()
+                    .gap(3.0)
+                    .cursor(CursorStyle::Pointer)
+                    .overflow_clip()
+                    .animate_bounds(
+                        VisualAnimationConfig::all()
+                            .with_key(format!("{}_anim", item_key))
+                            .clip_to_animated()
+                            .snappy(),
+                    )
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .child(svg(&item.icon).size(18.0, 18.0).color(&icon_color)),
+                    )
+                    .child(
+                        div().visible(&expanded).child(
+                            text(&item.label)
+                                .size(theme.typography().text_sm)
+                                .no_cursor()
+                                .no_wrap(),
+                        ),
+                    )
+                    .on_click(move |_| {
+                        active_menu_for_click.set(Some(item_for_click.clone()));
+                        item_on_click();
+                    });
 
-                sidebar_content.child(items_container)
-            });
+                items_container = items_container.child(item_element);
+            }
+        }
+
+        let stateful_container = sidebar_content.child(items_container);
 
         // Apply user classes and id
         let mut rail = stateful_container;

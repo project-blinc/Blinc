@@ -37,10 +37,19 @@ fn laid_out(dsl: &BlincDsl) -> RenderTree {
     tree
 }
 
+/// The text the tree shows: what is under an element taken out of layout
+/// (`display: none`, as a collapsed rail's labels are) is not shown.
 fn texts(tree: &RenderTree) -> Vec<String> {
     let mut out = Vec::new();
     let mut stack = vec![tree.root().expect("root")];
     while let Some(id) = stack.pop() {
+        if tree
+            .layout_tree
+            .get_style(id)
+            .is_some_and(|s| s.display == taffy::Display::None)
+        {
+            continue;
+        }
         if let Some(node) = tree.get_render_node(id)
             && let ElementType::Text(t) = &node.element_type
         {
