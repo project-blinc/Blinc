@@ -43,7 +43,6 @@ use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{ElementBounds, RenderProps};
 use blinc_layout::overlay_state::overlay_stack;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, stateful_with_key};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::overlay::AnchorDirection;
 use blinc_layout::widgets::overlay_stack::{OverlayBuilder, OverlayHandle};
@@ -213,27 +212,25 @@ impl PopoverBuilder {
         let offset = self.offset;
         let content_builder = self.content.clone();
         let trigger_builder = self.trigger.clone();
-        let button_key = self.key.derive("button");
 
         // Clone states for closures
-        let open_state_for_trigger = open_state.clone();
         let open_state_for_click = open_state.clone();
         let overlay_handle_for_click = overlay_handle_state.clone();
         let overlay_handle_for_show = overlay_handle_state.clone();
         let open_state_for_close = open_state.clone();
         let overlay_handle_for_close = overlay_handle_state.clone();
 
-        // Build trigger with click handler
-        let trigger = stateful_with_key::<ButtonState>(&button_key)
-            .deps([open_state.signal_id()])
-            .on_state(move |_ctx| {
-                let is_open = open_state_for_trigger.get();
-
-                // Build trigger content
-                let trigger_content = (trigger_builder)(is_open);
-
-                div().w_fit().cursor_pointer().child(trigger_content)
-            })
+        // The trigger is built once; what it shows is swapped for the open
+        // or closed form its builder makes, in place.
+        let closed_trigger = trigger_builder.clone();
+        let trigger = div()
+            .w_fit()
+            .cursor_pointer()
+            .show_or(
+                &open_state,
+                move || (trigger_builder)(true),
+                move || (closed_trigger)(false),
+            )
             .on_click(move |ctx| {
                 let bounds = ElementBounds {
                     x: ctx.bounds_x,
@@ -450,7 +447,7 @@ fn build_popover_overlay(
 
 /// Built popover component
 pub struct Popover {
-    inner: blinc_layout::stateful::Stateful<ButtonState>,
+    inner: Div,
 }
 
 impl std::fmt::Debug for Popover {
@@ -481,7 +478,7 @@ impl ElementBuilder for PopoverBuilder {
     }
 
     fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
-        self.get_or_build().inner.event_handlers()
+        ElementBuilder::event_handlers(&self.get_or_build().inner)
     }
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
@@ -515,7 +512,7 @@ impl ElementBuilder for Popover {
     }
 
     fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
-        self.inner.event_handlers()
+        ElementBuilder::event_handlers(&self.inner)
     }
 }
 
