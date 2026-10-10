@@ -39,22 +39,19 @@
 
 use blinc_animation::{AnimatedValue, SpringConfig};
 use blinc_core::State;
+use blinc_core::reactive::{Computed, ReactiveGraph, computed};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::motion::{SharedAnimatedValue, motion};
 use blinc_layout::prelude::*;
 use blinc_layout::render_state::get_global_scheduler;
-use blinc_layout::stateful::{ButtonState, stateful};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 use std::sync::{Arc, Mutex};
 
 /// Chevron down SVG icon
 const CHEVRON_DOWN_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
-
-/// Chevron up SVG icon (for when section is open)
-const CHEVRON_UP_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>"#;
 
 /// Collapsible content wrapper with animated expand/collapse
 ///
@@ -129,7 +126,11 @@ pub struct CollapsibleBuilder {
 /// removing it leaves nothing to measure or shrink — and the collapsed
 /// branch re-asserts width while adding no vertical padding, which
 /// would keep the element occupying space even at `h(0)`.
-fn fold_body(content: impl ElementBuilder + 'static, anim_key: &str, open: bool) -> Div {
+fn fold_body(
+    content: impl ElementBuilder + 'static,
+    anim_key: &str,
+    closed: &Computed<bool>,
+) -> Div {
     div()
         .w_full()
         .flex_col()
@@ -141,7 +142,7 @@ fn fold_body(content: impl ElementBuilder + 'static, anim_key: &str, open: bool)
                 .snappy(),
         )
         .child(content)
-        .when(!open, |d| d.w_full().h(0.0))
+        .collapsed_when(closed)
 }
 
 impl CollapsibleBuilder {
@@ -219,51 +220,26 @@ impl CollapsibleBuilder {
 
     /// Get or build the inner Collapsible
     fn get_or_build(&self) -> &Collapsible {
-        // Built OUTSIDE the cell rather than in `get_or_init`.
-        // `Stateful` runs its callback during construction, and that
-        // path can reach back here — inside `get_or_init` that is a
-        // "reentrant init" panic, whereas here the inner call simply
-        // builds its own and loses the `set` race harmlessly.
-        if let Some(built) = self.built.get() {
-            return built;
-        }
-        let built = self.make();
-        let _ = self.built.set(built);
-        self.built.get().expect("just set")
+        ::blinc_layout::build_once::build_once(&self.built, || self.make())
     }
 
     fn make(&self) -> Collapsible {
-        {
-            let anim_key = format!("cn-collapsible-{}", self.is_open.signal_id().to_raw());
-            let is_open = self.is_open.clone();
-            let content = self.content.clone();
-
-            // Wrapped in a `Stateful` bound to the state. Open and shut
-            // differ by an explicit zero height, and height is decided
-            // when the element is BUILT, so without a rebuild the
-            // section keeps whatever it was first built with and only
-            // moves when something unrelated rebuilds it.
-            let inner =
-                blinc_layout::stateful::stateful_with_key::<()>(&format!("{anim_key}-container"))
-                    .deps([self.is_open.signal_id()])
-                    .on_state(move |_ctx| {
-                        // Content is ALWAYS rendered: the collapse animates
-                        // down FROM the open bounds, so removing it would
-                        // leave the animation nothing to measure or shrink.
-                        let body = match &content {
-                            Some(f) => f(),
-                            None => div(),
-                        };
-                        fold_body(body, &anim_key, is_open.get())
-                    });
-
-            Collapsible {
-                inner: div().w_full().child(inner),
-            }
+        let anim_key = format!("cn-collapsible-{}", self.is_open.signal_id().to_raw());
+        // Built once. The section collapses to no height while closed, in
+        // place, and its content is always laid out so the height
+        // animation has something to shrink and grow.
+        let open = self.is_open.signal();
+        let closed = computed(move |g: &ReactiveGraph| !g.get(open).unwrap_or(false));
+        let body = match &self.content {
+            Some(f) => f(),
+            None => div(),
+        };
+        Collapsible {
+            inner: div().w_full().child(fold_body(body, &anim_key, &closed)),
         }
     }
 
-    /// Set the content, as a builder called on every rebuild.
+    /// Set the content, built once with the section.
     pub fn content<F>(mut self, content: F) -> Self
     where
         F: Fn() -> Div + Send + Sync + 'static,
@@ -438,10 +414,10 @@ where
 /// Collapsible trigger button that toggles the state
 ///
 /// A convenience component that creates a clickable header that toggles
-/// the associated collapsible section. Uses Stateful for hover/pressed states
-/// and changes chevron direction when open.
+/// the associated collapsible section. Its fill follows the pointer and its
+/// chevron turns while the section is open, in place.
 pub struct CollapsibleTrigger {
-    inner: Stateful<ButtonState>,
+    inner: Div,
 }
 
 impl CollapsibleTrigger {
@@ -454,7 +430,6 @@ impl CollapsibleTrigger {
     ) -> Self {
         let theme = ThemeState::get();
         let label_text = label.into();
-        let is_open_for_state = is_open.clone();
         let is_open_for_click = is_open.clone();
         let scale_anim_for_click = scale_anim;
         let opacity_anim_for_click = opacity_anim;
@@ -465,42 +440,51 @@ impl CollapsibleTrigger {
         let surface_hover = theme.color(ColorToken::SurfaceElevated);
         let radius = theme.radius(RadiusToken::Md);
 
-        let inner = stateful::<ButtonState>()
-            .deps([is_open.signal_id()])
-            .on_state(move |ctx| {
-                let state = ctx.state();
-                let section_is_open = is_open_for_state.get();
+        let interaction = Interaction::keyed(&format!(
+            "cn-collapsible-trigger-{}",
+            is_open.signal_id().to_raw()
+        ));
+        let (hovered, pressed) = (
+            interaction.hovered().signal(),
+            interaction.pressed().signal(),
+        );
+        let bg = computed(move |g: &ReactiveGraph| {
+            if g.get(hovered).unwrap_or(false) || g.get(pressed).unwrap_or(false) {
+                surface_hover.with_alpha(0.5)
+            } else {
+                blinc_core::Color::TRANSPARENT
+            }
+        });
+        let open = is_open.signal();
+        let chevron_angle = computed(move |g: &ReactiveGraph| {
+            if g.get(open).unwrap_or(false) {
+                180.0
+            } else {
+                0.0
+            }
+        });
 
-                // Background color based on hover state
-                let bg = match state {
-                    ButtonState::Hovered | ButtonState::Pressed => surface_hover.with_alpha(0.5),
-                    _ => blinc_core::Color::TRANSPARENT,
-                };
-
-                // Chevron direction based on open state
-                let chevron_svg = if section_is_open {
-                    CHEVRON_UP_SVG
-                } else {
-                    CHEVRON_DOWN_SVG
-                };
-
+        let inner = div()
+            .class("cn-collapsible-trigger")
+            .flex_row()
+            .w_full()
+            .justify_between()
+            .items_center()
+            .p(12.0)
+            .rounded(radius)
+            .cursor(CursorStyle::Pointer)
+            .bg(&bg)
+            .track(&interaction)
+            .child(
+                text(&label_text)
+                    .size(theme.typography().text_sm)
+                    .color(text_primary),
+            )
+            .child(
                 div()
-                    .class("cn-collapsible-trigger")
-                    .flex_row()
-                    .w_full()
-                    .justify_between()
-                    .items_center()
-                    .p(12.0)
-                    .rounded(radius)
-                    .cursor(CursorStyle::Pointer)
-                    .bg(bg)
-                    .child(
-                        text(&label_text)
-                            .size(theme.typography().text_sm)
-                            .color(text_primary),
-                    )
-                    .child(svg(chevron_svg).size(16.0, 16.0).color(text_secondary))
-            })
+                    .rotate_deg(&chevron_angle)
+                    .child(svg(CHEVRON_DOWN_SVG).size(16.0, 16.0).color(text_secondary)),
+            )
             .on_click(move |_| {
                 let current = is_open_for_click.get();
                 let new_state = !current;
@@ -546,6 +530,14 @@ impl ElementBuilder for CollapsibleTrigger {
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
         self.inner.element_classes()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
+    }
+
+    fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
+        ElementBuilder::event_handlers(&self.inner)
     }
 }
 
