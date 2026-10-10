@@ -86,6 +86,7 @@ Three calls hide content. They differ in what exists while it is hidden:
 | `.show(cond, \|\| ..)` | Nothing is built | The branch is built, or torn down with its state |
 | `.visible(cond)` | The element exists, with `display: none` | Its display flips and layout runs |
 | `.when(cond, \|d\| ..)` | The children `f` added exist, hidden | Their display flips and layout runs |
+| `.collapsed_when(cond)` | The element and its content exist, at no height | Its height changes and layout runs, which a height animation can follow |
 
 Use `show` when the hidden content is expensive to keep or should start
 fresh each time. Use `visible` when it should keep its state and toggles

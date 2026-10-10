@@ -159,6 +159,7 @@ These take `impl IntoReactive<T>`: a value, a signal, a state or a computed.
 | `.gap(value)` | `f32` | Runs layout |
 | `.visible(value)` | `bool` | Flips `display: none`, runs layout |
 | `.absolute_when(value)` | `bool` | Takes the element out of flow and back, runs layout |
+| `.collapsed_when(value)` | `bool` | Collapses the element to no height and back to its content's, runs layout |
 | `.class_when(name, value)` | `bool` | Adds or removes a class; see below |
 | `.when(value, \|d\| ..)` | `bool` | Shows or hides the children `f` adds; see below |
 
@@ -239,6 +240,22 @@ the same as `.class(name)` or nothing.
   properties directly.
 - `.absolute_when(signal)` positions the element absolutely while the
   signal holds, keeping its insets.
+- `.collapsed_when(signal)` collapses the element to no height while the
+  signal holds and gives it its content's height back when it stops. The
+  content stays laid out, so with `overflow_clip` and a height
+  `animate_bounds` the element animates open and shut:
+
+  ```rust
+  use blinc_layout::visual_animation::VisualAnimationConfig;
+
+  let closed = computed(move |g| !g.get(open).unwrap_or(false));
+
+  div()
+      .overflow_clip()
+      .animate_bounds(VisualAnimationConfig::height().with_key("faq-1").clip_to_animated())
+      .collapsed_when(&closed)
+      .child(answer())
+  ```
 
 To build content only while a condition holds, use `show` or `show_or`; see
 [Lists & Conditional Content](./lists-branches.md).

@@ -2849,6 +2849,49 @@ impl Div {
         self
     }
 
+    /// Collapse the element to no height while `condition` holds, and give
+    /// it back the height of its content when it stops.
+    ///
+    /// Its content stays laid out and painted: with `overflow_clip` it is
+    /// cut off rather than removed, so a height animation
+    /// ([`Self::animate_bounds`]) shows it closing. A `State<bool>`, a
+    /// `Signal<bool>` or a `Computed<bool>` is followed in place, with a
+    /// layout pass and no rebuild. While expanded the element is as tall as
+    /// its content, whatever height it was given.
+    pub fn collapsed_when(mut self, condition: impl crate::binding::IntoReactive<bool>) -> Self {
+        use crate::binding::{LayoutPendingBinding, Reactive};
+        use crate::property::PropertyId;
+        fn write(style: &mut taffy::Style, collapsed: bool) {
+            style.size.height = if collapsed {
+                Dimension::length(0.0)
+            } else {
+                Dimension::auto()
+            };
+        }
+        match condition.into_reactive() {
+            Reactive::Const(collapsed) => write(&mut self.style, collapsed),
+            Reactive::Bound(state) => {
+                write(&mut self.style, state.try_get().unwrap_or(false));
+                self.pending_bindings
+                    .push(Box::new(LayoutPendingBinding::new(
+                        state,
+                        PropertyId::Height,
+                        write,
+                    )));
+            }
+            Reactive::Computed(computed) => {
+                write(&mut self.style, computed.try_get().unwrap_or(false));
+                self.pending_bindings
+                    .push(Box::new(LayoutPendingBinding::from_computed(
+                        computed,
+                        PropertyId::Height,
+                        write,
+                    )));
+            }
+        }
+        self
+    }
+
     /// Set position to relative (default)
     pub fn relative(mut self) -> Self {
         self.style.position = Position::Relative;
