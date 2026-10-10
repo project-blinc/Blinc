@@ -293,3 +293,29 @@ mod viewport_units {
         assert_eq!(parse_css_px("12"), Some(12.0));
     }
 }
+
+#[test]
+fn transform_origin_keywords_name_their_own_axis() {
+    let cases: &[(&str, Option<[f32; 2]>)] = &[
+        ("top center", Some([50.0, 0.0])),
+        ("center top", Some([50.0, 0.0])),
+        ("top left", Some([0.0, 0.0])),
+        ("left top", Some([0.0, 0.0])),
+        ("bottom right", Some([100.0, 100.0])),
+        ("center left", Some([0.0, 50.0])),
+        ("right center", Some([100.0, 50.0])),
+        ("top", Some([50.0, 0.0])),
+        ("right", Some([100.0, 50.0])),
+        ("center", Some([50.0, 50.0])),
+        ("25%", Some([25.0, 50.0])),
+        ("25% 75%", Some([25.0, 75.0])),
+        ("left right", None),
+        ("top bottom", None),
+    ];
+    for (value, expected) in cases {
+        let css = format!(".a {{ transform-origin: {value}; }}");
+        let sheet = Stylesheet::parse(&css).expect("parse");
+        let got = sheet.get_class("a").and_then(|s| s.transform_origin);
+        assert_eq!(got, *expected, "transform-origin: {value}");
+    }
+}

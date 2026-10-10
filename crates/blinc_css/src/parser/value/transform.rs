@@ -171,31 +171,39 @@ pub(crate) fn parse_skew_function(input: &str) -> Option<(f32, f32)> {
 /// Parse `transform-origin: X Y` where X/Y can be percentages or keywords
 /// Returns [x%, y%] where 0% = left/top, 50% = center, 100% = right/bottom
 pub(crate) fn parse_transform_origin(value: &str) -> Option<[f32; 2]> {
-    let parts: Vec<&str> = value.split_whitespace().collect();
-    let parse_one = |s: &str| -> Option<f32> {
-        match s {
-            "left" | "top" => Some(0.0),
-            "center" => Some(50.0),
-            "right" | "bottom" => Some(100.0),
-            _ => {
-                if let Some(pct) = s.strip_suffix('%') {
-                    pct.trim().parse::<f32>().ok()
-                } else {
-                    s.parse::<f32>().ok() // bare number = percentage
-                }
-            }
-        }
+    // A keyword names its own axis, so `top center` and `center top` are the
+    // same point; otherwise the first value is horizontal. One value leaves
+    // the other axis at center.
+    enum Part {
+        X(f32),
+        Y(f32),
+        Either(f32),
+    }
+    let parse_one = |s: &str| -> Option<Part> {
+        Some(match s {
+            "left" => Part::X(0.0),
+            "right" => Part::X(100.0),
+            "top" => Part::Y(0.0),
+            "bottom" => Part::Y(100.0),
+            "center" => Part::Either(50.0),
+            _ => Part::Either(match s.strip_suffix('%') {
+                Some(pct) => pct.trim().parse::<f32>().ok()?,
+                None => s.parse::<f32>().ok()?, // bare number = percentage
+            }),
+        })
     };
-    match parts.len() {
-        1 => {
-            let v = parse_one(parts[0])?;
-            Some([v, v])
+    let parts: Vec<Part> = value
+        .split_whitespace()
+        .map(parse_one)
+        .collect::<Option<_>>()?;
+    match parts.as_slice() {
+        [Part::Y(y)] => Some([50.0, *y]),
+        [Part::X(v) | Part::Either(v)] => Some([*v, 50.0]),
+        [Part::X(_), Part::X(_)] | [Part::Y(_), Part::Y(_)] => None,
+        [Part::Y(y), Part::X(x) | Part::Either(x)] | [Part::Either(y), Part::X(x)] => {
+            Some([*x, *y])
         }
-        2 => {
-            let x = parse_one(parts[0])?;
-            let y = parse_one(parts[1])?;
-            Some([x, y])
-        }
+        [Part::X(x) | Part::Either(x), Part::Y(y) | Part::Either(y)] => Some([*x, *y]),
         _ => None,
     }
 }

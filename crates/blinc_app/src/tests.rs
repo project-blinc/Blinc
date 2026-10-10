@@ -1150,9 +1150,9 @@ fn an_animated_panel_carries_its_text() {
     };
 
     // Where the text sits inside the panel, as fractions of the panel's
-    // width and height: the panel is the white area, the text the dark
-    // pixels inside it.
-    let measure = |px: &[u8]| -> Option<(f32, f32)> {
+    // width and height, and the panel's horizontal centre: the panel is the
+    // white area, the text the dark pixels inside it.
+    let measure = |px: &[u8]| -> Option<(f32, f32, f32)> {
         let at = |x: u32, y: u32| {
             let i = ((y * w + x) * 4) as usize;
             px[i] as u32 + px[i + 1] as u32 + px[i + 2] as u32
@@ -1186,6 +1186,7 @@ fn an_animated_panel_carries_its_text() {
         Some((
             (tx0 - px0) as f32 / (px1 - px0) as f32,
             (ty0 - py0) as f32 / (py1 - py0) as f32,
+            (px0 + px1) as f32 / 2.0,
         ))
     };
 
@@ -1196,6 +1197,13 @@ fn an_animated_panel_carries_its_text() {
     assert!(
         (mid.0 - rest.0).abs() < 0.04 && (mid.1 - rest.1).abs() < 0.08,
         "the text sits at {mid:?} of the panel mid-animation and at {rest:?} at rest"
+    );
+    // Scaled about its top centre, the panel keeps its horizontal centre.
+    assert!(
+        (mid.2 - rest.2).abs() < 3.0,
+        "the panel's centre moved from {} at rest to {} mid-animation",
+        rest.2,
+        mid.2
     );
 }
 
