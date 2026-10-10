@@ -311,10 +311,7 @@ impl ResizableGroup {
             let min_size = panel_config.min_size;
             let max_size = panel_config.max_size;
 
-            // Build panel wrapper
-            let panel_wrapper: Div;
-
-            if is_flex {
+            let panel_wrapper: Div = if is_flex {
                 // Flex panel - grows to fill available space
                 let mut wrapper = div().overflow_clip().flex_grow_value(flex_grow_factor);
                 match direction {
@@ -342,7 +339,7 @@ impl ResizableGroup {
                 if let Some(content) = panel_config.content {
                     wrapper = wrapper.child_box(content);
                 }
-                panel_wrapper = wrapper;
+                wrapper
             } else {
                 // A fixed panel's size is bound to its state, so a drag
                 // patches it in place and runs layout, with no rebuild.
@@ -380,8 +377,8 @@ impl ResizableGroup {
                             .child_box(content),
                     );
                 }
-                panel_wrapper = sized;
-            }
+                sized
+            };
 
             container = container.child(panel_wrapper);
 
