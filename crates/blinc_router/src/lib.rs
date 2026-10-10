@@ -35,7 +35,9 @@ pub mod transition;
 use std::sync::{Arc, Mutex};
 
 use blinc_core::context_state::BlincContextState;
-use blinc_core::reactive::{ReactiveGraph, Signal, computed};
+use blinc_core::reactive::{ReactiveGraph, Signal, computed, signal};
+use blinc_layout::region::Row;
+use blinc_layout::selector::query_motion;
 use history::RouterHistory;
 use route::RouteTrie;
 
@@ -316,7 +318,11 @@ impl Router {
     /// wrapping. Pulled out of `outlet()` so the latter can build it
     /// again on every route change without duplicating the
     /// suspension-scope bookkeeping.
-    fn build_current_view(&self) -> blinc_layout::div::Div {
+    ///
+    /// `version` names this navigation. A route with a `PageTransition`
+    /// gets a motion keyed by it, and the key to address that motion's exit
+    /// comes back with the view.
+    fn build_current_view(&self, version: u32) -> (blinc_layout::div::Div, Option<String>) {
         let view_and_ctx = {
             let state = self.inner.lock().unwrap();
             state.current_match.as_ref().and_then(|matched| {
@@ -372,23 +378,14 @@ impl Router {
             blinc_animation::suspension::exit_scope();
 
             // Wrap in a motion container when the route declares a
-            // `PageTransition` so the page actually animates on
-            // appear. The outlet builds a fresh row per navigation, so
-            // the new view's motion container is freshly minted on every
-            // route change and its `enter_animation` plays.
+            // `PageTransition` so the page animates on appear and on
+            // leaving.
             //
-            // `.transient()` is critical here: without it, motion
-            // defaults to `use_stable_key=true` and reuses the same
-            // `RenderState::stable_motions` entry on every navigation,
-            // and the state machine accumulates partial transitions
-            // across them (visible as ghosted / half-scaled glyphs after
-            // a few navigations). With `transient`, motion state is
-            // keyed by the freshly allocated `LayoutNodeId` and cleaned
-            // up on subtree removal.
-            //
-            // The `exit_animation` is set for completeness but does not
-            // play: the outlet removes the outgoing view at once, and
-            // exit playback needs a stable-keyed motion it can address.
+            // The motion is keyed by the navigation, so each page has a
+            // motion of its own: its exit can be addressed while the
+            // outlet keeps the page mounted, and state cannot build up
+            // across navigations the way it did when one key was shared.
+            // The renderer drops a motion's state once its page is gone.
             if let Some(transition) = transition {
                 // The host `Div` + motion wrapper must size to fit
                 // their child (the view), not collapse to zero and
@@ -398,18 +395,20 @@ impl Router {
                 // page to occupy exactly the space the bare view
                 // would have. `w_fit().h_fit()` matches the natural
                 // sizing of the view returned by the route closure.
-                blinc_layout::div::div().w_fit().h_fit().child(
-                    blinc_layout::motion::motion()
-                        .transient()
+                let key = format!("router-page-{:p}-{}", Arc::as_ptr(&self.inner), version);
+                let exit_key = format!("motion:{key}:child:0");
+                let page = blinc_layout::div::div().w_fit().h_fit().child(
+                    blinc_layout::motion::motion_derived(&key)
                         .enter_animation(transition.enter)
                         .exit_animation(transition.exit)
                         .child(result),
-                )
+                );
+                (page, Some(exit_key))
             } else {
-                result
+                (result, None)
             }
         } else {
-            blinc_layout::div::div()
+            (blinc_layout::div::div(), None)
         }
     }
 
@@ -422,6 +421,10 @@ impl Router {
     /// etc.) is left untouched (GH #35). Each navigation builds the view
     /// again, even to the same path.
     ///
+    /// A route with a [`PageTransition`] plays the new page's enter
+    /// animation and keeps the old page mounted, out of flow at the start
+    /// of the outlet, until its exit animation is done.
+    ///
     /// The outer `Div` is unstyled and keeps the return type chainable
     /// (`router.outlet().flex_grow()`).
     pub fn outlet(&self) -> blinc_layout::div::Div {
@@ -429,14 +432,28 @@ impl Router {
         let Some(sig) = self.ensure_route_signal() else {
             // Before the reactive graph exists there is nothing to follow,
             // and the view is built once.
-            return host.child(self.build_current_view());
+            return host.child(self.build_current_view(0).0);
         };
         let router = self.clone();
         let version = computed(move |g: &ReactiveGraph| vec![g.get(sig).unwrap_or(0)]);
         host.for_each(
             &version,
             |version: &u32| *version,
-            move |_| router.build_current_view(),
+            move |version: u32| {
+                let (view, exit_key) = router.build_current_view(version);
+                let Some(exit_key) = exit_key else {
+                    return Row::new(view);
+                };
+                let leaving = signal(false);
+                let done_key = exit_key.clone();
+                Row::new(view.absolute_when(leaving)).on_leave(
+                    move || {
+                        leaving.set(true);
+                        query_motion(&exit_key).exit();
+                    },
+                    move || !query_motion(&done_key).is_animating(),
+                )
+            },
         )
     }
 }
