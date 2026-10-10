@@ -169,7 +169,6 @@ impl Select {
         let radius = theme.radius(RadiusToken::Md);
 
         // Colors
-        let bg = theme.color(ColorToken::Surface);
         let border = theme.color(ColorToken::Border);
         let border_hover = theme.color(ColorToken::BorderHover);
         let text_color = theme.color(ColorToken::TextPrimary);
