@@ -145,11 +145,7 @@ fn list(items: Signal<Vec<u32>>) -> Div {
         .w(200.0)
         .flex_col()
         .child(div().h(5.0))
-        .for_each(
-            move |g| g.get(items).unwrap_or_default(),
-            |item| *item,
-            |item| row(&item),
-        )
+        .for_each(items, |item| *item, |item| row(&item))
         .child(div().h(7.0))
 }
 
@@ -230,7 +226,7 @@ fn an_item_is_built_once_while_it_stays() {
     let builds = Arc::new(AtomicUsize::new(0));
     let counted = Arc::clone(&builds);
     let ui = div().w(200.0).for_each(
-        move |g| g.get(items).unwrap_or_default(),
+        items,
         |item| *item,
         move |item| {
             counted.fetch_add(1, Ordering::SeqCst);
@@ -256,7 +252,7 @@ fn a_row_takes_what_it_created_when_it_goes() {
     let made: Arc<Mutex<Vec<(u32, Signal<u32>)>>> = Arc::new(Mutex::new(Vec::new()));
     let sink = Arc::clone(&made);
     let ui = div().w(200.0).for_each(
-        move |g| g.get(items).unwrap_or_default(),
+        items,
         |item| *item,
         move |item| {
             sink.lock().unwrap().push((item, signal(item)));
@@ -287,11 +283,7 @@ fn a_handler_on_a_later_node_survives_an_insert_before_it() {
     let ui = div()
         .w(200.0)
         .flex_col()
-        .for_each(
-            move |g| g.get(items).unwrap_or_default(),
-            |item| *item,
-            |item| row(&item).on_click(|_| {}),
-        )
+        .for_each(items, |item| *item, |item| row(&item).on_click(|_| {}))
         .child(div().h(7.0).on_click(|_| {}));
     let (mut tree, root) = mount(&ui);
     let before = kids(&tree, root);
@@ -319,11 +311,10 @@ fn a_new_row_gets_the_stylesheet() {
     use blinc_core::Brush;
     let _g = serial();
     let items = signal(vec![1_u32]);
-    let ui = div().w(200.0).flex_col().for_each(
-        move |g| g.get(items).unwrap_or_default(),
-        |item| *item,
-        |item| row(&item).class("r"),
-    );
+    let ui = div()
+        .w(200.0)
+        .flex_col()
+        .for_each(items, |item| *item, |item| row(&item).class("r"));
     let mut tree = RenderTree::from_element(&ui);
     tree.set_stylesheet(
         blinc_layout::css_parser::Stylesheet::parse(".r { background: #ff0000; }").expect("css"),
@@ -341,4 +332,47 @@ fn a_new_row_gets_the_stylesheet() {
     for node in kids(&tree, root) {
         assert_eq!(fill(node), (1.0, 0.0, 0.0));
     }
+}
+
+#[test]
+fn a_list_can_come_from_a_state_a_computed_or_a_plain_vec() {
+    use blinc_core::reactive::{State, computed, global_dirty_flag, global_graph};
+    let _g = serial();
+
+    let source = signal(vec![1_u32, 2]);
+    let state = State::new(source, global_graph(), global_dirty_flag());
+    let (mut tree, root) = mount(&div().w(200.0).flex_col().for_each(
+        state.clone(),
+        |item| *item,
+        |item| row(&item),
+    ));
+    assert_eq!(heights(&tree, root), vec![10.0, 20.0]);
+    state.set(vec![1, 2, 3]);
+    frame(&mut tree);
+    assert_eq!(heights(&tree, root), vec![10.0, 20.0, 30.0]);
+
+    // A list derived from something else is a computed.
+    let evens = computed(move |g| {
+        g.get(source)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|n| n % 2 == 0)
+            .collect::<Vec<u32>>()
+    });
+    let (mut tree, root) = mount(&div().w(200.0).flex_col().for_each(
+        &evens,
+        |item| *item,
+        |item| row(&item),
+    ));
+    source.set(vec![2, 3, 4]);
+    frame(&mut tree);
+    assert_eq!(heights(&tree, root), vec![20.0, 40.0]);
+
+    // A plain list is shown as it is.
+    let (tree, root) = mount(&div().w(200.0).flex_col().for_each(
+        vec![5_u32, 6],
+        |item| *item,
+        |item| row(&item),
+    ));
+    assert_eq!(heights(&tree, root), vec![50.0, 60.0]);
 }

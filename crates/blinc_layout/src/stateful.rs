@@ -1214,6 +1214,14 @@ pub fn queue_class_toggle(node_id: LayoutNodeId, class: std::sync::Arc<str>, on:
     request_redraw();
 }
 
+/// Put updates taken from the queue back, to be applied on a later drain.
+pub(crate) fn requeue_partial_updates(updates: Vec<PartialPropertyUpdate>) {
+    if updates.is_empty() {
+        return;
+    }
+    PENDING_PARTIAL_PROP_UPDATES.lock().unwrap().extend(updates);
+}
+
 /// Queue the rows of a region to be brought up to date with its source.
 pub fn queue_region_update(node_id: LayoutNodeId, region: u64) {
     PENDING_PARTIAL_PROP_UPDATES

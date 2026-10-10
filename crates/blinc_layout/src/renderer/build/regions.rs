@@ -22,6 +22,17 @@ impl RenderTree {
             return;
         }
         let evaluation = region.logic.borrow_mut().evaluate();
+        // What a row's `start` queued (a class that takes it out of flow, say)
+        // lands in this pass, so the frame never shows the old row and the
+        // new one together. Region updates wait for the next drain.
+        if evaluation.started {
+            let (regions, writes): (Vec<_>, Vec<_>) =
+                crate::stateful::take_pending_partial_prop_updates()
+                    .into_iter()
+                    .partition(|update| update.region_update.is_some());
+            crate::stateful::requeue_partial_updates(regions);
+            self.apply_partial_property_updates(writes);
+        }
         // A row that is leaving is asked again next frame.
         if region.logic.borrow().is_leaving() {
             crate::stateful::queue_region_update(parent, region_id);

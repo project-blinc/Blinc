@@ -21,7 +21,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use blinc_core::owner::Owner;
-use blinc_core::reactive::{Computed, ReactiveGraph, computed};
+use blinc_core::reactive::{Computed, DerivedId, ReactiveGraph, computed, dispose_derived};
 
 use crate::div::ElementBuilder;
 use crate::tree::LayoutNodeId;
@@ -105,6 +105,9 @@ pub(crate) struct Evaluation {
     /// Rows whose key has gone but that stay mounted until they are done.
     /// They are not among `rows`.
     pub lingering: Vec<RowId>,
+    /// Whether a row began to leave in this evaluation, so its `start` has
+    /// run and may have queued writes.
+    pub started: bool,
 }
 
 pub(crate) trait RegionLogic {
@@ -135,6 +138,9 @@ struct Lingering {
 /// A list: the rows are the items, matched by key.
 pub(crate) struct ForRegion<T, K> {
     each: Computed<Vec<T>>,
+    /// `each`, when the list made it itself and so disposes it, rather than
+    /// being handed one to read.
+    owned_each: Option<DerivedId>,
     key: Box<dyn Fn(&T) -> K>,
     item: Item<T>,
     rows: HashMap<K, Mounted>,
@@ -150,12 +156,14 @@ where
     K: Hash + Eq + Clone + 'static,
 {
     pub(crate) fn new(
-        each: impl Fn(&ReactiveGraph) -> Vec<T> + Send + 'static,
+        each: Computed<Vec<T>>,
+        owns_each: bool,
         key: impl Fn(&T) -> K + 'static,
         item: impl Fn(T) -> Option<Row> + 'static,
     ) -> Self {
         Self {
-            each: computed(each),
+            owned_each: owns_each.then(|| each.derived_id()),
+            each,
             key: Box::new(key),
             item: Box::new(item),
             rows: HashMap::new(),
@@ -212,6 +220,7 @@ where
             .cloned()
             .collect();
         let mut removed = Vec::with_capacity(gone.len());
+        let mut started = false;
         // Rows already waiting are asked before the ones that start now, so
         // a row is never done in the pass that starts it.
         let (finished, waiting): (Vec<Lingering>, Vec<Lingering>) =
@@ -230,6 +239,7 @@ where
             match row.exit {
                 Some(Exit { start, done }) => {
                     start();
+                    started = true;
                     self.lingering.push(Lingering {
                         id: row.id,
                         owner: row.owner,
@@ -247,6 +257,7 @@ where
             rows,
             removed,
             lingering,
+            started,
         }
     }
 
@@ -263,6 +274,9 @@ where
 
 impl<T, K> Drop for ForRegion<T, K> {
     fn drop(&mut self) {
+        if let Some(id) = self.owned_each {
+            dispose_derived(id);
+        }
         for row in self.rows.values() {
             row.owner.dispose();
         }
@@ -272,6 +286,28 @@ impl<T, K> Drop for ForRegion<T, K> {
         for owner in self.leaving.values() {
             owner.dispose();
         }
+    }
+}
+
+/// The computed a list reads its items from, and whether it was made here.
+///
+/// A computed is read as it is. A state or a plain list gets a computed of
+/// its own, which the list disposes with itself.
+pub(crate) fn source_of<T>(items: crate::binding::Reactive<Vec<T>>) -> (Computed<Vec<T>>, bool)
+where
+    T: Clone + Send + 'static,
+{
+    use crate::binding::Reactive;
+    match items {
+        Reactive::Computed(computed) => (computed, false),
+        Reactive::Bound(state) => {
+            let signal = state.signal();
+            (
+                computed(move |graph: &ReactiveGraph| graph.get(signal).unwrap_or_default()),
+                true,
+            )
+        }
+        Reactive::Const(list) => (computed(move |_: &ReactiveGraph| list.clone()), true),
     }
 }
 

@@ -77,7 +77,7 @@ fn list(items: Signal<Vec<u32>>, log: &Log) -> Div {
         .flex_col()
         .child(div().h(5.0))
         .for_each(
-            move |g| g.get(items).unwrap_or_default(),
+            items,
             |item| *item,
             move |item| {
                 log.made.lock().unwrap().push((item, signal(item)));
@@ -268,4 +268,42 @@ fn a_region_queued_twice_is_asked_again_once() {
 
     let queued = blinc_layout::stateful::take_pending_partial_prop_updates();
     assert_eq!(queued.len(), 1, "duplicates carry on from frame to frame");
+}
+
+#[test]
+fn what_a_row_queues_when_it_starts_to_leave_lands_in_the_same_frame() {
+    let _g = serial();
+    let items = signal(vec![1_u32, 2]);
+    let flags: Arc<Mutex<Vec<(u32, Signal<bool>)>>> = Arc::new(Mutex::new(Vec::new()));
+    let made = Arc::clone(&flags);
+    let ui = div().w(200.0).flex_col().for_each(
+        items,
+        |item| *item,
+        move |item| {
+            let leaving = signal(false);
+            made.lock().unwrap().push((item, leaving));
+            Row::new(div().h(10.0).class_when("leaving", leaving))
+                .on_leave(move || leaving.set(true), || false)
+        },
+    );
+    let mut tree = RenderTree::from_element(&ui);
+    tree.set_stylesheet(
+        blinc_layout::css_parser::Stylesheet::parse(".leaving { opacity: 0.25; }").expect("css"),
+    );
+    tree.apply_stylesheet_base_styles();
+    tree.compute_layout(200.0, 400.0);
+    let root = tree.root().unwrap();
+    let second = kids(&tree, root)[1];
+    let opacity = |tree: &RenderTree| tree.get_render_node(second).unwrap().props.opacity;
+    assert_eq!(opacity(&tree), 1.0);
+
+    items.set(vec![1]);
+    frame(&mut tree);
+
+    assert_eq!(kids(&tree, root).len(), 2, "the row went at once");
+    assert_eq!(
+        opacity(&tree),
+        0.25,
+        "the write its start queued waited for the next frame"
+    );
 }

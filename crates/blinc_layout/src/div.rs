@@ -723,9 +723,9 @@ impl Div {
 
     /// One child per item `each` yields, in order, kept up to date in place.
     ///
-    /// `each` is read like the body of a `computed`, through the graph it is
-    /// given: when something it reads changes, the rows are brought up to
-    /// date. `key` names an item; an item whose key was there before keeps its
+    /// `each` is a signal, a state or a computed of a `Vec`, or a plain one:
+    /// when it changes, the rows are brought up to date. To show a list
+    /// derived from other things, make it with `computed`. `key` names an item; an item whose key was there before keeps its
     /// element and everything it owns, a new key gets `item(value)` built
     /// under a scope of its own, and a key that has gone takes its element and
     /// its scope with it, once a [`crate::region::Row::on_leave`] it asked
@@ -734,23 +734,21 @@ impl Div {
     /// The element is the container: the rows lay out as its own children,
     /// with its direction, gap and alignment, and children added before or
     /// after this call stay where they are. An element has one such region.
-    pub fn for_each<T, I, K, R>(
+    pub fn for_each<T, K, R>(
         self,
-        each: impl Fn(&blinc_core::reactive::ReactiveGraph) -> I + Send + 'static,
+        each: impl crate::binding::IntoReactive<Vec<T>>,
         key: impl Fn(&T) -> K + 'static,
         item: impl Fn(T) -> R + 'static,
     ) -> Self
     where
-        I: IntoIterator<Item = T>,
         T: Clone + Send + Sync + 'static,
         K: std::hash::Hash + Eq + Clone + 'static,
         R: Into<crate::region::Row>,
     {
-        let logic = crate::region::ForRegion::new(
-            move |graph| each(graph).into_iter().collect::<Vec<T>>(),
-            key,
-            move |value| Some(item(value).into()),
-        );
+        let (source, owned) = crate::region::source_of(each.into_reactive());
+        let logic = crate::region::ForRegion::new(source, owned, key, move |value| {
+            Some(item(value).into())
+        });
         self.with_region(logic)
     }
 
@@ -815,7 +813,10 @@ impl Div {
                 }
             };
         let logic = crate::region::ForRegion::new(
-            move |graph| each(graph),
+            blinc_core::reactive::computed(move |graph: &blinc_core::reactive::ReactiveGraph| {
+                each(graph)
+            }),
+            true,
             |shown: &bool| *shown,
             move |shown| {
                 if shown {
