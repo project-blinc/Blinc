@@ -2806,6 +2806,49 @@ impl Div {
         self
     }
 
+    /// Take the element out of flow, as [`Self::absolute`] does, while
+    /// `condition` holds.
+    ///
+    /// With a `State<bool>`, a `Signal<bool>` or a `Computed<bool>` the
+    /// element goes out of flow and back in place, with a layout pass and no
+    /// rebuild. It keeps whatever insets it has; with none it sits at the
+    /// start of its container. A constant is the same as [`Self::absolute`]
+    /// or nothing.
+    pub fn absolute_when(mut self, condition: impl crate::binding::IntoReactive<bool>) -> Self {
+        use crate::binding::{LayoutPendingBinding, Reactive};
+        use crate::property::PropertyId;
+        fn write(style: &mut taffy::Style, out_of_flow: bool) {
+            style.position = if out_of_flow {
+                Position::Absolute
+            } else {
+                Position::Relative
+            };
+        }
+        match condition.into_reactive() {
+            Reactive::Const(true) => write(&mut self.style, true),
+            Reactive::Const(false) => {}
+            Reactive::Bound(state) => {
+                write(&mut self.style, state.try_get().unwrap_or(false));
+                self.pending_bindings
+                    .push(Box::new(LayoutPendingBinding::new(
+                        state,
+                        PropertyId::Position,
+                        write,
+                    )));
+            }
+            Reactive::Computed(computed) => {
+                write(&mut self.style, computed.try_get().unwrap_or(false));
+                self.pending_bindings
+                    .push(Box::new(LayoutPendingBinding::from_computed(
+                        computed,
+                        PropertyId::Position,
+                        write,
+                    )));
+            }
+        }
+        self
+    }
+
     /// Set position to relative (default)
     pub fn relative(mut self) -> Self {
         self.style.position = Position::Relative;
