@@ -51,58 +51,64 @@ fn find_class(tree: &RenderTree, class: &str) -> Option<LayoutNodeId> {
 
 #[test]
 fn the_tooltip_enter_uses_the_themes_fast_duration() {
-    init();
-    let sheet = sheet();
-    let style = sheet.get_class("cn-tooltip").expect("no .cn-tooltip rule");
-    let anim = style
-        .animation
-        .as_ref()
-        .expect("the tooltip does not animate in");
-    assert_eq!(anim.name, "cn-tooltip-enter");
-    let fast = blinc_theme::ThemeState::get().animations().duration_fast;
-    assert_eq!(
-        anim.duration_ms as u64, fast,
-        "not the theme's fast duration"
-    );
+    guarded(|| {
+        init();
+        let sheet = sheet();
+        let style = sheet.get_class("cn-tooltip").expect("no .cn-tooltip rule");
+        let anim = style
+            .animation
+            .as_ref()
+            .expect("the tooltip does not animate in");
+        assert_eq!(anim.name, "cn-tooltip-enter");
+        let fast = blinc_theme::ThemeState::get().animations().duration_fast;
+        assert_eq!(
+            anim.duration_ms as u64, fast,
+            "not the theme's fast duration"
+        );
+    })
 }
 
 #[test]
 fn a_tooltip_grows_out_of_the_edge_facing_its_trigger() {
-    for (side, origin) in [
-        (TooltipSide::Top, [50.0, 100.0]),
-        (TooltipSide::Bottom, [50.0, 0.0]),
-        (TooltipSide::Left, [100.0, 50.0]),
-        (TooltipSide::Right, [0.0, 50.0]),
-    ] {
-        let (tree, node) = hover_open(side);
-        let props = &tree.get_render_node(node).unwrap().props;
-        assert_eq!(props.transform_origin, Some(origin), "{side:?}");
-        overlay_stack().lock().unwrap().close_all();
-    }
+    guarded(|| {
+        for (side, origin) in [
+            (TooltipSide::Top, [50.0, 100.0]),
+            (TooltipSide::Bottom, [50.0, 0.0]),
+            (TooltipSide::Left, [100.0, 50.0]),
+            (TooltipSide::Right, [0.0, 50.0]),
+        ] {
+            let (tree, node) = hover_open(side);
+            let props = &tree.get_render_node(node).unwrap().props;
+            assert_eq!(props.transform_origin, Some(origin), "{side:?}");
+            overlay_stack().lock().unwrap().close_all();
+        }
+    })
 }
 
 #[test]
 fn a_tooltip_fades_in_with_its_text_and_settles_opaque() {
-    let (mut tree, node) = hover_open(TooltipSide::Top);
-    let fast = blinc_theme::ThemeState::get().animations().duration_fast as f32;
+    guarded(|| {
+        let (mut tree, node) = hover_open(TooltipSide::Top);
+        let fast = blinc_theme::ThemeState::get().animations().duration_fast as f32;
 
-    tree.css_anim_store().lock().unwrap().tick(fast / 2.0);
-    tree.apply_all_css_animation_props();
-    let props = &tree.get_render_node(node).unwrap().props;
-    assert!(
-        props.opacity > 0.0 && props.opacity < 1.0,
-        "half way in, the tooltip's opacity is {}",
-        props.opacity
-    );
-    assert!(
-        !tree.css_active_patchable(),
-        "the tooltip's text would keep the alpha of the frame it was first painted in"
-    );
+        tree.css_anim_store().lock().unwrap().tick(fast / 2.0);
+        tree.apply_all_css_animation_props();
+        let props = &tree.get_render_node(node).unwrap().props;
+        assert!(
+            props.opacity > 0.0 && props.opacity < 1.0,
+            "half way in, the tooltip's opacity is {}",
+            props.opacity
+        );
+        assert!(
+            !tree.css_active_patchable(),
+            "the tooltip's text would keep the alpha of the frame it was first painted in"
+        );
 
-    for _ in 0..10 {
-        tree.css_anim_store().lock().unwrap().tick(fast / 4.0);
-    }
-    tree.apply_all_css_animation_props();
-    assert_eq!(tree.get_render_node(node).unwrap().props.opacity, 1.0);
-    assert!(!tree.css_has_active());
+        for _ in 0..10 {
+            tree.css_anim_store().lock().unwrap().tick(fast / 4.0);
+        }
+        tree.apply_all_css_animation_props();
+        assert_eq!(tree.get_render_node(node).unwrap().props.opacity, 1.0);
+        assert!(!tree.css_has_active());
+    })
 }

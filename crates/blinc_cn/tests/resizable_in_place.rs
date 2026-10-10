@@ -116,52 +116,58 @@ impl Scene {
 
 #[test]
 fn dragging_the_handle_resizes_the_panel_in_place() {
-    let mut s = scene("rz_drag");
-    assert_eq!(s.first_panel_width(), 200.0);
-    let (x, y) = s.handle_centre();
+    guarded(|| {
+        let mut s = scene("rz_drag");
+        assert_eq!(s.first_panel_width(), 200.0);
+        let (x, y) = s.handle_centre();
 
-    s.move_to(x, y);
-    s.press(x, y);
-    s.move_to(x + 30.0, y);
-    s.move_to(x + 50.0, y);
-    assert_eq!(s.first_panel_width(), 250.0);
+        s.move_to(x, y);
+        s.press(x, y);
+        s.move_to(x + 30.0, y);
+        s.move_to(x + 50.0, y);
+        assert_eq!(s.first_panel_width(), 250.0);
 
-    s.move_to(x - 40.0, y);
-    assert_eq!(s.first_panel_width(), 160.0);
-    s.release(x - 40.0, y);
-    assert_eq!(s.first_panel_width(), 160.0, "releasing moved the panel");
+        s.move_to(x - 40.0, y);
+        assert_eq!(s.first_panel_width(), 160.0);
+        s.release(x - 40.0, y);
+        assert_eq!(s.first_panel_width(), 160.0, "releasing moved the panel");
+    })
 }
 
 #[test]
 fn a_dragged_panel_stays_within_its_bounds() {
-    let mut s = scene("rz_bounds");
-    let (x, y) = s.handle_centre();
-    s.move_to(x, y);
-    s.press(x, y);
-    s.move_to(x + 250.0, y);
-    assert_eq!(s.first_panel_width(), 300.0, "past its maximum");
-    s.move_to(x - 250.0, y);
-    assert_eq!(s.first_panel_width(), 100.0, "past its minimum");
-    s.release(x - 250.0, y);
+    guarded(|| {
+        let mut s = scene("rz_bounds");
+        let (x, y) = s.handle_centre();
+        s.move_to(x, y);
+        s.press(x, y);
+        s.move_to(x + 250.0, y);
+        assert_eq!(s.first_panel_width(), 300.0, "past its maximum");
+        s.move_to(x - 250.0, y);
+        assert_eq!(s.first_panel_width(), 100.0, "past its minimum");
+        s.release(x - 250.0, y);
+    })
 }
 
 #[test]
 fn the_handle_shows_the_primary_colour_only_while_dragged() {
-    let mut s = scene("rz_colour");
-    let theme = ThemeState::get();
-    let (rest, active) = (
-        theme.color(ColorToken::Border),
-        theme.color(ColorToken::Primary),
-    );
-    assert_eq!(s.bar_color(), rest);
+    guarded(|| {
+        let mut s = scene("rz_colour");
+        let theme = ThemeState::get();
+        let (rest, active) = (
+            theme.color(ColorToken::Border),
+            theme.color(ColorToken::Primary),
+        );
+        assert_eq!(s.bar_color(), rest);
 
-    let (x, y) = s.handle_centre();
-    s.move_to(x, y);
-    s.press(x, y);
-    s.move_to(x + 20.0, y);
-    assert_eq!(s.bar_color(), active, "not highlighted while dragged");
-    s.release(x + 20.0, y);
-    assert_eq!(s.bar_color(), rest, "still highlighted after the drag");
+        let (x, y) = s.handle_centre();
+        s.move_to(x, y);
+        s.press(x, y);
+        s.move_to(x + 20.0, y);
+        assert_eq!(s.bar_color(), active, "not highlighted while dragged");
+        s.release(x + 20.0, y);
+        assert_eq!(s.bar_color(), rest, "still highlighted after the drag");
+    })
 }
 
 fn panels(group: blinc_cn::ResizableGroupBuilder) -> blinc_cn::ResizableGroupBuilder {
@@ -177,94 +183,100 @@ fn panels(group: blinc_cn::ResizableGroupBuilder) -> blinc_cn::ResizableGroupBui
 
 #[test]
 fn groups_made_in_different_places_keep_their_own_sizes() {
-    init();
-    // Neither has a key: each is named by where it was made.
-    let first = panels(resizable_group());
-    let second = panels(resizable_group());
-    let host = div()
-        .w(600.0)
-        .h(400.0)
-        .flex_col()
-        .child(div().w_full().h(200.0).child(first))
-        .child(div().w_full().h(200.0).child(second));
-    let mut s = Scene {
-        tree: RenderTree::from_element(&host),
-        router: EventRouter::new(),
-    };
-    s.tree.compute_layout(600.0, 400.0);
-    let width = |s: &Scene, row: usize| {
-        let root = s.tree.root().unwrap();
-        let slot = s.tree.layout_tree.children(root)[row];
-        let group = s.tree.layout_tree.children(slot)[0];
-        let panel = s.tree.layout_tree.children(group)[0];
-        s.tree.get_absolute_bounds(panel).unwrap().width
-    };
+    guarded(|| {
+        init();
+        // Neither has a key: each is named by where it was made.
+        let first = panels(resizable_group());
+        let second = panels(resizable_group());
+        let host = div()
+            .w(600.0)
+            .h(400.0)
+            .flex_col()
+            .child(div().w_full().h(200.0).child(first))
+            .child(div().w_full().h(200.0).child(second));
+        let mut s = Scene {
+            tree: RenderTree::from_element(&host),
+            router: EventRouter::new(),
+        };
+        s.tree.compute_layout(600.0, 400.0);
+        let width = |s: &Scene, row: usize| {
+            let root = s.tree.root().unwrap();
+            let slot = s.tree.layout_tree.children(root)[row];
+            let group = s.tree.layout_tree.children(slot)[0];
+            let panel = s.tree.layout_tree.children(group)[0];
+            s.tree.get_absolute_bounds(panel).unwrap().width
+        };
 
-    let (x, y) = s.handle_centre();
-    s.move_to(x, y);
-    s.press(x, y);
-    s.move_to(x + 40.0, y);
-    s.release(x + 40.0, y);
-    assert_eq!(width(&s, 0), 240.0);
-    assert_eq!(width(&s, 1), 200.0, "the other group's panel moved too");
+        let (x, y) = s.handle_centre();
+        s.move_to(x, y);
+        s.press(x, y);
+        s.move_to(x + 40.0, y);
+        s.release(x + 40.0, y);
+        assert_eq!(width(&s, 0), 240.0);
+        assert_eq!(width(&s, 1), 200.0, "the other group's panel moved too");
+    })
 }
 
 #[test]
 fn on_resize_reports_the_new_sizes() {
-    init();
-    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<f32>>::new()));
-    let log = seen.clone();
-    let group = panels(resizable_group().key("rz_report"))
-        .on_resize(move |sizes| log.lock().unwrap().push(sizes.to_vec()));
-    let host = div().w(600.0).h(200.0).child(group);
-    let mut s = Scene {
-        tree: RenderTree::from_element(&host),
-        router: EventRouter::new(),
-    };
-    s.tree.compute_layout(600.0, 200.0);
+    guarded(|| {
+        init();
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::<Vec<f32>>::new()));
+        let log = seen.clone();
+        let group = panels(resizable_group().key("rz_report"))
+            .on_resize(move |sizes| log.lock().unwrap().push(sizes.to_vec()));
+        let host = div().w(600.0).h(200.0).child(group);
+        let mut s = Scene {
+            tree: RenderTree::from_element(&host),
+            router: EventRouter::new(),
+        };
+        s.tree.compute_layout(600.0, 200.0);
 
-    let (x, y) = s.handle_centre();
-    s.move_to(x, y);
-    s.press(x, y);
-    s.move_to(x + 30.0, y);
-    s.release(x + 30.0, y);
-    assert_eq!(
-        seen.lock().unwrap().last().map(|v| v[0]),
-        Some(230.0),
-        "on_resize did not report the drag"
-    );
+        let (x, y) = s.handle_centre();
+        s.move_to(x, y);
+        s.press(x, y);
+        s.move_to(x + 30.0, y);
+        s.release(x + 30.0, y);
+        assert_eq!(
+            seen.lock().unwrap().last().map(|v| v[0]),
+            Some(230.0),
+            "on_resize did not report the drag"
+        );
+    })
 }
 
 #[test]
 fn a_vertical_group_resizes_heights() {
-    init();
-    let group = resizable_group()
-        .key("rz_vertical")
-        .vertical()
-        .panel(resizable_panel().flex_grow().child(div().w_full().h_full()))
-        .panel(
-            resizable_panel()
-                .default_size(120.0)
-                .min_size(80.0)
-                .child(div().w_full().h_full()),
-        );
-    let host = div().w(400.0).h(400.0).child(group);
-    let mut s = Scene {
-        tree: RenderTree::from_element(&host),
-        router: EventRouter::new(),
-    };
-    s.tree.compute_layout(400.0, 400.0);
-    let height = |s: &Scene| {
-        let panel = s.tree.layout_tree.children(s.group())[2];
-        s.tree.get_absolute_bounds(panel).unwrap().height
-    };
-    assert_eq!(height(&s), 120.0);
+    guarded(|| {
+        init();
+        let group = resizable_group()
+            .key("rz_vertical")
+            .vertical()
+            .panel(resizable_panel().flex_grow().child(div().w_full().h_full()))
+            .panel(
+                resizable_panel()
+                    .default_size(120.0)
+                    .min_size(80.0)
+                    .child(div().w_full().h_full()),
+            );
+        let host = div().w(400.0).h(400.0).child(group);
+        let mut s = Scene {
+            tree: RenderTree::from_element(&host),
+            router: EventRouter::new(),
+        };
+        s.tree.compute_layout(400.0, 400.0);
+        let height = |s: &Scene| {
+            let panel = s.tree.layout_tree.children(s.group())[2];
+            s.tree.get_absolute_bounds(panel).unwrap().height
+        };
+        assert_eq!(height(&s), 120.0);
 
-    let (x, y) = s.handle_centre();
-    s.move_to(x, y);
-    s.press(x, y);
-    // Dragging the handle up grows the panel below it.
-    s.move_to(x, y - 30.0);
-    s.release(x, y - 30.0);
-    assert_eq!(height(&s), 150.0);
+        let (x, y) = s.handle_centre();
+        s.move_to(x, y);
+        s.press(x, y);
+        // Dragging the handle up grows the panel below it.
+        s.move_to(x, y - 30.0);
+        s.release(x, y - 30.0);
+        assert_eq!(height(&s), 150.0);
+    })
 }

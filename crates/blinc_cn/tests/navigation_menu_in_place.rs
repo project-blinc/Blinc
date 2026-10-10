@@ -104,53 +104,64 @@ impl Scene {
 
 #[test]
 fn hovering_a_trigger_opens_its_menu_and_marks_it_active() {
-    let mut s = scene();
-    let items = s.items();
-    assert_eq!(items.len(), 4);
-    let (products, services) = (items[1], items[2]);
-    assert!(items.iter().all(|&i| !s.active(i)));
+    guarded(|| {
+        let mut s = scene();
+        let items = s.items();
+        assert_eq!(items.len(), 4);
+        let (products, services) = (items[1], items[2]);
+        assert!(items.iter().all(|&i| !s.active(i)));
 
-    s.move_to(s.centre(products));
-    assert!(s.active(products), "the open trigger is not marked active");
-    assert!(!s.active(services));
-    assert_eq!(overlay_stack().lock().unwrap().len(), 1, "no menu opened");
+        let before = overlay_stack().lock().unwrap().len();
+        s.move_to(s.centre(products));
+        assert!(s.active(products), "the open trigger is not marked active");
+        assert!(!s.active(services));
+        assert_eq!(
+            overlay_stack().lock().unwrap().len(),
+            before + 1,
+            "no menu opened"
+        );
 
-    s.move_to(s.centre(services));
-    assert!(s.active(services));
-    assert!(!s.active(products), "two triggers are marked active");
+        s.move_to(s.centre(services));
+        assert!(s.active(services));
+        assert!(!s.active(products), "two triggers are marked active");
+    })
 }
 
 #[test]
 fn hovering_a_link_brightens_it_in_place() {
-    let mut s = scene();
-    let theme = ThemeState::get();
-    let (rest, lit) = (
-        theme.color(ColorToken::TextSecondary),
-        theme.color(ColorToken::TextPrimary),
-    );
-    let home = s.items()[0];
-    assert_eq!(s.label_color(home), rest);
-    s.move_to(s.centre(home));
-    assert_eq!(
-        s.label_color(home),
-        lit,
-        "hovering did not brighten the link"
-    );
-    s.move_to((790.0, 90.0));
-    assert_eq!(
-        s.label_color(home),
-        rest,
-        "the link stayed lit after the pointer left"
-    );
+    guarded(|| {
+        let mut s = scene();
+        let theme = ThemeState::get();
+        let (rest, lit) = (
+            theme.color(ColorToken::TextSecondary),
+            theme.color(ColorToken::TextPrimary),
+        );
+        let home = s.items()[0];
+        assert_eq!(s.label_color(home), rest);
+        s.move_to(s.centre(home));
+        assert_eq!(
+            s.label_color(home),
+            lit,
+            "hovering did not brighten the link"
+        );
+        s.move_to((790.0, 90.0));
+        assert_eq!(
+            s.label_color(home),
+            rest,
+            "the link stayed lit after the pointer left"
+        );
+    })
 }
 
 #[test]
 fn labels_stay_on_one_line() {
-    let s = scene();
-    for item in s.items() {
-        match &s.tree.get_render_node(s.label(item)).unwrap().element_type {
-            ElementType::Text(t) => assert!(!t.wrap, "{:?} can wrap", t.content),
-            _ => panic!("the item's first child is not its label"),
+    guarded(|| {
+        let s = scene();
+        for item in s.items() {
+            match &s.tree.get_render_node(s.label(item)).unwrap().element_type {
+                ElementType::Text(t) => assert!(!t.wrap, "{:?} can wrap", t.content),
+                _ => panic!("the item's first child is not its label"),
+            }
         }
-    }
+    })
 }

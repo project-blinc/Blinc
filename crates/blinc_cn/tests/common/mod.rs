@@ -279,6 +279,8 @@ pub fn visible_svg(tree: &RenderTree, node: LayoutNodeId) -> Option<String> {
 pub fn guarded<T>(f: impl FnOnce() -> T) -> T {
     static LOCK: Mutex<()> = Mutex::new(());
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    // A text input an earlier test left focused would queue its blur here.
+    blinc_layout::widgets::text_input::blur_all_text_inputs();
     let _ = blinc_layout::stateful::take_pending_subtree_rebuilds();
     let _ = blinc_layout::take_pending_partial_prop_updates();
     f()
