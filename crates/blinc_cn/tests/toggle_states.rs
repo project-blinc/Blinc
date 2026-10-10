@@ -271,6 +271,9 @@ fn a_toggle_looks_the_same_in_every_state() {
         std::fs::write(&path, &got).expect("write golden");
         return;
     }
-    let want = std::fs::read_to_string(&path).expect("tests/toggle_states.golden");
+    // A checkout may have turned the file's line feeds into CRLF.
+    let want = std::fs::read_to_string(&path)
+        .expect("tests/toggle_states.golden")
+        .replace("\r\n", "\n");
     assert_eq!(got, want, "the toggle no longer looks as recorded");
 }

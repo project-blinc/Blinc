@@ -293,7 +293,10 @@ pub fn check_golden(name: &str, got: &str) {
         std::fs::write(&path, got).expect("write golden");
         return;
     }
-    let want = std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("tests/{name}"));
+    // A checkout may have turned the file's line feeds into CRLF.
+    let want = std::fs::read_to_string(&path)
+        .unwrap_or_else(|_| panic!("tests/{name}"))
+        .replace("\r\n", "\n");
     assert_eq!(
         got, want,
         "tests/{name}: the widget no longer looks as recorded"
