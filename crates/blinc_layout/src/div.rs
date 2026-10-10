@@ -724,31 +724,32 @@ impl Div {
     /// One child per item `each` yields, in order, kept up to date in place.
     ///
     /// `each` is read like the body of a `computed`, through the graph it is
-    /// given: when something it reads changes, the rows are brought up to date. `key` names an item; an item whose key was
-    /// there before keeps its element and everything it owns, a new key gets
-    /// `item(value)` built under a scope of its own, and a key that has gone
-    /// takes its element and its scope with it. Two items with one key show
-    /// the first only.
+    /// given: when something it reads changes, the rows are brought up to
+    /// date. `key` names an item; an item whose key was there before keeps its
+    /// element and everything it owns, a new key gets `item(value)` built
+    /// under a scope of its own, and a key that has gone takes its element and
+    /// its scope with it, once a [`crate::region::Row::on_leave`] it asked
+    /// for is done. Two items with one key show the first only.
     ///
     /// The element is the container: the rows lay out as its own children,
     /// with its direction, gap and alignment, and children added before or
     /// after this call stay where they are. An element has one such region.
-    pub fn for_each<T, I, K, E>(
+    pub fn for_each<T, I, K, R>(
         self,
         each: impl Fn(&blinc_core::reactive::ReactiveGraph) -> I + Send + 'static,
         key: impl Fn(&T) -> K + 'static,
-        item: impl Fn(T) -> E + 'static,
+        item: impl Fn(T) -> R + 'static,
     ) -> Self
     where
         I: IntoIterator<Item = T>,
         T: Clone + Send + Sync + 'static,
         K: std::hash::Hash + Eq + Clone + 'static,
-        E: ElementBuilder + 'static,
+        R: Into<crate::region::Row>,
     {
         let logic = crate::region::ForRegion::new(
             move |graph| each(graph).into_iter().collect::<Vec<T>>(),
             key,
-            move |value| Some(Box::new(item(value)) as Box<dyn ElementBuilder>),
+            move |value| Some(item(value).into()),
         );
         self.with_region(logic)
     }
@@ -759,38 +760,32 @@ impl Div {
     /// Unlike [`Self::when`], which builds its children either way and hides
     /// them, nothing is built while the condition is false. A constant is
     /// decided now.
-    pub fn show<E>(
+    pub fn show<R>(
         self,
         when: impl crate::binding::IntoReactive<bool>,
-        then: impl Fn() -> E + 'static,
+        then: impl Fn() -> R + 'static,
     ) -> Self
     where
-        E: ElementBuilder + 'static,
+        R: Into<crate::region::Row>,
     {
-        self.show_branches(
-            when,
-            Box::new(move || Box::new(then()) as Box<dyn ElementBuilder>),
-            None,
-        )
+        self.show_branches(when, Box::new(move || then().into()), None)
     }
 
     /// [`Self::show`] with an element for the other case too.
-    pub fn show_or<E, F>(
+    pub fn show_or<R, S>(
         self,
         when: impl crate::binding::IntoReactive<bool>,
-        then: impl Fn() -> E + 'static,
-        otherwise: impl Fn() -> F + 'static,
+        then: impl Fn() -> R + 'static,
+        otherwise: impl Fn() -> S + 'static,
     ) -> Self
     where
-        E: ElementBuilder + 'static,
-        F: ElementBuilder + 'static,
+        R: Into<crate::region::Row>,
+        S: Into<crate::region::Row>,
     {
         self.show_branches(
             when,
-            Box::new(move || Box::new(then()) as Box<dyn ElementBuilder>),
-            Some(Box::new(move || {
-                Box::new(otherwise()) as Box<dyn ElementBuilder>
-            })),
+            Box::new(move || then().into()),
+            Some(Box::new(move || otherwise().into())),
         )
     }
 
@@ -798,8 +793,8 @@ impl Div {
     fn show_branches(
         self,
         when: impl crate::binding::IntoReactive<bool>,
-        then: Box<dyn Fn() -> Box<dyn ElementBuilder>>,
-        otherwise: Option<Box<dyn Fn() -> Box<dyn ElementBuilder>>>,
+        then: Box<dyn Fn() -> crate::region::Row>,
+        otherwise: Option<Box<dyn Fn() -> crate::region::Row>>,
     ) -> Self {
         use crate::binding::Reactive;
         let each: Box<dyn Fn(&blinc_core::reactive::ReactiveGraph) -> Vec<bool> + Send> =
@@ -807,7 +802,7 @@ impl Div {
                 Reactive::Const(shown) => {
                     let branch = if shown { Some(then) } else { otherwise };
                     return match branch {
-                        Some(build) => self.child_box(build()),
+                        Some(build) => self.child_box(build().into_element()),
                         None => self,
                     };
                 }

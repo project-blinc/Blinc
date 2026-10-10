@@ -1,6 +1,6 @@
 //! Bringing the rows of a list or branch up to date in place.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::div::ElementBuilder;
 use crate::region::{RowId, RowNode};
@@ -22,6 +22,10 @@ impl RenderTree {
             return;
         }
         let evaluation = region.logic.borrow_mut().evaluate();
+        // A row that is leaving is asked again next frame.
+        if region.logic.borrow().is_leaving() {
+            crate::stateful::queue_region_update(parent, region_id);
+        }
 
         let old_live: Vec<(RowId, Option<LayoutNodeId>)> = region.live.borrow().clone();
         let node_of: HashMap<RowId, Option<LayoutNodeId>> = old_live.iter().copied().collect();
@@ -44,15 +48,48 @@ impl RenderTree {
             region.logic.borrow_mut().dispose_row(*id);
         }
 
-        let mut live = Vec::with_capacity(evaluation.rows.len());
+        // A row that is leaving keeps its place: after the nearest row before
+        // it that is still there, or first if there is none.
+        let kept: HashSet<RowId> = evaluation
+            .rows
+            .iter()
+            .filter(|plan| matches!(plan.node, RowNode::Keep))
+            .map(|plan| plan.id)
+            .collect();
+        let mut first: Vec<RowId> = Vec::new();
+        let mut after: HashMap<RowId, Vec<RowId>> = HashMap::new();
+        let mut anchor: Option<RowId> = None;
+        for (id, _) in &old_live {
+            if kept.contains(id) {
+                anchor = Some(*id);
+            } else if evaluation.lingering.contains(id) {
+                match anchor {
+                    Some(anchor) => after.entry(anchor).or_default().push(*id),
+                    None => first.push(*id),
+                }
+            }
+        }
+
+        let mut live = Vec::with_capacity(evaluation.rows.len() + evaluation.lingering.len());
         let mut row_nodes: Vec<LayoutNodeId> = Vec::new();
         let mut built: Vec<(Box<dyn ElementBuilder>, LayoutNodeId, RowId)> = Vec::new();
+        let linger = |ids: &[RowId], live: &mut Vec<_>, row_nodes: &mut Vec<LayoutNodeId>| {
+            for id in ids {
+                let node = node_of.get(id).copied().flatten();
+                row_nodes.extend(node);
+                live.push((*id, node));
+            }
+        };
+        linger(&first, &mut live, &mut row_nodes);
         for plan in evaluation.rows {
             match plan.node {
                 RowNode::Keep => {
                     let node = node_of.get(&plan.id).copied().flatten();
                     row_nodes.extend(node);
                     live.push((plan.id, node));
+                    if let Some(ids) = after.get(&plan.id) {
+                        linger(ids, &mut live, &mut row_nodes);
+                    }
                 }
                 RowNode::Build(builder) => {
                     let node = builder.build(&mut self.layout_tree);

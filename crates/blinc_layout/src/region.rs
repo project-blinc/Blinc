@@ -7,6 +7,10 @@
 //! its node. The `Div` itself is the container, so the rows lay out as its own
 //! children, with its direction, gap and alignment.
 //!
+//! A row can stay mounted for a while after its key goes (see [`Row::on_leave`]),
+//! so it can animate out. It keeps its node, its place among the rows and its
+//! scope until it says it is done.
+//!
 //! The definition lives on the thread that built it, keyed by the node that
 //! holds the region, and is looked up when the source changes.
 
@@ -21,6 +25,59 @@ use blinc_core::reactive::{Computed, ReactiveGraph, computed};
 
 use crate::div::ElementBuilder;
 use crate::tree::LayoutNodeId;
+
+/// What an item shows: an element, and optionally what happens when its key
+/// goes.
+///
+/// Anything that is an element converts to a row that goes at once.
+pub struct Row {
+    element: Box<dyn ElementBuilder>,
+    exit: Option<Exit>,
+}
+
+struct Exit {
+    start: Box<dyn FnOnce()>,
+    done: Box<dyn Fn() -> bool>,
+}
+
+impl Row {
+    pub fn new(element: impl ElementBuilder + 'static) -> Self {
+        Self {
+            element: Box::new(element),
+            exit: None,
+        }
+    }
+
+    /// The element, for a row that is not going to leave.
+    pub(crate) fn into_element(self) -> Box<dyn ElementBuilder> {
+        self.element
+    }
+
+    /// Keep the row mounted after its key goes.
+    ///
+    /// `start` runs once, when the key goes. The row then stays where it is,
+    /// with everything it owns, until `done` returns true; `done` is asked
+    /// once per frame and must come true eventually, or the row stays for as
+    /// long as the element does. If the key comes back meanwhile, the item is
+    /// built afresh as a new row and the old one still finishes leaving.
+    pub fn on_leave(
+        mut self,
+        start: impl FnOnce() + 'static,
+        done: impl Fn() -> bool + 'static,
+    ) -> Self {
+        self.exit = Some(Exit {
+            start: Box::new(start),
+            done: Box::new(done),
+        });
+        self
+    }
+}
+
+impl<E: ElementBuilder + 'static> From<E> for Row {
+    fn from(element: E) -> Self {
+        Row::new(element)
+    }
+}
 
 pub(crate) type RowId = u64;
 
@@ -45,6 +102,9 @@ pub(crate) struct Evaluation {
     /// Rows that were there and no longer are. Their scopes are still alive:
     /// the tree tears the nodes down, then calls `dispose_row`.
     pub removed: Vec<RowId>,
+    /// Rows whose key has gone but that stay mounted until they are done.
+    /// They are not among `rows`.
+    pub lingering: Vec<RowId>,
 }
 
 pub(crate) trait RegionLogic {
@@ -52,14 +112,24 @@ pub(crate) trait RegionLogic {
     fn evaluate(&mut self) -> Evaluation;
     /// A removed row's nodes are gone: dispose what it created.
     fn dispose_row(&mut self, id: RowId);
+    /// Whether a row is still leaving, which has to be asked about again.
+    fn is_leaving(&self) -> bool;
 }
 
-/// The element a row shows for an item; `None` for nothing.
-type Item<T> = Box<dyn Fn(T) -> Option<Box<dyn ElementBuilder>>>;
+/// The row an item shows; `None` for nothing.
+type Item<T> = Box<dyn Fn(T) -> Option<Row>>;
 
-struct Row {
+struct Mounted {
     id: RowId,
     owner: Owner,
+    exit: Option<Exit>,
+}
+
+/// A row whose key has gone, waiting to be done.
+struct Lingering {
+    id: RowId,
+    owner: Owner,
+    done: Box<dyn Fn() -> bool>,
 }
 
 /// A list: the rows are the items, matched by key.
@@ -67,7 +137,8 @@ pub(crate) struct ForRegion<T, K> {
     each: Computed<Vec<T>>,
     key: Box<dyn Fn(&T) -> K>,
     item: Item<T>,
-    rows: HashMap<K, Row>,
+    rows: HashMap<K, Mounted>,
+    lingering: Vec<Lingering>,
     /// Rows taken out of the list, waiting for their nodes to be torn down.
     leaving: HashMap<RowId, Owner>,
     next_id: RowId,
@@ -81,13 +152,14 @@ where
     pub(crate) fn new(
         each: impl Fn(&ReactiveGraph) -> Vec<T> + Send + 'static,
         key: impl Fn(&T) -> K + 'static,
-        item: impl Fn(T) -> Option<Box<dyn ElementBuilder>> + 'static,
+        item: impl Fn(T) -> Option<Row> + 'static,
     ) -> Self {
         Self {
             each: computed(each),
             key: Box::new(key),
             item: Box::new(item),
             rows: HashMap::new(),
+            lingering: Vec::new(),
             leaving: HashMap::new(),
             next_id: 0,
         }
@@ -125,14 +197,12 @@ where
             let built = owner.run(|| (self.item)(value));
             let id = self.next_id;
             self.next_id += 1;
-            self.rows.insert(key, Row { id, owner });
-            rows.push(RowPlan {
-                id,
-                node: match built {
-                    Some(builder) => RowNode::Build(builder),
-                    None => RowNode::Empty,
-                },
-            });
+            let (node, exit) = match built {
+                Some(Row { element, exit }) => (RowNode::Build(element), exit),
+                None => (RowNode::Empty, None),
+            };
+            self.rows.insert(key, Mounted { id, owner, exit });
+            rows.push(RowPlan { id, node });
         }
 
         let gone: Vec<K> = self
@@ -142,13 +212,42 @@ where
             .cloned()
             .collect();
         let mut removed = Vec::with_capacity(gone.len());
+        // Rows already waiting are asked before the ones that start now, so
+        // a row is never done in the pass that starts it.
+        let (finished, waiting): (Vec<Lingering>, Vec<Lingering>) =
+            std::mem::take(&mut self.lingering)
+                .into_iter()
+                .partition(|row| (row.done)());
+        self.lingering = waiting;
+        for row in finished {
+            removed.push(row.id);
+            self.leaving.insert(row.id, row.owner);
+        }
         for key in gone {
-            if let Some(row) = self.rows.remove(&key) {
-                removed.push(row.id);
-                self.leaving.insert(row.id, row.owner);
+            let Some(row) = self.rows.remove(&key) else {
+                continue;
+            };
+            match row.exit {
+                Some(Exit { start, done }) => {
+                    start();
+                    self.lingering.push(Lingering {
+                        id: row.id,
+                        owner: row.owner,
+                        done,
+                    });
+                }
+                None => {
+                    removed.push(row.id);
+                    self.leaving.insert(row.id, row.owner);
+                }
             }
         }
-        Evaluation { rows, removed }
+        let lingering = self.lingering.iter().map(|row| row.id).collect();
+        Evaluation {
+            rows,
+            removed,
+            lingering,
+        }
     }
 
     fn dispose_row(&mut self, id: RowId) {
@@ -156,11 +255,18 @@ where
             owner.dispose();
         }
     }
+
+    fn is_leaving(&self) -> bool {
+        !self.lingering.is_empty()
+    }
 }
 
 impl<T, K> Drop for ForRegion<T, K> {
     fn drop(&mut self) {
         for row in self.rows.values() {
+            row.owner.dispose();
+        }
+        for row in &self.lingering {
             row.owner.dispose();
         }
         for owner in self.leaving.values() {

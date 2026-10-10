@@ -2929,6 +2929,9 @@ impl RenderTree {
         updates: Vec<crate::stateful::PartialPropertyUpdate>,
     ) -> crate::property::SideEffects {
         let mut effects = crate::property::SideEffects::default();
+        // A region is brought up to date once per batch, however many times
+        // it was queued.
+        let mut regions_seen: HashSet<(LayoutNodeId, u64)> = HashSet::new();
         for update in updates {
             effects = effects.or(update.effects);
             if let Some(write) = update.render_write {
@@ -2950,7 +2953,9 @@ impl RenderTree {
                 self.set_text_content(update.node_id, content);
             }
             if let Some(region) = update.region_update {
-                self.reconcile_region(update.node_id, region);
+                if regions_seen.insert((update.node_id, region)) {
+                    self.reconcile_region(update.node_id, region);
+                }
             }
         }
         effects
