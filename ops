@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1791655142,"nonce":"1kH43CF+eLHpkzyExjefoFowoS4=","message":"Fixed in 76508488e815d3f2f16aadd8523f8d45ba0cb51b. Verified in cn_demo: scrolled to the form, a click in Bio shows the caret and typed text draws.","files":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1791655142,"nonce":"qpbJLSNiGKbkBB7SUBSH1MNojrA=","status":2}]}
