@@ -372,6 +372,16 @@ impl LayoutTree {
     /// Set the style for a node
     pub fn set_style(&mut self, id: LayoutNodeId, style: Style) {
         if let Some(&taffy_node) = self.node_map.get(id) {
+            // Setting a style marks the node and its ancestors for layout.
+            // An unchanged one is left alone, so a pass that writes every
+            // node's style back does not cost a layout of the whole tree.
+            if self
+                .taffy
+                .style(taffy_node)
+                .is_ok_and(|current| *current == style)
+            {
+                return;
+            }
             let _ = self.taffy.set_style(taffy_node, style);
         }
     }
