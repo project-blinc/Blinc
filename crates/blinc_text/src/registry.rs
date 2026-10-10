@@ -51,13 +51,24 @@ const KNOWN_FONT_PATHS: &[&str] = &[
     "/Library/Fonts/Georgia.ttf",
 ];
 
+// Each family's weights and italics are separate files here, and a query
+// only chooses among faces already loaded, so a family loaded regular-only
+// answers every weight with its regular face.
 #[cfg(target_os = "windows")]
 const KNOWN_FONT_PATHS: &[&str] = &[
-    "C:\\Windows\\Fonts\\segoeui.ttf", // Segoe UI (System)
-    "C:\\Windows\\Fonts\\consola.ttf", // Consolas (Monospace)
-    "C:\\Windows\\Fonts\\arial.ttf",   // Arial (Sans-serif)
-    "C:\\Windows\\Fonts\\times.ttf",   // Times New Roman (Serif)
-    "C:\\Windows\\Fonts\\cour.ttf",    // Courier New (Monospace)
+    "C:\\Windows\\Fonts\\segoeui.ttf",  // Segoe UI (System)
+    "C:\\Windows\\Fonts\\seguisb.ttf",  // Segoe UI Semibold
+    "C:\\Windows\\Fonts\\segoeuib.ttf", // Segoe UI Bold
+    "C:\\Windows\\Fonts\\seguibl.ttf",  // Segoe UI Black
+    "C:\\Windows\\Fonts\\segoeuii.ttf", // Segoe UI Italic
+    "C:\\Windows\\Fonts\\segoeuiz.ttf", // Segoe UI Bold Italic
+    "C:\\Windows\\Fonts\\consola.ttf",  // Consolas (Monospace)
+    "C:\\Windows\\Fonts\\consolab.ttf", // Consolas Bold
+    "C:\\Windows\\Fonts\\arial.ttf",    // Arial (Sans-serif)
+    "C:\\Windows\\Fonts\\arialbd.ttf",  // Arial Bold
+    "C:\\Windows\\Fonts\\times.ttf",    // Times New Roman (Serif)
+    "C:\\Windows\\Fonts\\timesbd.ttf",  // Times New Roman Bold
+    "C:\\Windows\\Fonts\\cour.ttf",     // Courier New (Monospace)
 ];
 
 #[cfg(target_os = "android")]
