@@ -166,6 +166,8 @@ pub struct FontRegistry {
     faces: FxHashMap<String, Option<Arc<FontFace>>>,
     /// Whether full system font scan has been performed
     system_fonts_loaded: bool,
+    /// The full system scan. Replaced in tests with a known set of faces.
+    scan_system: fn(&mut Database),
 }
 
 impl FontRegistry {
@@ -203,6 +205,7 @@ impl FontRegistry {
             db,
             faces: FxHashMap::default(),
             system_fonts_loaded: false,
+            scan_system: Database::load_system_fonts,
         }
         // Note: We don't preload generic fonts here anymore.
         // They'll be loaded on first use. This avoids triggering a full
@@ -236,7 +239,7 @@ impl FontRegistry {
         }
 
         tracing::debug!("Loading all system fonts (lazy scan)...");
-        self.db.load_system_fonts();
+        (self.scan_system)(&mut self.db);
         self.system_fonts_loaded = true;
         tracing::debug!("System fonts loaded: {} faces", self.db.faces().count());
     }
@@ -346,6 +349,7 @@ impl FontRegistry {
                 )));
             }
         };
+        let id = self.closest_face(id, weight, italic);
 
         // Get the font data
         let mut face = self.load_face_by_id(id)?;
@@ -393,6 +397,48 @@ impl FontRegistry {
             // defaults; anything else falls through to the generic sans.
             &["Cantarell", "Ubuntu", "Noto Sans", "DejaVu Sans"]
         }
+    }
+
+    /// `id`, unless it is not the weight or style asked for and the lookup
+    /// that found it only chose among the preloaded faces. Then the system is
+    /// scanned, once, and the same family asked again, keeping `id` if the
+    /// family has nothing closer. A variable face takes any weight.
+    fn closest_face(&mut self, id: fontdb::ID, weight: u16, italic: bool) -> fontdb::ID {
+        if self.system_fonts_loaded || self.face_answers(id, weight, italic) {
+            return id;
+        }
+        let family = self
+            .db
+            .face(id)
+            .and_then(|f| f.families.first())
+            .map(|(name, _)| name.clone());
+        self.ensure_system_fonts_loaded();
+        family
+            .and_then(|name| self.find_font_id(&name, weight, italic))
+            .unwrap_or(id)
+    }
+
+    /// Whether face `id` is drawn at `weight` in the style asked for.
+    fn face_answers(&self, id: fontdb::ID, weight: u16, italic: bool) -> bool {
+        let Some(info) = self.db.face(id) else {
+            return true;
+        };
+        if (info.style != Style::Normal) != italic {
+            return false;
+        }
+        info.weight.0 == weight
+            || self
+                .db
+                .with_face_data(id, |data, index| {
+                    ttf_parser::Face::parse(data, index)
+                        .map(|f| {
+                            f.variation_axes()
+                                .into_iter()
+                                .any(|a| a.tag == ttf_parser::Tag::from_bytes(b"wght"))
+                        })
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false)
     }
 
     fn find_font_id(&self, name: &str, weight: u16, italic: bool) -> Option<fontdb::ID> {
@@ -794,6 +840,7 @@ impl FontRegistry {
                 )));
             }
         };
+        let id = self.closest_face(id, weight, italic);
 
         let mut face = self.load_face_by_id(id)?;
         // A variable file answers every weight with the same face, so
@@ -1086,6 +1133,73 @@ impl Default for FontRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::font::FontWeight;
+
+    /// The bundled Arial, its OS/2 table claiming `weight`.
+    fn arial_at(weight: u16) -> Vec<u8> {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/fonts/Arial.ttf");
+        let mut data = std::fs::read(path).expect("bundled Arial");
+        let tables = u16::from_be_bytes([data[4], data[5]]) as usize;
+        let os2 = (0..tables)
+            .map(|i| 12 + i * 16)
+            .find(|&r| &data[r..r + 4] == b"OS/2")
+            .map(|r| u32::from_be_bytes([data[r + 8], data[r + 9], data[r + 10], data[r + 11]]))
+            .expect("an OS/2 table") as usize;
+        data[os2 + 4..os2 + 6].copy_from_slice(&weight.to_be_bytes());
+        data
+    }
+
+    static SCANS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+    /// A "system" holding the bold Arial the preload lacks.
+    fn scan_bold(db: &mut Database) {
+        SCANS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        db.load_font_data(arial_at(700));
+    }
+
+    /// A registry that preloaded regular Arial only.
+    fn regular_only() -> FontRegistry {
+        let mut db = Database::new();
+        db.load_font_data(arial_at(400));
+        FontRegistry {
+            db,
+            faces: FxHashMap::default(),
+            system_fonts_loaded: false,
+            scan_system: scan_bold,
+        }
+    }
+
+    #[test]
+    fn a_weight_the_preload_lacks_is_found_by_scanning_once() {
+        let mut registry = regular_only();
+        let before = SCANS.load(std::sync::atomic::Ordering::SeqCst);
+
+        let regular = registry.load_font_with_style("Arial", 400, false).unwrap();
+        assert_eq!(regular.weight(), FontWeight::Regular);
+        assert_eq!(
+            SCANS.load(std::sync::atomic::Ordering::SeqCst),
+            before,
+            "a weight the preload has scanned the system"
+        );
+
+        let bold = registry.load_font_with_style("Arial", 700, false).unwrap();
+        assert_eq!(
+            bold.weight(),
+            FontWeight::Bold,
+            "bold resolved to another weight"
+        );
+        let black = registry.load_font_with_style("Arial", 900, false).unwrap();
+        assert_eq!(
+            black.weight(),
+            FontWeight::Bold,
+            "black is the family's heaviest"
+        );
+        assert_eq!(
+            SCANS.load(std::sync::atomic::Ordering::SeqCst),
+            before + 1,
+            "the system was not scanned exactly once"
+        );
+    }
 
     #[test]
     fn test_load_generic_fonts() {
