@@ -25,11 +25,11 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use blinc_core::State;
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
 use blinc_layout::element::CursorStyle;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{NoState, stateful_with_key};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
 /// Chevron left SVG
@@ -101,13 +101,8 @@ pub struct Pagination {
 impl Pagination {
     fn from_builder(builder: &PaginationBuilder) -> Self {
         let theme = ThemeState::get();
-        let text_primary = theme.color(ColorToken::TextPrimary);
         let text_secondary = theme.color(ColorToken::TextSecondary);
         let text_tertiary = theme.color(ColorToken::TextTertiary);
-        let primary = theme.color(ColorToken::Primary);
-        let primary_hover = theme.color(ColorToken::PrimaryHover);
-        let surface = theme.color(ColorToken::Surface);
-        let surface_elevated = theme.color(ColorToken::SurfaceElevated);
         let border = theme.color(ColorToken::Border);
         let radius = theme.radius(RadiusToken::Md);
 
@@ -116,99 +111,62 @@ impl Pagination {
         let icon_size = builder.size.icon_size();
         let gap = builder.size.gap();
 
-        let key = builder.key.get().to_string();
         let total_pages = builder.total_pages;
         let visible_pages = builder.visible_pages;
         let show_first_last = builder.show_first_last;
         let on_page_change = builder.on_page_change.clone();
         let page_state = builder.current_page.clone();
 
-        // Create stateful container that rebuilds when page changes
-        let container_key = format!("{}_container", key);
-        let page_state_for_container = page_state.clone();
+        // The row is built once: a keyed list of slots worked out from the
+        // current page. A page that stays in view keeps its button; the
+        // active and disabled looks are classes bound to the page.
+        let page = page_state.clone();
+        let slots = computed(move |g: &ReactiveGraph| {
+            page_slots(page.read(g), total_pages, visible_pages, show_first_last)
+        });
 
-        let stateful_container = stateful_with_key::<NoState>(&container_key)
-            .deps([page_state.signal_id()])
-            .on_state(move |_ctx| {
-                let current_page = page_state_for_container.get();
-                let mut container = div()
-                    .class("cn-pagination")
-                    .flex_row()
-                    .items_center()
-                    .gap(gap);
-
-                // Calculate visible page range
-                let (start_page, end_page) =
-                    calculate_page_range(current_page, total_pages, visible_pages);
-
-                let show_start_ellipsis = start_page > 1;
-                let show_end_ellipsis = end_page < total_pages;
-
-                // First page button (if enabled)
-                if show_first_last && total_pages > visible_pages {
-                    let page_state_first = page_state_for_container.clone();
-                    let on_change_first = on_page_change.clone();
-                    let first_key = format!("{}_first", key);
-                    let is_disabled = current_page == 1;
-
-                    let first_btn = build_nav_button(
-                        &first_key,
-                        CHEVRONS_LEFT_SVG,
-                        button_size,
-                        icon_size,
-                        radius,
-                        is_disabled,
-                        surface_elevated,
-                        border,
-                        text_secondary,
-                        text_tertiary,
+        let row = div()
+            .class("cn-pagination")
+            .flex_row()
+            .items_center()
+            .gap(gap)
+            .for_each(
+                slots,
+                |slot: &Slot| *slot,
+                move |slot: Slot| -> Div {
+                    let page = page_state.clone();
+                    let on_change = on_page_change.clone();
+                    // Where a click on this slot goes from `current`, if anywhere.
+                    let target = move |current: usize| -> Option<usize> {
+                        match slot {
+                            Slot::First => (current > 1).then_some(1),
+                            Slot::Prev => (current > 1).then(|| current - 1),
+                            Slot::Next => (current < total_pages).then(|| current + 1),
+                            Slot::Last => (current < total_pages).then_some(total_pages),
+                            Slot::Page(n) => (current != n).then_some(n),
+                            Slot::StartEllipsis | Slot::EndEllipsis => None,
+                        }
+                    };
+                    let go = {
+                        let page = page.clone();
                         move || {
-                            if !is_disabled {
-                                page_state_first.set(1);
-                                if let Some(ref cb) = on_change_first {
-                                    cb(1);
+                            if let Some(to) = target(page.get()) {
+                                page.set(to);
+                                if let Some(ref cb) = on_change {
+                                    cb(to);
                                 }
                             }
-                        },
-                    );
-                    container = container.child(first_btn);
-                }
-
-                // Previous button
-                {
-                    let page_state_prev = page_state_for_container.clone();
-                    let on_change_prev = on_page_change.clone();
-                    let prev_key = format!("{}_prev", key);
-                    let is_disabled = current_page == 1;
-                    let prev_page = (current_page - 1).max(1);
-
-                    let prev_btn = build_nav_button(
-                        &prev_key,
-                        CHEVRON_LEFT_SVG,
-                        button_size,
-                        icon_size,
-                        radius,
-                        is_disabled,
-                        surface_elevated,
-                        border,
-                        text_secondary,
-                        text_tertiary,
-                        move || {
-                            if !is_disabled {
-                                page_state_prev.set(prev_page);
-                                if let Some(ref cb) = on_change_prev {
-                                    cb(prev_page);
-                                }
-                            }
-                        },
-                    );
-                    container = container.child(prev_btn);
-                }
-
-                // Start ellipsis
-                if show_start_ellipsis {
-                    container = container.child(
-                        div()
+                        }
+                    };
+                    let icon = match slot {
+                        Slot::First => Some(CHEVRONS_LEFT_SVG),
+                        Slot::Prev => Some(CHEVRON_LEFT_SVG),
+                        Slot::Next => Some(CHEVRON_RIGHT_SVG),
+                        Slot::Last => Some(CHEVRONS_RIGHT_SVG),
+                        _ => None,
+                    };
+                    match slot {
+                        Slot::StartEllipsis | Slot::EndEllipsis => div()
                             .w(button_size)
                             .h(button_size)
                             .items_center()
@@ -218,122 +176,78 @@ impl Pagination {
                                     .size(icon_size, icon_size)
                                     .color(text_tertiary),
                             ),
-                    );
-                }
+                        Slot::Page(n) => {
+                            let active = {
+                                let page = page.clone();
+                                computed(move |g: &ReactiveGraph| page.read(g) == n)
+                            };
+                            let text_color = {
+                                let page = page.clone();
+                                computed(move |g: &ReactiveGraph| {
+                                    if page.read(g) == n {
+                                        ThemeState::get().color(ColorToken::TextInverse)
+                                    } else {
+                                        text_secondary
+                                    }
+                                })
+                            };
+                            div()
+                                .class("cn-pagination-btn")
+                                .class_when("cn-pagination-btn--active", &active)
+                                .w(button_size)
+                                .h(button_size)
+                                .rounded(radius)
+                                .items_center()
+                                .justify_center()
+                                .border(1.0, border)
+                                .cursor(CursorStyle::Pointer)
+                                .child(
+                                    text(n.to_string())
+                                        .size(font_size)
+                                        .color(&text_color)
+                                        .medium()
+                                        .pointer_events_none()
+                                        .no_cursor(),
+                                )
+                                .on_click(move |_| go())
+                        }
+                        _ => {
+                            let disabled = {
+                                let page = page.clone();
+                                computed(move |g: &ReactiveGraph| target(page.read(g)).is_none())
+                            };
+                            let icon_color = {
+                                let page = page.clone();
+                                computed(move |g: &ReactiveGraph| {
+                                    if target(page.read(g)).is_none() {
+                                        text_tertiary.with_alpha(0.5)
+                                    } else {
+                                        text_secondary
+                                    }
+                                })
+                            };
+                            div()
+                                .class("cn-pagination-btn")
+                                .class_when("cn-pagination-btn--disabled", &disabled)
+                                .w(button_size)
+                                .h(button_size)
+                                .rounded(radius)
+                                .items_center()
+                                .justify_center()
+                                .border(1.0, border)
+                                .cursor(CursorStyle::Pointer)
+                                .child(
+                                    svg(icon.unwrap_or(CHEVRON_LEFT_SVG))
+                                        .size(icon_size, icon_size)
+                                        .color(&icon_color),
+                                )
+                                .on_click(move |_| go())
+                        }
+                    }
+                },
+            );
 
-                // Page number buttons
-                for page in start_page..=end_page {
-                    let page_state_num = page_state_for_container.clone();
-                    let on_change_num = on_page_change.clone();
-                    let page_key = format!("{}_page_{}", key, page);
-                    let is_current = page == current_page;
-
-                    let page_btn = build_page_button(
-                        &page_key,
-                        page,
-                        is_current,
-                        button_size,
-                        font_size,
-                        radius,
-                        primary,
-                        primary_hover,
-                        surface_elevated,
-                        border,
-                        text_primary,
-                        text_secondary,
-                        move || {
-                            if !is_current {
-                                page_state_num.set(page);
-                                if let Some(ref cb) = on_change_num {
-                                    cb(page);
-                                }
-                            }
-                        },
-                    );
-                    container = container.child(page_btn);
-                }
-
-                // End ellipsis
-                if show_end_ellipsis {
-                    container = container.child(
-                        div()
-                            .w(button_size)
-                            .h(button_size)
-                            .items_center()
-                            .justify_center()
-                            .child(
-                                svg(ELLIPSIS_SVG)
-                                    .size(icon_size, icon_size)
-                                    .color(text_tertiary),
-                            ),
-                    );
-                }
-
-                // Next button
-                {
-                    let page_state_next = page_state_for_container.clone();
-                    let on_change_next = on_page_change.clone();
-                    let next_key = format!("{}_next", key);
-                    let is_disabled = current_page == total_pages;
-                    let next_page = (current_page + 1).min(total_pages);
-
-                    let next_btn = build_nav_button(
-                        &next_key,
-                        CHEVRON_RIGHT_SVG,
-                        button_size,
-                        icon_size,
-                        radius,
-                        is_disabled,
-                        surface_elevated,
-                        border,
-                        text_secondary,
-                        text_tertiary,
-                        move || {
-                            if !is_disabled {
-                                page_state_next.set(next_page);
-                                if let Some(ref cb) = on_change_next {
-                                    cb(next_page);
-                                }
-                            }
-                        },
-                    );
-                    container = container.child(next_btn);
-                }
-
-                // Last page button (if enabled)
-                if show_first_last && total_pages > visible_pages {
-                    let page_state_last = page_state_for_container.clone();
-                    let on_change_last = on_page_change.clone();
-                    let last_key = format!("{}_last", key);
-                    let is_disabled = current_page == total_pages;
-
-                    let last_btn = build_nav_button(
-                        &last_key,
-                        CHEVRONS_RIGHT_SVG,
-                        button_size,
-                        icon_size,
-                        radius,
-                        is_disabled,
-                        surface_elevated,
-                        border,
-                        text_secondary,
-                        text_tertiary,
-                        move || {
-                            if !is_disabled {
-                                page_state_last.set(total_pages);
-                                if let Some(ref cb) = on_change_last {
-                                    cb(total_pages);
-                                }
-                            }
-                        },
-                    );
-                    container = container.child(last_btn);
-                }
-
-                container
-            });
-
-        let mut inner = div().child(stateful_container);
+        let mut inner = row;
         for c in &builder.classes {
             inner = inner.class(c);
         }
@@ -343,6 +257,41 @@ impl Pagination {
 
         Self { inner }
     }
+}
+
+/// A place in the pagination row.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Slot {
+    First,
+    Prev,
+    StartEllipsis,
+    Page(usize),
+    EndEllipsis,
+    Next,
+    Last,
+}
+
+/// The row for `current` of `total` pages, showing `visible` page numbers.
+fn page_slots(current: usize, total: usize, visible: usize, first_last: bool) -> Vec<Slot> {
+    let (start, end) = calculate_page_range(current, total, visible);
+    let with_first_last = first_last && total > visible;
+    let mut slots = Vec::new();
+    if with_first_last {
+        slots.push(Slot::First);
+    }
+    slots.push(Slot::Prev);
+    if start > 1 {
+        slots.push(Slot::StartEllipsis);
+    }
+    slots.extend((start..=end).map(Slot::Page));
+    if end < total {
+        slots.push(Slot::EndEllipsis);
+    }
+    slots.push(Slot::Next);
+    if with_first_last {
+        slots.push(Slot::Last);
+    }
+    slots
 }
 
 /// Calculate the range of page numbers to display
@@ -362,125 +311,6 @@ fn calculate_page_range(current: usize, total: usize, visible: usize) -> (usize,
 
     let end = (start + visible - 1).min(total);
     (start, end)
-}
-
-/// Build a navigation button (prev/next/first/last)
-#[allow(clippy::too_many_arguments)]
-fn build_nav_button<F>(
-    key: &str,
-    icon_svg: &'static str,
-    button_size: f32,
-    icon_size: f32,
-    radius: f32,
-    is_disabled: bool,
-    _surface_elevated: blinc_core::Color,
-    border: blinc_core::Color,
-    text_secondary: blinc_core::Color,
-    text_tertiary: blinc_core::Color,
-    on_click: F,
-) -> impl ElementBuilder + use<F>
-where
-    F: Fn() + Send + Sync + 'static,
-{
-    let on_click = Arc::new(on_click);
-
-    // Use plain div — no Stateful wrapper to avoid hover rebuild artifact.
-    // All hover visuals handled by CSS .cn-pagination-btn:hover
-    let icon_color = if is_disabled {
-        text_tertiary.with_alpha(0.5)
-    } else {
-        text_secondary
-    };
-
-    let mut btn = div()
-        .class("cn-pagination-btn")
-        .w(button_size)
-        .h(button_size)
-        .rounded(radius)
-        .items_center()
-        .justify_center()
-        .border(
-            1.0,
-            if is_disabled {
-                border.with_alpha(0.5)
-            } else {
-                border
-            },
-        )
-        .cursor(if is_disabled {
-            CursorStyle::NotAllowed
-        } else {
-            CursorStyle::Pointer
-        })
-        .child(svg(icon_svg).size(icon_size, icon_size).color(icon_color));
-    if is_disabled {
-        btn = btn.class("cn-pagination-btn--disabled");
-    }
-    btn.on_click(move |_| {
-        on_click();
-    })
-}
-
-/// Build a page number button
-#[allow(clippy::too_many_arguments)]
-fn build_page_button<F>(
-    key: &str,
-    page: usize,
-    is_current: bool,
-    button_size: f32,
-    font_size: f32,
-    radius: f32,
-    primary: blinc_core::Color,
-    _primary_hover: blinc_core::Color,
-    _surface_elevated: blinc_core::Color,
-    border: blinc_core::Color,
-    text_primary: blinc_core::Color,
-    text_secondary: blinc_core::Color,
-    on_click: F,
-) -> impl ElementBuilder + use<F>
-where
-    F: Fn() + Send + Sync + 'static,
-{
-    let on_click = Arc::new(on_click);
-    let page_str = page.to_string();
-
-    // Use plain div — no Stateful wrapper to avoid hover rebuild artifact.
-    // All hover visuals handled by CSS .cn-pagination-btn:hover
-    let theme = ThemeState::get();
-    let (bg, text_color, border_color) = if is_current {
-        (primary, theme.color(ColorToken::TextInverse), primary)
-    } else {
-        (blinc_core::Color::TRANSPARENT, text_secondary, border)
-    };
-
-    let mut btn = div()
-        .class("cn-pagination-btn")
-        .w(button_size)
-        .h(button_size)
-        .rounded(radius)
-        .items_center()
-        .justify_center()
-        .bg(bg)
-        .border(1.0, border_color)
-        .cursor(if is_current {
-            CursorStyle::Default
-        } else {
-            CursorStyle::Pointer
-        })
-        .child(
-            text(&page_str)
-                .size(font_size)
-                .color(text_color)
-                .medium()
-                .pointer_events_none()
-                .no_cursor(),
-        );
-    if is_current {
-        btn = btn.class("cn-pagination-btn--active");
-    }
-    btn.on_click(move |_| {
-        on_click();
-    })
 }
 
 impl Deref for Pagination {
@@ -567,6 +397,21 @@ impl PageValue {
             Self::Usize(s) => s.set(page),
             Self::I32(s) => s.set(page as i32),
             Self::Number(n) => n.set(page as f32),
+        }
+    }
+
+    /// The current page, read through `g` so a computed follows it.
+    pub fn read(&self, g: &ReactiveGraph) -> usize {
+        use crate::reactive_props::NumberValue;
+        match self {
+            Self::Usize(s) => g.get(s.signal()).unwrap_or(1),
+            Self::I32(s) => g.get(s.signal()).unwrap_or(1).max(1) as usize,
+            Self::Number(NumberValue::F32(s)) => {
+                g.get(s.signal()).unwrap_or(1.0).round().max(1.0) as usize
+            }
+            Self::Number(NumberValue::F64(s)) => {
+                g.get(s.signal()).unwrap_or(1.0).round().max(1.0) as usize
+            }
         }
     }
 
