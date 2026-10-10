@@ -24,14 +24,14 @@
 
 use blinc_animation::{AnimatedValue, SchedulerHandle, SpringConfig};
 use blinc_core::context_state::BlincContextState;
-use blinc_core::{Color, SignalId, State};
+use blinc_core::reactive::{ReactiveGraph, computed};
+use blinc_core::{Color, State};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::motion::{SharedAnimatedValue, motion};
 use blinc_layout::prelude::*;
 use blinc_layout::render_state::get_global_scheduler;
-use blinc_layout::stateful::Stateful;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 use std::cell::OnceCell;
@@ -39,9 +39,6 @@ use std::sync::{Arc, Mutex};
 
 /// Chevron right SVG icon (collapsed state)
 const CHEVRON_RIGHT_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>"#;
-
-/// Chevron down SVG icon (expanded state)
-const CHEVRON_DOWN_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
 
 /// Diff status for tree nodes (used in debugger)
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -118,7 +115,7 @@ impl TreeNodeConfig {
 
 /// Tree View component for hierarchical data
 pub struct TreeView {
-    inner: Stateful<()>,
+    inner: Div,
 }
 
 impl ElementBuilder for TreeView {
@@ -258,8 +255,6 @@ impl TreeViewBuilder {
         let scheduler = get_global_scheduler()
             .expect("Animation scheduler not initialized - call this after app starts");
 
-        // Collect all expand states for reactivity
-        let mut all_signal_ids: Vec<SignalId> = Vec::new();
         let mut expand_states: Vec<(String, State<bool>, SharedAnimatedValue)> = Vec::new();
 
         // Create expand state for each node recursively
@@ -267,15 +262,12 @@ impl TreeViewBuilder {
             node: &TreeNodeConfig,
             instance_key: &InstanceKey,
             scheduler: &SchedulerHandle,
-            signal_ids: &mut Vec<SignalId>,
             states: &mut Vec<(String, State<bool>, SharedAnimatedValue)>,
             spring_config: SpringConfig,
         ) {
             let state_key = format!("{}_{}_expanded", instance_key.get(), node.key);
             let is_expanded: State<bool> =
                 BlincContextState::get().use_state_keyed(&state_key, || node.initially_expanded);
-
-            signal_ids.push(is_expanded.signal_id());
 
             let initial_value = if is_expanded.get() { 1.0 } else { 0.0 };
             let anim: SharedAnimatedValue = Arc::new(Mutex::new(AnimatedValue::new(
@@ -287,14 +279,7 @@ impl TreeViewBuilder {
             states.push((node.key.clone(), is_expanded, anim));
 
             for child in &node.children {
-                collect_states(
-                    child,
-                    instance_key,
-                    scheduler,
-                    signal_ids,
-                    states,
-                    spring_config,
-                );
+                collect_states(child, instance_key, scheduler, states, spring_config);
             }
         }
 
@@ -304,7 +289,6 @@ impl TreeViewBuilder {
                 node,
                 &self.instance_key,
                 &scheduler,
-                &mut all_signal_ids,
                 &mut expand_states,
                 spring_config,
             );
@@ -314,16 +298,12 @@ impl TreeViewBuilder {
         let selected_state_key = format!("{}_selected", self.instance_key.get());
         let selected: State<Option<String>> = BlincContextState::get()
             .use_state_keyed(&selected_state_key, || self.selected_key.clone());
-        all_signal_ids.push(selected.signal_id());
 
         // Clone data for closure
         let nodes = self.nodes.clone();
         let indent_size = self.indent_size;
         let show_guides = self.show_guides;
         let on_select = self.on_select.clone();
-        let container_key = format!("{}_container", self.instance_key.get());
-
-        let container_state = blinc_layout::stateful::use_fsm_keyed(&container_key, ());
 
         let text_primary = theme.color(ColorToken::TextPrimary);
         let text_secondary = theme.color(ColorToken::TextSecondary);
@@ -337,283 +317,253 @@ impl TreeViewBuilder {
         let diff_removed = theme.color(ColorToken::Error);
         let diff_modified = theme.color(ColorToken::Warning);
 
-        let inner =
-            Stateful::with_shared_state(container_state)
-                .deps(&all_signal_ids)
-                .on_state(move |_state: &(), container: &mut Div| {
-                    let mut tree_container = div().flex_col().flex_shrink_0();
+        // The tree is built once. Expanding a node collapses or opens its
+        // children in place, and selection moves the highlight.
+        let inner = {
+            let mut tree_container = div().flex_col().flex_shrink_0();
 
-                    // Build tree recursively
-                    #[allow(clippy::too_many_arguments)]
-                    fn build_node(
-                        node: &TreeNodeConfig,
-                        depth: usize,
-                        indent_size: f32,
-                        show_guides: bool,
-                        expand_states: &[(String, State<bool>, SharedAnimatedValue)],
-                        selected: &State<Option<String>>,
-                        on_select: &Option<SelectCallback>,
-                        text_primary: Color,
-                        text_secondary: Color,
-                        text_tertiary: Color,
-                        _surface_hover: Color,
-                        primary: Color,
-                        radius: f32,
-                        diff_added: Color,
-                        diff_removed: Color,
-                        diff_modified: Color,
-                    ) -> Div {
-                        let has_children = !node.children.is_empty();
-                        let indent = depth as f32 * indent_size;
+            // Build tree recursively
+            #[allow(clippy::too_many_arguments)]
+            fn build_node(
+                node: &TreeNodeConfig,
+                depth: usize,
+                indent_size: f32,
+                show_guides: bool,
+                expand_states: &[(String, State<bool>, SharedAnimatedValue)],
+                selected: &State<Option<String>>,
+                on_select: &Option<SelectCallback>,
+                text_primary: Color,
+                text_secondary: Color,
+                text_tertiary: Color,
+                _surface_hover: Color,
+                primary: Color,
+                radius: f32,
+                diff_added: Color,
+                diff_removed: Color,
+                diff_modified: Color,
+            ) -> Div {
+                let has_children = !node.children.is_empty();
+                let indent = depth as f32 * indent_size;
 
-                        // Find this node's expand state
-                        let expand_state = expand_states
-                            .iter()
-                            .find(|(k, _, _)| k == &node.key)
-                            .map(|(_, s, a)| (s.clone(), a.clone()));
+                // Find this node's expand state
+                let expand_state = expand_states
+                    .iter()
+                    .find(|(k, _, _)| k == &node.key)
+                    .map(|(_, s, a)| (s.clone(), a.clone()));
 
-                        let is_expanded =
-                            expand_state.as_ref().map(|(s, _)| s.get()).unwrap_or(false);
+                let expanded_sig = expand_state.as_ref().map(|(s, _)| s.signal());
+                let selected_sig = selected.signal();
+                let key = node.key.clone();
+                let is_selected = computed(move |g: &ReactiveGraph| {
+                    g.get(selected_sig).flatten().as_deref() == Some(key.as_str())
+                });
 
-                        let is_selected = selected.get().as_ref() == Some(&node.key);
-
-                        // Diff-based coloring
-                        let label_color = match node.diff {
-                            TreeNodeDiff::None => {
-                                if is_selected {
-                                    primary
-                                } else {
-                                    text_primary
-                                }
-                            }
-                            TreeNodeDiff::Added => diff_added,
-                            TreeNodeDiff::Removed => diff_removed,
-                            TreeNodeDiff::Modified => diff_modified,
-                        };
-
-                        // Background for selected/hover
-                        let bg = if is_selected {
-                            primary.with_alpha(0.15)
+                // Diff-based coloring
+                let diff = node.diff;
+                let key = node.key.clone();
+                let label_color = computed(move |g: &ReactiveGraph| match diff {
+                    TreeNodeDiff::None => {
+                        if g.get(selected_sig).flatten().as_deref() == Some(key.as_str()) {
+                            primary
                         } else {
-                            Color::TRANSPARENT
-                        };
-
-                        // Build the node row
-                        let node_key = node.key.clone();
-                        let selected_for_click = selected.clone();
-                        let on_select_for_click = on_select.clone();
-
-                        // Expand/collapse handler
-                        let expand_state_for_row = expand_state.clone();
-
-                        let mut row = div()
-                            .class("cn-tree-node")
-                            .flex_row()
-                            .items_center()
-                            .flex_shrink_0()
-                            .h(28.0)
-                            .pl(indent + 1.0)
-                            .pr(2.0)
-                            .rounded(radius)
-                            .bg(bg)
-                            .cursor(CursorStyle::Pointer);
-
-                        if is_selected {
-                            row = row.class("cn-tree-node--selected");
+                            text_primary
                         }
+                    }
+                    TreeNodeDiff::Added => diff_added,
+                    TreeNodeDiff::Removed => diff_removed,
+                    TreeNodeDiff::Modified => diff_modified,
+                });
 
-                        row = row.on_click(move |_| {
-                            // Update selection
-                            selected_for_click.set(Some(node_key.clone()));
+                // Background for selected/hover
+                let key = node.key.clone();
+                let bg = computed(move |g: &ReactiveGraph| {
+                    if g.get(selected_sig).flatten().as_deref() == Some(key.as_str()) {
+                        primary.with_alpha(0.15)
+                    } else {
+                        Color::TRANSPARENT
+                    }
+                });
 
-                            // Call callback
-                            if let Some(cb) = &on_select_for_click {
-                                cb(&node_key);
-                            }
+                // Build the node row
+                let node_key = node.key.clone();
+                let selected_for_click = selected.clone();
+                let on_select_for_click = on_select.clone();
 
-                            // Also toggle expand if has children
-                            if let Some((state, anim)) = &expand_state_for_row {
-                                let new_expanded = !state.get();
-                                state.set(new_expanded);
-                                let target = if new_expanded { 1.0 } else { 0.0 };
-                                anim.lock().unwrap().set_target(target);
-                            }
-                        });
+                // Expand/collapse handler
+                let expand_state_for_row = expand_state.clone();
 
-                        // Expand/collapse chevron (if has children)
-                        if has_children {
-                            let chevron = if is_expanded {
-                                CHEVRON_DOWN_SVG
-                            } else {
-                                CHEVRON_RIGHT_SVG
-                            };
+                let mut row = div()
+                    .class("cn-tree-node")
+                    .flex_row()
+                    .items_center()
+                    .flex_shrink_0()
+                    .h(28.0)
+                    .pl(indent + 1.0)
+                    .pr(2.0)
+                    .rounded(radius)
+                    .bg(&bg)
+                    .class_when("cn-tree-node--selected", &is_selected)
+                    .cursor(CursorStyle::Pointer);
 
-                            row = row.child(
-                                div()
-                                    .w(16.0)
-                                    .h(16.0)
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .mr(1.0)
-                                    .flex_shrink_0()
-                                    .child(svg(chevron).size(16.0, 16.0).color(text_secondary)),
-                            );
-                        } else {
-                            // Spacer for alignment (matches chevron container width)
-                            row = row.child(div().w(5.0).h(4.0).flex_shrink_0());
-                        }
+                row = row.on_click(move |_| {
+                    // Update selection
+                    selected_for_click.set(Some(node_key.clone()));
 
-                        // Diff indicator icon (+/-/~)
-                        match node.diff {
-                            TreeNodeDiff::Added => {
-                                row = row.child(
-                                    div()
-                                        .mr(1.0)
-                                        .flex_shrink_0()
-                                        .child(text("+").size(13.0).color(diff_added).no_wrap()),
-                                );
-                            }
-                            TreeNodeDiff::Removed => {
-                                row = row.child(
-                                    div()
-                                        .mr(1.0)
-                                        .flex_shrink_0()
-                                        .child(text("−").size(13.0).color(diff_removed).no_wrap()),
-                                );
-                            }
-                            TreeNodeDiff::Modified => {
-                                row =
-                                    row.child(div().mr(1.0).flex_shrink_0().child(
-                                        text("~").size(13.0).color(diff_modified).no_wrap(),
-                                    ));
-                            }
-                            TreeNodeDiff::None => {}
-                        }
-
-                        // Optional custom icon
-                        if let Some(icon_svg) = &node.icon {
-                            row =
-                                row.child(
-                                    div().w(3.5).h(3.5).mr(1.5).flex_shrink_0().child(
-                                        svg(icon_svg).size(14.0, 14.0).color(text_secondary),
-                                    ),
-                                );
-                        }
-
-                        // Label
-                        row = row.child(
-                            text(&node.label)
-                                .size(13.0)
-                                .color(label_color)
-                                .no_wrap()
-                                .pointer_events_none(),
-                        );
-
-                        // Build node container with optional children
-                        let mut node_div = div().flex_col().flex_shrink_0().child(row);
-
-                        // Children container — ALWAYS render when the node has
-                        // children, even if collapsed. FLIP needs a stable element
-                        // to compare bounds against; if we only added the container
-                        // on expand, the first reveal had no `previous_visual_bounds`
-                        // and the animation didn't start until something else
-                        // (mouse move) forced another frame.
-                        //
-                        // Collapsed = explicit h(0); expanded = natural height.
-                        // overflow_clip + clip_to_animated hide overflow during the
-                        // shrink/grow.
-                        if has_children {
-                            let anim_key = format!("tree-children-{}", node.key);
-
-                            // Mirrors the accordion pattern: `w_full()` so the
-                            // child width stays stable across collapsed → expanded
-                            // (without it, taffy resolves an `h(0)` container to a
-                            // different cross-axis size than the natural-height
-                            // expanded form, and the FLIP `from_bounds` snapshot
-                            // doesn't compose with the new `to_bounds`).
-                            let mut children_container = div()
-                                .flex_col()
-                                .w_full()
-                                .flex_shrink_0()
-                                .relative()
-                                .overflow_clip()
-                                .animate_bounds(
-                                    blinc_layout::visual_animation::VisualAnimationConfig::height()
-                                        .with_key(&anim_key)
-                                        .clip_to_animated()
-                                        .snappy(),
-                                );
-
-                            // Optional guide line - positioned at center of this node's chevron.
-                            // Chevron container is 16px wide, starts at `indent + 1.0`,
-                            // so its center is `indent + 9.0`.
-                            if show_guides {
-                                children_container = children_container.child(
-                                    div()
-                                        .absolute()
-                                        .left(indent + 9.0)
-                                        .top(0.0)
-                                        .bottom(0.0)
-                                        .w(1.0)
-                                        .bg(text_tertiary.with_alpha(0.5)),
-                                );
-                            }
-
-                            for child in &node.children {
-                                children_container = children_container.child(build_node(
-                                    child,
-                                    depth + 1,
-                                    indent_size,
-                                    show_guides,
-                                    expand_states,
-                                    selected,
-                                    on_select,
-                                    text_primary,
-                                    text_secondary,
-                                    text_tertiary,
-                                    _surface_hover,
-                                    primary,
-                                    radius,
-                                    diff_added,
-                                    diff_removed,
-                                    diff_modified,
-                                ));
-                            }
-
-                            if !is_expanded {
-                                // Matches accordion's `w_full().h(0.0).px(1.0)`
-                                // pattern: a non-zero horizontal padding when
-                                // collapsed keeps the element's cross-axis size
-                                // stable so the FLIP `from_bounds` snapshot
-                                // produces a clean dh delta against the expanded
-                                // `to_bounds`. Pure `h(0)` left taffy
-                                // computing different widths between states
-                                // and that produced choppy mid-animation paints
-                                // (only some children visible until the next
-                                // input forced another full repaint).
-                                children_container = children_container.h(0.0).px(1.0);
-                            }
-
-                            node_div = node_div.child(children_container);
-                        }
-
-                        node_div
+                    // Call callback
+                    if let Some(cb) = &on_select_for_click {
+                        cb(&node_key);
                     }
 
-                    for node in &nodes {
-                        tree_container = tree_container.child(build_node(
-                            node,
-                            0,
+                    // Also toggle expand if has children
+                    if let Some((state, anim)) = &expand_state_for_row {
+                        let new_expanded = !state.get();
+                        state.set(new_expanded);
+                        let target = if new_expanded { 1.0 } else { 0.0 };
+                        anim.lock().unwrap().set_target(target);
+                    }
+                });
+
+                // Expand/collapse chevron (if has children)
+                if has_children {
+                    // Points right, and turns down while expanded.
+                    let chevron_angle = computed(move |g: &ReactiveGraph| {
+                        let open = expanded_sig.and_then(|s| g.get(s)).unwrap_or(false);
+                        if open { 90.0 } else { 0.0 }
+                    });
+                    row = row.child(
+                        div()
+                            .w(16.0)
+                            .h(16.0)
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .mr(1.0)
+                            .flex_shrink_0()
+                            .rotate_deg(&chevron_angle)
+                            .child(
+                                svg(CHEVRON_RIGHT_SVG)
+                                    .size(16.0, 16.0)
+                                    .color(text_secondary),
+                            ),
+                    );
+                } else {
+                    // Spacer for alignment (matches chevron container width)
+                    row = row.child(div().w(5.0).h(4.0).flex_shrink_0());
+                }
+
+                // Diff indicator icon (+/-/~)
+                match node.diff {
+                    TreeNodeDiff::Added => {
+                        row = row.child(
+                            div()
+                                .mr(1.0)
+                                .flex_shrink_0()
+                                .child(text("+").size(13.0).color(diff_added).no_wrap()),
+                        );
+                    }
+                    TreeNodeDiff::Removed => {
+                        row = row.child(
+                            div()
+                                .mr(1.0)
+                                .flex_shrink_0()
+                                .child(text("−").size(13.0).color(diff_removed).no_wrap()),
+                        );
+                    }
+                    TreeNodeDiff::Modified => {
+                        row = row.child(
+                            div()
+                                .mr(1.0)
+                                .flex_shrink_0()
+                                .child(text("~").size(13.0).color(diff_modified).no_wrap()),
+                        );
+                    }
+                    TreeNodeDiff::None => {}
+                }
+
+                // Optional custom icon
+                if let Some(icon_svg) = &node.icon {
+                    row = row.child(
+                        div()
+                            .w(3.5)
+                            .h(3.5)
+                            .mr(1.5)
+                            .flex_shrink_0()
+                            .child(svg(icon_svg).size(14.0, 14.0).color(text_secondary)),
+                    );
+                }
+
+                // Label
+                row = row.child(
+                    text(&node.label)
+                        .size(13.0)
+                        .color(&label_color)
+                        .no_wrap()
+                        .pointer_events_none(),
+                );
+
+                // Build node container with optional children
+                let mut node_div = div().flex_col().flex_shrink_0().child(row);
+
+                // Children container — ALWAYS render when the node has
+                // children, even if collapsed. FLIP needs a stable element
+                // to compare bounds against; if we only added the container
+                // on expand, the first reveal had no `previous_visual_bounds`
+                // and the animation didn't start until something else
+                // (mouse move) forced another frame.
+                //
+                // Collapsed = explicit h(0); expanded = natural height.
+                // overflow_clip + clip_to_animated hide overflow during the
+                // shrink/grow.
+                if has_children {
+                    let anim_key = format!("tree-children-{}", node.key);
+
+                    // Mirrors the accordion pattern: `w_full()` so the
+                    // child width stays stable across collapsed → expanded
+                    // (without it, taffy resolves an `h(0)` container to a
+                    // different cross-axis size than the natural-height
+                    // expanded form, and the FLIP `from_bounds` snapshot
+                    // doesn't compose with the new `to_bounds`).
+                    let mut children_container = div()
+                        .flex_col()
+                        .w_full()
+                        .flex_shrink_0()
+                        .relative()
+                        .overflow_clip()
+                        .animate_bounds(
+                            blinc_layout::visual_animation::VisualAnimationConfig::height()
+                                .with_key(&anim_key)
+                                .clip_to_animated()
+                                .snappy(),
+                        );
+
+                    // Optional guide line - positioned at center of this node's chevron.
+                    // Chevron container is 16px wide, starts at `indent + 1.0`,
+                    // so its center is `indent + 9.0`.
+                    if show_guides {
+                        children_container = children_container.child(
+                            div()
+                                .absolute()
+                                .left(indent + 9.0)
+                                .top(0.0)
+                                .bottom(0.0)
+                                .w(1.0)
+                                .bg(text_tertiary.with_alpha(0.5)),
+                        );
+                    }
+
+                    for child in &node.children {
+                        children_container = children_container.child(build_node(
+                            child,
+                            depth + 1,
                             indent_size,
                             show_guides,
-                            &expand_states,
-                            &selected,
-                            &on_select,
+                            expand_states,
+                            selected,
+                            on_select,
                             text_primary,
                             text_secondary,
                             text_tertiary,
-                            surface_hover,
+                            _surface_hover,
                             primary,
                             radius,
                             diff_added,
@@ -622,8 +572,43 @@ impl TreeViewBuilder {
                         ));
                     }
 
-                    container.merge(tree_container);
-                });
+                    // Collapsed to no height while the node is shut;
+                    // the children stay laid out so the height
+                    // animation has something to shrink and grow.
+                    let collapsed = computed(move |g: &ReactiveGraph| {
+                        !expanded_sig.and_then(|s| g.get(s)).unwrap_or(false)
+                    });
+                    children_container = children_container.collapsed_when(&collapsed);
+
+                    node_div = node_div.child(children_container);
+                }
+
+                node_div
+            }
+
+            for node in &nodes {
+                tree_container = tree_container.child(build_node(
+                    node,
+                    0,
+                    indent_size,
+                    show_guides,
+                    &expand_states,
+                    &selected,
+                    &on_select,
+                    text_primary,
+                    text_secondary,
+                    text_tertiary,
+                    surface_hover,
+                    primary,
+                    radius,
+                    diff_added,
+                    diff_removed,
+                    diff_modified,
+                ));
+            }
+
+            tree_container
+        };
 
         // Apply user classes and id
         let mut inner = inner;
