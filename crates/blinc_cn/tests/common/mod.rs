@@ -10,6 +10,17 @@ use blinc_layout::renderer::{ElementType, RenderTree};
 use std::fmt::Write as _;
 use std::sync::{Arc, Mutex};
 
+/// The animation scheduler every test in the process shares.
+static SCHEDULER: std::sync::OnceLock<&'static blinc_animation::AnimationScheduler> =
+    std::sync::OnceLock::new();
+
+/// Advance the shared animations by `dt` seconds.
+pub fn tick_animations(dt: f32) {
+    if let Some(scheduler) = SCHEDULER.get() {
+        scheduler.tick_by(dt);
+    }
+}
+
 pub fn init() {
     static I: std::sync::Once = std::sync::Once::new();
     I.call_once(|| {
@@ -22,7 +33,7 @@ pub fn init() {
         let s = blinc_animation::AnimationScheduler::new();
         blinc_animation::set_global_scheduler(s.handle());
         blinc_layout::render_state::set_global_scheduler(s.handle());
-        Box::leak(Box::new(s));
+        let _ = SCHEDULER.set(Box::leak(Box::new(s)));
         if !blinc_core::BlincContextState::is_initialized() {
             blinc_core::BlincContextState::init(
                 global_graph(),

@@ -35,15 +35,15 @@
 
 use blinc_animation::{AnimatedValue, SpringConfig};
 use blinc_core::context_state::BlincContextState;
-use blinc_core::{SignalId, State, use_state_keyed};
+use blinc_core::{State, use_state_keyed};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
 // LayoutAnimationConfig is no longer used - using new VisualAnimationConfig system
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_layout::InstanceKey;
 use blinc_layout::motion::{SharedAnimatedValue, motion};
 use blinc_layout::prelude::*;
 use blinc_layout::render_state::get_global_scheduler;
-use blinc_layout::stateful::Stateful;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 use std::cell::OnceCell;
@@ -51,9 +51,6 @@ use std::sync::{Arc, Mutex};
 
 /// Chevron down SVG icon
 const CHEVRON_DOWN_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
-
-/// Chevron up SVG icon (for when section is open)
-const CHEVRON_UP_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>"#;
 
 /// Accordion mode - single or multi open
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -68,7 +65,7 @@ pub enum AccordionMode {
 /// Accordion component - multiple collapsible sections
 pub struct Accordion {
     /// The fully-built inner element
-    inner: Stateful<()>,
+    inner: Div,
 }
 
 impl ElementBuilder for Accordion {
@@ -254,9 +251,6 @@ impl AccordionBuilder {
         let scheduler = get_global_scheduler()
             .expect("Animation scheduler not initialized - call this after app starts");
 
-        // Collect all signal IDs for the container's deps
-        let mut all_signal_ids: Vec<SignalId> = Vec::new();
-
         // Build combined item data with runtime state - no mutex needed, just Vec
         let mut items_with_state: Vec<(AccordionItem, AccordionItemState)> = Vec::new();
 
@@ -280,9 +274,6 @@ impl AccordionBuilder {
                     BlincContextState::get().use_state_keyed(&state_key, || is_initially_open)
                 }
             };
-
-            // Collect signal ID for container deps
-            all_signal_ids.push(is_open.signal_id());
 
             // Get actual current state (may differ from initial if persisted)
             let actual_is_open = is_open.get();
@@ -311,11 +302,6 @@ impl AccordionBuilder {
         let radius = theme.radius(RadiusToken::Lg);
 
         let key_for_container = format!("{}_container", self.instance_key.get());
-        let container_state_handle = blinc_layout::stateful::use_fsm_keyed(&key_for_container, ());
-
-        // Clone for use inside the closure
-        let anim_key_for_container = key_for_container.clone();
-
         let item_count = items_with_state.len();
         let mode = self.mode;
 
@@ -323,177 +309,157 @@ impl AccordionBuilder {
         let all_item_states: Vec<AccordionItemState> =
             items_with_state.iter().map(|(_, s)| s.clone()).collect();
 
-        // Build the entire accordion as a single Stateful that reacts to ALL item open states
-        let accordion_stateful = Stateful::with_shared_state(container_state_handle)
-            .deps(&all_signal_ids)
-            .on_state(move |_state: &(), container: &mut Div| {
-                // Outer container animates height so border follows children expansion
-                let mut content = div()
-                    .class("cn-accordion")
-                    .flex_col()
-                    .w_full()
-                    .flex_shrink()
-                    .rounded(radius)
-                    .shadow_md()
-                    .bg(theme.color(ColorToken::SurfaceElevated))
-                    .border(1.5, border_color)
-                    .overflow_clip()
-                    .animate_bounds(
-                        blinc_layout::visual_animation::VisualAnimationConfig::height()
-                            .with_key(&anim_key_for_container)
-                            .clip_to_animated()
-                            .snappy(),
-                    );
+        // The accordion is built once. Each section's chevron and height
+        // follow its open state in place, and the height change animates.
+        let mut content = div()
+            .class("cn-accordion")
+            .flex_col()
+            .w_full()
+            .flex_shrink()
+            .rounded(radius)
+            .shadow_md()
+            .bg(theme.color(ColorToken::SurfaceElevated))
+            .border(1.5, border_color)
+            .overflow_clip()
+            .animate_bounds(
+                blinc_layout::visual_animation::VisualAnimationConfig::height()
+                    .with_key(&key_for_container)
+                    .clip_to_animated()
+                    .snappy(),
+            );
 
-                for (index, (item, item_state)) in items_with_state.iter().enumerate() {
-                    let is_open = item_state.is_open.clone();
-                    let opacity_anim = item_state.opacity_anim.clone();
-                    let item_key = item_state.key.clone();
+        for (index, (item, item_state)) in items_with_state.iter().enumerate() {
+            let is_open = item_state.is_open.clone();
+            let opacity_anim = item_state.opacity_anim.clone();
+            let item_key = item_state.key.clone();
 
-                    let content_fn = item.content.clone();
-                    let label = item.label.clone();
+            let content_fn = item.content.clone();
+            let label = item.label.clone();
 
-                    // Clones for on_click closure
-                    let is_open_for_click = is_open.clone();
-                    let opacity_anim_for_click = opacity_anim.clone();
-                    let all_states_for_click = all_item_states.clone();
-                    let key_for_click = item_key.clone();
+            // Clones for on_click closure
+            let is_open_for_click = is_open.clone();
+            let opacity_anim_for_click = opacity_anim.clone();
+            let all_states_for_click = all_item_states.clone();
+            let key_for_click = item_key.clone();
 
-                    let section_is_open = is_open.get();
-
-                    // Build trigger - stateless div since container rebuilds on state change
-                    let chevron_svg = if section_is_open {
-                        CHEVRON_UP_SVG
-                    } else {
-                        CHEVRON_DOWN_SVG
-                    };
-
-                    let mut trigger = div()
-                        .class("cn-accordion-trigger")
-                        .flex_row()
-                        .w_full()
-                        // Builder padding fallback MUST match the
-                        // `.cn-accordion-trigger` CSS (space-4 / space-3 =
-                        // 16px / 12px). Every other cn menu primitive sets
-                        // this fallback (see cn_styles.rs's note); the
-                        // accordion trigger omitted it, so on a rebuild that
-                        // doesn't re-apply the class layout — and on the
-                        // initial default-open render — the row collapsed to
-                        // zero padding + height. The value equals the CSS so
-                        // there is never a shift when the class does apply.
-                        .py(4.0)
-                        .px(3.0)
-                        .justify_between()
-                        .items_center()
-                        .cursor(CursorStyle::Pointer)
-                        .child(
-                            text(&label)
-                                .size(14.0)
-                                .weight(blinc_layout::div::FontWeight::Medium)
-                                .color(text_primary)
-                                .pointer_events_none(),
-                        )
-                        .child(svg(chevron_svg).size(16.0, 16.0).color(text_secondary))
-                        .on_click(move |_| {
-                            let current = is_open_for_click.get();
-                            let new_state = !current;
-
-                            // In single mode, close all other sections first
-                            if mode == AccordionMode::Single && new_state {
-                                for state in &all_states_for_click {
-                                    if state.key != key_for_click && state.is_open.get() {
-                                        state.is_open.set(false);
-                                        state.opacity_anim.lock().unwrap().set_target(0.0);
-                                    }
-                                }
-                            }
-
-                            // Toggle this section
-                            is_open_for_click.set(new_state);
-
-                            let target_opacity = if new_state { 1.0 } else { 0.0 };
-                            opacity_anim_for_click
-                                .lock()
-                                .unwrap()
-                                .set_target(target_opacity);
-                        });
-
-                    // Note: No position animation on trigger - it doesn't move relative to item_div.
-                    // The item_div itself animates position within the container.
-
-                    // Structure: item_wrapper contains trigger (always visible) + collapsible content
-                    // Only the collapsible content area animates, keeping trigger always visible
-                    let anim_key = format!("accordion-content-{}", item_key);
-
-                    // Build the collapsible content area with FLIP-style visual animation
-                    // ALWAYS render content - during collapse, the content is visible while
-                    // the animated height shrinks. overflow_clip() hides overflow during animation.
-                    //
-                    // Using animate_bounds() (new system) instead of animate_layout() (old system):
-                    // - Layout runs once with final positions (taffy is read-only)
-                    // - Animation tracks visual offsets from layout position
-                    // - Parent offsets propagate to children hierarchically
-                    // Content animates HEIGHT only - position is handled by parent item_div
-                    // clip_to_animated ensures content clips to shrinking bounds during collapse
-                    //
-                    // IMPORTANT: Content must ALWAYS be rendered for collapse animation to work.
-                    // If content is conditionally removed, there's nothing to show during collapse.
-                    // The content is always present but clipped by overflow_clip and animate_bounds.
-                    // Padding is only applied when open to avoid gaps when collapsed.
-                    let collapsible_content = div()
-                        .class("cn-accordion-content")
-                        .flex_col()
-                        .w_full()
-                        .bg(theme.color(ColorToken::Surface))
-                        .border_top(1.0, border_color)
-                        .overflow_clip()
-                        .animate_bounds(
-                            blinc_layout::visual_animation::VisualAnimationConfig::height()
-                                .with_key(&anim_key)
-                                .clip_to_animated()
-                                .snappy(),
-                        )
-                        // Always render content so collapse animation has something to clip
-                        .child(content_fn())
-                        // Only add padding when open (padding adds to size even with h(0))
-                        .when(section_is_open, |d| d.py(2.0).px(1.0))
-                        // Set explicit height to 0 when collapsed - content is clipped
-                        .when(!section_is_open, |d| d.w_full().h(0.0).px(1.0));
-
-                    // Item wrapper: trigger (always visible) + collapsible content
-                    // Both item_div and separators animate position for fluid transitions
-                    let item_div_key = format!("accordion-item-{}", item_key);
-                    let item_div = div()
-                        .flex_col()
-                        .w_full()
-                        .animate_bounds(
-                            blinc_layout::visual_animation::VisualAnimationConfig::position()
-                                .with_key(&item_div_key)
-                                .snappy(),
-                        )
-                        .child(trigger)
-                        .child(collapsible_content);
-
-                    content = content.child(item_div);
-
-                    // Add separator between items (not after last)
-                    // Separator also animates position for fluid transitions
-                    if index < item_count - 1 {
-                        let separator_key = format!("accordion-sep-{}", item_key);
-                        content = content.child(
-                            div().w_full().h(1.0).bg(border_color).animate_bounds(
-                                blinc_layout::visual_animation::VisualAnimationConfig::position()
-                                    .with_key(&separator_key)
-                                    .snappy(),
-                            ),
-                        );
-                    }
+            let open = is_open.signal();
+            let chevron_angle = computed(move |g: &ReactiveGraph| {
+                if g.get(open).unwrap_or(false) {
+                    180.0
+                } else {
+                    0.0
                 }
-
-                container.merge(content);
             });
+            let closed = computed(move |g: &ReactiveGraph| !g.get(open).unwrap_or(false));
 
-        let mut inner = accordion_stateful;
+            let trigger = div()
+                .class("cn-accordion-trigger")
+                .flex_row()
+                .w_full()
+                // Builder padding fallback MUST match the
+                // `.cn-accordion-trigger` CSS (space-4 / space-3 =
+                // 16px / 12px), so there is never a shift when the class
+                // applies.
+                .py(4.0)
+                .px(3.0)
+                .justify_between()
+                .items_center()
+                .cursor(CursorStyle::Pointer)
+                .child(
+                    text(&label)
+                        .size(14.0)
+                        .weight(blinc_layout::div::FontWeight::Medium)
+                        .color(text_primary)
+                        .pointer_events_none(),
+                )
+                .child(
+                    div()
+                        .rotate_deg(&chevron_angle)
+                        .child(svg(CHEVRON_DOWN_SVG).size(16.0, 16.0).color(text_secondary)),
+                )
+                .on_click(move |_| {
+                    let current = is_open_for_click.get();
+                    let new_state = !current;
+
+                    // In single mode, close all other sections first
+                    if mode == AccordionMode::Single && new_state {
+                        for state in &all_states_for_click {
+                            if state.key != key_for_click && state.is_open.get() {
+                                state.is_open.set(false);
+                                state.opacity_anim.lock().unwrap().set_target(0.0);
+                            }
+                        }
+                    }
+
+                    // Toggle this section
+                    is_open_for_click.set(new_state);
+
+                    let target_opacity = if new_state { 1.0 } else { 0.0 };
+                    opacity_anim_for_click
+                        .lock()
+                        .unwrap()
+                        .set_target(target_opacity);
+                });
+
+            // The content is always laid out and painted, and collapsed to no
+            // height while the section is closed: the height animation then
+            // clips it as it closes instead of it vanishing first. Its padding
+            // sits inside, so a closed section has none.
+            let anim_key = format!("accordion-content-{}", item_key);
+            let collapsible_content = div()
+                .class("cn-accordion-content")
+                .flex_col()
+                .w_full()
+                .bg(theme.color(ColorToken::Surface))
+                .border_top(1.0, border_color)
+                .overflow_clip()
+                .animate_bounds(
+                    blinc_layout::visual_animation::VisualAnimationConfig::height()
+                        .with_key(&anim_key)
+                        .clip_to_animated()
+                        .snappy(),
+                )
+                .collapsed_when(&closed)
+                .child(
+                    div()
+                        .flex_col()
+                        .w_full()
+                        .py(2.0)
+                        .px(1.0)
+                        .child(content_fn()),
+                );
+
+            // Item wrapper: trigger (always visible) + collapsible content
+            // Both item_div and separators animate position for fluid transitions
+            let item_div_key = format!("accordion-item-{}", item_key);
+            let item_div = div()
+                .flex_col()
+                .w_full()
+                .animate_bounds(
+                    blinc_layout::visual_animation::VisualAnimationConfig::position()
+                        .with_key(&item_div_key)
+                        .snappy(),
+                )
+                .child(trigger)
+                .child(collapsible_content);
+
+            content = content.child(item_div);
+
+            // Add separator between items (not after last)
+            // Separator also animates position for fluid transitions
+            if index < item_count - 1 {
+                let separator_key = format!("accordion-sep-{}", item_key);
+                content = content.child(
+                    div().w_full().h(1.0).bg(border_color).animate_bounds(
+                        blinc_layout::visual_animation::VisualAnimationConfig::position()
+                            .with_key(&separator_key)
+                            .snappy(),
+                    ),
+                );
+            }
+        }
+
+        let mut inner = content;
         for c in &self.classes {
             inner = inner.class(c);
         }
