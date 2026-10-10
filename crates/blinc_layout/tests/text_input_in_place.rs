@@ -1,5 +1,6 @@
 //! A text field is built once: typing, focusing, hovering, scrolling and
-//! selecting patch what it shows in place, with no subtree rebuilt.
+//! selecting patch what it shows in place, with no subtree rebuilt, and its
+//! caret shows while it is focused.
 
 use blinc_core::Color;
 use blinc_core::events::event_types;
@@ -119,6 +120,37 @@ impl Scene {
             .border_color
     }
 
+    /// The rectangles the caret paints this frame.
+    fn caret_rects(&self) -> usize {
+        let mut stack = vec![self.root()];
+        while let Some(node) = stack.pop() {
+            if let Some(ElementType::Canvas(c)) =
+                self.tree.get_render_node(node).map(|r| &r.element_type)
+            {
+                let paint = c.render_fn.clone().expect("the caret has no paint");
+                let b = self.tree.get_absolute_bounds(node).unwrap();
+                let mut ctx =
+                    blinc_core::RecordingContext::new(blinc_core::Size::new(400.0, 100.0));
+                paint(
+                    &mut ctx,
+                    blinc_layout::CanvasBounds {
+                        x: 0.0,
+                        y: 0.0,
+                        width: b.width,
+                        height: b.height,
+                    },
+                );
+                return ctx
+                    .commands()
+                    .iter()
+                    .filter(|c| matches!(c, blinc_core::DrawCommand::FillRect { .. }))
+                    .count();
+            }
+            stack.extend(self.tree.layout_tree.children(node));
+        }
+        panic!("the field has no caret");
+    }
+
     /// How far the text has been scrolled left: the translation of the node
     /// holding the runs.
     fn scrolled(&self) -> f32 {
@@ -207,4 +239,22 @@ fn a_selection_splits_the_text_into_runs() {
         "the selection did not split the text"
     );
     assert_eq!(s.shown(), "hello world");
+}
+
+#[test]
+fn the_caret_shows_while_focused_with_nothing_selected() {
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = scene(300.0);
+    assert_eq!(s.caret_rects(), 0, "an unfocused field draws a caret");
+    s.click();
+    assert_eq!(s.caret_rects(), 1, "the focused field draws no caret");
+    s.type_text("hello");
+    assert_eq!(s.caret_rects(), 1);
+    {
+        let mut d = s.data.lock().unwrap();
+        d.selection_start = Some(0);
+    }
+    refresh_text_input(&s.data);
+    s.frame();
+    assert_eq!(s.caret_rects(), 0, "a selection still draws the caret");
 }

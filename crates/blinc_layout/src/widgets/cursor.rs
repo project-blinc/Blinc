@@ -113,7 +113,12 @@ impl CursorState {
         if !self.visible {
             return 0.0;
         }
+        self.blink_opacity()
+    }
 
+    /// The opacity at this point in the blink, whatever `visible` says: for a
+    /// caret whose owner decides when it shows.
+    pub fn blink_opacity(&self) -> f32 {
         let elapsed = self.reset_time.elapsed().as_millis() as f64;
         let period = self.blink_period_ms as f64;
 

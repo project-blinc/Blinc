@@ -3381,7 +3381,7 @@ fn content(
                     return;
                 }
                 let cs = cursor_state.lock().unwrap();
-                let opacity = cs.current_opacity();
+                let opacity = cs.blink_opacity();
                 if opacity < 0.01 {
                     return;
                 }
