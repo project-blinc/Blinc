@@ -37,11 +37,13 @@ use std::sync::Arc;
 
 use blinc_core::State;
 use blinc_core::context_state::BlincContextState;
+use blinc_core::owner::Owner;
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_layout::click_outside;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, stateful_with_key};
+use blinc_layout::stateful::ButtonState;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState};
 
@@ -182,173 +184,164 @@ impl Select {
 
         let dropdown_width = config.width.unwrap_or(200.0);
 
-        // Clones for closures
-        let value_state_for_display = config.value_state.clone();
-        let open_state_for_display = open_state.clone();
-        let options_for_display = config.options.clone();
-        let placeholder_for_display = config.placeholder.clone();
-        let options_for_dropdown = config.options.clone();
-        let on_change_for_dropdown = config.on_change.clone();
-        let value_state_for_dropdown = config.value_state.clone();
-        let open_state_for_dropdown = open_state.clone();
+        // The select is built once. Its fill and border follow the pointer
+        // and whether it is open; the shown value is rebuilt when the value
+        // changes, and the list is built while it is open.
+        let interaction = Interaction::keyed(&format!("{}_btn", instance_key));
+        let (hovered, pressed) = (
+            interaction.hovered().signal(),
+            interaction.pressed().signal(),
+        );
+        let open = open_state.signal();
+        let btn_variant = ButtonVariant::Outline;
+        let trigger_bg = computed(move |g: &ReactiveGraph| {
+            let theme = ThemeState::get();
+            if disabled {
+                return theme.color(ColorToken::InputBgDisabled);
+            }
+            let state = if g.get(pressed).unwrap_or(false) {
+                ButtonState::Pressed
+            } else if g.get(hovered).unwrap_or(false) {
+                ButtonState::Hovered
+            } else {
+                ButtonState::Idle
+            };
+            btn_variant.background(theme, state)
+        });
+        let trigger_border = computed(move |g: &ReactiveGraph| {
+            if disabled {
+                ThemeState::get().color(ColorToken::BorderSecondary)
+            } else if g.get(open).unwrap_or(false) {
+                border_hover
+            } else {
+                border
+            }
+        });
 
         // Chevron SVG (down arrow)
         let chevron_svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
 
-        let btn_variant = ButtonVariant::Outline;
-        let select_btn_key = format!("{}_btn", instance_key);
-        let instance_key_owned = instance_key.to_string();
-        // Unique element ID for click-outside detection
-        let wrapper_id = format!("cn-select-{}", instance_key);
-        let wrapper_id_for_state = wrapper_id.clone();
-        let open_state_for_dismiss = open_state.clone();
-
-        let select_element = stateful_with_key::<ButtonState>(&select_btn_key)
-            .deps([config.value_state.signal_id(), open_state.signal_id()])
-            .on_state(move |ctx| {
-                let state = ctx.state();
-                let is_open = open_state_for_display.get();
-
-                // Register/unregister click-outside based on open state
-                if is_open {
-                    let dismiss_state = open_state_for_dismiss.clone();
-                    click_outside::register_click_outside(
-                        &wrapper_id_for_state,
-                        &wrapper_id_for_state,
-                        move || {
-                            dismiss_state.set(false);
-                        },
-                    );
-                } else {
-                    click_outside::unregister_click_outside(&wrapper_id_for_state);
-                }
-
-                // Disabled gets the same tonal-fill treatment as cn::button —
-                // solid `InputBgDisabled` bg, `BorderSecondary` outline,
-                // `TextTertiary` text. Matches the disabled-surface family
-                // (button / select / switch) so the inert states all read
-                // as the same UI tier.
-                let bg = if disabled {
-                    theme.color(ColorToken::InputBgDisabled)
-                } else {
-                    btn_variant.background(theme, state)
-                };
-                let current_val = value_state_for_display.get();
-                let selected_option = options_for_display
-                    .iter()
-                    .find(|opt| opt.value == current_val);
-
-                let is_placeholder = selected_option.is_none();
-                let text_clr = if disabled || is_placeholder {
+        // The value shown, as a one-row list keyed by the value.
+        let value = config.value_state.signal();
+        let shown = computed(move |g: &ReactiveGraph| vec![g.get(value).unwrap_or_default()]);
+        let options_for_display = config.options.clone();
+        let placeholder = config
+            .placeholder
+            .clone()
+            .unwrap_or_else(|| "Select...".to_string());
+        let content_wrapper = div().overflow_clip().flex_1().for_each(
+            shown,
+            |value: &String| value.clone(),
+            move |current: String| -> Div {
+                let selected = options_for_display.iter().find(|opt| opt.value == current);
+                let text_clr = if disabled || selected.is_none() {
                     text_tertiary
                 } else {
                     text_color
                 };
-                let bdr = if disabled {
-                    theme.color(ColorToken::BorderSecondary)
-                } else if is_open {
-                    border_hover
-                } else {
-                    border
-                };
-
-                let display_content: Div = if let Some(opt) = selected_option {
-                    if let Some(ref content_fn) = opt.content {
-                        content_fn()
-                    } else {
-                        div()
+                match selected {
+                    Some(opt) => match opt.content {
+                        Some(ref content_fn) => content_fn(),
+                        None => div()
                             .h_fit()
                             .overflow_clip()
-                            .child(text(&opt.label).size(font_size).no_cursor().color(text_clr))
-                    }
-                } else {
-                    let placeholder_text = placeholder_for_display
-                        .clone()
-                        .unwrap_or_else(|| "Select...".to_string());
-                    div().h_fit().overflow_clip().child(
-                        text(&placeholder_text)
+                            .child(text(&opt.label).size(font_size).no_cursor().color(text_clr)),
+                    },
+                    None => div().h_fit().overflow_clip().child(
+                        text(&placeholder)
                             .size(font_size)
                             .no_cursor()
                             .color(text_clr),
-                    )
-                };
-
-                let content_wrapper = div().overflow_clip().flex_1().child(display_content);
-
-                // Wrapper uses relative positioning so the dropdown can be absolutely positioned
-                let mut wrapper = div()
-                    .class("cn-select")
-                    .id(&wrapper_id)
-                    .relative()
-                    .overflow_visible()
-                    .w(dropdown_width);
-
-                // Trigger button — click handler is on the trigger itself (not the wrapper)
-                // so clicking dropdown items does NOT re-toggle the dropdown.
-                let open_state_trigger = open_state_for_display.clone();
-                let trigger = div()
-                    .class("cn-select-trigger")
-                    .flex_row()
-                    .w(dropdown_width)
-                    .items_center()
-                    .justify_between()
-                    .h(height)
-                    .p_px(padding)
-                    .bg(bg)
-                    .border(1.0, bdr)
-                    .rounded(radius)
-                    .overflow_clip()
-                    .flex_shrink_0()
-                    // No shadow when disabled — matches the flat,
-                    // non-interactive look the cn::button disabled state uses.
-                    .when(!disabled, |t| t.shadow_sm())
-                    .child(content_wrapper)
-                    .child(
-                        svg(chevron_svg)
-                            .size(16.0, 16.0)
-                            .tint(text_tertiary)
-                            .ml(1.0)
-                            .flex_shrink_0(),
-                    )
-                    .when(!disabled, |t| t.cursor_pointer())
-                    .when(disabled, |t| t.cursor_not_allowed())
-                    .on_click(move |_ctx| {
-                        if !disabled {
-                            open_state_trigger.set(!open_state_trigger.get());
-                        }
-                    });
-
-                wrapper = wrapper.child(trigger);
-
-                // Dropdown content (only when open)
-                if is_open {
-                    let current_selected = value_state_for_dropdown.get();
-                    // Use fixed Surface color for dropdown items — not the
-                    // trigger's state-dependent bg which changes on hover/press
-                    let dropdown_bg = theme.color(ColorToken::Surface);
-                    let dropdown = build_dropdown_content(
-                        &options_for_dropdown,
-                        &current_selected,
-                        &value_state_for_dropdown,
-                        &open_state_for_dropdown,
-                        &on_change_for_dropdown,
-                        &instance_key_owned,
-                        dropdown_width,
-                        height,
-                        font_size,
-                        padding,
-                        radius,
-                        dropdown_bg,
-                        border,
-                        text_color,
-                        text_tertiary,
-                        surface_elevated,
-                    );
-
-                    wrapper = wrapper.child(dropdown);
+                    ),
                 }
+            },
+        );
 
-                wrapper
+        // Trigger button — click handler is on the trigger itself (not the wrapper)
+        // so clicking dropdown items does NOT re-toggle the dropdown.
+        let open_state_trigger = open_state.clone();
+        let trigger = div()
+            .class("cn-select-trigger")
+            .flex_row()
+            .w(dropdown_width)
+            .items_center()
+            .justify_between()
+            .h(height)
+            .p_px(padding)
+            .bg(&trigger_bg)
+            .border_width(1.0)
+            .border_color(&trigger_border)
+            .rounded(radius)
+            .overflow_clip()
+            .flex_shrink_0()
+            // No shadow when disabled — matches the flat,
+            // non-interactive look the cn::button disabled state uses.
+            .when(!disabled, |t| t.shadow_sm())
+            .track(&interaction)
+            .child(content_wrapper)
+            .child(
+                svg(chevron_svg)
+                    .size(16.0, 16.0)
+                    .tint(text_tertiary)
+                    .ml(1.0)
+                    .flex_shrink_0(),
+            )
+            .when(!disabled, |t| t.cursor_pointer())
+            .when(disabled, |t| t.cursor_not_allowed())
+            .on_click(move |_ctx| {
+                if !disabled {
+                    open_state_trigger.set(!open_state_trigger.get());
+                }
+            });
+
+        // Unique element ID for click-outside detection
+        let wrapper_id = format!("cn-select-{}", instance_key);
+        let options_for_dropdown = config.options.clone();
+        let on_change_for_dropdown = config.on_change.clone();
+        let value_state_for_dropdown = config.value_state.clone();
+        let open_state_for_dropdown = open_state.clone();
+        let instance_key_owned = instance_key.to_string();
+        let wrapper_id_for_list = wrapper_id.clone();
+
+        // The wrapper is positioned so the list can sit absolutely below the
+        // trigger.
+        let select_element = div()
+            .class("cn-select")
+            .id(&wrapper_id)
+            .relative()
+            .overflow_visible()
+            .w(dropdown_width)
+            .child(trigger)
+            .show(&open_state, move || {
+                // A click outside closes the list for as long as it is open.
+                let dismiss = open_state_for_dropdown.clone();
+                click_outside::register_click_outside(
+                    &wrapper_id_for_list,
+                    &wrapper_id_for_list,
+                    move || dismiss.set(false),
+                );
+                let registered = wrapper_id_for_list.clone();
+                Owner::on_cleanup(move || click_outside::unregister_click_outside(&registered));
+
+                build_dropdown_content(
+                    &options_for_dropdown,
+                    &value_state_for_dropdown.get(),
+                    &value_state_for_dropdown,
+                    &open_state_for_dropdown,
+                    &on_change_for_dropdown,
+                    &instance_key_owned,
+                    dropdown_width,
+                    height,
+                    font_size,
+                    padding,
+                    radius,
+                    // Fixed Surface: the trigger's fill follows the pointer.
+                    theme.color(ColorToken::Surface),
+                    border,
+                    text_color,
+                    text_tertiary,
+                    surface_elevated,
+                )
             });
 
         // If there's a label, wrap in a container
