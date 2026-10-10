@@ -258,6 +258,10 @@ div()
     .left(20.0)         // 20px from left
 ```
 
+`.absolute_when(signal)` takes the element out of flow while the signal
+holds and puts it back when it stops, with a layout pass and no rebuild. It
+keeps its insets; with none it sits at the start of its container.
+
 ### Overflow
 
 ```rust
@@ -352,7 +356,7 @@ div()
 
 ## The `.child()` Pattern
 
-Add children with `.child()`. For multiple children of the same type, use iterators:
+Add children with `.child()`. For multiple children of the same type, pass an iterator to `.children()`:
 
 ```rust
 // Single child
@@ -366,9 +370,19 @@ div()
 
 // From iterator
 let items = vec!["Apple", "Banana", "Cherry"];
-div().child(
+div().children(
     items.into_iter().map(|item| text(item))
 )
+```
+
+Children added this way are fixed once built. For children that follow a
+signal, a list with `for_each` or a branch with `show` / `show_or`, see
+[Lists & Conditional Content](./lists-branches.md):
+
+```rust
+let fruits = signal(vec!["Apple".to_string(), "Banana".to_string()]);
+
+div().flex_col().for_each(fruits, |name: &String| name.clone(), |name: String| text(name))
 ```
 
 ---

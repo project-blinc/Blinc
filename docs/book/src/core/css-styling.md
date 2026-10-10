@@ -1804,6 +1804,24 @@ fn card_style(is_selected: bool, scale: f32) -> ElementStyle {
 }
 ```
 
+A class can also follow a signal. `.class_when(name, signal)` adds the
+class while the signal holds; the stylesheet's rules for it apply and stop
+applying in place, with no rebuild:
+
+```rust
+let selected = signal(false);
+
+div()
+    .class("card")
+    .class_when("card--selected", selected)
+    .on_click(move |_| selected.update(|v| !v))
+```
+
+```css
+.card { border: 1px solid #333; }
+.card--selected { border: 2px solid #4a7dff; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+```
+
 ### When to Use Each Approach
 
 | Approach | Best For |

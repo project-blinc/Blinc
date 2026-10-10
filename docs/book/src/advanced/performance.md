@@ -24,33 +24,33 @@ size becomes irrelevant; work scales with what *changed*.
 
 Anything that invalidates a gate forces a full walker rerun.
 
-## Use Stateful for Visual States
+## Patch Visual State in Place
 
-**Do:** Use `stateful::<S>()` for hover, press, and focus effects:
+**Do:** Let a stylesheet or a bound property carry hover, press and focus:
 
 ```rust
-use blinc_layout::stateful::stateful;
+use blinc_core::reactive::computed;
+use blinc_layout::prelude::*;
 
 fn hover_button() -> impl ElementBuilder {
-    stateful::<ButtonState>()
-        .px(16.0)
-        .py(8.0)
+    let pointer = Interaction::keyed("hover-button");
+    let hovered = pointer.hovered().signal();
+    let bg = computed(move |g| {
+        if g.get(hovered).unwrap_or(false) { Color::BLUE } else { Color::RED }
+    });
+
+    div()
+        .track(&pointer)
+        .bg(bg)
+        .px(4.0)
+        .py(2.0)
         .rounded(8.0)
-        .on_state(|ctx| {
-            let bg = match ctx.state() {
-                ButtonState::Idle => Color::RED,
-                ButtonState::Hovered => Color::BLUE,
-                _ => Color::RED,
-            };
-            div().bg(bg)
-        })
         .child(text("Hover me").color(Color::WHITE))
 }
 ```
 
-**Don't:** Reach for a top-level `use_signal` to switch a visual property
-when CSS, `Stateful`, or signal *binding* (`bg(my_signal)`) would do the
-job:
+**Don't:** Branch on a signal read to switch a visual property when CSS or
+a bound property (`.bg(my_signal)`) would do the job:
 
 ```rust
 // AVOID: flipping this signal triggers a subtree rebuild because the
@@ -69,12 +69,12 @@ div()
 
 Order of preference for visual state:
 
-1. **CSS `:hover` / `:focus` / `:active`.** Patched in place by
-   `apply_css_deltas` with zero Rust overhead.
-2. **`stateful::<S>()`.** Element-scoped FSM, only re-renders the affected
-   subtree on transition.
-3. **Direct signal binding** (`.bg(color_signal)`). Fast-path patch via
-   `apply_binding_deltas`; no rebuild at all.
+1. **CSS `:hover` / `:focus` / `:active`.** Patched in place with no Rust
+   code at all.
+2. **A bound property or class** (`.bg(signal)`, `.bg(computed)`,
+   `.class_when(name, signal)`). Patched in place; nothing is rebuilt.
+3. **`stateful::<S>()`.** Rebuilds its subtree on every transition. Keep it
+   for state machines whose states build different structure.
 4. **Branched `if/else` driven by a signal read.** Last resort; this
    rebuilds the reading component's subtree.
 
@@ -114,24 +114,29 @@ Don't overuse; each key adds memory overhead.
 
 ## Efficient List Rendering
 
-For large lists, consider:
-
-1. **Virtualization.** Only render visible items.
-2. **Stable keys.** Use consistent identifiers for list items.
-3. **Memoization.** Cache expensive computations.
+A list that changes belongs in `for_each`. When the list changes, rows are
+added, removed and reordered in place; a row whose key stays keeps its
+element, and nothing around the list is rebuilt:
 
 ```rust
-// For very long lists, wrap in scroll and limit rendered items
 scroll()
     .h(500.0)
+    .viewport_cull(true)
     .child(
         div()
             .flex_col()
-            .child(
-                visible_items.iter().map(|item| render_item(item))
-            )
+            .for_each(items, |item: &Item| item.id, |item: Item| render_item(&item)),
     )
 ```
+
+For large lists:
+
+1. **Key by identity.** A key that follows the item, not its position, lets
+   a reorder move rows instead of rebuilding them.
+2. **Cull or virtualize.** Only render what is visible.
+3. **Keep `item` cheap.** It runs once per new key.
+
+See [Lists & Conditional Content](../core/lists-branches.md).
 
 ## Canvas Optimization
 
@@ -168,6 +173,17 @@ let (x, y, scale) = timeline.lock().unwrap().configure(|t| {
      t.add(0, 500, 1.0, 1.5))
 });
 ```
+
+A CSS animation or transition of `opacity` and `transform` alone is the
+cheapest kind: the subtree is painted once into a texture and the
+compositor moves it each frame. That holds only while nothing in the
+subtree is drawn in a pass of its own. A subtree with text, an SVG or a
+canvas in it is painted with the animation applied on every frame, so the
+text moves, scales and fades with its container about its
+`transform-origin`.
+
+Each animation step is capped, so after a long frame (a stall, a debugger
+pause) an animation slows down instead of jumping to its end.
 
 ## Memory Management
 
@@ -255,6 +271,7 @@ These changes trip the compositor fast path and require a full walker run:
 | Scroll physics actively moving                          | Cache invalidated by scroll offset        |
 | Overlay / dialog / sheet open or close                  | Layer composition changes                 |
 | Stateful flips that change child structure              | Subtree rebuild                           |
+| CSS animation on a subtree with text, SVG or canvas     | Painted every frame instead of baked      |
 
 Prefer animating `transform: translate / scale / rotate`, `opacity`,
 `background-color`, `border-*`, `corner-radius`, `box-shadow`, and 3D
@@ -289,13 +306,39 @@ Look for:
 - Long frame times.
 - Excessive state updates.
 
+### Tracing an animation frame by frame
+
+`BLINC_MOTION_TRACE=<file>` appends one JSON object per frame to the file:
+the clock step the animations took, whether the frame was drawn and by
+which path, what asked for another frame, and the progress of every CSS
+animation, transition and motion still running. It finds an animation that
+stalls, skips or waits for input. Unset, it costs nothing.
+
+```sh
+BLINC_MOTION_TRACE=/tmp/motion.jsonl cargo run -p blinc_app_examples --example cn_demo --features cn
+```
+
+### Profiling without a window
+
+`WindowedContext::headless(width, height)` builds a context with no window,
+for profiling, tests and exports. It has its own animation scheduler,
+overlay manager and element registry. The `cn_profile` example uses it to
+time cn_demo's build, a full paint and a tab switch offscreen; run it under
+a sampling profiler to see where a frame goes:
+
+```sh
+cargo run -p blinc_app_examples --example cn_profile --features cn --release
+samply record target/release/examples/cn_profile
+```
+
 ## Summary
 
 | Do | Don't |
 |----|-------|
-| Prefer CSS `:hover` / `:focus` → `Stateful` → signal binding | Branch on a signal read to flip a visual property |
+| Prefer CSS `:hover` / `:focus`, then bound properties, then `Stateful` | Branch on a signal read to flip a visual property |
 | Animate `transform`, `opacity`, colours, radii, shadow | Animate `width` / `height` / `padding` / `gap` |
 | Opt long scrolls into `viewport_cull(true)` | Render thousands of children unconditionally |
+| Use `for_each` keyed by identity for lists that change | Rebuild a list's container to change one row |
 | Batch signal updates | Update signals one at a time |
 | Use `Arc::clone()` | Clone large data into closures |
 | Use timelines for loops | Create many spring values |

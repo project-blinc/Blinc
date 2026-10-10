@@ -234,9 +234,27 @@ rebuild can't leak stale subscribers.
 
 | Goal | Channel |
 | --- | --- |
-| Update one property on one element | Reactive setter (e.g. `.bg(&state)`) — cheapest |
-| Update many properties or restructure children | `Stateful<S>` + `.deps([signal_id])` + `on_state` |
-| Side effect (logging, IO) when a signal changes | Effects (future) |
+| Update one property on one element | Reactive setter (e.g. `.bg(&state)`), the cheapest |
+| Switch a set of stylesheet rules | `.class_when(name, signal)`: a class toggle on the same queue |
+| Change the children | `for_each`, `show`, `show_or`: a region update on the same queue |
+| A state machine whose states build different structure | `Stateful<S>` + `.deps([signal_id])` + `on_state` |
+| Side effect (logging, IO) when a signal changes | `effect(..)` |
+
+The queue carries more than property writes. A class toggle adds or removes
+a class and re-applies that element's rules. A text update replaces a text
+node's content and has it measured again. A region update reads a list or
+condition again and adds, removes and reorders the rows of a `for_each`,
+`show` or `show_or`. Each update reports what it affects (paint, layout,
+text measurement), and the runner runs layout only when one of them asks
+for it.
+
+### Ownership
+
+A row or a branch is built inside an `Owner`, a scope that records the
+signals, computeds and effects created inside it. When the row goes, its
+owner disposes them and runs any cleanups registered with
+`Owner::on_cleanup`. Keyed state (`use_state_keyed`) is meant to outlive a
+rebuild and is never owned.
 
 See the [Reactive Property Bindings](../core/state.md#reactive-property-bindings)
 section for the call-site surface.

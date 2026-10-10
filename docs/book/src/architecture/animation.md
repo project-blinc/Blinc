@@ -242,6 +242,18 @@ fn run(&self) {
 }
 ```
 
+### Ticking from the Frame Loop
+
+The scheduler can also be ticked by the frame loop instead of its own
+thread (`AnimationThreadMode`). `tick()` advances every animation by the
+time since the last tick. `tick_by(dt)` advances by a fixed step in seconds,
+so an offscreen render or a test sees the same values on every run. Both do
+nothing while a background thread owns ticking.
+
+Every step is capped, for springs, keyframes, CSS animations, transitions
+and motions alike. After a long frame (a stall, a debugger pause) an
+animation slows down for a frame instead of jumping to its end.
+
 ### Benefits of Background Thread
 
 1. **Consistent timing** - Animations run at 120fps regardless of main thread
@@ -257,18 +269,20 @@ fn run(&self) {
 
 ```rust
 motion()
-    .scale(scale.lock().unwrap().get())      // Read current value
-    .opacity(opacity.lock().unwrap().get())
-    .translate_y(y.lock().unwrap().get())
+    .scale(scale.clone())        // Bind the animated value itself
+    .opacity(opacity.clone())
+    .translate_y(y.clone())
     .child(content)
 ```
 
 ### How Motion Works
 
-1. **At build time**: Reads current animation values
-2. **Stores binding**: Remembers which animated values to sample
-3. **At render time**: Samples current values from scheduler
-4. **No rebuild needed**: Animation updates don't trigger tree rebuilds
+1. **At build time**: Stores which animated values the container follows
+2. **At render time**: Samples their current values
+3. **No rebuild needed**: Animation updates don't trigger tree rebuilds
+
+Pass the `SharedAnimatedValue` handle, not a value read from it. A value
+read at build time is a constant and never moves.
 
 ### Enter/Exit Animations
 
@@ -286,7 +300,7 @@ motion()
 
 ## Integration Points
 
-### With Stateful Elements
+### With Motion Bindings
 
 ```rust
 fn animated_button(ctx: &WindowedContext) -> impl ElementBuilder {
@@ -294,15 +308,14 @@ fn animated_button(ctx: &WindowedContext) -> impl ElementBuilder {
     let hover = Arc::clone(&scale);
     let leave = Arc::clone(&scale);
 
-    motion()
-        .scale(scale.lock().unwrap().get())
+    div()
         .on_hover_enter(move |_| {
             hover.lock().unwrap().set_target(1.05);
         })
         .on_hover_leave(move |_| {
             leave.lock().unwrap().set_target(1.0);
         })
-        .child(button_content())
+        .child(motion().scale(scale).child(button_content()))
 }
 ```
 

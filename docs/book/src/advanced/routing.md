@@ -53,6 +53,10 @@ fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
 }
 ```
 
+On navigation the outlet swaps its view in place. The scaffold around it
+(header, nav bar) is left alone, and each navigation builds the view again,
+even to the same path.
+
 ## use_router() Hook
 
 Inside route views, `use_router()` returns the active router:
@@ -89,6 +93,10 @@ Route::new("/settings")
 // Custom with spring physics
     .transition(PageTransition::slide().with_spring(SpringConfig::bouncy()))
 ```
+
+A route with a transition plays the new page's enter animation and keeps
+the old page mounted, out of flow at the start of the outlet, until its
+exit animation is done.
 
 ## Navigation Guards
 

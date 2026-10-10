@@ -1,7 +1,9 @@
 //! Ready-to-use Radio Group widget
 //!
 //! A radio button group with built-in selection, hover states, and CSS styling support.
-//! Uses `Stateful<ButtonState>` internally for automatic hover/pressed detection.
+//! Each option's look is bound to the selected value and to the pointer
+//! signals of an [`Interaction`], so a selection or a hover restyles it in
+//! place.
 //! Follows the lazy `OnceCell` initialization pattern from `blinc_cn`.
 //!
 //! # Example
@@ -651,7 +653,8 @@ impl ElementBuilder for RadioGroupBuilder {
 
 /// Create a radio group with reactive state
 ///
-/// The radio group uses `Stateful<ButtonState>` internally for hover detection.
+/// The options restyle in place from the selected value and their pointer
+/// signals; the group does not rebuild when either changes.
 /// Use `.id("name")` to enable CSS styling via `:hover`, `:checked`, `:disabled`.
 ///
 /// # Example

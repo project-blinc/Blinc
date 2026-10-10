@@ -84,19 +84,19 @@ blinc run android   # or: blinc run ios
 
 ```rust
 use blinc_app::prelude::*;
+use blinc_core::reactive::{computed, signal};
+use blinc_layout::IntoReactive;
 
 fn app(ctx: &mut WindowedContext) -> impl ElementBuilder {
-    let count = ctx.use_state_keyed("count", || 0i32);
+    let count = signal(0i32);
+    let label = computed(move |g| format!("Count: {}", g.get(count).unwrap_or(0)));
 
     div()
         .w(ctx.width).h(ctx.height)
         .bg(Color::from_hex(0x1a1a2e))
         .flex_col().items_center().justify_center().gap(20.0)
-        .child(text(format!("Count: {}", count.get())).size(48.0).color(Color::WHITE))
-        .child(
-            button(state.clone(), "+")
-                .on_click(move |_| count.set(count.get() + 1))
-        )
+        .child(Text::bound(label.into_reactive()).size(48.0).color(Color::WHITE))
+        .child(button("+").on_click(move |_| count.update(|n| n + 1)))
 }
 ```
 

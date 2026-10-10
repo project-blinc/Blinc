@@ -1,61 +1,97 @@
 # Buttons & Inputs
 
-Blinc provides ready-to-use input widgets with built-in state management.
+Blinc provides ready-to-use input widgets. Their hover, press and checked
+looks are patched in place from signals; they don't rebuild when the
+pointer moves.
 
 ## Buttons
 
 ### Basic Button
 
 ```rust
-use blinc_layout::widgets::button::{button, Button};
+use blinc_layout::prelude::*;
 
-fn my_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-    // Bare auto-keyed FSM handle — one slot per source line via
-    // `#[track_caller]`. For multiple instances from the same line
-    // (loops, list items) use `ctx.use_fsm_keyed(key, initial)`.
-    let btn_state = ctx.use_fsm(ButtonState::Idle);
+button("Save").on_click(|_| println!("Saved!"))
+```
 
-    button(btn_state, "Save")
-        .on_click(|_| {
-            println!("Saved!");
-        })
-}
+A button keeps its pointer state under a key made from where it was
+created. Buttons made in a loop from one line need a key each:
+
+```rust
+div().flex_row().gap(2.0).children(
+    ["Cut", "Copy", "Paste"].map(|label| button(label).key(format!("edit-{label}"))),
+)
 ```
 
 ### Styled Buttons
 
 ```rust
-button(state, "Primary")
+button("Primary")
     .bg_color(Color::rgba(0.3, 0.5, 0.9, 1.0))
     .hover_color(Color::rgba(0.4, 0.6, 1.0, 1.0))
     .pressed_color(Color::rgba(0.2, 0.4, 0.8, 1.0))
     .text_color(Color::WHITE)
     .rounded(8.0)
-    .p(2.0)
+    .px(4.0)
+```
+
+The colours default to the theme's primary tokens. `.id(..)` and
+`.class(..)` let a stylesheet style the button, including `:hover`,
+`:active` and `:disabled`.
+
+### A Label That Follows a Signal
+
+The label takes a string or a signal, and `.disabled(..)` takes a bool or a
+signal. Both are patched in place:
+
+```rust
+use blinc_core::reactive::{computed, signal};
+
+let saving = signal(false);
+let label = computed(move |g| {
+    if g.get(saving).unwrap_or(false) { "Saving…".to_string() } else { "Save".to_string() }
+});
+
+button(label)
+    .disabled(saving)
+    .on_click(move |_| saving.set(true))
 ```
 
 ### Custom Content Buttons
 
+`button_with` builds the content once and hands it a `ButtonLook`. Bind
+what should follow the button's state to it:
+
 ```rust
-Button::with_content(state, |s| {
+use blinc_layout::widgets::button_with;
+
+button_with(|look| {
     div()
         .flex_row()
-        .gap(8.0)
+        .gap(2.0)
         .items_center()
-        .child(svg("icons/save.svg").w(16.0).h(16.0).tint(Color::WHITE))
-        .child(text("Save").color(Color::WHITE))
+        .child(svg(SAVE_ICON).size(16.0, 16.0).color(look.text_color()))
+        .child(text("Save").color(look.text_color()))
 })
 .on_click(|_| save_file())
 ```
 
+`look.text_color()` is the text colour for the button's current state,
+after stylesheet overrides. `look.interaction()` gives its hovered, pressed
+and focused signals.
+
 ### Disabled Buttons
 
 ```rust
-let state = ctx.use_fsm(ButtonState::Disabled);
-
-button(state, "Cannot Click")
+button("Cannot Click")
+    .disabled(true)
     .disabled_color(Color::rgba(0.2, 0.2, 0.25, 0.5))
+    .disabled_text_color(Color::rgba(1.0, 1.0, 1.0, 0.4))
+    .flat_when_disabled(true)
 ```
+
+A disabled button has its disabled fill and does not click.
+`.disabled_border(width, color)` replaces its border while disabled.
 
 ---
 
@@ -64,40 +100,42 @@ button(state, "Cannot Click")
 ### Basic Checkbox
 
 ```rust
-use blinc_layout::widgets::checkbox::{checkbox, checkbox_state};
+use blinc_core::context_state::use_state_keyed;
+use blinc_layout::widgets::checkbox::checkbox;
 
-fn my_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-    let state = checkbox_state(false);  // Initially unchecked
+let remember = use_state_keyed("remember_me", || false);
 
-    checkbox(&state)
-        .on_change(|checked| {
-            println!("Checkbox is now: {}", checked);
-        })
-}
+checkbox(&remember).on_change(|checked| println!("Checkbox is now: {checked}"))
 ```
+
+The checkbox reads and writes the `State<bool>` it is given, so the state
+is the source of truth: set it from elsewhere and the box follows.
 
 ### Labeled Checkbox
 
 ```rust
-checkbox(&state)
+checkbox(&remember)
     .label("Remember me")
     .label_color(Color::WHITE)
 ```
 
+`checkbox_labeled(&remember, "Remember me")` is the same.
+
 ### Styled Checkbox
 
 ```rust
-checkbox(&state)
-    .check_color(Color::rgba(0.4, 0.6, 1.0, 1.0))
-    .bg_color(Color::rgba(0.2, 0.2, 0.25, 1.0))
+checkbox(&remember)
+    .check_color(Color::WHITE)
+    .checked_bg(Color::rgba(0.4, 0.6, 1.0, 1.0))
+    .unchecked_bg(Color::rgba(0.2, 0.2, 0.25, 1.0))
     .rounded(4.0)
-    .size(20.0)
+    .checkbox_size(20.0)
 ```
 
 ### Initially Checked
 
 ```rust
-let state = checkbox_state(true);  // Start checked
+let remember = use_state_keyed("remember_me", || true); // Start checked
 ```
 
 ---
@@ -107,10 +145,10 @@ let state = checkbox_state(true);  // Start checked
 ### Basic Text Input
 
 ```rust
-use blinc_layout::widgets::text_input::{text_input, text_input_state};
+use blinc_layout::widgets::text_input::{text_input, text_input_state_with_placeholder};
 
 fn my_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-    let state = text_input_state("Enter your name...");
+    let state = text_input_state_with_placeholder("Enter your name...");
 
     text_input(&state)
         .w(300.0)
@@ -126,19 +164,19 @@ fn my_ui(ctx: &WindowedContext) -> impl ElementBuilder {
 text_input(&state)
     .w(300.0)
     .rounded(8.0)
-    .bg_color(Color::rgba(0.15, 0.15, 0.2, 1.0))
+    .idle_bg_color(Color::rgba(0.15, 0.15, 0.2, 1.0))
     .text_color(Color::WHITE)
     .placeholder_color(Color::rgba(0.5, 0.5, 0.6, 1.0))
-    .focus_border_color(Color::rgba(0.4, 0.6, 1.0, 1.0))
+    .focused_border_color(Color::rgba(0.4, 0.6, 1.0, 1.0))
 ```
 
 ### Reading Input Value
 
 ```rust
-let state = text_input_state("");
+let state = text_input_state();
 
 // Later, read the current value
-let current_text = state.text();
+let current_text = state.lock().unwrap().value.clone();
 ```
 
 ---
@@ -251,10 +289,9 @@ fn main() {
 
 ```rust
 fn login_form(ctx: &WindowedContext) -> impl ElementBuilder {
-    let email_state = text_input_state("Email address");
-    let password_state = text_input_state("Password");
-    let remember_state = checkbox_state(false);
-    let submit_state = ctx.use_fsm(ButtonState::Idle);
+    let email_state = text_input_state_with_placeholder("Email address");
+    let password_state = text_input_state_with_placeholder("Password");
+    let remember_state = use_state_keyed("remember_me", || false);
 
     div()
         .w(400.0)
@@ -303,7 +340,7 @@ fn login_form(ctx: &WindowedContext) -> impl ElementBuilder {
         )
         // Submit button
         .child(
-            button(submit_state, "Sign In")
+            button("Sign In")
                 .w_full()
                 .bg_color(Color::rgba(0.3, 0.5, 0.9, 1.0))
                 .text_color(Color::WHITE)
@@ -317,15 +354,13 @@ fn login_form(ctx: &WindowedContext) -> impl ElementBuilder {
 
 ---
 
-## Widget State Types
+## Widget State
 
-Each widget uses a specific state type:
-
-| Widget | State Type | States |
-|--------|-----------|--------|
-| Button | `ButtonState` | Idle, Hovered, Pressed, Disabled |
-| Checkbox | `CheckboxState` | UncheckedIdle, UncheckedHovered, CheckedIdle, CheckedHovered |
-| TextInput | `TextFieldState` | Idle, Hovered, Focused, FocusedHovered, Disabled |
+| Widget | State | Source |
+|--------|-------|--------|
+| Button | Hovered, pressed, focused, disabled | Signals from `Interaction`; `.disabled(..)` |
+| Checkbox | Checked, hovered | The `State<bool>` it is given; pointer signals |
+| TextInput | `TextFieldState`: Idle, Hovered, Focused, FocusedHovered, Disabled | Its own state handle |
 | TextArea | `TextFieldState` | Same as TextInput |
 
 ---

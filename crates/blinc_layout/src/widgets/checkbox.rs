@@ -1,9 +1,9 @@
 //! Ready-to-use Checkbox widget
 //!
 //! A checkbox with built-in toggle, hover states, and CSS styling support.
-//! Uses `Stateful<ButtonState>` internally for automatic hover/pressed detection.
-//! Uses reactive `State<bool>` for checked state, connected via `.deps()` so
-//! the visual updates immediately on click.
+//! Its look is bound to the checked `State<bool>` it is given and to the
+//! pointer signals of an [`Interaction`], so a toggle or a hover restyles it
+//! in place.
 //! Follows the lazy `OnceCell` initialization pattern from `blinc_cn`.
 //!
 //! # Example
@@ -568,9 +568,8 @@ impl ElementBuilder for CheckboxBuilder {
 
 /// Create a checkbox with reactive checked state
 ///
-/// The checkbox uses `Stateful<ButtonState>` internally for hover detection,
-/// and connects to the `State<bool>` signal via `.deps()` for immediate
-/// visual updates on toggle.
+/// The checkbox restyles in place from the `State<bool>` and its pointer
+/// signals; it does not rebuild when either changes.
 ///
 /// Use `.id("name")` to enable CSS styling via `:hover`, `:checked`, `:disabled`.
 ///
