@@ -190,6 +190,7 @@ impl RenderTree {
         if self.flip_animations.is_empty() {
             return false;
         }
+        let dt_ms = dt_ms.min(crate::render_state::MAX_ANIMATION_STEP_MS);
         let mut any_playing = false;
         for anim in self.flip_animations.values_mut() {
             if anim.tick(dt_ms) {

@@ -55,6 +55,13 @@ use crate::tree::LayoutNodeId;
 /// from outside the render loop via the query_motion API.
 pub type SharedMotionStates = Arc<RwLock<HashMap<String, MotionAnimationState>>>;
 
+/// The longest step, in milliseconds, an animation takes in one frame.
+///
+/// A frame that comes late pauses an animation for the time over this
+/// rather than jumping it ahead, so a fade that overlaps a slow frame is
+/// still seen to fade.
+pub const MAX_ANIMATION_STEP_MS: f32 = 50.0;
+
 /// Create a new shared motion state store
 pub fn create_shared_motion_states() -> SharedMotionStates {
     Arc::new(RwLock::new(HashMap::new()))
@@ -366,8 +373,8 @@ impl CssAnimationStore {
     /// off-screen — `styling_demo`, with ~25 infinite animations,
     /// pinned ~73 % CPU at idle. Filtering by visibility lets the
     /// chain die when the user isn't looking at the moving parts;
-    /// when they scroll back, `tick(dt_ms)` catches up by elapsed
-    /// time so the visible state is still correct.
+    /// an animation it left behind carries on from where it was when
+    /// frames come again (a step is at most [`MAX_ANIMATION_STEP_MS`]).
     pub fn has_visible_active(
         &self,
         painted: &std::collections::HashSet<crate::tree::StableNodeId>,
@@ -417,6 +424,7 @@ impl CssAnimationStore {
     /// Called from the AnimationScheduler's background thread via tick callback.
     /// Returns `(animations_active, transitions_active)`.
     pub fn tick(&mut self, dt_ms: f32) -> (bool, bool) {
+        let dt_ms = dt_ms.min(MAX_ANIMATION_STEP_MS);
         // Tick CSS animations
         let mut anim_playing = false;
         for anim in self.animations.values_mut() {
@@ -870,7 +878,7 @@ impl RenderState {
         } else {
             16.0 // Assume ~60fps for first frame
         };
-        let dt_ms = raw_dt_ms.max(1.0);
+        let dt_ms = raw_dt_ms.clamp(1.0, MAX_ANIMATION_STEP_MS);
         self.last_tick_time = Some(current_time_ms);
 
         // Tick the animation scheduler

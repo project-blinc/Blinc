@@ -91,3 +91,29 @@ fn a_playing_class_animation_is_on_a_painted_node() {
         "a playing animation is not on a painted node, so nothing keeps the frame loop awake"
     );
 }
+
+/// A late frame pauses an animation rather than jumping it: one tick advances
+/// it by at most the longest step.
+#[test]
+fn a_late_frame_does_not_jump_an_animation_ahead() {
+    use blinc_layout::render_state::MAX_ANIMATION_STEP_MS;
+    let ui = div().w(200.0).child(div().class("menu").w(50.0).h(20.0));
+    let mut tree = RenderTree::from_element(&ui);
+    tree.set_stylesheet(Stylesheet::parse(CSS).expect("css"));
+    tree.apply_stylesheet_layout_overrides();
+    tree.apply_stylesheet_base_styles();
+    tree.start_all_css_animations();
+    let node = tree.layout_tree.children(tree.root().unwrap())[0];
+
+    // A 300ms fade and a frame that came 200ms late.
+    tree.css_anim_store().lock().unwrap().tick(200.0);
+    let opacity = tree
+        .get_css_animation_properties(node)
+        .and_then(|p| p.opacity)
+        .expect("opacity is animated");
+    let most = MAX_ANIMATION_STEP_MS / 300.0;
+    assert!(
+        opacity <= most + 1e-3,
+        "a 200ms frame took the fade to {opacity}, past {most}"
+    );
+}
