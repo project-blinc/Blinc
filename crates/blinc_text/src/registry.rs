@@ -912,6 +912,41 @@ impl FontRegistry {
     }
 
     /// Fast font lookup for rendering with specific weight and style
+    /// The face text in this family, weight and style is drawn in: the
+    /// cached one, else loaded now. Tries the named family in the style,
+    /// then the generic family in the style, then the normal style, then
+    /// sans-serif. Measuring and drawing both resolve here, so text is
+    /// measured in the face it is drawn in.
+    pub fn resolve_styled(
+        &mut self,
+        name: Option<&str>,
+        generic: GenericFont,
+        weight: u16,
+        italic: bool,
+    ) -> Option<Arc<FontFace>> {
+        if let Some(font) = self.get_for_render_with_style(name, generic, weight, italic) {
+            return Some(font);
+        }
+        if let Some(name) = name
+            && let Ok(font) = self.load_font_with_style(name, weight, italic)
+        {
+            return Some(font);
+        }
+        if let Ok(font) = self.load_generic_with_style(generic, weight, italic) {
+            return Some(font);
+        }
+        if weight != 400 || italic {
+            if let Some(font) = self.get_for_render_with_style(name, generic, 400, false) {
+                return Some(font);
+            }
+            if let Ok(font) = self.load_generic_with_style(generic, 400, false) {
+                return Some(font);
+            }
+        }
+        self.get_cached_generic(GenericFont::SansSerif)
+            .or_else(|| self.load_generic(GenericFont::SansSerif).ok())
+    }
+
     pub fn get_for_render_with_style(
         &self,
         name: Option<&str>,

@@ -335,11 +335,16 @@ impl Text {
     // =========================================================================
 
     /// Set font weight, or follow a signal or computed.
+    ///
+    /// A weight changes the text's width, so it is measured again.
     pub fn weight(self, weight: impl IntoReactive<FontWeight>) -> Self {
         self.follow(
             weight.into_reactive(),
             PropertyId::FontWeight,
-            |text, weight| text.weight = *weight,
+            |text, weight| {
+                text.weight = *weight;
+                text.update_size_estimate();
+            },
             |props, weight| props.font_weight = Some(weight),
         )
     }
@@ -393,9 +398,10 @@ impl Text {
     // Font Style (Italic)
     // =========================================================================
 
-    /// Set italic style
+    /// Set italic style. The text is measured again in the italic face.
     pub fn italic(mut self) -> Self {
         self.italic = true;
+        self.update_size_estimate();
         self
     }
 

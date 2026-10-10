@@ -935,45 +935,11 @@ impl TextRenderer {
         weight: u16,
         italic: bool,
     ) -> Result<Arc<FontFace>> {
-        let mut registry = self.font_registry.lock().unwrap();
-
-        // First try cache lookup
-        if let Some(font) = registry.get_for_render_with_style(font_name, generic, weight, italic) {
-            return Ok(font);
-        }
-
-        // Try loading the font with style on demand
-        if let Some(name) = font_name {
-            if let Ok(font) = registry.load_font_with_style(name, weight, italic) {
-                return Ok(font);
-            }
-        }
-
-        // Try loading generic font with style
-        if let Ok(font) = registry.load_generic_with_style(generic, weight, italic) {
-            return Ok(font);
-        }
-
-        // If styled font not found, fall back to normal style
-        if weight != 400 || italic {
-            if let Some(font) = registry.get_for_render_with_style(font_name, generic, 400, false) {
-                return Ok(font);
-            }
-            // Try loading normal style
-            if let Ok(font) = registry.load_generic_with_style(generic, 400, false) {
-                return Ok(font);
-            }
-        }
-
-        // Ultimate fallback to SansSerif normal
-        if let Some(font) = registry.get_cached_generic(GenericFont::SansSerif) {
-            return Ok(font);
-        }
-        if let Ok(font) = registry.load_generic(GenericFont::SansSerif) {
-            return Ok(font);
-        }
-
-        Err(TextError::FontLoadError("No fonts available".to_string()))
+        self.font_registry
+            .lock()
+            .unwrap()
+            .resolve_styled(font_name, generic, weight, italic)
+            .ok_or_else(|| TextError::FontLoadError("No fonts available".to_string()))
     }
 
     /// Preload fonts that your app uses (call at startup)

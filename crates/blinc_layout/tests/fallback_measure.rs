@@ -116,3 +116,85 @@ fn a_measured_cjk_run_is_as_wide_as_a_drawn_one() {
     }
     assert!(checked > 0, "nothing was checked");
 }
+
+/// Text in a weight no text has used yet measures as wide as it draws. The
+/// measurer used to find only faces already loaded, so a medium or bold
+/// label was sized by the character estimate while the renderer, loading
+/// the face, drew real glyphs: "Home" got a box narrower than itself and
+/// wrapped, longer labels got boxes wider than themselves.
+#[test]
+fn a_weight_not_yet_loaded_measures_as_it_draws() {
+    blinc_layout::text_measurer::init_text_measurer();
+    let mut renderer = TextRenderer::new();
+    for weight in [500u16, 600, 700] {
+        for text in ["Home", "Products", "Services"] {
+            // Measured first, as layout runs before the frame is drawn.
+            let mut o = TextLayoutOptions::new();
+            o.generic_font = GenericFont::System;
+            o.font_weight = weight;
+            let measured = measure_text_with_options(text, 14.0, &o).width;
+            let Ok(drawn) = renderer.prepare_text_with_style(
+                text,
+                14.0,
+                [1.0; 4],
+                &LayoutOptions::default(),
+                None,
+                TextGeneric::System,
+                weight,
+                false,
+            ) else {
+                eprintln!("SKIP: renderer unavailable");
+                return;
+            };
+            assert!(
+                (measured - drawn.width).abs() < 0.5,
+                "{text:?} at weight {weight} draws {:.1}px wide but measures {measured:.1}px",
+                drawn.width
+            );
+        }
+    }
+}
+
+/// A label given a weight after it was created reports the width it draws
+/// at in that weight. The paint path compares that width with the label's
+/// box to decide whether to wrap, so a width left over from the regular
+/// weight wrapped light text that fitted, or failed to wrap bold text.
+#[test]
+fn a_label_reports_its_width_in_its_own_weight() {
+    use blinc_layout::div::div;
+    use blinc_layout::renderer::{ElementType, RenderTree};
+    use blinc_layout::text::text;
+
+    blinc_layout::text_measurer::init_text_measurer();
+    let mut renderer = TextRenderer::new();
+    let content = "Products and services";
+    for (weight, label) in [
+        (300u16, text(content).size(14.0).light()),
+        (700, text(content).size(14.0).bold()),
+    ] {
+        let Ok(drawn) = renderer.prepare_text_with_style(
+            content,
+            14.0,
+            [1.0; 4],
+            &LayoutOptions::default(),
+            None,
+            TextGeneric::System,
+            weight,
+            false,
+        ) else {
+            eprintln!("SKIP: renderer unavailable");
+            return;
+        };
+        let tree = RenderTree::from_element(&div().child(label));
+        let node = tree.layout_tree.children(tree.root().unwrap())[0];
+        let reported = match &tree.get_render_node(node).unwrap().element_type {
+            ElementType::Text(t) => t.measured_width,
+            _ => panic!("not a text node"),
+        };
+        assert!(
+            (reported - drawn.width).abs() < 0.5,
+            "at weight {weight} the label draws {:.1}px wide but reports {reported:.1}px",
+            drawn.width
+        );
+    }
+}

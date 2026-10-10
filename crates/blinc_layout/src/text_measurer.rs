@@ -143,10 +143,9 @@ impl TextMeasurer for FontTextMeasurer {
         // Determine which font to use based on options
         let generic_font = to_text_generic_font(options.generic_font);
 
-        // Fast path: use cached fonts only (never load during measurement)
-        // Use weight and italic from options to get the correct font variant
-        let registry = self.font_registry.lock().unwrap();
-        let font = match registry.get_for_render_with_style(
+        // The face the renderer will draw this text in, loaded now if no
+        // text has used it yet.
+        let font = match self.font_registry.lock().unwrap().resolve_styled(
             options.font_name.as_deref(),
             generic_font,
             options.font_weight,
@@ -155,7 +154,6 @@ impl TextMeasurer for FontTextMeasurer {
             Some(f) => f,
             None => return Self::estimate_size(text, font_size, options),
         };
-        drop(registry); // Release lock before layout
 
         // `blinc_layout::tree::text_measure_function` encodes taffy's
         // three AvailableSpace variants as:
@@ -277,15 +275,12 @@ impl TextMeasurer for FontTextMeasurer {
         // Scoped so the guard is gone before the fallback, which measures
         // and so takes this same non-reentrant lock. Returning out of the
         // guard's scope deadlocked instead of falling back.
-        let font = {
-            let registry = self.font_registry.lock().unwrap();
-            registry.get_for_render_with_style(
-                options.font_name.as_deref(),
-                to_text_generic_font(options.generic_font),
-                options.font_weight,
-                options.italic,
-            )
-        };
+        let font = self.font_registry.lock().unwrap().resolve_styled(
+            options.font_name.as_deref(),
+            to_text_generic_font(options.generic_font),
+            options.font_weight,
+            options.italic,
+        );
         let Some(font) = font else {
             return fallback();
         };
