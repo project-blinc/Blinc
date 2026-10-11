@@ -164,6 +164,8 @@ pub struct FontRegistry {
     db: Database,
     /// Cached FontFace instances (Some = found, None = not found)
     faces: FxHashMap<String, Option<Arc<FontFace>>>,
+    /// Immutable private faces registered by an adapter, independent of embedded family names.
+    registered: FxHashMap<String, Arc<FontFace>>,
     /// Whether full system font scan has been performed
     system_fonts_loaded: bool,
     /// The full system scan. Replaced in tests with a known set of faces.
@@ -204,6 +206,7 @@ impl FontRegistry {
         Self {
             db,
             faces: FxHashMap::default(),
+            registered: FxHashMap::default(),
             system_fonts_loaded: false,
             scan_system: Database::load_system_fonts,
         }
@@ -227,6 +230,27 @@ impl FontRegistry {
             tracing::debug!("Loaded {} font faces from data", loaded);
         }
         loaded
+    }
+
+    /// Register a parsed face under an adapter-owned, unique name. Its variation axes
+    /// are already selected by the caller. Every weight/style lookup of this name
+    /// returns this face; CSS family matching remains the adapter's responsibility.
+    ///
+    /// Names are immutable: replacing a font must use a new name so renderer layout
+    /// and glyph caches cannot reuse data from the previous face. Returns false if
+    /// the name is already registered.
+    pub fn register_face(&mut self, name: String, face: Arc<FontFace>) -> bool {
+        if self.registered.contains_key(&name) {
+            return false;
+        }
+        self.registered.insert(name, face);
+        true
+    }
+
+    /// Release an adapter-owned name. Previously returned faces remain alive while
+    /// their owners use them. This does not remove installed/system fonts.
+    pub fn unregister_face(&mut self, name: &str) -> bool {
+        self.registered.remove(name).is_some()
     }
 
     /// Ensure all system fonts are loaded (lazy initialization)
@@ -308,6 +332,9 @@ impl FontRegistry {
         weight: u16,
         italic: bool,
     ) -> Result<Arc<FontFace>> {
+        if let Some(face) = self.registered.get(name) {
+            return Ok(Arc::clone(face));
+        }
         // Create cache key that includes weight and style
         let cache_key = format!("{}:w{}:{}", name, weight, if italic { "i" } else { "n" });
 
@@ -921,6 +948,9 @@ impl FontRegistry {
     /// Get cached font by name (doesn't load - for use during render)
     pub fn get_cached(&self, name: &str) -> Option<Arc<FontFace>> {
         // Legacy: check for normal weight/style first
+        if let Some(face) = self.registered.get(name) {
+            return Some(Arc::clone(face));
+        }
         let cache_key = format!("{}:w400:n", name);
         self.faces.get(&cache_key).and_then(|opt| opt.clone())
     }
@@ -932,6 +962,9 @@ impl FontRegistry {
         weight: u16,
         italic: bool,
     ) -> Option<Arc<FontFace>> {
+        if let Some(face) = self.registered.get(name) {
+            return Some(Arc::clone(face));
+        }
         let cache_key = format!("{}:w{}:{}", name, weight, if italic { "i" } else { "n" });
         self.faces.get(&cache_key).and_then(|opt| opt.clone())
     }
@@ -1062,6 +1095,9 @@ impl FontRegistry {
     /// Note: This may trigger a full system font scan if the font
     /// isn't found in the initially loaded fonts.
     pub fn has_font(&mut self, name: &str) -> bool {
+        if self.registered.contains_key(name) {
+            return true;
+        }
         let query = Query {
             families: &[Family::Name(name)],
             weight: Weight::NORMAL,
@@ -1164,9 +1200,41 @@ mod tests {
         FontRegistry {
             db,
             faces: FxHashMap::default(),
+            registered: FxHashMap::default(),
             system_fonts_loaded: false,
             scan_system: scan_bold,
         }
+    }
+
+    #[test]
+    fn private_faces_override_failed_lookups_without_scanning_or_replacing() {
+        let mut registry = regular_only();
+        registry.system_fonts_loaded = true;
+        let name = "blinc-test-private-face";
+        assert!(registry.load_font(name).is_err());
+        let data = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/fonts/FiraCode-Regular.ttf"
+        ))
+        .unwrap();
+        let face = Arc::new(FontFace::from_data(data).unwrap());
+        assert!(registry.register_face(name.to_string(), Arc::clone(&face)));
+        assert!(registry.has_font(name));
+        assert!(!registry.register_face(name.to_string(), Arc::clone(&face)));
+        let styled = registry
+            .get_for_render_with_style(Some(name), GenericFont::System, 700, true)
+            .unwrap();
+        assert!(Arc::ptr_eq(&styled, &face));
+        assert!(Arc::ptr_eq(
+            &registry.load_font_with_style(name, 300, false).unwrap(),
+            &face
+        ));
+        assert!(registry.unregister_face(name));
+        assert!(!registry.unregister_face(name));
+        assert!(!registry.has_font(name));
+        assert!(registry.get_cached(name).is_none());
+        // Releasing a name cannot invalidate a face currently being measured/drawn.
+        assert!(styled.glyph_id('A').is_some());
     }
 
     #[test]
