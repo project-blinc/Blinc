@@ -224,6 +224,19 @@ impl<T: Clone + Send + 'static> Signal<T> {
         self.try_get().unwrap_or_default()
     }
 
+    /// The signal's current version, for change detection without paying
+    /// for a value clone. Does not record a dependency — pair with a
+    /// tracked read (`get`/`try_get`, or `blinc_signal_touch` on the FFI
+    /// side) when the reader also needs to subscribe.
+    pub fn version(&self) -> Option<u64> {
+        if let Some(v) = with_in_flight_graph(|g| g.signal_version(self.id)) {
+            return v;
+        }
+        let graph = global_graph();
+        let g = graph.lock().unwrap();
+        g.signal_version(self.id)
+    }
+
     /// Set a new value. Fires every subscriber: property bindings
     /// (`.bg(&signal)` etc.), derived chains, and `Stateful` elements
     /// declaring this signal in `.deps([...])`.
@@ -2313,6 +2326,34 @@ mod tests {
             c.try_get(),
             Some(0.85),
             "global-path read inside compute must register the dependency"
+        );
+    }
+
+    #[test]
+    fn signal_version_bumps_on_write_but_is_not_tracked() {
+        let sig = signal(1i32);
+        let v0 = sig.version().unwrap();
+        assert_eq!(sig.version(), Some(v0), "repeated reads do not bump the version");
+
+        let reads = Arc::new(Mutex::new(0));
+        let log = Arc::clone(&reads);
+        let c = computed::<i32, _>(move |_| {
+            *log.lock().unwrap() += 1;
+            sig.version().unwrap_or(0) as i32
+        });
+        assert_eq!(c.try_get(), Some(v0 as i32));
+
+        sig.set(2);
+        assert_eq!(
+            c.try_get(),
+            Some(v0 as i32),
+            "a version-only read must not register a dependency"
+        );
+        assert_eq!(*reads.lock().unwrap(), 1, "computed must not have rerun");
+        assert_eq!(
+            sig.version(),
+            Some(v0 + 1),
+            "an actual write still bumps the version"
         );
     }
 
