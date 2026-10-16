@@ -2333,7 +2333,11 @@ mod tests {
     fn signal_version_bumps_on_write_but_is_not_tracked() {
         let sig = signal(1i32);
         let v0 = sig.version().unwrap();
-        assert_eq!(sig.version(), Some(v0), "repeated reads do not bump the version");
+        assert_eq!(
+            sig.version(),
+            Some(v0),
+            "repeated reads do not bump the version"
+        );
 
         let reads = Arc::new(Mutex::new(0));
         let log = Arc::clone(&reads);
