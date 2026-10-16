@@ -6,6 +6,13 @@ use crate::fallback::FallbackFaces;
 use crate::font::FontFace;
 use crate::shaper::{ShapedGlyph, ShapedText, TextShaper};
 
+/// A line's `max_width` is often a container's own intrinsic width, rounded
+/// to a whole pixel for display by the layout engine upstream (Taffy's
+/// round-to-nearest, which never moves a value by more than half a pixel).
+/// Without slack here, a label whose true shaped width lands just past that
+/// rounded-down box breaks at its last space, wrapping a line it fits on.
+const WRAP_EPSILON: f32 = 0.5;
+
 /// Text alignment options (horizontal)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum TextAlignment {
@@ -484,7 +491,7 @@ impl TextLayoutEngine {
             let is_word_break = word_breaks.contains(&(glyph.cluster as usize));
 
             // Check if adding this glyph would overflow the line
-            if line_width + advance > max_width && !current_line.is_empty() {
+            if line_width + advance > max_width + WRAP_EPSILON && !current_line.is_empty() {
                 let mut broke_line = false;
                 match options.line_break {
                     LineBreakMode::Word => {
