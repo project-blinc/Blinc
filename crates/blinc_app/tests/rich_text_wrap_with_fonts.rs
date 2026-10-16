@@ -112,6 +112,11 @@ fn a_link_that_itself_wraps_is_hittable_on_each_line() {
             hit.hit(x, y, bounds.width).is_some(),
             "{rect:?} is drawn but not hittable",
         );
-        assert!(rect.x1 <= bounds.width, "{rect:?} escapes the container");
+        // The box is the text's width rounded to a whole pixel, which can
+        // take off up to half a pixel the line still breaks within.
+        assert!(
+            rect.x1 <= bounds.width + 0.5,
+            "{rect:?} escapes the container"
+        );
     }
 }
