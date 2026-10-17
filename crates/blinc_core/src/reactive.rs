@@ -1857,6 +1857,8 @@ impl<T: Clone + Send + 'static> State<T> {
         for d_id in dirty_derived {
             notify_property_bindings_for_derived(d_id);
         }
+        // Writes an effect made while this one was applied, as `Signal::set`.
+        drain_deferred_writes();
     }
 
     /// Set a new value AND trigger a UI tree rebuild
@@ -1881,6 +1883,8 @@ impl<T: Clone + Send + 'static> State<T> {
         for d_id in dirty_derived {
             notify_property_bindings_for_derived(d_id);
         }
+        // Writes an effect made while this one was applied, as `Signal::set`.
+        drain_deferred_writes();
     }
 
     /// Update the value using a function
@@ -1901,6 +1905,8 @@ impl<T: Clone + Send + 'static> State<T> {
         for d_id in dirty_derived {
             notify_property_bindings_for_derived(d_id);
         }
+        // Writes an effect made while this one was applied, as `Signal::set`.
+        drain_deferred_writes();
     }
 
     /// Update the value AND trigger a UI tree rebuild
@@ -1916,6 +1922,8 @@ impl<T: Clone + Send + 'static> State<T> {
         for d_id in dirty_derived {
             notify_property_bindings_for_derived(d_id);
         }
+        // Writes an effect made while this one was applied, as `Signal::set`.
+        drain_deferred_writes();
     }
 
     /// Get the underlying signal (for advanced use cases)
@@ -2305,6 +2313,23 @@ where
 mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
+
+    /// An effect woken by `State::set` that writes a signal has that write
+    /// applied by the time `set` returns, as with `Signal::set`.
+    #[test]
+    fn a_write_an_effect_makes_lands_when_state_set_returns() {
+        let source = State::new(signal(0u32), global_graph(), global_dirty_flag());
+        let mirror = signal(0u32);
+        let watched = source.signal();
+        let _e = effect(move |g| {
+            let v = g.get(watched).unwrap_or(0);
+            mirror.set(v);
+        });
+        source.set(7);
+        assert_eq!(mirror.get(), 7, "the effect's write was left queued");
+        source.update(|v| v + 1);
+        assert_eq!(mirror.get(), 8);
+    }
 
     /// A derived whose compute closure reads a signal through the
     /// GLOBAL path (`Signal::try_get`) instead of the passed `&graph`.
