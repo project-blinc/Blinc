@@ -4,11 +4,9 @@
 use std::sync::Arc;
 
 use blinc_core::State;
-use blinc_layout::InstanceKey;
 use blinc_layout::div::ElementBuilder;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{NoState, stateful_with_key};
-use blinc_layout::widgets::input_otp::{sync_slots_from_value, wire_otp_slot};
+use blinc_layout::widgets::input_otp::{show_value_in_slots, wire_otp_slot};
 use blinc_layout::widgets::text_input::{InputType, text_input, text_input_data};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
@@ -30,7 +28,6 @@ struct Config {
 }
 
 pub struct InputOtpBuilder {
-    key: InstanceKey,
     config: Config,
     built: std::cell::OnceCell<InputOtp>,
 }
@@ -40,10 +37,8 @@ pub struct InputOtp {
 }
 
 impl InputOtpBuilder {
-    #[track_caller]
     pub fn new(value: &State<String>, length: usize) -> Self {
         Self {
-            key: InstanceKey::new("cn_input_otp"),
             config: Config {
                 value: value.clone(),
                 length,
@@ -62,7 +57,7 @@ impl InputOtpBuilder {
 
     fn get_or_build(&self) -> &InputOtp {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            InputOtp::from_config(&self.key, self.clone_config())
+            InputOtp::from_config(self.clone_config())
         })
     }
 
@@ -79,17 +74,6 @@ impl InputOtpBuilder {
             on_change: self.config.on_change.clone(),
             on_complete: self.config.on_complete.clone(),
         }
-    }
-
-    /// Name this widget, so its group state is its own.
-    ///
-    /// The default identity is the call site, which is enough for two
-    /// OTPs written in different places. A caller that builds several
-    /// from ONE site -- a loop, or a DSL wrapper -- has to say which is
-    /// which, or their groups share one stateful entry.
-    pub fn key(mut self, key: impl Into<String>) -> Self {
-        self.key = InstanceKey::explicit(key);
-        self
     }
 
     pub fn numeric_only(mut self, numeric_only: bool) -> Self {
@@ -143,7 +127,7 @@ impl InputOtpBuilder {
 }
 
 impl InputOtp {
-    fn from_config(instance_key: &InstanceKey, config: Config) -> Self {
+    fn from_config(config: Config) -> Self {
         let theme = ThemeState::get();
         let typography = theme.typography();
         let height = config.size.height(theme);
@@ -188,91 +172,70 @@ impl InputOtp {
             .collect();
         let slots = Arc::new(slots);
 
-        let group_key = instance_key.derive("group");
-        let value_for_group = config.value.clone();
-        let value_dep = config.value.clone();
-        let disabled = config.disabled;
-        let error = config.error;
-        let masked = config.masked;
-        let group_every = config.group_every;
-        let on_change = config.on_change.clone();
-        let on_complete = config.on_complete.clone();
+        show_value_in_slots(&slots, &config.value);
 
-        let row = stateful_with_key::<NoState>(&group_key)
-            .deps([value_dep.signal_id()])
-            .on_state(move |_ctx| {
-                sync_slots_from_value(&slots, &value_for_group.get());
+        let mut row = div().flex_row().items_center().class("cn-input-otp");
+        if config.disabled {
+            row = row.class("cn-input-otp--disabled");
+        }
+        for i in 0..length {
+            let mut field = text_input(&slots[i])
+                .input_type(if numeric_only {
+                    InputType::Integer
+                } else {
+                    InputType::Text
+                })
+                .text_align(blinc_core::TextAlign::Center)
+                .max_length(1)
+                .masked(config.masked)
+                .disabled(config.disabled)
+                .h(height)
+                .w(height)
+                .text_size(font_size)
+                .rounded(radius)
+                .idle_border_color(border_idle)
+                .hover_border_color(border_hover)
+                .focused_border_color(if config.error {
+                    border_error
+                } else {
+                    border_focus
+                })
+                .error_border_color(border_error)
+                .idle_bg_color(bg)
+                .hover_bg_color(bg_hover)
+                .focused_bg_color(bg_focus)
+                .text_color(text_primary)
+                .class("cn-input-otp-slot");
+            if config.error {
+                field = field.class("cn-input-otp-slot--error");
+            }
+            row = row.child(wire_otp_slot(
+                field,
+                i,
+                &slots,
+                numeric_only,
+                &config.value,
+                config.on_change.clone(),
+                config.on_complete.clone(),
+            ));
 
-                let mut row = div().flex_row().items_center().class("cn-input-otp");
-                if disabled {
-                    row = row.class("cn-input-otp--disabled");
-                }
-
-                for i in 0..length {
-                    let mut field = text_input(&slots[i])
-                        .input_type(if numeric_only {
-                            InputType::Integer
-                        } else {
-                            InputType::Text
-                        })
-                        .text_align(blinc_core::TextAlign::Center)
-                        .max_length(1)
-                        .masked(masked)
-                        .disabled(disabled)
-                        .h(height)
-                        .w(height)
-                        .text_size(font_size)
-                        .rounded(radius)
-                        .idle_border_color(border_idle)
-                        .hover_border_color(border_hover)
-                        .focused_border_color(if error { border_error } else { border_focus })
-                        .error_border_color(border_error)
-                        .idle_bg_color(bg)
-                        .hover_bg_color(bg_hover)
-                        .focused_bg_color(bg_focus)
-                        .text_color(text_primary)
-                        .class("cn-input-otp-slot");
-                    if error {
-                        field = field.class("cn-input-otp-slot--error");
-                    }
-
-                    field = wire_otp_slot(
-                        field,
-                        i,
-                        &slots,
-                        numeric_only,
-                        &value_for_group,
-                        on_change.clone(),
-                        on_complete.clone(),
-                    );
-
-                    row = row.child(field);
-
-                    let is_last = i + 1 == length;
-                    if !is_last {
-                        let is_group_boundary =
-                            group_every.map(|n| (i + 1) % n == 0).unwrap_or(false);
-                        if is_group_boundary {
-                            row = row.child(
-                                div()
-                                    .w(height * 0.5)
-                                    .h(height)
-                                    .flex_row()
-                                    .items_center()
-                                    .justify_center()
-                                    .child(text("\u{2022}").size(font_size).color(text_tertiary))
-                                    .class("cn-input-otp-separator"),
-                            );
-                        } else {
-                            row = row.child(
-                                div().w(theme.spacing_value(blinc_theme::SpacingToken::Space2)),
-                            );
-                        }
-                    }
-                }
-
-                row
+            if i + 1 == length {
+                continue;
+            }
+            let group_boundary = config.group_every.is_some_and(|n| (i + 1) % n == 0);
+            row = row.child(if group_boundary {
+                div()
+                    .w(height * 0.5)
+                    .h(height)
+                    .flex_row()
+                    .items_center()
+                    .justify_center()
+                    .child(text("\u{2022}").size(font_size).color(text_tertiary))
+                    .class("cn-input-otp-separator")
+            } else {
+                div().w(theme.spacing_value(blinc_theme::SpacingToken::Space2))
             });
+        }
 
         Self {
             inner: div().h_fit().w_fit().child(row),
@@ -358,7 +321,6 @@ impl ElementBuilder for InputOtpBuilder {
 
 /// Create a cn-styled one-time-passcode input with `length` slots,
 /// bound to a reactive [`State<String>`] holding the joined value.
-#[track_caller]
 pub fn input_otp(value: &State<String>, length: usize) -> InputOtpBuilder {
     InputOtpBuilder::new(value, length)
 }

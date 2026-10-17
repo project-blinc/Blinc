@@ -18,15 +18,16 @@
 //! ```
 
 use blinc_core::State;
+use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_icons::{icons, to_svg};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::ElementBuilder;
+use blinc_layout::interaction::Interaction;
 use blinc_layout::prelude::*;
-use blinc_layout::stateful::{ButtonState, NoState, stateful_with_key};
 use blinc_layout::svg::svg;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::text_input::{
-    InputType, SharedTextInputData, text_input, text_input_data,
+    InputType, SharedTextInputData, refresh_text_input, text_input, text_input_data,
 };
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 use std::sync::Arc;
@@ -175,305 +176,269 @@ impl NumberInput {
         let font_size = config.size.font_size(&typography);
         let radius = theme.radius(RadiusToken::Default);
         let border_color = theme.color(ColorToken::BorderSecondary);
-        let bg = theme.color(ColorToken::InputBg);
-        let bg_hover = theme.color(ColorToken::InputBgHover);
-        let bg_pressed = theme.color(ColorToken::InputBgFocus);
-        let text_primary = theme.color(ColorToken::TextPrimary);
-        let text_tertiary = theme.color(ColorToken::TextTertiary);
 
         // Steppers are square at the row height.
         let button_w = height;
 
-        // SVG icons for the steppers — using glyph characters would
-        // pull whatever font happens to render at the run-time
-        // weight / family and made the `+` and `−` shift visually
-        // between paints. SVG locks the geometry to Lucide.
-        let icon_size = (font_size + 2.0).min(height * 0.45);
-        let icon_minus = to_svg(icons::MINUS, icon_size);
-        let icon_plus = to_svg(icons::PLUS, icon_size);
+        // The width follows the bounds, not the value, so typing digits
+        // never resizes the control.
+        const DEFAULT_FIELD_W: f32 = 32.0;
+        let auto_field_w = auto_field_width(
+            config.min,
+            config.max,
+            config.precision,
+            font_size,
+            DEFAULT_FIELD_W,
+        );
+        let total_w = config
+            .width
+            .unwrap_or_else(|| (auto_field_w + button_w * 2.0).min(config.max_width));
+        let field_w = (total_w - button_w * 2.0).max(DEFAULT_FIELD_W);
 
-        // SharedTextInputData persists across re-renders triggered by
-        // the outer Stateful's `state.signal_id()` deps. Without
-        // hoisting the data here, each re-render would create a fresh
-        // `text_input_data()` (losing cursor / focus / scroll state on
-        // every stepper click).
         let data = text_input_data();
         if let Ok(mut d) = data.lock() {
             d.value = format_number(config.state.get(), config.precision);
             d.cursor = d.value.chars().count();
             d.input_type = InputType::Number;
         }
+        show_state_in_field(&config, &data);
 
-        // Pre-clone everything the outer Stateful callback captures so
-        // the `move` closure stays `Fn`. Each `Arc`-clone is cheap.
-        let group_key = instance_key.derive("group");
-        let cfg_state = config.state.clone();
-        let cfg_min = config.min;
-        let cfg_max = config.max;
-        let cfg_step = config.step;
-        let cfg_precision = config.precision;
-        let cfg_disabled = config.disabled;
-        let cfg_max_width = config.max_width;
-        let cfg_explicit_w = config.width;
-        let cfg_placeholder = config.placeholder.clone();
-        let cfg_on_change = config.on_change.clone();
-        let data_for_render = data.clone();
-        // Pre-derive stepper key strings outside the outer closure —
-        // `InstanceKey` isn't `Send + Sync` so we can't capture it into
-        // a `Fn` closure crossed by the Stateful's bg thread access.
-        let stepper_dec_key: String = instance_key.derive("step-dec");
-        let stepper_inc_key: String = instance_key.derive("step-inc");
-
-        // Outer Stateful watches the bound `State<f64>`. When the
-        // value changes (stepper click OR user typing committed via
-        // on_change), the callback re-runs and the field width
-        // recomputes against the *current* formatted value — fits the
-        // content rather than the max possible value.
-        let group = stateful_with_key::<NoState>(&group_key)
-            .deps([cfg_state.signal_id()])
-            .on_state(move |_ctx| {
-                let current = cfg_state.get();
-                let formatted = format_number(current, cfg_precision);
-
-                // Sync the shared text-input data with the current
-                // formatted state value on every re-render. Any
-                // code path that calls `state.set(…)` (steppers,
-                // keyboard stepping, external callers) bumps the
-                // signal, the outer `.deps([state.signal_id()])`
-                // fires this callback, and the field picks up the
-                // new value next paint.
-                //
-                // SKIP the sync while the field is focused (user is
-                // typing). The on_change handler still pushes parsed
-                // values into `state`, but we don't write the
-                // *formatted* string back into the visible field —
-                // doing so canonicalises mid-edit (`"3"` → `"3.0"`
-                // at precision=1) so the next keystroke (`"0"`)
-                // lands after the auto-inserted `.0` instead of
-                // building up `"30"`. Stepper / external updates
-                // happen with the field blurred, so they still sync
-                // through this path.
-                if let Ok(mut d) = data_for_render.lock() {
-                    let is_focused = d.visual.is_focused();
-                    // Step changes (see on_step below) must still sync
-                    // while focused — only typing should skip this.
-                    let force = std::mem::take(&mut d.force_sync_once);
-                    if (force || !is_focused) && d.value != formatted {
-                        d.value = formatted.clone();
-                        d.cursor = d.value.chars().count();
-                        d.selection_start = None;
-                        d.scroll_offset_x = 0.0;
-                    }
-                }
-
-                const DEFAULT_FIELD_W: f32 = 32.0;
-                let auto_field_w =
-                    auto_field_width(cfg_min, cfg_max, cfg_precision, font_size, DEFAULT_FIELD_W);
-                let total_w = cfg_explicit_w
-                    .unwrap_or_else(|| (auto_field_w + button_w * 2.0).min(cfg_max_width));
-                let field_w = (total_w - button_w * 2.0).max(DEFAULT_FIELD_W);
-
-                // Field — text_input directly so cn owns the data
-                // lifecycle (the outer Stateful needs the same
-                // `Arc<Mutex<…>>` instance across re-renders to keep
-                // cursor / focus state).
-                let mut field = text_input(&data_for_render)
-                    .input_type(InputType::Number)
-                    .text_align(blinc_core::TextAlign::Center)
-                    .padding_x(4.0)
-                    .w(field_w)
-                    .h(height)
-                    .rounded(0.0)
-                    .class("cn-number-input-field")
-                    .disabled(cfg_disabled);
-
-                // Wire keyboard stepping (↑ / ↓ / `+` / `−`). The hook
-                // receives `+1` for increment, `-1` for decrement —
-                // the same direction the `+` / `−` buttons use.
-                {
-                    let state = cfg_state.clone();
-                    let min = cfg_min;
-                    let max = cfg_max;
-                    let step = cfg_step;
-                    let on_change = cfg_on_change.clone();
-                    let data_for_step = data_for_render.clone();
-                    field = field.on_step(move |delta| {
-                        let direction = delta as f64;
-                        let next = clamp(state.get() + direction * step, min, max);
-                        if (next - state.get()).abs() < f64::EPSILON {
-                            return; // at bound — no-op
-                        }
-                        // Set before state.set() — it can synchronously
-                        // trigger the sync above, so the flag must
-                        // already be visible when that runs.
-                        if let Ok(mut d) = data_for_step.lock() {
-                            d.force_sync_once = true;
-                        }
-                        state.set(next);
-                        if let Some(ref cb) = on_change {
-                            cb(next);
-                        }
-                    });
-                }
-                if let Some(ref p) = cfg_placeholder {
-                    field = field.placeholder(p.clone());
-                }
-                // Parse + clamp on every keystroke. Empty / partial
-                // strings (`""`, `"-"`, `"."`, `"-."`) leave `state`
-                // untouched so the user can finish typing without the
-                // wrapper "correcting" mid-edit.
-                {
-                    let state = cfg_state.clone();
-                    let min = cfg_min;
-                    let max = cfg_max;
-                    let precision = cfg_precision;
-                    let data_ref = data_for_render.clone();
-                    let on_change = cfg_on_change.clone();
-                    field = field.on_change(move |text| {
-                        let trimmed = text.trim();
-                        if trimmed.is_empty() || trimmed == "-" || trimmed == "." || trimmed == "-."
-                        {
-                            return;
-                        }
-                        if let Ok(parsed) = trimmed.parse::<f64>() {
-                            let clamped = clamp(parsed, min, max);
-                            // Only mutate `state` if the value actually
-                            // changed — otherwise we re-fire the
-                            // outer Stateful's deps every keystroke
-                            // (state.set always bumps the signal) and
-                            // re-render mid-typing, which thrashes the
-                            // cursor.
-                            if (clamped - state.get()).abs() > f64::EPSILON {
-                                state.set(clamped);
-                                if let Some(ref cb) = on_change {
-                                    cb(clamped);
-                                }
-                            }
-                            // If clamp moved the value, push the
-                            // canonical form back into the field.
-                            if (clamped - parsed).abs() > f64::EPSILON {
-                                if let Ok(mut d) = data_ref.lock() {
-                                    d.value = format_number(clamped, precision);
-                                    d.cursor = d.value.chars().count();
-                                }
-                            }
-                        }
-                    });
-                }
-
-                // Stepper buttons — each its own Stateful so hover /
-                // pressed bg shifts work, keyed off the parent so
-                // identity stays stable across outer re-renders.
-                let make_stepper =
-                    |label_svg: &str, delta: f64, is_left: bool, stepper_key: &str| {
-                        let state = cfg_state.clone();
-                        let state_click = cfg_state.clone();
-                        let min = cfg_min;
-                        let max = cfg_max;
-                        let step = cfg_step;
-                        let disabled = cfg_disabled;
-                        let precision = cfg_precision;
-                        let data_click = data_for_render.clone();
-                        let on_change = cfg_on_change.clone();
-                        let icon_svg = label_svg.to_string();
-
-                        let mut btn = stateful_with_key::<ButtonState>(stepper_key)
-                            .deps([cfg_state.signal_id()])
-                            .on_state(move |ctx| {
-                                let s = ctx.state();
-                                let cell_bg = if disabled {
-                                    bg
-                                } else {
-                                    match s {
-                                        ButtonState::Pressed => bg_pressed,
-                                        ButtonState::Hovered => bg_hover,
-                                        _ => bg,
-                                    }
-                                };
-                                // Disable when stepping in this direction
-                                // wouldn't change the clamped value.
-                                let at_bound = if disabled {
-                                    true
-                                } else {
-                                    let v = state.get();
-                                    clamp(v + delta * step, min, max) == v
-                                };
-                                let fg = if disabled || at_bound {
-                                    text_tertiary
-                                } else {
-                                    text_primary
-                                };
-
-                                let mut cell = div()
-                                    .w(button_w)
-                                    .h(height)
-                                    .flex_row()
-                                    .items_center()
-                                    .justify_center()
-                                    .bg(cell_bg)
-                                    .cursor_pointer()
-                                    .child(
-                                        svg(&icon_svg)
-                                            .size(icon_size, icon_size)
-                                            .color(fg)
-                                            .internal(),
-                                    );
-                                if is_left {
-                                    cell = cell.border_right(1.0, border_color);
-                                } else {
-                                    cell = cell.border_left(1.0, border_color);
-                                }
-                                cell.class(if is_left {
-                                    "cn-number-input-step--dec"
-                                } else {
-                                    "cn-number-input-step--inc"
-                                })
-                            });
-
-                        btn = btn.on_click(move |_| {
-                            if disabled {
-                                return;
-                            }
-                            let next = clamp(state_click.get() + delta * step, min, max);
-                            if (next - state_click.get()).abs() < f64::EPSILON {
-                                return; // at bound — no-op
-                            }
-                            // `state.set` is enough: it bumps the signal,
-                            // the outer Stateful's `.deps` re-renders,
-                            // and the render-time sync above pushes the
-                            // formatted value into `data_for_render`.
-                            // Pre-fix the click handler also wrote
-                            // directly to `data`, which raced with the
-                            // outer re-render and produced the first-
-                            // click-doesn't-update bug.
-                            state_click.set(next);
-                            let _ = data_click; // capture for Send-bound; sync handled by outer Stateful
-                            let _ = precision;
-                            if let Some(ref cb) = on_change {
-                                cb(next);
-                            }
-                        });
-
-                        btn
-                    };
-
-                div()
-                    .w(total_w)
-                    .h(height)
-                    .flex_row()
-                    .items_center()
-                    .rounded(radius)
-                    .border(1.0, border_color)
-                    .overflow_clip()
-                    .class("cn-number-input-group")
-                    .child(make_stepper(&icon_minus, -1.0, true, &stepper_dec_key))
-                    .child(field)
-                    .child(make_stepper(&icon_plus, 1.0, false, &stepper_inc_key))
-            });
+        let field = number_field(&config, &data, field_w, height);
+        let group = div()
+            .w(total_w)
+            .h(height)
+            .flex_row()
+            .items_center()
+            .rounded(radius)
+            .border(1.0, border_color)
+            .overflow_clip()
+            .class("cn-number-input-group")
+            .child(stepper(
+                &config,
+                &instance_key.derive("step-dec"),
+                -1.0,
+                height,
+            ))
+            .child(field)
+            .child(stepper(
+                &config,
+                &instance_key.derive("step-inc"),
+                1.0,
+                height,
+            ));
 
         Self {
             inner: div().h_fit().w_fit().child(group),
         }
+    }
+}
+
+/// Keep the field showing the bound value.
+///
+/// Every change to the state is written into the field, formatted, except
+/// while the field is focused: the user is typing there, and writing the
+/// formatted string back would canonicalise mid-edit (`"3"` to `"3.0"` at
+/// precision 1, so the next `"0"` lands after the `.0`). A step taken with
+/// the field focused sets `force_sync_once`, so it still shows.
+fn show_state_in_field(config: &Config, data: &SharedTextInputData) {
+    let signal = config.state.signal();
+    let precision = config.precision;
+    let data = data.clone();
+    blinc_core::reactive::effect(move |graph| {
+        // Through the passed graph: the first run holds the global one.
+        let Some(value) = graph.get(signal) else {
+            return;
+        };
+        let formatted = format_number(value, precision);
+        let changed = match data.lock() {
+            Ok(mut d) => {
+                let force = std::mem::take(&mut d.force_sync_once);
+                if (force || !d.visual.is_focused()) && d.value != formatted {
+                    d.value = formatted;
+                    d.cursor = d.value.chars().count();
+                    d.selection_start = None;
+                    d.scroll_offset_x = 0.0;
+                    true
+                } else {
+                    false
+                }
+            }
+            Err(_) => false,
+        };
+        if changed {
+            refresh_text_input(&data);
+        }
+    });
+}
+
+/// The text field between the steppers: parses what is typed into the
+/// state and steps it from the keyboard.
+fn number_field(
+    config: &Config,
+    data: &SharedTextInputData,
+    width: f32,
+    height: f32,
+) -> blinc_layout::widgets::text_input::TextInput {
+    let mut field = text_input(data)
+        .input_type(InputType::Number)
+        .text_align(blinc_core::TextAlign::Center)
+        .padding_x(4.0)
+        .w(width)
+        .h(height)
+        .rounded(0.0)
+        .class("cn-number-input-field")
+        .disabled(config.disabled);
+
+    // Keyboard stepping (↑ / ↓ / `+` / `−`): `+1` increments and `-1`
+    // decrements, as the buttons do.
+    {
+        let state = config.state.clone();
+        let (min, max, step) = (config.min, config.max, config.step);
+        let on_change = config.on_change.clone();
+        let data = data.clone();
+        field = field.on_step(move |delta| {
+            let next = clamp(state.get() + delta as f64 * step, min, max);
+            if (next - state.get()).abs() < f64::EPSILON {
+                return; // at bound — no-op
+            }
+            // Before the write: the field shows the value even though it
+            // is focused.
+            if let Ok(mut d) = data.lock() {
+                d.force_sync_once = true;
+            }
+            state.set(next);
+            if let Some(ref cb) = on_change {
+                cb(next);
+            }
+        });
+    }
+    if let Some(ref p) = config.placeholder {
+        field = field.placeholder(p.clone());
+    }
+    // Parse + clamp on every keystroke. Empty / partial strings (`""`,
+    // `"-"`, `"."`, `"-."`) leave `state` untouched so the user can finish
+    // typing without the wrapper "correcting" mid-edit.
+    {
+        let state = config.state.clone();
+        let (min, max, precision) = (config.min, config.max, config.precision);
+        let data = data.clone();
+        let on_change = config.on_change.clone();
+        field = field.on_change(move |text| {
+            let trimmed = text.trim();
+            if trimmed.is_empty() || trimmed == "-" || trimmed == "." || trimmed == "-." {
+                return;
+            }
+            let Ok(parsed) = trimmed.parse::<f64>() else {
+                return;
+            };
+            let clamped = clamp(parsed, min, max);
+            // Only a change is written: every write wakes the dependents.
+            if (clamped - state.get()).abs() > f64::EPSILON {
+                state.set(clamped);
+                if let Some(ref cb) = on_change {
+                    cb(clamped);
+                }
+            }
+            // A clamped value goes back into the field in its canonical form.
+            if (clamped - parsed).abs() > f64::EPSILON {
+                if let Ok(mut d) = data.lock() {
+                    d.value = format_number(clamped, precision);
+                    d.cursor = d.value.chars().count();
+                }
+                refresh_text_input(&data);
+            }
+        });
+    }
+    field
+}
+
+/// A `+` or `−` button: steps the state by `delta` steps. Its fill follows
+/// the pointer, and its icon dims where a step would change nothing.
+fn stepper(config: &Config, key: &str, delta: f64, height: f32) -> Div {
+    let theme = ThemeState::get();
+    let typography = theme.typography();
+    let font_size = config.size.font_size(&typography);
+    let border_color = theme.color(ColorToken::BorderSecondary);
+    let (bg, bg_hover, bg_pressed) = (
+        theme.color(ColorToken::InputBg),
+        theme.color(ColorToken::InputBgHover),
+        theme.color(ColorToken::InputBgFocus),
+    );
+    let (text_primary, text_tertiary) = (
+        theme.color(ColorToken::TextPrimary),
+        theme.color(ColorToken::TextTertiary),
+    );
+    let (min, max, step, disabled) = (config.min, config.max, config.step, config.disabled);
+    let is_dec = delta < 0.0;
+
+    let interaction = Interaction::keyed(key);
+    let (hovered, pressed) = (
+        interaction.hovered().signal(),
+        interaction.pressed().signal(),
+    );
+    let fill = computed(move |g: &ReactiveGraph| {
+        if disabled {
+            bg
+        } else if g.get(pressed).unwrap_or(false) {
+            bg_pressed
+        } else if g.get(hovered).unwrap_or(false) {
+            bg_hover
+        } else {
+            bg
+        }
+    });
+    let value = config.state.signal();
+    let fg = computed(move |g: &ReactiveGraph| {
+        let at_bound = g
+            .get(value)
+            .is_some_and(|v| clamp(v + delta * step, min, max) == v);
+        if disabled || at_bound {
+            text_tertiary
+        } else {
+            text_primary
+        }
+    });
+
+    // SVG icons rather than glyphs: a glyph renders in whatever face and
+    // weight resolve at run time, and shifted between paints.
+    let icon_size = (font_size + 2.0).min(height * 0.45);
+    let icon = to_svg(if is_dec { icons::MINUS } else { icons::PLUS }, icon_size);
+
+    let state = config.state.clone();
+    let on_change = config.on_change.clone();
+    let cell = div()
+        .w(height)
+        .h(height)
+        .flex_row()
+        .items_center()
+        .justify_center()
+        .bg(&fill)
+        .cursor_pointer()
+        .track(&interaction)
+        .class(if is_dec {
+            "cn-number-input-step--dec"
+        } else {
+            "cn-number-input-step--inc"
+        })
+        .child(svg(&icon).size(icon_size, icon_size).color(&fg).internal())
+        .on_click(move |_| {
+            if disabled {
+                return;
+            }
+            let next = clamp(state.get() + delta * step, min, max);
+            if (next - state.get()).abs() < f64::EPSILON {
+                return; // at bound — no-op
+            }
+            // The field picks the value up through `show_state_in_field`.
+            state.set(next);
+            if let Some(ref cb) = on_change {
+                cb(next);
+            }
+        });
+    if is_dec {
+        cell.border_right(1.0, border_color)
+    } else {
+        cell.border_left(1.0, border_color)
     }
 }
 
@@ -640,9 +605,8 @@ mod tests {
     }
 
     fn test_state(initial: f64) -> State<f64> {
-        let graph = Arc::new(std::sync::Mutex::new(ReactiveGraph::new()));
-        let signal = graph.lock().unwrap().create_signal(initial);
-        State::new(signal, graph, Arc::new(AtomicBool::new(false)))
+        use blinc_core::reactive::{global_dirty_flag, global_graph, signal};
+        State::new(signal(initial), global_graph(), global_dirty_flag())
     }
 
     fn number_input_widths(value: f64) -> (f32, f32) {

@@ -39,10 +39,6 @@ pub struct CnInputOTP {
     pub group_every: f64,
     /// Fired once when the last slot is filled. Zero when omitted.
     pub on_complete: i64,
-    /// Names this widget when two of them would otherwise look
-    /// identical. Only needed for a genuine duplicate: see
-    /// `otp_key`.
-    pub key: String,
     /// Lazy-constructed cn widget. Same caching rationale as
     /// `CnButton::built`.
     #[skip]
@@ -52,24 +48,6 @@ pub struct CnInputOTP {
 impl CnInputOTP {
     fn get_or_build(&self) -> &blinc_cn::InputOtpBuilder {
         ::blinc_layout::build_once::build_once(&self.built, || self.to_cn_widget())
-    }
-
-    /// What tells this widget's group state from another's.
-    ///
-    /// Named by what the author wrote rather than the call site — the
-    /// id a DSL widget would key on is unreliable, and every instance
-    /// is built from the one line below regardless. Two OTPs alike in
-    /// every respect share state; `key` is the way out.
-    fn otp_key(&self) -> String {
-        if !self.key.is_empty() {
-            return format!("cn-input-otp-{}", self.key);
-        }
-        format!(
-            "cn-input-otp-{}-{}-{}",
-            crate::bridge::signal_key(&self.value),
-            self.length(),
-            self.size,
-        )
     }
 
     fn length(&self) -> usize {
@@ -82,9 +60,7 @@ impl CnInputOTP {
 
     fn to_cn_widget(&self) -> blinc_cn::InputOtpBuilder {
         let state = crate::bridge::string_state(&self.value);
-        let mut b = blinc_cn::input_otp(&state, self.length())
-            .key(self.otp_key())
-            .size(self.size());
+        let mut b = blinc_cn::input_otp(&state, self.length()).size(self.size());
 
         if self.numeric_only {
             b = b.numeric_only(true);

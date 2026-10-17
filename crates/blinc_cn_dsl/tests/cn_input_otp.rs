@@ -42,6 +42,8 @@ impl Harness {
 
     /// Apply whatever a signal write queued, as a frame would.
     fn frame(&mut self) {
+        let updates = blinc_layout::take_pending_partial_prop_updates();
+        self.tree.apply_partial_property_updates(updates);
         self.tree.process_pending_subtree_rebuilds();
         self.tree.compute_layout(600.0, 200.0);
     }

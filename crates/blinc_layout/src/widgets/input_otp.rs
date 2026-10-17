@@ -11,12 +11,10 @@ use blinc_core::State;
 
 use crate::div::{Div, ElementBuilder, ElementTypeId, div};
 use crate::element::RenderProps;
-use crate::key::InstanceKey;
-use crate::stateful::{NoState, stateful_with_key};
 use crate::tree::{LayoutNodeId, LayoutTree};
 use crate::widgets::text_input::{
-    InputType, SharedTextInputData, TextInput, focus_text_input_deferred, text_input,
-    text_input_data,
+    InputType, SharedTextInputData, TextInput, focus_text_input_deferred, refresh_text_input,
+    text_input, text_input_data,
 };
 
 /// Reactive OTP configuration bound to a [`State<String>`] holding the
@@ -64,14 +62,31 @@ pub fn sync_slots_from_value(slots: &[SharedTextInputData], value: &str) {
     let mut chars = value.chars();
     for slot in slots {
         let target = chars.next().map(|c| c.to_string()).unwrap_or_default();
-        if let Ok(mut d) = slot.lock() {
-            if d.value != target {
+        let changed = match slot.lock() {
+            Ok(mut d) if d.value != target => {
                 d.cursor = target.chars().count();
                 d.value = target;
                 d.selection_start = None;
+                true
             }
+            _ => false,
+        };
+        if changed {
+            refresh_text_input(slot);
         }
     }
+}
+
+/// Keep the slots showing the bound value, whoever writes it.
+#[doc(hidden)]
+pub fn show_value_in_slots(slots: &Arc<Vec<SharedTextInputData>>, value: &State<String>) {
+    let signal = value.signal();
+    let slots = Arc::clone(slots);
+    blinc_core::reactive::effect(move |graph| {
+        // Through the passed graph: the first run holds the global one.
+        let value = graph.get(signal).unwrap_or_default();
+        sync_slots_from_value(&slots, &value);
+    });
 }
 
 /// Wire the auto-advance / backspace-rewind / paste-distribution FSM
@@ -229,7 +244,6 @@ pub struct InputOtp {
 
 /// Lazy builder for [`InputOtp`].
 pub struct InputOtpBuilder {
-    key: InstanceKey,
     config: InputOtpConfig,
     masked: bool,
     disabled: bool,
@@ -240,10 +254,8 @@ pub struct InputOtpBuilder {
 }
 
 impl InputOtpBuilder {
-    #[track_caller]
     pub fn new(value: &State<String>, length: usize) -> Self {
         Self {
-            key: InstanceKey::new("input_otp"),
             config: InputOtpConfig {
                 value: value.clone(),
                 length,
@@ -347,61 +359,38 @@ impl InputOtp {
             .collect();
         let slots = Arc::new(slots);
 
-        // `slots` is captured outside the signal-driven rebuild so
-        // cursor/focus state survives each render.
-        let group_key = b.key.derive("group");
-        let value_for_group = b.config.value.clone();
-        let value_dep = b.config.value.clone();
-        let masked = b.masked;
-        let disabled = b.disabled;
-        let gap = b.gap;
-        let on_change = b.config.on_change.clone();
-        let on_complete = b.config.on_complete.clone();
-        let css_element_id = b.css_element_id.clone();
-        let css_classes = b.css_classes.clone();
+        show_value_in_slots(&slots, &b.config.value);
 
-        let row = stateful_with_key::<NoState>(&group_key)
-            .deps([value_dep.signal_id()])
-            .on_state(move |_ctx| {
-                sync_slots_from_value(&slots, &value_for_group.get());
-
-                let mut row = div().flex_row().items_center().gap(gap);
-
-                for i in 0..length {
-                    let field = text_input(&slots[i])
-                        .input_type(if numeric_only {
-                            InputType::Integer
-                        } else {
-                            InputType::Text
-                        })
-                        .text_align(blinc_core::TextAlign::Center)
-                        .max_length(1)
-                        .masked(masked)
-                        .disabled(disabled)
-                        .class("cn-input-otp-slot");
-
-                    let field = wire_otp_slot(
-                        field,
-                        i,
-                        &slots,
-                        numeric_only,
-                        &value_for_group,
-                        on_change.clone(),
-                        on_complete.clone(),
-                    );
-
-                    row = row.child(field);
-                }
-
-                for class in &css_classes {
-                    row = row.class(class.as_str());
-                }
-                if let Some(ref id) = css_element_id {
-                    row = row.id(id.as_str());
-                }
-
-                row.class("cn-input-otp")
-            });
+        let mut row = div().flex_row().items_center().gap(b.gap);
+        for i in 0..length {
+            let field = text_input(&slots[i])
+                .input_type(if numeric_only {
+                    InputType::Integer
+                } else {
+                    InputType::Text
+                })
+                .text_align(blinc_core::TextAlign::Center)
+                .max_length(1)
+                .masked(b.masked)
+                .disabled(b.disabled)
+                .class("cn-input-otp-slot");
+            row = row.child(wire_otp_slot(
+                field,
+                i,
+                &slots,
+                numeric_only,
+                &b.config.value,
+                b.config.on_change.clone(),
+                b.config.on_complete.clone(),
+            ));
+        }
+        for class in &b.css_classes {
+            row = row.class(class.as_str());
+        }
+        if let Some(ref id) = b.css_element_id {
+            row = row.id(id.as_str());
+        }
+        let row = row.class("cn-input-otp");
 
         Self {
             inner: div().h_fit().w_fit().child(row),
@@ -492,7 +481,6 @@ impl ElementBuilder for InputOtpBuilder {
 /// let code = ctx.use_state_keyed("code", || String::new());
 /// input_otp(&code, 6).numeric_only(true)
 /// ```
-#[track_caller]
 pub fn input_otp(value: &State<String>, length: usize) -> InputOtpBuilder {
     InputOtpBuilder::new(value, length)
 }
