@@ -17,15 +17,13 @@
 
 use std::sync::Arc;
 
+use blinc_core::State;
 use blinc_core::context_state::BlincContextState;
-use blinc_core::{Brush, Color, CornerRadius, DrawContext, Rect, State};
 
-use crate::canvas::{Canvas, CanvasBounds, canvas};
-use crate::div::{Div, ElementBuilder, div};
-use crate::stateful::{NoState, stateful_with_key};
-use crate::widgets::cursor::SharedCursorState;
+use crate::div::{Div, div};
 
 use super::block_ops::{indent_blocks, outdent_blocks, toggle_block_kind};
+use super::content::{content, ensure_geometry};
 use super::cursor::{DocPosition, step_backward, step_forward};
 use super::document::BlockKind;
 use super::edit::{
@@ -33,7 +31,7 @@ use super::edit::{
     split_block,
 };
 use super::format::{Mark, apply_mark_to_selection};
-use super::render::{RichTextTheme, compute_line_geometry, render_document};
+use super::render::RichTextTheme;
 use super::state::RichTextState;
 
 /// Build an interactive rich text editor element.
@@ -41,133 +39,37 @@ use super::state::RichTextState;
 /// `state` is an externally-owned `RichTextState` that survives across
 /// rebuilds. `theme` controls visual style. `content_width` is the
 /// pixel width of the column the document will be rendered into — same
-/// caveat as [`render_document`].
+/// caveat as [`super::render::render_document`].
 ///
-/// The returned element is a `Stateful` so it can be embedded anywhere
-/// a normal element fits. Use a parent with explicit width (e.g. inside
-/// a centered column) to control the editor's footprint.
-pub fn rich_text_editor(
-    state: &RichTextState,
-    theme: RichTextTheme,
-    content_width: f32,
-) -> impl ElementBuilder + use<> {
-    // Per-editor signal that bumps on every state mutation. The Stateful
-    // rebuilds whenever this signal changes, which triggers a fresh
-    // line-index computation and a new cursor overlay.
+/// The element is built once. Every edit bumps a per-editor version
+/// signal, and what the editor shows is bound to it: the blocks are a
+/// keyed list, so an edit rebuilds only the block it changed, and the
+/// selection, cursor and toolbar follow in place. Use a parent with
+/// explicit width (e.g. inside a centered column) to control the
+/// editor's footprint.
+pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_width: f32) -> Div {
+    // Per-editor signal that bumps on every state mutation.
     let blinc = BlincContextState::get();
     let version_key = format!("rich_text_editor:{:p}", Arc::as_ptr(state));
     let version: State<u32> = blinc.use_state_keyed(&version_key, || 0);
-    let stateful_key = format!("rich_text_editor_root:{:p}", Arc::as_ptr(state));
 
     // Pre-populate the line index so the very first frame can already
     // hit-test clicks before any state mutation has happened.
-    {
-        if let Ok(mut data) = state.lock() {
-            let geometry = compute_line_geometry(&data.document, &theme, content_width);
-            data.set_line_index(geometry);
-        }
-    }
+    ensure_geometry(state, &theme, content_width, version.try_get().unwrap_or(0));
 
     // Clones for the various closures
-    let state_for_render = Arc::clone(state);
     let state_for_click = Arc::clone(state);
     let state_for_drag = Arc::clone(state);
     let state_for_key = Arc::clone(state);
     let state_for_text = Arc::clone(state);
-    let theme_for_render = theme.clone();
-    let version_for_render = version.clone();
     let version_for_click = version.clone();
     let version_for_drag = version.clone();
     let version_for_key = version.clone();
     let version_for_text = version.clone();
 
-    stateful_with_key::<NoState>(&stateful_key)
-        .deps([version.signal_id()])
-        .on_state(move |_ctx| {
-            // Re-walk geometry against the (possibly mutated) document.
-            let mut data = state_for_render.lock().unwrap();
-            let geometry = compute_line_geometry(&data.document, &theme_for_render, content_width);
-            data.set_line_index(geometry);
+    let content = content(state, &version, &theme, content_width);
 
-            // Sync cursor blink state's visibility with focus.
-            data.set_cursor_visible(data.focused);
-
-            // Compute the editor's content height from the line index so
-            // the cursor canvas can be sized to span every visual line.
-            // Without this the canvas defaults to its `h(1.0)` and the
-            // cursor bar gets vertically clipped to a 1px dot. We add
-            // a small bottom slack so the cursor is visible at the very
-            // last line.
-            let content_height = data
-                .line_index
-                .iter()
-                .map(|g| g.y + g.height)
-                .fold(0.0_f32, f32::max)
-                .max(theme_for_render.font_size * theme_for_render.line_height);
-
-            let doc_tree = render_document(&data.document, &theme_for_render, content_width);
-
-            // Selection rectangles (one per visual line). The cursor
-            // canvas overlays the entire content rect and is responsible
-            // for its own blink animation.
-            let mut overlay_children: Vec<Div> = Vec::new();
-            if data.focused {
-                if let Some(sel) = data.selection {
-                    if !sel.is_empty() {
-                        overlay_children.extend(selection_rects(&data, sel, &theme_for_render));
-                    }
-                }
-            }
-
-            // Wrap the document in a relative-positioned container so
-            // absolute children (cursor / selection) are positioned
-            // against the editor's content rect, not the window.
-            //
-            // The text cursor (`cursor_text`) is set on this inner Div
-            // — not on the outer Stateful — because every rebuild
-            // replaces the inner Div's RenderProps. Setting it on the
-            // outer Stateful would only stick until the first state
-            // mutation, after which the rebuilt inner div reverts to
-            // the default arrow.
-            //
-            // The `blinc-rich-text-editor` class is the canonical CSS
-            // hook for stylesheet overrides — users can target it via
-            // `.blinc-rich-text-editor { … }` in `ctx.add_css(…)` for
-            // background, padding, font, etc.
-            let mut root = div()
-                .w_full()
-                .relative()
-                .cursor_text()
-                .class("blinc-rich-text-editor")
-                .child(doc_tree);
-            for child in overlay_children {
-                root = root.child(child);
-            }
-            // Cursor canvas spans the entire content rect and reads its
-            // (x, y) position from the state on each redraw.
-            root = root.child(cursor_overlay_canvas(
-                Arc::clone(&state_for_render),
-                data.cursor_state.clone(),
-                theme_for_render.text,
-                content_width,
-                content_height,
-            ));
-
-            // Floating context toolbar — only shows when the editor is
-            // focused and has a non-empty selection. Clear any stale
-            // toolbar_rect first so a previous frame's rect doesn't
-            // keep blocking clicks after the selection is collapsed.
-            data.toolbar_rect = None;
-            drop(data);
-            if let Some(toolbar) = super::toolbar::selection_toolbar(
-                &state_for_render,
-                &version_for_render,
-                &theme_for_render,
-            ) {
-                root = root.child(toolbar);
-            }
-            root
-        })
+    div()
         .w_full()
         .on_mouse_down(move |ctx| {
             let mut data = state_for_click.lock().unwrap();
@@ -198,12 +100,15 @@ pub fn rich_text_editor(
             // (the global hook lives inside `RichTextEditorState::set_focus`).
             crate::widgets::text_input::bump_focus_tap_generation();
             let blur_state = Arc::clone(&state_for_click);
+            let blur_version = version_for_click.clone();
             crate::widgets::text_input::set_focused_editable_node(
                 ctx.node_id,
                 Some(Box::new(move || {
                     if let Ok(mut data) = blur_state.lock() {
                         data.set_focus(false);
                     }
+                    // The selection, cursor and toolbar follow focus.
+                    blur_version.set(blur_version.get().wrapping_add(1));
                 })),
             );
 
@@ -736,6 +641,7 @@ pub fn rich_text_editor(
                 version_for_key.set(version_for_key.get().wrapping_add(1));
             }
         })
+        .child(content)
 }
 
 /// Build a `Selection` covering whatever block range the editor's
@@ -768,113 +674,6 @@ fn apply_block_kind(data: &mut super::state::RichTextData, kind: BlockKind) -> b
     let cursor = data.cursor;
     data.set_cursor(cursor);
     true
-}
-
-/// Canvas overlay that draws a blinking cursor at the current document
-/// position. The closure reads the cursor geometry from `state` on each
-/// frame, so when the editor's content rect is animating (or the cursor
-/// blink advances) we don't need a tree rebuild — the canvas redraws
-/// itself in place.
-fn cursor_overlay_canvas(
-    state: RichTextState,
-    cursor_state: SharedCursorState,
-    color: Color,
-    width: f32,
-    height: f32,
-) -> Canvas {
-    canvas(move |ctx: &mut dyn DrawContext, _bounds: CanvasBounds| {
-        // Compute opacity from blink state.
-        let (opacity, visible) = match cursor_state.lock() {
-            Ok(s) => (s.current_opacity(), s.visible),
-            Err(_) => (1.0, false),
-        };
-        if !visible || opacity < 0.01 {
-            return;
-        }
-
-        let Ok(data) = state.lock() else {
-            return;
-        };
-        if !data.focused {
-            return;
-        }
-        let Some((x, y, h)) = data.cursor_geometry() else {
-            return;
-        };
-
-        let c = Color::rgba(color.r, color.g, color.b, color.a * opacity);
-        ctx.fill_rect(
-            Rect::new(x, y, 2.0, h),
-            CornerRadius::default(),
-            Brush::Solid(c),
-        );
-    })
-    .absolute()
-    .left(0.0)
-    .top(0.0)
-    .w(width)
-    .h(height.max(1.0))
-}
-
-/// Build absolute-positioned selection rectangles for the given selection.
-/// One rect per visual line that the selection covers, sized to the
-/// width of the selected text on that line.
-fn selection_rects(
-    data: &super::state::RichTextData,
-    sel: super::cursor::Selection,
-    theme: &RichTextTheme,
-) -> Vec<Div> {
-    let (start, end) = sel.ordered();
-    let mut rects = Vec::new();
-    let highlight = Color::rgba(theme.text.r, theme.text.g, theme.text.b, 0.18);
-    for g in &data.line_index {
-        // Determine the [start_col_in_line .. end_col_in_line) range for
-        // this visual line in the selection.
-        let line_chars = g.total_chars();
-        let line_end_col = g.start.col + line_chars;
-        let on_block = g.start.block;
-        let on_line = g.start.line;
-
-        // Skip lines fully outside the selection.
-        let after_start = (on_block, on_line, line_end_col) >= (start.block, start.line, start.col);
-        let before_end = (on_block, on_line, g.start.col) <= (end.block, end.line, end.col);
-        if !(after_start && before_end) {
-            continue;
-        }
-
-        // Compute clamped local columns within this visual line.
-        let line_start_pos = (on_block, on_line, g.start.col);
-        let line_end_pos = (on_block, on_line, line_end_col);
-        let sel_start_pos = (start.block, start.line, start.col);
-        let sel_end_pos = (end.block, end.line, end.col);
-
-        let sx_global = sel_start_pos.max(line_start_pos);
-        let ex_global = sel_end_pos.min(line_end_pos);
-        if sx_global >= ex_global {
-            continue;
-        }
-        let local_start = sx_global.2 - g.start.col;
-        let local_end = ex_global.2 - g.start.col;
-
-        // Walk runs to find the pixel x for each end of the selection
-        // range, measuring each prefix with its run's actual font.
-        let start_px = super::state::pixel_x_for_local_col(g, local_start);
-        let end_px = super::state::pixel_x_for_local_col(g, local_end);
-        let mid_w = end_px - start_px;
-        if mid_w <= 0.0 {
-            continue;
-        }
-        rects.push(
-            div()
-                .absolute()
-                .left(g.x + start_px)
-                .top(g.y)
-                .w(mid_w)
-                .h(g.height)
-                .bg(highlight),
-        );
-    }
-    rects
 }
 
 /// Toggle an inline `mark`.

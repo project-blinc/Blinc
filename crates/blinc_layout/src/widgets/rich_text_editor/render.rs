@@ -123,7 +123,7 @@ pub fn render_document(doc: &RichDocument, theme: &RichTextTheme, content_width:
 /// list ordinals. `content_width` is the available pixel width *outside*
 /// any indent: each block subtracts its own indent before passing the
 /// remainder down to its inline content.
-fn render_block(
+pub(super) fn render_block(
     doc: &RichDocument,
     index: usize,
     block: &Block,

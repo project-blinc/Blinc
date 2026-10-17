@@ -151,8 +151,11 @@ pub struct RichTextData {
     pub active_format: ActiveFormat,
     /// Focus flag — set on first mouse-down inside the editor.
     pub focused: bool,
-    /// Visual line geometry index, populated by the renderer each frame.
+    /// Visual line geometry index, kept current by the editor as the
+    /// document changes.
     pub line_index: Vec<LineGeometry>,
+    /// The editor version the line index was computed for.
+    pub(crate) geometry_stamp: Option<u32>,
     /// Shared cursor blink state — used by the canvas-based cursor
     /// overlay so blinking doesn't require tree rebuilds.
     pub cursor_state: SharedCursorState,
@@ -225,6 +228,7 @@ impl RichTextData {
             active_format: ActiveFormat::default(),
             focused: false,
             line_index: Vec::new(),
+            geometry_stamp: None,
             cursor_state: cursor_state(),
             tick_callback_id: None,
             editor_bounds: (0.0, 0.0, 0.0, 0.0),

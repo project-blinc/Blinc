@@ -24,6 +24,7 @@
 //! handlers without going through a sealed setter API.
 
 pub mod block_ops;
+mod content;
 pub mod cursor;
 pub mod document;
 pub mod edit;
