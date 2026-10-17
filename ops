@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1792246613,"nonce":"rEZwcFqbTqCI3FbDkjwRtuObN5s=","message":"text_area split in 71d2957f, text_input in d6c80973bf48cd9773a19ebe5500c50b7f351319. Largest files now: text_input/handlers.rs 601 lines, text_area/widget.rs 670.","files":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1792246613,"nonce":"nGJPQsQ0Ors5G3qsGYSkgkbu/J0=","status":2}]}
