@@ -72,7 +72,7 @@ struct DialogProps {
 }
 
 impl CnDialog {
-    fn to_element(&self) -> blinc_layout::stateful::Stateful<()> {
+    fn to_element(&self) -> Div {
         let open = crate::bridge::bool_state(&self.open);
         let props = self.props();
         crate::modal::watcher(open, move || props.show())
