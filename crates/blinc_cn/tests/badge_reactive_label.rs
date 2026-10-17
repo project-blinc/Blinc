@@ -1,10 +1,5 @@
-//! A bound Badge label must still be styled by the variant class.
-//!
-//! `.cn-badge--{style}-{variant}` carries the chip's background, border
-//! AND its text colour, which the label inherits. Building the classed
-//! node inside the `Stateful` put it behind the rebuild boundary and the
-//! label rendered in the default text colour instead of the variant's,
-//! so the class has to live on a stable node outside it.
+//! A bound Badge label is styled by the variant class like a static one:
+//! `.cn-badge--{style}-{variant}` sits on the same outer node either way.
 
 use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
 use blinc_layout::binding::Reactive;

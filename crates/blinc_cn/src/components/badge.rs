@@ -190,42 +190,23 @@ impl Badge {
 
     /// Bind the chip's text to a reactive source.
     ///
-    /// Text content has no property writer -- a changed label needs a
-    /// new text node -- so a bound label wraps the chip in a
-    /// `Stateful` subscribed to the source. A `Const` needs none of
-    /// that and rebuilds in place, exactly as `new` does.
+    /// A bound label is a text bound to the source: a change replaces the
+    /// text in place. A `Const` builds the chip exactly as `new` does.
     pub fn reactive_label(self, label: blinc_layout::binding::Reactive<String>) -> Self {
         use crate::reactive_props::{clone_reactive, current, dep_signal};
-        use blinc_layout::stateful::{ButtonState, stateful};
 
         let (variant, style, icon_position) = (self.variant, self.style, self.icon_position);
-        let Some(sig) = dep_signal(&label) else {
+        if dep_signal(&label).is_none() {
             return Self::rebuild(current(&label), variant, style, None, icon_position);
-        };
+        }
 
-        // The class stays on a STABLE node outside the stateful, and
-        // only the text is rebuilt inside it. The chip's whole
-        // appearance -- background, border, radius, and the text colour
-        // the label inherits -- comes from
-        // `.cn-badge--{style}-{variant}`, and that cascade only reaches
-        // content the stylesheet pass can see as a descendant. Building
-        // the classed node inside the callback put it behind the
-        // stateful boundary, so the label rendered in the default text
-        // colour instead of the variant's.
+        // The chip's background, border and radius come from
+        // `.cn-badge--{style}-{variant}` on the outer node. The label's
+        // colour is the variant's token, set rather than inherited, as
+        // cn::Button's label is: a CSS override of that class's `color`
+        // does not reach a bound label.
         let src = clone_reactive(&label);
         let variant_class = format!("cn-badge--{}-{}", style.css_suffix(), variant.css_suffix());
-        // The label's colour is set in Rust rather than left to the
-        // cascade. A static chip's text is a plain child of the classed
-        // node and inherits `color` from it; a rebuilt label is created
-        // by the stateful's callback, so whether it carries the
-        // variant's colour depends on a stylesheet pass having run over
-        // it since. That is why the chip rendered in the default text
-        // colour until some unrelated interaction happened to trigger
-        // one. Reading the token here makes the rebuilt label
-        // self-sufficient. The trade-off is that a CSS override of
-        // `.cn-badge--{style}-{variant} { color }` no longer reaches a
-        // BOUND label -- the same trade-off cn::Button already makes for
-        // its own label.
         let fg = ThemeState::get().color(label_color_token(style, variant));
         // Same helper every other reactive text prop uses, so the
         // wrapper's sizing and the "set your own colour" rule live in

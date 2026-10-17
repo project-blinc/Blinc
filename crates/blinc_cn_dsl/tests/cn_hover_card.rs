@@ -141,6 +141,8 @@ fn typography_renders_and_a_bound_text_follows() {
     assert!(found.iter().any(|t| t.contains("before")), "{found:?}");
 
     dsl.set_signal_string("type_probe", "after");
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    tree.apply_partial_property_updates(updates);
     tree.process_pending_subtree_rebuilds();
     tree.compute_layout(600.0, 300.0);
 

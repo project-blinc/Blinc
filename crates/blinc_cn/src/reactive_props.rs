@@ -64,17 +64,17 @@ pub fn clone_reactive<T: Clone>(r: &Reactive<T>) -> Reactive<T> {
 /// An element that follows a reactive source.
 ///
 /// The general form of [`reactive_text`], for content a property write can't
-/// express: a `Const` builds once
-/// with no wrapper at all, and a bound source gets a `Stateful`
-/// subscribed to the signal that re-runs `build` on every change. Use
-/// it for content a property write can't express -- text, an image
-/// source, anything that picks a different element.
+/// express -- an image source, anything that picks a different element. A
+/// `Const` (or a `Computed`, which is read once) builds once with no wrapper.
+/// A bound state gets a region keyed by its value: a change builds the
+/// element for the new value in place and drops the old one, with nothing
+/// around it rebuilt.
 ///
-/// `build` runs on every rebuild and MUST set everything the content
-/// needs. It runs after the stylesheet pass has walked the tree, so it
-/// cannot rely on inheriting from an ancestor's class; content that did
-/// would render unstyled until some later event triggered another pass.
-/// See `gotcha_stateful_content_loses_css_inheritance`.
+/// `build` MUST set everything the content needs. It runs after the
+/// stylesheet pass has walked the tree, so it cannot rely on inheriting
+/// from an ancestor's class; content that did would render unstyled until
+/// some later event triggered another pass. See
+/// `gotcha_stateful_content_loses_css_inheritance`.
 pub fn reactive_node<F>(
     src: &Reactive<String>,
     build: F,
@@ -82,44 +82,22 @@ pub fn reactive_node<F>(
 where
     F: Fn(String) -> Box<dyn blinc_layout::div::ElementBuilder> + Send + Sync + 'static,
 {
-    use blinc_layout::stateful::{ButtonState, stateful};
+    use blinc_core::reactive::{ReactiveGraph, computed};
 
-    let Some(sig) = dep_signal(src) else {
+    let Reactive::Bound(state) = src else {
         return build(current(src));
     };
-    let src = clone_reactive(src);
-    // The Stateful sits inside a plain hugging Div.
-    //
-    // A Stateful's own container does not take the parent's
-    // `items_center` the way an ordinary child does, so on its own it
-    // lands at the top-left of a taller box -- visible as a chip label
-    // pinned to the top of its pill instead of centred. Wrapped, the
-    // parent aligns an ordinary Div and the content follows it.
-    //
-    // The inner Div hugs too: the callback has to return a container,
-    // and a stretching one would put the content back in the corner.
+    let signal = state.signal();
+    let value = computed(move |g: &ReactiveGraph| vec![g.get(signal).unwrap_or_default()]);
+    // The region hugs its content and is centred in its parent: every
+    // caller puts this content in a box and centres it, and `h_fit()` alone
+    // would pin it to the top (it sets `align_self: Start`).
     Box::new(
         blinc_layout::div::div()
             .w_fit()
             .h_fit()
-            // `h_fit()` also sets `align_self: Start`, which pins the
-            // wrapper to the top of a taller parent -- a chip label
-            // against the top of its pill rather than centred in it.
-            // Content in a box is centred in every caller here, so say
-            // so.
             .align_self_center()
-            .child(
-                stateful::<ButtonState>()
-                    .deps([sig])
-                    .on_state(move |_ctx| {
-                        blinc_layout::div::div()
-                            .w_fit()
-                            .h_fit()
-                            .child_box(build(current(&src)))
-                    })
-                    .w_fit()
-                    .h_fit(),
-            ),
+            .for_each(&value, |v: &String| v.clone(), move |v: String| build(v)),
     )
 }
 
