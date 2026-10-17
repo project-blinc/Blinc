@@ -22,19 +22,20 @@ pub const CODE_EDITOR_STYLES: &str = r#"
 }
 .blinc-find-row { gap: 6px; }
 
+/* A solid 1px border: opaque colours, and a whole-pixel width so it stays
+   crisp (the plain input default is 1.5px). */
 .blinc-find-input {
     height: 28px;
     background: var(--surface-overlay);
-    border-color: var(--border);
+    border-width: 1px;
+    border-color: var(--border-secondary);
     border-radius: var(--radius-md);
     color: var(--text-primary);
 }
-.blinc-find-input:hover { border-color: var(--border-hover); }
+.blinc-find-input:hover { border-color: var(--text-secondary); }
 .blinc-find-input:focus {
     background: var(--surface-overlay);
     border-color: var(--border-focus);
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 0px;
 }
 
 .blinc-find-button {

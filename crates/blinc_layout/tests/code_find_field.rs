@@ -216,6 +216,19 @@ fn fill(bar: &RenderTree, class: &str) -> Option<Color> {
     panic!("no .{class} in the find bar");
 }
 
+/// The render props of the first node carrying `class`.
+fn props(bar: &RenderTree, class: &str) -> blinc_layout::element::RenderProps {
+    let registry = bar.element_registry();
+    let mut stack = vec![bar.root().unwrap()];
+    while let Some(n) = stack.pop() {
+        if registry.has_class(n, class) {
+            return bar.get_render_node(n).unwrap().props.clone();
+        }
+        stack.extend(bar.layout_tree.children(n));
+    }
+    panic!("no .{class} in the find bar");
+}
+
 fn near(a: Color, b: Color) -> bool {
     (a.r - b.r).abs() < 0.01
         && (a.g - b.g).abs() < 0.01
@@ -235,16 +248,20 @@ fn the_stylesheet_designs_the_bar() {
         d.search_query = "zzz".to_string();
         d.execute_search();
     }
+    // Published before the bar is built, as an app's is: a text input reads
+    // its look from it when it is made.
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let sheet = Arc::new(
+        blinc_layout::css_parser::Stylesheet::parse_with_variables(
+            blinc_layout::widgets::CODE_EDITOR_STYLES,
+            &vars,
+        )
+        .expect("the stylesheet parses with the theme's variables"),
+    );
+    blinc_layout::css_parser::set_active_stylesheet(Arc::clone(&sheet));
     let (_editor, mut bar) = open_bar(&state);
     frame(&mut bar);
-
-    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
-    let sheet = blinc_layout::css_parser::Stylesheet::parse_with_variables(
-        blinc_layout::widgets::CODE_EDITOR_STYLES,
-        &vars,
-    )
-    .expect("the stylesheet parses with the theme's variables");
-    bar.set_stylesheet_arc(Arc::new(sheet));
+    bar.set_stylesheet_arc(sheet);
     bar.apply_stylesheet_layout_overrides();
     bar.apply_stylesheet_base_styles();
 
@@ -260,6 +277,18 @@ fn the_stylesheet_designs_the_bar() {
     assert!(
         near(on, accent_tint),
         "the toggle's on state is not the accent tint: {on:?}"
+    );
+    // The input's border is solid: opaque, the theme's grey, one whole pixel.
+    let input = props(&bar, "blinc-find-input");
+    let border = input.border_color.expect("the input has a border colour");
+    let grey = Color::rgba(99.0 / 255.0, 99.0 / 255.0, 102.0 / 255.0, 1.0);
+    assert!(
+        near(border, grey),
+        "the input's border is not the solid grey: {border:?}"
+    );
+    assert_eq!(
+        input.border_width, 1.0,
+        "the input's border is not one pixel"
     );
     // No results: the count carries its modifier.
     assert!(
