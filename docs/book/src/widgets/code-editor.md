@@ -65,10 +65,34 @@ code_editor(&state)
 - Minimap (optional scaled-down overview)
 
 ### Search (Cmd+F)
-- VS Code-style search bar overlay
+- VS Code-style search bar overlay (opt in with `.search_enabled(true)`)
 - Case sensitive, whole word, regex toggles
-- Match highlighting with navigation (up/down arrows)
-- Find and replace with replace all
+- The search runs as you type, with a match count
+- Enter steps to the next match, Shift+Enter to the previous
+- Find and replace with replace all (Cmd+H opens the replace row)
+
+The bar is built from classed elements, and its design is a stylesheet. Add
+`CODE_EDITOR_STYLES` to your application's CSS to get it (the cn theme bundle,
+`blinc_cn::cn_bundle()`, already includes it):
+
+```rust
+ctx.add_css(blinc_layout::widgets::CODE_EDITOR_STYLES);
+```
+
+Without it the bar has a plain fallback look. Override any rule after it to
+restyle the bar, using the theme's tokens:
+
+```css
+.blinc-find { background: var(--surface); border-radius: var(--radius-md); }
+.blinc-find-input:focus { border-color: var(--accent); }
+.blinc-find-toggle--on { background: var(--accent); color: var(--text-inverse); }
+.blinc-find-count--none { color: var(--warning); }
+```
+
+The classes are `blinc-find` (the panel), `blinc-find-row`, `blinc-find-field`,
+`blinc-find-input`, `blinc-find-button` (with `-chevron`, `-prev`, `-next`,
+`-close`, `-replace`, `-replace-all`), `blinc-find-toggle` and
+`blinc-find-toggle--on`, and `blinc-find-count` and `blinc-find-count--none`.
 
 ## Syntax Highlighters
 

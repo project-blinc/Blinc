@@ -37,8 +37,11 @@ use blinc_theme::{ThemeBundle, platform_theme_bundle};
 /// The default theme bundle paired with blinc_cn's CSS.
 ///
 /// Returns the framework's platform-detected bundle pre-loaded with
-/// [`crate::cn_styles::CN_STYLES`]. Chain `with_css` / `with_css_file`
-/// on the returned value to layer additional stylesheets.
+/// [`crate::cn_styles::CN_STYLES`] and the code editor's
+/// [`blinc_layout::widgets::CODE_EDITOR_STYLES`]. Chain `with_css` /
+/// `with_css_file` on the returned value to layer additional stylesheets.
 pub fn cn_bundle() -> ThemeBundle {
-    platform_theme_bundle().with_css(crate::cn_styles::CN_STYLES)
+    platform_theme_bundle()
+        .with_css(crate::cn_styles::CN_STYLES)
+        .with_css(blinc_layout::widgets::CODE_EDITOR_STYLES)
 }

@@ -162,6 +162,18 @@ impl TextInput {
         self
     }
 
+    /// Called when Enter is pressed in the field, with whether Shift was
+    /// held. Without one, Enter does nothing in a single-line field.
+    pub fn on_submit<F>(self, callback: F) -> Self
+    where
+        F: Fn(bool) + Send + Sync + 'static,
+    {
+        if let Ok(mut d) = self.data.lock() {
+            d.on_submit_callback = Some(Arc::new(callback));
+        }
+        self
+    }
+
     /// Override Backspace on an empty field.
     pub fn on_backspace_empty<F>(self, callback: F) -> Self
     where

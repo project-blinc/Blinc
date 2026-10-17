@@ -34,6 +34,9 @@ fn main() -> Result<()> {
 }
 
 pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
+    // The find bar's design is a stylesheet; load it once.
+    static CSS: std::sync::Once = std::sync::Once::new();
+    CSS.call_once(|| ctx.add_css(blinc_layout::widgets::CODE_EDITOR_STYLES));
     // Create editable code state outside the UI builder so it persists
     let editor_state = code_editor_state(
         r#"use blinc_layout::prelude::*;

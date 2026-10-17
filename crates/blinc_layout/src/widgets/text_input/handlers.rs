@@ -453,6 +453,13 @@ impl TextInput {
                             }
                             value_changed = true;
                         }
+                        13 if d.on_submit_callback.is_some() => {
+                            if let Some(cb) = d.on_submit_callback.as_ref().map(Arc::clone) {
+                                drop(d);
+                                cb(ctx.shift);
+                            }
+                            return;
+                        }
                         127 if mod_key => {
                             // Cmd+Delete: delete word forward
                             d.delete_word_forward();

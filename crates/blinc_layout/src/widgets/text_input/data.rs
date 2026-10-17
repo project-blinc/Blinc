@@ -103,6 +103,8 @@ pub struct TextInputData {
     pub force_sync_once: bool,
     /// Hook for composite inputs that need empty-Backspace behavior.
     pub(crate) on_backspace_empty_callback: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// Called with whether Shift was held when Enter is pressed.
+    pub(crate) on_submit_callback: Option<Arc<dyn Fn(bool) + Send + Sync>>,
     /// Hook for composite inputs that need to own paste handling.
     pub(crate) on_paste_override_callback: Option<crate::widgets::TextPredicate>,
     /// Hook for composite inputs that need to redirect focus before the

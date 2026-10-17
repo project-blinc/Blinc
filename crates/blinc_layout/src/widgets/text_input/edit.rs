@@ -26,6 +26,7 @@ impl TextInputData {
             force_sync_once: false,
             on_step_callback: None,
             on_backspace_empty_callback: None,
+            on_submit_callback: None,
             on_paste_override_callback: None,
             on_focus_request_callback: None,
             css_element_id: None,
