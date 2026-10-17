@@ -350,8 +350,8 @@ impl Clone for ButtonConfig {
     }
 }
 
-/// The built button element — wraps `blinc_layout::widgets::button::Button`
-/// which provides `Stateful<ButtonState>` FSM for hover/press behavior.
+/// The built button element — wraps `blinc_layout::widgets::button::Button`,
+/// whose fill and text colour are bound to its pointer signals.
 pub struct Button {
     inner: layout_button::Button,
 }

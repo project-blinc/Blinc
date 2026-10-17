@@ -2,10 +2,9 @@
 //! selection state. Mirrors shadcn/ui's `<ToggleGroup>` for the
 //! `type="single"` case (radio-style — one value at a time).
 //!
-//! Compositional: each item renders a `Stateful<ButtonState>` whose
-//! `is_on` derives from `group_state.get() == item.value`. Same theme-
-//! token defaults as `cn::toggle` because the visual rules are
-//! re-resolved per item inside the callback.
+//! Compositional: each item is built once, its fill bound to whether
+//! `group_state` holds the item's value and to the item's hover and press.
+//! Same theme-token defaults as `cn::toggle`.
 //!
 //! # Example
 //!
