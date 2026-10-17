@@ -2969,43 +2969,19 @@ fn open_search_overlay(shared_state: &SharedCodeEditorState, instance_key: &str)
             }
         })
         .content(move || {
-            // Wrap search bar in a Stateful that rebuilds when signal fires
-            let state_for_stateful = Arc::clone(&state_for_content);
-            let key_for_stateful = key.clone();
-
-            let search_stateful_state =
-                crate::stateful::use_fsm_keyed::<_, crate::stateful::ButtonState>(
-                    &format!("{}:search_stateful", key),
-                    crate::stateful::ButtonState::default(),
-                );
-
-            div().child(
-                crate::stateful::Stateful::with_shared_state(search_stateful_state)
-                    .deps(&[signal_id])
-                    .on_state({
-                        let s = Arc::clone(&state_for_content);
-                        let k = key_for_stateful.clone();
-                        move |_ctx, container| {
-                            let data = s.lock().unwrap();
-                            let config = data.config.clone();
-                            let bar = build_search_bar(&data, &config, &s, &k);
-                            container.set_child(bar);
-                        }
-                    }),
-            )
+            let revision = blinc_core::reactive::Signal::<u64>::from_id(signal_id);
+            build_search_bar(&state_for_content, &key, revision)
         })
         .show();
 
     shared_state.lock().unwrap().search_overlay_handle = Some(handle);
 }
 
-/// Fire the search signal to trigger overlay content rebuild
+/// Repaint the search bar: what it shows is bound to the search signal.
 fn fire_search_signal(shared_state: &SharedCodeEditorState) {
-    if let Ok(d) = shared_state.lock() {
-        if let Some(signal_id) = d.search_signal_id {
-            drop(d); // Release lock before firing signal
-            crate::stateful::check_stateful_deps(&[signal_id]);
-        }
+    let signal_id = shared_state.lock().ok().and_then(|d| d.search_signal_id);
+    if let Some(signal_id) = signal_id {
+        blinc_core::reactive::Signal::<u64>::from_id(signal_id).update(|n| n.wrapping_add(1));
     }
 }
 
@@ -3024,16 +3000,31 @@ fn search_icon_button(
     color: Color,
     on_click: impl Fn() + Send + Sync + 'static,
 ) -> crate::widgets::button::Button {
+    search_button_around(key, icon_size, on_click, move || {
+        crate::svg::svg(icon_svg)
+            .size(icon_size, icon_size)
+            .color(color)
+    })
+}
+
+/// A ghost icon button around whatever `icon` builds.
+fn search_button_around<I: ElementBuilder + 'static>(
+    key: &str,
+    icon_size: f32,
+    on_click: impl Fn() + Send + Sync + 'static,
+    icon: impl Fn() -> I + Send + Sync + 'static,
+) -> crate::widgets::button::Button {
     let theme = ThemeState::get();
     let hover = theme.color(ColorToken::SurfaceElevated);
     let pressed = theme.color(ColorToken::SurfaceOverlay);
     let s = icon_size + 4.0;
     crate::widgets::button::Button::with_content(move |_| {
-        div().w(s).h(s).items_center().justify_center().child(
-            crate::svg::svg(icon_svg)
-                .size(icon_size, icon_size)
-                .color(color),
-        )
+        div()
+            .w(s)
+            .h(s)
+            .items_center()
+            .justify_center()
+            .child(icon())
     })
     .key(key)
     .bg_color(Color::TRANSPARENT)
@@ -3045,52 +3036,96 @@ fn search_icon_button(
     .on_click(move |_| on_click())
 }
 
-/// Outline toggle button — border when inactive, accent bg when active
+/// Outline toggle button — border when inactive, accent bg when active.
+/// Whether it is on is read from the editor state each revision.
+#[allow(clippy::too_many_arguments)]
 fn search_toggle_button(
     key: &str,
     label: &'static str,
-    active: bool,
+    state: &SharedCodeEditorState,
+    revision: blinc_core::reactive::Signal<u64>,
+    is_on: fn(&CodeEditorData) -> bool,
     color: Color,
     accent: Color,
     font_size: f32,
     on_click: impl Fn() + Send + Sync + 'static,
-) -> crate::widgets::button::Button {
+) -> Div {
+    use blinc_core::reactive::{ReactiveGraph, computed};
     let theme = ThemeState::get();
     let hover = theme.color(ColorToken::SurfaceElevated);
     let border_color = theme.color(ColorToken::Border);
 
-    let (bg, border, tc) = if active {
-        (accent.with_alpha(0.15), accent, accent)
-    } else {
-        (Color::TRANSPARENT, border_color, color)
+    let interaction = crate::interaction::Interaction::keyed(key);
+    let (hovered, pressed) = (
+        interaction.hovered().signal(),
+        interaction.pressed().signal(),
+    );
+    let on = {
+        let state = Arc::clone(state);
+        move |g: &ReactiveGraph| {
+            g.get(revision);
+            state.lock().map(|d| is_on(&d)).unwrap_or(false)
+        }
     };
+    let bg = {
+        let on = on.clone();
+        computed(move |g: &ReactiveGraph| {
+            if g.get(pressed).unwrap_or(false) {
+                accent.with_alpha(0.3)
+            } else if g.get(hovered).unwrap_or(false) {
+                hover
+            } else if on(g) {
+                accent.with_alpha(0.15)
+            } else {
+                Color::TRANSPARENT
+            }
+        })
+    };
+    let border = {
+        let on = on.clone();
+        computed(move |g: &ReactiveGraph| if on(g) { accent } else { border_color })
+    };
+    let fg = computed(move |g: &ReactiveGraph| if on(g) { accent } else { color });
 
-    crate::widgets::button::Button::with_content(move |_| {
-        div()
-            .items_center()
-            .justify_center()
-            .child(text(label).size(font_size).color(tc).monospace().no_wrap())
-    })
-    .key(key)
-    .bg_color(bg)
-    .hover_color(hover)
-    .pressed_color(accent.with_alpha(0.3))
-    .border(1.0, border)
-    .rounded(3.0)
-    .border(1.0, border)
-    .px(1.0)
-    .py(0.0)
-    .on_click(move |_| on_click())
+    div()
+        .items_center()
+        .justify_center()
+        .px(1.0)
+        .rounded(3.0)
+        .bg(&bg)
+        .border_width(1.0)
+        .border_color(&border)
+        .cursor_pointer()
+        .track(&interaction)
+        .child(
+            crate::text::Text::new(label)
+                .size(font_size)
+                .color(&fg)
+                .monospace()
+                .no_wrap(),
+        )
+        .on_click(move |_| on_click())
 }
 
-/// Build the search bar overlay (VS Code style)
+/// Build the search bar overlay (VS Code style), once: the match count, the
+/// chevron, the toggles' looks and the replace row are bound to `revision`,
+/// which [`fire_search_signal`] bumps.
 fn build_search_bar(
-    data: &CodeEditorData,
-    config: &CodeConfig,
     shared_state: &SharedCodeEditorState,
     instance_key: &str,
+    revision: blinc_core::reactive::Signal<u64>,
 ) -> Div {
-    let theme = ThemeState::get();
+    use crate::binding::IntoReactive;
+    use blinc_core::reactive::{ReactiveGraph, computed};
+
+    let (config, search_state, replace_state) = {
+        let data = shared_state.lock().unwrap();
+        (
+            data.config.clone(),
+            Arc::clone(&data.search_input_state),
+            Arc::clone(&data.replace_input_state),
+        )
+    };
     let small_font = config.font_size * 0.85;
     let icon_size = config.font_size + 2.0;
     let label_color = config.line_number_color;
@@ -3099,101 +3134,113 @@ fn build_search_bar(
     let border_color = config.gutter_separator_color;
     let input_w = 240.0;
 
-    let match_info = if data.search_query.is_empty() {
-        String::new()
-    } else if data.search_matches.is_empty() {
-        "No results".to_string()
-    } else {
-        format!(
-            "{}/{}",
-            data.search_match_idx + 1,
-            data.search_matches.len()
-        )
+    // Something read from the editor state, each revision.
+    let read = |f: fn(&CodeEditorData) -> bool| {
+        let state = Arc::clone(shared_state);
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            state.lock().map(|d| f(&d)).unwrap_or(false)
+        })
+    };
+    let replace_open = read(|d| d.replace_active);
+    let has_query = read(|d| !d.search_query.is_empty());
+    let match_info = {
+        let state = Arc::clone(shared_state);
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            let Ok(d) = state.lock() else {
+                return String::new();
+            };
+            if d.search_matches.is_empty() {
+                "No results".to_string()
+            } else {
+                format!("{}/{}", d.search_match_idx + 1, d.search_matches.len())
+            }
+        })
     };
 
-    // --- Chevron (toggle replace) ---
-    let chevron_svg = if data.replace_active {
-        FOLD_EXPANDED_SVG
-    } else {
-        FOLD_COLLAPSED_SVG
-    };
-    let state_for_toggle = Arc::clone(shared_state);
-    // Helper: fire signal to rebuild overlay content
-    let notify = |state: &SharedCodeEditorState| {
-        let s = Arc::clone(state);
-        move || fire_search_signal(&s)
+    // A click handler that changes the editor state, then repaints.
+    let act = |f: fn(&mut CodeEditorData)| {
+        let state = Arc::clone(shared_state);
+        move || {
+            if let Ok(mut d) = state.lock() {
+                f(&mut d);
+            }
+            fire_search_signal(&state);
+        }
     };
 
     // --- Chevron toggle (expand/collapse replace) ---
-    let notify_toggle = notify(shared_state);
-    let chevron = search_icon_button(
-        &format!("{}:stoggle", instance_key),
-        chevron_svg,
-        icon_size,
-        text_col,
-        move || {
-            if let Ok(mut d) = state_for_toggle.lock() {
-                d.replace_active = !d.replace_active;
-            }
-            notify_toggle();
-        },
-    );
+    let chevron = {
+        let replace_open = replace_open.clone();
+        search_button_around(
+            &format!("{}:stoggle", instance_key),
+            icon_size,
+            act(|d| d.replace_active = !d.replace_active),
+            move || {
+                div().show_or(
+                    &replace_open,
+                    move || {
+                        crate::svg::svg(FOLD_EXPANDED_SVG)
+                            .size(icon_size, icon_size)
+                            .color(text_col)
+                    },
+                    move || {
+                        crate::svg::svg(FOLD_COLLAPSED_SVG)
+                            .size(icon_size, icon_size)
+                            .color(text_col)
+                    },
+                )
+            },
+        )
+    };
 
     // --- Toggle buttons (Aa, ab, .*) — absolutely positioned inside find input ---
-    let state_for_case = Arc::clone(shared_state);
-    let notify_case = notify(shared_state);
-    let case_btn = search_toggle_button(
-        &format!("{}:scase", instance_key),
+    let toggle = |name: &str,
+                  label: &'static str,
+                  is_on: fn(&CodeEditorData) -> bool,
+                  flip: fn(&mut CodeEditorData)| {
+        search_toggle_button(
+            &format!("{}:{}", instance_key, name),
+            label,
+            shared_state,
+            revision,
+            is_on,
+            label_color,
+            accent,
+            small_font,
+            act(flip),
+        )
+    };
+    let case_btn = toggle(
+        "scase",
         "Aa",
-        data.search_case_sensitive,
-        label_color,
-        accent,
-        small_font,
-        move || {
-            if let Ok(mut d) = state_for_case.lock() {
-                d.search_case_sensitive = !d.search_case_sensitive;
-                d.execute_search();
-            }
-            notify_case();
+        |d| d.search_case_sensitive,
+        |d| {
+            d.search_case_sensitive = !d.search_case_sensitive;
+            d.execute_search();
         },
     );
-    let state_for_word = Arc::clone(shared_state);
-    let notify_word = notify(shared_state);
-    let word_btn = search_toggle_button(
-        &format!("{}:sword", instance_key),
+    let word_btn = toggle(
+        "sword",
         "ab",
-        data.search_whole_word,
-        label_color,
-        accent,
-        small_font,
-        move || {
-            if let Ok(mut d) = state_for_word.lock() {
-                d.search_whole_word = !d.search_whole_word;
-                d.execute_search();
-            }
-            notify_word();
+        |d| d.search_whole_word,
+        |d| {
+            d.search_whole_word = !d.search_whole_word;
+            d.execute_search();
         },
     );
-    let state_for_regex = Arc::clone(shared_state);
-    let notify_regex = notify(shared_state);
-    let regex_btn = search_toggle_button(
-        &format!("{}:sregex", instance_key),
+    let regex_btn = toggle(
+        "sregex",
         ".*",
-        data.search_regex,
-        label_color,
-        accent,
-        small_font,
-        move || {
-            if let Ok(mut d) = state_for_regex.lock() {
-                d.search_regex = !d.search_regex;
-                d.execute_search();
-            }
-            notify_regex();
+        |d| d.search_regex,
+        |d| {
+            d.search_regex = !d.search_regex;
+            d.execute_search();
         },
     );
 
     // Find input with toggle buttons overlaid at the right edge
-    let search_state = Arc::clone(&data.search_input_state);
     let find_input_with_toggles = div()
         .relative()
         .w(input_w)
@@ -3213,29 +3260,19 @@ fn build_search_bar(
         );
 
     // --- Nav buttons ---
-    let state_for_prev = Arc::clone(shared_state);
     let prev_btn = search_icon_button(
         &format!("{}:sprev", instance_key),
         ICON_UP,
         icon_size,
         text_col,
-        move || {
-            if let Ok(mut d) = state_for_prev.lock() {
-                d.search_prev();
-            }
-        },
+        act(|d| d.search_prev()),
     );
-    let state_for_next = Arc::clone(shared_state);
     let next_btn = search_icon_button(
         &format!("{}:snext", instance_key),
         ICON_DOWN,
         icon_size,
         text_col,
-        move || {
-            if let Ok(mut d) = state_for_next.lock() {
-                d.search_next();
-            }
-        },
+        act(|d| d.search_next()),
     );
     let state_for_close = Arc::clone(shared_state);
     let close_btn = search_icon_button(
@@ -3251,25 +3288,69 @@ fn build_search_bar(
     );
 
     // === FIND ROW: [>] [input+toggles] [count] [↑] [↓] [×] ===
-    let mut find_row = div()
+    // The count is a region of the row itself, so while it is hidden it
+    // takes no gap.
+    let find_row = div()
         .flex_row()
         .items_center()
         .gap_px(4.0)
         .child(chevron)
-        .child(find_input_with_toggles);
-
-    if !match_info.is_empty() {
-        find_row = find_row.child(
-            text(&match_info)
+        .child(find_input_with_toggles)
+        .show(&has_query, move || {
+            crate::text::Text::bound(match_info.clone().into_reactive())
                 .size(small_font * 0.9)
                 .color(label_color)
-                .no_wrap(),
-        );
-    }
-    find_row = find_row.child(prev_btn).child(next_btn).child(close_btn);
+                .no_wrap()
+        })
+        .child(prev_btn)
+        .child(next_btn)
+        .child(close_btn);
+
+    // === REPLACE ROW: [spacer] [input] [⇄] [⇄⇄] ===
+    let replace_row = {
+        let state = Arc::clone(shared_state);
+        let key = instance_key.to_string();
+        move || {
+            let act = |f: fn(&mut CodeEditorData)| {
+                let state = Arc::clone(&state);
+                move || {
+                    if let Ok(mut d) = state.lock() {
+                        f(&mut d);
+                    }
+                    fire_search_signal(&state);
+                }
+            };
+            let replace_input = div()
+                .w(input_w)
+                .child(text_input(&replace_state).w_full().text_size(small_font));
+            let replace_btn = search_icon_button(
+                &format!("{}:sr1", key),
+                ICON_REPLACE,
+                icon_size,
+                text_col,
+                act(|d| d.replace_current()),
+            );
+            let replace_all_btn = search_icon_button(
+                &format!("{}:sra", key),
+                ICON_REPLACE_ALL,
+                icon_size,
+                text_col,
+                act(|d| d.replace_all()),
+            );
+            // Spacer matches chevron button: icon_size + 4 (content) + button padding
+            div()
+                .flex_row()
+                .items_center()
+                .gap_px(4.0)
+                .child(div().w(icon_size + 4.0))
+                .child(replace_input)
+                .child(replace_btn)
+                .child(replace_all_btn)
+        }
+    };
 
     // === CONTAINER (sized by content, not fixed) ===
-    let mut search_bar = div()
+    div()
         .w_fit()
         .flex_col()
         .gap_px(4.0)
@@ -3278,59 +3359,8 @@ fn build_search_bar(
         .border(1.0, border_color)
         .rounded(4.0)
         .shadow_md()
-        .child(find_row);
-
-    // === REPLACE ROW: [spacer] [input] [⇄] [⇄⇄] ===
-    if data.replace_active {
-        let replace_state = Arc::clone(&data.replace_input_state);
-        let replace_input = div()
-            .w(input_w)
-            .child(text_input(&replace_state).w_full().text_size(small_font));
-
-        let state_for_r1 = Arc::clone(shared_state);
-        let notify_r1 = notify(shared_state);
-        let replace_btn = search_icon_button(
-            &format!("{}:sr1", instance_key),
-            ICON_REPLACE,
-            icon_size,
-            text_col,
-            move || {
-                if let Ok(mut d) = state_for_r1.lock() {
-                    d.replace_current();
-                }
-                notify_r1();
-            },
-        );
-        let state_for_ra = Arc::clone(shared_state);
-        let notify_ra = notify(shared_state);
-        let replace_all_btn = search_icon_button(
-            &format!("{}:sra", instance_key),
-            ICON_REPLACE_ALL,
-            icon_size,
-            text_col,
-            move || {
-                if let Ok(mut d) = state_for_ra.lock() {
-                    d.replace_all();
-                }
-                notify_ra();
-            },
-        );
-
-        // Spacer matches chevron button: icon_size + 4 (content) + button padding
-        let chevron_w = icon_size + 4.0;
-        let replace_row = div()
-            .flex_row()
-            .items_center()
-            .gap_px(4.0)
-            .child(div().w(chevron_w))
-            .child(replace_input)
-            .child(replace_btn)
-            .child(replace_all_btn);
-
-        search_bar = search_bar.child(replace_row);
-    }
-
-    search_bar
+        .child(find_row)
+        .show(&replace_open, replace_row)
 }
 
 // ============================================================================
@@ -3362,6 +3392,78 @@ mod tests {
 
     fn ensure_theme_initialized() {
         THEME_INIT.call_once(ThemeState::init_default);
+    }
+
+    /// The search bar is built once: stepping through matches and opening
+    /// the replace row patch it in place, with no subtree rebuilt.
+    #[test]
+    fn the_search_bar_follows_the_search_in_place() {
+        use crate::renderer::{ElementType, RenderTree};
+        use blinc_core::reactive::{global_graph, signal};
+        ensure_theme_initialized();
+        if !blinc_core::BlincContextState::is_initialized() {
+            blinc_core::BlincContextState::init(
+                global_graph(),
+                Arc::new(Mutex::new(blinc_core::context_state::HookState::new())),
+                Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            );
+        }
+        let state = code_editor_state("one two one");
+        let revision = signal(0u64);
+        {
+            let mut d = state.lock().unwrap();
+            d.search_signal_id = Some(revision.id());
+            d.search_query = "one".to_string();
+            d.execute_search();
+        }
+        let bar = build_search_bar(&state, "search-test", revision);
+        let mut tree = RenderTree::from_element(&bar);
+        tree.compute_layout(800.0, 200.0);
+        let texts = |tree: &RenderTree| {
+            let mut out = Vec::new();
+            let mut stack = vec![tree.root().unwrap()];
+            while let Some(node) = stack.pop() {
+                if let Some(ElementType::Text(t)) =
+                    tree.get_render_node(node).map(|r| &r.element_type)
+                {
+                    out.push(t.content.clone());
+                }
+                stack.extend(tree.layout_tree.children(node));
+            }
+            out
+        };
+        let frame = |tree: &mut RenderTree| {
+            assert!(
+                !crate::stateful::has_pending_subtree_rebuilds(),
+                "the search bar queued a subtree rebuild"
+            );
+            let updates = crate::stateful::take_pending_partial_prop_updates();
+            tree.apply_partial_property_updates(updates);
+            tree.compute_layout(800.0, 200.0);
+        };
+        assert!(
+            texts(&tree).contains(&"1/2".to_string()),
+            "{:?}",
+            texts(&tree)
+        );
+        let nodes = tree.layout_tree.len();
+
+        state.lock().unwrap().search_next();
+        fire_search_signal(&state);
+        frame(&mut tree);
+        assert!(
+            texts(&tree).contains(&"2/2".to_string()),
+            "the count did not follow: {:?}",
+            texts(&tree)
+        );
+
+        state.lock().unwrap().replace_active = true;
+        fire_search_signal(&state);
+        frame(&mut tree);
+        assert!(
+            tree.layout_tree.len() > nodes,
+            "the replace row did not open"
+        );
     }
 
     #[test]
