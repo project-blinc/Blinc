@@ -1,4 +1,6 @@
 [package]
+# One test binary: see tests/main.rs.
+autotests = false
 name = "blinc_dsl_core"
 version.workspace = true
 edition.workspace = true
@@ -102,3 +104,7 @@ path = "examples/counter_dsl.rs"
 [[example]]
 name = "reactive_dsl"
 path = "examples/reactive_dsl.rs"
+
+[[test]]
+name = "integration"
+path = "tests/main.rs"

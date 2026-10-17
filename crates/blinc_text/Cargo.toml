@@ -1,4 +1,6 @@
 [package]
+# One test binary: see tests/main.rs.
+autotests = false
 name = "blinc_text"
 description = "High-quality text rendering for Blinc UI framework"
 version.workspace = true
@@ -39,3 +41,7 @@ rustc-hash = { workspace = true }
 lru = { workspace = true }
 
 [dev-dependencies]
+
+[[test]]
+name = "integration"
+path = "tests/main.rs"

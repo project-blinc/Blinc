@@ -1,4 +1,6 @@
 [package]
+# One test binary: see tests/main.rs.
+autotests = false
 name = "blinc_cn_dsl"
 description = "DSL bindings for the blinc_cn widget pack — exposes cn.* widgets to the Blinc DSL via #[extern_widget]"
 version.workspace = true
@@ -74,3 +76,7 @@ tracing.workspace = true
 # pulls a filesystem watcher into the dep tree, and a shipped app has
 # no reason to watch its own sources.
 hot-reload = ["blinc_app/hot-reload"]
+
+[[test]]
+name = "integration"
+path = "tests/main.rs"

@@ -1,4 +1,6 @@
 [package]
+# One test binary: see tests/main.rs.
+autotests = false
 name = "blinc_gpu"
 description = "Blinc GPU renderer - SDF-based rendering via wgpu"
 version.workspace = true
@@ -88,3 +90,7 @@ lyon.workspace = true
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
 wasm-bindgen = "0.2"
+
+[[test]]
+name = "integration"
+path = "tests/main.rs"
