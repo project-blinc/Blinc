@@ -25,7 +25,7 @@ use crate::canvas::canvas;
 use crate::css_parser::{ElementState, Stylesheet, active_stylesheet};
 use crate::div::{Div, ElementBuilder, div};
 use crate::element::RenderProps;
-use crate::stateful::{StateTransitions, TextFieldState, refresh_stateful};
+use crate::stateful::{StateTransitions, TextFieldState};
 use crate::text_selection::{SelectionSource, clear_selection, set_selection};
 use crate::tree::{LayoutNodeId, LayoutTree};
 use crate::widgets::cursor::{CursorAnimation, SharedCursorState, cursor_state};
@@ -736,7 +736,7 @@ pub fn process_pending_area_focus() {
         let mounted = strong
             .lock()
             .ok()
-            .map(|s| s.stateful_state.is_some())
+            .map(|s| s.revision.is_some())
             .unwrap_or(false);
         if mounted {
             crate::widgets::text_area::focus_text_area(&strong);
@@ -864,37 +864,19 @@ pub(crate) fn set_focused_text_area(state: &crate::widgets::text_area::SharedTex
 fn blur_text_area_state(state: &crate::widgets::text_area::SharedTextAreaState) {
     use blinc_core::events::event_types;
 
-    let mut stateful_to_refresh = None;
-    if let Ok(mut s) = state.lock() {
-        if let Some(new_state) = s.visual.on_event(event_types::BLUR) {
-            s.visual = new_state;
-            decrement_focus_count();
-        }
-
-        if let Some(ref stateful) = s.stateful_state {
-            if let Ok(mut shared) = stateful.lock() {
-                if let Some(new_fsm) = shared.state.on_event(event_types::BLUR) {
-                    shared.state = new_fsm;
-                    shared.needs_visual_update = true;
-                    stateful_to_refresh = Some(Arc::clone(stateful));
-                }
+    let blurred = match state.lock() {
+        Ok(mut s) => match s.visual.on_event(event_types::BLUR) {
+            Some(new_state) => {
+                s.visual = new_state;
+                decrement_focus_count();
+                true
             }
-        }
-    }
-
-    if let Some(ref stateful) = stateful_to_refresh {
-        refresh_stateful(stateful);
-    }
-}
-
-pub(crate) fn clear_focused_text_area(state: &crate::widgets::text_area::SharedTextAreaState) {
-    let mut focused = FOCUSED_TEXT_AREA.lock().unwrap();
-    if let Some(weak) = focused.as_ref() {
-        if let Some(prev_state) = weak.upgrade() {
-            if Arc::ptr_eq(&prev_state, state) {
-                *focused = None;
-            }
-        }
+            None => false,
+        },
+        Err(_) => false,
+    };
+    if blurred {
+        crate::widgets::text_area::notify_text_area(state);
     }
 }
 
@@ -910,7 +892,6 @@ fn blur_focused_text_area() {
 /// Blur all focused text inputs and text areas.
 /// Called when clicking outside any text element.
 pub fn blur_all_text_inputs() {
-    use crate::stateful::refresh_stateful;
     use blinc_core::events::event_types;
 
     // Invalidate any not-yet-drained deferred focus request.
@@ -967,28 +948,18 @@ pub fn blur_all_text_inputs() {
         let mut focused = FOCUSED_TEXT_AREA.lock().unwrap();
         if let Some(weak) = focused.take() {
             if let Some(state) = weak.upgrade() {
-                if let Ok(mut s) = state.lock() {
-                    if s.visual.is_focused() {
+                let blurred = match state.lock() {
+                    Ok(mut s) if s.visual.is_focused() => {
                         if let Some(new_state) = s.visual.on_event(event_types::BLUR) {
                             s.visual = new_state;
                             decrement_focus_count();
                         }
-                        // Also update the FSM state to keep in sync
-                        let stateful_ref = s.stateful_state.clone();
-                        if let Some(ref stateful) = stateful_ref {
-                            if let Ok(mut shared) = stateful.lock() {
-                                if let Some(new_fsm) = shared.state.on_event(event_types::BLUR) {
-                                    shared.state = new_fsm;
-                                    shared.needs_visual_update = true;
-                                }
-                            }
-                        }
-                        // Trigger visual refresh after releasing the data lock
-                        drop(s);
-                        if let Some(ref stateful) = stateful_ref {
-                            refresh_stateful(stateful);
-                        }
+                        true
                     }
+                    _ => false,
+                };
+                if blurred {
+                    crate::widgets::text_area::notify_text_area(&state);
                 }
             }
         }
@@ -1016,9 +987,7 @@ pub fn focused_text_area_node_id() -> Option<LayoutNodeId> {
     let weak = focused.as_ref()?;
     let data = weak.upgrade()?;
     let guard = data.lock().ok()?;
-    let stateful = guard.stateful_state.as_ref()?;
-    let shared = stateful.lock().ok()?;
-    shared.node_id
+    guard.node_id
 }
 
 // =============================================================================

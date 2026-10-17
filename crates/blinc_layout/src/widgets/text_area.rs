@@ -21,10 +21,7 @@ use crate::canvas::canvas;
 use crate::css_parser::{ElementState, Stylesheet, active_stylesheet};
 use crate::div::{Div, ElementBuilder, div};
 use crate::element::RenderProps;
-use crate::stateful::{
-    SharedState, StateTransitions, Stateful, StatefulInner, TextFieldState, refresh_stateful,
-};
-use crate::text::text;
+use crate::stateful::{StateTransitions, TextFieldState};
 use crate::tree::{LayoutNodeId, LayoutTree};
 use crate::widgets::cursor::{CursorAnimation, SharedCursorState, cursor_state};
 use crate::widgets::scroll::{Scroll, ScrollDirection, ScrollPhysics, SharedScrollPhysics};
@@ -433,8 +430,15 @@ pub struct TextAreaState {
     /// Computed visual lines (recomputed when text or width changes)
     /// Each VisualLine represents one rendered row of text
     pub(crate) visual_lines: Vec<VisualLine>,
-    /// Reference to the Stateful's shared state for triggering incremental updates
-    pub(crate) stateful_state: Option<SharedState<TextFieldState>>,
+    /// Bumped whenever something the field shows changes; its content is
+    /// bound to it. `None` until a `TextArea` is made over the state.
+    pub(crate) revision: Option<blinc_core::reactive::Signal<u64>>,
+    /// The field's node, once built.
+    pub(crate) node_id: Option<LayoutNodeId>,
+    /// The config of the field made over this state, which lays out its lines.
+    pub(crate) config: Option<Arc<Mutex<TextAreaConfig>>>,
+    /// [`Self::layout_key`] as of the last [`Self::compute_visual_lines`].
+    pub(crate) laid_out: Option<u64>,
     /// Last clicked visual line index (set by line click handlers, read by main handler)
     /// This is used to accurately determine which line was clicked when local_y
     /// is relative to the clicked line element rather than the whole text area.
@@ -467,7 +471,6 @@ impl std::fmt::Debug for TextAreaState {
             .field("disabled", &self.disabled)
             .field("focus_time_ms", &self.focus_time_ms)
             .field("cursor_blink_interval_ms", &self.cursor_blink_interval_ms)
-            // Skip stateful_state since StatefulInner doesn't implement Debug
             .finish()
     }
 }
@@ -492,7 +495,10 @@ impl Default for TextAreaState {
             available_width: 276.0,   // Default width minus padding/borders
             wrap_enabled: true,       // Default to wrapping (visual lines handle cursor tracking)
             visual_lines: Vec::new(), // Computed on first layout
-            stateful_state: None,
+            revision: None,
+            node_id: None,
+            config: None,
+            laid_out: None,
             clicked_visual_line: None, // Set by line click handlers
             change_version: Arc::new(AtomicU64::new(0)),
             change_signal_id: None,
@@ -1077,6 +1083,17 @@ impl TextAreaState {
         ((metrics.width / available_width).ceil() as usize).max(1)
     }
 
+    /// What the visual lines are laid out from: the text and the sizes.
+    fn layout_key(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::hash::DefaultHasher::new();
+        self.lines.hash(&mut h);
+        self.font_size.to_bits().hash(&mut h);
+        self.available_width.to_bits().hash(&mut h);
+        self.wrap_enabled.hash(&mut h);
+        h.finish()
+    }
+
     /// Compute visual lines for all text content
     ///
     /// This creates a list of VisualLine entries that map logical lines to
@@ -1186,6 +1203,7 @@ impl TextAreaState {
                 });
             }
         }
+        self.laid_out = Some(self.layout_key());
     }
 
     /// Calculate cursor position from a known visual line index and x coordinate
@@ -1507,24 +1525,6 @@ pub fn text_area_state_with_placeholder(placeholder: impl Into<String>) -> Share
     Arc::new(Mutex::new(TextAreaState::with_placeholder(placeholder)))
 }
 
-/// Programmatically focus a text_area by its shared state handle.
-///
-/// Mirrors [`crate::widgets::text_input::focus_text_input`]: sets the
-/// widget's visual state to `Focused`, marks it as the active focus
-/// target for keyboard / IME / cursor-blink machinery, blurs any
-/// previously-focused text_input or text_area, and increments the
-/// soft-keyboard refcount. Use from a parent widget's open-handler
-/// when an embedded text area should grab focus on appearance (e.g.
-/// an inline editor popover that should land cursor-ready).
-///
-/// Safe to call BEFORE the matching [`TextArea`] is constructed: when
-/// the widget's `TextArea::new` runs it reads `state.visual` and
-/// seeds the inner `Stateful` with that value, so a pre-set
-/// `Focused` initialises the FSM in `Focused` directly — avoids a
-/// mid-frame Idle→Focused transition that would otherwise cascade
-/// a tree rebuild while the parent overlay is opening (the same
-/// flicker motivation as
-/// [`crate::widgets::text_input::focus_text_input`]).
 /// Enqueue a text_area for focus on the NEXT frame, after its widget
 /// has been built into the tree.
 ///
@@ -1536,11 +1536,22 @@ pub fn focus_text_area_deferred(state: &SharedTextAreaState) {
     crate::widgets::text_input::enqueue_pending_focus_area(Arc::downgrade(state));
 }
 
+/// Programmatically focus a text_area by its shared state handle.
+///
+/// Mirrors [`crate::widgets::text_input::focus_text_input`]: sets the
+/// widget's visual state to `Focused`, marks it as the active focus
+/// target for keyboard / IME / cursor-blink machinery, blurs any
+/// previously-focused text_input or text_area, and increments the
+/// soft-keyboard refcount. Use from a parent widget's open-handler
+/// when an embedded text area should grab focus on appearance (e.g.
+/// an inline editor popover that should land cursor-ready).
+///
+/// Safe to call before the matching [`TextArea`] is built: it is built
+/// showing the state's visual state, so it starts out focused.
 pub fn focus_text_area(state: &SharedTextAreaState) {
-    use crate::stateful::refresh_stateful;
     use crate::widgets::text_input::{increment_focus_count, set_focused_text_area};
     use blinc_core::events::event_types;
-    let stateful_to_refresh = if let Ok(mut s) = state.lock() {
+    let focused = if let Ok(mut s) = state.lock() {
         if !s.visual.is_focused() {
             if let Some(new_state) = s.visual.on_event(event_types::FOCUS) {
                 s.visual = new_state;
@@ -1550,57 +1561,102 @@ pub fn focus_text_area(state: &SharedTextAreaState) {
             s.focus_time_ms = crate::widgets::text_input::elapsed_ms();
             s.reset_cursor_blink();
             increment_focus_count();
-            // Drive the Stateful's shared FSM as well as data.visual.
-            // The Stateful's state_callback (which paints the focused
-            // bg/border) reads `shared.state`, NOT data.visual. Only
-            // flipping data.visual + needs_visual_update leaves the
-            // next build() reading the stale Idle shared.state and
-            // baking Idle visuals into the render tree, so the popup
-            // looks unfocused until a pointer event drives shared.state
-            // via the auto event handlers. refresh_stateful after the
-            // data lock drops queues a prop update for the current
-            // frame. Skipped when no stateful exists yet (caller
-            // focused before constructing the widget — handled by
-            // TextArea::new's initial-visual read instead).
-            let stateful_ref = s.stateful_state.clone();
-            if let Some(ref stateful) = stateful_ref {
-                if let Ok(mut shared) = stateful.lock() {
-                    if let Some(new_fsm) = shared.state.on_event(event_types::FOCUS) {
-                        shared.state = new_fsm;
-                    } else {
-                        shared.state = TextFieldState::Focused;
-                    }
-                    shared.needs_visual_update = true;
-                }
-            }
-            stateful_ref
+            true
         } else {
-            None
+            false
         }
     } else {
-        None
+        false
     };
-    if let Some(ref stateful) = stateful_to_refresh {
-        refresh_stateful(stateful);
-    }
     set_focused_text_area(state);
-    // Only redraw when this call ACTUALLY transitioned to focused.
-    // See `focus_text_input` for the rationale; same shape applies
-    // here.
-    if stateful_to_refresh.is_some() {
-        crate::stateful::request_redraw();
+    if focused {
+        notify_text_area(state);
     }
+}
+
+/// Lay the lines out again and repaint the field: everything it shows is
+/// bound to the revision. Called after any change to the state.
+pub(crate) fn notify_text_area(state: &SharedTextAreaState) {
+    // The config is copied out first: a layout callback locks the config
+    // and then the state.
+    let base = state
+        .lock()
+        .ok()
+        .and_then(|d| d.config.clone())
+        .and_then(|c| c.lock().ok().map(|c| c.clone()));
+    let revision = match state.lock() {
+        Ok(mut d) => {
+            if let Some(base) = &base {
+                let (cfg, _) = resolved_config(base, &d);
+                take_metrics(&mut d, &cfg);
+            }
+            if d.laid_out != Some(d.layout_key()) {
+                d.compute_visual_lines();
+            }
+            d.revision
+        }
+        Err(_) => None,
+    };
+    if let Some(revision) = revision {
+        revision.update(|n| n.wrapping_add(1));
+    }
+    crate::stateful::request_redraw();
+}
+
+/// Repaint a text area after its state was changed from outside the widget.
+pub fn refresh_text_area(state: &SharedTextAreaState) {
+    notify_text_area(state);
+}
+
+/// Copy the sizes the state lays its lines out with from `cfg`.
+fn take_metrics(d: &mut TextAreaState, cfg: &TextAreaConfig) {
+    d.line_height = cfg.font_size * cfg.line_height;
+    d.viewport_height = cfg.effective_height() - cfg.padding_y * 2.0 - cfg.border_width * 2.0;
+    d.font_size = cfg.font_size;
+    d.available_width = cfg.effective_width() - cfg.padding_x * 2.0 - cfg.border_width * 2.0;
+    d.wrap_enabled = cfg.wrap;
+}
+
+/// The config with the stylesheet's rules for the field's state applied,
+/// and the outline those rules give it.
+fn resolved_config(
+    base: &TextAreaConfig,
+    d: &TextAreaState,
+) -> (TextAreaConfig, Option<(f32, Color, f32)>) {
+    let mut cfg = base.clone();
+    if d.css_element_id.is_none() && d.css_classes.is_empty() {
+        return (cfg, None);
+    }
+    let Some(stylesheet) = active_stylesheet() else {
+        return (cfg, None);
+    };
+    apply_css_overrides_textarea(
+        &mut cfg,
+        &stylesheet,
+        d.css_element_id.as_deref(),
+        &d.css_classes,
+        &d.visual,
+    );
+    let outline = extract_outline_from_textarea_stylesheet(
+        &stylesheet,
+        d.css_element_id.as_deref(),
+        &d.css_classes,
+        &d.visual,
+    );
+    (cfg, outline)
 }
 
 /// Ready-to-use text area element
 ///
-/// Uses FSM-driven state management via `Stateful<TextFieldState>` for visual states
-/// while maintaining separate text content state for editing.
+/// Built once: what it shows is bound to its state's revision, so typing,
+/// focus, hover, selection and scrolling patch it in place.
 ///
 /// Usage: `text_area(&state).rows(4).w(400.0).rounded(12.0)`
 pub struct TextArea {
-    /// Inner Stateful element for FSM-driven visual states
-    inner: Stateful<TextFieldState>,
+    /// The element as configured so far: layout calls and the handlers land
+    /// on it as they are made. The content is added when it is first built.
+    inner: std::cell::RefCell<Div>,
+    built: std::cell::OnceCell<Div>,
     /// Text area state (content, cursor, etc.)
     state: SharedTextAreaState,
     /// Text area configuration
@@ -1624,179 +1680,52 @@ impl TextArea {
     /// Create a new text area with shared state
     pub fn new(state: &SharedTextAreaState) -> Self {
         let config = Arc::new(Mutex::new(TextAreaConfig::default()));
-        let cfg = config.lock().unwrap();
-        let default_width = cfg.effective_width();
-        let default_height = cfg.effective_height();
-        drop(cfg);
-
-        // Get initial visual state and existing stateful_state from data
-        let (initial_visual, existing_stateful_state) = {
-            let d = state.lock().unwrap();
-            (d.visual, d.stateful_state.clone())
+        let (default_width, default_height) = {
+            let cfg = config.lock().unwrap();
+            (cfg.effective_width(), cfg.effective_height())
         };
-
-        // Reuse existing stateful_state if available, otherwise create new one
-        // This ensures state persists across rebuilds (e.g., window resize)
-        let shared_state: SharedState<TextFieldState> =
-            existing_stateful_state.unwrap_or_else(|| {
-                let new_state = Arc::new(Mutex::new(StatefulInner::new(initial_visual)));
-                // Store reference in TextAreaState for triggering refreshes
-                if let Ok(mut d) = state.lock() {
-                    d.stateful_state = Some(Arc::clone(&new_state));
-                }
-                new_state
-            });
-
-        // Clear stale node_id from previous tree builds
-        // During full rebuild (e.g., window resize), the old node_id points to
-        // nodes in the old tree. Clearing it ensures the new node_id gets assigned
-        // when this element is added to the new tree.
-        {
-            let mut shared = shared_state.lock().unwrap();
-            shared.node_id = None;
+        // A field with a revision is one a deferred focus can land on.
+        if let Ok(mut d) = state.lock() {
+            d.revision
+                .get_or_insert_with(|| blinc_core::reactive::signal(0u64));
+            d.config = Some(Arc::clone(&config));
         }
 
-        // Create inner Stateful with text area event handlers
-        let mut inner = Self::create_inner_with_handlers(
-            Arc::clone(&shared_state),
-            Arc::clone(state),
-            Arc::clone(&config),
-        );
-
-        // Set default dimensions from config
-        // HTML-like flex behavior:
-        // 1. min-width: 0 - allows shrinking below content size in flex containers
-        // 2. flex-shrink: 1 (default) - allows shrinking when container is constrained
-        // 3. The height is always set explicitly (based on rows or config.height)
-        // Note: Don't use overflow_clip() here - the inner Scroll handles clipping.
-        // Using overflow_clip on the outer container with rounded corners causes
-        // the clip to interfere with border rendering at the corners.
-        inner = inner.w(default_width).h(default_height).min_w(0.0);
-
-        // Register callback immediately so it's available for incremental diff
-        // The diff system calls children_builders() before build(), so the callback
-        // must be registered here, not in build()
-        {
-            let config_for_callback = Arc::clone(&config);
-            let data_for_callback = Arc::clone(state);
-            let shared_state_for_callback = Arc::clone(state);
-            let mut shared = shared_state.lock().unwrap();
-
-            shared.state_callback = Some(Arc::new(
-                move |visual: &TextFieldState, container: &mut Div| {
-                    let mut cfg = config_for_callback.lock().unwrap().clone();
-                    let mut data_guard = data_for_callback.lock().unwrap();
-
-                    // Apply CSS stylesheet overrides (class-based and/or ID-based)
-                    let has_css_target =
-                        data_guard.css_element_id.is_some() || !data_guard.css_classes.is_empty();
-                    let css_outline = if has_css_target {
-                        if let Some(stylesheet) = active_stylesheet() {
-                            apply_css_overrides_textarea(
-                                &mut cfg,
-                                &stylesheet,
-                                data_guard.css_element_id.as_deref(),
-                                &data_guard.css_classes,
-                                visual,
-                            );
-                            // Extract outline. Pass both classes and
-                            // the optional id so a class-only target
-                            // (cn::textarea attaches by class) still
-                            // picks up `.cn-textarea:focus { outline:
-                            // …; }` from the stylesheet.
-                            extract_outline_from_textarea_stylesheet(
-                                &stylesheet,
-                                data_guard.css_element_id.as_deref(),
-                                &data_guard.css_classes,
-                                visual,
-                            )
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    };
-
-                    // Sync visual state to data so it matches the FSM
-                    data_guard.visual = *visual;
-
-                    // Update cached scroll dimensions from config
-                    let line_height = cfg.font_size * cfg.line_height;
-                    let viewport_height =
-                        cfg.effective_height() - cfg.padding_y * 2.0 - cfg.border_width * 2.0;
-                    let available_width =
-                        cfg.effective_width() - cfg.padding_x * 2.0 - cfg.border_width * 2.0;
-                    data_guard.line_height = line_height;
-                    data_guard.viewport_height = viewport_height;
-                    data_guard.font_size = cfg.font_size;
-                    data_guard.available_width = available_width;
-                    data_guard.wrap_enabled = cfg.wrap;
-
-                    // Recompute visual lines for proper cursor tracking with wrapped text
-                    data_guard.compute_visual_lines();
-
-                    // Determine colors based on visual state
-                    let (bg, border) = match visual {
-                        TextFieldState::Focused | TextFieldState::FocusedHovered => {
-                            (cfg.focused_bg_color, cfg.focused_border_color)
-                        }
-                        TextFieldState::Hovered => (cfg.hover_bg_color, cfg.hover_border_color),
-                        TextFieldState::Disabled => (
-                            Color::rgba(0.12, 0.12, 0.15, 0.5),
-                            Color::rgba(0.25, 0.25, 0.3, 0.5),
-                        ),
-                        _ => (cfg.bg_color, cfg.border_color),
-                    };
-
-                    // Apply visual styling directly to the container (preserves fixed dimensions)
-                    container.set_bg(bg);
-                    container.set_border(cfg.border_width, border);
-                    container.set_rounded(cfg.corner_radius);
-
-                    // Apply CSS outline if specified
-                    if let Some((width, color, offset)) = css_outline {
-                        container.outline_width = width;
-                        container.outline_color = Some(color);
-                        container.outline_offset = offset;
-                    }
-
-                    // Build content wrapper with explicit padding spacers (like TextInput)
-                    let content = TextArea::build_content(
-                        *visual,
-                        &data_guard,
-                        &cfg,
-                        Arc::clone(&shared_state_for_callback),
-                    );
-                    container.set_child(content);
-                },
-            ));
-
-            shared.needs_visual_update = true;
-        }
-
-        // Ensure state handlers (hover/press) are registered immediately
-        // so they're available for incremental diff
-        inner.ensure_state_handlers_registered();
+        // HTML-like flex behaviour: `min_w(0)` lets the field shrink below
+        // its content in a flex container; the height is always explicit.
+        // The inner scroll clips, so this does not: clipping here would cut
+        // into the rounded border.
+        let inner = Self::create_inner_with_handlers(Arc::clone(state), Arc::clone(&config))
+            .w(default_width)
+            .h(default_height)
+            .min_w(0.0);
 
         let textarea = Self {
-            inner,
+            inner: std::cell::RefCell::new(inner),
+            built: std::cell::OnceCell::new(),
             state: Arc::clone(state),
             config,
             element_ref: None,
         };
-
-        // Initialize scroll dimensions from default config
         textarea.update_scroll_dimensions();
-
         textarea
     }
 
-    /// Create the inner Stateful element with all event handlers registered
+    /// The element, finished on first use: the content and the bound looks
+    /// added to what the builder calls made.
+    fn element(&self) -> &Div {
+        crate::build_once::build_once(&self.built, || {
+            let outer = self.inner.take();
+            let cfg = self.config.lock().unwrap().clone();
+            assemble(outer, &self.state, &cfg)
+        })
+    }
+
+    /// Create the element with all the event handlers registered
     fn create_inner_with_handlers(
-        shared_state: SharedState<TextFieldState>,
         data: SharedTextAreaState,
         config: Arc<Mutex<TextAreaConfig>>,
-    ) -> Stateful<TextFieldState> {
+    ) -> Div {
         use blinc_core::events::event_types;
 
         let data_for_click = Arc::clone(&data);
@@ -1805,12 +1734,13 @@ impl TextArea {
         let data_for_drag = Arc::clone(&data);
         let config_for_click = Arc::clone(&config);
         let config_for_drag = Arc::clone(&config);
-        let shared_for_click = Arc::clone(&shared_state);
-        let shared_for_text = Arc::clone(&shared_state);
-        let shared_for_key = Arc::clone(&shared_state);
-        let shared_for_drag = Arc::clone(&shared_state);
+        let data_for_enter = Arc::clone(&data);
+        let data_for_leave = Arc::clone(&data);
 
-        Stateful::with_shared_state(shared_state)
+        div()
+            // The pointer over the field changes its look.
+            .on_hover_enter(move |_| pointer_crossed(&data_for_enter, event_types::POINTER_ENTER))
+            .on_hover_leave(move |_| pointer_crossed(&data_for_leave, event_types::POINTER_LEAVE))
             // Handle mouse down to focus and position cursor
             .on_mouse_down(move |ctx| {
                 // First, forcibly blur any previously focused text input/area
@@ -1818,7 +1748,7 @@ impl TextArea {
 
                 // Get click position from context for cursor positioning.
                 // `ctx.local_x` / `local_y` are relative to THIS handler's
-                // node — the outer Stateful wrapper — not the inner text
+                // node — the field's box — not the inner text
                 // content. The wrapper renders a `padding_x`-wide left
                 // spacer + a `border_width` border before the scroll
                 // container, and a `padding_y` top spacer before the
@@ -1865,22 +1795,6 @@ impl TextArea {
                     // dedicated `FOCUSED_TEXT_AREA` tracker that the
                     // typed blur path walks.
                     crate::widgets::text_input::set_focused_editable_node(ctx.node_id, None);
-
-                    // Set focus via FSM transition
-                    {
-                        let mut shared = shared_for_click.lock().unwrap();
-                        if !shared.state.is_focused() {
-                            // Transition to focused state
-                            if let Some(new_state) = shared
-                                .state
-                                .on_event(event_types::POINTER_DOWN)
-                                .or_else(|| shared.state.on_event(event_types::FOCUS))
-                            {
-                                shared.state = new_state;
-                                shared.needs_visual_update = true;
-                            }
-                        }
-                    }
 
                     // Update data state
                     let was_focused = d.visual.is_focused();
@@ -1969,7 +1883,7 @@ impl TextArea {
 
                 // Trigger incremental refresh AFTER releasing the data lock
                 if needs_refresh {
-                    refresh_stateful(&shared_for_click);
+                    notify_text_area(&data_for_click);
                 }
             })
             // Mouse drag to extend selection.
@@ -2043,7 +1957,7 @@ impl TextArea {
                     }
                 };
                 if needs_refresh {
-                    refresh_stateful(&shared_for_drag);
+                    notify_text_area(&data_for_drag);
                 }
             })
             // Handle text input
@@ -2084,7 +1998,7 @@ impl TextArea {
 
                 // Trigger incremental refresh AFTER releasing the data lock
                 if needs_refresh {
-                    refresh_stateful(&shared_for_text);
+                    notify_text_area(&data_for_text);
                 }
 
                 // Notify external listeners of text change
@@ -2240,7 +2154,7 @@ impl TextArea {
                     crate::widgets::text_input::blur_all_text_inputs();
                 } else if needs_refresh.0 {
                     // Trigger incremental refresh AFTER releasing the data lock
-                    refresh_stateful(&shared_for_key);
+                    notify_text_area(&data_for_key);
                 }
 
                 // Notify external listeners of text change
@@ -2252,455 +2166,6 @@ impl TextArea {
             // Set text cursor (I-beam) for text area
             .cursor_text()
         // Note: Scroll events are handled by the scroll() widget inside build_content
-    }
-
-    /// Build the content div based on current visual state and data
-    /// Returns a Div with explicit padding spacers (like TextInput) for proper
-    /// visual separation from rounded corners.
-    fn build_content(
-        visual: TextFieldState,
-        data: &TextAreaState,
-        config: &TextAreaConfig,
-        shared_state: SharedTextAreaState,
-    ) -> Div {
-        // Note: Visual styling (bg, border, rounded) is now applied directly to the
-        // container in the callback via set_* methods, not here.
-
-        let text_color = if data.is_empty() {
-            config.placeholder_color
-        } else if data.disabled {
-            Color::rgba(0.4, 0.4, 0.4, 1.0)
-        } else {
-            config.text_color
-        };
-
-        // Check if cursor should be shown (focused state)
-        let is_focused = visual.is_focused();
-        let cursor_color = config.cursor_color;
-
-        // Cursor dimensions
-        let cursor_height = config.font_size * 1.2;
-        let line_height = config.font_size * config.line_height;
-
-        // Calculate available width for text (for wrap calculations)
-        let text_area_width =
-            config.effective_width() - config.padding_x * 2.0 - config.border_width * 2.0;
-
-        // Use visual lines for cursor positioning (computed in callback before build_content)
-        // This provides accurate cursor tracking for wrapped text
-        let (cursor_x, cursor_visual_y) = if !data.visual_lines.is_empty() {
-            data.cursor_position_from_visual_lines()
-        } else {
-            // Fallback: simple calculation when visual lines not yet computed
-            let cursor_line = data.cursor.line;
-            let cursor_col = data.cursor.column;
-            let cursor_x = if cursor_col > 0 && cursor_line < data.lines.len() {
-                let line_text = &data.lines[cursor_line];
-                let text_before: String = line_text.chars().take(cursor_col).collect();
-                crate::text_measure::measure_text(&text_before, config.font_size).width
-            } else {
-                0.0
-            };
-            let cursor_y = cursor_line as f32 * line_height;
-            (cursor_x, cursor_y)
-        };
-
-        // Clone the cursor state for the canvas callback
-        let cursor_state_for_canvas = Arc::clone(&data.cursor_state);
-
-        // Build cursor canvas element (if focused)
-        // The cursor is positioned inside the scroll content so it scrolls with text
-        let cursor_canvas_opt = if is_focused {
-            // Cursor top is based on visual line position plus vertical centering within line
-            // Shift cursor UP - fonts have descender space at bottom which pushes visible text upward
-            let descender_offset = config.font_size * 0.1;
-            let cursor_top =
-                cursor_visual_y + (line_height - cursor_height) / 2.0 - descender_offset;
-            let cursor_left = cursor_x;
-
-            {
-                if let Ok(mut cs) = cursor_state_for_canvas.lock() {
-                    cs.visible = true;
-                    cs.color = cursor_color;
-                    cs.x = cursor_x;
-                    cs.animation = CursorAnimation::SmoothFade;
-                }
-            }
-
-            let cursor_state_clone = Arc::clone(&cursor_state_for_canvas);
-            let cursor_canvas = canvas(
-                move |ctx: &mut dyn blinc_core::DrawContext,
-                      bounds: crate::canvas::CanvasBounds| {
-                    let cs = cursor_state_clone.lock().unwrap();
-
-                    if !cs.visible {
-                        return;
-                    }
-
-                    let opacity = cs.current_opacity();
-                    if opacity < 0.01 {
-                        return;
-                    }
-
-                    let color = blinc_core::Color::rgba(
-                        cs.color.r,
-                        cs.color.g,
-                        cs.color.b,
-                        cs.color.a * opacity,
-                    );
-
-                    ctx.fill_rect(
-                        blinc_core::Rect::new(0.0, 0.0, cs.width, bounds.height),
-                        blinc_core::CornerRadius::default(),
-                        blinc_core::Brush::Solid(color),
-                    );
-                },
-            )
-            .absolute()
-            .left(cursor_left)
-            .top(cursor_top)
-            .w(2.0)
-            .h(cursor_height);
-
-            Some(cursor_canvas)
-        } else {
-            if let Ok(mut cs) = cursor_state_for_canvas.lock() {
-                cs.visible = false;
-            }
-            None
-        };
-
-        // Build text content - left-aligned column of text lines
-        // Use relative positioning to allow cursor absolute positioning within
-        // Note: Don't use w_full() here - each line has explicit width, and w_full would
-        // cause content to extend into the rounded corner areas of the outer container
-        // Use overflow_visible to prevent clipping cursor when it shifts up
-        let mut text_content = div()
-            .flex_col()
-            .justify_start()
-            .items_start()
-            .relative()
-            .overflow_visible();
-
-        // Render selection highlights (behind text, absolutely positioned).
-        // When wrap is enabled AND visual_lines is populated, iterate the
-        // VISUAL lines so a logical line that wrapped onto several visual
-        // lines gets one highlight rectangle per visual line. The legacy
-        // logical-line iteration only painted at `line_idx * line_height`
-        // which is the FIRST visual line for a wrapped logical line —
-        // continuation visual lines below got no highlight even though
-        // their characters were inside the selection range.
-        if is_focused {
-            if let Some(sel_start) = data.selection_start {
-                let (start, end) = data.order_positions(sel_start, data.cursor);
-                if start != end {
-                    let sel_color = config.selection_color;
-                    let use_visual_lines = config.wrap && !data.visual_lines.is_empty();
-                    if use_visual_lines {
-                        for (vl_idx, vl) in data.visual_lines.iter().enumerate() {
-                            // Skip visual lines outside [start.line, end.line].
-                            if vl.logical_line < start.line || vl.logical_line > end.line {
-                                continue;
-                            }
-                            // Selection bounds within THIS logical line.
-                            let logical_line_text = data
-                                .lines
-                                .get(vl.logical_line)
-                                .map(|s| s.as_str())
-                                .unwrap_or("");
-                            let logical_char_count = logical_line_text.chars().count();
-                            let logical_col_start = if vl.logical_line == start.line {
-                                start.column
-                            } else {
-                                0
-                            };
-                            let logical_col_end = if vl.logical_line == end.line {
-                                end.column
-                            } else {
-                                logical_char_count
-                            };
-                            // Intersect with the visual line's char range.
-                            let visual_col_start =
-                                logical_col_start.max(vl.start_char).min(vl.end_char);
-                            let visual_col_end =
-                                logical_col_end.max(vl.start_char).min(vl.end_char);
-                            if visual_col_end <= visual_col_start {
-                                continue;
-                            }
-                            // x_start / x_end are measured RELATIVE to the
-                            // visual line's text (which starts at
-                            // vl.start_char of the logical line), so the
-                            // selection rect aligns with the rendered
-                            // glyphs at this visual line's position.
-                            let vl_prefix_to_start: String = vl
-                                .text
-                                .chars()
-                                .take(visual_col_start - vl.start_char)
-                                .collect();
-                            let vl_prefix_to_end: String = vl
-                                .text
-                                .chars()
-                                .take(visual_col_end - vl.start_char)
-                                .collect();
-                            let x_start = crate::text_measure::measure_text(
-                                &vl_prefix_to_start,
-                                config.font_size,
-                            )
-                            .width;
-                            let x_end = crate::text_measure::measure_text(
-                                &vl_prefix_to_end,
-                                config.font_size,
-                            )
-                            .width;
-                            // Extend past the right edge with a trailing
-                            // sliver when the selection reaches the end of
-                            // a visual line that isn't the final line of
-                            // the selection — gives the "newline / wrap"
-                            // visual cue users expect.
-                            let reaches_end_of_visual =
-                                visual_col_end >= vl.end_char.min(logical_char_count);
-                            let is_final_visual =
-                                vl.logical_line == end.line && visual_col_end == end.column;
-                            let mut width = x_end - x_start;
-                            if reaches_end_of_visual && !is_final_visual {
-                                width += config.font_size * 0.5;
-                            }
-                            if width > 0.0 {
-                                let sel_top = vl_idx as f32 * line_height;
-                                text_content = text_content.child(
-                                    crate::div::div()
-                                        .absolute()
-                                        .left(x_start)
-                                        .top(sel_top)
-                                        .w(width)
-                                        .h(line_height)
-                                        .bg(sel_color)
-                                        .rounded(2.0),
-                                );
-                            }
-                        }
-                    } else {
-                        // No-wrap mode (or visual lines not yet computed):
-                        // legacy per-logical-line rendering. Each logical
-                        // line maps to one visual line at index ==
-                        // logical line index, so the legacy y positioning
-                        // is correct.
-                        for line_idx in start.line..=end.line {
-                            if line_idx >= data.lines.len() {
-                                break;
-                            }
-                            let line_text = &data.lines[line_idx];
-                            let line_char_count = line_text.chars().count();
-                            let col_start = if line_idx == start.line {
-                                start.column
-                            } else {
-                                0
-                            };
-                            let col_end = if line_idx == end.line {
-                                end.column
-                            } else {
-                                line_char_count
-                            };
-                            let x_start = if col_start > 0 {
-                                let before: String = line_text.chars().take(col_start).collect();
-                                crate::text_measure::measure_text(&before, config.font_size).width
-                            } else {
-                                0.0
-                            };
-                            let x_end = if col_end > 0 {
-                                let before: String = line_text.chars().take(col_end).collect();
-                                crate::text_measure::measure_text(&before, config.font_size).width
-                            } else {
-                                0.0
-                            };
-                            let width = if col_end == line_char_count && line_idx != end.line {
-                                (x_end - x_start) + config.font_size * 0.5
-                            } else {
-                                x_end - x_start
-                            };
-                            if width > 0.0 {
-                                let sel_top = line_idx as f32 * line_height;
-                                text_content = text_content.child(
-                                    crate::div::div()
-                                        .absolute()
-                                        .left(x_start)
-                                        .top(sel_top)
-                                        .w(width)
-                                        .h(line_height)
-                                        .bg(sel_color)
-                                        .rounded(2.0),
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if data.is_empty() {
-            // Use state's placeholder if available, otherwise fall back to config
-            let placeholder = if !data.placeholder.is_empty() {
-                &data.placeholder
-            } else {
-                &config.placeholder
-            };
-
-            // Placeholder always uses no_wrap for consistent appearance
-            text_content = text_content.child(
-                div()
-                    .h(line_height)
-                    .flex_row()
-                    .items_center()
-                    .w(text_area_width)
-                    .child(
-                        text(placeholder)
-                            .size(config.font_size)
-                            .color(text_color)
-                            .text_left()
-                            .no_wrap(),
-                    ),
-            );
-        } else if config.wrap && !data.visual_lines.is_empty() {
-            // Wrapping mode with computed visual lines
-            // Render each visual line segment for precise cursor alignment
-            // Each line has a click handler that stores its visual line index
-            for (visual_line_idx, vl) in data.visual_lines.iter().enumerate() {
-                let line_text = if vl.text.is_empty() {
-                    " "
-                } else {
-                    vl.text.as_str()
-                };
-                let state_for_line = Arc::clone(&shared_state);
-
-                // Each visual line has fixed height and a click handler
-                text_content = text_content.child(
-                    div()
-                        .h(line_height)
-                        .w(text_area_width)
-                        .flex_row()
-                        .items_center()
-                        .on_mouse_down(move |_ctx| {
-                            // Store which visual line was clicked so the main handler knows
-                            if let Ok(mut state) = state_for_line.lock() {
-                                state.clicked_visual_line = Some(visual_line_idx);
-                            }
-                        })
-                        .child(
-                            text(line_text)
-                                .size(config.font_size)
-                                .color(text_color)
-                                .text_left()
-                                .no_wrap(), // Visual lines are pre-wrapped, don't wrap again
-                        ),
-                );
-            }
-        } else if config.wrap {
-            // Wrapping mode fallback: use natural text wrapping
-            // This path is used when visual lines not yet computed
-            // In this mode, line_idx corresponds to logical line (visual line not computed)
-            for (line_idx, line) in data.lines.iter().enumerate() {
-                let line_text = if line.is_empty() { " " } else { line.as_str() };
-                let state_for_line = Arc::clone(&shared_state);
-
-                // Don't use fixed height - let it grow based on wrapped content
-                // Use min_h to ensure empty/short lines still have proper height
-                text_content = text_content.child(
-                    div()
-                        .min_h(line_height)
-                        .w(text_area_width)
-                        .on_mouse_down(move |_ctx| {
-                            // Store line index (logical line in fallback mode)
-                            if let Ok(mut state) = state_for_line.lock() {
-                                state.clicked_visual_line = Some(line_idx);
-                            }
-                        })
-                        .child(
-                            text(line_text)
-                                .size(config.font_size)
-                                .color(text_color)
-                                .text_left(),
-                            // No .no_wrap() - text wraps at container width
-                        ),
-                );
-            }
-        } else {
-            // No-wrap mode: each line stays on single line, horizontally scrollable
-            // In this mode, line_idx corresponds to both logical and visual line
-            for (line_idx, line) in data.lines.iter().enumerate() {
-                let line_text = if line.is_empty() { " " } else { line.as_str() };
-                let state_for_line = Arc::clone(&shared_state);
-
-                text_content = text_content.child(
-                    div()
-                        .h(line_height)
-                        .flex_row()
-                        .items_center()
-                        .on_mouse_down(move |_ctx| {
-                            // Store line index
-                            if let Ok(mut state) = state_for_line.lock() {
-                                state.clicked_visual_line = Some(line_idx);
-                            }
-                        })
-                        .child(
-                            text(line_text)
-                                .size(config.font_size)
-                                .color(text_color)
-                                .text_left()
-                                .no_wrap(),
-                        ),
-                );
-            }
-        }
-
-        // Add cursor inside text_content so it scrolls with the text
-        if let Some(cursor) = cursor_canvas_opt {
-            text_content = text_content.child(cursor);
-        }
-
-        // Build wrapper with explicit padding spacers (like TextInput)
-        // This ensures proper visual separation from rounded corners
-        let padding_x = config.padding_x;
-        let padding_y = config.padding_y;
-
-        // Wrap text content in scroll container with shared physics
-        // This provides proper scroll handling and clipping
-        // TextArea scroll doesn't use bounce animation - just hard stops at edges
-        // Note: Don't add rounded() to scroll - the outer container handles visual rounding
-        let scrollable_content = Scroll::with_physics(Arc::clone(&data.scroll_physics))
-            .direction(ScrollDirection::Vertical)
-            .no_bounce()
-            .flex_grow() // Take remaining space
-            .child(text_content);
-
-        // Main content wrapper. Heights are explicit so the box has proper
-        // intrinsic dimensions; width is only pinned when the caller asked
-        // for one. A measured width must never be emitted here -- see
-        // `TextAreaConfig::width_is_explicit`. Left auto, the wrapper is
-        // stretched by its parent, which is what a full-width field wants
-        // and what a `w_fit()` ancestor can still shrink to fit.
-        // Structure matches TextInput: outer styled container -> padding spacers -> clip container
-        let pin_width = config.width_is_explicit;
-        let content_width = config.effective_width();
-        let content_height = config.effective_height();
-        let inner_height = content_height - padding_y * 2.0;
-        let pinned = |d: Div| if pin_width { d.w(content_width) } else { d };
-
-        pinned(div().flex_col())
-            .h(content_height)
-            // Top padding spacer
-            .child(pinned(div().h(padding_y)))
-            // Middle row with left/right padding and scroll content
-            .child(
-                pinned(div().flex_row().h(inner_height))
-                    // Left padding spacer
-                    .child(div().w(padding_x).h(inner_height))
-                    // Scroll content in the middle (no rounded corners on scroll itself)
-                    .child(scrollable_content)
-                    // Right padding spacer
-                    .child(div().w(padding_x).h(inner_height)),
-            )
-            // Bottom padding spacer
-            .child(pinned(div().h(padding_y)))
     }
 
     /// Set placeholder text
@@ -2740,7 +2205,7 @@ impl TextArea {
             cfg.rows = Some(rows);
             cfg.effective_height()
         };
-        self.inner = std::mem::take(&mut self.inner).h(height);
+        self.inner = std::cell::RefCell::new(self.inner.take().h(height));
         self.update_scroll_dimensions();
         self
     }
@@ -2753,7 +2218,7 @@ impl TextArea {
             cfg.width_is_explicit = true;
             cfg.effective_width()
         };
-        self.inner = std::mem::take(&mut self.inner).w(width);
+        self.inner = std::cell::RefCell::new(self.inner.take().w(width));
         self
     }
 
@@ -2766,7 +2231,7 @@ impl TextArea {
             cfg.width_is_explicit = true;
             (cfg.effective_width(), cfg.effective_height())
         };
-        self.inner = std::mem::take(&mut self.inner).w(width).h(height);
+        self.inner = std::cell::RefCell::new(self.inner.take().w(width).h(height));
         self.update_scroll_dimensions();
         self
     }
@@ -2821,7 +2286,7 @@ impl TextArea {
             cfg.cols = None;
             cfg.width_is_explicit = true;
         }
-        self.inner = std::mem::take(&mut self.inner).w(px);
+        self.inner = std::cell::RefCell::new(self.inner.take().w(px));
         self
     }
 
@@ -2831,7 +2296,7 @@ impl TextArea {
             cfg.height = px;
             cfg.rows = None;
         }
-        self.inner = std::mem::take(&mut self.inner).h(px);
+        self.inner = std::cell::RefCell::new(self.inner.take().h(px));
         self.update_scroll_dimensions();
         self
     }
@@ -2845,134 +2310,134 @@ impl TextArea {
             cfg.rows = None;
             cfg.width_is_explicit = true;
         }
-        self.inner = std::mem::take(&mut self.inner).size(w, h);
+        self.inner = std::cell::RefCell::new(self.inner.take().size(w, h));
         self.update_scroll_dimensions();
         self
     }
 
     pub fn square(mut self, size: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).square(size);
+        self.inner = std::cell::RefCell::new(self.inner.take().square(size));
         self
     }
 
     pub fn w_full(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).w_full();
+        self.inner = std::cell::RefCell::new(self.inner.take().w_full());
         self
     }
 
     pub fn h_full(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).h_full();
+        self.inner = std::cell::RefCell::new(self.inner.take().h_full());
         self
     }
 
     pub fn w_fit(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).w_fit();
+        self.inner = std::cell::RefCell::new(self.inner.take().w_fit());
         self
     }
 
     pub fn h_fit(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).h_fit();
+        self.inner = std::cell::RefCell::new(self.inner.take().h_fit());
         self
     }
 
     pub fn min_w(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).min_w(px);
+        self.inner = std::cell::RefCell::new(self.inner.take().min_w(px));
         self
     }
 
     pub fn p(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).p(px);
+        self.inner = std::cell::RefCell::new(self.inner.take().p(px));
         self
     }
 
     pub fn px(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).px(px);
+        self.inner = std::cell::RefCell::new(self.inner.take().px(px));
         self
     }
 
     pub fn py(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).py(px);
+        self.inner = std::cell::RefCell::new(self.inner.take().py(px));
         self
     }
 
     pub fn m(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).m(px);
+        self.inner = std::cell::RefCell::new(self.inner.take().m(px));
         self
     }
 
     pub fn mx(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).mx(px);
+        self.inner = std::cell::RefCell::new(self.inner.take().mx(px));
         self
     }
 
     pub fn my(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).my(px);
+        self.inner = std::cell::RefCell::new(self.inner.take().my(px));
         self
     }
 
     pub fn gap(mut self, px: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).gap(px);
+        self.inner = std::cell::RefCell::new(self.inner.take().gap(px));
         self
     }
 
     pub fn flex_row(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).flex_row();
+        self.inner = std::cell::RefCell::new(self.inner.take().flex_row());
         self
     }
 
     pub fn flex_col(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).flex_col();
+        self.inner = std::cell::RefCell::new(self.inner.take().flex_col());
         self
     }
 
     pub fn flex_grow(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).flex_grow();
+        self.inner = std::cell::RefCell::new(self.inner.take().flex_grow());
         self
     }
 
     pub fn items_center(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).items_center();
+        self.inner = std::cell::RefCell::new(self.inner.take().items_center());
         self
     }
 
     pub fn items_start(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).items_start();
+        self.inner = std::cell::RefCell::new(self.inner.take().items_start());
         self
     }
 
     pub fn items_end(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).items_end();
+        self.inner = std::cell::RefCell::new(self.inner.take().items_end());
         self
     }
 
     pub fn justify_center(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).justify_center();
+        self.inner = std::cell::RefCell::new(self.inner.take().justify_center());
         self
     }
 
     pub fn justify_start(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).justify_start();
+        self.inner = std::cell::RefCell::new(self.inner.take().justify_start());
         self
     }
 
     pub fn justify_end(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).justify_end();
+        self.inner = std::cell::RefCell::new(self.inner.take().justify_end());
         self
     }
 
     pub fn justify_between(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).justify_between();
+        self.inner = std::cell::RefCell::new(self.inner.take().justify_between());
         self
     }
 
     pub fn bg(mut self, color: impl Into<blinc_core::Brush>) -> Self {
-        self.inner = std::mem::take(&mut self.inner).bg(color);
+        self.inner = std::cell::RefCell::new(self.inner.take().background(color));
         self
     }
 
     pub fn rounded(mut self, radius: f32) -> Self {
         self.config.lock().unwrap().corner_radius = radius;
-        self.inner = std::mem::take(&mut self.inner).rounded(radius);
+        self.inner = std::cell::RefCell::new(self.inner.take().rounded(radius));
         self
     }
 
@@ -2985,7 +2450,7 @@ impl TextArea {
         if let Ok(mut d) = self.state.lock() {
             d.css_element_id = Some(id.to_string());
         }
-        self.inner = std::mem::take(&mut self.inner).id(id);
+        self.inner = std::cell::RefCell::new(self.inner.take().id(id));
         self
     }
 
@@ -2994,62 +2459,62 @@ impl TextArea {
         if let Ok(mut d) = self.state.lock() {
             d.css_classes.push(blinc_core::intern::intern(name));
         }
-        self.inner = std::mem::take(&mut self.inner).class(name);
+        self.inner = std::cell::RefCell::new(self.inner.take().class(name));
         self
     }
 
     pub fn border(mut self, width: f32, color: blinc_core::Color) -> Self {
-        self.inner = std::mem::take(&mut self.inner).border(width, color);
+        self.inner = std::cell::RefCell::new(self.inner.take().border(width, color));
         self
     }
 
     pub fn border_color(mut self, color: blinc_core::Color) -> Self {
-        self.inner = std::mem::take(&mut self.inner).border_color(color);
+        self.inner = std::cell::RefCell::new(self.inner.take().border_color(color));
         self
     }
 
     pub fn border_width(mut self, width: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).border_width(width);
+        self.inner = std::cell::RefCell::new(self.inner.take().border_width(width));
         self
     }
 
     pub fn shadow(mut self, shadow: blinc_core::Shadow) -> Self {
-        self.inner = std::mem::take(&mut self.inner).shadow(shadow);
+        self.inner = std::cell::RefCell::new(self.inner.take().shadow(shadow));
         self
     }
 
     pub fn shadow_sm(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).shadow_sm();
+        self.inner = std::cell::RefCell::new(self.inner.take().shadow_sm());
         self
     }
 
     pub fn shadow_md(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).shadow_md();
+        self.inner = std::cell::RefCell::new(self.inner.take().shadow_md());
         self
     }
 
     pub fn shadow_lg(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).shadow_lg();
+        self.inner = std::cell::RefCell::new(self.inner.take().shadow_lg());
         self
     }
 
     pub fn transform(mut self, transform: blinc_core::Transform) -> Self {
-        self.inner = std::mem::take(&mut self.inner).transform(transform);
+        self.inner = std::cell::RefCell::new(self.inner.take().transform(transform));
         self
     }
 
     pub fn opacity(mut self, opacity: f32) -> Self {
-        self.inner = std::mem::take(&mut self.inner).opacity(opacity);
+        self.inner = std::cell::RefCell::new(self.inner.take().opacity(opacity));
         self
     }
 
     pub fn overflow_clip(mut self) -> Self {
-        self.inner = std::mem::take(&mut self.inner).overflow_clip();
+        self.inner = std::cell::RefCell::new(self.inner.take().overflow_clip());
         self
     }
 
     pub fn child(mut self, child: impl ElementBuilder + 'static) -> Self {
-        self.inner = std::mem::take(&mut self.inner).child(child);
+        self.inner = std::cell::RefCell::new(self.inner.take().child(child));
         self
     }
 
@@ -3058,7 +2523,7 @@ impl TextArea {
         I: IntoIterator,
         I::Item: ElementBuilder + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).children(children);
+        self.inner = std::cell::RefCell::new(self.inner.take().children(children));
         self
     }
 
@@ -3067,7 +2532,7 @@ impl TextArea {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_click(handler);
+        self.inner = std::cell::RefCell::new(self.inner.take().on_click(handler));
         self
     }
 
@@ -3075,7 +2540,7 @@ impl TextArea {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_hover_enter(handler);
+        self.inner = std::cell::RefCell::new(self.inner.take().on_hover_enter(handler));
         self
     }
 
@@ -3083,7 +2548,7 @@ impl TextArea {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_hover_leave(handler);
+        self.inner = std::cell::RefCell::new(self.inner.take().on_hover_leave(handler));
         self
     }
 
@@ -3091,7 +2556,7 @@ impl TextArea {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_mouse_down(handler);
+        self.inner = std::cell::RefCell::new(self.inner.take().on_mouse_down(handler));
         self
     }
 
@@ -3099,7 +2564,7 @@ impl TextArea {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_mouse_up(handler);
+        self.inner = std::cell::RefCell::new(self.inner.take().on_mouse_up(handler));
         self
     }
 
@@ -3107,7 +2572,7 @@ impl TextArea {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_focus(handler);
+        self.inner = std::cell::RefCell::new(self.inner.take().on_focus(handler));
         self
     }
 
@@ -3115,7 +2580,7 @@ impl TextArea {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_blur(handler);
+        self.inner = std::cell::RefCell::new(self.inner.take().on_blur(handler));
         self
     }
 
@@ -3123,7 +2588,7 @@ impl TextArea {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_key_down(handler);
+        self.inner = std::cell::RefCell::new(self.inner.take().on_key_down(handler));
         self
     }
 
@@ -3131,7 +2596,7 @@ impl TextArea {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_key_up(handler);
+        self.inner = std::cell::RefCell::new(self.inner.take().on_key_up(handler));
         self
     }
 
@@ -3139,7 +2604,7 @@ impl TextArea {
     where
         F: Fn(&crate::event_handler::EventContext) + Send + Sync + 'static,
     {
-        self.inner = std::mem::take(&mut self.inner).on_scroll(handler);
+        self.inner = std::cell::RefCell::new(self.inner.take().on_scroll(handler));
         self
     }
 
@@ -3233,29 +2698,19 @@ impl ElementBuilder for TextArea {
     }
 
     fn build(&self, tree: &mut LayoutTree) -> LayoutNodeId {
-        // Set base render props and layout style for incremental updates
-        // Note: callback and handlers are registered in new() so they're available for incremental diff
-        // base_style must be updated here because on_state() captures it before .w()/.h() are applied
-        {
-            let shared_state = self.inner.shared_state();
-            let mut shared = shared_state.lock().unwrap();
-            shared.base_render_props = Some(self.inner.inner_render_props());
-            shared.base_style = self
-                .inner
-                .inner_layout_style()
-                .map(crate::stateful::SharedStyle);
+        let node = self.element().build(tree);
+        if let Ok(mut d) = self.state.lock() {
+            d.node_id = Some(node);
         }
-
-        // Build the inner Stateful
-        self.inner.build(tree)
+        node
     }
 
     fn render_props(&self) -> RenderProps {
-        self.inner.render_props()
+        self.element().render_props()
     }
 
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
-        self.inner.children_builders()
+        self.element().children_builders()
     }
 
     fn element_type_id(&self) -> crate::div::ElementTypeId {
@@ -3267,24 +2722,19 @@ impl ElementBuilder for TextArea {
     }
 
     fn event_handlers(&self) -> Option<&crate::event_handler::EventHandlers> {
-        ElementBuilder::event_handlers(&self.inner)
+        ElementBuilder::event_handlers(self.element())
     }
 
     fn layout_style(&self) -> Option<&taffy::Style> {
-        self.inner.layout_style()
+        ElementBuilder::layout_style(self.element())
     }
 
-    // Forward CSS class list / id from the inner Stateful so the
-    // selector matcher can match `.foo` / `#bar` rules added via
-    // `text_area(...).class(..)` / `.id(..)`. Same gotcha as
-    // text_input — the setters update inner state but without
-    // these forwards the renderer queries the default `&[]` / `None`.
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
-        self.inner.element_classes()
+        self.element().element_classes()
     }
 
     fn element_id(&self) -> Option<&str> {
-        self.inner.element_id()
+        ElementBuilder::element_id(self.element())
     }
 
     fn layout_bounds_storage(&self) -> Option<crate::renderer::LayoutBoundsStorage> {
@@ -3297,61 +2747,465 @@ impl ElementBuilder for TextArea {
     }
 
     fn layout_bounds_callback(&self) -> Option<crate::renderer::LayoutBoundsCallback> {
-        // When layout bounds change, update config dimensions and trigger refresh
+        // A new size wraps the lines differently and moves the viewport.
         let config = Arc::clone(&self.config);
         let state = Arc::clone(&self.state);
-        let stateful_state = self.inner.shared_state();
         Some(Arc::new(move |bounds| {
-            let mut needs_refresh = false;
-
+            let mut changed = false;
             if let Ok(mut cfg) = config.lock() {
-                let new_width = bounds.width;
-                let new_height = bounds.height;
-
-                // Check if width changed significantly
-                let width_changed = (cfg.width - new_width).abs() > 1.0;
-                // Check if height changed significantly
-                let height_changed = (cfg.height - new_height).abs() > 1.0;
-
-                if width_changed || height_changed {
-                    if width_changed {
-                        cfg.width = new_width;
-                    }
-                    if height_changed {
-                        cfg.height = new_height;
-                    }
-
-                    // Update state with new dimensions
-                    if let Ok(mut data) = state.lock() {
-                        if width_changed {
-                            data.available_width =
-                                new_width - cfg.padding_x * 2.0 - cfg.border_width * 2.0;
-                            // Recompute visual lines with new width
-                            data.compute_visual_lines();
-                        }
-
-                        if height_changed {
-                            // Update viewport height for scroll calculations
-                            let viewport_height =
-                                new_height - cfg.padding_y * 2.0 - cfg.border_width * 2.0;
-                            data.viewport_height = viewport_height;
-
-                            // Update scroll physics viewport
-                            if let Ok(mut p) = data.scroll_physics.lock() {
-                                p.viewport_height = viewport_height;
-                            }
-                        }
-                    }
-
-                    needs_refresh = true;
+                let width_changed = (cfg.width - bounds.width).abs() > 1.0;
+                let height_changed = (cfg.height - bounds.height).abs() > 1.0;
+                if width_changed {
+                    cfg.width = bounds.width;
                 }
+                if height_changed {
+                    cfg.height = bounds.height;
+                    let viewport_height =
+                        bounds.height - cfg.padding_y * 2.0 - cfg.border_width * 2.0;
+                    if let Ok(data) = state.lock() {
+                        if let Ok(mut p) = data.scroll_physics.lock() {
+                            p.viewport_height = viewport_height;
+                        }
+                    }
+                }
+                changed = width_changed || height_changed;
             }
-
-            if needs_refresh {
-                // Trigger a visual update
-                crate::stateful::refresh_stateful(&stateful_state);
+            if changed {
+                notify_text_area(&state);
             }
         }))
+    }
+}
+
+/// The pointer entered or left a field: move its visual state.
+fn pointer_crossed(state: &SharedTextAreaState, event: u32) {
+    let changed = match state.lock() {
+        Ok(mut d) if !d.disabled => match d.visual.on_event(event) {
+            Some(next) => {
+                d.visual = next;
+                true
+            }
+            None => false,
+        },
+        _ => false,
+    };
+    if changed {
+        notify_text_area(state);
+    }
+}
+
+/// How the field's box looks in its state.
+#[derive(Clone)]
+struct BoxLook {
+    bg: Color,
+    border: Color,
+    border_width: f32,
+    radius: f32,
+    /// Width, colour and offset.
+    outline: (f32, Color, f32),
+}
+
+fn box_look(base: &TextAreaConfig, d: &TextAreaState) -> BoxLook {
+    let (cfg, outline) = resolved_config(base, d);
+    let (bg, border) = match d.visual {
+        TextFieldState::Focused | TextFieldState::FocusedHovered => {
+            (cfg.focused_bg_color, cfg.focused_border_color)
+        }
+        TextFieldState::Hovered => (cfg.hover_bg_color, cfg.hover_border_color),
+        TextFieldState::Disabled => (
+            Color::rgba(0.12, 0.12, 0.15, 0.5),
+            Color::rgba(0.25, 0.25, 0.3, 0.5),
+        ),
+        TextFieldState::Idle => (cfg.bg_color, cfg.border_color),
+    };
+    BoxLook {
+        bg,
+        border,
+        border_width: cfg.border_width,
+        radius: cfg.corner_radius,
+        outline: outline.unwrap_or((0.0, Color::TRANSPARENT, 0.0)),
+    }
+}
+
+/// The text a visual line shows: its own text, or the placeholder on the
+/// first line of an empty field.
+fn row_text(d: &TextAreaState, base: &TextAreaConfig, row: usize) -> String {
+    if d.is_empty() {
+        if row > 0 {
+            String::new()
+        } else if !d.placeholder.is_empty() {
+            d.placeholder.clone()
+        } else {
+            base.placeholder.clone()
+        }
+    } else {
+        d.visual_lines
+            .get(row)
+            .map(|vl| vl.text.clone())
+            .unwrap_or_default()
+    }
+}
+
+/// Where the selection's highlight sits on a visual line: its left edge
+/// and width, `(0, 0)` where the line has none. Shown while focused.
+fn selection_span(d: &TextAreaState, row: usize) -> (f32, f32) {
+    let none = (0.0, 0.0);
+    if !d.visual.is_focused() {
+        return none;
+    }
+    let Some(sel_start) = d.selection_start else {
+        return none;
+    };
+    let (start, end) = d.order_positions(sel_start, d.cursor);
+    let Some(vl) = d.visual_lines.get(row) else {
+        return none;
+    };
+    if start == end || vl.logical_line < start.line || vl.logical_line > end.line {
+        return none;
+    }
+    let line_chars = d
+        .lines
+        .get(vl.logical_line)
+        .map(|l| l.chars().count())
+        .unwrap_or(0);
+    let from = if vl.logical_line == start.line {
+        start.column
+    } else {
+        0
+    };
+    let to = if vl.logical_line == end.line {
+        end.column
+    } else {
+        line_chars
+    };
+    // The part of the selection on this visual line.
+    let from = from.max(vl.start_char).min(vl.end_char);
+    let to = to.max(vl.start_char).min(vl.end_char);
+    if to <= from {
+        return none;
+    }
+    let width_to = |col: usize| {
+        let prefix: String = vl.text.chars().take(col - vl.start_char).collect();
+        crate::text_measure::measure_text(&prefix, d.font_size).width
+    };
+    let (x0, x1) = (width_to(from), width_to(to));
+    // A selection running on past this line ends in a sliver for the break.
+    let runs_on =
+        to >= vl.end_char.min(line_chars) && !(vl.logical_line == end.line && to == end.column);
+    let sliver = if runs_on { d.font_size * 0.5 } else { 0.0 };
+    (x0, x1 - x0 + sliver)
+}
+
+/// The field as built: the box's look bound to its state, around the content.
+fn assemble(mut outer: Div, state: &SharedTextAreaState, base: &TextAreaConfig) -> Div {
+    use crate::binding::TypedPendingBinding;
+    use crate::property::PropertyId;
+    use blinc_core::reactive::{ReactiveGraph, computed, signal};
+
+    let revision = {
+        let mut d = state.lock().unwrap();
+        // Laid out for the state the field starts in.
+        let (cfg, _) = resolved_config(base, &d);
+        take_metrics(&mut d, &cfg);
+        d.compute_visual_lines();
+        *d.revision.get_or_insert_with(|| signal(0u64))
+    };
+
+    let look = {
+        let (state, base) = (Arc::clone(state), base.clone());
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            box_look(&base, &state.lock().unwrap())
+        })
+    };
+    // Read once, so the look is subscribed to the revision.
+    let first = look
+        .try_get()
+        .unwrap_or_else(|| box_look(base, &state.lock().unwrap()));
+    outer = outer
+        .bg(first.bg)
+        .border(first.border_width, first.border)
+        .rounded(first.radius)
+        .outline_width(first.outline.0)
+        .outline_color(first.outline.1)
+        .outline_offset(first.outline.2);
+    outer
+        .pending_bindings
+        .push(Box::new(TypedPendingBinding::from_computed(
+            look.clone(),
+            PropertyId::Background,
+            |props, look: BoxLook| props.background = Some(blinc_core::Brush::Solid(look.bg)),
+        )));
+    outer
+        .pending_bindings
+        .push(Box::new(TypedPendingBinding::from_computed(
+            look.clone(),
+            PropertyId::BorderColor,
+            |props, look: BoxLook| props.border_color = Some(look.border),
+        )));
+    outer
+        .pending_bindings
+        .push(Box::new(TypedPendingBinding::from_computed(
+            look.clone(),
+            PropertyId::CornerRadius,
+            |props, look: BoxLook| {
+                props.border_radius = blinc_core::CornerRadius::uniform(look.radius)
+            },
+        )));
+    outer
+        .pending_bindings
+        .push(Box::new(TypedPendingBinding::from_computed(
+            look,
+            PropertyId::Outline,
+            |props, look: BoxLook| {
+                props.outline_width = look.outline.0;
+                props.outline_color = Some(look.outline.1);
+                props.outline_offset = look.outline.2;
+            },
+        )));
+    // A border width a state's rule changes moves the content, so it is
+    // bound as layout.
+    let border_width = {
+        let (state, base) = (Arc::clone(state), base.clone());
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            box_look(&base, &state.lock().unwrap()).border_width
+        })
+    };
+    outer = outer.border_width(&border_width);
+
+    let (cfg, _) = resolved_config(base, &state.lock().unwrap());
+    outer.child(content(state, &cfg, base, revision))
+}
+
+/// The inside of the field: one row per visual line in a vertical scroll,
+/// and the caret, all bound to the revision.
+fn content(
+    state: &SharedTextAreaState,
+    cfg: &TextAreaConfig,
+    base: &TextAreaConfig,
+    revision: blinc_core::reactive::Signal<u64>,
+) -> Div {
+    use blinc_core::reactive::{ReactiveGraph, computed};
+
+    let line_height = cfg.font_size * cfg.line_height;
+    let cursor_height = cfg.font_size * 1.2;
+
+    let text_color = {
+        let (state, base) = (Arc::clone(state), base.clone());
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            let d = state.lock().unwrap();
+            let (cfg, _) = resolved_config(&base, &d);
+            if d.is_empty() {
+                cfg.placeholder_color
+            } else if d.disabled {
+                Color::rgba(0.4, 0.4, 0.4, 1.0)
+            } else {
+                cfg.text_color
+            }
+        })
+    };
+    let rows = {
+        let state = Arc::clone(state);
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            let count = state.lock().unwrap().visual_lines.len().max(1);
+            (0..count).collect::<Vec<usize>>()
+        })
+    };
+    // Wrapped rows are as wide as the text area; unwrapped ones as their text.
+    let row_width = cfg.wrap.then(|| {
+        let state = Arc::clone(state);
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            state.lock().unwrap().available_width
+        })
+    });
+
+    let row = {
+        let (state, base) = (Arc::clone(state), base.clone());
+        let (font_size, selection_color) = (cfg.font_size, cfg.selection_color);
+        move |index: usize| {
+            text_row(
+                &state,
+                &base,
+                revision,
+                index,
+                line_height,
+                font_size,
+                selection_color,
+                row_width.as_ref(),
+                &text_color,
+            )
+        }
+    };
+
+    // The caret, moved to the cursor's line and column. Drawn while focused.
+    if let Ok(mut cs) = state.lock().unwrap().cursor_state.lock() {
+        cs.color = cfg.cursor_color;
+        cs.animation = CursorAnimation::SmoothFade;
+    }
+    let at = {
+        let state = Arc::clone(state);
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            let d = state.lock().unwrap();
+            let (x, y) = d.cursor_position_from_visual_lines();
+            // Fonts keep descender space at the bottom of the line, which
+            // sits the glyphs high: the caret is raised to match.
+            let top = y + (d.line_height - cursor_height) / 2.0 - d.font_size * 0.1;
+            blinc_core::Transform::translate(x, top)
+        })
+    };
+    let state_for_caret = Arc::clone(state);
+    let caret = canvas(
+        move |ctx: &mut dyn blinc_core::DrawContext, bounds: crate::canvas::CanvasBounds| {
+            let (shown, cursor_state) = {
+                let d = state_for_caret.lock().unwrap();
+                (d.visual.is_focused(), Arc::clone(&d.cursor_state))
+            };
+            if !shown {
+                return;
+            }
+            let cs = cursor_state.lock().unwrap();
+            let opacity = cs.blink_opacity();
+            if opacity < 0.01 {
+                return;
+            }
+            let color = Color::rgba(cs.color.r, cs.color.g, cs.color.b, cs.color.a * opacity);
+            ctx.fill_rect(
+                blinc_core::Rect::new(0.0, 0.0, cs.width, bounds.height),
+                blinc_core::CornerRadius::default(),
+                blinc_core::Brush::Solid(color),
+            );
+        },
+    )
+    .w(2.0)
+    .h(cursor_height);
+
+    let text_content = div()
+        .flex_col()
+        .justify_start()
+        .items_start()
+        .relative()
+        .overflow_visible()
+        .for_each(&rows, |index| *index, row)
+        .child(
+            div()
+                .absolute()
+                .left(0.0)
+                .top(0.0)
+                .w(2.0)
+                .h(cursor_height)
+                .transform(&at)
+                .child(caret),
+        );
+
+    // The scroll clips the rows and carries the vertical offset; the outer
+    // box does the rounding.
+    let scrollable_content =
+        Scroll::with_physics(Arc::clone(&state.lock().unwrap().scroll_physics))
+            .direction(ScrollDirection::Vertical)
+            .no_bounce()
+            .flex_grow()
+            .child(text_content);
+
+    // Heights are explicit so the box has proper intrinsic dimensions; the
+    // width is only pinned when the caller asked for one. A measured width
+    // must never be emitted here -- see `TextAreaConfig::width_is_explicit`.
+    // Left auto, the wrapper is stretched by its parent, which is what a
+    // full-width field wants and what a `w_fit()` ancestor can shrink.
+    let (padding_x, padding_y) = (cfg.padding_x, cfg.padding_y);
+    let pin_width = cfg.width_is_explicit;
+    let content_width = cfg.effective_width();
+    let content_height = cfg.effective_height();
+    let inner_height = content_height - padding_y * 2.0;
+    let pinned = |d: Div| if pin_width { d.w(content_width) } else { d };
+
+    pinned(div().flex_col())
+        .h(content_height)
+        .child(pinned(div().h(padding_y)))
+        .child(
+            pinned(div().flex_row().h(inner_height))
+                .child(div().w(padding_x).h(inner_height))
+                .child(scrollable_content)
+                .child(div().w(padding_x).h(inner_height)),
+        )
+        .child(pinned(div().h(padding_y)))
+}
+
+/// One visual line: its text, and the selection's highlight behind it.
+#[allow(clippy::too_many_arguments)]
+fn text_row(
+    state: &SharedTextAreaState,
+    base: &TextAreaConfig,
+    revision: blinc_core::reactive::Signal<u64>,
+    index: usize,
+    line_height: f32,
+    font_size: f32,
+    selection_color: Color,
+    width: Option<&blinc_core::reactive::Computed<f32>>,
+    color: &blinc_core::reactive::Computed<Color>,
+) -> Div {
+    use crate::binding::IntoReactive;
+    use blinc_core::reactive::{ReactiveGraph, computed};
+
+    let text = {
+        let (state, base) = (Arc::clone(state), base.clone());
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            row_text(&state.lock().unwrap(), &base, index)
+        })
+    };
+    let highlight_at = {
+        let state = Arc::clone(state);
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            let (x, _) = selection_span(&state.lock().unwrap(), index);
+            blinc_core::Transform::translate(x, 0.0)
+        })
+    };
+    let highlight_width = {
+        let state = Arc::clone(state);
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            selection_span(&state.lock().unwrap(), index).1
+        })
+    };
+    // Tells the field's own handler which line a press landed on.
+    let state_for_press = Arc::clone(state);
+    let row = div()
+        .h(line_height)
+        .flex_row()
+        .items_center()
+        .relative()
+        .on_mouse_down(move |_| {
+            if let Ok(mut d) = state_for_press.lock() {
+                d.clicked_visual_line = Some(index);
+            }
+        })
+        .child(
+            div()
+                .absolute()
+                .left(0.0)
+                .top(0.0)
+                .h(line_height)
+                .w(&highlight_width)
+                .transform(&highlight_at)
+                .bg(selection_color)
+                .rounded(2.0),
+        )
+        .child(
+            crate::text::Text::bound(text.into_reactive())
+                .size(font_size)
+                .color(color)
+                .text_left()
+                .no_wrap(),
+        );
+    match width {
+        Some(width) => row.w(width),
+        None => row,
     }
 }
 

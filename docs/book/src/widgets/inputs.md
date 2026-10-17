@@ -241,14 +241,14 @@ input_otp(&code, 6)
 ### Basic Text Area
 
 ```rust
-use blinc_layout::widgets::text_area::{text_area, text_area_state};
+use blinc_layout::widgets::text_area::{text_area, text_area_state_with_placeholder};
 
 fn my_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-    let state = text_area_state("Enter description...");
+    let state = text_area_state_with_placeholder("Enter description...");
 
     text_area(&state)
         .w(400.0)
-        .h(200.0)
+        .rows(6)
         .on_change(|text| {
             println!("Content: {}", text);
         })
@@ -257,15 +257,35 @@ fn my_ui(ctx: &WindowedContext) -> impl ElementBuilder {
 
 ### Styled Text Area
 
+Size and shape are set on the builder. Colours come from the stylesheet, by
+class or id, per state:
+
 ```rust
 text_area(&state)
     .w(400.0)
-    .h(200.0)
+    .rows(6)
     .rounded(8.0)
-    .bg_color(Color::rgba(0.15, 0.15, 0.2, 1.0))
-    .text_color(Color::WHITE)
     .font_size(14.0)
-    .line_height(1.5)
+    .class("notes")
+```
+
+```css
+.notes { background: #1e1e2a; color: #ffffff; caret-color: #6699ff; }
+.notes:hover { background: #24243a; }
+.notes:focus { border-color: #6699ff; }
+```
+
+### Setting the Text from Code
+
+Like the text input, the text area is built once and patches what it shows
+in place. After changing its state from outside the widget, call
+`refresh_text_area` so the field shows the change:
+
+```rust
+use blinc_layout::widgets::text_area::refresh_text_area;
+
+state.lock().unwrap().set_value("First line\nSecond line");
+refresh_text_area(&state);
 ```
 
 ---

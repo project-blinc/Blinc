@@ -145,15 +145,7 @@ impl TextareaRef {
         let Some(state) = self.state_handle() else {
             return;
         };
-        let stateful = state
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .stateful_state
-            .clone();
-        if let Some(stateful) = stateful {
-            crate::stateful::refresh_stateful(&stateful);
-        }
-        crate::stateful::request_redraw();
+        crate::widgets::text_area::refresh_text_area(&state);
     }
 }
 
