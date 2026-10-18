@@ -38,6 +38,18 @@ pub struct RasterizedGlyph {
     pub format: GlyphFormat,
 }
 
+/// Whether the face's outlines are PostScript (`CFF ` or `CFF2`).
+///
+/// swash scales those to pixels only when it hints them: unhinted, a CFF
+/// glyph is rasterized in font units, a bitmap a thousand pixels a side
+/// that fills the glyph atlas. TrueType outlines are scaled either way, so
+/// they stay unhinted.
+fn has_cff_outlines(font: swash::FontRef) -> bool {
+    [b"CFF ", b"CFF2"]
+        .iter()
+        .any(|tag| font.table(swash::tag_from_bytes(tag)).is_some())
+}
+
 /// Glyph rasterizer using swash
 pub struct GlyphRasterizer {
     /// Swash scale context (caches scaling state)
@@ -85,7 +97,11 @@ impl GlyphRasterizer {
         // Same axis the shaper set: a variable face rasterizes at its
         // default instance otherwise, so every weight would draw as
         // regular.
-        let mut builder = self.scale_context.builder(swash_font).size(font_size);
+        let mut builder = self
+            .scale_context
+            .builder(swash_font)
+            .size(font_size)
+            .hint(has_cff_outlines(swash_font));
         if let Some(w) = font.variation_weight() {
             builder = builder.variations([swash::Setting::from(("wght", w))]);
         }
@@ -168,7 +184,11 @@ impl GlyphRasterizer {
         // Same axis the shaper set: a variable face rasterizes at its
         // default instance otherwise, so every weight would draw as
         // regular.
-        let mut builder = self.scale_context.builder(swash_font).size(font_size);
+        let mut builder = self
+            .scale_context
+            .builder(swash_font)
+            .size(font_size)
+            .hint(has_cff_outlines(swash_font));
         if let Some(w) = font.variation_weight() {
             builder = builder.variations([swash::Setting::from(("wght", w))]);
         }
