@@ -20,7 +20,11 @@ static LOCK: Mutex<()> = Mutex::new(());
 fn init() {
     static I: std::sync::Once = std::sync::Once::new();
     I.call_once(|| {
-        blinc_theme::ThemeState::init_default();
+        // Pinned: `init_default` follows the machine's colour scheme.
+        blinc_theme::ThemeState::init(
+            blinc_theme::HybridTheme::bundle(),
+            blinc_theme::ColorScheme::Dark,
+        );
         if !blinc_core::BlincContextState::is_initialized() {
             blinc_core::BlincContextState::init(
                 blinc_core::reactive::global_graph(),
@@ -229,6 +233,37 @@ fn props(bar: &RenderTree, class: &str) -> blinc_layout::element::RenderProps {
     panic!("no .{class} in the find bar");
 }
 
+/// A theme token as a colour, read from the variable map the stylesheet is
+/// parsed with.
+fn token(name: &str) -> Color {
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let value = vars
+        .get(name)
+        .unwrap_or_else(|| panic!("no --{name} in the theme"))
+        .trim()
+        .to_string();
+    let byte = |s: &str| u8::from_str_radix(s, 16).unwrap() as f32 / 255.0;
+    if let Some(hex) = value.strip_prefix('#') {
+        let a = if hex.len() == 8 {
+            byte(&hex[6..8])
+        } else {
+            1.0
+        };
+        return Color::rgba(byte(&hex[0..2]), byte(&hex[2..4]), byte(&hex[4..6]), a);
+    }
+    let inner = value
+        .strip_prefix("rgba(")
+        .or_else(|| value.strip_prefix("rgb("))
+        .and_then(|v| v.strip_suffix(')'))
+        .unwrap_or_else(|| panic!("--{name} is not a colour: {value}"));
+    let parts: Vec<f32> = inner
+        .split(',')
+        .map(|p| p.trim().parse().unwrap())
+        .collect();
+    let a = parts.get(3).copied().unwrap_or(1.0);
+    Color::rgba(parts[0] / 255.0, parts[1] / 255.0, parts[2] / 255.0, a)
+}
+
 fn near(a: Color, b: Color) -> bool {
     (a.r - b.r).abs() < 0.01
         && (a.g - b.g).abs() < 0.01
@@ -265,14 +300,13 @@ fn the_stylesheet_designs_the_bar() {
     bar.apply_stylesheet_layout_overrides();
     bar.apply_stylesheet_base_styles();
 
-    // `#3a3a3a`, the theme's elevated surface.
-    let surface = Color::rgba(58.0 / 255.0, 58.0 / 255.0, 58.0 / 255.0, 1.0);
+    let surface = token("surface-elevated");
     assert!(
         near(fill(&bar, "blinc-find").unwrap(), surface),
         "the panel is not the elevated surface"
     );
     // The toggle that is on carries the accent's tint; the others none.
-    let accent_tint = Color::rgba(10.0 / 255.0, 132.0 / 255.0, 1.0, 0.15);
+    let accent_tint = token("accent-subtle");
     let on = fill(&bar, "blinc-find-toggle--on").expect("the case toggle is on");
     assert!(
         near(on, accent_tint),
@@ -281,7 +315,7 @@ fn the_stylesheet_designs_the_bar() {
     // The input's border is solid: opaque, the theme's grey, one whole pixel.
     let input = props(&bar, "blinc-find-input");
     let border = input.border_color.expect("the input has a border colour");
-    let grey = Color::rgba(99.0 / 255.0, 99.0 / 255.0, 102.0 / 255.0, 1.0);
+    let grey = token("border-secondary");
     assert!(
         near(border, grey),
         "the input's border is not the solid grey: {border:?}"
