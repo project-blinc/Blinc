@@ -100,6 +100,8 @@ struct Primitive {
     side_color_right: vec4<f32>,
     side_color_bottom: vec4<f32>,
     side_color_left: vec4<f32>,
+    // A gradient's stop table in aux_data: one more than its offset, zero for none.
+    gradient_table: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -402,6 +404,54 @@ fn calculate_polygon_clip_alpha(p: vec2<f32>, vertex_count: u32, aux_offset: u32
 // ============================================================================
 // Fragment Shader
 // ============================================================================
+
+// The colour of a gradient at `position`, from its table in aux_data: a header
+// of the stop count and the spread, the average colour, then each stop's colour
+// and offset. Stops mix in premultiplied colour. A repeating or reflecting
+// gradient folds `position` into the span of its stops first.
+fn gradient_table_color(position: f32, first: u32) -> vec4<f32> {
+    let header = aux_data[first];
+    let count = u32(header.x);
+    let start = aux_data[first + 3u].x;
+    let end = aux_data[first + 1u + 2u * count].x;
+    var t = position;
+    if header.y > 0.5 {
+        let period = end - start;
+        if period <= 0.0001 {
+            return aux_data[first + 1u];
+        }
+        var phase = (t - start) / period;
+        if header.y > 1.5 {
+            phase = 1.0 - abs(2.0 * fract(phase * 0.5) - 1.0);
+        } else {
+            phase = fract(phase);
+        }
+        t = start + phase * period;
+    }
+    var color = aux_data[first + 2u];
+    var offset = start;
+    var i = 1u;
+    while i < count {
+        let next = aux_data[first + 2u + 2u * i];
+        let at = aux_data[first + 3u + 2u * i].x;
+        if t < at {
+            let amount = clamp((t - offset) / max(at - offset, 1e-20), 0.0, 1.0);
+            let premult = mix(
+                vec4<f32>(color.rgb * color.a, color.a),
+                vec4<f32>(next.rgb * next.a, next.a),
+                amount
+            );
+            if premult.a > 0.0 {
+                return vec4<f32>(premult.rgb / premult.a, premult.a);
+            }
+            return vec4<f32>(0.0);
+        }
+        color = next;
+        offset = at;
+        i = i + 1u;
+    }
+    return color;
+}
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
@@ -706,11 +756,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                 if (g_len_sq > 0.0001) {
                     // Project current position onto gradient line
                     let proj = sp - g_start;
-                    t = clamp(dot(proj, g_dir) / g_len_sq, 0.0, 1.0);
+                    t = dot(proj, g_dir) / g_len_sq;
                 } else {
                     t = 0.0;
                 }
-                fill_color = mix(prim.color, prim.color2, t);
+                if prim.gradient_table.x > 0.5 {
+                    fill_color = gradient_table_color(t, u32(prim.gradient_table.x) - 1u);
+                } else {
+                    fill_color = mix(prim.color, prim.color2, clamp(t, 0.0, 1.0));
+                }
             }
             case 2u /* FILL_RADIAL_GRADIENT */: {
                 // Radial gradient using gradient_params (cx, cy, radius, 0) in user space
@@ -718,8 +772,22 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                 let g_radius = prim.gradient_params.z;
 
                 let dist = length(sp - g_center);
-                let t = clamp(dist / max(g_radius, 0.001), 0.0, 1.0);
-                fill_color = mix(prim.color, prim.color2, t);
+                let t = dist / max(g_radius, 0.001);
+                if prim.gradient_table.x > 0.5 {
+                    fill_color = gradient_table_color(t, u32(prim.gradient_table.x) - 1u);
+                } else {
+                    fill_color = mix(prim.color, prim.color2, clamp(t, 0.0, 1.0));
+                }
+            }
+            case 3u /* FILL_CONIC_GRADIENT */: {
+                // Conic gradient using gradient_params (cx, cy, start angle, 0) in user space
+                let delta = sp - prim.gradient_params.xy;
+                let t = fract((atan2(delta.x, -delta.y) - prim.gradient_params.z) / 6.283185307179586);
+                if prim.gradient_table.x > 0.5 {
+                    fill_color = gradient_table_color(t, u32(prim.gradient_table.x) - 1u);
+                } else {
+                    fill_color = mix(prim.color, prim.color2, t);
+                }
             }
             default: {
                 fill_color = prim.color;

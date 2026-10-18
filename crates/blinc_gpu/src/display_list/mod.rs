@@ -119,7 +119,7 @@ impl std::error::Error for DecodeError {}
 pub enum Unsupported {
     /// A kind other than a box, its shadow, a glyph, an image or a layer: canvas or backdrop.
     Kind(f32),
-    /// A gradient that is not two stops, or is conic.
+    /// A fill of a kind this does not know, or a gradient whose table is not in the list.
     Gradient,
     /// A clip in the element's own frame.
     LocalClip,
@@ -139,6 +139,8 @@ pub enum Unsupported {
     ClipCorner,
     /// A layer that is masked.
     LayerEffect,
+    /// A gradient whose stops are kept in a table, where the caller gave none to keep it in.
+    GradientTable,
 }
 
 /// The kind of a record.
@@ -187,6 +189,8 @@ pub fn records(
 #[derive(Debug, Default)]
 pub struct Decoded {
     pub primitives: Vec<GpuPrimitive>,
+    /// What the primitives keep in `aux_data`: the stop tables of their gradients.
+    pub aux: Vec<[f32; 4]>,
     /// The index of each record left out, and why.
     pub unsupported: Vec<(usize, Unsupported)>,
 }
@@ -200,8 +204,11 @@ pub fn decode(
 ) -> Result<Decoded, DecodeError> {
     let mut out = Decoded::default();
     for (index, record) in records(floats, count, version)?.enumerate() {
-        match record.to_primitive(scale) {
-            Ok(p) => out.primitives.push(p),
+        match record.primitive(scale, floats, out.aux.len()) {
+            Ok((p, table)) => {
+                out.primitives.push(p);
+                out.aux.extend(table);
+            }
             Err(why) => out.unsupported.push((index, why)),
         }
     }
@@ -318,10 +325,8 @@ impl<'a> Record<'a> {
             return Some(Unsupported::Notch);
         }
         if self.kind() == Kind::Box {
-            let fill = self.fill_type();
-            let plain = fill == 0.0
-                || ((fill == 1.0 || fill == 2.0) && self.row(row::GRADIENT_OFFSETS) == TWO_STOPS);
-            if !plain {
+            // Solid, linear, radial and conic; anything else is not a fill this knows.
+            if self.fill_type() > 3.5 {
                 return Some(Unsupported::Gradient);
             }
         }
@@ -332,7 +337,31 @@ impl<'a> Record<'a> {
     /// logical pixel, in the numbers `GpuPaintContext` produces for the same
     /// transform: the box keeps its centre and takes the transform's uniform
     /// scale, and the remainder of the transform is the normalized 2x2.
+    ///
+    /// A gradient with more than two stops, or stops other than from 0 to 1, or
+    /// one that spreads past them, keeps them in a table; see
+    /// [`Record::primitive`] for those. This one reports such a record.
     pub fn to_primitive(&self, scale: f32) -> Result<GpuPrimitive, Unsupported> {
+        // A table in the list's tail, which there is no list here to find it in.
+        if self.fill_type() > 0.5 && self.row(row::GRADIENT_OFFSETS)[3] >= 2.0 {
+            return Err(Unsupported::GradientTable);
+        }
+        match self.primitive(scale, &[], 0)? {
+            (p, table) if table.is_empty() => Ok(p),
+            _ => Err(Unsupported::GradientTable),
+        }
+    }
+
+    /// The primitive for this record, and the rows of its gradient's stop table
+    /// if it has one. `list` is the whole display list, the records and the data
+    /// after them that tables of stops are in, and `aux_base` where the table
+    /// will be in `aux_data`, which the primitive names it by.
+    pub fn primitive(
+        &self,
+        scale: f32,
+        list: &[f32],
+        aux_base: usize,
+    ) -> Result<(GpuPrimitive, Vec<[f32; 4]>), Unsupported> {
         match self.kind() {
             // An image is drawn from a texture of the consumer's, and a layer from its own.
             Kind::Image => return Err(Unsupported::Kind(KIND_IMAGE)),
@@ -387,7 +416,7 @@ impl<'a> Record<'a> {
                 clip_type as u32,
                 0,
             ];
-            return Ok(p);
+            return Ok((p, Vec::new()));
         }
 
         if kind == KIND_TEXT {
@@ -400,7 +429,7 @@ impl<'a> Record<'a> {
                 clip_type as u32,
                 0,
             ];
-            return Ok(p);
+            return Ok((p, Vec::new()));
         }
 
         p.color = self.row(row::FILL);
@@ -408,26 +437,29 @@ impl<'a> Record<'a> {
         let fill = match self.fill_type() {
             1.0 => FillType::LinearGradient,
             2.0 => FillType::RadialGradient,
+            3.0 => FillType::ConicGradient,
             _ => FillType::Solid,
         };
+        let mut table = Vec::new();
         if fill != FillType::Solid {
             // Pixels from the box's top-left, taken to the primitive's frame.
             let g = self.row(row::GRADIENT);
-            p.gradient_params = if fill == FillType::RadialGradient {
-                [
-                    bounds[0] + g[0] * size_scale,
-                    bounds[1] + g[1] * size_scale,
-                    g[2] * size_scale,
-                    g[3],
-                ]
-            } else {
-                [
-                    bounds[0] + g[0] * size_scale,
-                    bounds[1] + g[1] * size_scale,
+            let (x, y) = (bounds[0] + g[0] * size_scale, bounds[1] + g[1] * size_scale);
+            p.gradient_params = match fill {
+                FillType::RadialGradient => [x, y, g[2] * size_scale, g[3]],
+                // The third is an angle, which a scale does not change.
+                FillType::ConicGradient => [x, y, g[2], g[3]],
+                _ => [
+                    x,
+                    y,
                     bounds[0] + g[2] * size_scale,
                     bounds[1] + g[3] * size_scale,
-                ]
+                ],
             };
+            if let Some(rows) = self.gradient_rows(list)? {
+                p.gradient_table = [(aux_base + 1) as f32, 0.0, 0.0, 0.0];
+                table = rows;
+            }
         }
 
         let widths = self.row(row::BORDER);
@@ -457,6 +489,51 @@ impl<'a> Record<'a> {
         }
 
         p.type_info = [PrimitiveType::Rect as u32, fill as u32, clip_type as u32, 0];
-        Ok(p)
+        Ok((p, table))
+    }
+
+    /// The rows of this record's gradient stop table: its header of the stop
+    /// count and spread, the average colour, then each stop's colour and offset.
+    /// None for two stops from 0 to 1 that stop there, which the primitive's two
+    /// colours say. A table the producer made is in `list` after the records; the
+    /// stops it does not make a table of are made one here.
+    fn gradient_rows(&self, list: &[f32]) -> Result<Option<Vec<[f32; 4]>>, Unsupported> {
+        let [first, middle, last, marker] = self.row(row::GRADIENT_OFFSETS);
+        let (c1, c2) = (self.row(row::FILL), self.row(row::FILL_END));
+        let built = |stops: &[([f32; 4], f32)]| {
+            let mean = std::array::from_fn(|c| {
+                stops.iter().map(|s| s.0[c]).sum::<f32>() / stops.len() as f32
+            });
+            let mut rows = vec![[stops.len() as f32, 0.0, 0.0, 0.0], mean];
+            for (color, offset) in stops {
+                rows.push(*color);
+                rows.push([*offset, 0.0, 0.0, 0.0]);
+            }
+            rows
+        };
+        if marker >= 2.0 {
+            // Two more than the first row's index from the start of the list.
+            let at = (marker - 2.0) as usize * 4;
+            let count = *list.get(at).ok_or(Unsupported::Gradient)? as usize;
+            let end = at + (2 + 2 * count) * 4;
+            if count == 0 || end > list.len() {
+                return Err(Unsupported::Gradient);
+            }
+            return Ok(Some(
+                list[at..end]
+                    .chunks_exact(4)
+                    .map(|c| [c[0], c[1], c[2], c[3]])
+                    .collect(),
+            ));
+        }
+        if marker >= 0.5 {
+            // A middle stop, kept in the row after the second colour.
+            let via = self.row(row::GRADIENT_VIA);
+            return Ok(Some(built(&[(c1, first), (via, middle), (c2, last)])));
+        }
+        if (first, last) == (0.0, 1.0) {
+            return Ok(None);
+        }
+        Ok(Some(built(&[(c1, first), (c2, last)])))
     }
 }

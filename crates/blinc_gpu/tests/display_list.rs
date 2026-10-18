@@ -241,9 +241,9 @@ fn what_a_primitive_cannot_carry_is_named() {
             Unsupported::LocalClip,
         ),
         (
-            "conic",
+            "fill of another kind",
             row::TYPES,
-            [0.0, 3.0, 0.0, 1.0],
+            [0.0, 4.0, 0.0, 1.0],
             Unsupported::Gradient,
         ),
         (
@@ -273,14 +273,6 @@ fn what_a_primitive_cannot_carry_is_named() {
         assert_eq!(record.unsupported(), Some(why), "{name}");
         assert_eq!(record.to_primitive(1.0).err(), Some(why), "{name}");
     }
-}
-
-#[test]
-fn three_stops_are_not_drawn_as_two() {
-    let mut list = fixture!("box_gradient");
-    set_row(&mut list, 0, row::GRADIENT_OFFSETS, [0.0, 0.5, 1.0, 1.0]);
-    let record = Record::new(list[..RECORD_FLOATS].try_into().unwrap());
-    assert_eq!(record.unsupported(), Some(Unsupported::Gradient));
 }
 
 #[test]
@@ -365,7 +357,7 @@ fn an_image_sits_between_the_primitive_runs_around_it() {
         .items
         .iter()
         .map(|i| match i {
-            Item::Primitives(run) => format!("{} primitives", run.len()),
+            Item::Primitives(run) => format!("{} primitives", run.primitives.len()),
             Item::Image(d) => format!("image {}", d.slot),
             Item::Layer(_) => "layer".to_string(),
         })
@@ -446,7 +438,7 @@ fn a_group_with_opacity_is_a_layer_of_its_items() {
         panic!("one layer");
     };
     assert_eq!(layer.fx.opacity, 0.5);
-    assert!(matches!(&layer.items[..], [Item::Primitives(run)] if run.len() == 2));
+    assert!(matches!(&layer.items[..], [Item::Primitives(run)] if run.primitives.len() == 2));
 }
 
 #[test]
@@ -499,7 +491,7 @@ fn a_masked_layer_is_drawn_flat_and_named() {
     set_row(&mut list, 3, row::SIDE_COLORS, [1.0, 0.0, 0.0, 0.0]);
     let planned = plan(&list, 4, DISPLAY_LIST_VERSION, 1.0).unwrap();
     assert_eq!(planned.unsupported, vec![(3, Unsupported::LayerEffect)]);
-    assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.len() == 2));
+    assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.primitives.len() == 2));
 }
 
 #[test]
@@ -511,5 +503,107 @@ fn a_layer_with_no_opening_or_no_end_is_named_and_its_content_kept() {
     // Its beginning and content, never closed.
     let planned = plan(&list[..3 * RECORD_FLOATS], 3, DISPLAY_LIST_VERSION, 1.0).unwrap();
     assert_eq!(planned.unsupported, vec![(0, Unsupported::Kind(40.0))]);
-    assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.len() == 2));
+    assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.primitives.len() == 2));
+}
+
+fn first_of(list: &[f32]) -> (GpuPrimitive, Vec<[f32; 4]>) {
+    let out = decode(list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(out.unsupported.is_empty(), "{:?}", out.unsupported);
+    (out.primitives[0], out.aux)
+}
+
+/// The offsets of a table's stops, and its header.
+fn stops_of(aux: &[[f32; 4]]) -> (f32, f32, Vec<f32>) {
+    let count = aux[0][0] as usize;
+    assert_eq!(
+        aux.len(),
+        2 + 2 * count,
+        "a header, an average, two rows a stop"
+    );
+    (
+        aux[0][0],
+        aux[0][1],
+        (0..count).map(|i| aux[3 + 2 * i][0]).collect(),
+    )
+}
+
+#[test]
+fn two_stops_from_nought_to_one_need_no_table() {
+    let (p, aux) = first_of(&fixture!("box_gradient"));
+    assert_eq!(p.gradient_table, [0.0; 4]);
+    assert!(aux.is_empty());
+}
+
+#[test]
+fn a_middle_stop_is_a_table_of_three() {
+    let (p, aux) = first_of(&fixture!("grad_three"));
+    assert_eq!(
+        p.gradient_table[0], 1.0,
+        "the table is at offset 0 in aux_data"
+    );
+    assert_eq!(stops_of(&aux), (3.0, 0.0, vec![0.0, 0.5, 1.0]));
+    near(&aux[2], &[1.0, 0.1, 0.1, 1.0]);
+    near(&aux[4], &[1.0, 0.9, 0.1, 1.0]);
+    near(&aux[6], &[0.1, 0.1, 1.0, 1.0]);
+}
+
+#[test]
+fn two_stops_between_other_offsets_are_a_table_of_two() {
+    let (p, aux) = first_of(&fixture!("grad_offsets"));
+    assert_eq!(p.gradient_table[0], 1.0);
+    assert_eq!(stops_of(&aux), (2.0, 0.0, vec![0.25, 0.75]));
+}
+
+#[test]
+fn a_table_the_producer_made_is_copied_with_its_spread() {
+    let (p, aux) = first_of(&fixture!("grad_five"));
+    assert_eq!(p.gradient_table[0], 1.0);
+    assert_eq!(stops_of(&aux), (5.0, 0.0, vec![0.0, 0.2, 0.5, 0.8, 1.0]));
+    let (_, repeat, _) = stops_of(&first_of(&fixture!("grad_repeat")).1);
+    let (_, reflect, _) = stops_of(&first_of(&fixture!("grad_reflect_radial")).1);
+    assert_eq!((repeat, reflect), (1.0, 2.0));
+}
+
+#[test]
+fn a_conic_gradient_keeps_its_angle_when_the_display_scales() {
+    let list = fixture!("grad_conic_stops");
+    let out = decode(&list, 1, DISPLAY_LIST_VERSION, 2.0).unwrap();
+    let p = out.primitives[0];
+    assert_eq!(p.type_info[1], FillType::ConicGradient as u32);
+    // The centre is placed from the box's corner and scaled, the angle is not.
+    near(&p.gradient_params, &[40.0 + 100.0, 40.0 + 60.0, 0.5, 0.0]);
+}
+
+#[test]
+fn a_table_that_is_not_in_the_list_is_named() {
+    let list = fixture!("grad_five");
+    let planned = plan(&list[..RECORD_FLOATS], 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert_eq!(planned.unsupported, vec![(0, Unsupported::Gradient)]);
+    // And a single-record decode, with nowhere to keep one, says so.
+    let record = Record::new(list[..RECORD_FLOATS].try_into().unwrap());
+    assert_eq!(
+        record.to_primitive(1.0).err(),
+        Some(Unsupported::GradientTable)
+    );
+}
+
+#[test]
+fn tables_in_one_run_follow_each_other() {
+    // Two records over the one table in the buffer's tail, moved to follow them.
+    let five = fixture!("grad_five");
+    let (record, tail) = (&five[..RECORD_FLOATS], &five[RECORD_FLOATS..]);
+    let mut list = [record, record, tail].concat();
+    // The tail now begins 56 vec4s in, so the marker is two more.
+    for r in 0..2 {
+        list[r * RECORD_FLOATS + row::GRADIENT_OFFSETS * 4 + 3] = 2.0 + 56.0;
+    }
+    let planned = plan(&list, 2, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(planned.unsupported.is_empty(), "{:?}", planned.unsupported);
+    let [Item::Primitives(run)] = &planned.items[..] else {
+        panic!("one run");
+    };
+    assert_eq!(run.aux.len(), 24, "two tables of twelve rows");
+    assert_eq!(run.primitives[0].gradient_table[0], 1.0);
+    assert_eq!(run.primitives[1].gradient_table[0], 13.0);
+    assert_eq!(run.aux[..12], run.aux[12..]);
 }

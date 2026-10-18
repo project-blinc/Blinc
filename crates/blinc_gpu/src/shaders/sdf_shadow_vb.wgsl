@@ -101,6 +101,8 @@ struct Primitive {
     side_color_right: vec4<f32>,
     side_color_bottom: vec4<f32>,
     side_color_left: vec4<f32>,
+    // A gradient's stop table in aux_data: one more than its offset, zero for none.
+    gradient_table: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;

@@ -34,11 +34,33 @@ pub struct Layer {
     pub bounds: [f32; 4],
 }
 
+/// Primitives in paint order, drawn together, and what they keep in `aux_data`.
+#[derive(Clone, Debug, Default)]
+pub struct Run {
+    pub primitives: Vec<GpuPrimitive>,
+    /// The stop tables of their gradients, which they name by offset.
+    pub aux: Vec<[f32; 4]>,
+}
+
+impl Run {
+    /// `more` after this, its tables' offsets moved to follow this one's.
+    fn append(&mut self, mut more: Run) {
+        let base = self.aux.len() as f32;
+        for p in &mut more.primitives {
+            if p.gradient_table[0] > 0.5 {
+                p.gradient_table[0] += base;
+            }
+        }
+        self.primitives.append(&mut more.primitives);
+        self.aux.append(&mut more.aux);
+    }
+}
+
 /// One step of a plan.
 #[derive(Clone, Debug)]
 pub enum Item {
     /// Primitives in paint order, drawn together.
-    Primitives(Vec<GpuPrimitive>),
+    Primitives(Run),
     Image(ImageDraw),
     Layer(Layer),
 }
@@ -59,7 +81,7 @@ struct Open {
 
 fn push(items: &mut Vec<Item>, item: Item) {
     match (items.last_mut(), item) {
-        (Some(Item::Primitives(run)), Item::Primitives(mut more)) => run.append(&mut more),
+        (Some(Item::Primitives(run)), Item::Primitives(more)) => run.append(more),
         (_, item) => items.push(item),
     }
 }
@@ -107,8 +129,22 @@ pub fn plan(floats: &[f32], count: usize, version: u32, scale: f32) -> Result<Pl
             }
             _ => {
                 let page = &mut open.last_mut().expect("the page is open").items;
-                match record.to_primitive(scale) {
-                    Ok(p) => push(page, Item::Primitives(vec![p])),
+                // A gradient's table goes at the end of the run the primitive joins.
+                let aux_base = match page.last() {
+                    Some(Item::Primitives(run)) => run.aux.len(),
+                    _ => 0,
+                };
+                match record.primitive(scale, floats, aux_base) {
+                    Ok((p, table)) => match page.last_mut() {
+                        Some(Item::Primitives(run)) => {
+                            run.primitives.push(p);
+                            run.aux.extend(table);
+                        }
+                        _ => page.push(Item::Primitives(Run {
+                            primitives: vec![p],
+                            aux: table,
+                        })),
+                    },
                     Err(why) => plan.unsupported.push((index, why)),
                 }
             }
@@ -237,7 +273,10 @@ fn moved(items: &[Item], dx: f32, dy: f32) -> Vec<Item> {
     items
         .iter()
         .map(|item| match item {
-            Item::Primitives(run) => Item::Primitives(run.iter().map(primitive).collect()),
+            Item::Primitives(run) => Item::Primitives(Run {
+                primitives: run.primitives.iter().map(primitive).collect(),
+                aux: run.aux.clone(),
+            }),
             Item::Image(draw) => {
                 let mut instance = draw.instance;
                 instance.dst_rect[0] += dx;
@@ -354,7 +393,8 @@ impl Painter {
             match item {
                 Item::Primitives(run) => {
                     let mut batch = PrimitiveBatch::new();
-                    batch.primitives.extend_from_slice(run);
+                    batch.primitives.extend_from_slice(&run.primitives);
+                    batch.aux_data.extend_from_slice(&run.aux);
                     renderer.render_overlay(target, &batch);
                 }
                 Item::Image(draw) => match images(draw.slot) {

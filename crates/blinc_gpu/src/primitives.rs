@@ -218,6 +218,7 @@ pub enum FillType {
     Solid = 0,
     LinearGradient = 1,
     RadialGradient = 2,
+    ConicGradient = 3,
 }
 
 /// Glass material types (must match shader constants)
@@ -351,6 +352,13 @@ pub struct GpuPrimitive {
     pub side_color_right: [f32; 4],
     pub side_color_bottom: [f32; 4],
     pub side_color_left: [f32; 4],
+    /// A gradient's stops, when it has more than two or its first and last are not
+    /// 0 and 1, or it spreads past them: `x` is one more than the offset in
+    /// `aux_data` of its table, and zero means none, the fill being `color` to
+    /// `color2`. The table is a header of the stop count and spread (0 pad, 1
+    /// repeat, 2 reflect), a row of the average colour, then for each stop a row of
+    /// its colour and a row of its offset.
+    pub gradient_table: [f32; 4],
 }
 
 impl Default for GpuPrimitive {
@@ -398,6 +406,7 @@ impl Default for GpuPrimitive {
             side_color_right: [0.0; 4],
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
+            gradient_table: [0.0; 4],
         }
     }
 }
@@ -661,6 +670,7 @@ impl GpuPrimitive {
             side_color_right: [0.0; 4],
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
+            gradient_table: [0.0; 4],
         }
     }
 
@@ -706,6 +716,7 @@ impl GpuPrimitive {
             side_color_right: [0.0; 4],
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
+            gradient_table: [0.0; 4],
         }
     }
 }

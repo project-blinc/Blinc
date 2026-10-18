@@ -1,7 +1,8 @@
 //! Dumps ABI display-list records for a few scenes as raw little-endian f32.
 use blinc_abi::context::{LayoutContext, Node, Style};
 use blinc_abi::scene::blinc_core::{
-    Affine2D, Brush, Color, CornerRadius, Gradient, Point, Shadow, Transform,
+    Affine2D, Brush, Color, CornerRadius, Gradient, GradientSpread, GradientStop, Point, Shadow,
+    Transform,
 };
 use blinc_abi::scene::{PaintOptions, RenderProps, SceneEncoder};
 use blinc_layout::element::{BorderSide, BorderSides};
@@ -43,10 +44,10 @@ fn scaled(name: &str, scale: f32, build: impl FnOnce(&mut LayoutContext) -> Node
     let info = enc.prepare(&cx, root, PaintOptions { scale, ..PaintOptions::default() }).unwrap();
     let mut out = vec![0f32; info.floats];
     enc.read(&cx, &mut out).unwrap();
-    out.truncate(info.count * 112);
+    // The whole buffer: the records, then any stop tables after them.
     let bytes: Vec<u8> = out.iter().flat_map(|f| f.to_le_bytes()).collect();
     std::fs::write(format!("out/{name}.f32"), bytes).unwrap();
-    println!("{name}: {} records", info.count);
+    println!("{name}: {} records, {} floats", info.count, info.floats);
 }
 
 
@@ -311,5 +312,78 @@ fn main() {
             ..CssFilter::default()
         });
         boxed(cx, 40.0, 30.0, p)
+    });
+
+    let c = |r: f32, g: f32, b: f32| Color::rgb(r, g, b);
+    let stops3 = vec![
+        GradientStop::new(0.0, c(1.0, 0.1, 0.1)),
+        GradientStop::new(0.5, c(1.0, 0.9, 0.1)),
+        GradientStop::new(1.0, c(0.1, 0.1, 1.0)),
+    ];
+    let stops5 = vec![
+        GradientStop::new(0.0, c(1.0, 0.1, 0.1)),
+        GradientStop::new(0.2, c(1.0, 0.9, 0.1)),
+        GradientStop::new(0.5, c(0.1, 0.8, 0.2)),
+        GradientStop::new(0.8, c(0.1, 0.6, 1.0)),
+        GradientStop::new(1.0, c(0.6, 0.1, 0.9)),
+    ];
+    let line = |stops: Vec<GradientStop>, spread: GradientSpread, to: f32| {
+        let mut g = Gradient::linear_with_stops(Point::new(0.0, 0.0), Point::new(to, 0.0), stops);
+        if let Gradient::Linear { spread: s, .. } = &mut g {
+            *s = spread;
+        }
+        g
+    };
+    let paint = |g: Gradient| {
+        let mut p = RenderProps::default();
+        p.background = Some(Brush::Gradient(g));
+        p
+    };
+    scene("grad_three", |cx| boxed(cx, 100.0, 60.0, paint(line(stops3.clone(), GradientSpread::Pad, 100.0))));
+    scene("grad_offsets", |cx| {
+        let stops = vec![
+            GradientStop::new(0.25, c(1.0, 0.1, 0.1)),
+            GradientStop::new(0.75, c(0.1, 0.1, 1.0)),
+        ];
+        boxed(cx, 100.0, 60.0, paint(line(stops, GradientSpread::Pad, 100.0)))
+    });
+    scene("grad_five", |cx| boxed(cx, 100.0, 60.0, paint(line(stops5.clone(), GradientSpread::Pad, 100.0))));
+    scene("grad_repeat", |cx| {
+        let stops = vec![
+            GradientStop::new(0.0, c(1.0, 0.1, 0.1)),
+            GradientStop::new(1.0, c(0.1, 0.1, 1.0)),
+        ];
+        boxed(cx, 100.0, 60.0, paint(line(stops, GradientSpread::Repeat, 40.0)))
+    });
+    scene("grad_reflect_radial", |cx| {
+        let mut g = Gradient::radial_with_stops(Point::new(50.0, 30.0), 20.0, stops3.clone());
+        if let Gradient::Radial { spread: s, .. } = &mut g {
+            *s = GradientSpread::Reflect;
+        }
+        boxed(cx, 100.0, 60.0, paint(g))
+    });
+    scene("grad_radial_stops", |cx| {
+        boxed(cx, 100.0, 60.0, paint(Gradient::radial_with_stops(Point::new(50.0, 30.0), 45.0, stops3.clone())))
+    });
+    scene("grad_conic", |cx| {
+        let g = Gradient::Conic {
+            center: Point::new(50.0, 30.0),
+            stops: vec![
+                GradientStop::new(0.0, c(1.0, 0.1, 0.1)),
+                GradientStop::new(1.0, c(0.1, 0.1, 1.0)),
+            ],
+            space: blinc_abi::scene::blinc_core::GradientSpace::UserSpace,
+            start_angle: 0.0,
+        };
+        boxed(cx, 100.0, 60.0, paint(g))
+    });
+    scene("grad_conic_stops", |cx| {
+        let g = Gradient::Conic {
+            center: Point::new(50.0, 30.0),
+            stops: stops5.clone(),
+            space: blinc_abi::scene::blinc_core::GradientSpace::UserSpace,
+            start_angle: 0.5,
+        };
+        boxed(cx, 100.0, 60.0, paint(g))
     });
 }

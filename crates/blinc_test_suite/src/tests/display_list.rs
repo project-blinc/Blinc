@@ -489,7 +489,26 @@ mod tests {
         image: Option<&GpuImage>,
         allowed: &[Unsupported],
     ) -> (RgbaImage, Vec<u32>) {
-        let planned = plan(list, list.len() / RECORD_FLOATS, DISPLAY_LIST_VERSION, 1.0).unwrap();
+        draw_records(
+            harness,
+            name,
+            list,
+            list.len() / RECORD_FLOATS,
+            image,
+            allowed,
+        )
+    }
+
+    /// As `draw_plan`, for a list with `count` records and data after them.
+    fn draw_records(
+        harness: &TestHarness,
+        name: &str,
+        list: &[f32],
+        count: usize,
+        image: Option<&GpuImage>,
+        allowed: &[Unsupported],
+    ) -> (RgbaImage, Vec<u32>) {
+        let planned = plan(list, count, DISPLAY_LIST_VERSION, 1.0).unwrap();
         for (_, why) in &planned.unsupported {
             assert!(allowed.contains(why), "{why:?} is not allowed");
         }
@@ -950,5 +969,184 @@ mod tests {
             4,
             "text in a layer",
         );
+    }
+
+    /// How a gradient measures a pixel, in the box's own pixels.
+    #[derive(Clone, Copy)]
+    enum Shape {
+        Linear { to: f32 },
+        Radial { centre: (f32, f32), radius: f32 },
+        Conic { centre: (f32, f32), angle: f32 },
+    }
+
+    /// The gradient's parameter at `(x, y)` from the box's corner.
+    fn gradient_t(shape: Shape, x: f32, y: f32) -> f32 {
+        match shape {
+            Shape::Linear { to } => x / to,
+            Shape::Radial { centre, radius } => (x - centre.0).hypot(y - centre.1) / radius,
+            Shape::Conic { centre, angle } => {
+                let (dx, dy) = (x - centre.0, y - centre.1);
+                let turns = (dx.atan2(-dy) - angle) / std::f32::consts::TAU;
+                turns - turns.floor()
+            }
+        }
+    }
+
+    /// A stop table as the shader reads it: folded by its spread, then stops
+    /// mixed in premultiplied colour. `spread` is 0 pad, 1 repeat, 2 reflect.
+    fn gradient_color(stops: &[(f32, [f32; 4])], spread: u32, t: f32) -> [f32; 4] {
+        let (start, end) = (stops[0].0, stops[stops.len() - 1].0);
+        let mut t = t;
+        if spread > 0 {
+            let phase = (t - start) / (end - start);
+            let phase = if spread == 2 {
+                1.0 - (2.0 * (phase * 0.5 - (phase * 0.5).floor()) - 1.0).abs()
+            } else {
+                phase - phase.floor()
+            };
+            t = start + phase * (end - start);
+        }
+        let (mut color, mut offset) = (stops[0].1, start);
+        for &(at, next) in &stops[1..] {
+            if t < at {
+                let amount = ((t - offset) / (at - offset).max(1e-20)).clamp(0.0, 1.0);
+                let pre = |c: [f32; 4]| [c[0] * c[3], c[1] * c[3], c[2] * c[3], c[3]];
+                let (a, b) = (pre(color), pre(next));
+                let m: Vec<f32> = (0..4).map(|i| a[i] + (b[i] - a[i]) * amount).collect();
+                return if m[3] > 0.0 {
+                    [m[0] / m[3], m[1] / m[3], m[2] / m[3], m[3]]
+                } else {
+                    [0.0; 4]
+                };
+            }
+            color = next;
+            offset = at;
+        }
+        color
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn gradients_with_stops_spreads_and_angles_match_the_formulas() {
+        let harness = TestHarness::new().unwrap();
+        let (red, yellow, blue) = (
+            [1.0, 0.1, 0.1, 1.0],
+            [1.0, 0.9, 0.1, 1.0],
+            [0.1, 0.1, 1.0, 1.0],
+        );
+        let three = vec![(0.0, red), (0.5, yellow), (1.0, blue)];
+        let five = vec![
+            (0.0, red),
+            (0.2, yellow),
+            (0.5, [0.1, 0.8, 0.2, 1.0]),
+            (0.8, [0.1, 0.6, 1.0, 1.0]),
+            (1.0, [0.6, 0.1, 0.9, 1.0]),
+        ];
+        let two_ends = vec![(0.0, red), (1.0, blue)];
+        let centre = (50.0, 30.0);
+        let cases: Vec<(&str, Vec<f32>, Vec<(f32, [f32; 4])>, u32, Shape)> = vec![
+            (
+                "grad_three",
+                fixture!("grad_three"),
+                three.clone(),
+                0,
+                Shape::Linear { to: 100.0 },
+            ),
+            (
+                "grad_offsets",
+                fixture!("grad_offsets"),
+                vec![(0.25, red), (0.75, blue)],
+                0,
+                Shape::Linear { to: 100.0 },
+            ),
+            (
+                "grad_five",
+                fixture!("grad_five"),
+                five.clone(),
+                0,
+                Shape::Linear { to: 100.0 },
+            ),
+            (
+                "grad_repeat",
+                fixture!("grad_repeat"),
+                two_ends.clone(),
+                1,
+                Shape::Linear { to: 40.0 },
+            ),
+            (
+                "grad_reflect_radial",
+                fixture!("grad_reflect_radial"),
+                three.clone(),
+                2,
+                Shape::Radial {
+                    centre,
+                    radius: 20.0,
+                },
+            ),
+            (
+                "grad_radial_stops",
+                fixture!("grad_radial_stops"),
+                three.clone(),
+                0,
+                Shape::Radial {
+                    centre,
+                    radius: 45.0,
+                },
+            ),
+            (
+                "grad_conic",
+                fixture!("grad_conic"),
+                two_ends,
+                0,
+                Shape::Conic { centre, angle: 0.0 },
+            ),
+            (
+                "grad_conic_stops",
+                fixture!("grad_conic_stops"),
+                five,
+                0,
+                Shape::Conic { centre, angle: 0.5 },
+            ),
+        ];
+        for (name, list, stops, spread, shape) in cases {
+            let (page, _) = draw_records(&harness, name, &list, 1, None, &[]);
+            let (mut worst, mut checked) = (0i32, 0);
+            for y in 20..80u32 {
+                for x in 20..120u32 {
+                    let (px, py) = (x as f32 + 0.5 - 20.0, y as f32 + 0.5 - 20.0);
+                    let t = gradient_t(shape, px, py);
+                    // A fold or a wrap jumps in colour where its parameter crosses a whole
+                    // period; a conic's centre has no angle. Leave a margin around both.
+                    let skip = match shape {
+                        Shape::Conic { centre, .. } => {
+                            (px - centre.0).hypot(py - centre.1) < 2.0 || t < 0.02 || t > 0.98
+                        }
+                        _ if spread == 1 => {
+                            let phase = (t - stops[0].0) / (stops[stops.len() - 1].0 - stops[0].0);
+                            let f = phase - phase.floor();
+                            f < 0.03 || f > 0.97
+                        }
+                        _ => false,
+                    };
+                    if skip {
+                        continue;
+                    }
+                    let c = gradient_color(&stops, spread, t);
+                    let got = at(&page, x, y);
+                    for ch in 0..3 {
+                        let want = 255.0 * (1.0 - c[3]) + c[ch] * c[3] * 255.0;
+                        worst = worst.max((got[ch] as i32 - want.round() as i32).abs());
+                    }
+                    checked += 1;
+                }
+            }
+            println!("{name}: worst {worst} over {checked} pixels");
+            assert!(worst <= 4, "{name}: off by {worst}");
+            assert!(checked > 3000, "{name}: only {checked} pixels were checked");
+            assert!(
+                within(at(&page, 10, 10), [255, 255, 255], 0),
+                "{name}: outside the box"
+            );
+        }
     }
 }

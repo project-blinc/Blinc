@@ -18,7 +18,7 @@ mod tests {
     use blinc_gpu::GpuPrimitive;
     use blinc_gpu::LayerTexture;
     use blinc_gpu::display_list::effects::{LayerEffects, LayerFrame, LayerFx};
-    use blinc_gpu::display_list::plan::{Item, Layer, Painter, Plan};
+    use blinc_gpu::display_list::plan::{Item, Layer, Painter, Plan, Run};
     use std::time::Instant;
 
     const SIZE: (u32, u32) = (1920, 1080);
@@ -156,7 +156,10 @@ mod tests {
                     ] {
                         let plan = Plan {
                             items: vec![Item::Layer(Layer {
-                                items: vec![Item::Primitives(vec![element])],
+                                items: vec![Item::Primitives(Run {
+                                    primitives: vec![element],
+                                    aux: Vec::new(),
+                                })],
                                 fx: LayerFx {
                                     blur,
                                     ..LayerFx::fade(0.5)
