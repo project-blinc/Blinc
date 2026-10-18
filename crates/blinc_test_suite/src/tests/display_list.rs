@@ -10,6 +10,7 @@ mod tests {
     use blinc_core::{Affine2D, Brush, Color, DrawContext, Gradient, Point, Shadow, Transform};
     use blinc_gpu::GpuImage;
     use blinc_gpu::PrimitiveBatch;
+    use blinc_gpu::display_list::Unsupported;
     use blinc_gpu::display_list::atlas::{AtlasError, AtlasTexture, AtlasUpdate};
     use blinc_gpu::display_list::plan::{plan, render};
     use blinc_gpu::display_list::{DISPLAY_LIST_VERSION, RECORD_FLOATS, decode};
@@ -486,17 +487,25 @@ mod tests {
         name: &str,
         list: &[f32],
         image: Option<&GpuImage>,
+        allowed: &[Unsupported],
     ) -> (RgbaImage, Vec<u32>) {
         let planned = plan(list, list.len() / RECORD_FLOATS, DISPLAY_LIST_VERSION, 1.0).unwrap();
-        assert!(planned.unsupported.is_empty(), "{:?}", planned.unsupported);
+        for (_, why) in &planned.unsupported {
+            assert!(allowed.contains(why), "{why:?} is not allowed");
+        }
         let path = harness.output_path(name);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let mut missing = Vec::new();
         harness
             .render_with(W as u32, H as u32, &path, |renderer, view| {
-                missing = render(renderer, view, &planned, [1.0; 4], &|slot| {
-                    image.filter(|_| slot == 7)
-                });
+                missing = render(
+                    renderer,
+                    view,
+                    (W as u32, H as u32),
+                    &planned,
+                    [1.0; 4],
+                    &|slot| image.filter(|_| slot == 7),
+                );
             })
             .unwrap();
         (image::open(&path).unwrap().to_rgba8(), missing)
@@ -541,7 +550,7 @@ mod tests {
             fixture!("text_hello_x1"),
         ]
         .concat();
-        let (page, missing) = draw_plan(&harness, "image_between", &list, Some(&image));
+        let (page, missing) = draw_plan(&harness, "image_between", &list, Some(&image), &[]);
         assert!(missing.is_empty());
 
         // Below the text, the image is drawn 1:1 over the box: red then green.
@@ -573,6 +582,7 @@ mod tests {
             "image_faded",
             &fixture!("image_faded"),
             Some(&image),
+            &[],
         );
         // Half of red over white.
         assert!(
@@ -587,6 +597,7 @@ mod tests {
             "image_clipped",
             &fixture!("image_clipped"),
             Some(&image),
+            &[],
         );
         assert!(
             within(at(&page, 21, 21), [255, 255, 255], 2),
@@ -595,11 +606,68 @@ mod tests {
         assert!(within(at(&page, 36, 21), [255, 0, 0], 3), "inside the arc");
         assert!(within(at(&page, 30, 50), [255, 0, 0], 3), "the middle");
 
-        let (page, missing) = draw_plan(&harness, "image_missing", &fixture!("image_plain"), None);
+        let (page, missing) = draw_plan(
+            &harness,
+            "image_missing",
+            &fixture!("image_plain"),
+            None,
+            &[],
+        );
         assert_eq!(missing, vec![7]);
         assert!(
             within(at(&page, 30, 30), [255, 255, 255], 0),
             "nothing is drawn"
+        );
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn a_layer_fades_its_group_as_one_and_an_effect_is_drawn_flat() {
+        let harness = TestHarness::new().unwrap();
+
+        // A red box and a green one over part of it, in a group at half opacity.
+        let (page, missing) = draw_plan(
+            &harness,
+            "layer_opacity",
+            &fixture!("layer_opacity"),
+            None,
+            &[],
+        );
+        assert!(missing.is_empty());
+        assert!(
+            within(at(&page, 30, 30), [242, 140, 140], 3),
+            "red alone: {:?}",
+            at(&page, 30, 30)
+        );
+        assert!(
+            within(at(&page, 100, 50), [140, 230, 140], 3),
+            "green alone: {:?}",
+            at(&page, 100, 50)
+        );
+        // Where they overlap the group shows its top, green, faded: not the red under it.
+        assert!(
+            within(at(&page, 60, 50), [140, 230, 140], 3),
+            "overlap: {:?}",
+            at(&page, 60, 50)
+        );
+        assert!(within(at(&page, 150, 100), [255, 255, 255], 1), "outside");
+
+        // A blur is not drawn yet, so its content is drawn as it is: red, sharp-edged.
+        let (page, _) = draw_plan(
+            &harness,
+            "layer_blur",
+            &fixture!("layer_blur"),
+            None,
+            &[Unsupported::LayerEffect],
+        );
+        assert!(
+            within(at(&page, 40, 35), [230, 26, 26], 3),
+            "{:?}",
+            at(&page, 40, 35)
+        );
+        assert!(
+            within(at(&page, 19, 35), [255, 255, 255], 1),
+            "the edge is sharp"
         );
     }
 }

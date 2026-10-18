@@ -5,6 +5,7 @@ use blinc_abi::scene::blinc_core::{
 };
 use blinc_abi::scene::{PaintOptions, RenderProps, SceneEncoder};
 use blinc_layout::element::{BorderSide, BorderSides};
+use blinc_layout::element_style::CssFilter;
 use blinc_layout::tree::TextMeasureContext;
 use taffy::prelude::*;
 use taffy::Overflow;
@@ -261,5 +262,39 @@ fn main() {
         let n = boxed(cx, 40.0, 30.0, p);
         cx.set_resource(n, Some(7), false).unwrap();
         n
+    });
+    scene("layer_opacity", |cx| {
+        let mut group = RenderProps::default();
+        group.opacity = 0.5;
+        let parent = boxed(cx, 100.0, 60.0, group);
+        let mut a = RenderProps::default();
+        a.background = solid(0.9, 0.1, 0.1);
+        let red = boxed(cx, 60.0, 40.0, a);
+        let mut b = RenderProps::default();
+        b.background = solid(0.1, 0.8, 0.1);
+        let green = cx
+            .create_node(Style {
+                position: Position::Absolute,
+                inset: Rect { left: length(30.0), top: length(20.0), right: auto(), bottom: auto() },
+                size: Size { width: length(60.0), height: length(40.0) },
+                ..Default::default()
+            })
+            .unwrap();
+        cx.set_properties(green, b).unwrap();
+        cx.insert_before(parent, red, None).unwrap();
+        cx.insert_before(parent, green, None).unwrap();
+        parent
+    });
+    scene("layer_blur", |cx| {
+        let mut p = RenderProps::default();
+        p.background = solid(0.9, 0.1, 0.1);
+        p.filter = Some(CssFilter { blur: 4.0, ..CssFilter::default() });
+        boxed(cx, 40.0, 30.0, p)
+    });
+    scene("layer_grayscale", |cx| {
+        let mut p = RenderProps::default();
+        p.background = solid(0.9, 0.1, 0.1);
+        p.filter = Some(CssFilter { grayscale: 1.0, ..CssFilter::default() });
+        boxed(cx, 40.0, 30.0, p)
     });
 }

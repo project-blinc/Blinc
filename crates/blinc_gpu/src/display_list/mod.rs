@@ -75,6 +75,8 @@ const KIND_RECT: f32 = 0.0;
 const KIND_SHADOW: f32 = 3.0;
 const KIND_TEXT: f32 = 7.0;
 const KIND_IMAGE: f32 = 32.0;
+const KIND_LAYER_BEGIN: f32 = 40.0;
+const KIND_LAYER: f32 = 41.0;
 
 /// `row::TYPES.z`: bit 0 is a screen clip, bit 1 a local one.
 const CLIP_SCREEN: u32 = 1;
@@ -114,7 +116,7 @@ impl std::error::Error for DecodeError {}
 /// What a record needs that a [`GpuPrimitive`] cannot yet express.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Unsupported {
-    /// A kind other than a box, its shadow, a glyph or an image: canvas, layer or backdrop.
+    /// A kind other than a box, its shadow, a glyph, an image or a layer: canvas or backdrop.
     Kind(f32),
     /// A gradient that is not two stops, or is conic.
     Gradient,
@@ -134,6 +136,8 @@ pub enum Unsupported {
     ImageMapping,
     /// An image under a clip whose rounded corners are not circular.
     ClipCorner,
+    /// A layer that blurs, filters its colour, casts a drop shadow or is masked, not only fades.
+    LayerEffect,
 }
 
 /// The kind of a record.
@@ -145,7 +149,11 @@ pub enum Kind {
     Text,
     /// A resource of the consumer's, named by its slot, over a box.
     Image,
-    /// Canvas, layer or backdrop, by its code.
+    /// Opens a layer: the records up to its [`Kind::Layer`] are drawn into it.
+    LayerBegin,
+    /// Closes a layer, and draws it over the page with what its record asks.
+    Layer,
+    /// Canvas or backdrop, by its code.
     Other(f32),
 }
 
@@ -259,6 +267,8 @@ impl<'a> Record<'a> {
             k if k == KIND_SHADOW => Kind::Shadow,
             k if k == KIND_TEXT => Kind::Text,
             k if k == KIND_IMAGE => Kind::Image,
+            k if k == KIND_LAYER_BEGIN => Kind::LayerBegin,
+            k if k == KIND_LAYER => Kind::Layer,
             k => Kind::Other(k),
         }
     }
@@ -286,6 +296,7 @@ impl<'a> Record<'a> {
             // Fill type 0 is a bitmap stretched over the box; anything else is a mapping.
             Kind::Image if self.fill_type() != 0.0 => return Some(Unsupported::ImageMapping),
             Kind::Image => {}
+            Kind::LayerBegin | Kind::Layer => {}
             Kind::Other(k) => return Some(Unsupported::Kind(k)),
         }
         let [a, b, c, d] = self.row(row::AFFINE);
@@ -321,9 +332,12 @@ impl<'a> Record<'a> {
     /// transform: the box keeps its centre and takes the transform's uniform
     /// scale, and the remainder of the transform is the normalized 2x2.
     pub fn to_primitive(&self, scale: f32) -> Result<GpuPrimitive, Unsupported> {
-        if self.kind() == Kind::Image {
-            // An image is drawn from a texture of the consumer's, not by the SDF pipelines.
-            return Err(Unsupported::Kind(KIND_IMAGE));
+        match self.kind() {
+            // An image is drawn from a texture of the consumer's, and a layer from its own.
+            Kind::Image => return Err(Unsupported::Kind(KIND_IMAGE)),
+            Kind::LayerBegin => return Err(Unsupported::Kind(KIND_LAYER_BEGIN)),
+            Kind::Layer => return Err(Unsupported::Kind(KIND_LAYER)),
+            _ => {}
         }
         if let Some(why) = self.unsupported() {
             return Err(why);

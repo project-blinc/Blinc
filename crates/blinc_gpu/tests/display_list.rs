@@ -223,10 +223,10 @@ fn what_a_primitive_cannot_carry_is_named() {
     let base = fixture!("box_solid");
     let cases: [(&str, usize, [f32; 4], Unsupported); 8] = [
         (
-            "layer",
+            "backdrop",
             row::TYPES,
-            [40.0, 0.0, 0.0, 1.0],
-            Unsupported::Kind(40.0),
+            [42.0, 0.0, 0.0, 1.0],
+            Unsupported::Kind(42.0),
         ),
         (
             "canvas",
@@ -367,6 +367,7 @@ fn an_image_sits_between_the_primitive_runs_around_it() {
         .map(|i| match i {
             Item::Primitives(run) => format!("{} primitives", run.len()),
             Item::Image(d) => format!("image {}", d.slot),
+            Item::Layer(_) => "layer".to_string(),
         })
         .collect();
     assert_eq!(shape, ["1 primitives", "image 7", "5 primitives"]);
@@ -430,4 +431,69 @@ fn a_mapped_image_and_an_oddly_rounded_clip_are_named() {
     set_row(&mut list, 0, row::TYPES, [32.0, 0.0, 1.0, 2.0]);
     let planned = plan(&list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
     assert_eq!(planned.unsupported, vec![(0, Unsupported::ClipCorner)]);
+}
+
+fn layer_record(list: &[f32], index: usize) -> Vec<f32> {
+    list[index * RECORD_FLOATS..(index + 1) * RECORD_FLOATS].to_vec()
+}
+
+#[test]
+fn a_group_with_opacity_is_a_layer_of_its_items() {
+    let list = fixture!("layer_opacity");
+    let planned = plan(&list, 4, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(planned.unsupported.is_empty());
+    let [Item::Layer(layer)] = &planned.items[..] else {
+        panic!("one layer");
+    };
+    assert_eq!(layer.opacity, 0.5);
+    assert!(matches!(&layer.items[..], [Item::Primitives(run)] if run.len() == 2));
+}
+
+#[test]
+fn a_layer_inside_a_layer_nests() {
+    let inner = fixture!("layer_opacity");
+    let list = [
+        layer_record(&inner, 0),
+        inner.clone(),
+        layer_record(&inner, 3),
+    ]
+    .concat();
+    let planned = plan(&list, 6, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(planned.unsupported.is_empty());
+    let [Item::Layer(outer)] = &planned.items[..] else {
+        panic!("one layer");
+    };
+    assert!(matches!(&outer.items[..], [Item::Layer(inner)] if inner.opacity == 0.5));
+}
+
+#[test]
+fn a_layer_that_does_more_than_fade_is_drawn_flat_and_named() {
+    for name in ["layer_blur", "layer_grayscale"] {
+        let list = match name {
+            "layer_blur" => fixture!("layer_blur"),
+            _ => fixture!("layer_grayscale"),
+        };
+        let planned = plan(&list, 3, DISPLAY_LIST_VERSION, 1.0).unwrap();
+        assert_eq!(
+            planned.unsupported,
+            vec![(2, Unsupported::LayerEffect)],
+            "{name}"
+        );
+        assert!(
+            matches!(&planned.items[..], [Item::Primitives(run)] if run.len() == 1),
+            "{name}: the content is still drawn"
+        );
+    }
+}
+
+#[test]
+fn a_layer_with_no_opening_or_no_end_is_named_and_its_content_kept() {
+    let list = fixture!("layer_opacity");
+    // Its end alone.
+    let planned = plan(&layer_record(&list, 3), 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert_eq!(planned.unsupported, vec![(0, Unsupported::Kind(41.0))]);
+    // Its beginning and content, never closed.
+    let planned = plan(&list[..3 * RECORD_FLOATS], 3, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert_eq!(planned.unsupported, vec![(0, Unsupported::Kind(40.0))]);
+    assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.len() == 2));
 }
