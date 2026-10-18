@@ -96,6 +96,12 @@ struct Primitive {
     clip_fade: vec4<f32>,
     // Type info (primitive_type, fill_type, clip_type, 0)
     type_info: vec4<u32>,
+    // Border colour of each side when the sides differ; alphas that sum to
+    // zero mean unset, and the border is `border_color` all round.
+    side_color_top: vec4<f32>,
+    side_color_right: vec4<f32>,
+    side_color_bottom: vec4<f32>,
+    side_color_left: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;

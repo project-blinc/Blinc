@@ -113,8 +113,6 @@ pub enum Unsupported {
     Kind(f32),
     /// A gradient that is not two stops, or is conic.
     Gradient,
-    /// A border whose sides are not one colour.
-    SideColors,
     /// A clip in the element's own frame.
     LocalClip,
     /// A clip that fades its edge.
@@ -249,11 +247,6 @@ impl<'a> Record<'a> {
             if !plain {
                 return Some(Unsupported::Gradient);
             }
-            let widths = self.row(row::BORDER);
-            let colors = self.side_colors();
-            if widths.iter().any(|w| *w > 0.0) && colors.iter().any(|c| *c != colors[0]) {
-                return Some(Unsupported::SideColors);
-            }
         }
         None
     }
@@ -353,6 +346,14 @@ impl<'a> Record<'a> {
         let widths = self.row(row::BORDER);
         if widths.iter().any(|w| *w > 0.0) {
             p.border_color = self.row(row::BORDER_COLOR);
+            // Sides of one colour need no more than `border_color`.
+            let colors = self.side_colors();
+            if colors.iter().any(|c| *c != colors[0]) {
+                p.side_color_top = colors[0];
+                p.side_color_right = colors[1];
+                p.side_color_bottom = colors[2];
+                p.side_color_left = colors[3];
+            }
             // One width is the uniform form; the sides are scaled by the
             // axis they run along.
             p.border = if widths.iter().all(|w| *w == widths[0]) {

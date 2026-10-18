@@ -109,10 +109,13 @@ fn a_uniform_border_takes_the_uniform_form() {
 }
 
 #[test]
-fn sides_of_different_colours_are_not_drawn_as_one() {
-    let list = fixture!("box_sides");
-    let record = Record::new(list[..RECORD_FLOATS].try_into().unwrap());
-    assert_eq!(record.unsupported(), Some(Unsupported::SideColors));
+fn sides_of_different_colours_each_keep_theirs() {
+    let p = first(&fixture!("box_sides"), 1.0);
+    near(&p.border, &[4.0, 2.0, 6.0, 3.0]);
+    near(&p.side_color_top, &[0.9, 0.1, 0.1, 1.0]);
+    near(&p.side_color_right, &[0.1, 0.7, 0.1, 1.0]);
+    near(&p.side_color_bottom, &[0.1, 0.1, 0.9, 1.0]);
+    near(&p.side_color_left, &[0.9, 0.7, 0.1, 1.0]);
 }
 
 #[test]
@@ -123,6 +126,16 @@ fn sides_of_one_colour_keep_their_own_widths() {
     }
     let p = first(&list, 1.0);
     near(&p.border, &[4.0, 2.0, 6.0, 3.0]);
+    // One colour is carried by `border_color` alone.
+    near(&p.border_color, &[0.9, 0.1, 0.1, 1.0]);
+    for side in [
+        p.side_color_top,
+        p.side_color_right,
+        p.side_color_bottom,
+        p.side_color_left,
+    ] {
+        near(&side, &[0.0; 4]);
+    }
 }
 
 #[test]

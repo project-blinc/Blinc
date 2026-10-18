@@ -117,6 +117,37 @@ fn apply_css_filter(color: vec4<f32>, filter_a: vec4<f32>, filter_b: vec4<f32>) 
     return vec4<f32>(clamp(rgb, vec3<f32>(0.0), vec3<f32>(1.0)), color.a);
 }
 
+// The colour of a border at `rel`, taken from the box's centre in its own
+// frame, when each side has its own. It is the side whose edge the point is
+// nearest in widths, so two sides meet on the diagonal at a corner as CSS
+// draws them. `widths` is top, right, bottom, left.
+fn border_side_color(
+    rel: vec2<f32>,
+    half_size: vec2<f32>,
+    widths: vec4<f32>,
+    top: vec4<f32>,
+    right: vec4<f32>,
+    bottom: vec4<f32>,
+    left: vec4<f32>
+) -> vec4<f32> {
+    var color = top;
+    var nearest = (rel.y + half_size.y) / max(widths.x, 0.0001);
+    let to_right = (half_size.x - rel.x) / max(widths.y, 0.0001);
+    if to_right < nearest {
+        nearest = to_right;
+        color = right;
+    }
+    let to_bottom = (half_size.y - rel.y) / max(widths.z, 0.0001);
+    if to_bottom < nearest {
+        nearest = to_bottom;
+        color = bottom;
+    }
+    if (rel.x + half_size.x) / max(widths.w, 0.0001) < nearest {
+        color = left;
+    }
+    return color;
+}
+
 fn compute_uv_box(hp: vec3<f32>, half: vec3<f32>) -> vec2<f32> {
     let abs_hp = abs(hp);
     let safe_half = max(abs(half), vec3<f32>(0.001));

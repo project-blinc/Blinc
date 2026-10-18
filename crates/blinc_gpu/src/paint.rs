@@ -2899,6 +2899,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 clip_type as u32,
                 self.z_layer,
             ],
+            side_color_top: [0.0; 4],
+            side_color_right: [0.0; 4],
+            side_color_bottom: [0.0; 4],
+            side_color_left: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3075,6 +3079,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 clip_type as u32,
                 self.z_layer,
             ],
+            side_color_top: [0.0; 4],
+            side_color_right: [0.0; 4],
+            side_color_bottom: [0.0; 4],
+            side_color_left: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3170,6 +3178,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 clip_type as u32,
                 self.z_layer,
             ],
+            side_color_top: [0.0; 4],
+            side_color_right: [0.0; 4],
+            side_color_bottom: [0.0; 4],
+            side_color_left: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3294,6 +3306,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 clip_type as u32,
                 self.z_layer,
             ],
+            side_color_top: [0.0; 4],
+            side_color_right: [0.0; 4],
+            side_color_bottom: [0.0; 4],
+            side_color_left: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3393,6 +3409,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 clip_type as u32,
                 self.z_layer,
             ],
+            side_color_top: [0.0; 4],
+            side_color_right: [0.0; 4],
+            side_color_bottom: [0.0; 4],
+            side_color_left: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3468,6 +3488,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 clip_type as u32,
                 self.z_layer,
             ],
+            side_color_top: [0.0; 4],
+            side_color_right: [0.0; 4],
+            side_color_bottom: [0.0; 4],
+            side_color_left: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3762,6 +3786,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 clip_type as u32,
                 self.z_layer,
             ],
+            side_color_top: [0.0; 4],
+            side_color_right: [0.0; 4],
+            side_color_bottom: [0.0; 4],
+            side_color_left: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3830,6 +3858,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 clip_type as u32,
                 self.z_layer,
             ],
+            side_color_top: [0.0; 4],
+            side_color_right: [0.0; 4],
+            side_color_bottom: [0.0; 4],
+            side_color_left: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3886,6 +3918,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 clip_type as u32,
                 self.z_layer,
             ],
+            side_color_top: [0.0; 4],
+            side_color_right: [0.0; 4],
+            side_color_bottom: [0.0; 4],
+            side_color_left: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3941,6 +3977,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 clip_type as u32,
                 self.z_layer,
             ],
+            side_color_top: [0.0; 4],
+            side_color_right: [0.0; 4],
+            side_color_bottom: [0.0; 4],
+            side_color_left: [0.0; 4],
         };
 
         if self.emit_foreground() {

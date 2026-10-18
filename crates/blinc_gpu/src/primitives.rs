@@ -344,6 +344,13 @@ pub struct GpuPrimitive {
     pub clip_fade: [f32; 4],
     /// Type info (primitive_type, fill_type, clip_type, z_layer)
     pub type_info: [u32; 4],
+    /// Border colour of the top, right, bottom and left sides when the
+    /// sides differ. Alphas that sum to zero mean unset: the border is
+    /// `border_color` all round.
+    pub side_color_top: [f32; 4],
+    pub side_color_right: [f32; 4],
+    pub side_color_bottom: [f32; 4],
+    pub side_color_left: [f32; 4],
 }
 
 impl Default for GpuPrimitive {
@@ -387,6 +394,10 @@ impl Default for GpuPrimitive {
             // Default clip fade: none (hard clip)
             clip_fade: [0.0; 4],
             type_info: [0; 4], // clip_type defaults to None (0)
+            side_color_top: [0.0; 4],
+            side_color_right: [0.0; 4],
+            side_color_bottom: [0.0; 4],
+            side_color_left: [0.0; 4],
         }
     }
 }
@@ -646,6 +657,10 @@ impl GpuPrimitive {
                 ClipType::None as u32,
                 0,
             ],
+            side_color_top: [0.0; 4],
+            side_color_right: [0.0; 4],
+            side_color_bottom: [0.0; 4],
+            side_color_left: [0.0; 4],
         }
     }
 
@@ -687,6 +702,10 @@ impl GpuPrimitive {
             corner_shape: [1.0; 4],
             clip_fade: [0.0; 4],
             type_info: [PrimitiveType::Text as u32, 0, ClipType::None as u32, 0],
+            side_color_top: [0.0; 4],
+            side_color_right: [0.0; 4],
+            side_color_bottom: [0.0; 4],
+            side_color_left: [0.0; 4],
         }
     }
 }

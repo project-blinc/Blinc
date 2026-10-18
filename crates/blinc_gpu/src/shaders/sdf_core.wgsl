@@ -97,6 +97,12 @@ struct Primitive {
     clip_fade: vec4<f32>,
     // Type info (primitive_type, fill_type, clip_type, 0)
     type_info: vec4<u32>,
+    // Border colour of each side when the sides differ; alphas that sum to
+    // zero mean unset, and the border is `border_color` all round.
+    side_color_top: vec4<f32>,
+    side_color_right: vec4<f32>,
+    side_color_bottom: vec4<f32>,
+    side_color_left: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -983,9 +989,18 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             //     would have squared the alpha here (10 % × 10 % = 1 % effective)
             //     and made the outline button's border invisible.
             let border_t = border_blend * step(0.001, fill_alpha);
-            let border_a = prim.border_color.a * border_t;
+            var border_rgba = prim.border_color;
+            if prim.side_color_top.a + prim.side_color_right.a
+                + prim.side_color_bottom.a + prim.side_color_left.a > 0.0 {
+                border_rgba = border_side_color(
+                    rel, half_size, vec4<f32>(bt, br, bb, bl),
+                    prim.side_color_top, prim.side_color_right,
+                    prim.side_color_bottom, prim.side_color_left
+                );
+            }
+            let border_a = border_rgba.a * border_t;
             let out_a = border_a + fill_color.a * (1.0 - border_a);
-            let premult_rgb = prim.border_color.rgb * border_a
+            let premult_rgb = border_rgba.rgb * border_a
                 + fill_color.rgb * fill_color.a * (1.0 - border_a);
             let new_rgb = select(
                 premult_rgb / max(out_a, 0.0001),

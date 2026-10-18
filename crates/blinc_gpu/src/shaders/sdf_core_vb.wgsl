@@ -94,6 +94,12 @@ struct Primitive {
     clip_fade: vec4<f32>,
     // Type info (primitive_type, fill_type, clip_type, 0)
     type_info: vec4<u32>,
+    // Border colour of each side when the sides differ; alphas that sum to
+    // zero mean unset, and the border is `border_color` all round.
+    side_color_top: vec4<f32>,
+    side_color_right: vec4<f32>,
+    side_color_bottom: vec4<f32>,
+    side_color_left: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -849,7 +855,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             let border_blend = smoothstep(-inner_aa, inner_aa, -inner_sdf);
 
             // Only apply border color where we're inside the shape
-            fill_color = mix(fill_color, prim.border_color, border_blend * step(0.001, fill_alpha));
+            var border_rgba = prim.border_color;
+            if prim.side_color_top.a + prim.side_color_right.a
+                + prim.side_color_bottom.a + prim.side_color_left.a > 0.0 {
+                border_rgba = border_side_color(
+                    rel, half_size, vec4<f32>(bt, br, bb, bl),
+                    prim.side_color_top, prim.side_color_right,
+                    prim.side_color_bottom, prim.side_color_left
+                );
+            }
+            fill_color = mix(fill_color, border_rgba, border_blend * step(0.001, fill_alpha));
         }
     }
 

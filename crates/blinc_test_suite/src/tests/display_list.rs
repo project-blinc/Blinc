@@ -228,4 +228,42 @@ mod tests {
             report.join("\n")
         );
     }
+
+    /// The pixel at logical `(x, y)`, as 0 to 255 channels.
+    fn at(img: &RgbaImage, x: u32, y: u32) -> [u8; 4] {
+        img.get_pixel(x, y).0
+    }
+
+    fn assert_color(img: &RgbaImage, x: u32, y: u32, want: [f32; 3], what: &str) {
+        let got = at(img, x, y);
+        for (c, w) in want.iter().enumerate() {
+            let want = (w * 255.0).round() as i32;
+            assert!(
+                (got[c] as i32 - want).abs() <= 6,
+                "{what}: pixel ({x}, {y}) is {got:?}, wanted {want:?} in channel {c}"
+            );
+        }
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn per_side_border_colours_meet_on_the_diagonal() {
+        let harness = TestHarness::new().unwrap();
+        let img = from_records(&harness, "box_sides", &fixture!("box_sides"), 1.0);
+        // The box is at (20, 20), 100 by 60, with sides of 4, 2, 6 and 3.
+        let (red, green, blue, yellow) = (
+            [0.9, 0.1, 0.1],
+            [0.1, 0.7, 0.1],
+            [0.1, 0.1, 0.9],
+            [0.9, 0.7, 0.1],
+        );
+        assert_color(&img, 70, 21, red, "top edge");
+        assert_color(&img, 118, 50, green, "right edge");
+        assert_color(&img, 70, 78, blue, "bottom edge");
+        assert_color(&img, 21, 50, yellow, "left edge");
+        assert_color(&img, 70, 50, [0.95, 0.95, 0.95], "inside");
+        // Along the top-left corner the nearer side, in widths, wins.
+        assert_color(&img, 21, 21, red, "corner, above the diagonal");
+        assert_color(&img, 21, 23, yellow, "corner, below the diagonal");
+    }
 }
