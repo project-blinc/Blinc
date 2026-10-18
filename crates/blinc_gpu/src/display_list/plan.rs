@@ -7,6 +7,7 @@
 //! consecutive primitives together, puts each image between them and nests
 //! each layer's items inside it.
 
+use super::effects::{DropShadow, LayerEffects, LayerFx};
 use super::{
     CLIP_SCREEN, DecodeError, Kind, NO_CLIP, Placement, Record, Unsupported, records, row,
 };
@@ -22,12 +23,12 @@ pub struct ImageDraw {
     pub instance: GpuImageInstance,
 }
 
-/// A group drawn into a layer of its own and faded as one, so what overlaps
-/// inside it does not show through itself.
+/// A group drawn into a layer of its own and then over its parent as `fx`
+/// says, so what overlaps inside it does not show through itself.
 #[derive(Debug)]
 pub struct Layer {
     pub items: Vec<Item>,
-    pub opacity: f32,
+    pub fx: LayerFx,
 }
 
 /// One step of a plan.
@@ -62,8 +63,8 @@ fn push(items: &mut Vec<Item>, item: Item) {
 
 /// Plans `count` records at `scale` device pixels per logical pixel.
 ///
-/// A layer that does more than fade is not drawn as a layer: its content is
-/// drawn as it would be without it, and its record is reported.
+/// A layer that is masked is not drawn as a layer: its content is drawn as it
+/// would be without it, and its record is reported.
 pub fn plan(floats: &[f32], count: usize, version: u32, scale: f32) -> Result<Plan, DecodeError> {
     let mut plan = Plan::default();
     let mut open = vec![Open {
@@ -83,10 +84,7 @@ pub fn plan(floats: &[f32], count: usize, version: u32, scale: f32) -> Result<Pl
                 let inner = open.pop().expect("a layer is open").items;
                 let parent = &mut open.last_mut().expect("the page is open").items;
                 match record.layer() {
-                    Ok(opacity) => parent.push(Item::Layer(Layer {
-                        items: inner,
-                        opacity,
-                    })),
+                    Ok(fx) => parent.push(Item::Layer(Layer { items: inner, fx })),
                     Err(why) => {
                         plan.unsupported.push((index, why));
                         inner.into_iter().for_each(|item| push(parent, item));
@@ -165,35 +163,122 @@ impl Record<'_> {
         })
     }
 
-    /// The opacity a layer record fades its layer by, when that is all it
-    /// does. Its blur is `color.x`, its colour filter the three rows after the
-    /// fill, its drop shadow's colour `via` and its mask the kind in the first
-    /// of the side-colour rows.
-    pub fn layer(&self) -> Result<f32, Unsupported> {
+    /// What a layer record does when its layer is drawn over its parent. Its blur
+    /// is `color.x` and its opacity `color.w`, its colour filter the three rows
+    /// after the fill, its drop shadow an offset and deviation in `gradient` and
+    /// a colour in `via`, and a mask is the kind in the first side-colour row,
+    /// which is not read yet. Lengths are in device pixels already.
+    pub fn layer(&self) -> Result<LayerFx, Unsupported> {
         if self.kind() != Kind::Layer {
             return Err(Unsupported::Kind(self.row(row::TYPES)[0]));
         }
-        const IDENTITY: [[f32; 4]; 3] = [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-        ];
-        let [blur, _, _, alpha] = self.row(row::FILL);
-        let filtered = (0..3).any(|i| self.row(row::FILL_END + i) != IDENTITY[i]);
-        let shadowed = self.row(row::GRADIENT_VIA)[3] > 0.0;
-        let masked = self.row(row::SIDE_COLORS)[0] > 0.5;
-        if blur > 0.0 || filtered || shadowed || masked {
+        if self.row(row::SIDE_COLORS)[0] > 0.5 {
             return Err(Unsupported::LayerEffect);
         }
-        Ok(alpha)
+        let [blur, _, _, opacity] = self.row(row::FILL);
+        let [x, y, deviation, _] = self.row(row::GRADIENT);
+        let color = self.row(row::GRADIENT_VIA);
+        Ok(LayerFx {
+            blur,
+            opacity,
+            matrix: [
+                self.row(row::FILL_END),
+                self.row(row::BORDER),
+                self.row(row::BORDER_COLOR),
+            ],
+            shadow: (color[3] > 0.0).then_some(DropShadow {
+                offset: [x, y],
+                deviation,
+                color,
+            }),
+        })
     }
 }
 
-/// Draws `plan` over `target`, `size` device pixels across and cleared to
-/// `clear` first, in paint order.
-///
-/// `images` finds the texture of a slot. An image whose slot it does not know
-/// is not drawn, and its slot is returned.
+/// Draws plans, keeping what drawing a layer's effects needs between them.
+#[derive(Default)]
+pub struct Painter {
+    effects: Option<LayerEffects>,
+}
+
+impl Painter {
+    /// Draws `plan` over `target`, `size` device pixels across and cleared to
+    /// `clear` first, in paint order.
+    ///
+    /// `images` finds the texture of a slot. An image whose slot it does not know
+    /// is not drawn, and its slot is returned.
+    pub fn render<'i>(
+        &mut self,
+        renderer: &mut GpuRenderer,
+        target: &wgpu::TextureView,
+        size: (u32, u32),
+        plan: &Plan,
+        clear: [f64; 4],
+        images: &dyn Fn(u32) -> Option<&'i GpuImage>,
+    ) -> Vec<u32> {
+        renderer.render_with_clear(target, &PrimitiveBatch::new(), clear);
+        let mut missing = Vec::new();
+        self.draw(renderer, target, size, &plan.items, images, &mut missing);
+        missing
+    }
+
+    fn draw<'i>(
+        &mut self,
+        renderer: &mut GpuRenderer,
+        target: &wgpu::TextureView,
+        size: (u32, u32),
+        items: &[Item],
+        images: &dyn Fn(u32) -> Option<&'i GpuImage>,
+        missing: &mut Vec<u32>,
+    ) {
+        for item in items {
+            match item {
+                Item::Primitives(run) => {
+                    let mut batch = PrimitiveBatch::new();
+                    batch.primitives.extend_from_slice(run);
+                    renderer.render_overlay(target, &batch);
+                }
+                Item::Image(draw) => match images(draw.slot) {
+                    Some(image) => renderer.render_images(target, image.view(), &[draw.instance]),
+                    None => missing.push(draw.slot),
+                },
+                Item::Layer(layer) => {
+                    let (device, queue) = (renderer.device_arc(), renderer.queue_arc());
+                    let format = renderer.texture_format;
+                    // Exactly the target's size: the renderer maps clip space onto the
+                    // whole texture, which a pooled texture rounded up would stretch.
+                    let texture = LayerTexture::new(&device, size, format, false);
+                    renderer.render_with_clear(&texture.view, &PrimitiveBatch::new(), [0.0; 4]);
+                    self.draw(renderer, &texture.view, size, &layer.items, images, missing);
+
+                    let rows = (layer.fx.blur > 0.0)
+                        .then(|| LayerTexture::new(&device, size, format, false));
+                    let shadow = layer
+                        .fx
+                        .shadow
+                        .map(|_| LayerTexture::new(&device, size, format, false));
+                    let effects = self
+                        .effects
+                        .get_or_insert_with(|| LayerEffects::new(&device, format));
+                    effects.composite(
+                        &device,
+                        &queue,
+                        &texture.view,
+                        [
+                            rows.as_ref().map_or(&texture.view, |t| &t.view),
+                            shadow.as_ref().map_or(&texture.view, |t| &t.view),
+                        ],
+                        target,
+                        &layer.fx,
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Draws `plan` once, with a [`Painter`] of its own. A layer with effects
+/// builds its pipelines on every call, so draw frames with one `Painter`.
 pub fn render<'i>(
     renderer: &mut GpuRenderer,
     target: &wgpu::TextureView,
@@ -202,55 +287,5 @@ pub fn render<'i>(
     clear: [f64; 4],
     images: &dyn Fn(u32) -> Option<&'i GpuImage>,
 ) -> Vec<u32> {
-    renderer.render_with_clear(target, &PrimitiveBatch::new(), clear);
-    let mut missing = Vec::new();
-    draw(renderer, target, size, &plan.items, images, &mut missing);
-    missing
-}
-
-fn draw<'i>(
-    renderer: &mut GpuRenderer,
-    target: &wgpu::TextureView,
-    size: (u32, u32),
-    items: &[Item],
-    images: &dyn Fn(u32) -> Option<&'i GpuImage>,
-    missing: &mut Vec<u32>,
-) {
-    for item in items {
-        match item {
-            Item::Primitives(run) => {
-                let mut batch = PrimitiveBatch::new();
-                batch.primitives.extend_from_slice(run);
-                renderer.render_overlay(target, &batch);
-            }
-            Item::Image(draw) => match images(draw.slot) {
-                Some(image) => renderer.render_images(target, image.view(), &[draw.instance]),
-                None => missing.push(draw.slot),
-            },
-            Item::Layer(layer) => {
-                // Exactly the target's size: the renderer maps clip space onto the
-                // whole texture, which a pooled texture rounded up would stretch.
-                let texture =
-                    LayerTexture::new(renderer.device(), size, renderer.texture_format, false);
-                renderer.render_with_clear(&texture.view, &PrimitiveBatch::new(), [0.0; 4]);
-                draw(renderer, &texture.view, size, &layer.items, images, missing);
-                let mut encoder =
-                    renderer
-                        .device()
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Display List Layer Composite"),
-                        });
-                renderer.composite_layer(
-                    &mut encoder,
-                    target,
-                    &texture,
-                    0.0,
-                    0.0,
-                    layer.opacity,
-                    blinc_core::BlendMode::Normal,
-                );
-                renderer.queue().submit(std::iter::once(encoder.finish()));
-            }
-        }
-    }
+    Painter::default().render(renderer, target, size, plan, clear, images)
 }

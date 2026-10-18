@@ -297,4 +297,19 @@ fn main() {
         p.filter = Some(CssFilter { grayscale: 1.0, ..CssFilter::default() });
         boxed(cx, 40.0, 30.0, p)
     });
+    scene("layer_shadow", |cx| {
+        let mut p = RenderProps::default();
+        p.background = solid(0.9, 0.1, 0.1);
+        p.filter = Some(CssFilter {
+            drop_shadow: Some(Shadow {
+                offset_x: 6.0,
+                offset_y: 5.0,
+                blur: 8.0,
+                spread: 0.0,
+                color: Color::rgba(0.0, 0.0, 0.0, 0.6),
+            }),
+            ..CssFilter::default()
+        });
+        boxed(cx, 40.0, 30.0, p)
+    });
 }

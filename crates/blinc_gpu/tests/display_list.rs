@@ -445,7 +445,7 @@ fn a_group_with_opacity_is_a_layer_of_its_items() {
     let [Item::Layer(layer)] = &planned.items[..] else {
         panic!("one layer");
     };
-    assert_eq!(layer.opacity, 0.5);
+    assert_eq!(layer.fx.opacity, 0.5);
     assert!(matches!(&layer.items[..], [Item::Primitives(run)] if run.len() == 2));
 }
 
@@ -463,27 +463,43 @@ fn a_layer_inside_a_layer_nests() {
     let [Item::Layer(outer)] = &planned.items[..] else {
         panic!("one layer");
     };
-    assert!(matches!(&outer.items[..], [Item::Layer(inner)] if inner.opacity == 0.5));
+    assert!(matches!(&outer.items[..], [Item::Layer(inner)] if inner.fx.opacity == 0.5));
+}
+
+fn the_layer_of(list: &[f32], count: usize) -> blinc_gpu::display_list::effects::LayerFx {
+    let planned = plan(list, count, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(planned.unsupported.is_empty(), "{:?}", planned.unsupported);
+    let [Item::Layer(layer)] = &planned.items[..] else {
+        panic!("one layer");
+    };
+    layer.fx
 }
 
 #[test]
-fn a_layer_that_does_more_than_fade_is_drawn_flat_and_named() {
-    for name in ["layer_blur", "layer_grayscale"] {
-        let list = match name {
-            "layer_blur" => fixture!("layer_blur"),
-            _ => fixture!("layer_grayscale"),
-        };
-        let planned = plan(&list, 3, DISPLAY_LIST_VERSION, 1.0).unwrap();
-        assert_eq!(
-            planned.unsupported,
-            vec![(2, Unsupported::LayerEffect)],
-            "{name}"
-        );
-        assert!(
-            matches!(&planned.items[..], [Item::Primitives(run)] if run.len() == 1),
-            "{name}: the content is still drawn"
-        );
-    }
+fn a_layers_blur_colour_filter_and_shadow_are_read() {
+    let blur = the_layer_of(&fixture!("layer_blur"), 3);
+    assert_eq!(blur.blur, 4.0);
+    assert_eq!(blur.opacity, 1.0);
+    assert_eq!(blur.shadow, None);
+
+    let grey = the_layer_of(&fixture!("layer_grayscale"), 3);
+    assert_eq!(grey.blur, 0.0);
+    near(&grey.matrix[0], &[0.2126, 0.7152, 0.0722, 0.0]);
+    near(&grey.matrix[2], &[0.2126, 0.7152, 0.0722, 0.0]);
+
+    let shadow = the_layer_of(&fixture!("layer_shadow"), 3).shadow.unwrap();
+    near(&shadow.offset, &[6.0, 5.0]);
+    assert_eq!(shadow.deviation, 4.0);
+    near(&shadow.color, &[0.0, 0.0, 0.0, 0.6]);
+}
+
+#[test]
+fn a_masked_layer_is_drawn_flat_and_named() {
+    let mut list = fixture!("layer_opacity");
+    set_row(&mut list, 3, row::SIDE_COLORS, [1.0, 0.0, 0.0, 0.0]);
+    let planned = plan(&list, 4, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert_eq!(planned.unsupported, vec![(3, Unsupported::LayerEffect)]);
+    assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.len() == 2));
 }
 
 #[test]

@@ -622,7 +622,7 @@ mod tests {
 
     #[test]
     #[ignore] // Requires GPU
-    fn a_layer_fades_its_group_as_one_and_an_effect_is_drawn_flat() {
+    fn a_layer_fades_its_group_as_one() {
         let harness = TestHarness::new().unwrap();
 
         // A red box and a green one over part of it, in a group at half opacity.
@@ -651,23 +651,142 @@ mod tests {
             at(&page, 60, 50)
         );
         assert!(within(at(&page, 150, 100), [255, 255, 255], 1), "outside");
+    }
 
-        // A blur is not drawn yet, so its content is drawn as it is: red, sharp-edged.
+    /// The weights the effects shader takes: offsets in pairs from `-reach`, each
+    /// pair's fetch standing for the two texels it lies between, then normalised.
+    fn gaussian_weights(sigma: f32) -> Vec<(i32, f32)> {
+        let reach = (sigma * 3.0).ceil() as i32;
+        let w = |i: i32| (-((i * i) as f32) / (2.0 * sigma * sigma)).exp();
+        let mut taps = Vec::new();
+        let mut i = -reach;
+        while i <= reach {
+            taps.push((i, w(i)));
+            taps.push((i + 1, w(i + 1)));
+            i += 2;
+        }
+        let total: f32 = taps.iter().map(|t| t.1).sum();
+        taps.iter().map(|&(o, w)| (o, w / total)).collect()
+    }
+
+    /// An indicator of `lo..hi` over `len` texels, blurred, with edges clamped.
+    fn blur_span(len: usize, lo: usize, hi: usize, sigma: f32) -> Vec<f32> {
+        let taps = gaussian_weights(sigma);
+        (0..len as i32)
+            .map(|x| {
+                taps.iter()
+                    .map(|&(o, w)| {
+                        let at = (x + o).clamp(0, len as i32 - 1) as usize;
+                        w * if (lo..hi).contains(&at) { 1.0 } else { 0.0 }
+                    })
+                    .sum()
+            })
+            .collect()
+    }
+
+    fn assert_page(got: &RgbaImage, want: impl Fn(u32, u32) -> [f32; 3], slack: i32, what: &str) {
+        let mut worst = 0;
+        let mut at_worst = (0, 0);
+        for (x, y, p) in got.enumerate_pixels() {
+            let w = want(x, y);
+            for c in 0..3 {
+                let d = (p[c] as i32 - w[c].round() as i32).abs();
+                if d > worst {
+                    worst = d;
+                    at_worst = (x, y);
+                }
+            }
+        }
+        assert!(worst <= slack, "{what}: off by {worst} at {at_worst:?}");
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn a_layers_blur_is_the_exact_gaussian() {
+        let harness = TestHarness::new().unwrap();
+        let (page, _) = draw_plan(&harness, "layer_blur", &fixture!("layer_blur"), None, &[]);
+        // A red box of 40 by 30 at (20, 20), blurred with a deviation of 4: its
+        // alpha is the product of a blurred span in each direction.
+        let (w, h) = (W as usize, H as usize);
+        let (hx, vy) = (blur_span(w, 20, 60, 4.0), blur_span(h, 20, 50, 4.0));
+        assert_page(
+            &page,
+            |x, y| {
+                let a = hx[x as usize] * vy[y as usize];
+                [
+                    255.0 * (1.0 - a) + 229.5 * a,
+                    255.0 * (1.0 - a) + 25.5 * a,
+                    255.0 * (1.0 - a) + 25.5 * a,
+                ]
+            },
+            4,
+            "blur",
+        );
+        // It really is soft: the box's own edge is half covered.
+        assert!(at(&page, 20, 35)[1] > 100 && at(&page, 20, 35)[1] < 200);
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn a_layers_colour_filter_maps_straight_colour() {
+        let harness = TestHarness::new().unwrap();
         let (page, _) = draw_plan(
             &harness,
-            "layer_blur",
-            &fixture!("layer_blur"),
+            "layer_grayscale",
+            &fixture!("layer_grayscale"),
             None,
-            &[Unsupported::LayerEffect],
+            &[],
+        );
+        let grey = 0.2126 * 229.5 + 0.7152 * 25.5 + 0.0722 * 25.5;
+        assert_page(
+            &page,
+            |x, y| {
+                if (20..60).contains(&x) && (20..50).contains(&y) {
+                    [grey; 3]
+                } else {
+                    [255.0; 3]
+                }
+            },
+            3,
+            "grayscale",
+        );
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn a_layers_drop_shadow_falls_blurred_behind_it() {
+        let harness = TestHarness::new().unwrap();
+        let (page, _) = draw_plan(
+            &harness,
+            "layer_shadow",
+            &fixture!("layer_shadow"),
+            None,
+            &[],
+        );
+        // The box is sharp and red; its alpha, blurred by 4 and moved by (6, 5), is a
+        // black shadow of 0.6 under it.
+        let (w, h) = (W as usize, H as usize);
+        let (hx, vy) = (blur_span(w, 20, 60, 4.0), blur_span(h, 20, 50, 4.0));
+        assert_page(
+            &page,
+            |x, y| {
+                if (20..60).contains(&x) && (20..50).contains(&y) {
+                    return [229.5, 25.5, 25.5];
+                }
+                let (sx, sy) = (x as i32 - 6, y as i32 - 5);
+                let s = if sx >= 0 && sy >= 0 {
+                    hx[sx as usize] * vy[sy as usize]
+                } else {
+                    0.0
+                };
+                [255.0 * (1.0 - 0.6 * s); 3]
+            },
+            4,
+            "shadow",
         );
         assert!(
-            within(at(&page, 40, 35), [230, 26, 26], 3),
-            "{:?}",
-            at(&page, 40, 35)
-        );
-        assert!(
-            within(at(&page, 19, 35), [255, 255, 255], 1),
-            "the edge is sharp"
+            at(&page, 64, 52)[0] < 200,
+            "the shadow is below and to the right"
         );
     }
 }

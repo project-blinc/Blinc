@@ -33,6 +33,7 @@
 //! | 25-27 | a notch's corners, top edge and bottom edge                       |
 
 pub mod atlas;
+pub mod effects;
 pub mod plan;
 
 use crate::primitives::{ClipType, FillType, GpuPrimitive, PrimitiveType};
@@ -136,7 +137,7 @@ pub enum Unsupported {
     ImageMapping,
     /// An image under a clip whose rounded corners are not circular.
     ClipCorner,
-    /// A layer that blurs, filters its colour, casts a drop shadow or is masked, not only fades.
+    /// A layer that is masked.
     LayerEffect,
 }
 
