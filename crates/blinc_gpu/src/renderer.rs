@@ -6557,6 +6557,9 @@ impl GpuRenderer {
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 
+        // Polygon clips and 3D groups read their vertices from here
+        self.update_aux_data_buffer(batch);
+
         // Sort and upload primitives
         let sdf_ranges = self.upload_sorted_primitives(&batch.primitives);
 
