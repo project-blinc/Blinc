@@ -9,7 +9,9 @@ mod tests {
     use crate::harness::TestHarness;
     use blinc_core::{Affine2D, Brush, Color, DrawContext, Gradient, Point, Shadow, Transform};
     use blinc_gpu::PrimitiveBatch;
+    use blinc_gpu::display_list::atlas::{AtlasError, AtlasTexture, AtlasUpdate};
     use blinc_gpu::display_list::{DISPLAY_LIST_VERSION, RECORD_FLOATS, decode};
+    use blinc_gpu::primitives::{GpuPrimitive, PrimitiveType};
     use blinc_layout::prelude::*;
     use image::RgbaImage;
 
@@ -265,5 +267,190 @@ mod tests {
         // Along the top-left corner the nearer side, in widths, wins.
         assert_color(&img, 21, 21, red, "corner, above the diagonal");
         assert_color(&img, 21, 23, yellow, "corner, below the diagonal");
+    }
+
+    /// A fixture's mask atlas: `[width, height, x, y, w, h]` as u32, then the
+    /// bytes of the used rectangle. Returned as the whole atlas, zero elsewhere.
+    fn atlas_fixture(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
+        let head: Vec<u32> = bytes[..24]
+            .chunks_exact(4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+            .collect();
+        let (width, height, x, y, w, h) = (head[0], head[1], head[2], head[3], head[4], head[5]);
+        let mut atlas = vec![0u8; (width * height) as usize];
+        for row in 0..h {
+            let from = 24 + (row * w) as usize;
+            let to = ((y + row) * width + x) as usize;
+            atlas[to..to + w as usize].copy_from_slice(&bytes[from..from + w as usize]);
+        }
+        (width, height, atlas)
+    }
+
+    /// The page the glyph records draw, worked out on the CPU: each glyph's
+    /// atlas rect laid over the page at its quad, coverage through the same
+    /// 0.7 power the shader applies, blended in paint order over white.
+    fn glyph_reference(list: &[f32], atlas: &[u8], atlas_width: u32, scale: f32) -> RgbaImage {
+        let mut page = RgbaImage::from_pixel(
+            (W * scale) as u32,
+            (H * scale) as u32,
+            image::Rgba([255, 255, 255, 255]),
+        );
+        for record in list.chunks_exact(RECORD_FLOATS) {
+            let (quad, uv, color) = (&record[0..4], &record[40..44], &record[8..12]);
+            let (x, y) = (
+                (quad[0] * scale).round() as i32,
+                (quad[1] * scale).round() as i32,
+            );
+            let (w, h) = (
+                (quad[2] * scale).round() as i32,
+                (quad[3] * scale).round() as i32,
+            );
+            assert_eq!(
+                ((uv[2] - uv[0]) as i32, (uv[3] - uv[1]) as i32),
+                (w, h),
+                "1:1"
+            );
+            for dy in 0..h {
+                for dx in 0..w {
+                    let texel = (uv[1] as i32 + dy) as usize * atlas_width as usize
+                        + (uv[0] as i32 + dx) as usize;
+                    let alpha = color[3] * (atlas[texel] as f32 / 255.0).powf(0.7);
+                    let pixel = page.get_pixel_mut((x + dx) as u32, (y + dy) as u32);
+                    for c in 0..3 {
+                        let blended = pixel[c] as f32 * (1.0 - alpha) + color[c] * 255.0 * alpha;
+                        pixel[c] = blended.round() as u8;
+                    }
+                }
+            }
+        }
+        page
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn glyph_records_draw_from_the_producers_atlas() {
+        let harness = TestHarness::new().unwrap();
+        let (device, queue) = harness.gpu();
+        for (name, scale) in [("text_hello_x1", 1.0f32), ("text_hello_x2", 2.0)] {
+            let list = match name {
+                "text_hello_x1" => fixture!("text_hello_x1"),
+                _ => fixture!("text_hello_x2"),
+            };
+            let bytes: &[u8] = match name {
+                "text_hello_x1" => include_bytes!(
+                    "../../../blinc_gpu/tests/fixtures/display_list/text_hello_x1.atlas"
+                ),
+                _ => include_bytes!(
+                    "../../../blinc_gpu/tests/fixtures/display_list/text_hello_x2.atlas"
+                ),
+            };
+            let (width, height, atlas) = atlas_fixture(bytes);
+
+            let mut mask = AtlasTexture::new(device, false);
+            let color = AtlasTexture::new(device, true);
+            mask.update(
+                device,
+                queue,
+                &AtlasUpdate {
+                    width,
+                    height,
+                    x: 0,
+                    y: 0,
+                    update_width: width,
+                    update_height: height,
+                    bytes: &atlas,
+                },
+            )
+            .unwrap();
+            harness.set_glyph_atlas(mask.view(), color.view());
+
+            let drawn = from_records(&harness, name, &list, scale);
+            let expected = glyph_reference(&list, &atlas, width, scale);
+            let (over, worst) = compare(&drawn, &expected, 3);
+            println!("{name}: {over} pixels differ by more than 3, worst {worst}");
+            assert_eq!(over, 0, "{name}: {over} pixels, worst {worst}");
+        }
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn an_atlas_update_writes_its_rectangle_and_a_resize_replaces_it() {
+        fn full(width: u32, height: u32, bytes: &[u8]) -> AtlasUpdate<'_> {
+            AtlasUpdate {
+                width,
+                height,
+                x: 0,
+                y: 0,
+                update_width: width,
+                update_height: height,
+                bytes,
+            }
+        }
+        let harness = TestHarness::new().unwrap();
+        let (device, queue) = harness.gpu();
+        let mut mask = AtlasTexture::new(device, false);
+        let color = AtlasTexture::new(device, true);
+        mask.update(device, queue, &full(4, 4, &[0; 16])).unwrap();
+        assert_eq!(mask.size(), (4, 4));
+
+        // A patch of 2 by 2 at (1, 1).
+        let patch = AtlasUpdate {
+            width: 4,
+            height: 4,
+            x: 1,
+            y: 1,
+            update_width: 2,
+            update_height: 2,
+            bytes: &[255; 4],
+        };
+        mask.update(device, queue, &patch).unwrap();
+
+        // The whole atlas drawn over 8 by 8 pixels: the patch is the middle, a quarter of it.
+        harness.set_glyph_atlas(mask.view(), color.view());
+        let mut batch = PrimitiveBatch::new();
+        batch.primitives.push(GpuPrimitive {
+            bounds: [10.0, 10.0, 8.0, 8.0],
+            gradient_params: [0.0, 0.0, 4.0, 4.0],
+            color: [0.0, 0.0, 0.0, 1.0],
+            type_info: [PrimitiveType::Text as u32, 0, 0, 0],
+            ..GpuPrimitive::default()
+        });
+        let img = draw(&harness, "atlas_patch", &batch, 1.0);
+        assert!(at(&img, 14, 14)[0] < 10, "the patch is drawn");
+        assert!(at(&img, 10, 10)[0] > 245, "the rest of the atlas is empty");
+        assert!(at(&img, 17, 17)[0] > 245, "the rest of the atlas is empty");
+
+        // A different size is accepted only whole, a patch only inside its atlas, and
+        // only with the bytes to fill it.
+        assert_eq!(
+            mask.update(
+                device,
+                queue,
+                &AtlasUpdate {
+                    width: 8,
+                    height: 8,
+                    ..patch
+                }
+            ),
+            Err(AtlasError::NeedsFullUpload)
+        );
+        assert_eq!(
+            mask.update(device, queue, &AtlasUpdate { x: 3, ..patch }),
+            Err(AtlasError::BadRect)
+        );
+        assert_eq!(
+            mask.update(
+                device,
+                queue,
+                &AtlasUpdate {
+                    bytes: &[255; 3],
+                    ..patch
+                }
+            ),
+            Err(AtlasError::BadRect)
+        );
+        assert_eq!(mask.size(), (4, 4), "a refused update changes nothing");
+        mask.update(device, queue, &full(8, 8, &[0; 64])).unwrap();
+        assert_eq!(mask.size(), (8, 8));
     }
 }

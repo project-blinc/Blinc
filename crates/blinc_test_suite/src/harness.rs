@@ -429,6 +429,17 @@ impl TestHarness {
         })
     }
 
+    /// The GPU device and queue, for tests that upload their own resources.
+    pub fn gpu(&self) -> (&Arc<wgpu::Device>, &Arc<wgpu::Queue>) {
+        (&self.device, &self.queue)
+    }
+
+    /// Binds the glyph atlases the renderer samples text records from. The views
+    /// must outlive the renders that use them.
+    pub fn set_glyph_atlas(&self, mask: &wgpu::TextureView, color: &wgpu::TextureView) {
+        self.renderer.borrow_mut().set_glyph_atlas(mask, color);
+    }
+
     /// Create a test context with default size
     pub fn create_context(&self, name: &str) -> TestContext<'static> {
         self.create_context_with_size(name, self.default_size.width, self.default_size.height)

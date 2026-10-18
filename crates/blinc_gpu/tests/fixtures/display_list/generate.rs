@@ -5,6 +5,7 @@ use blinc_abi::scene::blinc_core::{
 };
 use blinc_abi::scene::{PaintOptions, RenderProps, SceneEncoder};
 use blinc_layout::element::{BorderSide, BorderSides};
+use blinc_layout::tree::TextMeasureContext;
 use taffy::prelude::*;
 use taffy::Overflow;
 
@@ -45,6 +46,76 @@ fn scaled(name: &str, scale: f32, build: impl FnOnce(&mut LayoutContext) -> Node
     let bytes: Vec<u8> = out.iter().flat_map(|f| f.to_le_bytes()).collect();
     std::fs::write(format!("out/{name}.f32"), bytes).unwrap();
     println!("{name}: {} records", info.count);
+}
+
+
+/// A line of text in a padded page, with the mask atlas it draws from, cropped to the
+/// region its glyphs use: `[width, height, x, y, w, h]` as u32, then the crop's bytes.
+fn text_scene(name: &str, scale: f32, content: &str, size: f32) {
+    let mut cx = LayoutContext::new();
+    let text = cx
+        .create_text(
+            Style::default(),
+            TextMeasureContext {
+                content: content.into(),
+                font_size: size,
+                line_height: 1.2,
+                letter_spacing: 0.0,
+                wrap: false,
+                font_name: None,
+                generic_font: Default::default(),
+                font_weight: 400,
+                italic: false,
+            },
+        )
+        .unwrap();
+    let root = cx
+        .create_node(Style {
+            display: Display::Flex,
+            align_items: Some(AlignItems::FLEX_START),
+            size: Size { width: length(200.0), height: length(120.0) },
+            padding: Rect::length(20.0),
+            ..Default::default()
+        })
+        .unwrap();
+    cx.insert_before(root, text, None).unwrap();
+    cx.compute(root, 200.0, 120.0).unwrap();
+    let mut enc = SceneEncoder::new();
+    let info = enc
+        .prepare(&cx, root, PaintOptions { scale, ..PaintOptions::default() })
+        .unwrap();
+    let mut out = vec![0f32; info.floats];
+    enc.read(&cx, &mut out).unwrap();
+    out.truncate(info.count * 112);
+    let bytes: Vec<u8> = out.iter().flat_map(|f| f.to_le_bytes()).collect();
+    std::fs::write(format!("out/{name}.f32"), bytes).unwrap();
+
+    let atlas = enc.atlas_info(false, 0).unwrap().expect("a mask atlas");
+    let mut pixels = vec![0u8; atlas.bytes()];
+    enc.read_atlas(false, 0, &mut pixels).unwrap().unwrap();
+    assert_eq!((atlas.x, atlas.y, atlas.update_width, atlas.update_height), (0, 0, atlas.width, atlas.height));
+    let (w, h) = (atlas.width as usize, atlas.height as usize);
+    let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0usize, 0usize);
+    for y in 0..h {
+        for x in 0..w {
+            if pixels[y * w + x] != 0 {
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x + 1);
+                y1 = y1.max(y + 1);
+            }
+        }
+    }
+    let (cw, ch) = (x1 - x0, y1 - y0);
+    let mut file = Vec::new();
+    for v in [w, h, x0, y0, cw, ch] {
+        file.extend_from_slice(&(v as u32).to_le_bytes());
+    }
+    for y in 0..ch {
+        file.extend_from_slice(&pixels[(y0 + y) * w + x0..(y0 + y) * w + x0 + cw]);
+    }
+    std::fs::write(format!("out/{name}.atlas"), file).unwrap();
+    println!("{name}: {} records, atlas {w}x{h}, crop {cw}x{ch} at ({x0},{y0})", info.count);
 }
 
 fn solid(r: f32, g: f32, b: f32) -> Option<Brush> {
@@ -161,4 +232,6 @@ fn main() {
         p.border_color = Some(Color::rgb(0.9, 0.1, 0.1));
         boxed(cx, 100.0, 60.0, p)
     });
+    text_scene("text_hello_x1", 1.0, "Hello", 20.0);
+    text_scene("text_hello_x2", 2.0, "Hello", 20.0);
 }

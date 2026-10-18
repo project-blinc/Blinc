@@ -32,6 +32,8 @@
 //! | 22-24 | the innermost `clip-path` in the element's frame                  |
 //! | 25-27 | a notch's corners, top edge and bottom edge                       |
 
+pub mod atlas;
+
 use crate::primitives::{ClipType, FillType, GpuPrimitive, PrimitiveType};
 
 /// The record schema this module reads, as `blinc_abi::scene::DISPLAY_LIST_VERSION`.
@@ -70,6 +72,7 @@ pub mod row {
 /// `row::TYPES.x`, the record's primitive kind.
 const KIND_RECT: f32 = 0.0;
 const KIND_SHADOW: f32 = 3.0;
+const KIND_TEXT: f32 = 7.0;
 
 /// `row::TYPES.z`: bit 0 is a screen clip, bit 1 a local one.
 const CLIP_SCREEN: u32 = 1;
@@ -109,7 +112,7 @@ impl std::error::Error for DecodeError {}
 /// What a record needs that a [`GpuPrimitive`] cannot yet express.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Unsupported {
-    /// A kind other than a box or its shadow: text, image, canvas, layer or backdrop.
+    /// A kind other than a box, its shadow or a glyph: image, canvas, layer or backdrop.
     Kind(f32),
     /// A gradient that is not two stops, or is conic.
     Gradient,
@@ -123,6 +126,8 @@ pub enum Unsupported {
     Notch,
     /// A transform with no area.
     Degenerate,
+    /// A colour glyph drawn as its shape in one colour, a text shadow's.
+    ColorGlyphShape,
 }
 
 /// The kind of a record.
@@ -130,7 +135,9 @@ pub enum Unsupported {
 pub enum Kind {
     Box,
     Shadow,
-    /// Text, image, canvas, layer or backdrop, by its code.
+    /// One glyph, a quad over its rect in a glyph atlas.
+    Text,
+    /// Image, canvas, layer or backdrop, by its code.
     Other(f32),
 }
 
@@ -200,6 +207,7 @@ impl<'a> Record<'a> {
         match self.row(row::TYPES)[0] {
             k if k == KIND_RECT => Kind::Box,
             k if k == KIND_SHADOW => Kind::Shadow,
+            k if k == KIND_TEXT => Kind::Text,
             k => Kind::Other(k),
         }
     }
@@ -221,6 +229,9 @@ impl<'a> Record<'a> {
     pub fn unsupported(&self) -> Option<Unsupported> {
         match self.kind() {
             Kind::Box | Kind::Shadow => {}
+            // A glyph in the colour atlas's alpha, in one colour: fill type 2.
+            Kind::Text if self.fill_type() > 1.5 => return Some(Unsupported::ColorGlyphShape),
+            Kind::Text => {}
             Kind::Other(k) => return Some(Unsupported::Kind(k)),
         }
         let [a, b, c, d] = self.row(row::AFFINE);
@@ -310,6 +321,19 @@ impl<'a> Record<'a> {
             p.type_info = [
                 PrimitiveType::Shadow as u32,
                 FillType::Solid as u32,
+                clip_type as u32,
+                0,
+            ];
+            return Ok(p);
+        }
+
+        if kind == KIND_TEXT {
+            // The atlas rect, in atlas pixels, is not scaled with the display.
+            p.color = self.row(row::FILL);
+            p.gradient_params = self.row(row::GRADIENT);
+            p.type_info = [
+                PrimitiveType::Text as u32,
+                self.fill_type() as u32,
                 clip_type as u32,
                 0,
             ];

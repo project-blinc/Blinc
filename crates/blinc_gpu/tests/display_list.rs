@@ -222,10 +222,10 @@ fn what_a_primitive_cannot_carry_is_named() {
     let base = fixture!("box_solid");
     let cases: [(&str, usize, [f32; 4], Unsupported); 8] = [
         (
-            "text",
+            "image",
             row::TYPES,
-            [7.0, 0.0, 0.0, 1.0],
-            Unsupported::Kind(7.0),
+            [32.0, 0.0, 0.0, 1.0],
+            Unsupported::Kind(32.0),
         ),
         (
             "canvas",
@@ -285,12 +285,12 @@ fn three_stops_are_not_drawn_as_two() {
 #[test]
 fn a_list_reports_the_records_it_left_out_by_index() {
     let one = fixture!("box_solid");
-    let mut text = one.clone();
-    set_row(&mut text, 0, row::TYPES, [7.0, 0.0, 0.0, 1.0]);
-    let list: Vec<f32> = [one.clone(), text, one].concat();
+    let mut image = one.clone();
+    set_row(&mut image, 0, row::TYPES, [32.0, 0.0, 0.0, 1.0]);
+    let list: Vec<f32> = [one.clone(), image, one].concat();
     let out = decode(&list, 3, DISPLAY_LIST_VERSION, 1.0).unwrap();
     assert_eq!(out.primitives.len(), 2);
-    assert_eq!(out.unsupported, vec![(1, Unsupported::Kind(7.0))]);
+    assert_eq!(out.unsupported, vec![(1, Unsupported::Kind(32.0))]);
 }
 
 #[test]
@@ -301,4 +301,46 @@ fn kinds_are_named() {
         .map(|r| r.kind())
         .collect();
     assert_eq!(kinds, [Kind::Shadow, Kind::Box]);
+}
+
+#[test]
+fn a_glyph_is_a_quad_over_its_atlas_rect() {
+    let list = fixture!("text_hello_x1");
+    let out = decode(&list, 5, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(out.unsupported.is_empty());
+    let h = &out.primitives[0];
+    assert_eq!(
+        h.type_info,
+        [PrimitiveType::Text as u32, 0, ClipType::None as u32, 0]
+    );
+    near(&h.bounds, &[20.0, 25.0, 14.0, 15.0]);
+    near(&h.gradient_params, &[0.0, 0.0, 14.0, 15.0]);
+    near(&h.color, &[0.0, 0.0, 0.0, 1.0]);
+    near(&out.primitives[1].gradient_params, &[16.0, 0.0, 28.0, 12.0]);
+}
+
+#[test]
+fn the_display_scale_moves_the_quad_and_not_the_atlas_rect() {
+    // At scale 2 the records are laid out in logical pixels and the glyphs
+    // rasterized twice as large, so a quad and its atlas rect agree in device pixels.
+    let list = fixture!("text_hello_x2");
+    let out = decode(&list, 5, DISPLAY_LIST_VERSION, 2.0).unwrap();
+    let h = &out.primitives[0];
+    near(&h.bounds, &[41.0, 50.0, 26.0, 29.0]);
+    near(&h.gradient_params, &[0.0, 0.0, 26.0, 29.0]);
+}
+
+#[test]
+fn a_colour_glyph_selects_the_colour_atlas() {
+    let mut list = fixture!("text_hello_x1");
+    set_row(&mut list, 0, row::TYPES, [7.0, 1.0, 0.0, 1.0]);
+    assert_eq!(first(&list, 1.0).type_info[1], 1);
+}
+
+#[test]
+fn a_colour_glyphs_shape_is_not_a_glyph() {
+    let mut list = fixture!("text_hello_x1");
+    set_row(&mut list, 0, row::TYPES, [7.0, 2.0, 0.0, 1.0]);
+    let record = Record::new(list[..RECORD_FLOATS].try_into().unwrap());
+    assert_eq!(record.unsupported(), Some(Unsupported::ColorGlyphShape));
 }
