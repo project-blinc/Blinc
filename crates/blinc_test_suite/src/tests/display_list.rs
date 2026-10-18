@@ -8,8 +8,10 @@
 mod tests {
     use crate::harness::TestHarness;
     use blinc_core::{Affine2D, Brush, Color, DrawContext, Gradient, Point, Shadow, Transform};
+    use blinc_gpu::GpuImage;
     use blinc_gpu::PrimitiveBatch;
     use blinc_gpu::display_list::atlas::{AtlasError, AtlasTexture, AtlasUpdate};
+    use blinc_gpu::display_list::plan::{plan, render};
     use blinc_gpu::display_list::{DISPLAY_LIST_VERSION, RECORD_FLOATS, decode};
     use blinc_gpu::primitives::{GpuPrimitive, PrimitiveType};
     use blinc_layout::prelude::*;
@@ -452,5 +454,152 @@ mod tests {
         assert_eq!(mask.size(), (4, 4), "a refused update changes nothing");
         mask.update(device, queue, &full(8, 8, &[0; 64])).unwrap();
         assert_eq!(mask.size(), (8, 8));
+    }
+
+    /// A 40 by 30 image, red on the left half and green on the right.
+    fn test_image(harness: &TestHarness) -> GpuImage {
+        let (device, queue) = harness.gpu();
+        let mut pixels = Vec::new();
+        for _y in 0..30 {
+            for x in 0..40 {
+                pixels.extend_from_slice(if x < 20 {
+                    &[255, 0, 0, 255]
+                } else {
+                    &[0, 200, 0, 255]
+                });
+            }
+        }
+        GpuImage::from_rgba(
+            device,
+            queue,
+            &pixels,
+            40,
+            30,
+            Some("display list test image"),
+        )
+    }
+
+    /// Draws a plan of `list` through the ordered executor, the image in slot 7,
+    /// and returns the page and the slots that had no image.
+    fn draw_plan(
+        harness: &TestHarness,
+        name: &str,
+        list: &[f32],
+        image: Option<&GpuImage>,
+    ) -> (RgbaImage, Vec<u32>) {
+        let planned = plan(list, list.len() / RECORD_FLOATS, DISPLAY_LIST_VERSION, 1.0).unwrap();
+        assert!(planned.unsupported.is_empty(), "{:?}", planned.unsupported);
+        let path = harness.output_path(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut missing = Vec::new();
+        harness
+            .render_with(W as u32, H as u32, &path, |renderer, view| {
+                missing = render(renderer, view, &planned, [1.0; 4], &|slot| {
+                    image.filter(|_| slot == 7)
+                });
+            })
+            .unwrap();
+        (image::open(&path).unwrap().to_rgba8(), missing)
+    }
+
+    fn within(got: [u8; 4], want: [u8; 3], slack: i32) -> bool {
+        (0..3).all(|c| (got[c] as i32 - want[c] as i32).abs() <= slack)
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn an_image_draws_between_the_primitives_around_it() {
+        let harness = TestHarness::new().unwrap();
+        let (device, queue) = harness.gpu();
+
+        // Text is drawn from the producer's atlas, over the image.
+        let (width, height, atlas) = atlas_fixture(include_bytes!(
+            "../../../blinc_gpu/tests/fixtures/display_list/text_hello_x1.atlas"
+        ));
+        let mut mask = AtlasTexture::new(device, false);
+        let color = AtlasTexture::new(device, true);
+        mask.update(
+            device,
+            queue,
+            &AtlasUpdate {
+                width,
+                height,
+                x: 0,
+                y: 0,
+                update_width: width,
+                update_height: height,
+                bytes: &atlas,
+            },
+        )
+        .unwrap();
+        harness.set_glyph_atlas(mask.view(), color.view());
+
+        let image = test_image(&harness);
+        let list = [
+            fixture!("box_solid"),
+            fixture!("image_plain"),
+            fixture!("text_hello_x1"),
+        ]
+        .concat();
+        let (page, missing) = draw_plan(&harness, "image_between", &list, Some(&image));
+        assert!(missing.is_empty());
+
+        // Below the text, the image is drawn 1:1 over the box: red then green.
+        for x in 20..40 {
+            assert!(within(at(&page, x, 45), [255, 0, 0], 2), "red at {x}");
+        }
+        for x in 40..60 {
+            assert!(within(at(&page, x, 45), [0, 200, 0], 2), "green at {x}");
+        }
+        // Past the image, the box under it; past the box, the page.
+        assert!(within(at(&page, 61, 45), [51, 102, 229], 2), "the box");
+        assert!(within(at(&page, 150, 100), [255, 255, 255], 2), "the page");
+        // The glyphs come after the image, so they are dark over it.
+        let dark = (20..64)
+            .flat_map(|x| (25..40).map(move |y| (x, y)))
+            .filter(|&(x, y)| at(&page, x, y)[..3].iter().all(|c| *c < 100))
+            .count();
+        assert!(dark > 25, "the text is over the image: {dark} dark pixels");
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn an_images_opacity_clip_and_missing_slot_are_honoured() {
+        let harness = TestHarness::new().unwrap();
+        let image = test_image(&harness);
+
+        let (page, _) = draw_plan(
+            &harness,
+            "image_faded",
+            &fixture!("image_faded"),
+            Some(&image),
+        );
+        // Half of red over white.
+        assert!(
+            within(at(&page, 25, 45), [255, 128, 128], 3),
+            "{:?}",
+            at(&page, 25, 45)
+        );
+
+        // 100 by 60, rounded by 16: the corner is clipped away, the middle is the image.
+        let (page, _) = draw_plan(
+            &harness,
+            "image_clipped",
+            &fixture!("image_clipped"),
+            Some(&image),
+        );
+        assert!(
+            within(at(&page, 21, 21), [255, 255, 255], 2),
+            "the corner is clipped"
+        );
+        assert!(within(at(&page, 36, 21), [255, 0, 0], 3), "inside the arc");
+        assert!(within(at(&page, 30, 50), [255, 0, 0], 3), "the middle");
+
+        let (page, missing) = draw_plan(&harness, "image_missing", &fixture!("image_plain"), None);
+        assert_eq!(missing, vec![7]);
+        assert!(
+            within(at(&page, 30, 30), [255, 255, 255], 0),
+            "nothing is drawn"
+        );
     }
 }

@@ -645,6 +645,17 @@ impl TestHarness {
             texture
         };
 
+        self.save_texture(&copy_texture, width, height, path)
+    }
+
+    /// Copy a texture of this harness's target format to a PNG file.
+    fn save_texture(
+        &self,
+        copy_texture: &wgpu::Texture,
+        width: u32,
+        height: u32,
+        path: &Path,
+    ) -> Result<()> {
         // Create readback buffer
         let buffer = self.create_readback_buffer(width, height);
         let bytes_per_row = Self::padded_bytes_per_row(width);
@@ -658,7 +669,7 @@ impl TestHarness {
 
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
-                texture: &copy_texture,
+                texture: copy_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -723,6 +734,26 @@ impl TestHarness {
         img.save(path).context("Failed to save PNG")?;
 
         Ok(())
+    }
+
+    /// Draws with `draw` onto a cleared single-sampled target of this size and
+    /// saves it. For drawing that is not a batch, as a display list's ordered
+    /// passes are.
+    pub fn render_with(
+        &self,
+        width: u32,
+        height: u32,
+        path: &Path,
+        draw: impl FnOnce(&mut GpuRenderer, &wgpu::TextureView),
+    ) -> Result<()> {
+        let texture = self.create_resolve_texture(width, height);
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        {
+            let mut renderer = self.renderer.borrow_mut();
+            renderer.resize(width, height);
+            draw(&mut renderer, &view);
+        }
+        self.save_texture(&texture, width, height, path)
     }
 
     /// Render a batch with glass effects to a PNG file

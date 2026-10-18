@@ -7,6 +7,7 @@
 //!
 //! These tests need no GPU.
 
+use blinc_gpu::display_list::plan::{Item, plan};
 use blinc_gpu::display_list::{
     DISPLAY_LIST_VERSION, DecodeError, Kind, RECORD_FLOATS, Record, Unsupported, decode, records,
     row,
@@ -222,10 +223,10 @@ fn what_a_primitive_cannot_carry_is_named() {
     let base = fixture!("box_solid");
     let cases: [(&str, usize, [f32; 4], Unsupported); 8] = [
         (
-            "image",
+            "layer",
             row::TYPES,
-            [32.0, 0.0, 0.0, 1.0],
-            Unsupported::Kind(32.0),
+            [40.0, 0.0, 0.0, 1.0],
+            Unsupported::Kind(40.0),
         ),
         (
             "canvas",
@@ -285,12 +286,12 @@ fn three_stops_are_not_drawn_as_two() {
 #[test]
 fn a_list_reports_the_records_it_left_out_by_index() {
     let one = fixture!("box_solid");
-    let mut image = one.clone();
-    set_row(&mut image, 0, row::TYPES, [32.0, 0.0, 0.0, 1.0]);
-    let list: Vec<f32> = [one.clone(), image, one].concat();
+    let mut canvas = one.clone();
+    set_row(&mut canvas, 0, row::TYPES, [33.0, 0.0, 0.0, 1.0]);
+    let list: Vec<f32> = [one.clone(), canvas, one].concat();
     let out = decode(&list, 3, DISPLAY_LIST_VERSION, 1.0).unwrap();
     assert_eq!(out.primitives.len(), 2);
-    assert_eq!(out.unsupported, vec![(1, Unsupported::Kind(32.0))]);
+    assert_eq!(out.unsupported, vec![(1, Unsupported::Kind(33.0))]);
 }
 
 #[test]
@@ -343,4 +344,90 @@ fn a_colour_glyphs_shape_is_not_a_glyph() {
     set_row(&mut list, 0, row::TYPES, [7.0, 2.0, 0.0, 1.0]);
     let record = Record::new(list[..RECORD_FLOATS].try_into().unwrap());
     assert_eq!(record.unsupported(), Some(Unsupported::ColorGlyphShape));
+}
+
+fn records_of(parts: &[Vec<f32>]) -> (Vec<f32>, usize) {
+    let list: Vec<f32> = parts.concat();
+    let count = list.len() / RECORD_FLOATS;
+    (list, count)
+}
+
+#[test]
+fn an_image_sits_between_the_primitive_runs_around_it() {
+    let (list, count) = records_of(&[
+        fixture!("box_solid"),
+        fixture!("image_plain"),
+        fixture!("text_hello_x1"),
+    ]);
+    let planned = plan(&list, count, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(planned.unsupported.is_empty());
+    let shape: Vec<String> = planned
+        .items
+        .iter()
+        .map(|i| match i {
+            Item::Primitives(run) => format!("{} primitives", run.len()),
+            Item::Image(d) => format!("image {}", d.slot),
+        })
+        .collect();
+    assert_eq!(shape, ["1 primitives", "image 7", "5 primitives"]);
+}
+
+#[test]
+fn an_image_is_stretched_over_its_box_at_the_display_scale() {
+    let list = fixture!("image_plain");
+    for (scale, dst) in [
+        (1.0, [20.0, 20.0, 40.0, 30.0]),
+        (2.0, [40.0, 40.0, 80.0, 60.0]),
+    ] {
+        let planned = plan(&list, 1, DISPLAY_LIST_VERSION, scale).unwrap();
+        let [Item::Image(draw)] = &planned.items[..] else {
+            panic!("one image");
+        };
+        near(&draw.instance.dst_rect, &dst);
+        near(&draw.instance.src_uv, &[0.0, 0.0, 1.0, 1.0]);
+        near(&draw.instance.tint, &[1.0; 4]);
+        near(&draw.instance.transform, &[1.0, 0.0, 0.0, 1.0]);
+        assert_eq!(draw.instance.params[1], 1.0);
+    }
+}
+
+#[test]
+fn an_images_opacity_and_clip_reach_its_instance() {
+    let faded = plan(&fixture!("image_faded"), 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    let [Item::Image(draw)] = &faded.items[..] else {
+        panic!("one image");
+    };
+    assert_eq!(draw.instance.params[1], 0.5);
+
+    let clipped = plan(&fixture!("image_clipped"), 1, DISPLAY_LIST_VERSION, 2.0).unwrap();
+    let [Item::Image(draw)] = &clipped.items[..] else {
+        panic!("one image");
+    };
+    near(&draw.instance.clip_bounds, &[40.0, 40.0, 200.0, 120.0]);
+    near(&draw.instance.clip_radius, &[32.0; 4]);
+}
+
+#[test]
+fn an_image_is_not_a_primitive() {
+    let list = fixture!("image_plain");
+    let record = Record::new(list[..RECORD_FLOATS].try_into().unwrap());
+    assert_eq!(record.kind(), Kind::Image);
+    assert_eq!(
+        record.to_primitive(1.0).err(),
+        Some(Unsupported::Kind(32.0))
+    );
+}
+
+#[test]
+fn a_mapped_image_and_an_oddly_rounded_clip_are_named() {
+    let mut list = fixture!("image_plain");
+    set_row(&mut list, 0, row::TYPES, [32.0, 3.0, 0.0, 1.0]);
+    let planned = plan(&list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(planned.items.is_empty());
+    assert_eq!(planned.unsupported, vec![(0, Unsupported::ImageMapping)]);
+
+    let mut list = fixture!("image_clipped");
+    set_row(&mut list, 0, row::TYPES, [32.0, 0.0, 1.0, 2.0]);
+    let planned = plan(&list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert_eq!(planned.unsupported, vec![(0, Unsupported::ClipCorner)]);
 }

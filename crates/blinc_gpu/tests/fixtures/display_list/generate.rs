@@ -234,4 +234,32 @@ fn main() {
     });
     text_scene("text_hello_x1", 1.0, "Hello", 20.0);
     text_scene("text_hello_x2", 2.0, "Hello", 20.0);
+    scene("image_plain", |cx| {
+        let n = boxed(cx, 40.0, 30.0, RenderProps::default());
+        cx.set_resource(n, Some(7), false).unwrap();
+        n
+    });
+    scene("image_clipped", |cx| {
+        let parent = cx
+            .create_node(Style {
+                size: Size { width: length(100.0), height: length(60.0) },
+                overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+                ..Default::default()
+            })
+            .unwrap();
+        let mut outer = RenderProps::default();
+        outer.border_radius = CornerRadius::uniform(16.0);
+        cx.set_properties(parent, outer).unwrap();
+        let image = boxed(cx, 100.0, 60.0, RenderProps::default());
+        cx.set_resource(image, Some(7), false).unwrap();
+        cx.insert_before(parent, image, None).unwrap();
+        parent
+    });
+    scene("image_faded", |cx| {
+        let mut p = RenderProps::default();
+        p.opacity = 0.5;
+        let n = boxed(cx, 40.0, 30.0, p);
+        cx.set_resource(n, Some(7), false).unwrap();
+        n
+    });
 }

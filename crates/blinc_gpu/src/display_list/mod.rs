@@ -33,6 +33,7 @@
 //! | 25-27 | a notch's corners, top edge and bottom edge                       |
 
 pub mod atlas;
+pub mod plan;
 
 use crate::primitives::{ClipType, FillType, GpuPrimitive, PrimitiveType};
 
@@ -73,6 +74,7 @@ pub mod row {
 const KIND_RECT: f32 = 0.0;
 const KIND_SHADOW: f32 = 3.0;
 const KIND_TEXT: f32 = 7.0;
+const KIND_IMAGE: f32 = 32.0;
 
 /// `row::TYPES.z`: bit 0 is a screen clip, bit 1 a local one.
 const CLIP_SCREEN: u32 = 1;
@@ -112,7 +114,7 @@ impl std::error::Error for DecodeError {}
 /// What a record needs that a [`GpuPrimitive`] cannot yet express.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Unsupported {
-    /// A kind other than a box, its shadow or a glyph: image, canvas, layer or backdrop.
+    /// A kind other than a box, its shadow, a glyph or an image: canvas, layer or backdrop.
     Kind(f32),
     /// A gradient that is not two stops, or is conic.
     Gradient,
@@ -128,6 +130,10 @@ pub enum Unsupported {
     Degenerate,
     /// A colour glyph drawn as its shape in one colour, a text shadow's.
     ColorGlyphShape,
+    /// An image that is fitted, positioned or tiled, not stretched over its box.
+    ImageMapping,
+    /// An image under a clip whose rounded corners are not circular.
+    ClipCorner,
 }
 
 /// The kind of a record.
@@ -137,7 +143,9 @@ pub enum Kind {
     Shadow,
     /// One glyph, a quad over its rect in a glyph atlas.
     Text,
-    /// Image, canvas, layer or backdrop, by its code.
+    /// A resource of the consumer's, named by its slot, over a box.
+    Image,
+    /// Canvas, layer or backdrop, by its code.
     Other(f32),
 }
 
@@ -191,10 +199,52 @@ pub fn decode(
     Ok(out)
 }
 
+/// Where a record's box lands on a target, in the numbers `GpuPaintContext`
+/// produces for the same transform.
+struct Placement {
+    /// The box, centred where the transform puts its centre, at the transform's uniform scale.
+    bounds: [f32; 4],
+    /// What is left of the transform's 2x2 once its uniform scale is taken out.
+    local_affine: [f32; 4],
+    size_scale: f32,
+    avg_scale: f32,
+    column_x: f32,
+    column_y: f32,
+}
+
 impl<'a> Record<'a> {
     /// A record over exactly [`RECORD_FLOATS`] floats.
     pub fn new(floats: &'a [f32; RECORD_FLOATS]) -> Self {
         Self(floats)
+    }
+
+    fn placement(&self, scale: f32) -> Placement {
+        let [x, y, w, h] = self.row(row::BOUNDS);
+        let [a, b, c, d] = self.row(row::AFFINE);
+
+        // The transform's uniform scale, and what is left of it.
+        let uniform = (a * d - b * c).abs().sqrt();
+        let local_affine = [a / uniform, b / uniform, c / uniform, d / uniform];
+        let size_scale = scale * uniform;
+        let (column_x, column_y) = (a.hypot(b), c.hypot(d));
+        let avg_scale = scale * (column_x + column_y) / 2.0;
+
+        // The record places the box's top-left; a primitive places its centre.
+        let centre = (x + a * w / 2.0 + c * h / 2.0, y + b * w / 2.0 + d * h / 2.0);
+        let (sw, sh) = (w * size_scale, h * size_scale);
+        Placement {
+            bounds: [
+                centre.0 * scale - sw / 2.0,
+                centre.1 * scale - sh / 2.0,
+                sw,
+                sh,
+            ],
+            local_affine,
+            size_scale,
+            avg_scale,
+            column_x,
+            column_y,
+        }
     }
 
     pub fn row(&self, row: usize) -> [f32; 4] {
@@ -208,6 +258,7 @@ impl<'a> Record<'a> {
             k if k == KIND_RECT => Kind::Box,
             k if k == KIND_SHADOW => Kind::Shadow,
             k if k == KIND_TEXT => Kind::Text,
+            k if k == KIND_IMAGE => Kind::Image,
             k => Kind::Other(k),
         }
     }
@@ -232,6 +283,9 @@ impl<'a> Record<'a> {
             // A glyph in the colour atlas's alpha, in one colour: fill type 2.
             Kind::Text if self.fill_type() > 1.5 => return Some(Unsupported::ColorGlyphShape),
             Kind::Text => {}
+            // Fill type 0 is a bitmap stretched over the box; anything else is a mapping.
+            Kind::Image if self.fill_type() != 0.0 => return Some(Unsupported::ImageMapping),
+            Kind::Image => {}
             Kind::Other(k) => return Some(Unsupported::Kind(k)),
         }
         let [a, b, c, d] = self.row(row::AFFINE);
@@ -267,28 +321,22 @@ impl<'a> Record<'a> {
     /// transform: the box keeps its centre and takes the transform's uniform
     /// scale, and the remainder of the transform is the normalized 2x2.
     pub fn to_primitive(&self, scale: f32) -> Result<GpuPrimitive, Unsupported> {
+        if self.kind() == Kind::Image {
+            // An image is drawn from a texture of the consumer's, not by the SDF pipelines.
+            return Err(Unsupported::Kind(KIND_IMAGE));
+        }
         if let Some(why) = self.unsupported() {
             return Err(why);
         }
-        let [x, y, w, h] = self.row(row::BOUNDS);
-        let [a, b, c, d] = self.row(row::AFFINE);
-
-        // The transform's uniform scale, and what is left of it.
-        let uniform = (a * d - b * c).abs().sqrt();
-        let local_affine = [a / uniform, b / uniform, c / uniform, d / uniform];
-        let size_scale = scale * uniform;
-        let (column_x, column_y) = (a.hypot(b), c.hypot(d));
-        let avg_scale = scale * (column_x + column_y) / 2.0;
-
-        // The record places the box's top-left; a primitive places its centre.
-        let centre = (x + a * w / 2.0 + c * h / 2.0, y + b * w / 2.0 + d * h / 2.0);
-        let (sw, sh) = (w * size_scale, h * size_scale);
-        let bounds = [
-            centre.0 * scale - sw / 2.0,
-            centre.1 * scale - sh / 2.0,
-            sw,
-            sh,
-        ];
+        let Placement {
+            bounds,
+            local_affine,
+            size_scale,
+            avg_scale,
+            column_x,
+            column_y,
+        } = self.placement(scale);
+        let [a, b] = [self.row(row::AFFINE)[0], self.row(row::AFFINE)[1]];
 
         let mul = |v: [f32; 4], k: f32| v.map(|f| f * k);
         let mut p = GpuPrimitive {
