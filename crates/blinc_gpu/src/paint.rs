@@ -43,11 +43,14 @@
 
 use blinc_core::{
     Affine2D, BillboardFacing, BlendMode, Brush, Camera, ClipShape, Color, CornerRadius,
-    CubemapData, DrawCommand, DrawContext, Environment, ImageId, ImageOptions, LayerConfig,
-    LayerId, Light, Mat4, MaterialId, MeshData, MeshId, MeshInstance, ParticleBlendMode,
-    ParticleEmitterShape, ParticleForce, ParticleSystemData, Path, Point, Rect, Sdf3DViewport,
-    SdfBuilder, Shadow, ShapeId, Size, Stroke, TextStyle, Transform,
+    CubemapData, DrawCommand, DrawContext, Environment, FillRule, ImageId, ImageOptions,
+    LayerConfig, LayerId, Light, Mat4, MaterialId, MeshData, MeshId, MeshInstance,
+    ParticleBlendMode, ParticleEmitterShape, ParticleForce, ParticleSystemData, Path, Point, Rect,
+    Sdf3DViewport, SdfBuilder, Shadow, ShapeId, Size, Stroke, TextStyle, Transform,
 };
+
+/// Set in a polygon clip's packed vertex count when it is filled even-odd.
+const POLYGON_EVEN_ODD: u32 = 1 << 31;
 
 use crate::path::{
     DEFAULT_TESSELLATION_TOLERANCE, extract_brush_info, tessellate_fill_with_tolerance,
@@ -312,6 +315,8 @@ pub struct GpuPaintContext<'a> {
     current_corner_shape: [f32; 4], // superellipse n per corner (default [1.0; 4] = round)
     // Overflow fade: pending value consumed by next push_clip
     pending_overflow_fade: [f32; 4], // [top, right, bottom, left] in CSS pixels
+    /// Fill rule of the next polygon clip, taken by `push_clip`.
+    pending_clip_fill_rule: FillRule,
     /// 3D mesh draws captured during this frame. `draw_mesh_data` pushes
     /// here; the outer render loop drains with `take_pending_meshes`
     /// after `take_batch` and dispatches each to
@@ -366,6 +371,7 @@ impl<'a> GpuPaintContext<'a> {
             current_mask_info: [0.0; 4],
             current_corner_shape: [1.0; 4],
             pending_overflow_fade: [0.0; 4],
+            pending_clip_fill_rule: FillRule::NonZero,
             pending_meshes: Vec::new(),
             mesh_viewport_bounds: None,
             pending_env: None,
@@ -425,6 +431,7 @@ impl<'a> GpuPaintContext<'a> {
             current_mask_info: [0.0; 4],
             current_corner_shape: [1.0; 4],
             pending_overflow_fade: [0.0; 4],
+            pending_clip_fill_rule: FillRule::NonZero,
             pending_meshes: Vec::new(),
             mesh_viewport_bounds: None,
             pending_env: None,
@@ -1681,11 +1688,18 @@ impl<'a> GpuPaintContext<'a> {
                 ClipType::Ellipse,
             ),
             ClipShape::Polygon(_) => {
-                // clip_bounds = rect scissor, clip_radius = [0, 0, vertex_count, aux_offset]
-                let (aux_offset, vertex_count) = poly_meta.unwrap_or((0, 0));
+                // clip_bounds = rect scissor, clip_radius = [even_odd, 0, vertex_count, aux_offset]
+                let (aux_offset, packed) = poly_meta.unwrap_or((0, 0));
+                let even_odd = packed & POLYGON_EVEN_ODD != 0;
+                let vertex_count = packed & !POLYGON_EVEN_ODD;
                 (
                     scissor_bounds,
-                    [0.0, 0.0, vertex_count as f32, aux_offset as f32],
+                    [
+                        if even_odd { 1.0 } else { 0.0 },
+                        0.0,
+                        vertex_count as f32,
+                        aux_offset as f32,
+                    ],
                     [1.0; 4],
                     ClipType::Polygon,
                 )
@@ -2040,6 +2054,13 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         // `pop_clip`; the aux_data entries stay around for the rest of the
         // paint pass (every later primitive emitted under this clip needs
         // them in place when its render-pass dispatches).
+        // The rule is taken by every push, so it never reaches a later clip.
+        let rule = std::mem::take(&mut self.pending_clip_fill_rule);
+        let rule_bit = if rule == FillRule::EvenOdd {
+            POLYGON_EVEN_ODD
+        } else {
+            0
+        };
         let poly_meta = if let ClipShape::Polygon(ref pts) = transformed_shape {
             let active = self.active_batch_mut();
             let aux_offset = active.aux_data.len() as u32;
@@ -2057,7 +2078,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 active.aux_data.push([x0, y0, x1, y1]);
                 i += 2;
             }
-            Some((aux_offset, vertex_count))
+            Some((aux_offset, vertex_count | rule_bit))
         } else {
             None
         };
@@ -2368,6 +2389,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
 
     fn clear_overflow_fade(&mut self) {
         self.pending_overflow_fade = [0.0; 4];
+    }
+
+    fn set_clip_fill_rule(&mut self, rule: FillRule) {
+        self.pending_clip_fill_rule = rule;
     }
 
     fn fill_path(&mut self, path: &Path, brush: Brush) {

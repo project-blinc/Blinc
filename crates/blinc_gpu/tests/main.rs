@@ -2,6 +2,7 @@
 //! crate and its dependencies are linked once rather than once per file.
 
 mod bc4_quality;
+mod clip_fill_rule;
 mod display_list;
 mod notch_joins;
 mod primitive_layout;

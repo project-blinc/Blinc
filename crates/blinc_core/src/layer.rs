@@ -1673,6 +1673,18 @@ impl LayerProperties {
 // Clip Shape
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// How a self-intersecting or nested outline decides which points are inside.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum FillRule {
+    /// A point is inside when the outline winds around it a nonzero number of
+    /// times. CSS's default.
+    #[default]
+    NonZero,
+    /// A point is inside when a ray from it crosses the outline an odd
+    /// number of times.
+    EvenOdd,
+}
+
 /// Shape used for clipping
 #[derive(Clone, Debug)]
 pub enum ClipShape {

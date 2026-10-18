@@ -294,7 +294,7 @@ fn calculate_clip_alpha(p: vec2<f32>, clip_bounds: vec4<f32>, clip_radius: vec4<
 
 // Polygon clip using winding number test with edge-distance anti-aliasing.
 // Vertices packed in aux_data as vec4(x0, y0, x1, y1) — 2 vertices per vec4.
-fn calculate_polygon_clip_alpha(p: vec2<f32>, vertex_count: u32, aux_offset: u32) -> f32 {
+fn calculate_polygon_clip_alpha(p: vec2<f32>, vertex_count: u32, aux_offset: u32, even_odd: bool) -> f32 {
     if vertex_count < 3u {
         return 1.0;
     }
@@ -356,8 +356,8 @@ fn calculate_polygon_clip_alpha(p: vec2<f32>, vertex_count: u32, aux_offset: u32
         min_edge_dist = min(min_edge_dist, dist);
     }
 
-    // Inside if winding number is non-zero
-    let is_inside = winding != 0;
+    // Inside when the winding number is nonzero, or odd for the even-odd rule
+    let is_inside = select(winding != 0, (winding & 1) != 0, even_odd);
 
     // Signed distance: negative inside, positive outside
     let signed_dist = select(min_edge_dist, -min_edge_dist, is_inside);

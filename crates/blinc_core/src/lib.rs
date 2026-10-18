@@ -61,12 +61,12 @@ pub use fsm::{FsmId, FsmRuntime, StateId, StateMachine, Transition};
 pub use layer::{
     Affine2D, BillboardFacing, BlendMode, BlurStyle, Brush, CachePolicy, Camera, CameraProjection,
     Canvas2DCommand, Canvas2DCommands, ClipLength, ClipPath, ClipShape, Color, CornerRadius,
-    CornerShape, CubemapData, Environment, GlassStyle, Gradient, GradientSpace, GradientSpread,
-    GradientStop, ImageBrush, ImageFit, ImagePosition, Layer, LayerId, LayerIdGenerator,
-    LayerProperties, Light, Mat4, OverflowFade, ParticleBlendMode, ParticleEmitterShape,
-    ParticleForce, ParticleRenderMode, ParticleSystemData, Point, PointerEvents, PostEffect, Rect,
-    Scene3DCommand, Scene3DCommands, SceneGraph, Sdf3DViewport, Shadow, Size, TextureFormat,
-    UiNode, Vec2, Vec3,
+    CornerShape, CubemapData, Environment, FillRule, GlassStyle, Gradient, GradientSpace,
+    GradientSpread, GradientStop, ImageBrush, ImageFit, ImagePosition, Layer, LayerId,
+    LayerIdGenerator, LayerProperties, Light, Mat4, OverflowFade, ParticleBlendMode,
+    ParticleEmitterShape, ParticleForce, ParticleRenderMode, ParticleSystemData, Point,
+    PointerEvents, PostEffect, Rect, Scene3DCommand, Scene3DCommands, SceneGraph, Sdf3DViewport,
+    Shadow, Size, TextureFormat, UiNode, Vec2, Vec3,
 };
 pub use reactive::{
     Computed, Derived, DerivedId, DirtyFlag, Effect, EffectId, ReactiveGraph, SharedReactiveGraph,

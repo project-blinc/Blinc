@@ -1921,6 +1921,10 @@ pub trait DrawContext {
     /// Clear pending overflow fade
     fn clear_overflow_fade(&mut self) {}
 
+    /// Set the fill rule the next `push_clip` of a polygon uses. It applies
+    /// to that clip only; the default is [`crate::FillRule::NonZero`].
+    fn set_clip_fill_rule(&mut self, _rule: crate::FillRule) {}
+
     // ─────────────────────────────────────────────────────────────────────────
     // 2D Drawing Operations
     // ─────────────────────────────────────────────────────────────────────────
