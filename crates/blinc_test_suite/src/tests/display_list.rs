@@ -697,6 +697,7 @@ mod tests {
                 }
             }
         }
+        println!("{what}: worst {worst} at {at_worst:?}");
         assert!(worst <= slack, "{what}: off by {worst} at {at_worst:?}");
     }
 
@@ -788,5 +789,63 @@ mod tests {
             at(&page, 64, 52)[0] < 200,
             "the shadow is below and to the right"
         );
+    }
+
+    /// `layer_blur` with its blur set to `sigma`, and its bounds, as the producer
+    /// draws them, the box widened by three deviations each way.
+    fn blurred_by(sigma: f32) -> Vec<f32> {
+        let mut list = fixture!("layer_blur");
+        let record = 2 * RECORD_FLOATS;
+        list[record + 2 * 4] = sigma;
+        let spread = (sigma * 3.0).ceil();
+        list[record..record + 4].copy_from_slice(&[
+            20.0 - spread,
+            20.0 - spread,
+            40.0 + 2.0 * spread,
+            30.0 + 2.0 * spread,
+        ]);
+        list
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn a_wide_blur_taken_at_reduced_size_stays_close_to_the_exact_one() {
+        let harness = TestHarness::new().unwrap();
+        let (w, h) = (W as usize, H as usize);
+        for (sigma, slack) in [(8.0f32, 4), (12.0, 6), (16.0, 6), (32.0, 6)] {
+            let name = format!("layer_blur_{sigma}");
+            let (page, _) = draw_plan(&harness, &name, &blurred_by(sigma), None, &[]);
+            let (hx, vy) = (blur_span(w, 20, 60, sigma), blur_span(h, 20, 50, sigma));
+            assert_page(
+                &page,
+                |x, y| {
+                    let a = hx[x as usize] * vy[y as usize];
+                    [
+                        255.0 * (1.0 - a) + 229.5 * a,
+                        255.0 * (1.0 - a) + 25.5 * a,
+                        255.0 * (1.0 - a) + 25.5 * a,
+                    ]
+                },
+                slack,
+                &format!("blur {sigma}"),
+            );
+        }
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn a_layer_changes_nothing_outside_its_bounds() {
+        let harness = TestHarness::new().unwrap();
+        // A blur of 4 whose bounds are the box alone, with none of the reach the
+        // producer would give it: the blur is cut off where the bounds end.
+        let mut list = blurred_by(4.0);
+        let record = 2 * RECORD_FLOATS;
+        list[record..record + 4].copy_from_slice(&[20.0, 20.0, 40.0, 30.0]);
+        let (page, _) = draw_plan(&harness, "layer_cut", &list, None, &[]);
+        assert!(within(at(&page, 15, 35), [255, 255, 255], 0), "left of it");
+        assert!(within(at(&page, 40, 55), [255, 255, 255], 0), "below it");
+        // Inside, the box's own edge is blurred as usual.
+        let edge = at(&page, 20, 35)[1];
+        assert!(edge > 100 && edge < 200, "{edge}");
     }
 }

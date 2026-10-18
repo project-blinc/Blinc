@@ -7,7 +7,7 @@
 //! consecutive primitives together, puts each image between them and nests
 //! each layer's items inside it.
 
-use super::effects::{DropShadow, LayerEffects, LayerFx};
+use super::effects::{DropShadow, LayerEffects, LayerFrame, LayerFx};
 use super::{
     CLIP_SCREEN, DecodeError, Kind, NO_CLIP, Placement, Record, Unsupported, records, row,
 };
@@ -29,6 +29,9 @@ pub struct ImageDraw {
 pub struct Layer {
     pub items: Vec<Item>,
     pub fx: LayerFx,
+    /// Where the layer reaches on the target, in device pixels: what it drew,
+    /// widened by how far its blur and shadow spread. Nothing outside it changes.
+    pub bounds: [f32; 4],
 }
 
 /// One step of a plan.
@@ -84,7 +87,11 @@ pub fn plan(floats: &[f32], count: usize, version: u32, scale: f32) -> Result<Pl
                 let inner = open.pop().expect("a layer is open").items;
                 let parent = &mut open.last_mut().expect("the page is open").items;
                 match record.layer() {
-                    Ok(fx) => parent.push(Item::Layer(Layer { items: inner, fx })),
+                    Ok(fx) => parent.push(Item::Layer(Layer {
+                        items: inner,
+                        fx,
+                        bounds: record.row(row::BOUNDS).map(|v| v * scale),
+                    })),
                     Err(why) => {
                         plan.unsupported.push((index, why));
                         inner.into_iter().for_each(|item| push(parent, item));
@@ -251,26 +258,22 @@ impl Painter {
                     renderer.render_with_clear(&texture.view, &PrimitiveBatch::new(), [0.0; 4]);
                     self.draw(renderer, &texture.view, size, &layer.items, images, missing);
 
-                    let rows = (layer.fx.blur > 0.0)
-                        .then(|| LayerTexture::new(&device, size, format, false));
-                    let shadow = layer
-                        .fx
-                        .shadow
-                        .map(|_| LayerTexture::new(&device, size, format, false));
                     let effects = self
                         .effects
                         .get_or_insert_with(|| LayerEffects::new(&device, format));
-                    effects.composite(
-                        &device,
-                        &queue,
-                        &texture.view,
-                        [
-                            rows.as_ref().map_or(&texture.view, |t| &t.view),
-                            shadow.as_ref().map_or(&texture.view, |t| &t.view),
-                        ],
-                        target,
-                        &layer.fx,
+                    // The pixels the layer reaches, whole, on the target.
+                    let [x, y, w, h] = layer.bounds;
+                    let (x0, y0) = (x.floor().max(0.0), y.floor().max(0.0));
+                    let (x1, y1) = (
+                        (x + w).ceil().min(size.0 as f32),
+                        (y + h).ceil().min(size.1 as f32),
                     );
+                    if x1 <= x0 || y1 <= y0 {
+                        continue;
+                    }
+                    let region = [x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32];
+                    let frame = LayerFrame { size, region };
+                    effects.composite(&device, &queue, &texture.view, target, frame, &layer.fx);
                 }
             }
         }
