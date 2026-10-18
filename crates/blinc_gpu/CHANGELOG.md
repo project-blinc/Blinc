@@ -5,6 +5,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `display_list`: reads `blinc_abi` display lists. `records` checks a list's version and length, `Record` is a typed view of one record, and `Record::to_primitive` turns a box or shadow record into the `GpuPrimitive` the SDF pipelines draw, at a given display scale. A record that needs something a primitive cannot yet carry (a local clip, per-side border colours, a fading clip, a `clip-path`, a notch, a multi-stop gradient, text, images, layers) comes back as `Unsupported` naming it.
 - Per-corner squircle / scoop / bevel support on `ClipShape::RoundedRect` propagated into the SDF clip primitive uniforms — all 12 SDF shader variants (`sdf_core` / `sdf_shadow` / `sdf_3d` / `sdf_notch` × `vb` / `dt` / msaa) now read and apply per-corner `n` when evaluating clip alpha.
 
 ### Fixed

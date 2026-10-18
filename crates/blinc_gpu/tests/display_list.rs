@@ -1,0 +1,291 @@
+//! The display list decoder, on records `blinc_abi` produced.
+//!
+//! Each fixture is the records of a small scene at `DISPLAY_LIST_VERSION` 1:
+//! a 200 by 120 root with 20px of padding holding one box of 100 by 60.
+//! `fixtures/display_list/generate.rs` writes them; it builds against
+//! `blinc_abi` outside this workspace, so the fixtures are checked in.
+//!
+//! These tests need no GPU.
+
+use blinc_gpu::display_list::{
+    DISPLAY_LIST_VERSION, DecodeError, Kind, RECORD_FLOATS, Record, Unsupported, decode, records,
+    row,
+};
+use blinc_gpu::primitives::{ClipType, FillType, GpuPrimitive, PrimitiveType};
+
+macro_rules! fixture {
+    ($name:literal) => {
+        floats(include_bytes!(concat!(
+            "fixtures/display_list/",
+            $name,
+            ".f32"
+        )))
+    };
+}
+
+fn floats(bytes: &[u8]) -> Vec<f32> {
+    bytes
+        .chunks_exact(4)
+        .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        .collect()
+}
+
+fn first(list: &[f32], scale: f32) -> GpuPrimitive {
+    decode(
+        list,
+        list.len() / RECORD_FLOATS,
+        DISPLAY_LIST_VERSION,
+        scale,
+    )
+    .unwrap()
+    .primitives
+    .remove(0)
+}
+
+fn near(a: &[f32], b: &[f32]) {
+    assert_eq!(a.len(), b.len(), "{a:?} vs {b:?}");
+    for (x, y) in a.iter().zip(b) {
+        assert!((x - y).abs() < 1e-3, "{a:?} vs {b:?}");
+    }
+}
+
+fn set_row(list: &mut [f32], record: usize, row: usize, value: [f32; 4]) {
+    let at = record * RECORD_FLOATS + row * 4;
+    list[at..at + 4].copy_from_slice(&value);
+}
+
+#[test]
+fn a_list_of_another_version_is_refused() {
+    let list = fixture!("box_solid");
+    assert_eq!(
+        records(&list, 1, DISPLAY_LIST_VERSION + 1).err(),
+        Some(DecodeError::Version {
+            found: DISPLAY_LIST_VERSION + 1
+        })
+    );
+}
+
+#[test]
+fn a_list_shorter_than_its_count_is_refused() {
+    let list = fixture!("box_solid");
+    assert_eq!(
+        records(&list, 2, DISPLAY_LIST_VERSION).err(),
+        Some(DecodeError::Short {
+            floats: RECORD_FLOATS,
+            needed: 2 * RECORD_FLOATS
+        })
+    );
+}
+
+#[test]
+fn a_solid_box_keeps_its_geometry() {
+    let p = first(&fixture!("box_solid"), 1.0);
+    near(&p.bounds, &[20.0, 20.0, 100.0, 60.0]);
+    near(&p.corner_radius, &[8.0; 4]);
+    near(&p.color, &[0.2, 0.4, 0.9, 1.0]);
+    near(&p.local_affine, &[1.0, 0.0, 0.0, 1.0]);
+    near(&p.clip_bounds, &[-10000.0, -10000.0, 100000.0, 100000.0]);
+    assert_eq!(
+        p.type_info,
+        [PrimitiveType::Rect as u32, FillType::Solid as u32, 0, 0]
+    );
+}
+
+#[test]
+fn the_display_scale_takes_every_length_to_device_pixels() {
+    // The record does not depend on the scale the scene was painted at.
+    let list = fixture!("box_solid_x2");
+    let p = first(&list, 2.0);
+    near(&p.bounds, &[40.0, 40.0, 200.0, 120.0]);
+    near(&p.corner_radius, &[16.0; 4]);
+    near(&p.border, &[4.0, 0.0, 0.0, 0.0]);
+}
+
+#[test]
+fn a_uniform_border_takes_the_uniform_form() {
+    let p = first(&fixture!("box_border"), 1.0);
+    near(&p.border, &[3.0, 0.0, 0.0, 0.0]);
+    near(&p.border_color, &[0.9, 0.1, 0.1, 1.0]);
+}
+
+#[test]
+fn sides_of_different_colours_are_not_drawn_as_one() {
+    let list = fixture!("box_sides");
+    let record = Record::new(list[..RECORD_FLOATS].try_into().unwrap());
+    assert_eq!(record.unsupported(), Some(Unsupported::SideColors));
+}
+
+#[test]
+fn sides_of_one_colour_keep_their_own_widths() {
+    let mut list = fixture!("box_sides");
+    for side in 0..4 {
+        set_row(&mut list, 0, row::SIDE_COLORS + side, [0.9, 0.1, 0.1, 1.0]);
+    }
+    let p = first(&list, 1.0);
+    near(&p.border, &[4.0, 2.0, 6.0, 3.0]);
+}
+
+#[test]
+fn a_shadow_is_its_own_primitive_before_the_box() {
+    let list = fixture!("box_shadow");
+    let out = decode(&list, 2, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(out.unsupported.is_empty());
+    let (shadow, body) = (&out.primitives[0], &out.primitives[1]);
+    assert_eq!(shadow.type_info[0], PrimitiveType::Shadow as u32);
+    near(&shadow.shadow, &[4.0, 6.0, 12.0, 2.0]);
+    near(&shadow.shadow_color, &[0.0, 0.0, 0.0, 0.4]);
+    near(&shadow.corner_radius, &[10.0; 4]);
+    assert_eq!(body.type_info[0], PrimitiveType::Rect as u32);
+    near(&body.color, &[1.0, 1.0, 1.0, 1.0]);
+}
+
+#[test]
+fn a_shadow_scales_with_the_display() {
+    let list = fixture!("box_shadow");
+    let out = decode(&list, 2, DISPLAY_LIST_VERSION, 2.0).unwrap();
+    near(&out.primitives[0].shadow, &[8.0, 12.0, 24.0, 4.0]);
+}
+
+#[test]
+fn a_turned_box_keeps_its_centre_and_size() {
+    let p = first(&fixture!("box_rotated"), 1.0);
+    near(&p.bounds, &[20.0, 20.0, 100.0, 60.0]);
+    let (sin, cos) = (0.5f32.sin(), 0.5f32.cos());
+    near(&p.local_affine, &[cos, sin, -sin, cos]);
+    near(&p.rotation, &[sin, cos, 0.0, 1.0]);
+}
+
+#[test]
+fn a_stretched_box_takes_the_uniform_scale_and_the_rest_in_the_affine() {
+    let p = first(&fixture!("box_scaled"), 1.0);
+    let k = (1.5f32 * 0.75).sqrt();
+    // The centre stays at (70, 50).
+    near(
+        &[
+            p.bounds[0] + p.bounds[2] / 2.0,
+            p.bounds[1] + p.bounds[3] / 2.0,
+        ],
+        &[70.0, 50.0],
+    );
+    near(&[p.bounds[2], p.bounds[3]], &[100.0 * k, 60.0 * k]);
+    near(&p.local_affine, &[1.5 / k, 0.0, 0.0, 0.75 / k]);
+}
+
+#[test]
+fn a_linear_gradient_is_placed_from_the_boxs_corner() {
+    let list = fixture!("box_gradient");
+    let p = first(&list, 1.0);
+    assert_eq!(p.type_info[1], FillType::LinearGradient as u32);
+    near(&p.gradient_params, &[20.0, 20.0, 120.0, 20.0]);
+    near(&p.color, &[1.0, 0.2, 0.2, 1.0]);
+    near(&p.color2, &[0.2, 0.2, 1.0, 1.0]);
+    let p = first(&list, 2.0);
+    near(&p.gradient_params, &[40.0, 40.0, 240.0, 40.0]);
+}
+
+#[test]
+fn a_radial_gradient_is_placed_from_the_boxs_corner() {
+    let p = first(&fixture!("box_radial"), 1.0);
+    assert_eq!(p.type_info[1], FillType::RadialGradient as u32);
+    near(&p.gradient_params, &[70.0, 50.0, 40.0, 0.0]);
+}
+
+#[test]
+fn an_overflow_clip_reaches_the_children_it_cuts() {
+    let list = fixture!("clip_child");
+    let out = decode(&list, 2, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    let (parent, child) = (&out.primitives[0], &out.primitives[1]);
+    assert_eq!(parent.type_info[2], ClipType::None as u32);
+    assert_eq!(child.type_info[2], ClipType::Rect as u32);
+    near(&child.clip_bounds, &[20.0, 20.0, 100.0, 60.0]);
+    near(&child.clip_radius, &[16.0; 4]);
+    near(&child.clip_corner_shape, &[1.0; 4]);
+    // The child's own box is not changed by the clip.
+    near(&child.bounds, &[10.0, 10.0, 60.0, 40.0]);
+}
+
+#[test]
+fn what_a_primitive_cannot_carry_is_named() {
+    let base = fixture!("box_solid");
+    let cases: [(&str, usize, [f32; 4], Unsupported); 8] = [
+        (
+            "text",
+            row::TYPES,
+            [7.0, 0.0, 0.0, 1.0],
+            Unsupported::Kind(7.0),
+        ),
+        (
+            "canvas",
+            row::TYPES,
+            [33.0, 0.0, 0.0, 1.0],
+            Unsupported::Kind(33.0),
+        ),
+        (
+            "local clip",
+            row::TYPES,
+            [0.0, 0.0, 2.0, 1.0],
+            Unsupported::LocalClip,
+        ),
+        (
+            "conic",
+            row::TYPES,
+            [0.0, 3.0, 0.0, 1.0],
+            Unsupported::Gradient,
+        ),
+        (
+            "fade",
+            row::FADE,
+            [4.0, 0.0, 0.0, 0.0],
+            Unsupported::ClipFade,
+        ),
+        (
+            "clip path",
+            row::SHAPE + 1,
+            [0.0, 0.0, 1.0, 0.0],
+            Unsupported::ClipShape,
+        ),
+        (
+            "notch",
+            row::NOTCH + 1,
+            [0.0, 8.0, 4.0, 0.0],
+            Unsupported::Notch,
+        ),
+        ("no area", row::AFFINE, [0.0; 4], Unsupported::Degenerate),
+    ];
+    for (name, at, value, why) in cases {
+        let mut list = base.clone();
+        set_row(&mut list, 0, at, value);
+        let record = Record::new(list[..RECORD_FLOATS].try_into().unwrap());
+        assert_eq!(record.unsupported(), Some(why), "{name}");
+        assert_eq!(record.to_primitive(1.0).err(), Some(why), "{name}");
+    }
+}
+
+#[test]
+fn three_stops_are_not_drawn_as_two() {
+    let mut list = fixture!("box_gradient");
+    set_row(&mut list, 0, row::GRADIENT_OFFSETS, [0.0, 0.5, 1.0, 1.0]);
+    let record = Record::new(list[..RECORD_FLOATS].try_into().unwrap());
+    assert_eq!(record.unsupported(), Some(Unsupported::Gradient));
+}
+
+#[test]
+fn a_list_reports_the_records_it_left_out_by_index() {
+    let one = fixture!("box_solid");
+    let mut text = one.clone();
+    set_row(&mut text, 0, row::TYPES, [7.0, 0.0, 0.0, 1.0]);
+    let list: Vec<f32> = [one.clone(), text, one].concat();
+    let out = decode(&list, 3, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert_eq!(out.primitives.len(), 2);
+    assert_eq!(out.unsupported, vec![(1, Unsupported::Kind(7.0))]);
+}
+
+#[test]
+fn kinds_are_named() {
+    let list = fixture!("box_shadow");
+    let kinds: Vec<Kind> = records(&list, 2, DISPLAY_LIST_VERSION)
+        .unwrap()
+        .map(|r| r.kind())
+        .collect();
+    assert_eq!(kinds, [Kind::Shadow, Kind::Box]);
+}

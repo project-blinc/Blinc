@@ -1,6 +1,7 @@
 //! Visual test cases organized by category
 
 pub mod clipping;
+pub mod display_list;
 pub mod glass;
 pub mod gradients;
 pub mod layout;
