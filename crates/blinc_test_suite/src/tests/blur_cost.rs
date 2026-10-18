@@ -8,15 +8,17 @@
 //! composite over a target, which the Kawase time does not.
 //!
 //! Two layers are measured. The first is the whole of a 1920 by 1080 target. The
-//! second is an element of 400 by 300 on that target: the Gaussian's passes are
-//! confined to its region on the full-size layer, and Kawase blurs a texture
-//! of just that size, as Blinc's own layers are.
+//! second is an element of 400 by 300 on that target, its content in a texture of
+//! just that size, as layers are drawn: the Gaussian's passes are confined to its
+//! region, and Kawase blurs the same texture.
 
 #[cfg(test)]
 mod tests {
     use crate::harness::TestHarness;
+    use blinc_gpu::GpuPrimitive;
     use blinc_gpu::LayerTexture;
     use blinc_gpu::display_list::effects::{LayerEffects, LayerFrame, LayerFx};
+    use blinc_gpu::display_list::plan::{Item, Layer, Painter, Plan};
     use std::time::Instant;
 
     const SIZE: (u32, u32) = (1920, 1080);
@@ -54,17 +56,21 @@ mod tests {
                         blur: sigma,
                         ..LayerFx::fade(1.0)
                     };
-                    let mut gaussian = |region: [u32; 4]| {
+                    let mut gaussian = |texture: &LayerTexture, region: [u32; 4]| {
                         median_ms(
                             (0..RUNS + 3)
                                 .map(|_| {
                                     let start = Instant::now();
                                     for _ in 0..BATCH {
-                                        let frame = LayerFrame { size: SIZE, region };
+                                        let frame = LayerFrame {
+                                            size: texture.size,
+                                            origin: [region[0], region[1]],
+                                            region,
+                                        };
                                         effects.composite(
                                             &device,
                                             &queue,
-                                            &content.view,
+                                            &texture.view,
                                             target,
                                             frame,
                                             &fx,
@@ -77,8 +83,8 @@ mod tests {
                                 .collect(),
                         )
                     };
-                    let gaussian_whole = gaussian(whole);
-                    let gaussian_element = gaussian(element);
+                    let gaussian_whole = gaussian(&content, whole);
+                    let gaussian_element = gaussian(&tight, element);
 
                     let passes = ((sigma / 2.0).ceil().max(2.0) as u32).min(8);
                     let mut kawase = |texture: &LayerTexture| {
@@ -122,6 +128,69 @@ mod tests {
         println!("sigma | gaussian | kawase   | gaussian | kawase");
         for (sigma, gw, kw, ge, ke) in table {
             println!("{sigma:>5} | {gw:>8.3} | {kw:>8.3} | {ge:>8.3} | {ke:>6.3}");
+        }
+    }
+
+    /// A whole frame of one box in a layer, drawn through the executor, with the
+    /// layer's bounds the whole target and then just the element.
+    #[test]
+    #[ignore] // Requires GPU
+    fn layer_cost_by_region() {
+        let harness = TestHarness::new().unwrap();
+        let path = harness.output_path("layer_cost");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut rows = Vec::new();
+        harness
+            .render_with(SIZE.0, SIZE.1, &path, |renderer, target| {
+                let device = renderer.device_arc();
+                let mut painter = Painter::default();
+                let element = GpuPrimitive {
+                    bounds: [760.0, 390.0, 400.0, 300.0],
+                    color: [0.9, 0.1, 0.1, 1.0],
+                    ..GpuPrimitive::rect(760.0, 390.0, 400.0, 300.0)
+                };
+                for (what, blur) in [("fade", 0.0f32), ("blur 4", 4.0), ("blur 16", 16.0)] {
+                    for (where_, bounds) in [
+                        ("whole target", [0.0, 0.0, SIZE.0 as f32, SIZE.1 as f32]),
+                        ("element", [760.0, 390.0, 400.0, 300.0]),
+                    ] {
+                        let plan = Plan {
+                            items: vec![Item::Layer(Layer {
+                                items: vec![Item::Primitives(vec![element])],
+                                fx: LayerFx {
+                                    blur,
+                                    ..LayerFx::fade(0.5)
+                                },
+                                bounds,
+                            })],
+                            unsupported: Vec::new(),
+                        };
+                        let frames = (0..RUNS + 3)
+                            .map(|_| {
+                                let start = Instant::now();
+                                for _ in 0..BATCH {
+                                    painter.render(
+                                        renderer,
+                                        target,
+                                        SIZE,
+                                        &plan,
+                                        [1.0; 4],
+                                        &|_| None,
+                                    );
+                                }
+                                let _ = device.poll(wgpu::PollType::Wait);
+                                start.elapsed().as_secs_f64() * 1000.0 / BATCH as f64
+                            })
+                            .skip(3)
+                            .collect::<Vec<_>>();
+                        rows.push((what, where_, median_ms(frames)));
+                    }
+                }
+            })
+            .unwrap();
+        println!("one layer, a whole frame through the executor, ms per frame");
+        for (what, where_, ms) in rows {
+            println!("{what:>8} | {where_:>12} | {ms:>6.3}");
         }
     }
 }

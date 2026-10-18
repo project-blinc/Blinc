@@ -12,7 +12,7 @@ use super::{
     CLIP_SCREEN, DecodeError, Kind, NO_CLIP, Placement, Record, Unsupported, records, row,
 };
 use crate::image::{GpuImage, GpuImageInstance};
-use crate::primitives::{GpuPrimitive, PrimitiveBatch};
+use crate::primitives::{FillType, GpuPrimitive, PrimitiveBatch, PrimitiveType};
 use crate::renderer::{GpuRenderer, LayerTexture};
 
 /// An image to draw: the consumer's resource for `slot`, over a box.
@@ -25,7 +25,7 @@ pub struct ImageDraw {
 
 /// A group drawn into a layer of its own and then over its parent as `fx`
 /// says, so what overlaps inside it does not show through itself.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Layer {
     pub items: Vec<Item>,
     pub fx: LayerFx,
@@ -35,7 +35,7 @@ pub struct Layer {
 }
 
 /// One step of a plan.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Item {
     /// Primitives in paint order, drawn together.
     Primitives(Vec<GpuPrimitive>),
@@ -202,10 +202,105 @@ impl Record<'_> {
     }
 }
 
+/// Whether a clip bound is a real clip and not the sentinel for none.
+fn has_clip(bounds: [f32; 4]) -> bool {
+    bounds[0] > -5000.0 && bounds[2] < 90000.0
+}
+
+/// `item` moved by `(dx, dy)`, into the frame of a texture that begins there.
+fn moved(items: &[Item], dx: f32, dy: f32) -> Vec<Item> {
+    let primitive = |p: &GpuPrimitive| {
+        let mut p = *p;
+        p.bounds[0] += dx;
+        p.bounds[1] += dy;
+        if has_clip(p.clip_bounds) {
+            p.clip_bounds[0] += dx;
+            p.clip_bounds[1] += dy;
+        }
+        // A gradient's geometry is in the same frame as the box; a glyph's is its
+        // rect in the atlas, which stays where it is.
+        let kind = p.type_info[0];
+        let fill = p.type_info[1];
+        if kind == PrimitiveType::Rect as u32 {
+            if fill == FillType::LinearGradient as u32 {
+                p.gradient_params[0] += dx;
+                p.gradient_params[1] += dy;
+                p.gradient_params[2] += dx;
+                p.gradient_params[3] += dy;
+            } else if fill == FillType::RadialGradient as u32 {
+                p.gradient_params[0] += dx;
+                p.gradient_params[1] += dy;
+            }
+        }
+        p
+    };
+    items
+        .iter()
+        .map(|item| match item {
+            Item::Primitives(run) => Item::Primitives(run.iter().map(primitive).collect()),
+            Item::Image(draw) => {
+                let mut instance = draw.instance;
+                instance.dst_rect[0] += dx;
+                instance.dst_rect[1] += dy;
+                if has_clip(instance.clip_bounds) {
+                    instance.clip_bounds[0] += dx;
+                    instance.clip_bounds[1] += dy;
+                }
+                Item::Image(ImageDraw {
+                    slot: draw.slot,
+                    instance,
+                })
+            }
+            Item::Layer(layer) => Item::Layer(Layer {
+                items: moved(&layer.items, dx, dy),
+                fx: layer.fx,
+                bounds: [
+                    layer.bounds[0] + dx,
+                    layer.bounds[1] + dy,
+                    layer.bounds[2],
+                    layer.bounds[3],
+                ],
+            }),
+        })
+        .collect()
+}
+
+/// Content textures are rounded up to this many pixels, so layers that differ a
+/// little between frames share one.
+const TEXTURE_STEP: u32 = 64;
+
+/// Textures kept for the next layer.
+const MAX_POOLED: usize = 8;
+
+/// Clears `view` to transparent.
+fn clear(device: &wgpu::Device, queue: &wgpu::Queue, view: &wgpu::TextureView) {
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("Display List Layer Clear"),
+    });
+    drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Display List Layer Clear"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            depth_slice: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+    }));
+    queue.submit(std::iter::once(encoder.finish()));
+}
+
 /// Draws plans, keeping what drawing a layer's effects needs between them.
 #[derive(Default)]
 pub struct Painter {
     effects: Option<LayerEffects>,
+    /// Content textures a layer is done with, to draw into again.
+    textures: Vec<LayerTexture>,
 }
 
 impl Painter {
@@ -223,10 +318,27 @@ impl Painter {
         clear: [f64; 4],
         images: &dyn Fn(u32) -> Option<&'i GpuImage>,
     ) -> Vec<u32> {
+        renderer.resize(size.0, size.1);
         renderer.render_with_clear(target, &PrimitiveBatch::new(), clear);
         let mut missing = Vec::new();
         self.draw(renderer, target, size, &plan.items, images, &mut missing);
         missing
+    }
+
+    /// A texture of exactly `size`, from the pool when one is free.
+    ///
+    /// Exactly, not at least: the renderer maps clip space onto the whole of a
+    /// texture, which a larger one would stretch.
+    fn take_texture(
+        &mut self,
+        device: &wgpu::Device,
+        size: (u32, u32),
+        format: wgpu::TextureFormat,
+    ) -> LayerTexture {
+        match self.textures.iter().position(|t| t.size == size) {
+            Some(at) => self.textures.swap_remove(at),
+            None => LayerTexture::new(device, size, format, false),
+        }
     }
 
     fn draw<'i>(
@@ -250,17 +362,6 @@ impl Painter {
                     None => missing.push(draw.slot),
                 },
                 Item::Layer(layer) => {
-                    let (device, queue) = (renderer.device_arc(), renderer.queue_arc());
-                    let format = renderer.texture_format;
-                    // Exactly the target's size: the renderer maps clip space onto the
-                    // whole texture, which a pooled texture rounded up would stretch.
-                    let texture = LayerTexture::new(&device, size, format, false);
-                    renderer.render_with_clear(&texture.view, &PrimitiveBatch::new(), [0.0; 4]);
-                    self.draw(renderer, &texture.view, size, &layer.items, images, missing);
-
-                    let effects = self
-                        .effects
-                        .get_or_insert_with(|| LayerEffects::new(&device, format));
                     // The pixels the layer reaches, whole, on the target.
                     let [x, y, w, h] = layer.bounds;
                     let (x0, y0) = (x.floor().max(0.0), y.floor().max(0.0));
@@ -272,8 +373,52 @@ impl Painter {
                         continue;
                     }
                     let region = [x0 as u32, y0 as u32, (x1 - x0) as u32, (y1 - y0) as u32];
-                    let frame = LayerFrame { size, region };
+                    // Its content is drawn into a texture that covers just that, and the
+                    // pixels a drop shadow is read from: the region shifted back by the
+                    // shadow's offset. The renderer's viewport is set to the texture's size.
+                    let mut content = [
+                        region[0] as i64,
+                        region[1] as i64,
+                        (region[0] + region[2]) as i64,
+                        (region[1] + region[3]) as i64,
+                    ];
+                    if let Some(shadow) = layer.fx.shadow {
+                        let shift = shadow.offset.map(|o| (o + 0.5).floor() as i64);
+                        content[0] = content[0].min(content[0] - shift[0]);
+                        content[1] = content[1].min(content[1] - shift[1]);
+                        content[2] = content[2].max(content[2] - shift[0]);
+                        content[3] = content[3].max(content[3] - shift[1]);
+                    }
+                    let (cx0, cy0) = (content[0].max(0) as u32, content[1].max(0) as u32);
+                    let (cx1, cy1) = (
+                        (content[2].max(0) as u32).min(size.0),
+                        (content[3].max(0) as u32).min(size.1),
+                    );
+                    let tight = (
+                        ((cx1 - cx0).div_ceil(TEXTURE_STEP) * TEXTURE_STEP).min(size.0),
+                        ((cy1 - cy0).div_ceil(TEXTURE_STEP) * TEXTURE_STEP).min(size.1),
+                    );
+                    let (device, queue) = (renderer.device_arc(), renderer.queue_arc());
+                    let format = renderer.texture_format;
+                    let texture = self.take_texture(&device, tight, format);
+                    clear(&device, &queue, &texture.view);
+                    renderer.resize(tight.0, tight.1);
+                    let inner = moved(&layer.items, -(cx0 as f32), -(cy0 as f32));
+                    self.draw(renderer, &texture.view, tight, &inner, images, missing);
+                    renderer.resize(size.0, size.1);
+
+                    let effects = self
+                        .effects
+                        .get_or_insert_with(|| LayerEffects::new(&device, format));
+                    let frame = LayerFrame {
+                        size: tight,
+                        origin: [cx0, cy0],
+                        region,
+                    };
                     effects.composite(&device, &queue, &texture.view, target, frame, &layer.fx);
+                    self.textures.push(texture);
+                    let excess = self.textures.len().saturating_sub(MAX_POOLED);
+                    self.textures.drain(..excess);
                 }
             }
         }

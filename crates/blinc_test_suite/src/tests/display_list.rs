@@ -837,15 +837,118 @@ mod tests {
     fn a_layer_changes_nothing_outside_its_bounds() {
         let harness = TestHarness::new().unwrap();
         // A blur of 4 whose bounds are the box alone, with none of the reach the
-        // producer would give it: the blur is cut off where the bounds end.
+        // producer would give it: nothing outside the bounds is changed.
         let mut list = blurred_by(4.0);
         let record = 2 * RECORD_FLOATS;
         list[record..record + 4].copy_from_slice(&[20.0, 20.0, 40.0, 30.0]);
         let (page, _) = draw_plan(&harness, "layer_cut", &list, None, &[]);
         assert!(within(at(&page, 15, 35), [255, 255, 255], 0), "left of it");
         assert!(within(at(&page, 40, 55), [255, 255, 255], 0), "below it");
-        // Inside, the box's own edge is blurred as usual.
-        let edge = at(&page, 20, 35)[1];
-        assert!(edge > 100 && edge < 200, "{edge}");
+        // Inside, the box is there: the blur is cut off at the bounds, and the content
+        // texture's edge texels repeat past it, so with no margin the edge stays sharp.
+        assert!(within(at(&page, 40, 35), [230, 26, 26], 3), "inside");
+    }
+
+    /// `list` with every record's box moved by `(dx, dy)`.
+    fn shifted(list: &[f32], dx: f32, dy: f32) -> Vec<f32> {
+        let mut out = list.to_vec();
+        for record in out.chunks_exact_mut(RECORD_FLOATS) {
+            // A box record's top-left and its layer's bounds are both in row 0, and a
+            // gradient's geometry is relative to the box, so only row 0 moves.
+            if record[44] == 0.0 || record[44] == 41.0 || record[44] == 7.0 {
+                record[0] += dx;
+                record[1] += dy;
+            }
+        }
+        out
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn a_layer_away_from_the_corner_draws_where_it_is() {
+        let harness = TestHarness::new().unwrap();
+        // The blurred box moved to (120, 60): the layer's texture covers only its
+        // region, so everything in it is placed against that, not the page.
+        let list = shifted(&fixture!("layer_blur"), 100.0, 40.0);
+        let (page, _) = draw_plan(&harness, "layer_moved", &list, None, &[]);
+        let (w, h) = (W as usize, H as usize);
+        let (hx, vy) = (blur_span(w, 120, 160, 4.0), blur_span(h, 60, 90, 4.0));
+        assert_page(
+            &page,
+            |x, y| {
+                let a = hx[x as usize] * vy[y as usize];
+                [
+                    255.0 * (1.0 - a) + 229.5 * a,
+                    255.0 * (1.0 - a) + 25.5 * a,
+                    255.0 * (1.0 - a) + 25.5 * a,
+                ]
+            },
+            4,
+            "moved blur",
+        );
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn a_gradient_and_text_in_a_faded_layer_keep_their_place() {
+        let harness = TestHarness::new().unwrap();
+        let (device, queue) = harness.gpu();
+        let (width, height, atlas) = atlas_fixture(include_bytes!(
+            "../../../blinc_gpu/tests/fixtures/display_list/text_hello_x1.atlas"
+        ));
+        let mut mask = AtlasTexture::new(device, false);
+        let color = AtlasTexture::new(device, true);
+        mask.update(
+            device,
+            queue,
+            &AtlasUpdate {
+                width,
+                height,
+                x: 0,
+                y: 0,
+                update_width: width,
+                update_height: height,
+                bytes: &atlas,
+            },
+        )
+        .unwrap();
+        harness.set_glyph_atlas(mask.view(), color.view());
+
+        // A gradient box and the word, in a group at half opacity, at (20, 20) in a
+        // layer whose own corner is not the page's.
+        let layer = fixture!("layer_opacity");
+        let group = |inner: &[f32], bounds: [f32; 4]| {
+            let mut closing = layer[3 * RECORD_FLOATS..4 * RECORD_FLOATS].to_vec();
+            closing[0..4].copy_from_slice(&bounds);
+            [layer[..RECORD_FLOATS].to_vec(), inner.to_vec(), closing].concat()
+        };
+        let gradient = group(&fixture!("box_gradient"), [20.0, 20.0, 100.0, 60.0]);
+        let (page, _) = draw_plan(&harness, "layer_gradient", &gradient, None, &[]);
+        // The gradient runs red to blue across the box, half faded over white.
+        for x in [30u32, 70, 110] {
+            let t = (x as f32 - 20.0) / 100.0;
+            let (r, g, b) = (1.0 - 0.8 * t, 0.2, 0.2 + 0.8 * t);
+            let want = [r, g, b].map(|c| 255.0 * (0.5 + 0.5 * c));
+            let got = at(&page, x, 50);
+            for c in 0..3 {
+                assert!(
+                    (got[c] as f32 - want[c]).abs() <= 4.0,
+                    "gradient at {x}: {got:?} wanted {want:?}"
+                );
+            }
+        }
+
+        let words = group(&fixture!("text_hello_x1"), [18.0, 23.0, 50.0, 20.0]);
+        let (page, _) = draw_plan(&harness, "layer_text", &words, None, &[]);
+        let expected = glyph_reference(&fixture!("text_hello_x1"), &atlas, width, 1.0);
+        assert_page(
+            &page,
+            |x, y| {
+                let p = expected.get_pixel(x, y);
+                [0, 1, 2].map(|c| 255.0 * 0.5 + p[c] as f32 * 0.5)
+            },
+            4,
+            "text in a layer",
+        );
     }
 }

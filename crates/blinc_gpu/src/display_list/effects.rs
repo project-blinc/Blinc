@@ -40,8 +40,9 @@ struct Params {
     shadow: vec4<f32>,
     // The drop shadow's colour.
     tint: vec4<f32>,
-    // The target's size.
+    // The content texture's size, and where on the target its top-left falls.
     size: vec4<f32>,
+    origin: vec4<f32>,
     // How many pairs of taps the blur has, and the shadow.
     counts: vec4<u32>,
     // Each pair is the offset of one fetch and its weight; two to a vec4.
@@ -118,12 +119,14 @@ fn fs_shadow_rows(@builtin(position) at: vec4<f32>) -> @location(0) vec4<f32> {
 @fragment
 fn fs_composite(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
     let at = position.xy;
+    // Where this pixel is in the content, which covers only the layer's region.
+    let local = at - params.origin.xy;
     var texel = vec4<f32>(0.0);
     if params.counts.x > 0u {
         // The layer here is the blurred rows, at the size the blur was taken at.
-        texel = blur_taps(layer, at / params.blur.z, vec2<f32>(0.0, 1.0));
+        texel = blur_taps(layer, local / params.blur.z, vec2<f32>(0.0, 1.0));
     } else {
-        texel = textureLoad(layer, vec2<i32>(at), 0);
+        texel = textureLoad(layer, vec2<i32>(local), 0);
     }
     var rgb = vec3<f32>(0.0);
     if texel.a > 0.0001 {
@@ -137,7 +140,7 @@ fn fs_composite(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32
     );
     var alpha = texel.a;
     if params.tint.a > 0.0 {
-        let source = floor(at) - floor(params.shadow.xy + vec2<f32>(0.5));
+        let source = floor(local) - floor(params.shadow.xy + vec2<f32>(0.5));
         var fallen = 0.0;
         if source.x >= 0.0 && source.x < params.size.x {
             fallen = shadow_taps(shadow, (source + vec2<f32>(0.5)) / params.blur.w, vec2<f32>(0.0, 1.0)).a;
@@ -166,13 +169,16 @@ pub struct DropShadow {
     pub color: [f32; 4],
 }
 
-/// Where a layer is drawn: the target's size, and the part of it the layer reaches.
+/// Where a layer is drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LayerFrame {
-    /// The size, in device pixels, of the layer's content and of the target.
+    /// The size, in pixels, of the content texture.
     pub size: (u32, u32),
-    /// `[x, y, width, height]`: what the layer's content, widened by the blur's and
-    /// the shadow's reach, covers. Nothing outside it is changed.
+    /// Where the content texture's top-left falls on the target.
+    pub origin: [u32; 2],
+    /// `[x, y, width, height]` on the target: the part the layer changes, the
+    /// content widened by the blur's and the shadow's reach. It lies inside the
+    /// content texture, which also covers where a shadow is read from.
     pub region: [u32; 4],
 }
 
@@ -260,6 +266,7 @@ struct Params {
     shadow: [f32; 4],
     tint: [f32; 4],
     size: [f32; 4],
+    origin: [f32; 4],
     counts: [u32; 4],
     blur_taps: [[f32; 4]; MAX_PAIRS / 2],
     shadow_taps: [[f32; 4]; MAX_PAIRS / 2],
@@ -434,12 +441,13 @@ impl LayerEffects {
     }
 
     /// Draws `content`, a premultiplied layer texture, over `target` as `fx` says,
-    /// changing only the frame's region. Every pass is drawn within that, scaled
-    /// down with the content, so a small layer costs what its area does, not the
-    /// target's.
+    /// changing only the frame's region. The passes over rows are drawn over the
+    /// content texture, scaled down with it, so a small layer costs what its area
+    /// does, not the target's.
     ///
-    /// The region must hold the content widened by the blur's and the shadow's
-    /// reach, as a layer record's bounds do; what lies outside it is not blurred in.
+    /// The content texture must hold the content widened by the blur's and the
+    /// shadow's reach, as a layer record's bounds do; what lies outside it is not
+    /// blurred in, and its edge texels are repeated past it.
     pub fn composite(
         &mut self,
         device: &wgpu::Device,
@@ -449,7 +457,13 @@ impl LayerEffects {
         frame: LayerFrame,
         fx: &LayerFx,
     ) {
-        let LayerFrame { size, region } = frame;
+        let LayerFrame {
+            size,
+            origin,
+            region,
+        } = frame;
+        // The whole content texture is drawn, as it is tight.
+        let extent = [0, 0, size.0, size.1];
         let blur = (fx.blur > 0.0).then(|| reduction(fx.blur));
         let shadow = fx
             .shadow
@@ -478,6 +492,7 @@ impl LayerEffects {
             }),
             tint: shadow.map_or([0.0; 4], |(s, _)| s.color),
             size: [size.0 as f32, size.1 as f32, 0.0, 0.0],
+            origin: [origin[0] as f32, origin[1] as f32, 0.0, 0.0],
             counts: [blur_count, shadow_count, 0, 0],
             blur_taps,
             shadow_taps,
@@ -563,7 +578,7 @@ impl LayerEffects {
                        (steps, rows): &(Vec<Scratch>, Scratch)| {
             let mut source = content;
             for (n, step) in steps.iter().enumerate() {
-                let within = shrunk(region, 2u32 << n, step.size);
+                let within = shrunk(extent, 2u32 << n, step.size);
                 pass(
                     encoder,
                     &self.down,
@@ -574,7 +589,7 @@ impl LayerEffects {
                 );
                 source = &step.view;
             }
-            let within = shrunk(region, 1u32 << steps.len(), rows.size);
+            let within = shrunk(extent, 1u32 << steps.len(), rows.size);
             pass(
                 encoder,
                 rows_pipeline,
@@ -593,20 +608,14 @@ impl LayerEffects {
 
         let layer = blur_textures.as_ref().map_or(content, |t| &t.1.view);
         let shadow_view = shadow_textures.as_ref().map_or(content, |t| &t.1.view);
-        let whole = [
-            region[0].min(size.0),
-            region[1].min(size.1),
-            region[2].min(size.0 - region[0].min(size.0)),
-            region[3].min(size.1 - region[1].min(size.1)),
-        ];
-        if whole[2] > 0 && whole[3] > 0 {
+        if region[2] > 0 && region[3] > 0 {
             pass(
                 &mut encoder,
                 &self.composite,
                 &group(layer, shadow_view),
                 target,
                 false,
-                whole,
+                region,
             );
         }
         queue.submit(std::iter::once(encoder.finish()));
@@ -654,8 +663,8 @@ mod tests {
 
     #[test]
     fn the_params_are_laid_out_as_the_shader_reads_them() {
-        // Seven vec4s, the counts, then two arrays of thirteen.
-        assert_eq!(std::mem::size_of::<Params>(), (8 + 26) * 16);
+        // Eight vec4s, the counts, then two arrays of thirteen.
+        assert_eq!(std::mem::size_of::<Params>(), (9 + 26) * 16);
     }
 
     #[test]
