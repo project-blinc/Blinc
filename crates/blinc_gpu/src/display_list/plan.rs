@@ -301,6 +301,10 @@ fn moved(items: &[Item], dx: f32, dy: f32) -> Vec<Item> {
             p.clip_bounds[0] += dx;
             p.clip_bounds[1] += dy;
         }
+        if p.clip_fade_bounds[2] > 0.0 {
+            p.clip_fade_bounds[0] += dx;
+            p.clip_fade_bounds[1] += dy;
+        }
         // A gradient's geometry is in the same frame as the box; a glyph's is its
         // rect in the atlas, which stays where it is.
         let kind = p.type_info[0];

@@ -277,7 +277,7 @@ pub enum ClipType {
 /// - corner_shape: `vec4<f32>`    (16 bytes) - superellipse n per corner (1.0=round, 0.0=bevel, 2.0=squircle)
 /// - clip_fade: `vec4<f32>`       (16 bytes) - overflow fade distances (top, right, bottom, left) in pixels
 /// - type_info: `vec4<u32>`       (16 bytes) - (primitive_type, fill_type, clip_type, z_layer)
-///   Total: 384 bytes (24 x vec4). Asserted against the WGSL
+///   Total: 512 bytes (32 x vec4). Asserted against the WGSL
 ///   declaration in `tests/primitive_layout.rs`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -365,6 +365,10 @@ pub struct GpuPrimitive {
     /// are `clip_corner_shape`'s.
     pub local_clip_bounds: [f32; 4],
     pub local_clip_radius: [f32; 4],
+    /// Screen rectangle for `clip_fade`. A zero width uses `clip_bounds`, as
+    /// native primitives do; a separate rectangle keeps intersecting clips from
+    /// moving the fade's edges.
+    pub clip_fade_bounds: [f32; 4],
 }
 
 impl Default for GpuPrimitive {
@@ -415,6 +419,7 @@ impl Default for GpuPrimitive {
             gradient_table: [0.0; 4],
             local_clip_bounds: [0.0; 4],
             local_clip_radius: [0.0; 4],
+            clip_fade_bounds: [0.0; 4],
         }
     }
 }
@@ -681,6 +686,7 @@ impl GpuPrimitive {
             gradient_table: [0.0; 4],
             local_clip_bounds: [0.0; 4],
             local_clip_radius: [0.0; 4],
+            clip_fade_bounds: [0.0; 4],
         }
     }
 
@@ -729,6 +735,7 @@ impl GpuPrimitive {
             gradient_table: [0.0; 4],
             local_clip_bounds: [0.0; 4],
             local_clip_radius: [0.0; 4],
+            clip_fade_bounds: [0.0; 4],
         }
     }
 }

@@ -221,7 +221,7 @@ fn an_overflow_clip_reaches_the_children_it_cuts() {
 #[test]
 fn what_a_primitive_cannot_carry_is_named() {
     let base = fixture!("box_solid");
-    let cases: [(&str, usize, [f32; 4], Unsupported); 7] = [
+    let cases: [(&str, usize, [f32; 4], Unsupported); 6] = [
         (
             "backdrop",
             row::TYPES,
@@ -239,12 +239,6 @@ fn what_a_primitive_cannot_carry_is_named() {
             row::TYPES,
             [0.0, 4.0, 0.0, 1.0],
             Unsupported::Gradient,
-        ),
-        (
-            "fade",
-            row::FADE,
-            [4.0, 0.0, 0.0, 0.0],
-            Unsupported::ClipFade,
         ),
         (
             "clip path",
@@ -694,4 +688,72 @@ fn an_image_under_a_clip_in_its_own_frame_is_named() {
     let planned = plan(&list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
     assert!(planned.items.is_empty());
     assert_eq!(planned.unsupported, vec![(0, Unsupported::LocalClip)]);
+}
+
+#[test]
+fn fading_clips_keep_their_own_screen_rectangle_and_distances() {
+    for scale in [1.0, 2.0] {
+        let p = first(&fixture!("fade_cut"), scale);
+        near(&p.clip_bounds, &[20.0, 20.0, 70.0, 60.0].map(|v| v * scale));
+        near(
+            &p.clip_fade_bounds,
+            &[10.0, 10.0, 100.0, 80.0].map(|v| v * scale),
+        );
+        near(&p.clip_fade, &[20.0, 32.0, 24.0, 28.0].map(|v| v * scale));
+        let turned = first(&fixture!("fade_turned"), scale);
+        assert_eq!(turned.type_info[2], ClipType::None as u32);
+        assert!(turned.local_clip_bounds[2] > 0.0);
+        assert!(turned.clip_fade_bounds[2] > 100.0 * scale);
+        let shadow = first(&fixture!("fade_shadow"), scale);
+        assert_eq!(shadow.type_info[0], PrimitiveType::Shadow as u32);
+        near(&shadow.clip_fade, &p.clip_fade);
+    }
+    assert_eq!(
+        first(&fixture!("box_solid"), 1.0).clip_fade_bounds,
+        [0.0; 4]
+    );
+}
+
+#[test]
+fn glyphs_take_the_fade_in_display_pixels_not_atlas_pixels() {
+    for (list, scale) in [
+        (fixture!("fade_text_x1"), 1.0),
+        (fixture!("fade_text_x2"), 2.0),
+    ] {
+        let decoded = decode(&list, 5, DISPLAY_LIST_VERSION, scale).unwrap();
+        assert!(decoded.unsupported.is_empty());
+        for p in decoded.primitives {
+            assert_eq!(p.type_info[0], PrimitiveType::Text as u32);
+            near(
+                &p.clip_fade_bounds,
+                &[20.0, 20.0, 100.0, 60.0].map(|v| v * scale),
+            );
+            near(&p.clip_fade, &[20.0, 32.0, 24.0, 28.0].map(|v| v * scale));
+        }
+    }
+}
+
+#[test]
+fn images_under_fading_clips_are_still_named() {
+    let list = fixture!("fade_image");
+    let planned = plan(&list, 2, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert_eq!(planned.unsupported, vec![(1, Unsupported::ClipFade)]);
+    assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.primitives.len() == 1));
+}
+
+#[test]
+fn a_fading_clip_inside_a_layer_keeps_its_screen_coordinates_until_drawing() {
+    let list = fixture!("fade_layer");
+    let planned = plan(&list, 3, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(planned.unsupported.is_empty());
+    let [Item::Layer(layer)] = &planned.items[..] else {
+        panic!("a layer")
+    };
+    let [Item::Primitives(run)] = &layer.items[..] else {
+        panic!("a primitive run")
+    };
+    near(
+        &run.primitives[0].clip_fade_bounds,
+        &[10.0, 10.0, 100.0, 80.0],
+    );
 }

@@ -108,6 +108,8 @@ struct Primitive {
     // A clip in the primitive's own frame, its width zero for none.
     local_clip_bounds: vec4<f32>,
     local_clip_radius: vec4<f32>,
+    // Separate screen fade rectangle; zero width uses clip_bounds.
+    clip_fade_bounds: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -300,7 +302,7 @@ fn vs_main(
 //   clip_radius = shape-specific data
 // The shader applies BOTH the rect scissor AND the shape clip.
 // clip_fade = (top, right, bottom, left) overflow fade distances in pixels
-fn calculate_clip_alpha(p: vec2<f32>, clip_bounds: vec4<f32>, clip_radius: vec4<f32>, clip_corner_shape: vec4<f32>, clip_type: u32, clip_fade: vec4<f32>) -> f32 {
+fn calculate_clip_alpha(p: vec2<f32>, clip_bounds: vec4<f32>, clip_radius: vec4<f32>, clip_corner_shape: vec4<f32>, clip_type: u32, clip_fade: vec4<f32>, fade_bounds: vec4<f32>) -> f32 {
     var alpha: f32 = 1.0;
 
     if clip_type != 0u {
@@ -344,8 +346,9 @@ fn calculate_clip_alpha(p: vec2<f32>, clip_bounds: vec4<f32>, clip_radius: vec4<
 
     // Apply overflow fade (smooth alpha ramp at clip edges)
     if clip_fade.x > 0.0 || clip_fade.y > 0.0 || clip_fade.z > 0.0 || clip_fade.w > 0.0 {
-        let clip_min = clip_bounds.xy;
-        let clip_max = clip_bounds.xy + clip_bounds.zw;
+        let fade_rect = select(clip_bounds, fade_bounds, fade_bounds.z > 0.0);
+        let clip_min = fade_rect.xy;
+        let clip_max = fade_rect.xy + fade_rect.zw;
         if clip_fade.x > 0.0 { alpha *= saturate((p.y - clip_min.y) / clip_fade.x); }  // top
         if clip_fade.y > 0.0 { alpha *= saturate((clip_max.x - p.x) / clip_fade.y); }  // right
         if clip_fade.z > 0.0 { alpha *= saturate((clip_max.y - p.y) / clip_fade.z); }  // bottom
@@ -539,7 +542,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // below so the polygon vertices (stored in element-local coords) can
     // be tested in the same frame the SDF evaluates — which means clips
     // rotate with motion-binding / CSS rotation automatically.
-    var clip_alpha = calculate_clip_alpha(p, prim.clip_bounds, prim.clip_radius, prim.clip_corner_shape, clip_type, prim.clip_fade);
+    var clip_alpha = calculate_clip_alpha(p, prim.clip_bounds, prim.clip_radius, prim.clip_corner_shape, clip_type, prim.clip_fade, prim.clip_fade_bounds);
     if clip_alpha < 0.001 {
         discard;
     }

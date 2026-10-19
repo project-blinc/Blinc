@@ -317,7 +317,15 @@ mod tests {
                 for dx in 0..w {
                     let texel = (uv[1] as i32 + dy) as usize * atlas_width as usize
                         + (uv[0] as i32 + dx) as usize;
-                    let alpha = color[3] * (atlas[texel] as f32 / 255.0).powf(0.7);
+                    let px = (x + dx) as f32 + 0.5;
+                    let py = (y + dy) as f32 + 0.5;
+                    let fade = fade_alpha(
+                        px / scale,
+                        py / scale,
+                        record[80..84].try_into().unwrap(),
+                        record[84..88].try_into().unwrap(),
+                    );
+                    let alpha = color[3] * (atlas[texel] as f32 / 255.0).powf(0.7) * fade;
                     let pixel = page.get_pixel_mut((x + dx) as u32, (y + dy) as u32);
                     for c in 0..3 {
                         let blended = pixel[c] as f32 * (1.0 - alpha) + color[c] * 255.0 * alpha;
@@ -334,17 +342,30 @@ mod tests {
     fn glyph_records_draw_from_the_producers_atlas() {
         let harness = TestHarness::new().unwrap();
         let (device, queue) = harness.gpu();
-        for (name, scale) in [("text_hello_x1", 1.0f32), ("text_hello_x2", 2.0)] {
+        for (name, scale) in [
+            ("text_hello_x1", 1.0f32),
+            ("text_hello_x2", 2.0),
+            ("fade_text_x1", 1.0),
+            ("fade_text_x2", 2.0),
+        ] {
             let list = match name {
                 "text_hello_x1" => fixture!("text_hello_x1"),
-                _ => fixture!("text_hello_x2"),
+                "text_hello_x2" => fixture!("text_hello_x2"),
+                "fade_text_x1" => fixture!("fade_text_x1"),
+                _ => fixture!("fade_text_x2"),
             };
             let bytes: &[u8] = match name {
                 "text_hello_x1" => include_bytes!(
                     "../../../blinc_gpu/tests/fixtures/display_list/text_hello_x1.atlas"
                 ),
-                _ => include_bytes!(
+                "text_hello_x2" => include_bytes!(
                     "../../../blinc_gpu/tests/fixtures/display_list/text_hello_x2.atlas"
+                ),
+                "fade_text_x1" => include_bytes!(
+                    "../../../blinc_gpu/tests/fixtures/display_list/fade_text_x1.atlas"
+                ),
+                _ => include_bytes!(
+                    "../../../blinc_gpu/tests/fixtures/display_list/fade_text_x2.atlas"
                 ),
             };
             let (width, height, atlas) = atlas_fixture(bytes);
@@ -535,6 +556,9 @@ mod tests {
                 (H * scale) as u32,
                 &path,
                 |renderer, view| {
+                    if name == "fade_plain_x1" {
+                        println!("fade adapter: {:?}", renderer.adapter().get_info());
+                    }
                     missing = render(
                         renderer,
                         view,
@@ -1413,5 +1437,135 @@ mod tests {
         println!("clip_cut: worst {worst} over {blue} pixels inside");
         assert!(worst <= 4, "off by {worst}");
         assert!(blue > 1000, "only {blue} pixels are inside");
+    }
+    /// The ABI fade is the product of four clamped distances from a screen rect.
+    fn fade_alpha(px: f32, py: f32, rect: [f32; 4], fade: [f32; 4]) -> f32 {
+        [
+            py - rect[1],
+            rect[0] + rect[2] - px,
+            rect[1] + rect[3] - py,
+            px - rect[0],
+        ]
+        .into_iter()
+        .zip(fade)
+        .map(|(distance, width)| {
+            if width > 0.0 {
+                (distance / width).clamp(0.0, 1.0)
+            } else {
+                1.0
+            }
+        })
+        .product()
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn fading_clips_use_the_innermost_fade_rectangle_on_screen() {
+        let harness = TestHarness::new().unwrap();
+        for scale in [1.0f32, 2.0] {
+            for (name, list, count, cut, turned, layered) in [
+                ("fade_plain", fixture!("fade_plain"), 1, false, false, false),
+                ("fade_cut", fixture!("fade_cut"), 1, true, false, false),
+                (
+                    "fade_turned",
+                    fixture!("fade_turned"),
+                    1,
+                    false,
+                    true,
+                    false,
+                ),
+                ("fade_layer", fixture!("fade_layer"), 3, true, false, true),
+                (
+                    "fade_shadow",
+                    fixture!("fade_shadow"),
+                    1,
+                    false,
+                    false,
+                    false,
+                ),
+            ] {
+                let label = format!("{name}_x{scale}");
+                let (page, _) = draw_records_at(&harness, &label, &list, count, scale, None, &[]);
+                let fade_rect = if cut {
+                    [10.0, 10.0, 100.0, 80.0]
+                } else if turned {
+                    let (c, s) = (0.4f32.cos(), 0.4f32.sin());
+                    let (w, h) = (100.0 * c + 60.0 * s, 100.0 * s + 60.0 * c);
+                    [70.0 - w / 2.0, 50.0 - h / 2.0, w, h]
+                } else {
+                    [20.0, 20.0, 100.0, 60.0]
+                };
+                let (mut worst, mut faded) = (0i32, 0usize);
+                for y in 0..page.height() {
+                    for x in 0..page.width() {
+                        let (px, py) = ((x as f32 + 0.5) / scale, (y as f32 + 0.5) / scale);
+                        let (lx, ly) = if turned {
+                            let (c, s) = (0.4f32.cos(), 0.4f32.sin());
+                            let (dx, dy) = (px - 70.0, py - 50.0);
+                            (70.0 + c * dx + s * dy, 50.0 - s * dx + c * dy)
+                        } else {
+                            (px, py)
+                        };
+                        let half = if cut { (35.0, 30.0) } else { (50.0, 30.0) };
+                        let centre = if cut { (55.0, 50.0) } else { (70.0, 50.0) };
+                        let distance = rounded_box(lx, ly, centre, half, 0.0);
+                        if distance.abs() < 1.5 / scale {
+                            continue;
+                        }
+                        let mut alpha = if distance < 0.0 {
+                            fade_alpha(px, py, fade_rect, [20.0, 32.0, 24.0, 28.0])
+                        } else {
+                            0.0
+                        };
+                        if name == "fade_shadow" {
+                            let inner = rounded_box(px, py, (70.0, 50.0), (30.0, 10.0), 0.0);
+                            let outer = rounded_box(px, py, (70.0, 50.0), (42.0, 22.0), 0.0);
+                            if inner.abs() < 1.5 / scale || outer.abs() < 1.5 / scale {
+                                continue;
+                            }
+                            if inner < 0.0 || outer > 0.0 {
+                                alpha = 0.0;
+                            }
+                        }
+                        faded += (alpha > 0.05 && alpha < 0.9) as usize;
+                        if layered {
+                            alpha *= 0.5;
+                        }
+                        let color = if layered {
+                            [0.1, 0.25, 0.45]
+                        } else {
+                            [0.2, 0.5, 0.9]
+                        };
+                        let got = at(&page, x, y);
+                        for ch in 0..3 {
+                            let want = (255.0 * (1.0 - alpha + color[ch] * alpha)).round() as i32;
+                            worst = worst.max((got[ch] as i32 - want).abs());
+                        }
+                    }
+                }
+                println!("{label}: worst {worst}, {faded} faded pixels");
+                assert!(worst <= 3, "{label}: off by {worst}");
+                assert!(faded > 500, "{label}: only {faded} faded pixels");
+            }
+        }
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn native_fades_still_use_the_screen_clip_when_no_fade_rectangle_is_set() {
+        let harness = TestHarness::new().unwrap();
+        let mut batch = PrimitiveBatch::new();
+        batch.primitives.push(GpuPrimitive {
+            bounds: [10.0, 10.0, 140.0, 100.0],
+            color: [0.2, 0.5, 0.9, 1.0],
+            clip_bounds: [20.0, 20.0, 100.0, 60.0],
+            clip_fade: [20.0, 32.0, 24.0, 28.0],
+            type_info: [PrimitiveType::Rect as u32, 0, 1, 0],
+            ..GpuPrimitive::default()
+        });
+        let native = draw(&harness, "fade_native", &batch, 1.0);
+        batch.primitives[0].clip_fade_bounds = batch.primitives[0].clip_bounds;
+        let explicit = draw(&harness, "fade_explicit", &batch, 1.0);
+        assert_eq!(compare(&native, &explicit, 0), (0, 0));
     }
 }

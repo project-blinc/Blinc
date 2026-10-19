@@ -123,7 +123,7 @@ pub enum Unsupported {
     Gradient,
     /// An image under a clip in its own frame, which the image pipeline does not take.
     LocalClip,
-    /// A clip that fades its edge.
+    /// An image under a fading clip, which the image pipeline does not take.
     ClipFade,
     /// A `clip-path` in the element's frame.
     ClipShape,
@@ -316,7 +316,7 @@ impl<'a> Record<'a> {
         if self.clip_flags() & CLIP_LOCAL != 0 && self.kind() == Kind::Image {
             return Some(Unsupported::LocalClip);
         }
-        if self.row(row::FADE) != [0.0; 4] {
+        if self.row(row::FADE) != [0.0; 4] && self.kind() == Kind::Image {
             return Some(Unsupported::ClipFade);
         }
         if self.row(row::SHAPE + 1)[2] != 0.0 {
@@ -406,6 +406,11 @@ impl<'a> Record<'a> {
             p.clip_corner_shape = [clip_n; 4];
         } else {
             p.clip_bounds = NO_CLIP;
+        }
+
+        p.clip_fade = mul(self.row(row::FADE), scale);
+        if p.clip_fade.iter().any(|f| *f > 0.0) {
+            p.clip_fade_bounds = mul(self.row(row::FADE_RECT), scale);
         }
 
         // A clip in the record's own frame, which a turned parent clips its children by.

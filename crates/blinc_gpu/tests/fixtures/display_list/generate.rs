@@ -2,7 +2,7 @@
 use blinc_abi::context::{LayoutContext, Node, Style};
 use blinc_abi::scene::blinc_core::{
     Affine2D, Brush, Color, CornerRadius, Gradient, GradientSpace, GradientSpread, GradientStop,
-    MaskImage, Point, Shadow, Transform,
+    MaskImage, OverflowFade, Point, Shadow, Transform,
 };
 use blinc_abi::scene::{PaintOptions, RenderProps, SceneEncoder};
 use blinc_layout::element::{BorderSide, BorderSides};
@@ -53,7 +53,7 @@ fn scaled(name: &str, scale: f32, build: impl FnOnce(&mut LayoutContext) -> Node
 
 /// A line of text in a padded page, with the mask atlas it draws from, cropped to the
 /// region its glyphs use: `[width, height, x, y, w, h]` as u32, then the crop's bytes.
-fn text_scene(name: &str, scale: f32, content: &str, size: f32) {
+fn text_scene(name: &str, scale: f32, content: &str, size: f32, fade: bool) {
     let mut cx = LayoutContext::new();
     let text = cx
         .create_text(
@@ -80,7 +80,19 @@ fn text_scene(name: &str, scale: f32, content: &str, size: f32) {
             ..Default::default()
         })
         .unwrap();
-    cx.insert_before(root, text, None).unwrap();
+    let content = if fade {
+        let parent = cx.create_node(Style {
+            size: Size { width: length(100.0), height: length(60.0) },
+            overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+            ..Default::default()
+        }).unwrap();
+        let mut props = RenderProps::default();
+        props.overflow_fade = OverflowFade::new(20.0, 32.0, 24.0, 28.0);
+        cx.set_properties(parent, props).unwrap();
+        cx.insert_before(parent, text, None).unwrap();
+        parent
+    } else { text };
+    cx.insert_before(root, content, None).unwrap();
     cx.compute(root, 200.0, 120.0).unwrap();
     let mut enc = SceneEncoder::new();
     let info = enc
@@ -124,7 +136,69 @@ fn solid(r: f32, g: f32, b: f32) -> Option<Brush> {
     Some(Brush::Solid(Color::rgb(r, g, b)))
 }
 
+/// An overflowing fill under an optionally cut, turned or layered fading clip.
+fn fading(cx: &mut LayoutContext, cut: bool, turned: bool, layered: bool, shadow: bool) -> Node {
+    let (w, h) = if cut { (100.0, 80.0) } else { (100.0, 60.0) };
+    let parent = cx.create_node(Style {
+        position: if cut { Position::Absolute } else { Position::Relative },
+        inset: if cut { Rect { left: length(-10.0), top: length(-10.0), right: auto(), bottom: auto() } } else { Rect::auto() },
+        size: Size { width: length(w), height: length(h) },
+        overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+        ..Default::default()
+    }).unwrap();
+    let mut props = RenderProps::default();
+    props.overflow_fade = OverflowFade::new(20.0, 32.0, 24.0, 28.0);
+    if turned { props.transform = Some(Transform::rotate(0.4)); }
+    cx.set_properties(parent, props).unwrap();
+    let mut fill = RenderProps::default();
+    if shadow {
+        fill.shadow = vec![Shadow { offset_x: 0.0, offset_y: 0.0, blur: 0.0, spread: 12.0, color: Color::rgb(0.2, 0.5, 0.9) }];
+    } else {
+        fill.background = solid(0.2, 0.5, 0.9);
+    }
+    let child = if shadow {
+        let child = cx.create_node(Style {
+            position: Position::Absolute,
+            inset: Rect { left: length(20.0), top: length(20.0), right: auto(), bottom: auto() },
+            size: Size { width: length(60.0), height: length(20.0) },
+            ..Default::default()
+        }).unwrap();
+        cx.set_properties(child, fill).unwrap();
+        child
+    } else { boxed(cx, w, h, fill) };
+    cx.insert_before(parent, child, None).unwrap();
+    if !cut { return parent; }
+    let outer = cx.create_node(Style {
+        size: Size { width: length(70.0), height: length(60.0) },
+        overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+        ..Default::default()
+    }).unwrap();
+    let mut props = RenderProps::default();
+    props.overflow_fade = OverflowFade::uniform(3.0);
+    if layered {
+        props.opacity = 0.5;
+        props.filter = Some(CssFilter { brightness: 0.5, ..CssFilter::default() });
+    }
+    cx.set_properties(outer, props).unwrap();
+    cx.insert_before(outer, parent, None).unwrap();
+    outer
+}
+
 fn main() {
+    text_scene("fade_text_x1", 1.0, "Hello", 20.0, true);
+    text_scene("fade_text_x2", 2.0, "Hello", 20.0, true);
+    scene("fade_image", |cx| {
+        let parent = fading(cx, false, false, false, false);
+        let image = boxed(cx, 40.0, 30.0, RenderProps::default());
+        cx.set_resource(image, Some(7), false).unwrap();
+        cx.insert_before(parent, image, None).unwrap();
+        parent
+    });
+    scene("fade_plain", |cx| fading(cx, false, false, false, false));
+    scene("fade_cut", |cx| fading(cx, true, false, false, false));
+    scene("fade_turned", |cx| fading(cx, false, true, false, false));
+    scene("fade_layer", |cx| fading(cx, true, false, true, false));
+    scene("fade_shadow", |cx| fading(cx, false, false, false, true));
     scene("box_solid", |cx| {
         let mut p = RenderProps::default();
         p.background = solid(0.2, 0.4, 0.9);
@@ -234,8 +308,8 @@ fn main() {
         p.border_color = Some(Color::rgb(0.9, 0.1, 0.1));
         boxed(cx, 100.0, 60.0, p)
     });
-    text_scene("text_hello_x1", 1.0, "Hello", 20.0);
-    text_scene("text_hello_x2", 2.0, "Hello", 20.0);
+    text_scene("text_hello_x1", 1.0, "Hello", 20.0, false);
+    text_scene("text_hello_x2", 2.0, "Hello", 20.0, false);
     scene("image_plain", |cx| {
         let n = boxed(cx, 40.0, 30.0, RenderProps::default());
         cx.set_resource(n, Some(7), false).unwrap();
