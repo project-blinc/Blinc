@@ -43,11 +43,22 @@ struct Params {
     // The content texture's size, and where on the target its top-left falls.
     size: vec4<f32>,
     origin: vec4<f32>,
+    // The mask: its kind (0 none, 1 linear, 2 radial, 3 conic), its spread and how
+    // many stops it has; its geometry and the element's box, as fractions and in
+    // layout units; the 2 x 2 of the transform that maps the box onto the target,
+    // and its translation and the display's scale.
+    mask: vec4<f32>,
+    mask_geometry: vec4<f32>,
+    mask_frame: vec4<f32>,
+    mask_matrix: vec4<f32>,
+    mask_translate: vec4<f32>,
     // How many pairs of taps the blur has, and the shadow.
     counts: vec4<u32>,
     // Each pair is the offset of one fetch and its weight; two to a vec4.
     blur_taps: array<vec4<f32>, 13>,
     shadow_taps: array<vec4<f32>, 13>,
+    // The mask's stops, an offset and an alpha each, two to a vec4.
+    mask_stops: array<vec4<f32>, 8>,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -91,6 +102,73 @@ fn shadow_taps(tex: texture_2d<f32>, pixel: vec2<f32>, direction: vec2<f32>) -> 
         sum = sum + textureSampleLevel(tex, linear_sampler, (pixel + direction * pair.x) / size, 0.0) * pair.y;
     }
     return sum;
+}
+
+fn mask_stop(i: u32) -> vec2<f32> {
+    let v = params.mask_stops[i / 2u];
+    if (i % 2u) == 0u {
+        return v.xy;
+    }
+    return v.zw;
+}
+
+// The mask's alpha at a parameter: the stops joined in a line, folded by its spread first.
+fn mask_stops_alpha(position: f32) -> f32 {
+    let count = u32(params.mask.z);
+    let start = mask_stop(0u).x;
+    let end = mask_stop(count - 1u).x;
+    var t = position;
+    if params.mask.y > 0.5 {
+        let period = end - start;
+        if period <= 0.0001 {
+            return mask_stop(0u).y;
+        }
+        var phase = (t - start) / period;
+        if params.mask.y > 1.5 {
+            phase = 1.0 - abs(2.0 * fract(phase * 0.5) - 1.0);
+        } else {
+            phase = fract(phase);
+        }
+        t = start + phase * period;
+    }
+    var alpha = mask_stop(0u).y;
+    var offset = start;
+    for (var i = 1u; i < count; i = i + 1u) {
+        let next = mask_stop(i);
+        if t < next.x {
+            return mix(alpha, next.y, clamp((t - offset) / max(next.x - offset, 1e-20), 0.0, 1.0));
+        }
+        alpha = next.y;
+        offset = next.x;
+    }
+    return alpha;
+}
+
+// The mask's alpha at a pixel of the target: the pixel taken back through the
+// element's transform into its box, in fractions of it, and measured by the gradient.
+fn mask_alpha(pixel: vec2<f32>) -> f32 {
+    if params.mask.x < 0.5 {
+        return 1.0;
+    }
+    let t = params.mask_translate;
+    let q = pixel / max(t.z, 0.0001) - t.xy;
+    let m = params.mask_matrix;
+    let det = m.x * m.w - m.z * m.y;
+    let local = vec2<f32>(m.w * q.x - m.z * q.y, -m.y * q.x + m.x * q.y) / det;
+    let frame = params.mask_frame;
+    let uv = (local - frame.xy) / max(frame.zw, vec2<f32>(0.0001));
+    let g = params.mask_geometry;
+    var f = 0.0;
+    if params.mask.x < 1.5 {
+        let dir = g.zw - g.xy;
+        f = dot(uv - g.xy, dir) / max(dot(dir, dir), 0.000001);
+    } else if params.mask.x < 2.5 {
+        f = length(uv - g.xy) / max(g.z, 0.0001);
+    } else {
+        let delta = (uv - g.xy) * frame.zw;
+        f = fract((atan2(delta.x, -delta.y) - g.z) / 6.283185307179586);
+    }
+    return mask_stops_alpha(f);
 }
 
 // Half the size, each texel the mean of the four it covers.
@@ -154,7 +232,7 @@ fn fs_composite(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32
         }
         alpha = out_alpha;
     }
-    return vec4<f32>(rgb, alpha * params.blur.y);
+    return vec4<f32>(rgb, alpha * params.blur.y * mask_alpha(at));
 }
 "#;
 
@@ -182,6 +260,31 @@ pub struct LayerFrame {
     pub region: [u32; 4],
 }
 
+/// Most stops a mask can have.
+pub const MAX_MASK_STOPS: usize = 16;
+
+/// A layer's mask: a gradient measured in the element's box, whose alpha, at each
+/// pixel, the layer's is multiplied by.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LayerMask {
+    /// 1 linear, 2 radial, 3 conic.
+    pub kind: f32,
+    /// Linear: from `(x, y)` to `(z, w)`; radial: the centre and radius `z`; conic: the
+    /// centre and start angle `z`. In fractions of the box.
+    pub geometry: [f32; 4],
+    /// The element's box in layout units, in the frame its transform maps.
+    pub frame: [f32; 4],
+    /// The transform's 2 x 2 part, which takes the box to the target.
+    pub matrix: [f32; 4],
+    /// Its translation, and the display's scale.
+    pub translate: [f32; 3],
+    /// 0 pad, 1 repeat, 2 reflect.
+    pub spread: f32,
+    /// The stops, an offset and an alpha, of which the first `count` are used.
+    pub stops: [[f32; 2]; MAX_MASK_STOPS],
+    pub count: u32,
+}
+
 /// What a layer does when it is drawn over its parent.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LayerFx {
@@ -192,6 +295,7 @@ pub struct LayerFx {
     /// A colour filter on straight RGB: each row weighs r, g and b, then offsets.
     pub matrix: [[f32; 4]; 3],
     pub shadow: Option<DropShadow>,
+    pub mask: Option<LayerMask>,
 }
 
 impl LayerFx {
@@ -208,6 +312,7 @@ impl LayerFx {
             opacity,
             matrix: Self::IDENTITY_MATRIX,
             shadow: None,
+            mask: None,
         }
     }
 }
@@ -267,9 +372,15 @@ struct Params {
     tint: [f32; 4],
     size: [f32; 4],
     origin: [f32; 4],
+    mask: [f32; 4],
+    mask_geometry: [f32; 4],
+    mask_frame: [f32; 4],
+    mask_matrix: [f32; 4],
+    mask_translate: [f32; 4],
     counts: [u32; 4],
     blur_taps: [[f32; 4]; MAX_PAIRS / 2],
     shadow_taps: [[f32; 4]; MAX_PAIRS / 2],
+    mask_stops: [[f32; 4]; MAX_MASK_STOPS / 2],
 }
 
 /// `region`, `[x, y, width, height]`, as it falls on a texture `by` times smaller of `limit`
@@ -493,9 +604,24 @@ impl LayerEffects {
             tint: shadow.map_or([0.0; 4], |(s, _)| s.color),
             size: [size.0 as f32, size.1 as f32, 0.0, 0.0],
             origin: [origin[0] as f32, origin[1] as f32, 0.0, 0.0],
+            mask: fx
+                .mask
+                .map_or([0.0; 4], |m| [m.kind, m.spread, m.count as f32, 0.0]),
+            mask_geometry: fx.mask.map_or([0.0; 4], |m| m.geometry),
+            mask_frame: fx.mask.map_or([0.0; 4], |m| m.frame),
+            mask_matrix: fx.mask.map_or([1.0, 0.0, 0.0, 1.0], |m| m.matrix),
+            mask_translate: fx.mask.map_or([0.0, 0.0, 1.0, 0.0], |m| {
+                [m.translate[0], m.translate[1], m.translate[2], 0.0]
+            }),
             counts: [blur_count, shadow_count, 0, 0],
             blur_taps,
             shadow_taps,
+            mask_stops: fx.mask.map_or([[0.0; 4]; MAX_MASK_STOPS / 2], |m| {
+                std::array::from_fn(|i| {
+                    let (a, b) = (m.stops[2 * i], m.stops[2 * i + 1]);
+                    [a[0], a[1], b[0], b[1]]
+                })
+            }),
         };
         queue.write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&params));
 
@@ -663,8 +789,8 @@ mod tests {
 
     #[test]
     fn the_params_are_laid_out_as_the_shader_reads_them() {
-        // Eight vec4s, the counts, then two arrays of thirteen.
-        assert_eq!(std::mem::size_of::<Params>(), (9 + 26) * 16);
+        // Fourteen vec4s, the counts, then two arrays of thirteen and one of eight.
+        assert_eq!(std::mem::size_of::<Params>(), (14 + 26 + 8) * 16);
     }
 
     #[test]

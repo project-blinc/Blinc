@@ -486,15 +486,6 @@ fn a_layers_blur_colour_filter_and_shadow_are_read() {
 }
 
 #[test]
-fn a_masked_layer_is_drawn_flat_and_named() {
-    let mut list = fixture!("layer_opacity");
-    set_row(&mut list, 3, row::SIDE_COLORS, [1.0, 0.0, 0.0, 0.0]);
-    let planned = plan(&list, 4, DISPLAY_LIST_VERSION, 1.0).unwrap();
-    assert_eq!(planned.unsupported, vec![(3, Unsupported::LayerEffect)]);
-    assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.primitives.len() == 2));
-}
-
-#[test]
 fn a_layer_with_no_opening_or_no_end_is_named_and_its_content_kept() {
     let list = fixture!("layer_opacity");
     // Its end alone.
@@ -606,4 +597,62 @@ fn tables_in_one_run_follow_each_other() {
     assert_eq!(run.primitives[0].gradient_table[0], 1.0);
     assert_eq!(run.primitives[1].gradient_table[0], 13.0);
     assert_eq!(run.aux[..12], run.aux[12..]);
+}
+
+fn mask_of(list: &[f32]) -> blinc_gpu::display_list::effects::LayerMask {
+    the_layer_of(list, 3).mask.expect("a mask")
+}
+
+#[test]
+fn a_layers_mask_is_read_from_its_rows() {
+    let m = mask_of(&fixture!("mask_linear"));
+    assert_eq!(m.kind, 1.0);
+    near(&m.geometry, &[0.0, 0.0, 1.0, 0.0]);
+    near(&m.frame, &[20.0, 20.0, 100.0, 60.0]);
+    near(&m.matrix, &[1.0, 0.0, 0.0, 1.0]);
+    near(&m.translate, &[0.0, 0.0, 1.0]);
+    assert_eq!((m.spread, m.count), (0.0, 2));
+    near(&m.stops[0], &[0.0, 1.0]);
+    near(&m.stops[1], &[1.0, 0.0]);
+
+    let radial = mask_of(&fixture!("mask_radial"));
+    assert_eq!(radial.kind, 2.0);
+    near(&radial.geometry, &[0.5, 0.5, 0.5, 0.0]);
+}
+
+#[test]
+fn a_mask_with_a_table_has_its_alphas_and_offsets_from_it() {
+    let m = mask_of(&fixture!("mask_stops"));
+    assert_eq!(m.count, 5);
+    let want = [[0.0, 1.0], [0.25, 0.2], [0.5, 0.8], [0.75, 0.0], [1.0, 1.0]];
+    for (got, want) in m.stops.iter().zip(want) {
+        near(got, &want);
+    }
+    let conic = mask_of(&fixture!("mask_conic"));
+    assert_eq!((conic.kind, conic.count), (3.0, 2));
+    near(&conic.stops[0], &[0.0, 0.1]);
+}
+
+#[test]
+fn a_masks_transform_and_display_scale_are_carried() {
+    let turned = mask_of(&fixture!("mask_rotated"));
+    near(&turned.matrix, &[0.921061, 0.389418, -0.389418, 0.921061]);
+    near(&turned.translate, &[24.9967, -23.3123, 1.0]);
+    assert_eq!(mask_of(&fixture!("mask_linear_x2")).translate[2], 2.0);
+}
+
+#[test]
+fn a_mask_with_more_stops_than_there_is_room_for_is_drawn_flat_and_named() {
+    // The records of a masked layer, then a table of seventeen stops after them.
+    let mut list = fixture!("mask_stops")[..3 * RECORD_FLOATS].to_vec();
+    let mut table = vec![17.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    for i in 0..17 {
+        table.extend_from_slice(&[0.0, 0.0, 0.0, 1.0, i as f32 / 16.0, 0.0, 0.0, 0.0]);
+    }
+    list.extend(table);
+    // It begins after the three records, 84 vec4s in.
+    list[2 * RECORD_FLOATS + row::GRADIENT_OFFSETS * 4 + 3] = 2.0 + 84.0;
+    let planned = plan(&list, 3, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert_eq!(planned.unsupported, vec![(2, Unsupported::LayerEffect)]);
+    assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.primitives.len() == 1));
 }

@@ -1,8 +1,8 @@
 //! Dumps ABI display-list records for a few scenes as raw little-endian f32.
 use blinc_abi::context::{LayoutContext, Node, Style};
 use blinc_abi::scene::blinc_core::{
-    Affine2D, Brush, Color, CornerRadius, Gradient, GradientSpread, GradientStop, Point, Shadow,
-    Transform,
+    Affine2D, Brush, Color, CornerRadius, Gradient, GradientSpace, GradientSpread, GradientStop,
+    MaskImage, Point, Shadow, Transform,
 };
 use blinc_abi::scene::{PaintOptions, RenderProps, SceneEncoder};
 use blinc_layout::element::{BorderSide, BorderSides};
@@ -385,5 +385,53 @@ fn main() {
             start_angle: 0.5,
         };
         boxed(cx, 100.0, 60.0, paint(g))
+    });
+
+    let alpha = |o: f32, a: f32| GradientStop::new(o, Color::rgba(0.0, 0.0, 0.0, a));
+    let masked = |g: Gradient| {
+        let mut p = RenderProps::default();
+        p.background = solid(0.9, 0.1, 0.1);
+        p.mask_image = Some(MaskImage::Gradient(g));
+        p
+    };
+    let obb_line = |stops: Vec<GradientStop>| {
+        let mut g = Gradient::linear_with_stops(Point::new(0.0, 0.0), Point::new(1.0, 0.0), stops);
+        if let Gradient::Linear { space, .. } = &mut g {
+            *space = GradientSpace::ObjectBoundingBox;
+        }
+        g
+    };
+    scene("mask_linear", |cx| boxed(cx, 100.0, 60.0, masked(obb_line(vec![alpha(0.0, 1.0), alpha(1.0, 0.0)]))));
+    scene("mask_stops", |cx| {
+        let stops = vec![alpha(0.0, 1.0), alpha(0.25, 0.2), alpha(0.5, 0.8), alpha(0.75, 0.0), alpha(1.0, 1.0)];
+        boxed(cx, 100.0, 60.0, masked(obb_line(stops)))
+    });
+    scene("mask_radial", |cx| {
+        let mut g = Gradient::radial_with_stops(
+            Point::new(0.5, 0.5),
+            0.5,
+            vec![alpha(0.0, 1.0), alpha(1.0, 0.0)],
+        );
+        if let Gradient::Radial { space, .. } = &mut g {
+            *space = GradientSpace::ObjectBoundingBox;
+        }
+        boxed(cx, 100.0, 60.0, masked(g))
+    });
+    scene("mask_conic", |cx| {
+        let g = Gradient::Conic {
+            center: Point::new(0.5, 0.5),
+            stops: vec![alpha(0.0, 0.1), alpha(1.0, 1.0)],
+            space: GradientSpace::ObjectBoundingBox,
+            start_angle: 0.0,
+        };
+        boxed(cx, 100.0, 60.0, masked(g))
+    });
+    scene("mask_rotated", |cx| {
+        let mut p = masked(obb_line(vec![alpha(0.0, 1.0), alpha(1.0, 0.0)]));
+        p.transform = Some(Transform::rotate(0.4));
+        boxed(cx, 100.0, 60.0, p)
+    });
+    scaled("mask_linear_x2", 2.0, |cx| {
+        boxed(cx, 100.0, 60.0, masked(obb_line(vec![alpha(0.0, 1.0), alpha(1.0, 0.0)])))
     });
 }

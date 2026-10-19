@@ -137,7 +137,7 @@ pub enum Unsupported {
     ImageMapping,
     /// An image under a clip whose rounded corners are not circular.
     ClipCorner,
-    /// A layer that is masked.
+    /// A layer whose mask has more stops than there is room for, or whose table is not in the list.
     LayerEffect,
     /// A gradient whose stops are kept in a table, where the caller gave none to keep it in.
     GradientTable,

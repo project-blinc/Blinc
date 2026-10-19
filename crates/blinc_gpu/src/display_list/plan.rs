@@ -7,7 +7,7 @@
 //! consecutive primitives together, puts each image between them and nests
 //! each layer's items inside it.
 
-use super::effects::{DropShadow, LayerEffects, LayerFrame, LayerFx};
+use super::effects::{DropShadow, LayerEffects, LayerFrame, LayerFx, LayerMask, MAX_MASK_STOPS};
 use super::{
     CLIP_SCREEN, DecodeError, Kind, NO_CLIP, Placement, Record, Unsupported, records, row,
 };
@@ -88,8 +88,8 @@ fn push(items: &mut Vec<Item>, item: Item) {
 
 /// Plans `count` records at `scale` device pixels per logical pixel.
 ///
-/// A layer that is masked is not drawn as a layer: its content is drawn as it
-/// would be without it, and its record is reported.
+/// A layer whose mask has more stops than `MAX_MASK_STOPS` is not drawn as a layer:
+/// its content is drawn as it would be without it, and its record is reported.
 pub fn plan(floats: &[f32], count: usize, version: u32, scale: f32) -> Result<Plan, DecodeError> {
     let mut plan = Plan::default();
     let mut open = vec![Open {
@@ -108,7 +108,7 @@ pub fn plan(floats: &[f32], count: usize, version: u32, scale: f32) -> Result<Pl
             Kind::Layer => {
                 let inner = open.pop().expect("a layer is open").items;
                 let parent = &mut open.last_mut().expect("the page is open").items;
-                match record.layer() {
+                match record.layer(floats) {
                     Ok(fx) => parent.push(Item::Layer(Layer {
                         items: inner,
                         fx,
@@ -209,14 +209,12 @@ impl Record<'_> {
     /// What a layer record does when its layer is drawn over its parent. Its blur
     /// is `color.x` and its opacity `color.w`, its colour filter the three rows
     /// after the fill, its drop shadow an offset and deviation in `gradient` and
-    /// a colour in `via`, and a mask is the kind in the first side-colour row,
-    /// which is not read yet. Lengths are in device pixels already.
-    pub fn layer(&self) -> Result<LayerFx, Unsupported> {
+    /// a colour in `via`, and its mask a gradient in the rows a box keeps its side
+    /// colours in. Lengths are in device pixels already. `list` is the whole display
+    /// list, for a mask's table of stops after the records.
+    pub fn layer(&self, list: &[f32]) -> Result<LayerFx, Unsupported> {
         if self.kind() != Kind::Layer {
             return Err(Unsupported::Kind(self.row(row::TYPES)[0]));
-        }
-        if self.row(row::SIDE_COLORS)[0] > 0.5 {
-            return Err(Unsupported::LayerEffect);
         }
         let [blur, _, _, opacity] = self.row(row::FILL);
         let [x, y, deviation, _] = self.row(row::GRADIENT);
@@ -234,7 +232,57 @@ impl Record<'_> {
                 deviation,
                 color,
             }),
+            mask: self.mask(list)?,
         })
+    }
+
+    /// The mask of a layer record: a gradient of alpha in the element's box.
+    ///
+    /// Its first row has the kind and the alpha of its first, middle and last stops, then
+    /// its geometry, the element's box and the transform's 2 x 2. The offsets of those stops
+    /// are in the row of gradient offsets, whose last is 1 for a middle stop, or the place of
+    /// a table of stops after the records when there are more, they repeat or it is conic.
+    fn mask(&self, list: &[f32]) -> Result<Option<LayerMask>, Unsupported> {
+        let [kind, first_alpha, middle_alpha, last_alpha] = self.row(row::SIDE_COLORS);
+        if kind < 0.5 {
+            return Ok(None);
+        }
+        let [first, middle, last, marker] = self.row(row::GRADIENT_OFFSETS);
+        let mut stops = [[0.0; 2]; MAX_MASK_STOPS];
+        let (spread, count) = if marker >= 2.0 {
+            let at = (marker - 2.0) as usize * 4;
+            let count = *list.get(at).ok_or(Unsupported::LayerEffect)? as usize;
+            let end = at + (2 + 2 * count) * 4;
+            if count == 0 || count > MAX_MASK_STOPS || end > list.len() {
+                return Err(Unsupported::LayerEffect);
+            }
+            for (i, stop) in stops.iter_mut().take(count).enumerate() {
+                // A stop is a colour row, whose alpha is the mask's, then its offset.
+                *stop = [list[at + (3 + 2 * i) * 4], list[at + (2 + 2 * i) * 4 + 3]];
+            }
+            (list[at + 1], count)
+        } else if marker >= 0.5 {
+            stops[..3].copy_from_slice(&[
+                [first, first_alpha],
+                [middle, middle_alpha],
+                [last, last_alpha],
+            ]);
+            (0.0, 3)
+        } else {
+            stops[..2].copy_from_slice(&[[first, first_alpha], [last, last_alpha]]);
+            (0.0, 2)
+        };
+        let translate = self.row(row::RADII);
+        Ok(Some(LayerMask {
+            kind,
+            geometry: self.row(row::SIDE_COLORS + 1),
+            frame: self.row(row::SIDE_COLORS + 2),
+            matrix: self.row(row::SIDE_COLORS + 3),
+            translate: [translate[0], translate[1], translate[2]],
+            spread,
+            stops,
+            count: count as u32,
+        }))
     }
 }
 

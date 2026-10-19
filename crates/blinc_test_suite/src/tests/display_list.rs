@@ -508,7 +508,21 @@ mod tests {
         image: Option<&GpuImage>,
         allowed: &[Unsupported],
     ) -> (RgbaImage, Vec<u32>) {
-        let planned = plan(list, count, DISPLAY_LIST_VERSION, 1.0).unwrap();
+        draw_records_at(harness, name, list, count, 1.0, image, allowed)
+    }
+
+    /// As `draw_records`, with the page `scale` times as large in device pixels.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_records_at(
+        harness: &TestHarness,
+        name: &str,
+        list: &[f32],
+        count: usize,
+        scale: f32,
+        image: Option<&GpuImage>,
+        allowed: &[Unsupported],
+    ) -> (RgbaImage, Vec<u32>) {
+        let planned = plan(list, count, DISPLAY_LIST_VERSION, scale).unwrap();
         for (_, why) in &planned.unsupported {
             assert!(allowed.contains(why), "{why:?} is not allowed");
         }
@@ -516,16 +530,21 @@ mod tests {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let mut missing = Vec::new();
         harness
-            .render_with(W as u32, H as u32, &path, |renderer, view| {
-                missing = render(
-                    renderer,
-                    view,
-                    (W as u32, H as u32),
-                    &planned,
-                    [1.0; 4],
-                    &|slot| image.filter(|_| slot == 7),
-                );
-            })
+            .render_with(
+                (W * scale) as u32,
+                (H * scale) as u32,
+                &path,
+                |renderer, view| {
+                    missing = render(
+                        renderer,
+                        view,
+                        ((W * scale) as u32, (H * scale) as u32),
+                        &planned,
+                        [1.0; 4],
+                        &|slot| image.filter(|_| slot == 7),
+                    );
+                },
+            )
             .unwrap();
         (image::open(&path).unwrap().to_rgba8(), missing)
     }
@@ -1146,6 +1165,154 @@ mod tests {
             assert!(
                 within(at(&page, 10, 10), [255, 255, 255], 0),
                 "{name}: outside the box"
+            );
+        }
+    }
+
+    /// A mask's stops as alpha: folded by the spread, then joined in a line.
+    fn mask_alpha_of(stops: &[(f32, f32)], t: f32) -> f32 {
+        let (mut color, mut offset) = (stops[0].1, stops[0].0);
+        for &(at, next) in &stops[1..] {
+            if t < at {
+                return color
+                    + (next - color) * ((t - offset) / (at - offset).max(1e-20)).clamp(0.0, 1.0);
+            }
+            color = next;
+            offset = at;
+        }
+        color
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn a_layers_mask_is_the_gradient_measured_in_its_elements_box() {
+        let harness = TestHarness::new().unwrap();
+        let ends = vec![(0.0, 1.0), (1.0, 0.0)];
+        let wavy = vec![(0.0, 1.0), (0.25, 0.2), (0.5, 0.8), (0.75, 0.0), (1.0, 1.0)];
+        let (rot_c, rot_s) = (0.4f32.cos(), 0.4f32.sin());
+        // Each case: its fixture, its stops, the scale it was laid out at, how a point of
+        // the box in fractions measures it, and whether the box is turned about its centre.
+        type Measure = fn(f32, f32) -> f32;
+        let cases: Vec<(&str, Vec<f32>, usize, Vec<(f32, f32)>, f32, Measure, bool)> = vec![
+            (
+                "mask_linear",
+                fixture!("mask_linear"),
+                3,
+                ends.clone(),
+                1.0,
+                |u, _| u,
+                false,
+            ),
+            (
+                "mask_stops",
+                fixture!("mask_stops"),
+                3,
+                wavy,
+                1.0,
+                |u, _| u,
+                false,
+            ),
+            (
+                "mask_radial",
+                fixture!("mask_radial"),
+                3,
+                ends.clone(),
+                1.0,
+                |u, v| (u - 0.5).hypot(v - 0.5) / 0.5,
+                false,
+            ),
+            (
+                "mask_rotated",
+                fixture!("mask_rotated"),
+                3,
+                ends.clone(),
+                1.0,
+                |u, _| u,
+                true,
+            ),
+            (
+                "mask_linear_x2",
+                fixture!("mask_linear_x2"),
+                3,
+                ends,
+                2.0,
+                |u, _| u,
+                false,
+            ),
+            (
+                "mask_conic",
+                fixture!("mask_conic"),
+                3,
+                vec![(0.0, 0.1), (1.0, 1.0)],
+                1.0,
+                // The angle about the centre, in the box's own pixels; none at the centre or
+                // where it wraps, which are left out.
+                |u, v| {
+                    let (dx, dy) = ((u - 0.5) * 100.0, (v - 0.5) * 60.0);
+                    let t = (dx.atan2(-dy) / std::f32::consts::TAU).rem_euclid(1.0);
+                    if dx.hypot(dy) < 2.0 || !(0.02..=0.98).contains(&t) {
+                        f32::NAN
+                    } else {
+                        t
+                    }
+                },
+                false,
+            ),
+        ];
+        for (name, list, count, stops, scale, measure, turned) in cases {
+            let (page, _) = draw_records_at(&harness, name, &list, count, scale, None, &[]);
+            let (mut worst, mut checked, mut faded) = (0i32, 0, 0);
+            for y in 0..page.height() {
+                for x in 0..page.width() {
+                    // The pixel's centre in layout units, then back into the box it belongs to.
+                    let (px, py) = ((x as f32 + 0.5) / scale, (y as f32 + 0.5) / scale);
+                    let (lx, ly) = if turned {
+                        let (dx, dy) = (px - 70.0, py - 50.0);
+                        (
+                            70.0 + rot_c * dx + rot_s * dy,
+                            50.0 - rot_s * dx + rot_c * dy,
+                        )
+                    } else {
+                        (px, py)
+                    };
+                    let (u, v) = ((lx - 20.0) / 100.0, (ly - 20.0) / 60.0);
+                    // Inside the box by a margin the edge's antialiasing does not reach, or
+                    // clearly outside it.
+                    let margin = 1.5 / scale;
+                    let inside = lx > 20.0 + margin
+                        && lx < 120.0 - margin
+                        && ly > 20.0 + margin
+                        && ly < 80.0 - margin;
+                    let outside = lx < 20.0 - margin
+                        || lx > 120.0 + margin
+                        || ly < 20.0 - margin
+                        || ly > 80.0 + margin;
+                    if !inside && !outside {
+                        continue;
+                    }
+                    let t = measure(u, v);
+                    if inside && t.is_nan() {
+                        continue;
+                    }
+                    let a = if inside {
+                        mask_alpha_of(&stops, t)
+                    } else {
+                        0.0
+                    };
+                    let got = at(&page, x, y);
+                    for (c, red) in [229.5f32, 25.5, 25.5].into_iter().enumerate() {
+                        let want = 255.0 * (1.0 - a) + red * a;
+                        worst = worst.max((got[c] as i32 - want.round() as i32).abs());
+                    }
+                    checked += 1;
+                    faded += (inside && a < 0.9) as usize;
+                }
+            }
+            println!("{name}: worst {worst} over {checked} pixels, {faded} of them faded");
+            assert!(worst <= 4, "{name}: off by {worst}");
+            assert!(
+                faded > 500,
+                "{name}: the mask barely shows ({faded} pixels faded)"
             );
         }
     }
