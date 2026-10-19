@@ -9,6 +9,8 @@ mod backdrop;
 #[cfg(test)]
 mod canvas;
 #[cfg(test)]
+mod colour;
+#[cfg(test)]
 mod image_clip;
 #[cfg(test)]
 mod image_mapping;

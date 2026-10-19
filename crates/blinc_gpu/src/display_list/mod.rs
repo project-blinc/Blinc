@@ -134,8 +134,8 @@ pub enum Unsupported {
     Notch,
     /// A transform with no area.
     Degenerate,
-    /// A colour glyph drawn as its shape in one colour, a text shadow's.
-    ColorGlyphShape,
+    /// A text atlas selector other than mask, colour or colour shape.
+    GlyphMode,
     /// Invalid image fit, position, repeat axes or intrinsic geometry.
     ImageMapping,
     /// A layer whose mask has more stops than there is room for, or whose table is not in the list.
@@ -328,8 +328,9 @@ impl<'a> Record<'a> {
     pub fn unsupported(&self) -> Option<Unsupported> {
         match self.kind() {
             Kind::Box | Kind::Shadow => {}
-            // A glyph in the colour atlas's alpha, in one colour: fill type 2.
-            Kind::Text if self.fill_type() > 1.5 => return Some(Unsupported::ColorGlyphShape),
+            Kind::Text if ![0.0, 1.0, 2.0].contains(&self.fill_type()) => {
+                return Some(Unsupported::GlyphMode);
+            }
             Kind::Text => {}
             // The producer emits plain images and unresolved bitmap mappings.
             Kind::Image if ![0.0, 3.0].contains(&self.fill_type()) => {
@@ -479,7 +480,12 @@ impl<'a> Record<'a> {
             p.gradient_params = self.row(row::GRADIENT);
             p.type_info = [
                 PrimitiveType::Text as u32,
-                self.fill_type() as u32,
+                // ABI modes clip atlas rectangles; native glyph modes stay 0 and 1.
+                match self.fill_type() as u32 {
+                    0 => 4,
+                    1 => 3,
+                    _ => 2,
+                },
                 clip_type as u32,
                 0,
             ];

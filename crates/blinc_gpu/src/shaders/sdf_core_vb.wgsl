@@ -656,7 +656,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             // atlas dimensions — see sdf_core.wgsl for the full
             // rationale.
             let pixel_bounds = prim.gradient_params;
-            let is_color = fill_type == 1u;
+            let is_color = fill_type >= 1u && fill_type <= 3u;
             var atlas_size: vec2<f32>;
             if is_color {
                 atlas_size = vec2<f32>(textureDimensions(color_glyph_atlas));
@@ -667,11 +667,20 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
                 atlas_size.x, atlas_size.y, atlas_size.x, atlas_size.y
             );
             let local_uv = (sp - origin) / size;
+            // A transformed AABB must not sample adjacent glyphs in the atlas.
+            if fill_type >= 2u && (any(local_uv < vec2<f32>(0.0)) || any(local_uv >= vec2<f32>(1.0))) {
+                discard;
+            }
             let atlas_uv = uv_bounds.xy + local_uv * (uv_bounds.zw - uv_bounds.xy);
 
             var text_result: vec4<f32>;
             if is_color {
                 text_result = textureSampleLevel(color_glyph_atlas, glyph_sampler, atlas_uv, 0.0);
+                if fill_type == 2u {
+                    text_result = vec4<f32>(prim.color.rgb, prim.color.a * text_result.a);
+                } else if fill_type == 3u {
+                    text_result.a *= prim.color.a;
+                }
             } else {
                 let coverage = textureSampleLevel(glyph_atlas, glyph_sampler, atlas_uv, 0.0).r;
                 let gamma_coverage = pow(coverage, 0.7);

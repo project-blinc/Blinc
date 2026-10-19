@@ -274,7 +274,7 @@ fn a_glyph_is_a_quad_over_its_atlas_rect() {
     let h = &out.primitives[0];
     assert_eq!(
         h.type_info,
-        [PrimitiveType::Text as u32, 0, ClipType::None as u32, 0]
+        [PrimitiveType::Text as u32, 4, ClipType::None as u32, 0]
     );
     near(&h.bounds, &[20.0, 25.0, 14.0, 15.0]);
     near(&h.gradient_params, &[0.0, 0.0, 14.0, 15.0]);
@@ -297,15 +297,48 @@ fn the_display_scale_moves_the_quad_and_not_the_atlas_rect() {
 fn a_colour_glyph_selects_the_colour_atlas() {
     let mut list = fixture!("text_hello_x1");
     set_row(&mut list, 0, row::TYPES, [7.0, 1.0, 0.0, 1.0]);
-    assert_eq!(first(&list, 1.0).type_info[1], 1);
+    assert_eq!(first(&list, 1.0).type_info[1], 3);
 }
 
 #[test]
-fn a_colour_glyphs_shape_is_not_a_glyph() {
+fn a_colour_glyphs_shape_selects_colour_alpha_and_keeps_its_tint() {
     let mut list = fixture!("text_hello_x1");
     set_row(&mut list, 0, row::TYPES, [7.0, 2.0, 0.0, 1.0]);
-    let record = Record::new(list[..RECORD_FLOATS].try_into().unwrap());
-    assert_eq!(record.unsupported(), Some(Unsupported::ColorGlyphShape));
+    set_row(&mut list, 0, row::FILL, [0.1, 0.6, 0.3, 0.4]);
+    let primitive = first(&list, 1.0);
+    assert_eq!(primitive.type_info[1], 2);
+    near(&primitive.color, &[0.1, 0.6, 0.3, 0.4]);
+}
+
+#[test]
+fn producer_mixed_text_keeps_shadow_atlas_modes_and_paint_order() {
+    for (list, scale) in [
+        (fixture!("colour_shadow_x1"), 1.0),
+        (fixture!("colour_shadow_x2"), 2.0),
+    ] {
+        let decoded = decode(&list, 12, DISPLAY_LIST_VERSION, scale).unwrap();
+        assert!(decoded.unsupported.is_empty());
+        assert_eq!(
+            decoded
+                .primitives
+                .iter()
+                .map(|p| p.type_info[1])
+                .collect::<Vec<_>>(),
+            [4, 2, 4, 2, 4, 2, 4, 2, 4, 3, 4, 3]
+        );
+        near(&decoded.primitives[1].color, &[0.7, 0.3, 0.1, 0.45]);
+        near(&decoded.primitives[5].color, &[0.15, 0.65, 0.9, 0.7]);
+    }
+}
+
+#[test]
+fn invalid_glyph_modes_are_reported() {
+    for mode in [-1.0, 0.5, 3.0, f32::NAN, f32::INFINITY] {
+        let mut list = fixture!("text_hello_x1");
+        set_row(&mut list, 0, row::TYPES, [7.0, mode, 0.0, 1.0]);
+        let record = Record::new(list[..RECORD_FLOATS].try_into().unwrap());
+        assert_eq!(record.unsupported(), Some(Unsupported::GlyphMode));
+    }
 }
 
 fn records_of(parts: &[Vec<f32>]) -> (Vec<f32>, usize) {

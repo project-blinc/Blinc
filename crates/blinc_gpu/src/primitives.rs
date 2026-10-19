@@ -351,6 +351,8 @@ pub struct GpuPrimitive {
     /// Non-zero values create a smooth alpha ramp at clip edges.
     pub clip_fade: [f32; 4],
     /// Type info (primitive_type, fill_type, clip_type, z_layer)
+    /// Text fill modes: native mask 0 and colour 1; ABI colour shape 2,
+    /// colour with record alpha 3 and mask 4. ABI modes clip their atlas rect.
     pub type_info: [u32; 4],
     /// Border colour of the top, right, bottom and left sides when the
     /// sides differ. Alphas that sum to zero mean unset: the border is
