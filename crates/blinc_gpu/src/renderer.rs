@@ -35,11 +35,12 @@ use crate::primitives::{
 };
 use crate::shaders::{
     BLUR_SHADER, CLEAR_QUAD_SHADER, COLOR_MATRIX_SHADER, COMPOSITE_SHADER, DROP_SHADOW_SHADER,
-    GLASS_DT_SHADER, GLASS_SHADER, GLOW_SHADER, IMAGE_SHADER, LAYER_COMPOSITE_SHADER,
-    MASK_IMAGE_SHADER, MESH_DT_SHADER, PATH_SHADER, SDF_3D_DT_SHADER, SDF_3D_SHADER,
-    SDF_3D_VB_SHADER, SDF_CORE_DT_SHADER, SDF_CORE_SHADER, SDF_CORE_VB_SHADER, SDF_NOTCH_DT_SHADER,
-    SDF_NOTCH_SHADER, SDF_NOTCH_VB_SHADER, SDF_SHADER, SDF_SHADOW_DT_SHADER, SDF_SHADOW_SHADER,
-    SDF_SHADOW_VB_SHADER, SIMPLE_GLASS_DT_SHADER, SIMPLE_GLASS_SHADER, TEXT_DT_SHADER, TEXT_SHADER,
+    GLASS_DT_SHADER, GLASS_SHADER, GLOW_SHADER, IMAGE_DT_SHADER, IMAGE_SHADER,
+    LAYER_COMPOSITE_SHADER, MASK_IMAGE_SHADER, MESH_DT_SHADER, PATH_SHADER, SDF_3D_DT_SHADER,
+    SDF_3D_SHADER, SDF_3D_VB_SHADER, SDF_CORE_DT_SHADER, SDF_CORE_SHADER, SDF_CORE_VB_SHADER,
+    SDF_NOTCH_DT_SHADER, SDF_NOTCH_SHADER, SDF_NOTCH_VB_SHADER, SDF_SHADER, SDF_SHADOW_DT_SHADER,
+    SDF_SHADOW_SHADER, SDF_SHADOW_VB_SHADER, SIMPLE_GLASS_DT_SHADER, SIMPLE_GLASS_SHADER,
+    TEXT_DT_SHADER, TEXT_SHADER,
 };
 
 fn env_u64(name: &str) -> Option<u64> {
@@ -8911,7 +8912,13 @@ impl GpuRenderer {
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("Image Shader"),
-                source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(IMAGE_SHADER)),
+                source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(
+                    if self.has_storage_buffers {
+                        IMAGE_SHADER
+                    } else {
+                        IMAGE_DT_SHADER
+                    },
+                )),
             });
 
         // Bind group layout: uniforms, texture, sampler
@@ -8947,6 +8954,26 @@ impl GpuRenderer {
                             binding: 2,
                             visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 3,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: if self.has_storage_buffers {
+                                wgpu::BindingType::Buffer {
+                                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                    has_dynamic_offset: false,
+                                    min_binding_size: None,
+                                }
+                            } else {
+                                wgpu::BindingType::Texture {
+                                    sample_type: wgpu::TextureSampleType::Float {
+                                        filterable: false,
+                                    },
+                                    view_dimension: wgpu::TextureViewDimension::D2,
+                                    multisampled: false,
+                                }
+                            },
                             count: None,
                         },
                     ],
@@ -9057,6 +9084,11 @@ impl GpuRenderer {
                                 format: wgpu::VertexFormat::Float32x4,
                                 offset: 176,
                                 shader_location: 11,
+                            },
+                            wgpu::VertexAttribute {
+                                format: wgpu::VertexFormat::Float32x4,
+                                offset: 192,
+                                shader_location: 12,
                             },
                         ],
                     }],
@@ -9587,12 +9619,24 @@ impl GpuRenderer {
         image_view: &wgpu::TextureView,
         instances: &[GpuImageInstance],
     ) {
+        self.render_images_with_aux(target, image_view, instances, &[]);
+    }
+
+    /// Draw images with the auxiliary clip rows addressed by their instances.
+    pub fn render_images_with_aux(
+        &mut self,
+        target: &wgpu::TextureView,
+        image_view: &wgpu::TextureView,
+        instances: &[GpuImageInstance],
+        aux: &[[f32; 4]],
+    ) {
         if instances.is_empty() {
             return;
         }
 
         // Ensure pipeline is created
         self.ensure_image_pipeline();
+        self.update_aux_data_slice(aux);
 
         let image_pipeline = self.image_pipeline.as_ref().unwrap();
 
@@ -9627,6 +9671,19 @@ impl GpuRenderer {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::Sampler(&image_pipeline.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: if self.has_storage_buffers {
+                        self.buffers.aux_data.as_entire_binding()
+                    } else {
+                        wgpu::BindingResource::TextureView(
+                            self.buffers
+                                .aux_data_view
+                                .as_ref()
+                                .expect("image DT auxiliary texture"),
+                        )
+                    },
                 },
             ],
         });

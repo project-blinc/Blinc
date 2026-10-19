@@ -102,7 +102,7 @@ pub(super) fn coverage(pixel: [f32; 2], record: &[f32], list: &[f32], scale: f32
 
 // The four-probe polygon override jumps at an edge. Compare probes away from
 // numerical boundaries so interpolation rounding cannot change that override.
-fn ambiguous_probe(pixel: [f32; 2], record: &[f32], list: &[f32], scale: f32) -> bool {
+pub(super) fn ambiguous_probe(pixel: [f32; 2], record: &[f32], list: &[f32], scale: f32) -> bool {
     if row(record, 23)[2] != 3.0 {
         return false;
     }

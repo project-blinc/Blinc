@@ -337,7 +337,88 @@ fn shape_scene(cx: &mut LayoutContext, name: &str) -> Node {
     node
 }
 
+fn clipped_image(cx: &mut LayoutContext, name: &str) -> Node {
+    let local = name == "image_local" || name == "image_clip_layer" || name == "image_clip_nested";
+    let cut = name == "image_cut_fade";
+    let shape = name.strip_prefix("image_shape_");
+    let parent = cx.create_node(Style {
+        position: if cut { Position::Absolute } else { Position::Relative },
+        inset: if cut { Rect { left: length(-10.0), top: length(-8.0), right: auto(), bottom: auto() } } else { Rect::auto() },
+        size: Size { width: length(100.0), height: length(60.0) },
+        overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+        ..Default::default()
+    }).unwrap();
+    let mut props = RenderProps::default();
+    props.border_radius = CornerRadius::uniform(18.0);
+    if local { props.transform = Some(Transform::Affine2D(Affine2D { elements: [1.1, 0.3, -0.2, 0.9, 0.0, 0.0] })); }
+    if cut || name.contains("clip_") { props.overflow_fade = OverflowFade::new(12.0, 22.0, 14.0, 18.0); }
+    if let Some(shape) = shape { props.clip_path = Some(shape_path(&format!("shape_{shape}"))); }
+    if shape == Some("affine") { props.transform = Some(Transform::rotate(0.25)); }
+    if name.contains("clip_") { props.clip_path = Some(shape_path("shape_polygon")); }
+    if name == "image_corner" { props.corner_shape = blinc_core::CornerShape::BEVEL; }
+    cx.set_properties(parent, props).unwrap();
+    if shape == Some("hole_even") { cx.set_clip_even_odd(parent, true).unwrap(); }
+    let child = cx.create_node(Style {
+        position: Position::Absolute,
+        inset: Rect { left: length(-12.0), top: length(-9.0), right: auto(), bottom: auto() },
+        size: Size { width: length(140.0), height: length(80.0) },
+        ..Default::default()
+    }).unwrap();
+    if shape == Some("affine") {
+        let mut props = RenderProps::default();
+        props.transform = Some(Transform::Affine2D(Affine2D { elements: [0.95, -0.2, 0.3, 1.1, 0.0, 0.0] }));
+        cx.set_properties(child, props).unwrap();
+    }
+    cx.set_resource(child, Some(7), false).unwrap();
+    cx.insert_before(parent, child, None).unwrap();
+    let mut node = parent;
+    if cut {
+        let outer = cx.create_node(Style {
+            size: Size { width: length(70.0), height: length(50.0) },
+            overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+            ..Default::default()
+        }).unwrap();
+        cx.insert_before(outer, node, None).unwrap();
+        node = outer;
+    }
+    let levels = if name == "image_clip_nested" { 2 } else if name == "image_clip_layer" { 1 } else { 0 };
+    for _ in 0..levels {
+        let mut props = RenderProps::default();
+        props.opacity = 0.6;
+        props.filter = Some(CssFilter { brightness: 0.8, ..CssFilter::default() });
+        let outer = boxed(cx, 120.0, 80.0, props);
+        cx.insert_before(outer, node, None).unwrap();
+        node = outer;
+    }
+    if levels > 0 {
+        let mut props = RenderProps::default();
+        props.transform = Some(Transform::translate(32.0, 24.0));
+        let holder = boxed(cx, 160.0, 100.0, props);
+        cx.insert_before(holder, node, None).unwrap();
+        node = holder;
+    }
+    node
+}
+
 fn main() {
+    for name in ["image_local", "image_cut_fade", "image_shape_ellipse", "image_shape_affine", "image_shape_rect", "image_shape_polygon", "image_shape_hole_even", "image_shape_hole_nonzero", "image_corner", "image_clip_layer", "image_clip_nested"] {
+        scene(name, |cx| clipped_image(cx, name));
+    }
+    scene("image_clip_pair", |cx| {
+        let parent = boxed(cx, 160.0, 80.0, RenderProps::default());
+        for (name, x) in [("image_shape_polygon", 0.0), ("image_shape_rect", 50.0)] {
+            let node = clipped_image(cx, name);
+            cx.set_style(node, Style {
+                position: Position::Absolute,
+                inset: Rect { left: length(x), top: length(0.0), right: auto(), bottom: auto() },
+                size: Size { width: length(100.0), height: length(60.0) },
+                overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+                ..Default::default()
+            }).unwrap();
+            cx.insert_before(parent, node, None).unwrap();
+        }
+        parent
+    });
     for name in ["shape_ellipse", "shape_rect", "shape_polygon", "shape_hole_even", "shape_hole_nonzero", "shape_affine", "shape_inherited", "shape_shadow", "shape_notch", "shape_layer", "shape_flatten", "shape_image"] {
         scene(name, |cx| shape_scene(cx, name));
     }

@@ -133,7 +133,7 @@ fn main() {
             p.extension().is_some_and(|x| x == "wgsl")
                 && p.file_name()
                     .and_then(|n| n.to_str())
-                    .is_some_and(|n| n.starts_with("sdf_"))
+                    .is_some_and(|n| n.starts_with("sdf_") || n == "image.wgsl")
         })
         .collect();
     paths.sort();
@@ -196,6 +196,11 @@ fn main() {
             used.len(),
             order.len()
         );
+        if name == "image.wgsl" {
+            let dt = out.replace("var<storage, read> aux_data: array<vec4<f32>>;", "var aux_tex: texture_2d<f32>;")
+                .replace("return aux_data[index];", "return textureLoad(aux_tex, vec2<i32>(i32(index % 1024u), i32(index / 1024u)), 0);");
+            std::fs::write(out_dir.join("image_dt.wgsl"), dt).expect("write image DT shader");
+        }
         std::fs::write(out_dir.join(&name), out)
             .unwrap_or_else(|e| panic!("cannot write {name}: {e}"));
     }

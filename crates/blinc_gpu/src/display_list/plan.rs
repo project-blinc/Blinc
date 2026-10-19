@@ -9,18 +9,23 @@
 
 use super::effects::{DropShadow, LayerEffects, LayerFrame, LayerFx, LayerMask, MAX_MASK_STOPS};
 use super::{
-    CLIP_SCREEN, DecodeError, Kind, NO_CLIP, Placement, Record, Unsupported, records, row,
+    CLIP_LOCAL, CLIP_SCREEN, DecodeError, Kind, NO_CLIP, Placement, Record, Unsupported, records,
+    row,
 };
 use crate::image::{GpuImage, GpuImageInstance};
 use crate::primitives::{FillType, GpuPrimitive, PrimitiveBatch, PrimitiveType};
 use crate::renderer::{GpuRenderer, LayerTexture};
 
 /// An image to draw: the consumer's resource for `slot`, over a box.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ImageDraw {
     /// The consumer's name for the image, set by whoever laid the scene out.
     pub slot: u32,
     pub instance: GpuImageInstance,
+    /// Local bounds/radii, fade bounds/distances, then `[corner n, local AA, 0,
+    /// shape pointer]`, followed by the optional shape payload. Pointers are
+    /// one more than their row index, zero for none.
+    pub aux: Vec<[f32; 4]>,
 }
 
 /// A group drawn into a layer of its own and then over its parent as `fx`
@@ -125,7 +130,7 @@ pub fn plan(floats: &[f32], count: usize, version: u32, scale: f32) -> Result<Pl
             }
             Kind::Image => {
                 let page = &mut open.last_mut().expect("the page is open").items;
-                match record.image(scale) {
+                match record.image_with_aux(scale, floats) {
                     Ok(draw) => page.push(Item::Image(draw)),
                     Err(why) => plan.unsupported.push((index, why)),
                 }
@@ -172,8 +177,15 @@ pub fn plan(floats: &[f32], count: usize, version: u32, scale: f32) -> Result<Pl
 impl Record<'_> {
     /// The image this record draws, at `scale` device pixels per logical pixel,
     /// stretched over its box. Its texture is the consumer's, found by
-    /// [`ImageDraw::slot`].
+    /// [`ImageDraw::slot`]. Draw its instance and auxiliary rows together with
+    /// [`GpuRenderer::render_images_with_aux`]. A polygon needs the whole list;
+    /// use [`Record::image_with_aux`] for it.
     pub fn image(&self, scale: f32) -> Result<ImageDraw, Unsupported> {
+        self.image_with_aux(scale, &[])
+    }
+
+    /// Like [`Record::image`], with the whole list for polygon clip points.
+    pub fn image_with_aux(&self, scale: f32, list: &[f32]) -> Result<ImageDraw, Unsupported> {
         if self.kind() != Kind::Image {
             return Err(Unsupported::Kind(self.row(row::TYPES)[0]));
         }
@@ -183,6 +195,7 @@ impl Record<'_> {
         let Placement {
             bounds,
             local_affine,
+            size_scale,
             ..
         } = self.placement(scale);
         let mut instance = GpuImageInstance {
@@ -194,18 +207,52 @@ impl Record<'_> {
         };
         if self.clip_flags() & CLIP_SCREEN != 0 {
             let radii = self.row(row::CLIP_RADII);
-            // The image pipeline rounds a clip's corners as circles.
-            if radii.iter().any(|r| *r > 0.0) && self.row(row::TYPES)[3] != 1.0 {
-                return Err(Unsupported::ClipCorner);
-            }
             instance.clip_bounds = self.row(row::CLIP).map(|v| v * scale);
             instance.clip_radius = radii.map(|v| v * scale);
         } else {
             instance.clip_bounds = NO_CLIP;
         }
+        let shape = self.clip_rows(scale, list)?;
+        let shaped_screen_clip = self.clip_flags() & CLIP_SCREEN != 0
+            && instance.clip_radius.iter().any(|r| *r > 0.0)
+            && self.row(row::TYPES)[3] != 1.0;
+        if self.clip_flags() & CLIP_LOCAL == 0
+            && self.row(row::FADE).iter().all(|f| *f <= 0.0)
+            && shape.is_empty()
+            && !shaped_screen_clip
+        {
+            return Ok(ImageDraw {
+                slot: self.row(row::GRADIENT)[0] as u32,
+                instance,
+                aux: Vec::new(),
+            });
+        }
+        let mut aux = vec![[0.0; 4]; 5];
+        if self.clip_flags() & CLIP_LOCAL != 0 {
+            aux[0] = self.row(row::SHADOW).map(|v| v * size_scale);
+            aux[1] = self.row(row::SHADOW_COLOR).map(|v| v * size_scale);
+        }
+        aux[2] = self.row(row::FADE_RECT).map(|v| v * scale);
+        aux[3] = self.row(row::FADE).map(|v| v * scale);
+        let [a, b, c, d] = self.row(row::AFFINE);
+        let det = (a * d - b * c).abs();
+        let aa = if [a, b, c, d] == [1.0, 0.0, 0.0, 1.0] {
+            0.75
+        } else {
+            0.25 * (a.hypot(c) + b.hypot(d)) / det.sqrt()
+        };
+        aux[4] = [
+            self.row(row::TYPES)[3],
+            aa,
+            0.0,
+            if shape.is_empty() { 0.0 } else { 6.0 },
+        ];
+        aux.extend(shape);
+        instance.abi_clip[0] = 1.0;
         Ok(ImageDraw {
             slot: self.row(row::GRADIENT)[0] as u32,
             instance,
+            aux,
         })
     }
 
@@ -354,9 +401,20 @@ fn moved(items: &[Item], dx: f32, dy: f32) -> Vec<Item> {
                     instance.clip_bounds[0] += dx;
                     instance.clip_bounds[1] += dy;
                 }
+                let mut aux = draw.aux.clone();
+                if instance.abi_clip[0] > 0.5 {
+                    let base = instance.abi_clip[0] as usize - 1;
+                    aux[base + 2][0] += dx;
+                    aux[base + 2][1] += dy;
+                    let shape = aux[base + 4][3];
+                    if shape > 0.5 {
+                        super::clip::translate(&mut aux[shape as usize - 1..], dx, dy);
+                    }
+                }
                 Item::Image(ImageDraw {
                     slot: draw.slot,
                     instance,
+                    aux,
                 })
             }
             Item::Layer(layer) => Item::Layer(Layer {
@@ -467,7 +525,12 @@ impl Painter {
                     renderer.render_overlay(target, &batch);
                 }
                 Item::Image(draw) => match images(draw.slot) {
-                    Some(image) => renderer.render_images(target, image.view(), &[draw.instance]),
+                    Some(image) => renderer.render_images_with_aux(
+                        target,
+                        image.view(),
+                        &[draw.instance],
+                        &draw.aux,
+                    ),
                     None => missing.push(draw.slot),
                 },
                 Item::Layer(layer) => {

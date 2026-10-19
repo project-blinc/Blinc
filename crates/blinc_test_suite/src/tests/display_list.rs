@@ -5,6 +5,8 @@
 //! 200 by 120 page with 20px of padding holding one 100 by 60 box.
 
 #[cfg(test)]
+mod image_clip;
+#[cfg(test)]
 mod notch;
 #[cfg(test)]
 mod shape;
@@ -497,7 +499,7 @@ mod tests {
     }
 
     /// A 40 by 30 image, red on the left half and green on the right.
-    fn test_image(harness: &TestHarness) -> GpuImage {
+    pub(super) fn test_image(harness: &TestHarness) -> GpuImage {
         let (device, queue) = harness.gpu();
         let mut pixels = Vec::new();
         for _y in 0..30 {

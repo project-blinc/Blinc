@@ -394,7 +394,7 @@ fn an_image_is_not_a_primitive() {
 }
 
 #[test]
-fn a_mapped_image_and_an_oddly_rounded_clip_are_named() {
+fn a_mapped_image_is_named_and_a_shaped_clip_is_carried() {
     let mut list = fixture!("image_plain");
     set_row(&mut list, 0, row::TYPES, [32.0, 3.0, 0.0, 1.0]);
     let planned = plan(&list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
@@ -404,7 +404,11 @@ fn a_mapped_image_and_an_oddly_rounded_clip_are_named() {
     let mut list = fixture!("image_clipped");
     set_row(&mut list, 0, row::TYPES, [32.0, 0.0, 1.0, 2.0]);
     let planned = plan(&list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
-    assert_eq!(planned.unsupported, vec![(0, Unsupported::ClipCorner)]);
+    assert!(planned.unsupported.is_empty());
+    let [Item::Image(draw)] = &planned.items[..] else {
+        panic!("an image")
+    };
+    assert_eq!(draw.aux[4][0], 2.0);
 }
 
 fn layer_record(list: &[f32], index: usize) -> Vec<f32> {
@@ -676,12 +680,25 @@ fn a_rounded_clip_cut_by_a_plain_one_has_both() {
 }
 
 #[test]
-fn an_image_under_a_clip_in_its_own_frame_is_named() {
-    let mut list = fixture!("image_plain");
-    set_row(&mut list, 0, row::TYPES, [32.0, 0.0, 2.0, 1.0]);
-    let planned = plan(&list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
-    assert!(planned.items.is_empty());
-    assert_eq!(planned.unsupported, vec![(0, Unsupported::LocalClip)]);
+fn image_local_clips_keep_the_images_frame_and_display_scale() {
+    let list = fixture!("image_local");
+    let record = records(&list, 1, DISPLAY_LIST_VERSION)
+        .unwrap()
+        .next()
+        .unwrap();
+    for scale in [1.0, 2.0] {
+        let draw = record.image(scale).unwrap();
+        let [a, b, c, d] = record.row(row::AFFINE);
+        let unit = scale * (a * d - b * c).abs().sqrt();
+        near(&draw.aux[0], &record.row(row::SHADOW).map(|v| v * unit));
+        near(
+            &draw.aux[1],
+            &record.row(row::SHADOW_COLOR).map(|v| v * unit),
+        );
+        assert!(draw.aux[0][2] > 0.0);
+        assert_eq!(draw.instance.abi_clip[0], 1.0);
+    }
+    assert_eq!(blinc_gpu::GpuImageInstance::default().abi_clip, [0.0; 4]);
 }
 
 #[test]
@@ -728,11 +745,24 @@ fn glyphs_take_the_fade_in_display_pixels_not_atlas_pixels() {
 }
 
 #[test]
-fn images_under_fading_clips_are_still_named() {
-    let list = fixture!("fade_image");
-    let planned = plan(&list, 2, DISPLAY_LIST_VERSION, 1.0).unwrap();
-    assert_eq!(planned.unsupported, vec![(1, Unsupported::ClipFade)]);
-    assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.primitives.len() == 1));
+fn image_fades_keep_a_rectangle_separate_from_the_screen_intersection() {
+    let list = fixture!("image_cut_fade");
+    let record = records(&list, 1, DISPLAY_LIST_VERSION)
+        .unwrap()
+        .next()
+        .unwrap();
+    for scale in [1.0, 2.0] {
+        let draw = record.image(scale).unwrap();
+        near(&draw.aux[2], &record.row(row::FADE_RECT).map(|v| v * scale));
+        near(&draw.aux[3], &record.row(row::FADE).map(|v| v * scale));
+        assert_ne!(draw.aux[2], draw.instance.clip_bounds);
+    }
+    let planned = plan(&fixture!("fade_image"), 2, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(planned.unsupported.is_empty());
+    assert!(matches!(
+        &planned.items[..],
+        [Item::Primitives(_), Item::Image(_)]
+    ));
 }
 
 #[test]
@@ -888,9 +918,41 @@ fn flattening_a_layer_rebases_clip_headers_but_keeps_polygon_offsets_relative() 
 }
 
 #[test]
-fn images_under_element_frame_shapes_remain_named() {
-    let list = fixture!("shape_image");
-    let planned = plan(&list, 2, DISPLAY_LIST_VERSION, 1.0).unwrap();
-    assert_eq!(planned.unsupported, vec![(1, Unsupported::ClipShape)]);
-    assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.primitives.len() == 1));
+fn image_shapes_keep_their_auxiliary_header_and_polygon_points() {
+    let list = fixture!("image_shape_hole_even");
+    let record = records(&list, 1, DISPLAY_LIST_VERSION)
+        .unwrap()
+        .next()
+        .unwrap();
+    assert_eq!(record.image(1.0).err(), Some(Unsupported::ClipShape));
+    let draw = record.image_with_aux(2.0, &list).unwrap();
+    assert_eq!(draw.aux[4][3], 6.0);
+    near(&draw.aux[5], &[0.5, 0.0, 0.0, 0.5]);
+    assert_eq!(draw.aux[7], [3.0, 11.0, 1.0, 0.0]);
+    assert_eq!(draw.aux[10], [0.0, 0.0, 1e30, 1e30]);
+    let truncated = plan(&list[..RECORD_FLOATS], 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert_eq!(truncated.unsupported, vec![(0, Unsupported::ClipShape)]);
+    let planned = plan(&fixture!("shape_image"), 2, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(planned.unsupported.is_empty());
+    assert!(matches!(
+        &planned.items[..],
+        [Item::Primitives(_), Item::Image(_)]
+    ));
+}
+
+#[test]
+fn plain_images_keep_the_zero_pointer_clip_path() {
+    for list in [
+        fixture!("image_plain"),
+        fixture!("image_clipped"),
+        fixture!("image_faded"),
+    ] {
+        let record = records(&list, 1, DISPLAY_LIST_VERSION)
+            .unwrap()
+            .next()
+            .unwrap();
+        let draw = record.image(1.0).unwrap();
+        assert_eq!(draw.instance.abi_clip, [0.0; 4]);
+        assert!(draw.aux.is_empty());
+    }
 }

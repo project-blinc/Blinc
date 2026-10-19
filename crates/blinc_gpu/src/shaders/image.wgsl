@@ -32,6 +32,7 @@ struct ImageInstance {
     @location(10) mask_params: vec4<f32>,
     // Mask info: [mask_type, start_alpha, end_alpha, 0] (0=none, 1=linear, 2=radial)
     @location(11) mask_info: vec4<f32>,
+    @location(12) abi_clip: vec4<f32>,
 }
 
 struct VertexOutput {
@@ -50,6 +51,7 @@ struct VertexOutput {
     @location(10) clip2_bounds: vec4<f32>,
     @location(11) mask_params: vec4<f32>,
     @location(12) mask_info: vec4<f32>,
+    @location(13) @interpolate(flat) abi_clip: f32,
 }
 
 @group(0) @binding(0)
@@ -60,6 +62,9 @@ var image_texture: texture_2d<f32>;
 
 @group(0) @binding(2)
 var image_sampler: sampler;
+
+@group(0) @binding(3)
+var<storage, read> aux_data: array<vec4<f32>>;
 
 // Vertex indices for a quad (two triangles)
 var<private> QUAD_INDICES: array<u32, 6> = array<u32, 6>(0u, 1u, 2u, 2u, 3u, 0u);
@@ -124,6 +129,7 @@ fn vs_main(
     output.clip2_bounds = instance.clip2_bounds;
     output.mask_params = instance.mask_params;
     output.mask_info = instance.mask_info;
+    output.abi_clip = instance.abi_clip.x;
 
     return output;
 }
@@ -189,7 +195,7 @@ fn calculate_clip_alpha(p: vec2<f32>, clip_bounds: vec4<f32>, clip_radius: vec4<
 /// filter_a = (grayscale, invert, sepia, hue_rotate_rad)
 /// filter_b = (brightness, contrast, saturate, 0)
 /// Values are in sRGB space (texture uses Rgba8Unorm, no hardware sRGB decode).
-fn apply_css_filter(color: vec4<f32>, fa: vec4<f32>, fb: vec4<f32>) -> vec4<f32> {
+fn apply_image_filter(color: vec4<f32>, fa: vec4<f32>, fb: vec4<f32>) -> vec4<f32> {
     var rgb = color.rgb;
 
     // Grayscale: desaturate using luminance weights
@@ -260,7 +266,27 @@ fn apply_css_filter(color: vec4<f32>, fa: vec4<f32>, fb: vec4<f32>) -> vec4<f32>
 @fragment
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Early clip test - discard if outside either clip region
-    let clip_alpha = calculate_clip_alpha(input.world_pos, input.clip_bounds, input.clip_radius);
+    var clip_alpha = calculate_clip_alpha(input.world_pos, input.clip_bounds, input.clip_radius);
+    if input.abi_clip > 0.5 {
+        let base = u32(input.abi_clip) - 1u;
+        let info = abi_clip_data(base + 4u);
+        if input.clip_bounds.x >= -9000.0 {
+            let distance = sd_shaped_rect(input.world_pos, input.clip_bounds.xy, input.clip_bounds.zw, input.clip_radius, vec4<f32>(info.x));
+            clip_alpha = 1.0 - smoothstep(-0.75, 0.75, distance);
+        }
+        let local = abi_clip_data(base);
+        if local.z > 0.0 {
+            let distance = sd_shaped_rect(input.local_pos, local.xy, local.zw, abi_clip_data(base + 1u), vec4<f32>(info.x));
+            clip_alpha *= 1.0 - smoothstep(-info.y, info.y, distance);
+        }
+        let bounds = abi_clip_data(base + 2u);
+        let fade = abi_clip_data(base + 3u);
+        if fade.x > 0.0 { clip_alpha *= clamp((input.world_pos.y - bounds.y) / fade.x, 0.0, 1.0); }
+        if fade.y > 0.0 { clip_alpha *= clamp((bounds.x + bounds.z - input.world_pos.x) / fade.y, 0.0, 1.0); }
+        if fade.z > 0.0 { clip_alpha *= clamp((bounds.y + bounds.w - input.world_pos.y) / fade.z, 0.0, 1.0); }
+        if fade.w > 0.0 { clip_alpha *= clamp((input.world_pos.x - bounds.x) / fade.w, 0.0, 1.0); }
+        clip_alpha *= abi_shape_clip_alpha(input.world_pos, info.w);
+    }
     if clip_alpha < 0.001 {
         discard;
     }
@@ -291,7 +317,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let fa = input.filter_a;
     let fb = input.filter_b;
     if fa.x != 0.0 || fa.y != 0.0 || fa.z != 0.0 || abs(fa.w) > 0.001 || fb.x != 1.0 || fb.y != 1.0 || fb.z != 1.0 {
-        color = apply_css_filter(color, fa, fb);
+        color = apply_image_filter(color, fa, fb);
     }
 
     // Apply opacity

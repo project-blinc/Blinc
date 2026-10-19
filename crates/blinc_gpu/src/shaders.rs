@@ -3982,7 +3982,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 /// - UV cropping for box-fit modes
 /// - Tinting and opacity
 /// - Optional rounded corners
-pub const IMAGE_SHADER: &str = include_str!("shaders/image.wgsl");
+pub const IMAGE_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/image.wgsl"));
+
+/// Image shader using a data texture for auxiliary clips.
+pub const IMAGE_DT_SHADER: &str = include_str!(concat!(env!("OUT_DIR"), "/image_dt.wgsl"));
 
 /// Shader for layer composition
 ///
@@ -5123,6 +5126,19 @@ mod tests {
     #[test]
     fn color_matrix_shader_parses() {
         parse_wgsl(COLOR_MATRIX_SHADER).expect("COLOR_MATRIX_SHADER");
+    }
+
+    #[test]
+    fn image_shaders_parse() {
+        for source in [IMAGE_SHADER, IMAGE_DT_SHADER] {
+            let module = naga::front::wgsl::parse_str(source).unwrap();
+            naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::all(),
+            )
+            .validate(&module)
+            .expect("valid image shader");
+        }
     }
 
     #[test]

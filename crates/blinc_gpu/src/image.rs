@@ -375,6 +375,8 @@ pub struct GpuImageInstance {
     pub mask_params: [f32; 4],
     /// Mask info: [mask_type, start_alpha, end_alpha, 0] (0=none, 1=linear, 2=radial)
     pub mask_info: [f32; 4],
+    /// One more than the ABI clip header in auxiliary data; zero keeps native clipping.
+    pub abi_clip: [f32; 4],
 }
 
 impl Default for GpuImageInstance {
@@ -397,6 +399,7 @@ impl Default for GpuImageInstance {
             // Default: no mask gradient
             mask_params: [0.0; 4],
             mask_info: [0.0; 4],
+            abi_clip: [0.0; 4],
         }
     }
 }

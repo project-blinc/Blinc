@@ -122,11 +122,7 @@ pub enum Unsupported {
     Kind(f32),
     /// A fill of a kind this does not know, or a gradient whose table is not in the list.
     Gradient,
-    /// An image under a clip in its own frame, which the image pipeline does not take.
-    LocalClip,
-    /// An image under a fading clip, which the image pipeline does not take.
-    ClipFade,
-    /// An image clip-path, invalid shape data, or a shape needing aux data in `to_primitive`.
+    /// Invalid shape data, or a shape needing aux data in `to_primitive`.
     ClipShape,
     /// A notch on a record other than a box or shadow.
     Notch,
@@ -136,8 +132,6 @@ pub enum Unsupported {
     ColorGlyphShape,
     /// An image that is fitted, positioned or tiled, not stretched over its box.
     ImageMapping,
-    /// An image under a clip whose rounded corners are not circular.
-    ClipCorner,
     /// A layer whose mask has more stops than there is room for, or whose table is not in the list.
     LayerEffect,
     /// A gradient whose stops are kept in a table, where the caller gave none to keep it in.
@@ -332,15 +326,8 @@ impl<'a> Record<'a> {
         if det.is_nan() || det <= 1e-12 {
             return Some(Unsupported::Degenerate);
         }
-        // The image pipeline has no clip in the image's own frame.
-        if self.clip_flags() & CLIP_LOCAL != 0 && self.kind() == Kind::Image {
-            return Some(Unsupported::LocalClip);
-        }
-        if self.row(row::FADE) != [0.0; 4] && self.kind() == Kind::Image {
-            return Some(Unsupported::ClipFade);
-        }
         let shape = self.row(row::SHAPE + 1)[2];
-        if shape != 0.0 && (self.kind() == Kind::Image || ![1.0, 2.0, 3.0].contains(&shape)) {
+        if shape != 0.0 && ![1.0, 2.0, 3.0].contains(&shape) {
             return Some(Unsupported::ClipShape);
         }
         if self.has_notch() && !matches!(self.kind(), Kind::Box | Kind::Shadow) {
