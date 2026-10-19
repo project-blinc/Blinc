@@ -34,6 +34,7 @@
 
 pub mod atlas;
 pub mod backdrop;
+pub mod canvas;
 mod clip;
 pub mod effects;
 mod gaussian;
@@ -79,6 +80,7 @@ const KIND_RECT: f32 = 0.0;
 const KIND_SHADOW: f32 = 3.0;
 const KIND_TEXT: f32 = 7.0;
 const KIND_IMAGE: f32 = 32.0;
+const KIND_CANVAS: f32 = 33.0;
 const KIND_LAYER_BEGIN: f32 = 40.0;
 const KIND_LAYER: f32 = 41.0;
 const KIND_BACKDROP: f32 = 42.0;
@@ -141,6 +143,8 @@ pub enum Unsupported {
     GradientTable,
     /// Non-finite backdrop data or a negative Gaussian deviation or read margin.
     BackdropEffect,
+    /// Invalid canvas geometry, slot or resource scale.
+    CanvasData,
 }
 
 /// The kind of a record.
@@ -152,13 +156,15 @@ pub enum Kind {
     Text,
     /// A resource of the consumer's, named by its slot, over a box.
     Image,
+    /// Custom GPU drawing at a consumer-owned slot.
+    Canvas,
     /// Opens a layer: the records up to its [`Kind::Layer`] are drawn into it.
     LayerBegin,
     /// Closes a layer, and draws it over the page with what its record asks.
     Layer,
     /// Filters the pixels painted so far in the current layer.
     Backdrop,
-    /// Canvas or an unknown kind, by its code.
+    /// An unknown kind, by its code.
     Other(f32),
 }
 
@@ -277,6 +283,7 @@ impl<'a> Record<'a> {
             k if k == KIND_SHADOW => Kind::Shadow,
             k if k == KIND_TEXT => Kind::Text,
             k if k == KIND_IMAGE => Kind::Image,
+            k if k == KIND_CANVAS => Kind::Canvas,
             k if k == KIND_LAYER_BEGIN => Kind::LayerBegin,
             k if k == KIND_LAYER => Kind::Layer,
             k if k == KIND_BACKDROP => Kind::Backdrop,
@@ -326,7 +333,7 @@ impl<'a> Record<'a> {
             // Fill type 0 is a bitmap stretched over the box; anything else is a mapping.
             Kind::Image if self.fill_type() != 0.0 => return Some(Unsupported::ImageMapping),
             Kind::Image => {}
-            Kind::LayerBegin | Kind::Layer | Kind::Backdrop => {}
+            Kind::Canvas | Kind::LayerBegin | Kind::Layer | Kind::Backdrop => {}
             Kind::Other(k) => return Some(Unsupported::Kind(k)),
         }
         let [a, b, c, d] = self.row(row::AFFINE);
@@ -383,8 +390,9 @@ impl<'a> Record<'a> {
         aux_base: usize,
     ) -> Result<(GpuPrimitive, Vec<[f32; 4]>), Unsupported> {
         match self.kind() {
-            // Images, layers and backdrops keep their place among primitive runs.
+            // Images, canvases, layers and backdrops keep their paint order.
             Kind::Image => return Err(Unsupported::Kind(KIND_IMAGE)),
+            Kind::Canvas => return Err(Unsupported::Kind(KIND_CANVAS)),
             Kind::LayerBegin => return Err(Unsupported::Kind(KIND_LAYER_BEGIN)),
             Kind::Layer => return Err(Unsupported::Kind(KIND_LAYER)),
             Kind::Backdrop => return Err(Unsupported::Kind(KIND_BACKDROP)),

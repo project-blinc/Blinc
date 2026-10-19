@@ -338,6 +338,10 @@ fn shape_scene(cx: &mut LayoutContext, name: &str) -> Node {
 }
 
 fn clipped_image(cx: &mut LayoutContext, name: &str) -> Node {
+    clipped_resource(cx, name, false)
+}
+
+fn clipped_resource(cx: &mut LayoutContext, name: &str, canvas: bool) -> Node {
     let local = name == "image_local" || name == "image_clip_layer" || name == "image_clip_nested";
     let cut = name == "image_cut_fade";
     let shape = name.strip_prefix("image_shape_");
@@ -369,7 +373,7 @@ fn clipped_image(cx: &mut LayoutContext, name: &str) -> Node {
         props.transform = Some(Transform::Affine2D(Affine2D { elements: [0.95, -0.2, 0.3, 1.1, 0.0, 0.0] }));
         cx.set_properties(child, props).unwrap();
     }
-    cx.set_resource(child, Some(7), false).unwrap();
+    cx.set_resource(child, Some(7), canvas).unwrap();
     cx.insert_before(parent, child, None).unwrap();
     let mut node = parent;
     if cut {
@@ -504,7 +508,54 @@ fn backdrop_scene(cx: &mut LayoutContext, name: &str) -> Node {
     root
 }
 
+fn canvas_scene(cx: &mut LayoutContext, name: &str) -> Node {
+    if name == "canvas_plain" {
+        let node = cx.create_node(Style {
+            size: Size { width: length(100.0), height: length(60.0) },
+            padding: Rect::length(5.0),
+            ..Default::default()
+        }).unwrap();
+        let mut props = RenderProps::default();
+        props.opacity = 0.45;
+        cx.set_properties(node, props).unwrap();
+        cx.set_resource(node, Some(7), true).unwrap();
+        return node;
+    }
+    if name == "canvas_pair" {
+        let root = boxed(cx, 160.0, 80.0, RenderProps::default());
+        for (shape, x) in [("image_shape_polygon", 0.0), ("image_shape_rect", 50.0)] {
+            let node = clipped_resource(cx, shape, true);
+            cx.set_style(node, Style {
+                position: Position::Absolute,
+                inset: Rect { left: length(x), top: length(0.0), right: auto(), bottom: auto() },
+                size: Size { width: length(100.0), height: length(60.0) },
+                overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+                ..Default::default()
+            }).unwrap();
+            cx.insert_before(root, node, None).unwrap();
+        }
+        return root;
+    }
+    if name == "canvas_order" {
+        let root = boxed(cx, 160.0, 80.0, RenderProps::default());
+        for (kind, slot, bounds) in [(0, 0, [0.0, 0.0, 140.0, 75.0]),
+            (33, 7, [8.0, 5.0, 90.0, 55.0]), (32, 9, [30.0, 15.0, 75.0, 50.0]),
+            (33, 8, [45.0, 20.0, 90.0, 55.0]), (0, 0, [70.0, 40.0, 30.0, 20.0])] {
+            let mut props = RenderProps::default();
+            if kind == 0 { props.background = Some(Brush::Solid(Color::rgba(0.2, 0.4, 0.1, 0.7))); }
+            let node = absolute_box(cx, bounds, props);
+            if kind != 0 { cx.set_resource(node, Some(slot), kind == 33).unwrap(); }
+            cx.insert_before(root, node, None).unwrap();
+        }
+        return root;
+    }
+    clipped_resource(cx, &name.replacen("canvas", "image", 1), true)
+}
+
 fn main() {
+    for name in ["canvas_pair", "canvas_plain", "canvas_local", "canvas_cut_fade", "canvas_shape_ellipse", "canvas_shape_affine", "canvas_shape_rect", "canvas_shape_polygon", "canvas_shape_hole_even", "canvas_shape_hole_nonzero", "canvas_corner", "canvas_clip_layer", "canvas_clip_nested", "canvas_order"] {
+        for scale in [1.0, 2.0] { scaled(&format!("{name}_x{scale}"), scale, |cx| canvas_scene(cx, name)); }
+    }
     for name in ["backdrop_blur", "backdrop_zero", "backdrop_wide", "backdrop_frost", "backdrop_liquid", "backdrop_border", "backdrop_transparent", "backdrop_affine", "backdrop_notch", "backdrop_clip", "backdrop_cut", "backdrop_shape", "backdrop_layers", "backdrop_order", "backdrop_matrix", "backdrop_flat", "backdrop_stretch", "backdrop_noline", "backdrop_offscreen"] {
         for scale in [1.0, 2.0] { scaled(&format!("{name}_x{scale}"), scale, |cx| backdrop_scene(cx, name)); }
     }

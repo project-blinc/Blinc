@@ -132,7 +132,10 @@ fn main() {
         .filter(|p| {
             p.extension().is_some_and(|x| x == "wgsl")
                 && p.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
-                    n.starts_with("sdf_") || n == "image.wgsl" || n == "backdrop.wgsl"
+                    n.starts_with("sdf_")
+                        || n == "image.wgsl"
+                        || n == "backdrop.wgsl"
+                        || n == "canvas.wgsl"
                 })
         })
         .collect();
@@ -149,13 +152,18 @@ fn main() {
             .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
 
         // Clip helpers read bindings, so they follow declarations and precede the fragment entry.
-        let clip = if name.contains("_dt") || name == "backdrop.wgsl" {
+        let clip = if name.contains("_dt") || name == "backdrop.wgsl" || name == "canvas.wgsl" {
             clip_src.replace("aux_data[index]", "load_aux(index)")
         } else {
             clip_src.clone()
         };
-        assert_eq!(body.matches("\n@fragment").count(), 1, "{name}");
-        let body = body.replacen("\n@fragment", &format!("\n{clip}\n@fragment"), 1);
+        let body = if name == "canvas.wgsl" {
+            assert_eq!(body.matches("// CLIP_HELPERS").count(), 1);
+            body.replace("// CLIP_HELPERS", &clip)
+        } else {
+            assert_eq!(body.matches("\n@fragment").count(), 1, "{name}");
+            body.replacen("\n@fragment", &format!("\n{clip}\n@fragment"), 1)
+        };
 
         // Everything the shader reaches, transitively through the prelude.
         let mut needed: BTreeSet<String> = order

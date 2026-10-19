@@ -221,13 +221,7 @@ fn an_overflow_clip_reaches_the_children_it_cuts() {
 #[test]
 fn what_a_primitive_cannot_carry_is_named() {
     let base = fixture!("box_solid");
-    let cases: [(&str, usize, [f32; 4], Unsupported); 4] = [
-        (
-            "canvas",
-            row::TYPES,
-            [33.0, 0.0, 0.0, 1.0],
-            Unsupported::Kind(33.0),
-        ),
+    let cases: [(&str, usize, [f32; 4], Unsupported); 3] = [
         (
             "fill of another kind",
             row::TYPES,
@@ -337,6 +331,7 @@ fn an_image_sits_between_the_primitive_runs_around_it() {
             Item::Image(d) => format!("image {}", d.slot),
             Item::Layer(_) => "layer".to_string(),
             Item::Backdrop(_) => "backdrop".to_string(),
+            Item::Canvas(d) => format!("canvas {}", d.slot),
         })
         .collect();
     assert_eq!(shape, ["1 primitives", "image 7", "5 primitives"]);
@@ -949,5 +944,100 @@ fn plain_images_keep_the_zero_pointer_clip_path() {
         let draw = record.image(1.0).unwrap();
         assert_eq!(draw.instance.abi_clip, [0.0; 4]);
         assert!(draw.aux.is_empty());
+    }
+}
+
+#[test]
+fn canvases_keep_their_slots_content_box_and_resource_scale() {
+    for (scale, list) in [
+        (1.0, fixture!("canvas_plain_x1")),
+        (2.0, fixture!("canvas_plain_x2")),
+    ] {
+        let record = records(&list, 1, DISPLAY_LIST_VERSION)
+            .unwrap()
+            .next()
+            .unwrap();
+        assert_eq!(record.kind(), Kind::Canvas);
+        assert_eq!(
+            record.primitive(scale, &list, 0).unwrap_err(),
+            Unsupported::Kind(33.0)
+        );
+        let canvas = record.canvas(scale, &list).unwrap();
+        assert_eq!(canvas.slot, 7);
+        near(&canvas.rows[row::BOUNDS], &[25.0, 25.0, 90.0, 50.0]);
+        near(&canvas.rows[row::GRADIENT], &[7.0, scale, 0.0, 0.0]);
+        near(&canvas.rows[row::FILL_END], &[1.0, 1.0, 1.0, 0.45]);
+        assert!(canvas.aux.is_empty());
+        assert_eq!(canvas.target_origin, [0.0; 2]);
+    }
+}
+
+#[test]
+fn canvas_plans_preserve_interleaved_resources_and_primitive_runs() {
+    let list = fixture!("canvas_order_x1");
+    let planned = plan(&list, 5, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(planned.unsupported.is_empty());
+    assert!(
+        matches!(planned.items.as_slice(), [Item::Primitives(_), Item::Canvas(a), Item::Image(i), Item::Canvas(b), Item::Primitives(_)] if a.slot == 7 && i.slot == 9 && b.slot == 8)
+    );
+}
+
+#[test]
+fn canvas_polygons_keep_their_payload_and_validate_truncation() {
+    let list = fixture!("canvas_shape_hole_even_x1");
+    let record = records(&list, 1, DISPLAY_LIST_VERSION)
+        .unwrap()
+        .next()
+        .unwrap();
+    let draw = record.canvas(2.0, &list).unwrap();
+    assert!(draw.aux.len() > 3);
+    near(&draw.aux[0], &record.row(row::SHAPE).map(|v| v / 2.0));
+    assert_eq!(draw.aux[2][0], 3.0);
+    assert_eq!(draw.aux[2][2], 1.0);
+    assert_eq!(
+        record.canvas(1.0, &list[..RECORD_FLOATS]).unwrap_err(),
+        Unsupported::ClipShape
+    );
+}
+
+#[test]
+fn canvas_data_rejects_invalid_slots_sizes_scales_and_nonfinite_rows() {
+    let original = fixture!("canvas_plain_x1");
+    for (at, value) in [
+        (40, -1.0),
+        (40, 7.5),
+        (40, 16777216.0),
+        (41, 0.0),
+        (41, f32::INFINITY),
+        (2, 0.0),
+        (3, -2.0),
+        (0, f32::NAN),
+    ] {
+        let mut list = original.clone();
+        list[at] = value;
+        let record = records(&list, 1, DISPLAY_LIST_VERSION)
+            .unwrap()
+            .next()
+            .unwrap();
+        assert_eq!(
+            record.canvas(1.0, &list).unwrap_err(),
+            Unsupported::CanvasData
+        );
+        assert_eq!(
+            plan(&list, 1, DISPLAY_LIST_VERSION, 1.0)
+                .unwrap()
+                .unsupported,
+            [(0, Unsupported::CanvasData)]
+        );
+    }
+    let record = records(&original, 1, DISPLAY_LIST_VERSION)
+        .unwrap()
+        .next()
+        .unwrap();
+    for scale in [0.0, -1.0, f32::NAN] {
+        assert_eq!(
+            record.canvas(scale, &original).unwrap_err(),
+            Unsupported::Degenerate
+        );
     }
 }

@@ -22,7 +22,7 @@ fn row(record: &[f32], index: usize) -> [f32; 4] {
     record[index * 4..index * 4 + 4].try_into().unwrap()
 }
 
-fn shaped(p: [f32; 2], bounds: [f32; 4], radius: [f32; 4], n: f32) -> f32 {
+pub(super) fn shaped(p: [f32; 2], bounds: [f32; 4], radius: [f32; 4], n: f32) -> f32 {
     if n == 1.0 {
         return rounded(p, bounds, radius);
     }

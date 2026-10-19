@@ -7,6 +7,8 @@
 #[cfg(test)]
 mod backdrop;
 #[cfg(test)]
+mod canvas;
+#[cfg(test)]
 mod image_clip;
 #[cfg(test)]
 mod notch;

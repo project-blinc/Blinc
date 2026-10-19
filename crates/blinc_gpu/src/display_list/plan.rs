@@ -4,10 +4,11 @@
 //! An image is a texture the consumer owns, drawn by the image pipeline in a
 //! pass of its own, and a layer is its own content drawn into a texture and
 //! composited back. Paint order interleaves them, so a [`Plan`] keeps
-//! consecutive primitives together, puts each image between them and nests
+//! consecutive primitives together, puts each image or canvas between them and nests
 //! each layer's items inside it.
 
 use super::backdrop::{Backdrop, BackdropPass};
+use super::canvas::{CanvasDraw, CanvasRegistry};
 use super::effects::{DropShadow, LayerEffects, LayerFrame, LayerFx, LayerMask, MAX_MASK_STOPS};
 use super::{
     CLIP_LOCAL, CLIP_SCREEN, DecodeError, Kind, NO_CLIP, Placement, Record, Unsupported, records,
@@ -72,6 +73,7 @@ pub enum Item {
     Primitives(Run),
     Image(ImageDraw),
     Backdrop(Backdrop),
+    Canvas(CanvasDraw),
     Layer(Layer),
 }
 
@@ -134,6 +136,13 @@ pub fn plan(floats: &[f32], count: usize, version: u32, scale: f32) -> Result<Pl
                 let page = &mut open.last_mut().expect("the page is open").items;
                 match record.backdrop(scale, floats) {
                     Ok(draw) => page.push(Item::Backdrop(draw)),
+                    Err(why) => plan.unsupported.push((index, why)),
+                }
+            }
+            Kind::Canvas => {
+                let page = &mut open.last_mut().expect("the page is open").items;
+                match record.canvas(scale, floats) {
+                    Ok(draw) => page.push(Item::Canvas(draw)),
                     Err(why) => plan.unsupported.push((index, why)),
                 }
             }
@@ -427,6 +436,7 @@ fn moved(items: &[Item], dx: f32, dy: f32) -> Vec<Item> {
                 })
             }
             Item::Backdrop(draw) => Item::Backdrop(draw.moved(dx, dy)),
+            Item::Canvas(draw) => Item::Canvas(draw.moved(dx, dy)),
             Item::Layer(layer) => Item::Layer(Layer {
                 items: moved(&layer.items, dx, dy),
                 fx: layer.fx,
@@ -479,9 +489,10 @@ fn clear(device: &wgpu::Device, queue: &wgpu::Queue, view: &wgpu::TextureView) {
     queue.submit(std::iter::once(encoder.finish()));
 }
 
-/// Draws plans, retaining layer and backdrop resources between frames.
+/// Draws plans, retaining canvas callbacks, layer and backdrop resources between frames.
 #[derive(Default)]
 pub struct Painter {
+    pub(super) canvases: CanvasRegistry,
     effects: Option<LayerEffects>,
     backdrop: Option<BackdropPass>,
     /// Content textures a layer is done with, to draw into again.
@@ -503,6 +514,7 @@ impl Painter {
         clear: [f64; 4],
         images: &dyn Fn(u32) -> Option<&'i GpuImage>,
     ) -> Vec<u32> {
+        self.canvases.missing.clear();
         renderer.resize(size.0, size.1);
         let mut missing = Vec::new();
         if has_backdrop(&plan.items) {
@@ -573,6 +585,17 @@ impl Painter {
                     ),
                     None => missing.push(draw.slot),
                 },
+                Item::Canvas(draw) => {
+                    let (device, queue) = (renderer.device_arc(), renderer.queue_arc());
+                    self.canvases.paint(
+                        &device,
+                        &queue,
+                        renderer.texture_format,
+                        target,
+                        size,
+                        draw,
+                    );
+                }
                 Item::Backdrop(draw) => {
                     let (device, queue) = (renderer.device_arc(), renderer.queue_arc());
                     self.backdrop
@@ -648,7 +671,7 @@ impl Painter {
 }
 
 /// Draws `plan` once, with a [`Painter`] of its own. Effect pipelines are rebuilt
-/// on each call; keep one `Painter` across frames to reuse them.
+/// on each call; keep one `Painter` across frames to reuse them and register canvases.
 pub fn render<'i>(
     renderer: &mut GpuRenderer,
     target: &wgpu::TextureView,

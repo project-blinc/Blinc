@@ -14,6 +14,8 @@
 //! - **Interactive Tests**: Manual testing with live windows
 //! - **Benchmarks**: Performance testing of rendering pipeline
 
+#![recursion_limit = "256"]
+
 pub mod harness;
 pub mod runner;
 pub mod tests;
