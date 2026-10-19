@@ -27,6 +27,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - Per-corner squircle / scoop / bevel support on `ClipShape::RoundedRect` propagated into the SDF clip primitive uniforms — all 12 SDF shader variants (`sdf_core` / `sdf_shadow` / `sdf_3d` / `sdf_notch` × `vb` / `dt` / msaa) now read and apply per-corner `n` when evaluating clip alpha.
 
 ### Fixed
+- Triangle mesh vertices, optional vertex colours and compound 3D shape descriptors follow primitive routing into motion and composite batches. Inherited polygon clips cache their payload in each batch that uses them and invalidate offsets when batches are drained.
 - The no-storage-buffer primitive path sizes texture rows and uploads from `GpuPrimitive` and loads every field in the core, shadow, notch and 3D data-texture shaders. Layout guards check field columns, instance rows and integer bitcasts. This restores the data-texture payload used by WebGL2 without changing native storage-buffer or vertex-buffer rendering.
 - `GpuRenderer::render_msaa` now uploads the auxiliary data buffer, so polygon clips and 3D groups draw through it. It drew them as if their vertices were all zero.
 - Box shadows in `sdf_shadow` (all three variants): a spread-only shadow now draws (the quad grows by the spread), an offset-only shadow with no blur and no spread now draws, a spread grows a corner only as far as it is already round (a square box keeps square shadow corners), and an unblurred outer or inset edge is antialiased over a pixel. A zero-blur inset shadow is now a crisp ring instead of a soft one.

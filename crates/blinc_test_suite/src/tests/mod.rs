@@ -1,5 +1,6 @@
 //! Visual test cases organized by category
 
+pub mod aux_routing;
 pub mod blur_cost;
 pub mod clip_fill_rule;
 pub mod clipping;

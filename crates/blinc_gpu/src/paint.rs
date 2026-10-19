@@ -62,6 +62,9 @@ use crate::primitives::{
 };
 use crate::text::TextRenderingContext;
 
+mod aux_data;
+use aux_data::{AuxBatch, PolygonClipData};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Transform Stack
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,8 +115,8 @@ struct LayerState {
     parent_state_indices: (usize, usize, usize, usize),
 }
 
-/// Clip stack entry: (shape, optional polygon aux_data metadata (aux_offset, vertex_count), overflow_fade)
-type ClipStackEntry = (ClipShape, Option<(u32, u32)>, [f32; 4]);
+/// Clip stack entry: shape, optional polygon payload offsets, overflow fade.
+type ClipStackEntry = (ClipShape, Option<PolygonClipData>, [f32; 4]);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pending 3D Mesh Draw
@@ -658,6 +661,7 @@ impl<'a> GpuPaintContext<'a> {
     pub fn take_composite_layer_batches(
         &mut self,
     ) -> std::collections::HashMap<u64, PrimitiveBatch> {
+        self.forget_composite_polygon_offsets();
         std::mem::take(&mut self.composite_layer_batches)
     }
 
@@ -668,12 +672,12 @@ impl<'a> GpuPaintContext<'a> {
     /// path / glass emit site so the routing is centralised.
     #[inline]
     fn active_batch_mut(&mut self) -> &mut PrimitiveBatch {
-        if let Some(node_id) = self.active_composite_layer {
-            self.composite_layer_batches.entry(node_id).or_default()
-        } else if self.motion_subtree_depth > 0 {
-            &mut self.dynamic_batch
-        } else {
-            &mut self.batch
+        match self.aux_batch() {
+            AuxBatch::Composite(node_id) => {
+                self.composite_layer_batches.entry(node_id).or_default()
+            }
+            AuxBatch::Dynamic => &mut self.dynamic_batch,
+            AuxBatch::Static => &mut self.batch,
         }
     }
 
@@ -703,17 +707,17 @@ impl<'a> GpuPaintContext<'a> {
     /// so they bracket the right batch.
     #[inline]
     fn active_batch(&self) -> &PrimitiveBatch {
-        if let Some(node_id) = self.active_composite_layer {
-            // If push happened, the entry must exist; fall back to
-            // `batch` defensively so reads don't panic on an
-            // unbalanced API call.
-            self.composite_layer_batches
-                .get(&node_id)
-                .unwrap_or(&self.batch)
-        } else if self.motion_subtree_depth > 0 {
-            &self.dynamic_batch
-        } else {
-            &self.batch
+        match self.aux_batch() {
+            AuxBatch::Composite(node_id) => {
+                // If push happened, the entry must exist; fall back to
+                // `batch` defensively so reads don't panic on an
+                // unbalanced API call.
+                self.composite_layer_batches
+                    .get(&node_id)
+                    .unwrap_or(&self.batch)
+            }
+            AuxBatch::Dynamic => &self.dynamic_batch,
+            AuxBatch::Static => &self.batch,
         }
     }
 
@@ -721,6 +725,7 @@ impl<'a> GpuPaintContext<'a> {
     /// fast path) dispatches it per frame on top of the static cache
     /// blit. Leaves `dynamic_batch` empty for the next paint pass.
     pub fn take_dynamic_batch(&mut self) -> PrimitiveBatch {
+        self.forget_polygon_offsets(AuxBatch::Dynamic);
         std::mem::take(&mut self.dynamic_batch)
     }
 
@@ -1374,7 +1379,7 @@ impl<'a> GpuPaintContext<'a> {
     /// reset the corner radius to 0 for any corners it covers, so a
     /// child with overflow_clip() doesn't inherit rounded corners
     /// from a parent.
-    fn get_clip_data(&self) -> ([f32; 4], [f32; 4], [f32; 4], ClipType) {
+    fn get_clip_data(&mut self) -> ([f32; 4], [f32; 4], [f32; 4], ClipType) {
         // P4.3 Option B clip-aware bake: while inside the OUTERMOST
         // composite layer, ancestor clips below the snapshot base
         // are stripped from per-primitive clip rects. They get
@@ -1689,7 +1694,8 @@ impl<'a> GpuPaintContext<'a> {
             ),
             ClipShape::Polygon(_) => {
                 // clip_bounds = rect scissor, clip_radius = [even_odd, 0, vertex_count, aux_offset]
-                let (aux_offset, packed) = poly_meta.unwrap_or((0, 0));
+                let packed = poly_meta.as_ref().unwrap().packed_count;
+                let aux_offset = self.polygon_clip_offset(start + shape_idx);
                 let even_odd = packed & POLYGON_EVEN_ODD != 0;
                 let vertex_count = packed & !POLYGON_EVEN_ODD;
                 (
@@ -1718,6 +1724,7 @@ impl<'a> GpuPaintContext<'a> {
 
     /// Take the accumulated batch for rendering
     pub fn take_batch(&mut self) -> PrimitiveBatch {
+        self.forget_polygon_offsets(AuxBatch::Static);
         std::mem::take(&mut self.batch)
     }
 
@@ -2045,15 +2052,9 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         // Note: This only works correctly for translate + uniform scale transforms.
         // Rotation transforms are approximated (the bounding box is used).
         let transformed_shape = self.transform_clip_shape(shape);
-        // For polygon clips, pack vertices into the ACTIVE batch's aux_data
-        // and store metadata. The active batch is `dynamic_batch` when
-        // emitting inside a motion-bound subtree — primitives there carry
-        // `clip_radius.w = aux_offset` indexing into the dispatched batch's
-        // own aux_data buffer, so vertices written to `self.batch.aux_data`
-        // wouldn't be reachable at draw time. The matching pop is in
-        // `pop_clip`; the aux_data entries stay around for the rest of the
-        // paint pass (every later primitive emitted under this clip needs
-        // them in place when its render-pass dispatches).
+        // Pack polygon vertices in the active batch. Emission copies the
+        // payload into any other batch that inherits this clip; cached
+        // offsets remain valid until their batch is drained.
         // The rule is taken by every push, so it never reaches a later clip.
         let rule = std::mem::take(&mut self.pending_clip_fill_rule);
         let rule_bit = if rule == FillRule::EvenOdd {
@@ -2062,6 +2063,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             0
         };
         let poly_meta = if let ClipShape::Polygon(ref pts) = transformed_shape {
+            let batch = self.aux_batch();
             let active = self.active_batch_mut();
             let aux_offset = active.aux_data.len() as u32;
             let vertex_count = pts.len() as u32;
@@ -2078,7 +2080,11 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 active.aux_data.push([x0, y0, x1, y1]);
                 i += 2;
             }
-            Some((aux_offset, vertex_count | rule_bit))
+            Some(PolygonClipData::new(
+                batch,
+                aux_offset,
+                vertex_count | rule_bit,
+            ))
         } else {
             None
         };
@@ -2860,7 +2866,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         // Pack group shape descriptors into aux_data if this is a 3D group
         let mut border = [0.0_f32; 4];
         if !self.current_3d_group_shapes.is_empty() {
-            let aux_offset = self.batch.aux_data.len() as f32;
+            let aux_offset = self.active_batch_mut().aux_data.len() as f32;
             let shape_count = self.current_3d_group_shapes.len() as f32;
 
             // Find max depth across all child shapes for AABB
@@ -2870,11 +2876,14 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             }
 
             // Push each ShapeDesc as 4 vec4s into aux_data
-            for shape in &self.current_3d_group_shapes {
-                self.batch.aux_data.push(shape.offset);
-                self.batch.aux_data.push(shape.params);
-                self.batch.aux_data.push(shape.half_ext);
-                self.batch.aux_data.push(shape.color);
+            for index in 0..self.current_3d_group_shapes.len() {
+                let shape = self.current_3d_group_shapes[index];
+                self.active_batch_mut().aux_data.extend_from_slice(&[
+                    shape.offset,
+                    shape.params,
+                    shape.half_ext,
+                    shape.color,
+                ]);
             }
 
             // border[0] = normal border width (unused for 3D groups)
@@ -4738,9 +4747,10 @@ impl<'a> GpuPaintContext<'a> {
                 continue;
             }
 
-            let aux_offset = self.batch.aux_data.len() as u32;
-            self.batch.aux_data.push([v0[0], v0[1], v1[0], v1[1]]);
-            self.batch.aux_data.push([v2[0], v2[1], 0.0, 0.0]);
+            let aux_data = &mut self.active_batch_mut().aux_data;
+            let aux_offset = aux_data.len() as u32;
+            aux_data.push([v0[0], v0[1], v1[0], v1[1]]);
+            aux_data.push([v2[0], v2[1], 0.0, 0.0]);
             // Multi-stop gradient: append 3 per-vertex colours right
             // after the triangle positions. The shader reads them at
             // `aux_data[aux_offset + 2..+5]` when
@@ -4752,9 +4762,9 @@ impl<'a> GpuPaintContext<'a> {
                 let c0 = colors[i0 as usize];
                 let c1 = colors[i1 as usize];
                 let c2 = colors[i2 as usize];
-                self.batch.aux_data.push([c0.r, c0.g, c0.b, c0.a]);
-                self.batch.aux_data.push([c1.r, c1.g, c1.b, c1.a]);
-                self.batch.aux_data.push([c2.r, c2.g, c2.b, c2.a]);
+                aux_data.push([c0.r, c0.g, c0.b, c0.a]);
+                aux_data.push([c1.r, c1.g, c1.b, c1.a]);
+                aux_data.push([c2.r, c2.g, c2.b, c2.a]);
             }
 
             let min_x = v0[0].min(v1[0]).min(v2[0]);
