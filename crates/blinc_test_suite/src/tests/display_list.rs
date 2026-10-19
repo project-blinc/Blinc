@@ -5,6 +5,8 @@
 //! 200 by 120 page with 20px of padding holding one 100 by 60 box.
 
 #[cfg(test)]
+mod backdrop;
+#[cfg(test)]
 mod image_clip;
 #[cfg(test)]
 mod notch;

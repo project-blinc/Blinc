@@ -400,7 +400,115 @@ fn clipped_image(cx: &mut LayoutContext, name: &str) -> Node {
     node
 }
 
+fn absolute_box(cx: &mut LayoutContext, bounds: [f32; 4], props: RenderProps) -> Node {
+    let [x, y, w, h] = bounds;
+    let node = cx.create_node(Style {
+        position: Position::Absolute,
+        inset: Rect { left: length(x), top: length(y), right: auto(), bottom: auto() },
+        size: Size { width: length(w), height: length(h) },
+        ..Default::default()
+    }).unwrap();
+    cx.set_properties(node, props).unwrap();
+    node
+}
+
+fn backdrop_scene(cx: &mut LayoutContext, name: &str) -> Node {
+    use blinc_core::{BlurStyle, GlassStyle};
+    let root = boxed(cx, 160.0, 80.0, RenderProps::default());
+    let image = absolute_box(cx, [-20.0, -20.0, 200.0, 120.0], RenderProps::default());
+    cx.set_resource(image, Some(7), false).unwrap();
+    cx.insert_before(root, image, None).unwrap();
+    let mut parent = root;
+    if name == "backdrop_layers" {
+        for _ in 0..2 {
+            let mut props = RenderProps::default();
+            props.opacity = 0.6;
+            props.filter = Some(CssFilter { brightness: 0.8, ..CssFilter::default() });
+            let group = boxed(cx, 160.0, 80.0, props);
+            cx.insert_before(parent, group, None).unwrap();
+            parent = group;
+        }
+        let mut props = RenderProps::default();
+        props.background = Some(Brush::Solid(Color::rgba(0.9, 0.2, 0.1, 0.6)));
+        let source = absolute_box(cx, [0.0, 0.0, 100.0, 60.0], props);
+        cx.insert_before(parent, source, None).unwrap();
+    }
+    if name == "backdrop_clip" || name == "backdrop_cut" {
+        let mut props = RenderProps::default();
+        props.border_radius = CornerRadius::uniform(16.0);
+        props.overflow_fade = OverflowFade::new(12.0, 20.0, 10.0, 16.0);
+        if name == "backdrop_clip" {
+            props.transform = Some(Transform::rotate(0.3));
+            props.clip_path = Some(shape_path("shape_polygon"));
+        }
+        let clip = cx.create_node(Style {
+            size: Size { width: length(100.0), height: length(60.0) },
+            overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+            ..Default::default()
+        }).unwrap();
+        cx.set_properties(clip, props).unwrap();
+        cx.insert_before(parent, clip, None).unwrap();
+        parent = clip;
+        if name == "backdrop_cut" {
+            let outer = cx.create_node(Style {
+                size: Size { width: length(70.0), height: length(50.0) },
+                overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+                ..Default::default()
+            }).unwrap();
+            cx.insert_before(parent, outer, None).unwrap();
+            parent = outer;
+        }
+    }
+    let simple = ["backdrop_blur", "backdrop_zero", "backdrop_wide", "backdrop_offscreen", "backdrop_affine", "backdrop_stretch", "backdrop_clip", "backdrop_cut", "backdrop_shape", "backdrop_order"].contains(&name);
+    let mut props = RenderProps::default();
+    props.border_radius = CornerRadius::new(12.0, 8.0, 16.0, 4.0);
+    props.corner_shape_locked = true;
+    if simple {
+        let radius = if name == "backdrop_zero" { 0.0 } else if name == "backdrop_wide" { 10.5 } else { 3.2 };
+        props.background = Some(Brush::Blur(BlurStyle { radius, tint: Some(Color::rgba(0.1, 0.6, 0.8, 0.25)), ..Default::default() }));
+        props.opacity = 0.8;
+    } else {
+        let frosted = name == "backdrop_frost";
+        props.background = Some(Brush::Glass(GlassStyle {
+            blur: 1.8, simple: frosted, saturation: 0.6, brightness: 0.85,
+            tint: Color::rgba(0.2, 0.5, 0.8, 0.15), noise: if frosted { 0.2 } else { 0.0 },
+            border_thickness: if name == "backdrop_noline" { 0.0 } else { 1.2 },
+            border_color: if name == "backdrop_border" { Some(Color::rgba(0.1, 0.8, 0.6, 0.7)) } else { None },
+            ..Default::default()
+        }));
+    }
+    if name == "backdrop_affine" { props.transform = Some(Transform::Affine2D(Affine2D { elements: [1.0, 0.25, -0.2, 0.9, 0.0, 0.0] })); }
+    if name == "backdrop_stretch" { props.transform = Some(Transform::Affine2D(Affine2D { elements: [3.2, 0.0, 0.0, 0.12, 0.3, 0.4] })); }
+    if name == "backdrop_shape" { props.clip_path = Some(shape_path("shape_ellipse")); }
+    let bounds = if name == "backdrop_offscreen" { [-45.0, -35.0, 90.0, 48.0] }
+        else if name == "backdrop_stretch" { [10.0, 12.0, 50.0, 60.0] }
+        else if name == "backdrop_clip" || name == "backdrop_cut" { [-10.0, -8.0, 110.0, 72.0] }
+        else { [20.0, 10.0, 90.0, 48.0] };
+    let glass = absolute_box(cx, bounds, props);
+    if !simple {
+        cx.set_glass_effects(glass, Some(blinc_abi::types::GlassEffects { aberration: 0.7, bevel: if name == "backdrop_flat" { 0.0 } else { 0.7 }, inset: name == "backdrop_border" })).unwrap();
+    }
+    if name == "backdrop_notch" { cx.set_notch(glass, Some([[-12.0, -8.0, 6.0, 4.0], [3.0, 28.0, 8.0, 0.0], [2.0, 25.0, 6.0, 2.0]])).unwrap(); }
+    if name == "backdrop_matrix" { cx.set_backdrop_filters(glass, Some([0.8, 1.1, 0.2, 0.3, 0.15, 0.6, 0.1])).unwrap(); }
+    cx.insert_before(parent, glass, None).unwrap();
+    if name == "backdrop_order" {
+        let mut props = RenderProps::default(); props.background = solid(0.8, 0.1, 0.4);
+        let front = absolute_box(cx, [44.0, 18.0, 20.0, 24.0], props);
+        cx.insert_before(parent, front, None).unwrap();
+        let mut props = RenderProps::default();
+        props.background = Some(Brush::Blur(BlurStyle { radius: 2.4, tint: Some(Color::rgba(0.8, 0.2, 0.1, 0.4)), ..Default::default() }));
+        props.border_radius = CornerRadius::uniform(6.0);
+        let second = absolute_box(cx, [55.0, 23.0, 65.0, 46.0], props);
+        cx.insert_before(parent, second, None).unwrap();
+    }
+    root
+}
+
 fn main() {
+    for name in ["backdrop_blur", "backdrop_zero", "backdrop_wide", "backdrop_frost", "backdrop_liquid", "backdrop_border", "backdrop_transparent", "backdrop_affine", "backdrop_notch", "backdrop_clip", "backdrop_cut", "backdrop_shape", "backdrop_layers", "backdrop_order", "backdrop_matrix", "backdrop_flat", "backdrop_stretch", "backdrop_noline", "backdrop_offscreen"] {
+        for scale in [1.0, 2.0] { scaled(&format!("{name}_x{scale}"), scale, |cx| backdrop_scene(cx, name)); }
+    }
+
     for name in ["image_local", "image_cut_fade", "image_shape_ellipse", "image_shape_affine", "image_shape_rect", "image_shape_polygon", "image_shape_hole_even", "image_shape_hole_nonzero", "image_corner", "image_clip_layer", "image_clip_nested"] {
         scene(name, |cx| clipped_image(cx, name));
     }

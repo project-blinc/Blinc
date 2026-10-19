@@ -221,13 +221,7 @@ fn an_overflow_clip_reaches_the_children_it_cuts() {
 #[test]
 fn what_a_primitive_cannot_carry_is_named() {
     let base = fixture!("box_solid");
-    let cases: [(&str, usize, [f32; 4], Unsupported); 5] = [
-        (
-            "backdrop",
-            row::TYPES,
-            [42.0, 0.0, 0.0, 1.0],
-            Unsupported::Kind(42.0),
-        ),
+    let cases: [(&str, usize, [f32; 4], Unsupported); 4] = [
         (
             "canvas",
             row::TYPES,
@@ -342,6 +336,7 @@ fn an_image_sits_between_the_primitive_runs_around_it() {
             Item::Primitives(run) => format!("{} primitives", run.primitives.len()),
             Item::Image(d) => format!("image {}", d.slot),
             Item::Layer(_) => "layer".to_string(),
+            Item::Backdrop(_) => "backdrop".to_string(),
         })
         .collect();
     assert_eq!(shape, ["1 primitives", "image 7", "5 primitives"]);

@@ -7,6 +7,7 @@
 //! consecutive primitives together, puts each image between them and nests
 //! each layer's items inside it.
 
+use super::backdrop::{Backdrop, BackdropPass};
 use super::effects::{DropShadow, LayerEffects, LayerFrame, LayerFx, LayerMask, MAX_MASK_STOPS};
 use super::{
     CLIP_LOCAL, CLIP_SCREEN, DecodeError, Kind, NO_CLIP, Placement, Record, Unsupported, records,
@@ -70,6 +71,7 @@ pub enum Item {
     /// Primitives in paint order, drawn together.
     Primitives(Run),
     Image(ImageDraw),
+    Backdrop(Backdrop),
     Layer(Layer),
 }
 
@@ -126,6 +128,13 @@ pub fn plan(floats: &[f32], count: usize, version: u32, scale: f32) -> Result<Pl
                         plan.unsupported.push((index, why));
                         inner.into_iter().for_each(|item| push(parent, item));
                     }
+                }
+            }
+            Kind::Backdrop => {
+                let page = &mut open.last_mut().expect("the page is open").items;
+                match record.backdrop(scale, floats) {
+                    Ok(draw) => page.push(Item::Backdrop(draw)),
+                    Err(why) => plan.unsupported.push((index, why)),
                 }
             }
             Kind::Image => {
@@ -417,6 +426,7 @@ fn moved(items: &[Item], dx: f32, dy: f32) -> Vec<Item> {
                     aux,
                 })
             }
+            Item::Backdrop(draw) => Item::Backdrop(draw.moved(dx, dy)),
             Item::Layer(layer) => Item::Layer(Layer {
                 items: moved(&layer.items, dx, dy),
                 fx: layer.fx,
@@ -429,6 +439,14 @@ fn moved(items: &[Item], dx: f32, dy: f32) -> Vec<Item> {
             }),
         })
         .collect()
+}
+
+fn has_backdrop(items: &[Item]) -> bool {
+    items.iter().any(|item| match item {
+        Item::Backdrop(_) => true,
+        Item::Layer(layer) => has_backdrop(&layer.items),
+        _ => false,
+    })
 }
 
 /// Content textures are rounded up to this many pixels, so layers that differ a
@@ -461,10 +479,11 @@ fn clear(device: &wgpu::Device, queue: &wgpu::Queue, view: &wgpu::TextureView) {
     queue.submit(std::iter::once(encoder.finish()));
 }
 
-/// Draws plans, keeping what drawing a layer's effects needs between them.
+/// Draws plans, retaining layer and backdrop resources between frames.
 #[derive(Default)]
 pub struct Painter {
     effects: Option<LayerEffects>,
+    backdrop: Option<BackdropPass>,
     /// Content textures a layer is done with, to draw into again.
     textures: Vec<LayerTexture>,
 }
@@ -485,9 +504,30 @@ impl Painter {
         images: &dyn Fn(u32) -> Option<&'i GpuImage>,
     ) -> Vec<u32> {
         renderer.resize(size.0, size.1);
-        renderer.render_with_clear(target, &PrimitiveBatch::new(), clear);
         let mut missing = Vec::new();
-        self.draw(renderer, target, size, &plan.items, images, &mut missing);
+        if has_backdrop(&plan.items) {
+            let (device, queue) = (renderer.device_arc(), renderer.queue_arc());
+            let texture = self.take_texture(&device, size, renderer.texture_format);
+            renderer.render_with_clear(&texture.view, &PrimitiveBatch::new(), clear);
+            self.draw(
+                renderer,
+                &texture.view,
+                size,
+                &plan.items,
+                images,
+                &mut missing,
+            );
+            let pass = self
+                .backdrop
+                .get_or_insert_with(|| BackdropPass::new(&device, renderer.texture_format));
+            pass.copy(&device, &queue, &texture.view, target, size);
+            self.textures.push(texture);
+            self.textures
+                .drain(..self.textures.len().saturating_sub(MAX_POOLED));
+        } else {
+            renderer.render_with_clear(target, &PrimitiveBatch::new(), clear);
+            self.draw(renderer, target, size, &plan.items, images, &mut missing);
+        }
         missing
     }
 
@@ -533,6 +573,12 @@ impl Painter {
                     ),
                     None => missing.push(draw.slot),
                 },
+                Item::Backdrop(draw) => {
+                    let (device, queue) = (renderer.device_arc(), renderer.queue_arc());
+                    self.backdrop
+                        .get_or_insert_with(|| BackdropPass::new(&device, renderer.texture_format))
+                        .draw(&device, &queue, target, size, draw);
+                }
                 Item::Layer(layer) => {
                     // The pixels the layer reaches, whole, on the target.
                     let [x, y, w, h] = layer.bounds;
@@ -560,6 +606,10 @@ impl Painter {
                         content[1] = content[1].min(content[1] - shift[1]);
                         content[2] = content[2].max(content[2] - shift[0]);
                         content[3] = content[3].max(content[3] - shift[1]);
+                    }
+                    // A backdrop's sampling root is the whole layer, even outside its visible bounds.
+                    if has_backdrop(&layer.items) {
+                        content = [0, 0, size.0 as i64, size.1 as i64];
                     }
                     let (cx0, cy0) = (content[0].max(0) as u32, content[1].max(0) as u32);
                     let (cx1, cy1) = (
@@ -597,8 +647,8 @@ impl Painter {
     }
 }
 
-/// Draws `plan` once, with a [`Painter`] of its own. A layer with effects
-/// builds its pipelines on every call, so draw frames with one `Painter`.
+/// Draws `plan` once, with a [`Painter`] of its own. Effect pipelines are rebuilt
+/// on each call; keep one `Painter` across frames to reuse them.
 pub fn render<'i>(
     renderer: &mut GpuRenderer,
     target: &wgpu::TextureView,

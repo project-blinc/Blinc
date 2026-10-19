@@ -33,8 +33,10 @@
 //! | 25-27 | a notch's corners, top edge and bottom edge                       |
 
 pub mod atlas;
+pub mod backdrop;
 mod clip;
 pub mod effects;
+mod gaussian;
 pub mod plan;
 
 use crate::primitives::{ClipType, FillType, GpuPrimitive, PrimitiveType};
@@ -79,6 +81,7 @@ const KIND_TEXT: f32 = 7.0;
 const KIND_IMAGE: f32 = 32.0;
 const KIND_LAYER_BEGIN: f32 = 40.0;
 const KIND_LAYER: f32 = 41.0;
+const KIND_BACKDROP: f32 = 42.0;
 
 /// `row::TYPES.z`: bit 0 is a screen clip, bit 1 a local one.
 const CLIP_SCREEN: u32 = 1;
@@ -118,13 +121,13 @@ impl std::error::Error for DecodeError {}
 /// What a record needs that a [`GpuPrimitive`] cannot yet express.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Unsupported {
-    /// A kind other than a box, its shadow, a glyph, an image or a layer: canvas or backdrop.
+    /// A kind this entry point cannot draw, including ordered passes in primitive-only decoding.
     Kind(f32),
     /// A fill of a kind this does not know, or a gradient whose table is not in the list.
     Gradient,
     /// Invalid shape data, or a shape needing aux data in `to_primitive`.
     ClipShape,
-    /// A notch on a record other than a box or shadow.
+    /// A notch on a record other than a box, shadow or backdrop.
     Notch,
     /// A transform with no area.
     Degenerate,
@@ -136,6 +139,8 @@ pub enum Unsupported {
     LayerEffect,
     /// A gradient whose stops are kept in a table, where the caller gave none to keep it in.
     GradientTable,
+    /// Non-finite backdrop data or a negative Gaussian deviation or read margin.
+    BackdropEffect,
 }
 
 /// The kind of a record.
@@ -151,7 +156,9 @@ pub enum Kind {
     LayerBegin,
     /// Closes a layer, and draws it over the page with what its record asks.
     Layer,
-    /// Canvas or backdrop, by its code.
+    /// Filters the pixels painted so far in the current layer.
+    Backdrop,
+    /// Canvas or an unknown kind, by its code.
     Other(f32),
 }
 
@@ -272,6 +279,7 @@ impl<'a> Record<'a> {
             k if k == KIND_IMAGE => Kind::Image,
             k if k == KIND_LAYER_BEGIN => Kind::LayerBegin,
             k if k == KIND_LAYER => Kind::Layer,
+            k if k == KIND_BACKDROP => Kind::Backdrop,
             k => Kind::Other(k),
         }
     }
@@ -318,7 +326,7 @@ impl<'a> Record<'a> {
             // Fill type 0 is a bitmap stretched over the box; anything else is a mapping.
             Kind::Image if self.fill_type() != 0.0 => return Some(Unsupported::ImageMapping),
             Kind::Image => {}
-            Kind::LayerBegin | Kind::Layer => {}
+            Kind::LayerBegin | Kind::Layer | Kind::Backdrop => {}
             Kind::Other(k) => return Some(Unsupported::Kind(k)),
         }
         let [a, b, c, d] = self.row(row::AFFINE);
@@ -330,7 +338,7 @@ impl<'a> Record<'a> {
         if shape != 0.0 && ![1.0, 2.0, 3.0].contains(&shape) {
             return Some(Unsupported::ClipShape);
         }
-        if self.has_notch() && !matches!(self.kind(), Kind::Box | Kind::Shadow) {
+        if self.has_notch() && !matches!(self.kind(), Kind::Box | Kind::Shadow | Kind::Backdrop) {
             return Some(Unsupported::Notch);
         }
         if self.kind() == Kind::Box {
@@ -375,10 +383,11 @@ impl<'a> Record<'a> {
         aux_base: usize,
     ) -> Result<(GpuPrimitive, Vec<[f32; 4]>), Unsupported> {
         match self.kind() {
-            // An image is drawn from a texture of the consumer's, and a layer from its own.
+            // Images, layers and backdrops keep their place among primitive runs.
             Kind::Image => return Err(Unsupported::Kind(KIND_IMAGE)),
             Kind::LayerBegin => return Err(Unsupported::Kind(KIND_LAYER_BEGIN)),
             Kind::Layer => return Err(Unsupported::Kind(KIND_LAYER)),
+            Kind::Backdrop => return Err(Unsupported::Kind(KIND_BACKDROP)),
             _ => {}
         }
         if let Some(why) = self.unsupported() {
