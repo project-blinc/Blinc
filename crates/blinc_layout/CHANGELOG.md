@@ -17,6 +17,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ### Performance
 - **Stateful layout-prop fast path** — `refresh_props_internal` discriminates three rebuild kinds via paired structural / topology hashes: `Visual` (no children change, no taffy `Style` change → visual-only prop update on existing nodes); `LayoutProps` (taffy `Style` changed, no topology change → patch styles in place + re-`compute_layout`); `Structural` (children added / removed / reordered → full subtree rebuild + mint + collect). The middle path is what keeps spring-driven `.w()` / `.h()` / `.left()` / `.top()` cheap — pre-fix every spring tick on a stateful went through the full Structural rebuild path, tearing down + re-collecting handlers / physics / motion bindings each frame.
+- **`LayoutTree` node maps hash with FxHash**: the Taffy-to-`LayoutNodeId` reverse map and the baseline and incidental-`align_self` tables were std maps, and `children()` hashed every child through the reverse map, so flushing a wide tree was quadratic in SipHash. The keys are integers the tree makes itself.
 
 ### Added
 - **Per-corner `CornerShape` on `ClipShape::RoundedRect`** carried end-to-end through the GPU SDF pipeline. `overflow: clip` on a squircle parent now follows the parent's squircle curve at each corner instead of the previous fixed circular arc — fixes the bg-leak between the parent's squircle outline and the clip's circular outline visible on cn::accordion hover.

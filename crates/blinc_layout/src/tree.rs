@@ -1,7 +1,7 @@
 //! Layout tree management
 
+use rustc_hash::{FxHashMap, FxHashSet};
 use slotmap::{Key, SlotMap, new_key_type};
-use std::collections::HashMap;
 use taffy::prelude::*;
 use taffy::{Baselines, LayoutInput, LayoutOutput, compute_leaf_layout};
 
@@ -281,7 +281,7 @@ pub struct LayoutTree {
     taffy: TaffyTree<TextMeasureContext>,
     node_map: SlotMap<LayoutNodeId, NodeId>,
     /// Reverse mapping from Taffy NodeId to our LayoutNodeId
-    reverse_map: HashMap<NodeId, LayoutNodeId>,
+    reverse_map: FxHashMap<NodeId, LayoutNodeId>,
     /// Nodes whose `align_self` is incidental, not authored.
     ///
     /// `w_fit`/`h_fit` set `align_self: Start` for exactly one reason:
@@ -294,7 +294,7 @@ pub struct LayoutTree {
     /// Marking it keeps CSS's guarantee intact: an authored `align_self`
     /// still beats the parent, because only the incidental one is
     /// listed here. See [`Self::resolve_incidental_align_self`].
-    incidental_align_self: std::collections::HashSet<LayoutNodeId>,
+    incidental_align_self: FxHashSet<LayoutNodeId>,
     /// Distance from a text node's content-box top to its first
     /// baseline, as the element that built it measured.
     ///
@@ -302,10 +302,10 @@ pub struct LayoutTree {
     /// context, so there is nothing to measure from at layout time. The
     /// builder already has the metrics, so it reports them, and layout
     /// hands them to taffy as the node's first baseline.
-    text_baseline: std::collections::HashMap<LayoutNodeId, f32>,
+    text_baseline: FxHashMap<LayoutNodeId, f32>,
     /// First baselines worked out from a text node's measure context, for
     /// nodes whose builder reported none. Dropped when the context changes.
-    derived_baseline: std::collections::HashMap<NodeId, f32>,
+    derived_baseline: FxHashMap<NodeId, f32>,
 }
 
 impl LayoutTree {
@@ -313,10 +313,10 @@ impl LayoutTree {
         Self {
             taffy: TaffyTree::new(),
             node_map: SlotMap::with_key(),
-            reverse_map: HashMap::new(),
-            incidental_align_self: std::collections::HashSet::new(),
-            text_baseline: std::collections::HashMap::new(),
-            derived_baseline: std::collections::HashMap::new(),
+            reverse_map: FxHashMap::default(),
+            incidental_align_self: FxHashSet::default(),
+            text_baseline: FxHashMap::default(),
+            derived_baseline: FxHashMap::default(),
         }
     }
 
