@@ -51,7 +51,7 @@ struct VertexOutput {
     @location(10) clip2_bounds: vec4<f32>,
     @location(11) mask_params: vec4<f32>,
     @location(12) mask_info: vec4<f32>,
-    @location(13) @interpolate(flat) abi_clip: f32,
+    @location(13) @interpolate(flat) abi_clip: vec3<f32>,
 }
 
 @group(0) @binding(0)
@@ -129,7 +129,7 @@ fn vs_main(
     output.clip2_bounds = instance.clip2_bounds;
     output.mask_params = instance.mask_params;
     output.mask_info = instance.mask_info;
-    output.abi_clip = instance.abi_clip.x;
+    output.abi_clip = instance.abi_clip.xyz;
 
     return output;
 }
@@ -267,8 +267,8 @@ fn apply_image_filter(color: vec4<f32>, fa: vec4<f32>, fb: vec4<f32>) -> vec4<f3
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Early clip test - discard if outside either clip region
     var clip_alpha = calculate_clip_alpha(input.world_pos, input.clip_bounds, input.clip_radius);
-    if input.abi_clip > 0.5 {
-        let base = u32(input.abi_clip) - 1u;
+    if input.abi_clip.x > 0.5 {
+        let base = u32(input.abi_clip.x) - 1u;
         let info = abi_clip_data(base + 4u);
         if input.clip_bounds.x >= -9000.0 {
             let distance = sd_shaped_rect(input.world_pos, input.clip_bounds.xy, input.clip_bounds.zw, input.clip_radius, vec4<f32>(info.x));
@@ -308,10 +308,25 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // forbids implicit-derivative sampling (`textureSample`) in
     // non-uniform flow. The image texture has no mipmaps so LOD 0
     // is identical to the implicit form.
-    var color = textureSampleLevel(image_texture, image_sampler, input.uv, 0.0);
+    var uv = input.uv;
+    if input.abi_clip.z > 0.5 {
+        let base = u32(input.abi_clip.z) - 1u;
+        let mapping = abi_clip_data(base);
+        let info = abi_clip_data(base + 1u);
+        let repeat = u32(info.x);
+        var at = (input.local_pos - mapping.xy) / mapping.zw;
+        if (repeat & 1u) != 0u { at.x = fract(at.x); }
+        else { clip_alpha *= 1.0 - smoothstep(-info.y, info.y, max(mapping.x - input.local_pos.x, input.local_pos.x - mapping.x - mapping.z)); }
+        if (repeat & 2u) != 0u { at.y = fract(at.y); }
+        else { clip_alpha *= 1.0 - smoothstep(-info.y, info.y, max(mapping.y - input.local_pos.y, input.local_pos.y - mapping.y - mapping.w)); }
+        let half_texel = vec2<f32>(0.5) / vec2<f32>(textureDimensions(image_texture));
+        uv = clamp(at, half_texel, vec2<f32>(1.0) - half_texel);
+    }
+    var color = textureSampleLevel(image_texture, image_sampler, uv, 0.0);
 
     // Apply tint
-    color = color * input.tint;
+    if input.abi_clip.y > 0.5 { color = vec4<f32>(input.tint.rgb, color.a * input.tint.a); }
+    else { color = color * input.tint; }
 
     // Apply CSS filters (grayscale, invert, sepia, hue-rotate, brightness, contrast, saturate)
     let fa = input.filter_a;

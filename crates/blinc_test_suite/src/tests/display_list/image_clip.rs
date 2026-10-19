@@ -41,7 +41,7 @@ pub(super) fn shaped(p: [f32; 2], bounds: [f32; 4], radius: [f32; 4], n: f32) ->
     box_distance.max((qx + qy + r) * std::f32::consts::FRAC_1_SQRT_2)
 }
 
-fn sample(pixel: [f32; 2], record: &[f32], list: &[f32], scale: f32) -> [f32; 4] {
+pub(super) fn sample(pixel: [f32; 2], record: &[f32], list: &[f32], scale: f32) -> [f32; 4] {
     let bounds = row(record, 0);
     let [a, b, c, d] = row(record, 15);
     let det = a * d - b * c;

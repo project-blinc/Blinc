@@ -38,6 +38,7 @@ pub mod canvas;
 mod clip;
 pub mod effects;
 mod gaussian;
+pub mod image;
 pub mod plan;
 
 use crate::primitives::{ClipType, FillType, GpuPrimitive, PrimitiveType};
@@ -135,7 +136,7 @@ pub enum Unsupported {
     Degenerate,
     /// A colour glyph drawn as its shape in one colour, a text shadow's.
     ColorGlyphShape,
-    /// An image that is fitted, positioned or tiled, not stretched over its box.
+    /// Invalid image fit, position, repeat axes or intrinsic geometry.
     ImageMapping,
     /// A layer whose mask has more stops than there is room for, or whose table is not in the list.
     LayerEffect,
@@ -330,8 +331,10 @@ impl<'a> Record<'a> {
             // A glyph in the colour atlas's alpha, in one colour: fill type 2.
             Kind::Text if self.fill_type() > 1.5 => return Some(Unsupported::ColorGlyphShape),
             Kind::Text => {}
-            // Fill type 0 is a bitmap stretched over the box; anything else is a mapping.
-            Kind::Image if self.fill_type() != 0.0 => return Some(Unsupported::ImageMapping),
+            // The producer emits plain images and unresolved bitmap mappings.
+            Kind::Image if ![0.0, 3.0].contains(&self.fill_type()) => {
+                return Some(Unsupported::ImageMapping);
+            }
             Kind::Image => {}
             Kind::Canvas | Kind::LayerBegin | Kind::Layer | Kind::Backdrop => {}
             Kind::Other(k) => return Some(Unsupported::Kind(k)),

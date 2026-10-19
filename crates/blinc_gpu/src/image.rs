@@ -375,7 +375,8 @@ pub struct GpuImageInstance {
     pub mask_params: [f32; 4],
     /// Mask info: [mask_type, start_alpha, end_alpha, 0] (0=none, 1=linear, 2=radial)
     pub mask_info: [f32; 4],
-    /// One more than the ABI clip header in auxiliary data; zero keeps native clipping.
+    /// ABI metadata: clip header pointer, alpha-mask flag, mapping header pointer, reserved.
+    /// Pointers are one more than their auxiliary row index; zeros keep native drawing.
     pub abi_clip: [f32; 4],
 }
 

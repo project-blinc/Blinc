@@ -10,25 +10,13 @@
 use super::backdrop::{Backdrop, BackdropPass};
 use super::canvas::{CanvasDraw, CanvasRegistry};
 use super::effects::{DropShadow, LayerEffects, LayerFrame, LayerFx, LayerMask, MAX_MASK_STOPS};
-use super::{
-    CLIP_LOCAL, CLIP_SCREEN, DecodeError, Kind, NO_CLIP, Placement, Record, Unsupported, records,
-    row,
-};
-use crate::image::{GpuImage, GpuImageInstance};
+use super::{DecodeError, Kind, Record, Unsupported, records, row};
+use crate::image::GpuImage;
 use crate::primitives::{FillType, GpuPrimitive, PrimitiveBatch, PrimitiveType};
 use crate::renderer::{GpuRenderer, LayerTexture};
 
-/// An image to draw: the consumer's resource for `slot`, over a box.
-#[derive(Clone, Debug)]
-pub struct ImageDraw {
-    /// The consumer's name for the image, set by whoever laid the scene out.
-    pub slot: u32,
-    pub instance: GpuImageInstance,
-    /// Local bounds/radii, fade bounds/distances, then `[corner n, local AA, 0,
-    /// shape pointer]`, followed by the optional shape payload. Pointers are
-    /// one more than their row index, zero for none.
-    pub aux: Vec<[f32; 4]>,
-}
+pub use super::image::ImageDraw;
+use super::image::ImageResource;
 
 /// A group drawn into a layer of its own and then over its parent as `fx`
 /// says, so what overlaps inside it does not show through itself.
@@ -193,87 +181,6 @@ pub fn plan(floats: &[f32], count: usize, version: u32, scale: f32) -> Result<Pl
 }
 
 impl Record<'_> {
-    /// The image this record draws, at `scale` device pixels per logical pixel,
-    /// stretched over its box. Its texture is the consumer's, found by
-    /// [`ImageDraw::slot`]. Draw its instance and auxiliary rows together with
-    /// [`GpuRenderer::render_images_with_aux`]. A polygon needs the whole list;
-    /// use [`Record::image_with_aux`] for it.
-    pub fn image(&self, scale: f32) -> Result<ImageDraw, Unsupported> {
-        self.image_with_aux(scale, &[])
-    }
-
-    /// Like [`Record::image`], with the whole list for polygon clip points.
-    pub fn image_with_aux(&self, scale: f32, list: &[f32]) -> Result<ImageDraw, Unsupported> {
-        if self.kind() != Kind::Image {
-            return Err(Unsupported::Kind(self.row(row::TYPES)[0]));
-        }
-        if let Some(why) = self.unsupported() {
-            return Err(why);
-        }
-        let Placement {
-            bounds,
-            local_affine,
-            size_scale,
-            ..
-        } = self.placement(scale);
-        let mut instance = GpuImageInstance {
-            dst_rect: bounds,
-            tint: [1.0; 4],
-            params: [0.0, self.row(row::FILL_END)[3], 0.0, 0.0],
-            transform: local_affine,
-            ..GpuImageInstance::default()
-        };
-        if self.clip_flags() & CLIP_SCREEN != 0 {
-            let radii = self.row(row::CLIP_RADII);
-            instance.clip_bounds = self.row(row::CLIP).map(|v| v * scale);
-            instance.clip_radius = radii.map(|v| v * scale);
-        } else {
-            instance.clip_bounds = NO_CLIP;
-        }
-        let shape = self.clip_rows(scale, list)?;
-        let shaped_screen_clip = self.clip_flags() & CLIP_SCREEN != 0
-            && instance.clip_radius.iter().any(|r| *r > 0.0)
-            && self.row(row::TYPES)[3] != 1.0;
-        if self.clip_flags() & CLIP_LOCAL == 0
-            && self.row(row::FADE).iter().all(|f| *f <= 0.0)
-            && shape.is_empty()
-            && !shaped_screen_clip
-        {
-            return Ok(ImageDraw {
-                slot: self.row(row::GRADIENT)[0] as u32,
-                instance,
-                aux: Vec::new(),
-            });
-        }
-        let mut aux = vec![[0.0; 4]; 5];
-        if self.clip_flags() & CLIP_LOCAL != 0 {
-            aux[0] = self.row(row::SHADOW).map(|v| v * size_scale);
-            aux[1] = self.row(row::SHADOW_COLOR).map(|v| v * size_scale);
-        }
-        aux[2] = self.row(row::FADE_RECT).map(|v| v * scale);
-        aux[3] = self.row(row::FADE).map(|v| v * scale);
-        let [a, b, c, d] = self.row(row::AFFINE);
-        let det = (a * d - b * c).abs();
-        let aa = if [a, b, c, d] == [1.0, 0.0, 0.0, 1.0] {
-            0.75
-        } else {
-            0.25 * (a.hypot(c) + b.hypot(d)) / det.sqrt()
-        };
-        aux[4] = [
-            self.row(row::TYPES)[3],
-            aa,
-            0.0,
-            if shape.is_empty() { 0.0 } else { 6.0 },
-        ];
-        aux.extend(shape);
-        instance.abi_clip[0] = 1.0;
-        Ok(ImageDraw {
-            slot: self.row(row::GRADIENT)[0] as u32,
-            instance,
-            aux,
-        })
-    }
-
     /// What a layer record does when its layer is drawn over its parent. Its blur
     /// is `color.x` and its opacity `color.w`, its colour filter the three rows
     /// after the fill, its drop shadow an offset and deviation in `gradient` and
@@ -430,9 +337,12 @@ fn moved(items: &[Item], dx: f32, dy: f32) -> Vec<Item> {
                     }
                 }
                 Item::Image(ImageDraw {
-                    slot: draw.slot,
                     instance,
                     aux,
+                    slot: draw.slot,
+                    mapping: draw.mapping.clone(),
+                    mask_tint: draw.mask_tint,
+                    unit: draw.unit,
                 })
             }
             Item::Backdrop(draw) => Item::Backdrop(draw.moved(dx, dy)),
@@ -514,6 +424,22 @@ impl Painter {
         clear: [f64; 4],
         images: &dyn Fn(u32) -> Option<&'i GpuImage>,
     ) -> Vec<u32> {
+        self.render_with_images(renderer, target, size, plan, clear, &|slot| {
+            images(slot).map(ImageResource::new)
+        })
+    }
+
+    /// Draw with resource metadata for intrinsic size, legacy fitting and masks.
+    /// Unknown or invalid image resources are skipped and their slots returned.
+    pub fn render_with_images<'i>(
+        &mut self,
+        renderer: &mut GpuRenderer,
+        target: &wgpu::TextureView,
+        size: (u32, u32),
+        plan: &Plan,
+        clear: [f64; 4],
+        images: &dyn Fn(u32) -> Option<ImageResource<'i>>,
+    ) -> Vec<u32> {
         self.canvases.missing.clear();
         renderer.resize(size.0, size.1);
         let mut missing = Vec::new();
@@ -565,7 +491,7 @@ impl Painter {
         target: &wgpu::TextureView,
         size: (u32, u32),
         items: &[Item],
-        images: &dyn Fn(u32) -> Option<&'i GpuImage>,
+        images: &dyn Fn(u32) -> Option<ImageResource<'i>>,
         missing: &mut Vec<u32>,
     ) {
         for item in items {
@@ -577,12 +503,15 @@ impl Painter {
                     renderer.render_overlay(target, &batch);
                 }
                 Item::Image(draw) => match images(draw.slot) {
-                    Some(image) => renderer.render_images_with_aux(
-                        target,
-                        image.view(),
-                        &[draw.instance],
-                        &draw.aux,
-                    ),
+                    Some(resource) => match draw.resolve(resource) {
+                        Ok(resolved) => renderer.render_images_with_aux(
+                            target,
+                            resource.image.view(),
+                            &[resolved.instance],
+                            &resolved.aux,
+                        ),
+                        Err(_) => missing.push(draw.slot),
+                    },
                     None => missing.push(draw.slot),
                 },
                 Item::Canvas(draw) => {

@@ -11,6 +11,8 @@ mod canvas;
 #[cfg(test)]
 mod image_clip;
 #[cfg(test)]
+mod image_mapping;
+#[cfg(test)]
 mod notch;
 #[cfg(test)]
 mod shape;

@@ -384,9 +384,9 @@ fn an_image_is_not_a_primitive() {
 }
 
 #[test]
-fn a_mapped_image_is_named_and_a_shaped_clip_is_carried() {
+fn an_unknown_image_mapping_is_named_and_a_shaped_clip_is_carried() {
     let mut list = fixture!("image_plain");
-    set_row(&mut list, 0, row::TYPES, [32.0, 3.0, 0.0, 1.0]);
+    set_row(&mut list, 0, row::TYPES, [32.0, 9.0, 0.0, 1.0]);
     let planned = plan(&list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
     assert!(planned.items.is_empty());
     assert_eq!(planned.unsupported, vec![(0, Unsupported::ImageMapping)]);
@@ -1039,5 +1039,43 @@ fn canvas_data_rejects_invalid_slots_sizes_scales_and_nonfinite_rows() {
             record.canvas(scale, &original).unwrap_err(),
             Unsupported::Degenerate
         );
+    }
+}
+
+#[test]
+fn mapped_images_retain_fit_position_and_repeat_without_reusing_clip_rows() {
+    for (list, fit, repeat) in [
+        (fixture!("mapping_cover_x1"), 0, 0),
+        (fixture!("mapping_tile_x1"), 3, 3),
+        (fixture!("mapping_bg_repeat_x_x1"), 3, 1),
+        (fixture!("mapping_bg_repeat_y_x1"), 3, 2),
+    ] {
+        let planned = plan(&list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+        assert!(planned.unsupported.is_empty());
+        let [Item::Image(draw)] = planned.items.as_slice() else {
+            panic!("one image")
+        };
+        let mapping = draw.mapping.as_ref().unwrap();
+        assert_eq!(mapping.fit as u8, fit);
+        assert_eq!(mapping.repeat, repeat);
+        assert_eq!(draw.slot, 7);
+        assert_eq!(draw.unit, 1.0);
+        let record = records(&list, 1, DISPLAY_LIST_VERSION)
+            .unwrap()
+            .next()
+            .unwrap();
+        assert_eq!(mapping.position, record.row(row::RADII));
+        assert_eq!(draw.mask_tint, record.row(row::FILL));
+    }
+}
+
+#[test]
+fn malformed_mapping_metadata_is_reported_before_sampling() {
+    let original = fixture!("mapping_cover_x1");
+    for (at, value) in [(4, f32::NAN), (12, 4.0), (12, 0.5), (14, 6.0), (14, -1.0)] {
+        let mut list = original.clone();
+        list[at] = value;
+        let planned = plan(&list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+        assert_eq!(planned.unsupported, [(0, Unsupported::ImageMapping)]);
     }
 }
