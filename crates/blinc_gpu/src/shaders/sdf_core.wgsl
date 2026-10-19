@@ -105,6 +105,9 @@ struct Primitive {
     side_color_left: vec4<f32>,
     // A gradient's stop table in aux_data: one more than its offset, zero for none.
     gradient_table: vec4<f32>,
+    // A clip in the primitive's own frame, its width zero for none.
+    local_clip_bounds: vec4<f32>,
+    local_clip_radius: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -606,6 +609,22 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let local_p = sp - prim.bounds.xy;
         let shape_alpha = calculate_polygon_clip_alpha(local_p, vertex_count, aux_offset, prim.clip_radius.x > 0.5);
         clip_alpha = clip_alpha * shape_alpha;
+        if clip_alpha < 0.001 {
+            discard;
+        }
+    }
+
+    // A clip in the primitive's own frame. `sp` has been taken back through any
+    // transform, so a turned parent clips its children to its turned, rounded box.
+    if prim.local_clip_bounds.z > 0.0 {
+        let local_d = sd_shaped_rect(
+            sp - origin,
+            prim.local_clip_bounds.xy,
+            prim.local_clip_bounds.zw,
+            prim.local_clip_radius,
+            prim.clip_corner_shape
+        );
+        clip_alpha = clip_alpha * (1.0 - smoothstep(-0.75, 0.75, local_d));
         if clip_alpha < 0.001 {
             discard;
         }

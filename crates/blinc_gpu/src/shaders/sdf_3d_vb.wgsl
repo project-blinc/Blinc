@@ -105,6 +105,9 @@ struct Primitive {
     side_color_left: vec4<f32>,
     // A gradient's stop table in aux_data: one more than its offset, zero for none.
     gradient_table: vec4<f32>,
+    // A clip in the primitive's own frame, its width zero for none.
+    local_clip_bounds: vec4<f32>,
+    local_clip_radius: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;

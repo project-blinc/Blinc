@@ -359,6 +359,12 @@ pub struct GpuPrimitive {
     /// repeat, 2 reflect), a row of the average colour, then for each stop a row of
     /// its colour and a row of its offset.
     pub gradient_table: [f32; 4],
+    /// A clip in the primitive's own frame: the box's corner is the origin and a
+    /// transform of the box has been taken back, so a turned parent clips its
+    /// children to its turned, rounded box. A width of zero means none. Its corners
+    /// are `clip_corner_shape`'s.
+    pub local_clip_bounds: [f32; 4],
+    pub local_clip_radius: [f32; 4],
 }
 
 impl Default for GpuPrimitive {
@@ -407,6 +413,8 @@ impl Default for GpuPrimitive {
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
             gradient_table: [0.0; 4],
+            local_clip_bounds: [0.0; 4],
+            local_clip_radius: [0.0; 4],
         }
     }
 }
@@ -671,6 +679,8 @@ impl GpuPrimitive {
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
             gradient_table: [0.0; 4],
+            local_clip_bounds: [0.0; 4],
+            local_clip_radius: [0.0; 4],
         }
     }
 
@@ -717,6 +727,8 @@ impl GpuPrimitive {
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
             gradient_table: [0.0; 4],
+            local_clip_bounds: [0.0; 4],
+            local_clip_radius: [0.0; 4],
         }
     }
 }

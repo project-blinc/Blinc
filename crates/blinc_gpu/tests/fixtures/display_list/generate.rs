@@ -434,4 +434,61 @@ fn main() {
     scaled("mask_linear_x2", 2.0, |cx| {
         boxed(cx, 100.0, 60.0, masked(obb_line(vec![alpha(0.0, 1.0), alpha(1.0, 0.0)])))
     });
+
+    // A turned card that clips its children to its rounded box, one of them overflowing it.
+    scene("clip_turned", |cx| {
+        let mut outer = RenderProps::default();
+        outer.background = solid(0.85, 0.85, 0.85);
+        outer.border_radius = CornerRadius::uniform(16.0);
+        outer.transform = Some(Transform::rotate(0.4));
+        let parent = cx
+            .create_node(Style {
+                size: Size { width: length(100.0), height: length(60.0) },
+                overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+                ..Default::default()
+            })
+            .unwrap();
+        cx.set_properties(parent, outer).unwrap();
+        let mut inner = RenderProps::default();
+        inner.background = solid(0.9, 0.2, 0.2);
+        let child = cx
+            .create_node(Style {
+                position: Position::Absolute,
+                inset: Rect { left: length(-10.0), top: length(-10.0), right: auto(), bottom: auto() },
+                size: Size { width: length(60.0), height: length(40.0) },
+                ..Default::default()
+            })
+            .unwrap();
+        cx.set_properties(child, inner).unwrap();
+        cx.insert_before(parent, child, None).unwrap();
+        parent
+    });
+    // A rounded clip cut on its right by a plain clip around it.
+    scene("clip_cut", |cx| {
+        let outer = cx
+            .create_node(Style {
+                size: Size { width: length(70.0), height: length(60.0) },
+                overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+                ..Default::default()
+            })
+            .unwrap();
+        let mut round = RenderProps::default();
+        round.border_radius = CornerRadius::uniform(24.0);
+        let middle = cx
+            .create_node(Style {
+                position: Position::Absolute,
+                inset: Rect { left: length(30.0), top: length(0.0), right: auto(), bottom: auto() },
+                size: Size { width: length(60.0), height: length(60.0) },
+                overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+                ..Default::default()
+            })
+            .unwrap();
+        cx.set_properties(middle, round).unwrap();
+        let mut fill = RenderProps::default();
+        fill.background = solid(0.2, 0.5, 0.9);
+        let child = boxed(cx, 60.0, 60.0, fill);
+        cx.insert_before(middle, child, None).unwrap();
+        cx.insert_before(outer, middle, None).unwrap();
+        outer
+    });
 }

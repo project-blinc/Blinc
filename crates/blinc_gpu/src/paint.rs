@@ -2929,6 +2929,8 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
             gradient_table: [0.0; 4],
+            local_clip_bounds: [0.0; 4],
+            local_clip_radius: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3110,6 +3112,8 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
             gradient_table: [0.0; 4],
+            local_clip_bounds: [0.0; 4],
+            local_clip_radius: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3210,6 +3214,8 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
             gradient_table: [0.0; 4],
+            local_clip_bounds: [0.0; 4],
+            local_clip_radius: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3339,6 +3345,8 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
             gradient_table: [0.0; 4],
+            local_clip_bounds: [0.0; 4],
+            local_clip_radius: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3443,6 +3451,8 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
             gradient_table: [0.0; 4],
+            local_clip_bounds: [0.0; 4],
+            local_clip_radius: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3523,6 +3533,8 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
             gradient_table: [0.0; 4],
+            local_clip_bounds: [0.0; 4],
+            local_clip_radius: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3822,6 +3834,8 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
             gradient_table: [0.0; 4],
+            local_clip_bounds: [0.0; 4],
+            local_clip_radius: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3895,6 +3909,8 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
             gradient_table: [0.0; 4],
+            local_clip_bounds: [0.0; 4],
+            local_clip_radius: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -3956,6 +3972,8 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
             gradient_table: [0.0; 4],
+            local_clip_bounds: [0.0; 4],
+            local_clip_radius: [0.0; 4],
         };
 
         if self.emit_foreground() {
@@ -4016,6 +4034,8 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             side_color_bottom: [0.0; 4],
             side_color_left: [0.0; 4],
             gradient_table: [0.0; 4],
+            local_clip_bounds: [0.0; 4],
+            local_clip_radius: [0.0; 4],
         };
 
         if self.emit_foreground() {

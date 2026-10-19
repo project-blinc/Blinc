@@ -121,7 +121,7 @@ pub enum Unsupported {
     Kind(f32),
     /// A fill of a kind this does not know, or a gradient whose table is not in the list.
     Gradient,
-    /// A clip in the element's own frame.
+    /// An image under a clip in its own frame, which the image pipeline does not take.
     LocalClip,
     /// A clip that fades its edge.
     ClipFade,
@@ -312,7 +312,8 @@ impl<'a> Record<'a> {
         if det.is_nan() || det <= 1e-12 {
             return Some(Unsupported::Degenerate);
         }
-        if self.clip_flags() & CLIP_LOCAL != 0 {
+        // The image pipeline has no clip in the image's own frame.
+        if self.clip_flags() & CLIP_LOCAL != 0 && self.kind() == Kind::Image {
             return Some(Unsupported::LocalClip);
         }
         if self.row(row::FADE) != [0.0; 4] {
@@ -405,6 +406,14 @@ impl<'a> Record<'a> {
             p.clip_corner_shape = [clip_n; 4];
         } else {
             p.clip_bounds = NO_CLIP;
+        }
+
+        // A clip in the record's own frame, which a turned parent clips its children by.
+        // A shadow's rows hold its own, and it has none.
+        if flags & CLIP_LOCAL != 0 && kind != KIND_SHADOW {
+            p.local_clip_bounds = mul(self.row(row::SHADOW), size_scale);
+            p.local_clip_radius = mul(self.row(row::SHADOW_COLOR), size_scale);
+            p.clip_corner_shape = [clip_n; 4];
         }
 
         if kind == KIND_SHADOW {

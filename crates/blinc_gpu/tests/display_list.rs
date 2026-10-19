@@ -221,7 +221,7 @@ fn an_overflow_clip_reaches_the_children_it_cuts() {
 #[test]
 fn what_a_primitive_cannot_carry_is_named() {
     let base = fixture!("box_solid");
-    let cases: [(&str, usize, [f32; 4], Unsupported); 8] = [
+    let cases: [(&str, usize, [f32; 4], Unsupported); 7] = [
         (
             "backdrop",
             row::TYPES,
@@ -233,12 +233,6 @@ fn what_a_primitive_cannot_carry_is_named() {
             row::TYPES,
             [33.0, 0.0, 0.0, 1.0],
             Unsupported::Kind(33.0),
-        ),
-        (
-            "local clip",
-            row::TYPES,
-            [0.0, 0.0, 2.0, 1.0],
-            Unsupported::LocalClip,
         ),
         (
             "fill of another kind",
@@ -655,4 +649,49 @@ fn a_mask_with_more_stops_than_there_is_room_for_is_drawn_flat_and_named() {
     let planned = plan(&list, 3, DISPLAY_LIST_VERSION, 1.0).unwrap();
     assert_eq!(planned.unsupported, vec![(2, Unsupported::LayerEffect)]);
     assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.primitives.len() == 1));
+}
+
+#[test]
+fn a_turned_parents_clip_reaches_its_child_in_the_childs_own_frame() {
+    let list = fixture!("clip_turned");
+    for (scale, k) in [(1.0, 1.0), (2.0, 2.0)] {
+        let out = decode(&list, 2, DISPLAY_LIST_VERSION, scale).unwrap();
+        assert!(out.unsupported.is_empty(), "{:?}", out.unsupported);
+        let (parent, child) = (&out.primitives[0], &out.primitives[1]);
+        assert_eq!(
+            parent.local_clip_bounds, [0.0; 4],
+            "the card itself is not clipped"
+        );
+        // The card's box, in the child's coordinates: the child begins 10 inside it.
+        near(
+            &child.local_clip_bounds,
+            &[10.0 * k, 10.0 * k, 100.0 * k, 60.0 * k],
+        );
+        near(&child.local_clip_radius, &[16.0 * k; 4]);
+        near(&child.clip_corner_shape, &[1.0; 4]);
+        assert_eq!(
+            child.type_info[2],
+            ClipType::None as u32,
+            "no clip on screen"
+        );
+    }
+}
+
+#[test]
+fn a_rounded_clip_cut_by_a_plain_one_has_both() {
+    let out = decode(&fixture!("clip_cut"), 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    let p = &out.primitives[0];
+    assert_eq!(p.type_info[2], ClipType::Rect as u32);
+    near(&p.clip_bounds, &[20.0, 20.0, 70.0, 60.0]);
+    near(&p.local_clip_bounds, &[0.0, 0.0, 60.0, 60.0]);
+    near(&p.local_clip_radius, &[24.0; 4]);
+}
+
+#[test]
+fn an_image_under_a_clip_in_its_own_frame_is_named() {
+    let mut list = fixture!("image_plain");
+    set_row(&mut list, 0, row::TYPES, [32.0, 0.0, 2.0, 1.0]);
+    let planned = plan(&list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(planned.items.is_empty());
+    assert_eq!(planned.unsupported, vec![(0, Unsupported::LocalClip)]);
 }

@@ -1316,4 +1316,102 @@ mod tests {
             );
         }
     }
+
+    /// The signed distance from `(x, y)` to a rounded rectangle given by its centre,
+    /// half size and corner radius: negative inside.
+    fn rounded_box(x: f32, y: f32, centre: (f32, f32), half: (f32, f32), radius: f32) -> f32 {
+        let (qx, qy) = (
+            (x - centre.0).abs() - half.0 + radius,
+            (y - centre.1).abs() - half.1 + radius,
+        );
+        qx.max(0.0).hypot(qy.max(0.0)) + qx.max(qy).min(0.0) - radius
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn a_turned_parents_clip_cuts_its_child_to_the_turned_rounded_box() {
+        let harness = TestHarness::new().unwrap();
+        let (c, sn) = (0.4f32.cos(), 0.4f32.sin());
+        for scale in [1.0f32, 2.0] {
+            let name = format!("clip_turned_x{scale}");
+            let (page, _) = draw_records_at(
+                &harness,
+                &name,
+                &fixture!("clip_turned"),
+                2,
+                scale,
+                None,
+                &[],
+            );
+            let (mut worst, mut red, mut grey, mut white) = (0i32, 0, 0, 0);
+            for y in 0..page.height() {
+                for x in 0..page.width() {
+                    // The pixel in the card's own frame: taken back through its turn about its centre.
+                    let (px, py) = ((x as f32 + 0.5) / scale, (y as f32 + 0.5) / scale);
+                    let (dx, dy) = (px - 70.0, py - 50.0);
+                    let (lx, ly) = (70.0 + c * dx + sn * dy, 50.0 - sn * dx + c * dy);
+                    let card = rounded_box(lx, ly, (70.0, 50.0), (50.0, 30.0), 16.0);
+                    // The child's rect, 10 to 70 across and 10 to 50 down, in the same frame.
+                    let child = rounded_box(lx, ly, (40.0, 30.0), (30.0, 20.0), 0.0);
+                    // Leave out what an edge's antialiasing reaches.
+                    let margin = 1.5 / scale;
+                    if card.abs() < margin || (card < 0.0 && child.abs() < margin) {
+                        continue;
+                    }
+                    let want: [f32; 3] = if card > 0.0 {
+                        white += 1;
+                        [255.0; 3]
+                    } else if child < 0.0 {
+                        red += 1;
+                        [229.5, 51.0, 51.0]
+                    } else {
+                        grey += 1;
+                        [216.75; 3]
+                    };
+                    let got = at(&page, x, y);
+                    for ch in 0..3 {
+                        worst = worst.max((got[ch] as i32 - want[ch].round() as i32).abs());
+                    }
+                }
+            }
+            println!("{name}: worst {worst}; red {red}, grey {grey}, white {white}");
+            assert!(worst <= 4, "{name}: off by {worst}");
+            assert!(
+                red > 400 && grey > 400,
+                "{name}: the scene is not what it should be"
+            );
+        }
+    }
+
+    #[test]
+    #[ignore] // Requires GPU
+    fn a_rounded_clip_cut_by_a_plain_one_is_both() {
+        let harness = TestHarness::new().unwrap();
+        let (page, _) = draw_records(&harness, "clip_cut", &fixture!("clip_cut"), 1, None, &[]);
+        let (mut worst, mut blue) = (0i32, 0);
+        for y in 0..page.height() {
+            for x in 0..page.width() {
+                let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+                // The box [50, 110] by [20, 80], rounded by 24, and the plain clip's edge at x = 90.
+                let round = rounded_box(px, py, (80.0, 50.0), (30.0, 30.0), 24.0);
+                if round.abs() < 1.5 || (px - 90.0).abs() < 1.5 {
+                    continue;
+                }
+                let inside = round < 0.0 && px < 90.0;
+                let want: [f32; 3] = if inside {
+                    blue += 1;
+                    [51.0, 127.5, 229.5]
+                } else {
+                    [255.0; 3]
+                };
+                let got = at(&page, x, y);
+                for ch in 0..3 {
+                    worst = worst.max((got[ch] as i32 - want[ch].round() as i32).abs());
+                }
+            }
+        }
+        println!("clip_cut: worst {worst} over {blue} pixels inside");
+        assert!(worst <= 4, "off by {worst}");
+        assert!(blue > 1000, "only {blue} pixels are inside");
+    }
 }
