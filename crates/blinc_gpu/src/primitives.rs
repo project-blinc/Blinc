@@ -136,6 +136,7 @@ pub struct SdfVertexInstance {
     pub local_affine: [f32; 4],
     pub corner_radius: [f32; 4],
     pub light: [f32; 4],
+    pub notch_info: [f32; 4],
 }
 
 impl SdfVertexInstance {
@@ -150,6 +151,7 @@ impl SdfVertexInstance {
             local_affine: p.local_affine,
             corner_radius: p.corner_radius,
             light: p.light,
+            notch_info: p.notch_info,
         }
     }
 
@@ -205,6 +207,11 @@ impl SdfVertexInstance {
                 format: wgpu::VertexFormat::Float32x4,
                 offset: 112,
                 shader_location: 7,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x4,
+                offset: 128,
+                shader_location: 8,
             },
         ],
     };
@@ -277,7 +284,7 @@ pub enum ClipType {
 /// - corner_shape: `vec4<f32>`    (16 bytes) - superellipse n per corner (1.0=round, 0.0=bevel, 2.0=squircle)
 /// - clip_fade: `vec4<f32>`       (16 bytes) - overflow fade distances (top, right, bottom, left) in pixels
 /// - type_info: `vec4<u32>`       (16 bytes) - (primitive_type, fill_type, clip_type, z_layer)
-///   Total: 512 bytes (32 x vec4). Asserted against the WGSL
+///   Total: 528 bytes (33 x vec4). Asserted against the WGSL
 ///   declaration in `tests/primitive_layout.rs`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -369,6 +376,11 @@ pub struct GpuPrimitive {
     /// native primitives do; a separate rectangle keeps intersecting clips from
     /// moving the fade's edges.
     pub clip_fade_bounds: [f32; 4],
+    /// ABI notch coordinates: x is device pixels per logical pixel (zero uses
+    /// native notch shading), y is 0 for fill, 1 for outer shadow, 2 for inset.
+    /// Geometry occupies the native notch slots in `perspective`, `sdf_3d`,
+    /// `light` and `corner_radius`.
+    pub notch_info: [f32; 4],
 }
 
 impl Default for GpuPrimitive {
@@ -420,6 +432,7 @@ impl Default for GpuPrimitive {
             local_clip_bounds: [0.0; 4],
             local_clip_radius: [0.0; 4],
             clip_fade_bounds: [0.0; 4],
+            notch_info: [0.0; 4],
         }
     }
 }
@@ -687,6 +700,7 @@ impl GpuPrimitive {
             local_clip_bounds: [0.0; 4],
             local_clip_radius: [0.0; 4],
             clip_fade_bounds: [0.0; 4],
+            notch_info: [0.0; 4],
         }
     }
 
@@ -736,6 +750,7 @@ impl GpuPrimitive {
             local_clip_bounds: [0.0; 4],
             local_clip_radius: [0.0; 4],
             clip_fade_bounds: [0.0; 4],
+            notch_info: [0.0; 4],
         }
     }
 }

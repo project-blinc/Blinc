@@ -309,13 +309,15 @@ fn moved(items: &[Item], dx: f32, dy: f32) -> Vec<Item> {
         // rect in the atlas, which stays where it is.
         let kind = p.type_info[0];
         let fill = p.type_info[1];
-        if kind == PrimitiveType::Rect as u32 {
+        if kind == PrimitiveType::Rect as u32 || kind == PrimitiveType::Notch as u32 {
             if fill == FillType::LinearGradient as u32 {
                 p.gradient_params[0] += dx;
                 p.gradient_params[1] += dy;
                 p.gradient_params[2] += dx;
                 p.gradient_params[3] += dy;
-            } else if fill == FillType::RadialGradient as u32 {
+            } else if fill == FillType::RadialGradient as u32
+                || fill == FillType::ConicGradient as u32
+            {
                 p.gradient_params[0] += dx;
                 p.gradient_params[1] += dy;
             }

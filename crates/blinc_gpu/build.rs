@@ -95,9 +95,14 @@ fn main() {
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
     let shaders = Path::new("src/shaders");
 
-    println!("cargo:rerun-if-changed={PRELUDE}");
-    let prelude_src =
-        std::fs::read_to_string(PRELUDE).unwrap_or_else(|e| panic!("cannot read {PRELUDE}: {e}"));
+    let mut prelude_src = String::new();
+    for path in [PRELUDE, "src/shaders/common/notch_abi.wgsl"] {
+        println!("cargo:rerun-if-changed={path}");
+        prelude_src.push_str(
+            &std::fs::read_to_string(path).unwrap_or_else(|e| panic!("cannot read {path}: {e}")),
+        );
+        prelude_src.push('\n');
+    }
     let helpers = split_functions(&prelude_src);
     assert!(!helpers.is_empty(), "parsed no helpers out of {PRELUDE}");
 

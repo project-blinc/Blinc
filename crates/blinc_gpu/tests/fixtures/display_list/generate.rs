@@ -184,7 +184,76 @@ fn fading(cx: &mut LayoutContext, cut: bool, turned: bool, layered: bool, shadow
     outer
 }
 
+/// Shapes and edge modifiers encoded by the ABI rather than hand-packed records.
+fn notch_scene(cx: &mut LayoutContext, name: &str) -> Node {
+    let mut props = RenderProps::default();
+    props.background = solid(0.2, 0.5, 0.9);
+    let mut shape = [[-18.0, -12.0, 10.0, 6.0], [0.0; 4], [0.0; 4]];
+    let mut height = 60.0;
+    match name {
+        "notch_scoop" => shape = [[6.0; 4], [1.0, 40.0, 12.0, 4.0], [1.0, 24.0, 18.0, 3.0]],
+        "notch_bulge" => shape = [[8.0; 4], [2.0, 50.0, 12.0, 4.0], [2.0, 38.0, 10.0, 3.0]],
+        "notch_v" => shape = [[4.0; 4], [3.0, 36.0, 14.0, 0.0], [4.0, 30.0, 12.0, 0.0]],
+        "notch_short" => { shape[0] = [-24.0, -16.0, 6.0, 6.0]; height = 32.0; }
+        "notch_border" => {
+            props.border_sides = BorderSides {
+                top: Some(BorderSide::new(3.0, Color::rgba(0.8, 0.1, 0.2, 0.6))),
+                right: Some(BorderSide::new(1.0, Color::rgb(0.1, 0.9, 0.1))),
+                bottom: Some(BorderSide::new(5.0, Color::rgb(0.7, 0.1, 0.9))),
+                left: Some(BorderSide::new(2.0, Color::rgb(0.1, 0.9, 0.9))),
+            };
+        }
+        "notch_shadow" | "notch_inset" => {
+            props.background = None;
+            let shadow = Shadow { offset_x: 4.0, offset_y: 5.0, blur: 6.0, spread: 2.0, color: Color::rgba(0.2, 0.4, 0.8, 0.7) };
+            if name == "notch_inset" { props.inner_shadow = vec![shadow]; } else { props.shadow = vec![shadow]; }
+            props.transform = Some(Transform::rotate(0.2));
+        }
+        _ => {}
+    }
+    if name == "notch_gradient" || name == "notch_layer" {
+        props.background = Some(Brush::Gradient(Gradient::Conic {
+            center: Point::new(50.0, 30.0),
+            start_angle: 0.3,
+            space: GradientSpace::UserSpace,
+            stops: vec![
+                GradientStop::new(0.0, Color::rgba(1.0, 0.1, 0.1, 0.8)),
+                GradientStop::new(0.2, Color::rgba(0.9, 0.9, 0.1, 0.6)),
+                GradientStop::new(0.5, Color::rgb(0.1, 0.8, 0.2)),
+                GradientStop::new(0.8, Color::rgb(0.1, 0.6, 1.0)),
+                GradientStop::new(1.0, Color::rgb(0.6, 0.1, 0.9)),
+            ],
+        }));
+        if name == "notch_layer" {
+            props.opacity = 0.5;
+            props.filter = Some(CssFilter { brightness: 0.8, ..CssFilter::default() });
+        }
+    }
+    if name == "notch_affine" {
+        props.transform = Some(Transform::Affine2D(Affine2D { elements: [1.2, 0.2, -0.15, 0.8, 0.0, 0.0] }));
+    }
+    let node = boxed(cx, 100.0, height, props);
+    cx.set_notch(node, Some(shape)).unwrap();
+    if name != "notch_clip" { return node; }
+    let parent = cx.create_node(Style {
+        size: Size { width: length(80.0), height: length(50.0) },
+        overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
+        ..Default::default()
+    }).unwrap();
+    let mut clip = RenderProps::default();
+    clip.border_radius = CornerRadius::uniform(10.0);
+    clip.transform = Some(Transform::rotate(0.3));
+    clip.overflow_fade = OverflowFade::new(8.0, 12.0, 6.0, 10.0);
+    cx.set_properties(parent, clip).unwrap();
+    cx.insert_before(parent, node, None).unwrap();
+    parent
+}
+
 fn main() {
+    for name in ["notch_corners", "notch_scoop", "notch_bulge", "notch_v", "notch_short", "notch_border", "notch_gradient", "notch_layer", "notch_shadow", "notch_inset", "notch_affine", "notch_clip"] {
+        scene(name, |cx| notch_scene(cx, name));
+    }
+
     text_scene("fade_text_x1", 1.0, "Hello", 20.0, true);
     text_scene("fade_text_x2", 2.0, "Hello", 20.0, true);
     scene("fade_image", |cx| {

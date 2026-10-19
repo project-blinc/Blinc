@@ -5,7 +5,11 @@
 //! rule below and twelve shaders stop compiling at once, so it is worth
 //! failing here with a sentence instead.
 
-const PRELUDE: &str = include_str!("../src/shaders/common/sdf_common.wgsl");
+const PRELUDE: &str = concat!(
+    include_str!("../src/shaders/common/sdf_common.wgsl"),
+    "\n",
+    include_str!("../src/shaders/common/notch_abi.wgsl")
+);
 
 /// Every binding name any SDF shader declares.
 const BINDINGS: &[&str] = &[

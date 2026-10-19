@@ -109,6 +109,8 @@ struct Primitive {
     local_clip_radius: vec4<f32>,
     // Separate screen fade rectangle; zero width uses clip_bounds.
     clip_fade_bounds: vec4<f32>,
+    // ABI notch scale and shadow mode; zero scale keeps native shading.
+    notch_info: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;

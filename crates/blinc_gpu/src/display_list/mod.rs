@@ -127,7 +127,7 @@ pub enum Unsupported {
     ClipFade,
     /// A `clip-path` in the element's frame.
     ClipShape,
-    /// A notch.
+    /// A notch on a record other than a box or shadow.
     Notch,
     /// A transform with no area.
     Degenerate,
@@ -294,6 +294,25 @@ impl<'a> Record<'a> {
         std::array::from_fn(|i| self.row(row::SIDE_COLORS + i))
     }
 
+    fn has_notch(&self) -> bool {
+        self.row(row::NOTCH).iter().map(|v| v.abs()).sum::<f32>()
+            + self.row(row::NOTCH + 1)[0]
+            + self.row(row::NOTCH + 2)[0]
+            > 0.0
+    }
+
+    /// Pack the ABI's signed corners and edge modifiers into the native notch slots.
+    fn notch(&self, p: &mut GpuPrimitive, unit: f32) {
+        let corners = self.row(row::NOTCH);
+        p.corner_radius = corners.map(|v| v.abs() * unit);
+        p.light = corners.map(|v| if v < 0.0 { 1.0 } else { 0.0 });
+        let edge = |m: [f32; 4]| [m[0], m[1] * unit, m[2] * unit, m[3] * unit];
+        p.perspective = edge(self.row(row::NOTCH + 1));
+        p.sdf_3d = edge(self.row(row::NOTCH + 2));
+        p.notch_info = [unit, 0.0, 0.0, 0.0];
+        p.type_info[0] = PrimitiveType::Notch as u32;
+    }
+
     /// The first thing in this record a primitive cannot yet carry.
     pub fn unsupported(&self) -> Option<Unsupported> {
         match self.kind() {
@@ -322,7 +341,7 @@ impl<'a> Record<'a> {
         if self.row(row::SHAPE + 1)[2] != 0.0 {
             return Some(Unsupported::ClipShape);
         }
-        if (row::NOTCH..row::NOTCH + 3).any(|r| self.row(r) != [0.0; 4]) {
+        if self.has_notch() && !matches!(self.kind(), Kind::Box | Kind::Shadow) {
             return Some(Unsupported::Notch);
         }
         if self.kind() == Kind::Box {
@@ -430,6 +449,10 @@ impl<'a> Record<'a> {
                 clip_type as u32,
                 0,
             ];
+            if self.has_notch() {
+                self.notch(&mut p, size_scale);
+                p.notch_info[1] = if self.fill_type() > 0.5 { 2.0 } else { 1.0 };
+            }
             return Ok((p, Vec::new()));
         }
 
@@ -503,6 +526,12 @@ impl<'a> Record<'a> {
         }
 
         p.type_info = [PrimitiveType::Rect as u32, fill as u32, clip_type as u32, 0];
+        if self.has_notch() {
+            self.notch(&mut p, size_scale);
+            // The ABI rings a notch with the top side's width and colour.
+            p.border = [widths[0] * size_scale, 0.0, 0.0, 0.0];
+            p.border_color = self.side_colors()[0];
+        }
         Ok((p, table))
     }
 

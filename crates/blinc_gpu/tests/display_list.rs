@@ -221,7 +221,7 @@ fn an_overflow_clip_reaches_the_children_it_cuts() {
 #[test]
 fn what_a_primitive_cannot_carry_is_named() {
     let base = fixture!("box_solid");
-    let cases: [(&str, usize, [f32; 4], Unsupported); 6] = [
+    let cases: [(&str, usize, [f32; 4], Unsupported); 5] = [
         (
             "backdrop",
             row::TYPES,
@@ -245,12 +245,6 @@ fn what_a_primitive_cannot_carry_is_named() {
             row::SHAPE + 1,
             [0.0, 0.0, 1.0, 0.0],
             Unsupported::ClipShape,
-        ),
-        (
-            "notch",
-            row::NOTCH + 1,
-            [0.0, 8.0, 4.0, 0.0],
-            Unsupported::Notch,
         ),
         ("no area", row::AFFINE, [0.0; 4], Unsupported::Degenerate),
     ];
@@ -756,4 +750,70 @@ fn a_fading_clip_inside_a_layer_keeps_its_screen_coordinates_until_drawing() {
         &run.primitives[0].clip_fade_bounds,
         &[10.0, 10.0, 100.0, 80.0],
     );
+}
+
+#[test]
+fn notch_rows_pack_signed_corners_and_edges_in_logical_units() {
+    use blinc_gpu::primitives::{SdfPipelineCategory, SdfVertexInstance};
+    for scale in [1.0, 2.0] {
+        let p = first(&fixture!("notch_corners"), scale);
+        assert_eq!(p.type_info[0], PrimitiveType::Notch as u32);
+        assert_eq!(p.pipeline_category(), SdfPipelineCategory::Notch);
+        near(
+            &p.corner_radius,
+            &[18.0, 12.0, 10.0, 6.0].map(|v| v * scale),
+        );
+        assert_eq!(p.light, [1.0, 1.0, 0.0, 0.0]);
+        assert_eq!(p.notch_info, [scale, 0.0, 0.0, 0.0]);
+        assert_eq!(
+            SdfVertexInstance::from_primitive(&p).notch_info,
+            p.notch_info
+        );
+        let scoop = first(&fixture!("notch_scoop"), scale);
+        near(
+            &scoop.perspective,
+            &[1.0, 40.0 * scale, 12.0 * scale, 4.0 * scale],
+        );
+        near(
+            &scoop.sdf_3d,
+            &[1.0, 24.0 * scale, 18.0 * scale, 3.0 * scale],
+        );
+        for (list, mode) in [
+            (fixture!("notch_shadow"), 1.0),
+            (fixture!("notch_inset"), 2.0),
+        ] {
+            let p = first(&list, scale);
+            assert_eq!(p.type_info[0], PrimitiveType::Notch as u32);
+            assert_eq!(p.notch_info, [scale, mode, 0.0, 0.0]);
+            near(&p.shadow, &[4.0, 5.0, 6.0, 2.0].map(|v| v * scale));
+        }
+    }
+    assert_eq!(GpuPrimitive::default().notch_info, [0.0; 4]);
+}
+
+#[test]
+fn notch_borders_use_the_producers_top_side_and_gradients_keep_their_table() {
+    let p = first(&fixture!("notch_border"), 2.0);
+    near(&p.border, &[6.0, 0.0, 0.0, 0.0]);
+    near(&p.border_color, &[0.8, 0.1, 0.2, 0.6]);
+    let list = fixture!("notch_gradient");
+    let decoded = decode(&list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(decoded.unsupported.is_empty());
+    assert_eq!(
+        decoded.primitives[0].type_info[1],
+        FillType::ConicGradient as u32
+    );
+    assert_eq!(decoded.primitives[0].gradient_table[0], 1.0);
+    assert_eq!(decoded.aux[0][0], 5.0);
+}
+
+#[test]
+fn notch_local_clips_and_fades_are_kept_and_other_record_kinds_are_named() {
+    let p = first(&fixture!("notch_clip"), 1.0);
+    near(&p.local_clip_bounds, &[0.0, 0.0, 80.0, 50.0]);
+    near(&p.clip_fade, &[8.0, 12.0, 6.0, 10.0]);
+    let mut image = fixture!("image_plain");
+    set_row(&mut image, 0, row::NOTCH, [-8.0, 0.0, 0.0, 0.0]);
+    let planned = plan(&image, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert_eq!(planned.unsupported, vec![(0, Unsupported::Notch)]);
 }

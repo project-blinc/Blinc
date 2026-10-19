@@ -105,6 +105,8 @@ struct Primitive {
     local_clip_radius: vec4<f32>,
     // Separate screen fade rectangle; zero width uses clip_bounds.
     clip_fade_bounds: vec4<f32>,
+    // ABI notch scale and shadow mode; zero scale keeps native shading.
+    notch_info: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -131,7 +133,12 @@ fn vs_main(
     let prim = primitives[instance_index];
 
     // Expand bounds for shadow blur
-    let blur_expand = prim.shadow.z * 3.0 + abs(prim.shadow.x) + abs(prim.shadow.y);
+    var blur_expand = prim.shadow.z * 3.0 + abs(prim.shadow.x) + abs(prim.shadow.y);
+    if prim.notch_info.x > 0.0 && prim.notch_info.y > 0.5 {
+        let la = prim.local_affine;
+        blur_expand = (prim.shadow.z * 3.0 + abs(prim.shadow.x) + abs(prim.shadow.y) + abs(prim.shadow.w))
+            * max(abs(la.x) + abs(la.z), abs(la.y) + abs(la.w));
+    }
 
     let la = prim.local_affine; // [a, b, c, d] of normalized 2x2 affine
     // Check if local_affine is non-identity (rotation, skew, or non-uniform scale)
@@ -426,6 +433,50 @@ fn calculate_polygon_clip_alpha(p: vec2<f32>, vertex_count: u32, aux_offset: u32
 // Fragment Shader
 // ============================================================================
 
+fn gradient_table_color(position: f32, first: u32) -> vec4<f32> {
+    let header = aux_data[first];
+    let count = u32(header.x);
+    let start = aux_data[first + 3u].x;
+    let end = aux_data[first + 1u + 2u * count].x;
+    var t = position;
+    if header.y > 0.5 {
+        let period = end - start;
+        if period <= 0.0001 {
+            return aux_data[first + 1u];
+        }
+        var phase = (t - start) / period;
+        if header.y > 1.5 {
+            phase = 1.0 - abs(2.0 * fract(phase * 0.5) - 1.0);
+        } else {
+            phase = fract(phase);
+        }
+        t = start + phase * period;
+    }
+    var color = aux_data[first + 2u];
+    var offset = start;
+    var i = 1u;
+    while i < count {
+        let next = aux_data[first + 2u + 2u * i];
+        let at = aux_data[first + 3u + 2u * i].x;
+        if t < at {
+            let amount = clamp((t - offset) / max(at - offset, 1e-20), 0.0, 1.0);
+            let premult = mix(
+                vec4<f32>(color.rgb * color.a, color.a),
+                vec4<f32>(next.rgb * next.a, next.a),
+                amount
+            );
+            if premult.a > 0.0 {
+                return vec4<f32>(premult.rgb / premult.a, premult.a);
+            }
+            return vec4<f32>(0.0);
+        }
+        color = next;
+        offset = at;
+        i = i + 1u;
+    }
+    return color;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let prim = primitives[in.instance_index];
@@ -487,6 +538,42 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         if clip_alpha < 0.001 {
             discard;
         }
+    }
+
+    // A clip in the primitive's own frame. `sp` has been taken back through any
+    // transform, so a turned parent clips its children to its turned, rounded box.
+    if prim.local_clip_bounds.z > 0.0 {
+        let local_d = sd_shaped_rect(
+            sp - origin,
+            prim.local_clip_bounds.xy,
+            prim.local_clip_bounds.zw,
+            prim.local_clip_radius,
+            prim.clip_corner_shape
+        );
+        clip_alpha = clip_alpha * (1.0 - smoothstep(-0.75, 0.75, local_d));
+        if clip_alpha < 0.001 {
+            discard;
+        }
+    }
+
+    let abi_unit = max(prim.notch_info.x, 0.000001);
+    let abi_point = (sp - origin) / abi_unit;
+    let abi_size = size / abi_unit;
+    let abi_radii = prim.corner_radius / abi_unit;
+    let abi_top = vec4<f32>(prim.perspective.x, prim.perspective.yzw / abi_unit);
+    let abi_bottom = vec4<f32>(prim.sdf_3d.x, prim.sdf_3d.yzw / abi_unit);
+    if prim.notch_info.x > 0.0 && prim.notch_info.y > 0.5 {
+        let d = sd_abi_notch(abi_point, abi_size, abi_radii, prim.light, abi_top, abi_bottom);
+        let params = prim.shadow / abi_unit;
+        let shifted = sd_abi_notch(abi_point - params.xy, abi_size, abi_radii, prim.light, abi_top, abi_bottom);
+        let inset = prim.notch_info.y > 1.5;
+        let distance = select(params.w - shifted, shifted + params.w, inset);
+        var shade = clamp(0.5 + distance, 0.0, 1.0);
+        if params.z >= 0.001 { shade = 0.5 * (1.0 + erf(distance / (0.7071067811865476 * params.z))); }
+        let outside = smoothstep(-0.75, 0.75, d);
+        let mask = select(outside, 1.0 - outside, inset);
+        let color = prim.shadow_color * shade;
+        return vec4<f32>(color.rgb, color.a * mask * clip_alpha);
     }
 
     var result = vec4<f32>(0.0);
@@ -576,7 +663,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Calculate main shape SDF — always notch
-    let d = sd_notch(
+    var d = sd_notch(
         sp, origin, size,
         prim.corner_radius,
         prim.light,       // per-corner type flags (TL, TR, BR, BL)
@@ -586,7 +673,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     // Anti-aliasing: smooth transition at edge over ~1 pixel total.
     _ = d_fw_screen;
-    let aa_width = 0.5;
+    var aa_width = 0.5;
+    if prim.notch_info.x > 0.0 {
+        d = sd_abi_notch(abi_point, abi_size, abi_radii, prim.light, abi_top, abi_bottom);
+        let det = abs(la.x * la.w - la.y * la.z);
+        aa_width = 0.25 * (length(vec2<f32>(la.w, -la.y)) + length(vec2<f32>(-la.z, la.x))) / (det * abi_unit);
+    }
     let fill_alpha = 1.0 - smoothstep(-aa_width, aa_width, d);
 
     if fill_alpha < 0.001 {
@@ -610,11 +702,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             if (g_len_sq > 0.0001) {
                 // Project current position onto gradient line
                 let proj = sp - g_start;
-                t = clamp(dot(proj, g_dir) / g_len_sq, 0.0, 1.0);
+                t = dot(proj, g_dir) / g_len_sq;
             } else {
                 t = 0.0;
             }
-            fill_color = mix(prim.color, prim.color2, t);
+            if prim.gradient_table.x > 0.5 {
+                fill_color = gradient_table_color(t, u32(prim.gradient_table.x) - 1u);
+            } else {
+                fill_color = mix(prim.color, prim.color2, clamp(t, 0.0, 1.0));
+            }
         }
         case 2u /* FILL_RADIAL_GRADIENT */: {
             // Radial gradient using gradient_params (cx, cy, radius, 0) in user space
@@ -622,12 +718,34 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             let g_radius = prim.gradient_params.z;
 
             let dist = length(sp - g_center);
-            let t = clamp(dist / max(g_radius, 0.001), 0.0, 1.0);
-            fill_color = mix(prim.color, prim.color2, t);
+            let t = dist / max(g_radius, 0.001);
+            if prim.gradient_table.x > 0.5 {
+                fill_color = gradient_table_color(t, u32(prim.gradient_table.x) - 1u);
+            } else {
+                fill_color = mix(prim.color, prim.color2, clamp(t, 0.0, 1.0));
+            }
+        }
+        case 3u /* FILL_CONIC_GRADIENT */: {
+            // Conic gradient using gradient_params (cx, cy, start angle, 0) in user space
+            let delta = sp - prim.gradient_params.xy;
+            let t = fract((atan2(delta.x, -delta.y) - prim.gradient_params.z) / 6.283185307179586);
+            if prim.gradient_table.x > 0.5 {
+                fill_color = gradient_table_color(t, u32(prim.gradient_table.x) - 1u);
+            } else {
+                fill_color = mix(prim.color, prim.color2, t);
+            }
         }
         default: {
             fill_color = prim.color;
         }
+    }
+
+    if prim.notch_info.x > 0.0 {
+        if prim.border.x > 0.0 {
+            let ring = smoothstep(-aa_width, aa_width, d + prim.border.x / abi_unit);
+            fill_color = mix(fill_color, prim.border_color, ring * prim.border_color.a);
+        }
+        return vec4<f32>(fill_color.rgb, fill_color.a * fill_alpha * clip_alpha);
     }
 
     // Handle border with proper inner corner radii (GPUI-style approach)

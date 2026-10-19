@@ -5,6 +5,9 @@
 //! 200 by 120 page with 20px of padding holding one 100 by 60 box.
 
 #[cfg(test)]
+mod notch;
+
+#[cfg(test)]
 mod tests {
     use crate::harness::TestHarness;
     use blinc_core::{Affine2D, Brush, Color, DrawContext, Gradient, Point, Shadow, Transform};
@@ -235,7 +238,7 @@ mod tests {
     }
 
     /// The pixel at logical `(x, y)`, as 0 to 255 channels.
-    fn at(img: &RgbaImage, x: u32, y: u32) -> [u8; 4] {
+    pub(super) fn at(img: &RgbaImage, x: u32, y: u32) -> [u8; 4] {
         img.get_pixel(x, y).0
     }
 
@@ -534,7 +537,7 @@ mod tests {
 
     /// As `draw_records`, with the page `scale` times as large in device pixels.
     #[allow(clippy::too_many_arguments)]
-    fn draw_records_at(
+    pub(super) fn draw_records_at(
         harness: &TestHarness,
         name: &str,
         list: &[f32],
