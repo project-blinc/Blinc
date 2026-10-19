@@ -39,6 +39,7 @@ mod clip;
 pub mod effects;
 mod gaussian;
 pub mod image;
+mod mask;
 pub mod plan;
 
 use crate::primitives::{ClipType, FillType, GpuPrimitive, PrimitiveType};
@@ -121,7 +122,7 @@ impl std::fmt::Display for DecodeError {
 
 impl std::error::Error for DecodeError {}
 
-/// What a record needs that a [`GpuPrimitive`] cannot yet express.
+/// Why this entry point cannot draw a record.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Unsupported {
     /// A kind this entry point cannot draw, including ordered passes in primitive-only decoding.
@@ -138,7 +139,7 @@ pub enum Unsupported {
     GlyphMode,
     /// Invalid image fit, position, repeat axes or intrinsic geometry.
     ImageMapping,
-    /// A layer whose mask has more stops than there is room for, or whose table is not in the list.
+    /// Invalid layer mask data or a stop table outside the list.
     LayerEffect,
     /// A gradient whose stops are kept in a table, where the caller gave none to keep it in.
     GradientTable,

@@ -9,7 +9,7 @@
 
 use super::backdrop::{Backdrop, BackdropPass};
 use super::canvas::{CanvasDraw, CanvasRegistry};
-use super::effects::{DropShadow, LayerEffects, LayerFrame, LayerFx, LayerMask, MAX_MASK_STOPS};
+use super::effects::{DropShadow, LayerEffects, LayerFrame, LayerFx};
 use super::{DecodeError, Kind, Record, Unsupported, records, row};
 use crate::image::GpuImage;
 use crate::primitives::{FillType, GpuPrimitive, PrimitiveBatch, PrimitiveType};
@@ -88,8 +88,7 @@ fn push(items: &mut Vec<Item>, item: Item) {
 
 /// Plans `count` records at `scale` device pixels per logical pixel.
 ///
-/// A layer whose mask has more stops than `MAX_MASK_STOPS` is not drawn as a layer:
-/// its content is drawn as it would be without it, and its record is reported.
+/// An invalid layer effect is reported and its content drawn flat.
 pub fn plan(floats: &[f32], count: usize, version: u32, scale: f32) -> Result<Plan, DecodeError> {
     let mut plan = Plan::default();
     let mut open = vec![Open {
@@ -210,55 +209,6 @@ impl Record<'_> {
             mask: self.mask(list)?,
         })
     }
-
-    /// The mask of a layer record: a gradient of alpha in the element's box.
-    ///
-    /// Its first row has the kind and the alpha of its first, middle and last stops, then
-    /// its geometry, the element's box and the transform's 2 x 2. The offsets of those stops
-    /// are in the row of gradient offsets, whose last is 1 for a middle stop, or the place of
-    /// a table of stops after the records when there are more, they repeat or it is conic.
-    fn mask(&self, list: &[f32]) -> Result<Option<LayerMask>, Unsupported> {
-        let [kind, first_alpha, middle_alpha, last_alpha] = self.row(row::SIDE_COLORS);
-        if kind < 0.5 {
-            return Ok(None);
-        }
-        let [first, middle, last, marker] = self.row(row::GRADIENT_OFFSETS);
-        let mut stops = [[0.0; 2]; MAX_MASK_STOPS];
-        let (spread, count) = if marker >= 2.0 {
-            let at = (marker - 2.0) as usize * 4;
-            let count = *list.get(at).ok_or(Unsupported::LayerEffect)? as usize;
-            let end = at + (2 + 2 * count) * 4;
-            if count == 0 || count > MAX_MASK_STOPS || end > list.len() {
-                return Err(Unsupported::LayerEffect);
-            }
-            for (i, stop) in stops.iter_mut().take(count).enumerate() {
-                // A stop is a colour row, whose alpha is the mask's, then its offset.
-                *stop = [list[at + (3 + 2 * i) * 4], list[at + (2 + 2 * i) * 4 + 3]];
-            }
-            (list[at + 1], count)
-        } else if marker >= 0.5 {
-            stops[..3].copy_from_slice(&[
-                [first, first_alpha],
-                [middle, middle_alpha],
-                [last, last_alpha],
-            ]);
-            (0.0, 3)
-        } else {
-            stops[..2].copy_from_slice(&[[first, first_alpha], [last, last_alpha]]);
-            (0.0, 2)
-        };
-        let translate = self.row(row::RADII);
-        Ok(Some(LayerMask {
-            kind,
-            geometry: self.row(row::SIDE_COLORS + 1),
-            frame: self.row(row::SIDE_COLORS + 2),
-            matrix: self.row(row::SIDE_COLORS + 3),
-            translate: [translate[0], translate[1], translate[2]],
-            spread,
-            stops,
-            count: count as u32,
-        }))
-    }
 }
 
 /// Whether a clip bound is a real clip and not the sentinel for none.
@@ -349,7 +299,13 @@ fn moved(items: &[Item], dx: f32, dy: f32) -> Vec<Item> {
             Item::Canvas(draw) => Item::Canvas(draw.moved(dx, dy)),
             Item::Layer(layer) => Item::Layer(Layer {
                 items: moved(&layer.items, dx, dy),
-                fx: layer.fx,
+                fx: {
+                    let mut fx = layer.fx.clone();
+                    if let Some(mask) = &mut fx.mask {
+                        mask.translate_by(dx, dy);
+                    }
+                    fx
+                },
                 bounds: [
                     layer.bounds[0] + dx,
                     layer.bounds[1] + dy,

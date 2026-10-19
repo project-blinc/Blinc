@@ -67,6 +67,7 @@ struct Params {
 @group(0) @binding(1) var layer: texture_2d<f32>;
 @group(0) @binding(2) var shadow: texture_2d<f32>;
 @group(0) @binding(3) var linear_sampler: sampler;
+@group(0) @binding(4) var mask_table: texture_2d<f32>;
 
 @vertex
 fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
@@ -107,7 +108,14 @@ fn shadow_taps(tex: texture_2d<f32>, pixel: vec2<f32>, direction: vec2<f32>) -> 
 }
 
 fn mask_stop(i: u32) -> vec2<f32> {
-    let v = params.mask_stops[i / 2u];
+    var v: vec4<f32>;
+    if params.mask.w > 0.5 {
+        let width = textureDimensions(mask_table).x;
+        let texel = i / 2u;
+        v = textureLoad(mask_table, vec2<i32>(i32(texel % width), i32(texel / width)), 0);
+    } else {
+        v = params.mask_stops[i / 2u];
+    }
     if (i % 2u) == 0u {
         return v.xy;
     }
@@ -262,33 +270,11 @@ pub struct LayerFrame {
     pub region: [u32; 4],
 }
 
-/// Most stops a mask can have.
-pub const MAX_MASK_STOPS: usize = 16;
-
-/// A layer's mask: a gradient measured in the element's box, whose alpha, at each
-/// pixel, the layer's is multiplied by.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct LayerMask {
-    /// 1 linear, 2 radial, 3 conic.
-    pub kind: f32,
-    /// Linear: from `(x, y)` to `(z, w)`; radial: the centre and radius `z`; conic: the
-    /// centre and start angle `z`. In fractions of the box.
-    pub geometry: [f32; 4],
-    /// The element's box in layout units, in the frame its transform maps.
-    pub frame: [f32; 4],
-    /// The transform's 2 x 2 part, which takes the box to the target.
-    pub matrix: [f32; 4],
-    /// Its translation, and the display's scale.
-    pub translate: [f32; 3],
-    /// 0 pad, 1 repeat, 2 reflect.
-    pub spread: f32,
-    /// The stops, an offset and an alpha, of which the first `count` are used.
-    pub stops: [[f32; 2]; MAX_MASK_STOPS],
-    pub count: u32,
-}
+use super::mask::MaskTable;
+pub use super::mask::{LayerMask, MAX_MASK_STOPS};
 
 /// What a layer does when it is drawn over its parent.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct LayerFx {
     /// The Gaussian deviation of its blur in device pixels; zero is none.
     pub blur: f32,
@@ -393,6 +379,7 @@ pub struct LayerEffects {
     /// Textures a composite is done with, to draw into again.
     pool: Vec<Scratch>,
     uniforms: wgpu::Buffer,
+    mask_table: MaskTable,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     down: wgpu::RenderPipeline,
@@ -433,6 +420,16 @@ impl LayerEffects {
                 },
                 texture(1),
                 texture(2),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
                 wgpu::BindGroupLayoutEntry {
                     binding: 3,
                     visibility: wgpu::ShaderStages::FRAGMENT,
@@ -492,6 +489,7 @@ impl LayerEffects {
         Self {
             pool: Vec::new(),
             uniforms,
+            mask_table: MaskTable::new(device),
             down: pipeline("fs_down", None),
             rows: pipeline("fs_rows", None),
             shadow_rows: pipeline("fs_shadow_rows", None),
@@ -571,6 +569,14 @@ impl LayerEffects {
             .map_or(([[0.0; 4]; MAX_PAIRS / 2], 0), |(_, (_, sigma))| {
                 pack(&taps(sigma))
             });
+        let mask = fx
+            .mask
+            .as_ref()
+            .filter(|m| m.count > 0 && !m.stops.is_empty());
+        let stops = mask.map_or(&[][..], |m| {
+            &m.stops[..(m.count as usize).min(m.stops.len())]
+        });
+        self.mask_table.update(device, queue, stops);
         let params = Params {
             blur: [
                 blur.map_or(0.0, |(_, sigma)| sigma),
@@ -587,23 +593,31 @@ impl LayerEffects {
             tint: shadow.map_or([0.0; 4], |(s, _)| s.color),
             size: [size.0 as f32, size.1 as f32, 0.0, 0.0],
             origin: [origin[0] as f32, origin[1] as f32, 0.0, 0.0],
-            mask: fx
-                .mask
-                .map_or([0.0; 4], |m| [m.kind, m.spread, m.count as f32, 0.0]),
-            mask_geometry: fx.mask.map_or([0.0; 4], |m| m.geometry),
-            mask_frame: fx.mask.map_or([0.0; 4], |m| m.frame),
-            mask_matrix: fx.mask.map_or([1.0, 0.0, 0.0, 1.0], |m| m.matrix),
-            mask_translate: fx.mask.map_or([0.0, 0.0, 1.0, 0.0], |m| {
+            mask: mask.map_or([0.0; 4], |m| {
+                [
+                    m.kind,
+                    m.spread,
+                    stops.len() as f32,
+                    if stops.len() > MAX_MASK_STOPS {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                ]
+            }),
+            mask_geometry: mask.map_or([0.0; 4], |m| m.geometry),
+            mask_frame: mask.map_or([0.0; 4], |m| m.frame),
+            mask_matrix: mask.map_or([1.0, 0.0, 0.0, 1.0], |m| m.matrix),
+            mask_translate: mask.map_or([0.0, 0.0, 1.0, 0.0], |m| {
                 [m.translate[0], m.translate[1], m.translate[2], 0.0]
             }),
             counts: [blur_count, shadow_count, 0, 0],
             blur_taps,
             shadow_taps,
-            mask_stops: fx.mask.map_or([[0.0; 4]; MAX_MASK_STOPS / 2], |m| {
-                std::array::from_fn(|i| {
-                    let (a, b) = (m.stops[2 * i], m.stops[2 * i + 1]);
-                    [a[0], a[1], b[0], b[1]]
-                })
+            mask_stops: std::array::from_fn(|i| {
+                let a = stops.get(2 * i).copied().unwrap_or_default();
+                let b = stops.get(2 * i + 1).copied().unwrap_or_default();
+                [a[0], a[1], b[0], b[1]]
             }),
         };
         queue.write_buffer(&self.uniforms, 0, bytemuck::bytes_of(&params));
@@ -642,6 +656,10 @@ impl LayerEffects {
                     wgpu::BindGroupEntry {
                         binding: 3,
                         resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(&self.mask_table.view),
                     },
                 ],
             })

@@ -137,7 +137,7 @@ pub(super) fn ambiguous_probe(pixel: [f32; 2], record: &[f32], list: &[f32], sca
 #[ignore] // Requires GPU
 fn shape_clips_stay_in_their_elements_frame_through_affines_and_layers() {
     let harness = TestHarness::new().unwrap();
-    for (name, list, count, layer, flatten) in [
+    for (name, mut list, count, layer, flatten) in [
         ("shape_ellipse", fixture!("shape_ellipse"), 1, false, false),
         ("shape_rect", fixture!("shape_rect"), 1, false, false),
         ("shape_polygon", fixture!("shape_polygon"), 1, false, false),
@@ -168,6 +168,10 @@ fn shape_clips_stay_in_their_elements_frame_through_affines_and_layers() {
         ("shape_layer", fixture!("shape_layer"), 3, true, false),
         ("shape_flatten", fixture!("shape_flatten"), 5, false, true),
     ] {
+        if flatten {
+            let marker = list[3 * RECORD_FLOATS + 14 * 4 + 3];
+            list[(marker - 2.0) as usize * 4] = 0.0;
+        }
         for scale in [1.0f32, 2.0] {
             let label = format!("{name}_x{scale}");
             let (page, _) = draw_records_at(

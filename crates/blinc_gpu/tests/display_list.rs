@@ -473,7 +473,7 @@ fn the_layer_of(list: &[f32], count: usize) -> blinc_gpu::display_list::effects:
     let [Item::Layer(layer)] = &planned.items[..] else {
         panic!("one layer");
     };
-    layer.fx
+    layer.fx.clone()
 }
 
 #[test]
@@ -651,19 +651,55 @@ fn a_masks_transform_and_display_scale_are_carried() {
 }
 
 #[test]
-fn a_mask_with_more_stops_than_there_is_room_for_is_drawn_flat_and_named() {
-    // The records of a masked layer, then a table of seventeen stops after them.
-    let mut list = fixture!("mask_stops")[..3 * RECORD_FLOATS].to_vec();
-    let mut table = vec![17.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-    for i in 0..17 {
-        table.extend_from_slice(&[0.0, 0.0, 0.0, 1.0, i as f32 / 16.0, 0.0, 0.0, 0.0]);
+fn producer_masks_keep_every_stop_beyond_the_uniform_capacity() {
+    for (list, count) in [
+        (fixture!("mask_many_16_x1"), 16),
+        (fixture!("mask_many_17_x1"), 17),
+        (fixture!("mask_many_rows_x1"), 4099),
+    ] {
+        let mask = mask_of(&list);
+        assert_eq!(mask.count, count);
+        assert_eq!(mask.stops.len(), count as usize);
+        near(mask.stops.last().unwrap(), &[1.0, 0.95]);
+        let other = mask.clone();
+        assert!(std::sync::Arc::ptr_eq(&mask.stops, &other.stops));
+        let planned = plan(&list, 3, DISPLAY_LIST_VERSION, 1.0).unwrap();
+        assert!(matches!(&planned.items[..], [Item::Layer(layer)] if layer.fx.opacity == 0.75));
     }
-    list.extend(table);
-    // It begins after the three records, 84 vec4s in.
-    list[2 * RECORD_FLOATS + row::GRADIENT_OFFSETS * 4 + 3] = 2.0 + 84.0;
-    let planned = plan(&list, 3, DISPLAY_LIST_VERSION, 1.0).unwrap();
+}
+
+#[test]
+fn invalid_mask_tables_are_reported_without_panicking() {
+    let original = fixture!("mask_many_17_x1");
+    let marker = 2 * RECORD_FLOATS + row::GRADIENT_OFFSETS * 4 + 3;
+    let table = (original[marker] - 2.0) as usize * 4;
+    for (at, value) in [
+        (marker, f32::NAN),
+        (marker, f32::INFINITY),
+        (marker, 3.5),
+        (marker, f32::MAX),
+        (table, 0.0),
+        (table, -1.0),
+        (table, 2.5),
+        (table, f32::MAX),
+        (table, f32::NAN),
+        (table + 1, 3.0),
+        (table + 11, f32::NAN),
+    ] {
+        let mut list = original.clone();
+        list[at] = value;
+        let planned = plan(&list, 3, DISPLAY_LIST_VERSION, 1.0).unwrap();
+        assert_eq!(planned.unsupported, vec![(2, Unsupported::LayerEffect)]);
+        assert!(matches!(&planned.items[..], [Item::Image(_)]));
+    }
+    let planned = plan(
+        &original[..table + 8 + 17 * 8 - 1],
+        3,
+        DISPLAY_LIST_VERSION,
+        1.0,
+    )
+    .unwrap();
     assert_eq!(planned.unsupported, vec![(2, Unsupported::LayerEffect)]);
-    assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.primitives.len() == 1));
 }
 
 #[test]
@@ -927,7 +963,9 @@ fn a_shape_and_a_gradient_share_auxiliary_data_without_overlapping() {
 
 #[test]
 fn flattening_a_layer_rebases_clip_headers_but_keeps_polygon_offsets_relative() {
-    let list = fixture!("shape_flatten");
+    let mut list = fixture!("shape_flatten");
+    let marker = list[3 * RECORD_FLOATS + row::GRADIENT_OFFSETS * 4 + 3];
+    list[(marker - 2.0) as usize * 4] = 0.0;
     let planned = plan(&list, 5, DISPLAY_LIST_VERSION, 1.0).unwrap();
     assert_eq!(planned.unsupported, vec![(3, Unsupported::LayerEffect)]);
     let [Item::Primitives(run)] = &planned.items[..] else {
