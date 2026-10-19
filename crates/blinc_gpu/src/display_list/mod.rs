@@ -33,6 +33,7 @@
 //! | 25-27 | a notch's corners, top edge and bottom edge                       |
 
 pub mod atlas;
+mod clip;
 pub mod effects;
 pub mod plan;
 
@@ -125,7 +126,7 @@ pub enum Unsupported {
     LocalClip,
     /// An image under a fading clip, which the image pipeline does not take.
     ClipFade,
-    /// A `clip-path` in the element's frame.
+    /// An image clip-path, invalid shape data, or a shape needing aux data in `to_primitive`.
     ClipShape,
     /// A notch on a record other than a box or shadow.
     Notch,
@@ -189,7 +190,7 @@ pub fn records(
 #[derive(Debug, Default)]
 pub struct Decoded {
     pub primitives: Vec<GpuPrimitive>,
-    /// What the primitives keep in `aux_data`: the stop tables of their gradients.
+    /// Gradient stop tables and shape clips, addressed by the primitives in `aux_data`.
     pub aux: Vec<[f32; 4]>,
     /// The index of each record left out, and why.
     pub unsupported: Vec<(usize, Unsupported)>,
@@ -338,7 +339,8 @@ impl<'a> Record<'a> {
         if self.row(row::FADE) != [0.0; 4] && self.kind() == Kind::Image {
             return Some(Unsupported::ClipFade);
         }
-        if self.row(row::SHAPE + 1)[2] != 0.0 {
+        let shape = self.row(row::SHAPE + 1)[2];
+        if shape != 0.0 && (self.kind() == Kind::Image || ![1.0, 2.0, 3.0].contains(&shape)) {
             return Some(Unsupported::ClipShape);
         }
         if self.has_notch() && !matches!(self.kind(), Kind::Box | Kind::Shadow) {
@@ -360,8 +362,12 @@ impl<'a> Record<'a> {
     ///
     /// A gradient with more than two stops, or stops other than from 0 to 1, or
     /// one that spreads past them, keeps them in a table; see
-    /// [`Record::primitive`] for those. This one reports such a record.
+    /// [`Record::primitive`] for those and for shape clips that need auxiliary
+    /// rows. This one reports either kind of record.
     pub fn to_primitive(&self, scale: f32) -> Result<GpuPrimitive, Unsupported> {
+        if self.row(row::SHAPE + 1)[2] != 0.0 {
+            return Err(Unsupported::ClipShape);
+        }
         // A table in the list's tail, which there is no list here to find it in.
         if self.fill_type() > 0.5 && self.row(row::GRADIENT_OFFSETS)[3] >= 2.0 {
             return Err(Unsupported::GradientTable);
@@ -372,10 +378,9 @@ impl<'a> Record<'a> {
         }
     }
 
-    /// The primitive for this record, and the rows of its gradient's stop table
-    /// if it has one. `list` is the whole display list, the records and the data
-    /// after them that tables of stops are in, and `aux_base` where the table
-    /// will be in `aux_data`, which the primitive names it by.
+    /// The primitive and its auxiliary rows: a shape clip, then a gradient stop
+    /// table, when present. `list` includes the records and their trailing point
+    /// and stop tables. `aux_base` is where these rows will begin in `aux_data`.
     pub fn primitive(
         &self,
         scale: f32,
@@ -411,6 +416,11 @@ impl<'a> Record<'a> {
             rotation: [b / column_x.max(1e-6), a / column_x.max(1e-6), 0.0, 1.0],
             ..GpuPrimitive::default()
         };
+
+        let mut aux = self.clip_rows(scale, list)?;
+        if !aux.is_empty() {
+            p.clip_shape[0] = (aux_base + 1) as f32;
+        }
 
         let flags = self.clip_flags();
         let [kind, _, _, clip_n] = self.row(row::TYPES);
@@ -453,7 +463,7 @@ impl<'a> Record<'a> {
                 self.notch(&mut p, size_scale);
                 p.notch_info[1] = if self.fill_type() > 0.5 { 2.0 } else { 1.0 };
             }
-            return Ok((p, Vec::new()));
+            return Ok((p, aux));
         }
 
         if kind == KIND_TEXT {
@@ -466,7 +476,7 @@ impl<'a> Record<'a> {
                 clip_type as u32,
                 0,
             ];
-            return Ok((p, Vec::new()));
+            return Ok((p, aux));
         }
 
         p.color = self.row(row::FILL);
@@ -477,7 +487,6 @@ impl<'a> Record<'a> {
             3.0 => FillType::ConicGradient,
             _ => FillType::Solid,
         };
-        let mut table = Vec::new();
         if fill != FillType::Solid {
             // Pixels from the box's top-left, taken to the primitive's frame.
             let g = self.row(row::GRADIENT);
@@ -494,8 +503,8 @@ impl<'a> Record<'a> {
                 ],
             };
             if let Some(rows) = self.gradient_rows(list)? {
-                p.gradient_table = [(aux_base + 1) as f32, 0.0, 0.0, 0.0];
-                table = rows;
+                p.gradient_table = [(aux_base + aux.len() + 1) as f32, 0.0, 0.0, 0.0];
+                aux.extend(rows);
             }
         }
 
@@ -532,7 +541,7 @@ impl<'a> Record<'a> {
             p.border = [widths[0] * size_scale, 0.0, 0.0, 0.0];
             p.border_color = self.side_colors()[0];
         }
-        Ok((p, table))
+        Ok((p, aux))
     }
 
     /// The rows of this record's gradient stop table: its header of the stop

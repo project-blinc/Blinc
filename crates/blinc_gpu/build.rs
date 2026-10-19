@@ -103,6 +103,10 @@ fn main() {
         );
         prelude_src.push('\n');
     }
+    let clip_path = "src/shaders/common/clip_shape.wgsl";
+    println!("cargo:rerun-if-changed={clip_path}");
+    let clip_src = std::fs::read_to_string(clip_path)
+        .unwrap_or_else(|e| panic!("cannot read {clip_path}: {e}"));
     let helpers = split_functions(&prelude_src);
     assert!(!helpers.is_empty(), "parsed no helpers out of {PRELUDE}");
 
@@ -143,6 +147,15 @@ fn main() {
         println!("cargo:rerun-if-changed={}", path.display());
         let body = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+
+        // Clip helpers read bindings, so they follow declarations and precede the fragment entry.
+        let clip = if name.contains("_dt") {
+            clip_src.replace("aux_data[index]", "load_aux(index)")
+        } else {
+            clip_src.clone()
+        };
+        assert_eq!(body.matches("\n@fragment").count(), 1, "{name}");
+        let body = body.replacen("\n@fragment", &format!("\n{clip}\n@fragment"), 1);
 
         // Everything the shader reaches, transitively through the prelude.
         let mut needed: BTreeSet<String> = order

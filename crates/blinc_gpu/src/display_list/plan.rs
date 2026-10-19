@@ -38,17 +38,20 @@ pub struct Layer {
 #[derive(Clone, Debug, Default)]
 pub struct Run {
     pub primitives: Vec<GpuPrimitive>,
-    /// The stop tables of their gradients, which they name by offset.
+    /// Gradient stop tables and shape clips, addressed by the primitives.
     pub aux: Vec<[f32; 4]>,
 }
 
 impl Run {
-    /// `more` after this, its tables' offsets moved to follow this one's.
+    /// `more` after this, its auxiliary pointers rebased to follow this run.
     fn append(&mut self, mut more: Run) {
         let base = self.aux.len() as f32;
         for p in &mut more.primitives {
             if p.gradient_table[0] > 0.5 {
                 p.gradient_table[0] += base;
+            }
+            if p.clip_shape[0] > 0.5 {
+                p.clip_shape[0] += base;
             }
         }
         self.primitives.append(&mut more.primitives);
@@ -327,10 +330,22 @@ fn moved(items: &[Item], dx: f32, dy: f32) -> Vec<Item> {
     items
         .iter()
         .map(|item| match item {
-            Item::Primitives(run) => Item::Primitives(Run {
-                primitives: run.primitives.iter().map(primitive).collect(),
-                aux: run.aux.clone(),
-            }),
+            Item::Primitives(run) => {
+                let mut aux = run.aux.clone();
+                let mut shifted = std::collections::BTreeSet::new();
+                for p in &run.primitives {
+                    if p.clip_shape[0] > 0.5 {
+                        let at = p.clip_shape[0] as usize - 1;
+                        if shifted.insert(at) {
+                            super::clip::translate(&mut aux[at..], dx, dy);
+                        }
+                    }
+                }
+                Item::Primitives(Run {
+                    primitives: run.primitives.iter().map(primitive).collect(),
+                    aux,
+                })
+            }
             Item::Image(draw) => {
                 let mut instance = draw.instance;
                 instance.dst_rect[0] += dx;

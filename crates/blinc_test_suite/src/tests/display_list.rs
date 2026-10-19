@@ -6,6 +6,8 @@
 
 #[cfg(test)]
 mod notch;
+#[cfg(test)]
+mod shape;
 
 #[cfg(test)]
 mod tests {
@@ -84,6 +86,7 @@ mod tests {
         assert!(out.unsupported.is_empty(), "{name}: {:?}", out.unsupported);
         let mut batch = PrimitiveBatch::new();
         batch.primitives.extend(out.primitives);
+        batch.aux_data.extend(out.aux);
         draw(harness, &format!("{name}_records_x{scale}"), &batch, scale)
     }
 
@@ -328,7 +331,9 @@ mod tests {
                         record[80..84].try_into().unwrap(),
                         record[84..88].try_into().unwrap(),
                     );
-                    let alpha = color[3] * (atlas[texel] as f32 / 255.0).powf(0.7) * fade;
+                    let shape =
+                        super::shape::coverage([px / scale, py / scale], record, list, scale);
+                    let alpha = color[3] * (atlas[texel] as f32 / 255.0).powf(0.7) * fade * shape;
                     let pixel = page.get_pixel_mut((x + dx) as u32, (y + dy) as u32);
                     for c in 0..3 {
                         let blended = pixel[c] as f32 * (1.0 - alpha) + color[c] * 255.0 * alpha;
@@ -350,12 +355,16 @@ mod tests {
             ("text_hello_x2", 2.0),
             ("fade_text_x1", 1.0),
             ("fade_text_x2", 2.0),
+            ("shape_text_x1", 1.0),
+            ("shape_text_x2", 2.0),
         ] {
             let list = match name {
                 "text_hello_x1" => fixture!("text_hello_x1"),
                 "text_hello_x2" => fixture!("text_hello_x2"),
                 "fade_text_x1" => fixture!("fade_text_x1"),
-                _ => fixture!("fade_text_x2"),
+                "fade_text_x2" => fixture!("fade_text_x2"),
+                "shape_text_x1" => fixture!("shape_text_x1"),
+                _ => fixture!("shape_text_x2"),
             };
             let bytes: &[u8] = match name {
                 "text_hello_x1" => include_bytes!(
@@ -367,8 +376,14 @@ mod tests {
                 "fade_text_x1" => include_bytes!(
                     "../../../blinc_gpu/tests/fixtures/display_list/fade_text_x1.atlas"
                 ),
-                _ => include_bytes!(
+                "fade_text_x2" => include_bytes!(
                     "../../../blinc_gpu/tests/fixtures/display_list/fade_text_x2.atlas"
+                ),
+                "shape_text_x1" => include_bytes!(
+                    "../../../blinc_gpu/tests/fixtures/display_list/shape_text_x1.atlas"
+                ),
+                _ => include_bytes!(
+                    "../../../blinc_gpu/tests/fixtures/display_list/shape_text_x2.atlas"
                 ),
             };
             let (width, height, atlas) = atlas_fixture(bytes);

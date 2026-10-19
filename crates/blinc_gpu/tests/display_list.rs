@@ -241,9 +241,9 @@ fn what_a_primitive_cannot_carry_is_named() {
             Unsupported::Gradient,
         ),
         (
-            "clip path",
+            "unknown clip path",
             row::SHAPE + 1,
-            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 9.0, 0.0],
             Unsupported::ClipShape,
         ),
         ("no area", row::AFFINE, [0.0; 4], Unsupported::Degenerate),
@@ -816,4 +816,81 @@ fn notch_local_clips_and_fades_are_kept_and_other_record_kinds_are_named() {
     set_row(&mut image, 0, row::NOTCH, [-8.0, 0.0, 0.0, 0.0]);
     let planned = plan(&image, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
     assert_eq!(planned.unsupported, vec![(0, Unsupported::Notch)]);
+}
+
+#[test]
+fn shape_frames_map_device_pixels_to_the_clips_own_logical_coordinates() {
+    let list = fixture!("shape_ellipse");
+    for scale in [1.0, 2.0] {
+        let out = decode(&list, 1, DISPLAY_LIST_VERSION, scale).unwrap();
+        assert!(out.unsupported.is_empty());
+        assert_eq!(out.primitives[0].clip_shape, [1.0, 0.0, 0.0, 0.0]);
+        near(&out.aux[0], &[1.0 / scale, 0.0, 0.0, 1.0 / scale]);
+        near(&out.aux[1], &[-20.0, -20.0, 1.0, 0.0]);
+        near(&out.aux[2], &[55.0, 27.0, 42.0, 20.4]);
+    }
+    let record = records(&list, 1, DISPLAY_LIST_VERSION)
+        .unwrap()
+        .next()
+        .unwrap();
+    assert_eq!(record.to_primitive(1.0).err(), Some(Unsupported::ClipShape));
+    assert_eq!(GpuPrimitive::default().clip_shape, [0.0; 4]);
+}
+
+#[test]
+fn polygon_clip_payloads_keep_closing_points_ring_separators_and_fill_rules() {
+    for (list, rule) in [
+        (fixture!("shape_hole_even"), 1.0),
+        (fixture!("shape_hole_nonzero"), 0.0),
+    ] {
+        let out = decode(&list, 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+        assert!(out.unsupported.is_empty());
+        assert_eq!(out.aux.len(), 9);
+        assert_eq!(out.aux[2], [3.0, 11.0, rule, 0.0]);
+        assert_eq!(out.aux[3], [0.0, 0.0, 100.0, 0.0]);
+        assert_eq!(out.aux[5], [0.0, 0.0, 1e30, 1e30]);
+        assert_eq!(&out.aux[8][..2], &[30.0, 15.0]);
+    }
+    let list = fixture!("shape_polygon");
+    let truncated = decode(&list[..RECORD_FLOATS], 1, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert!(truncated.primitives.is_empty());
+    assert_eq!(truncated.unsupported, vec![(0, Unsupported::ClipShape)]);
+}
+
+#[test]
+fn a_shape_and_a_gradient_share_auxiliary_data_without_overlapping() {
+    let list = fixture!("shape_layer");
+    let record = records(&list, 3, DISPLAY_LIST_VERSION)
+        .unwrap()
+        .nth(1)
+        .unwrap();
+    let (p, aux) = record.primitive(2.0, &list, 5).unwrap();
+    assert_eq!(p.clip_shape[0], 6.0);
+    assert_eq!(aux[2], [3.0, 6.0, 0.0, 0.0]);
+    assert_eq!(p.gradient_table[0], 12.0);
+    assert_eq!(aux[6][0], 5.0);
+    assert_eq!(aux.len(), 18);
+}
+
+#[test]
+fn flattening_a_layer_rebases_clip_headers_but_keeps_polygon_offsets_relative() {
+    let list = fixture!("shape_flatten");
+    let planned = plan(&list, 5, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert_eq!(planned.unsupported, vec![(3, Unsupported::LayerEffect)]);
+    let [Item::Primitives(run)] = &planned.items[..] else {
+        panic!("one merged run")
+    };
+    let pointers: Vec<_> = run.primitives.iter().map(|p| p.clip_shape[0]).collect();
+    assert_eq!(pointers, [1.0, 4.0, 10.0]);
+    assert_eq!(run.aux[5], [3.0, 6.0, 0.0, 0.0]);
+    assert_eq!(run.aux[6], [5.0, 7.0, 95.0, 4.0]);
+    assert_eq!(run.aux[10][2], 1.0);
+}
+
+#[test]
+fn images_under_element_frame_shapes_remain_named() {
+    let list = fixture!("shape_image");
+    let planned = plan(&list, 2, DISPLAY_LIST_VERSION, 1.0).unwrap();
+    assert_eq!(planned.unsupported, vec![(1, Unsupported::ClipShape)]);
+    assert!(matches!(&planned.items[..], [Item::Primitives(run)] if run.primitives.len() == 1));
 }

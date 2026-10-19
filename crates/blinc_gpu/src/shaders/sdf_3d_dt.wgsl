@@ -113,6 +113,8 @@ struct Primitive {
     clip_fade_bounds: vec4<f32>,
     // ABI notch scale and shadow mode; zero scale keeps native shading.
     notch_info: vec4<f32>,
+    // One more than the aux_data header offset for an ABI shape clip, zero for none.
+    clip_shape: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -524,7 +526,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let clip_type = prim.type_info.z;
 
     // Early clip test - discard if completely outside clip region (screen space)
-    let clip_alpha = calculate_clip_alpha(p, prim.clip_bounds, prim.clip_radius, prim.clip_corner_shape, clip_type, prim.clip_fade, prim.clip_fade_bounds);
+    var clip_alpha = calculate_clip_alpha(p, prim.clip_bounds, prim.clip_radius, prim.clip_corner_shape, clip_type, prim.clip_fade, prim.clip_fade_bounds);
+    clip_alpha = clip_alpha * abi_shape_clip_alpha(p, prim.clip_shape.x);
     if clip_alpha < 0.001 {
         discard;
     }

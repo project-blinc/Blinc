@@ -1,7 +1,7 @@
 //! Dumps ABI display-list records for a few scenes as raw little-endian f32.
 use blinc_abi::context::{LayoutContext, Node, Style};
 use blinc_abi::scene::blinc_core::{
-    Affine2D, Brush, Color, CornerRadius, Gradient, GradientSpace, GradientSpread, GradientStop,
+    Affine2D, Brush, ClipLength, ClipPath, Color, CornerRadius, Gradient, GradientSpace, GradientSpread, GradientStop,
     MaskImage, OverflowFade, Point, Shadow, Transform,
 };
 use blinc_abi::scene::{PaintOptions, RenderProps, SceneEncoder};
@@ -80,14 +80,20 @@ fn text_scene(name: &str, scale: f32, content: &str, size: f32, fade: bool) {
             ..Default::default()
         })
         .unwrap();
-    let content = if fade {
+    let content = if fade || name.starts_with("shape_text") {
         let parent = cx.create_node(Style {
             size: Size { width: length(100.0), height: length(60.0) },
             overflow: taffy::Point { x: Overflow::Clip, y: Overflow::Clip },
             ..Default::default()
         }).unwrap();
         let mut props = RenderProps::default();
-        props.overflow_fade = OverflowFade::new(20.0, 32.0, 24.0, 28.0);
+        if fade { props.overflow_fade = OverflowFade::new(20.0, 32.0, 24.0, 28.0); }
+        if name.starts_with("shape_text") {
+            props.clip_path = Some(ClipPath::Ellipse {
+                rx: Some(ClipLength::Px(26.0)), ry: Some(ClipLength::Px(13.0)),
+                center: (ClipLength::Px(30.0), ClipLength::Px(15.0)),
+            });
+        }
         cx.set_properties(parent, props).unwrap();
         cx.insert_before(parent, text, None).unwrap();
         parent
@@ -249,7 +255,95 @@ fn notch_scene(cx: &mut LayoutContext, name: &str) -> Node {
     parent
 }
 
+fn shape_path(name: &str) -> ClipPath {
+    use ClipLength::{Percent as Pc, Px};
+    match name {
+        "shape_rect" => ClipPath::Inset { top: Px(5.0), right: Pc(12.0), bottom: Px(7.0), left: Px(9.0), round: Some(10.0) },
+        "shape_polygon" | "shape_layer" | "shape_notch" => ClipPath::Polygon {
+            points: vec![(Px(5.0), Px(7.0)), (Px(95.0), Px(4.0)), (Px(80.0), Px(52.0)), (Px(55.0), Px(32.0)), (Px(25.0), Px(57.0))],
+        },
+        "shape_hole_even" | "shape_hole_nonzero" => ClipPath::Path {
+            vertices: vec![(0.0, 0.0), (100.0, 0.0), (100.0, 60.0), (0.0, 60.0), (0.0, 0.0), (1e30, 1e30),
+                (30.0, 15.0), (70.0, 15.0), (70.0, 45.0), (30.0, 45.0), (30.0, 15.0)],
+        },
+        _ => ClipPath::Ellipse { rx: Some(Pc(42.0)), ry: Some(Pc(34.0)), center: (Pc(55.0), Pc(45.0)) },
+    }
+}
+
+fn shape_scene(cx: &mut LayoutContext, name: &str) -> Node {
+    let mut p = RenderProps::default();
+    p.background = solid(0.9, 0.2, 0.2);
+    p.clip_path = Some(shape_path(name));
+    if name == "shape_affine" { p.transform = Some(Transform::Affine2D(Affine2D { elements: [1.1, 0.3, -0.2, 0.9, 0.0, 0.0] })); }
+    if name == "shape_inherited" {
+        p.transform = Some(Transform::rotate(0.35));
+        let parent = boxed(cx, 100.0, 60.0, p);
+        let mut child_props = RenderProps::default();
+        child_props.background = solid(0.1, 0.7, 0.4);
+        child_props.transform = Some(Transform::Affine2D(Affine2D { elements: [0.95, -0.2, 0.3, 1.1, 0.0, 0.0] }));
+        let child = boxed(cx, 140.0, 70.0, child_props);
+        cx.insert_before(parent, child, None).unwrap();
+        return parent;
+    }
+    if name == "shape_shadow" {
+        p.background = None;
+        let parent = boxed(cx, 100.0, 60.0, p);
+        let mut shadow = RenderProps::default();
+        shadow.shadow = vec![Shadow { offset_x: 4.0, offset_y: 3.0, blur: 0.0, spread: 8.0, color: Color::rgba(0.2, 0.4, 0.8, 0.7) }];
+        let child = cx.create_node(Style {
+            position: Position::Absolute,
+            inset: Rect { left: length(20.0), top: length(20.0), right: auto(), bottom: auto() },
+            size: Size { width: length(50.0), height: length(20.0) }, ..Default::default()
+        }).unwrap();
+        cx.set_properties(child, shadow).unwrap();
+        cx.insert_before(parent, child, None).unwrap();
+        return parent;
+    }
+    if name == "shape_layer" {
+        let mut props = RenderProps::default();
+        props.clip_path = Some(shape_path(name));
+        props.background = Some(Brush::Gradient(Gradient::Conic {
+            center: Point::new(50.0, 30.0), start_angle: 0.3, space: GradientSpace::UserSpace,
+            stops: vec![GradientStop::new(0.0, Color::rgb(1.0, 0.1, 0.1)), GradientStop::new(0.2, Color::rgb(0.9, 0.9, 0.1)), GradientStop::new(0.5, Color::rgb(0.1, 0.8, 0.2)), GradientStop::new(0.8, Color::rgb(0.1, 0.6, 1.0)), GradientStop::new(1.0, Color::rgb(0.6, 0.1, 0.9))],
+        }));
+        props.filter = Some(CssFilter { brightness: 0.8, ..CssFilter::default() });
+        props.opacity = 0.5;
+        props.transform = Some(Transform::rotate(0.2));
+        return boxed(cx, 100.0, 60.0, props);
+    }
+    if name == "shape_flatten" {
+        let outer = boxed(cx, 150.0, 60.0, RenderProps::default());
+        for i in 0..3 {
+            let mut props = RenderProps::default();
+            props.background = solid(0.2 + i as f32 * 0.2, 0.5, 0.8);
+            props.clip_path = Some(shape_path("shape_ellipse"));
+            if i == 1 {
+                props.clip_path = Some(shape_path("shape_polygon"));
+                props.mask_image = Some(MaskImage::Gradient(Gradient::Linear {
+                    start: Point::new(0.0, 0.0), end: Point::new(1.0, 0.0), space: GradientSpace::ObjectBoundingBox,
+                    spread: GradientSpread::Pad,
+                    stops: (0..17).map(|n| GradientStop::new(n as f32 / 16.0, Color::rgba(0.0, 0.0, 0.0, n as f32 / 16.0))).collect(),
+                }));
+            }
+            let node = boxed(cx, 45.0, 40.0, props);
+            cx.insert_before(outer, node, None).unwrap();
+        }
+        return outer;
+    }
+    let node = boxed(cx, 100.0, 60.0, p);
+    if name == "shape_notch" { cx.set_notch(node, Some([[-18.0, -12.0, 10.0, 6.0], [0.0; 4], [0.0; 4]])).unwrap(); }
+    if name == "shape_hole_even" { cx.set_clip_even_odd(node, true).unwrap(); }
+    if name == "shape_image" { cx.set_resource(node, Some(7), false).unwrap(); }
+    node
+}
+
 fn main() {
+    for name in ["shape_ellipse", "shape_rect", "shape_polygon", "shape_hole_even", "shape_hole_nonzero", "shape_affine", "shape_inherited", "shape_shadow", "shape_notch", "shape_layer", "shape_flatten", "shape_image"] {
+        scene(name, |cx| shape_scene(cx, name));
+    }
+    text_scene("shape_text_x1", 1.0, "Hello", 20.0, false);
+    text_scene("shape_text_x2", 2.0, "Hello", 20.0, false);
+
     for name in ["notch_corners", "notch_scoop", "notch_bulge", "notch_v", "notch_short", "notch_border", "notch_gradient", "notch_layer", "notch_shadow", "notch_inset", "notch_affine", "notch_clip"] {
         scene(name, |cx| notch_scene(cx, name));
     }

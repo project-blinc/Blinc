@@ -284,7 +284,7 @@ pub enum ClipType {
 /// - corner_shape: `vec4<f32>`    (16 bytes) - superellipse n per corner (1.0=round, 0.0=bevel, 2.0=squircle)
 /// - clip_fade: `vec4<f32>`       (16 bytes) - overflow fade distances (top, right, bottom, left) in pixels
 /// - type_info: `vec4<u32>`       (16 bytes) - (primitive_type, fill_type, clip_type, z_layer)
-///   Total: 528 bytes (33 x vec4). Asserted against the WGSL
+///   Total: 544 bytes (34 x vec4). Asserted against the WGSL
 ///   declaration in `tests/primitive_layout.rs`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -381,6 +381,11 @@ pub struct GpuPrimitive {
     /// Geometry occupies the native notch slots in `perspective`, `sdf_3d`,
     /// `light` and `corner_radius`.
     pub notch_info: [f32; 4],
+    /// One more than the offset in `aux_data` of an ABI shape clip, zero for
+    /// none. Three rows hold its inverse screen frame, translation/kind/radius,
+    /// and shape parameters, followed by polygon points two per row. A polygon
+    /// offset is relative to that header, so moving a run only rebases this pointer.
+    pub clip_shape: [f32; 4],
 }
 
 impl Default for GpuPrimitive {
@@ -433,6 +438,7 @@ impl Default for GpuPrimitive {
             local_clip_radius: [0.0; 4],
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
+            clip_shape: [0.0; 4],
         }
     }
 }
@@ -701,6 +707,7 @@ impl GpuPrimitive {
             local_clip_radius: [0.0; 4],
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
+            clip_shape: [0.0; 4],
         }
     }
 
@@ -751,6 +758,7 @@ impl GpuPrimitive {
             local_clip_radius: [0.0; 4],
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
+            clip_shape: [0.0; 4],
         }
     }
 }

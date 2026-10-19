@@ -21,7 +21,7 @@ fn row(record: &[f32], index: usize) -> [f32; 4] {
     record[index * 4..index * 4 + 4].try_into().unwrap()
 }
 
-fn rounded(p: [f32; 2], bounds: [f32; 4], radii: [f32; 4]) -> f32 {
+pub(super) fn rounded(p: [f32; 2], bounds: [f32; 4], radii: [f32; 4]) -> f32 {
     let x = p[0] - bounds[0] - bounds[2] * 0.5;
     let y = p[1] - bounds[1] - bounds[3] * 0.5;
     let corner = match (x > 0.0, y > 0.0) {
@@ -101,7 +101,7 @@ fn edge(p: [f32; 2], d: f32, cx: f32, base: f32, modifier: [f32; 4], dir: f32, i
     union(d, peak, 1.5)
 }
 
-fn distance(p: [f32; 2], record: &[f32]) -> f32 {
+pub(super) fn distance(p: [f32; 2], record: &[f32]) -> f32 {
     let bounds = row(record, 0);
     let corners = row(record, 25);
     let top = row(record, 26);
@@ -152,7 +152,7 @@ fn distance(p: [f32; 2], record: &[f32]) -> f32 {
     edge(p, d, bounds[2] * 0.5, end[1], bottom, -1.0, into)
 }
 
-fn smooth(a: f32, b: f32, x: f32) -> f32 {
+pub(super) fn smooth(a: f32, b: f32, x: f32) -> f32 {
     let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
@@ -169,7 +169,7 @@ fn normal_cdf(z: f32) -> f32 {
     0.5 + z.signum() * h * sum / 3.0
 }
 
-fn fill(p: [f32; 2], record: &[f32], list: &[f32]) -> [f32; 4] {
+pub(super) fn fill(p: [f32; 2], record: &[f32], list: &[f32]) -> [f32; 4] {
     let kind = row(record, 11)[1];
     if kind == 0.0 {
         return row(record, 2);
