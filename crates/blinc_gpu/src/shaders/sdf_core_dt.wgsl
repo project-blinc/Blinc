@@ -115,7 +115,7 @@ struct Primitive {
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-// Primitive data packed into an RGBA32F texture (width=23, height=max_primitives)
+// Primitive rows, one RGBA32F texel per vec4 field.
 @group(0) @binding(1) var prim_data: texture_2d<f32>;
 // Glyph atlas textures for unified text rendering
 @group(0) @binding(2) var glyph_atlas: texture_2d<f32>;
@@ -417,7 +417,6 @@ fn calculate_polygon_clip_alpha(p: vec2<f32>, vertex_count: u32, aux_offset: u32
 // ============================================================================
 
 // Load a primitive from the data texture.
-// Layout: width = 23 texels (one vec4 per field), height = max_primitives.
 // Each row is one primitive. Column index = field index.
 fn load_primitive(index: u32) -> Primitive {
     var p: Primitive;
@@ -432,19 +431,30 @@ fn load_primitive(index: u32) -> Primitive {
     p.shadow_color = textureLoad(prim_data, vec2<i32>(7, y), 0);
     p.clip_bounds = textureLoad(prim_data, vec2<i32>(8, y), 0);
     p.clip_radius = textureLoad(prim_data, vec2<i32>(9, y), 0);
-    p.gradient_params = textureLoad(prim_data, vec2<i32>(10, y), 0);
-    p.rotation = textureLoad(prim_data, vec2<i32>(11, y), 0);
-    p.local_affine = textureLoad(prim_data, vec2<i32>(12, y), 0);
-    p.perspective = textureLoad(prim_data, vec2<i32>(13, y), 0);
-    p.sdf_3d = textureLoad(prim_data, vec2<i32>(14, y), 0);
-    p.light = textureLoad(prim_data, vec2<i32>(15, y), 0);
-    p.filter_a = textureLoad(prim_data, vec2<i32>(16, y), 0);
-    p.filter_b = textureLoad(prim_data, vec2<i32>(17, y), 0);
-    p.mask_params = textureLoad(prim_data, vec2<i32>(18, y), 0);
-    p.mask_info = textureLoad(prim_data, vec2<i32>(19, y), 0);
-    p.corner_shape = textureLoad(prim_data, vec2<i32>(20, y), 0);
-    p.clip_fade = textureLoad(prim_data, vec2<i32>(21, y), 0);
-    p.type_info = bitcast<vec4<u32>>(textureLoad(prim_data, vec2<i32>(22, y), 0));
+    p.clip_corner_shape = textureLoad(prim_data, vec2<i32>(10, y), 0);
+    p.gradient_params = textureLoad(prim_data, vec2<i32>(11, y), 0);
+    p.rotation = textureLoad(prim_data, vec2<i32>(12, y), 0);
+    p.local_affine = textureLoad(prim_data, vec2<i32>(13, y), 0);
+    p.perspective = textureLoad(prim_data, vec2<i32>(14, y), 0);
+    p.sdf_3d = textureLoad(prim_data, vec2<i32>(15, y), 0);
+    p.light = textureLoad(prim_data, vec2<i32>(16, y), 0);
+    p.filter_a = textureLoad(prim_data, vec2<i32>(17, y), 0);
+    p.filter_b = textureLoad(prim_data, vec2<i32>(18, y), 0);
+    p.mask_params = textureLoad(prim_data, vec2<i32>(19, y), 0);
+    p.mask_info = textureLoad(prim_data, vec2<i32>(20, y), 0);
+    p.corner_shape = textureLoad(prim_data, vec2<i32>(21, y), 0);
+    p.clip_fade = textureLoad(prim_data, vec2<i32>(22, y), 0);
+    p.type_info = bitcast<vec4<u32>>(textureLoad(prim_data, vec2<i32>(23, y), 0));
+    p.side_color_top = textureLoad(prim_data, vec2<i32>(24, y), 0);
+    p.side_color_right = textureLoad(prim_data, vec2<i32>(25, y), 0);
+    p.side_color_bottom = textureLoad(prim_data, vec2<i32>(26, y), 0);
+    p.side_color_left = textureLoad(prim_data, vec2<i32>(27, y), 0);
+    p.gradient_table = textureLoad(prim_data, vec2<i32>(28, y), 0);
+    p.local_clip_bounds = textureLoad(prim_data, vec2<i32>(29, y), 0);
+    p.local_clip_radius = textureLoad(prim_data, vec2<i32>(30, y), 0);
+    p.clip_fade_bounds = textureLoad(prim_data, vec2<i32>(31, y), 0);
+    p.notch_info = textureLoad(prim_data, vec2<i32>(32, y), 0);
+    p.clip_shape = textureLoad(prim_data, vec2<i32>(33, y), 0);
     return p;
 }
 

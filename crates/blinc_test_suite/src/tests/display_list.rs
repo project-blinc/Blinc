@@ -20,6 +20,8 @@ mod mask;
 mod notch;
 #[cfg(test)]
 mod shape;
+#[cfg(test)]
+mod texture;
 
 #[cfg(test)]
 mod tests {

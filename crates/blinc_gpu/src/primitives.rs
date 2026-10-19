@@ -89,6 +89,10 @@ pub enum SdfPipelineCategory {
 }
 
 impl GpuPrimitive {
+    /// RGBA32Float texels in one data-texture row for this primitive.
+    pub const DATA_TEXTURE_TEXELS: u32 =
+        (std::mem::size_of::<Self>() / std::mem::size_of::<[f32; 4]>()) as u32;
+
     /// Determine which SDF pipeline should render this primitive.
     /// 3D is detected by shape_type in `perspective[3]`, but only promotes
     /// *core* prim types (rect/circle/ellipse). Shadows, text, and notches

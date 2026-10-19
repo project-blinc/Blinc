@@ -557,7 +557,7 @@ struct Buffers {
     /// vertex shaders.
     sdf_vertex_instances: Option<wgpu::Buffer>,
     /// Data texture for primitive data (WebGL2 fallback when no storage buffers).
-    /// Width = 23 texels (one per vec4 field of GpuPrimitive), height = max_primitives.
+    /// Width follows GpuPrimitive::DATA_TEXTURE_TEXELS; height is max_primitives.
     /// Format: Rgba32Float.
     prim_data_texture: Option<wgpu::Texture>,
     prim_data_view: Option<wgpu::TextureView>,
@@ -1491,7 +1491,7 @@ impl GpuRenderer {
 
         if !self.has_storage_buffers {
             // DT mode: upload to data texture instead of storage buffer.
-            // Each GpuPrimitive is 23 × vec4<f32> = 23 RGBA32F texels in a row.
+            // One complete primitive per row, including integer fields as raw bits.
             if let Some(ref tex) = self.buffers.prim_data_texture {
                 let bytes = bytemuck::cast_slice::<GpuPrimitive, u8>(primitives_to_write);
                 self.queue.write_texture(
@@ -1504,12 +1504,11 @@ impl GpuRenderer {
                     bytes,
                     wgpu::TexelCopyBufferLayout {
                         offset: 0,
-                        // 23 texels × 16 bytes per RGBA32F texel = 368 bytes per row
-                        bytes_per_row: Some(23 * 16),
+                        bytes_per_row: Some(std::mem::size_of::<GpuPrimitive>() as u32),
                         rows_per_image: None,
                     },
                     wgpu::Extent3d {
-                        width: 23,
+                        width: GpuPrimitive::DATA_TEXTURE_TEXELS,
                         height: primitives_to_write.len() as u32,
                         depth_or_array_layers: 1,
                     },
@@ -4016,11 +4015,11 @@ impl GpuRenderer {
             glyph_data_texture,
             glyph_data_view,
         ) = if !has_storage_buffers {
-            // Primitive data texture: width=23 (one texel per vec4 field), height=max_primitives
+            // One texel per vec4 field, one complete primitive per row.
             let prim_tex = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("Primitive Data Texture"),
                 size: wgpu::Extent3d {
-                    width: 23,
+                    width: GpuPrimitive::DATA_TEXTURE_TEXELS,
                     height: config.max_primitives as u32,
                     depth_or_array_layers: 1,
                 },
