@@ -4,15 +4,15 @@ use crate::{GpuImageInstance, primitives::DynamicImage};
 
 impl GpuRenderer {
     /// Upload and draw a sequence of raw RGBA images in the supplied order.
-    /// Full-batch methods already draw background records; use
-    /// `render_unordered_dynamic_images` for their separate foreground pass.
+    /// Ordered batch and foreground methods already draw their image records;
+    /// `render_unordered_dynamic_images` draws only separate legacy records.
     pub fn render_dynamic_images(&mut self, target: &wgpu::TextureView, images: &[DynamicImage]) {
         for image in images {
             self.render_dynamic_image_at(target, image, [0.0; 2]);
         }
     }
 
-    /// Draw only images kept outside the batch's ordered background stream.
+    /// Draw only records kept outside the ordered batch streams.
     pub fn render_unordered_dynamic_images(
         &mut self,
         target: &wgpu::TextureView,

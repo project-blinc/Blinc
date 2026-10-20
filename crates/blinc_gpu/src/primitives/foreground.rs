@@ -1,10 +1,12 @@
-//! Project foreground shapes into the ordered renderer's local cursor space.
+//! Project foreground draws into the ordered renderer's local cursor space.
 use super::{LayerCommand, LayerCommandEntry, PrimitiveBatch};
 
 impl PrimitiveBatch {
-    /// Whether the separately composed foreground shape stream has content.
+    /// Whether the separately composed foreground stream has content.
     pub fn has_foreground_content(&self) -> bool {
-        !self.foreground_primitives.is_empty() || !self.foreground_paths.indices.is_empty()
+        !self.foreground_primitives.is_empty()
+            || !self.foreground_paths.indices.is_empty()
+            || !self.foreground_dynamic_images.is_empty()
     }
 
     /// Whether foreground command indices must survive a cache update.
@@ -25,12 +27,13 @@ impl PrimitiveBatch {
         });
     }
 
-    /// Move foreground shapes and commands into a renderable batch. Aux rows
-    /// retain their original offsets; separate text and RGBA dispatch stay outside.
+    /// Move foreground draws and commands into a renderable batch. Aux rows
+    /// retain their original offsets; separate prepared text stays outside.
     pub fn take_foreground(&mut self) -> Self {
         let mut foreground = Self::new();
         foreground.primitives = std::mem::take(&mut self.foreground_primitives);
         foreground.paths = std::mem::take(&mut self.foreground_paths);
+        foreground.dynamic_images = std::mem::take(&mut self.foreground_dynamic_images);
         foreground.layer_commands = std::mem::take(&mut self.foreground_layer_commands);
         if !foreground.primitives.is_empty() || !foreground.paths.indices.is_empty() {
             foreground.aux_data = self.aux_data.clone();
@@ -43,6 +46,7 @@ impl PrimitiveBatch {
         let mut foreground = Self::new();
         foreground.primitives = self.foreground_primitives.clone();
         foreground.paths = self.foreground_paths.clone();
+        foreground.dynamic_images = self.foreground_dynamic_images.clone();
         foreground.layer_commands = self.foreground_layer_commands.clone();
         if self.has_foreground_content() {
             foreground.aux_data = self.aux_data.clone();

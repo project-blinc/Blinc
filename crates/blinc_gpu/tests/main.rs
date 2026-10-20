@@ -8,6 +8,7 @@ mod clip_fill_rule;
 mod composite_layers;
 mod display_list;
 mod foreground_layers;
+mod foreground_rgba;
 mod motion_layers;
 mod notch_joins;
 mod primitive_layout;

@@ -31,6 +31,8 @@ mod composite_scratch;
 #[cfg(test)]
 mod foreground_layers_tests;
 #[cfg(test)]
+mod foreground_rgba_tests;
+#[cfg(test)]
 mod motion_layers_tests;
 #[cfg(test)]
 mod rgba_order_tests;
@@ -237,7 +239,7 @@ fn effective_single_clip(primary: Option<[f32; 4]>, scroll: Option<[f32; 4]>) ->
 ///
 /// - **`primitives`** — SDF / glass / text primitives, the
 ///   common case (drawn rounded boxes, gradients, glyphs).
-/// - `foreground_batches`: SDF / mesh / text primitives, paths and groups
+/// - `foreground_batches`: RGBA images, SDF / mesh / text, paths and groups
 ///   emitted while the canvas has `set_foreground_layer(true)` active.
 /// - **`dynamic_images`** — raw-RGBA blits via
 ///   `ctx.draw_rgba_pixels(...)`. Used by video players (one
@@ -255,7 +257,7 @@ fn effective_single_clip(primary: Option<[f32; 4]>, scroll: Option<[f32; 4]>) ->
 pub struct CanvasOverlay {
     /// Whole canvas batches when groups, paths or RGBA draws require paint order.
     pub ordered_batches: Vec<PrimitiveBatch>,
-    /// Foreground shape streams kept with their own commands and auxiliary rows.
+    /// Foreground draws kept with their own commands and auxiliary rows.
     pub foreground_batches: Vec<PrimitiveBatch>,
     pub primitives: Vec<blinc_gpu::primitives::GpuPrimitive>,
     pub foreground_primitives: Vec<blinc_gpu::primitives::GpuPrimitive>,
@@ -1244,11 +1246,10 @@ impl RenderContext {
     /// every kind of draw output the closure produced:
     ///
     /// - `primitives`: SDF / mesh / text primitives (the main batch)
-    /// - `foreground_batches`: foreground shapes, paths and groups emitted
+    /// - `foreground_batches`: foreground images, shapes, paths and groups emitted
     ///   while `set_foreground_layer(true)` is active
     /// - `ordered_batches`: canvas backgrounds with ordered RGBA draws
-    /// - `dynamic_images`: independently dispatched foreground RGBA blits
-    ///   (`ctx.draw_rgba_pixels(...)`)
+    /// - `dynamic_images`: explicitly separate legacy RGBA blits
     /// - `meshes`: 3D mesh draws (`ctx.draw_mesh_data(...)`) from
     ///   `blinc_canvas_kit::SceneKit3D` or direct API users
     ///
@@ -2036,6 +2037,7 @@ impl RenderContext {
             || !new_batch.nested_glass_primitives.is_empty()
             || !new_batch.paths.vertices.is_empty()
             || !new_batch.foreground_paths.vertices.is_empty()
+            || !new_batch.foreground_dynamic_images.is_empty()
             || !new_batch.glyphs.is_empty()
             || !new_batch.viewports_3d.is_empty()
             || !new_batch.particle_viewports.is_empty()
@@ -2812,7 +2814,7 @@ impl RenderContext {
     /// after this helper at the compositor call sites so popovers and
     /// toasts still sit above canvas foreground chrome.
     ///
-    /// The static cache contains background and glass. Foreground shapes are
+    /// The static cache contains background and glass. Foreground draws are
     /// retained in the cached batch and dispatched once after canvas content;
     /// canvas foreground follows in callback order. Separate text keeps its
     /// existing overlay dispatch.
@@ -3561,6 +3563,8 @@ impl RenderContext {
 
         // Take the batch from fg_ctx before reusing text_ctx for text elements
         let mut fg_batch = fg_ctx.take_batch();
+        // Explicit canvas foreground stays ordered after the separate layer passes.
+        let foreground = [bg_batch.take_foreground(), fg_batch.take_foreground()];
 
         // Collect text, SVG, image, and flow elements
         let (texts, svgs, images, _flows) = self.collect_render_elements(tree);
@@ -4034,6 +4038,13 @@ impl RenderContext {
                 if !primitives.is_empty() {
                     self.render_unified(target, primitives);
                 }
+            }
+        }
+
+        self.rebind_glyph_atlas_for_overlay();
+        for batch in &foreground {
+            if !batch.is_empty() {
+                self.renderer.render_overlay_msaa(target, batch, 1);
             }
         }
 
@@ -10001,6 +10012,7 @@ impl RenderContext {
             batch.foreground_primitives.clear();
             batch.foreground_paths = Default::default();
             batch.foreground_layer_commands.clear();
+            batch.foreground_dynamic_images.clear();
         }
 
         let has_glass = batch.glass_count() > 0;

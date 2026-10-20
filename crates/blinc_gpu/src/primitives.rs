@@ -1636,9 +1636,11 @@ pub struct PrimitiveBatch {
     /// Dynamic RGBA images to upload and render this frame
     /// (video frames, camera preview, procedural textures)
     pub dynamic_images: Vec<DynamicImage>,
+    /// Foreground RGBA draws with foreground-local paint cursors.
+    pub foreground_dynamic_images: Vec<DynamicImage>,
 }
 
-/// Paint cursor at which an image was emitted into its background batch.
+/// Paint cursor in the owning background or foreground stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ImagePaintOrder {
     pub primitive_index: usize,
@@ -1650,7 +1652,7 @@ pub struct ImagePaintOrder {
 /// An RGBA image to upload to the GPU and render in a single frame
 #[derive(Clone)]
 pub struct DynamicImage {
-    /// Background paint cursor, or None for a separately dispatched foreground image.
+    /// Local paint cursor, or None for an explicitly separate legacy draw.
     pub paint_order: Option<ImagePaintOrder>,
     /// RGBA pixel data (4 bytes per pixel)
     pub data: Vec<u8>,
@@ -1690,6 +1692,7 @@ impl PrimitiveBatch {
             particle_viewports: Vec::new(),
             aux_data: Vec::new(),
             dynamic_images: Vec::new(),
+            foreground_dynamic_images: Vec::new(),
         }
     }
 
@@ -1707,6 +1710,7 @@ impl PrimitiveBatch {
         self.particle_viewports.clear();
         self.aux_data.clear();
         self.dynamic_images.clear();
+        self.foreground_dynamic_images.clear();
     }
 
     /// Push a 3D viewport for SDF raymarching
@@ -2015,6 +2019,7 @@ impl PrimitiveBatch {
             && self.foreground_paths.vertices.is_empty()
             && self.viewports_3d.is_empty()
             && self.dynamic_images.is_empty()
+            && self.foreground_dynamic_images.is_empty()
     }
 
     /// Check if the batch contains any tessellated path geometry
@@ -2138,6 +2143,7 @@ impl PrimitiveBatch {
         let fg_primitive_offset = self.foreground_primitives.len();
         let fg_vertex_offset = self.foreground_paths.vertices.len();
         let fg_index_offset = self.foreground_paths.indices.len();
+        let fg_command_offset = self.foreground_layer_commands.len();
 
         self.primitives.extend(other.primitives);
         self.foreground_primitives
@@ -2179,6 +2185,16 @@ impl PrimitiveBatch {
             entry.foreground_path_vertex_index += fg_vertex_offset;
             entry.foreground_path_index_count += fg_index_offset;
             self.foreground_layer_commands.push(entry);
+        }
+
+        for mut image in other.foreground_dynamic_images {
+            if let Some(order) = image.paint_order.as_mut() {
+                order.primitive_index += fg_primitive_offset;
+                order.path_vertex_index += fg_vertex_offset;
+                order.path_index_count += fg_index_offset;
+                order.layer_command_count += fg_command_offset;
+            }
+            self.foreground_dynamic_images.push(image);
         }
 
         // Merge 3D viewports

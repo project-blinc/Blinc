@@ -27,6 +27,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - Per-corner squircle / scoop / bevel support on `ClipShape::RoundedRect` propagated into the SDF clip primitive uniforms — all 12 SDF shader variants (`sdf_core` / `sdf_shadow` / `sdf_3d` / `sdf_notch` × `vb` / `dt` / msaa) now read and apply per-corner `n` when evaluating clip alpha.
 
 ### Fixed
+- Foreground raw RGBA shares the active foreground batch, local paint cursors and group opacity with shapes and paths. Foreground projection, merging and clearing retain image ownership; explicit legacy image drawing remains available.
 - Foreground shape groups keep commands and path cursors in their active static or motion batch, and `render_foreground` composes them once after glass. Unrepresented ancestor opacity and separate raw RGBA fallback are retained.
 - Background RGBA draws retain active-batch ownership and primitive/path/layer paint cursors. Native clear, overlay, MSAA, backdrop and tight-bake routes compose them with nested groups in order. `render_unordered_dynamic_images` filters records already drawn by full-batch methods; explicit `render_dynamic_images` still draws the supplied sequence. Foreground RGBA retains its separate opacity fallback. Glass hand-offs retain foreground and reuse native nested-glass dispatch; storage-free backends preserve ordinary background/foreground while omitting unsupported glass. Invalid or empty uploads are skipped.
 - Composite bake regions include tessellated paths and nested effect margins in their screen-space bounds.

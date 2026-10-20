@@ -126,7 +126,7 @@ fn routed_children_keep_only_opacity_unrepresented_in_their_batch() {
 }
 
 #[test]
-fn foreground_and_late_images_keep_effective_opacity() {
+fn foreground_and_images_keep_unrepresented_background_opacity() {
     let mut ctx = GpuPaintContext::new(100.0, 100.0);
     ctx.push_opacity(0.5);
     ctx.push_layer(LayerConfig::new().opacity(0.5));
@@ -142,5 +142,5 @@ fn foreground_and_late_images_keep_effective_opacity() {
     for primitive in &batch.foreground_primitives {
         assert_eq!(primitive.color[3], 0.25);
     }
-    assert_eq!(batch.dynamic_images[0].opacity, 0.25);
+    assert_eq!(batch.foreground_dynamic_images[0].opacity, 0.25);
 }

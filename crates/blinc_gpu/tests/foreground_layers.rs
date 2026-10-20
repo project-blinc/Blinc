@@ -39,7 +39,7 @@ fn foreground_layers_own_opacity_in_static_and_motion_streams() {
 }
 
 #[test]
-fn foreground_layers_keep_background_ancestor_and_late_image_fallback() {
+fn foreground_layers_keep_background_ancestor_opacity_for_images() {
     let mut ctx = GpuPaintContext::new(160.0, 120.0);
     ctx.push_layer(LayerConfig::new().opacity(0.5));
     ctx.set_foreground_layer(true);
@@ -55,7 +55,7 @@ fn foreground_layers_keep_background_ancestor_and_late_image_fallback() {
     ctx.pop_layer();
     let batch = ctx.take_batch();
     assert_eq!(batch.foreground_primitives[0].color[3], 0.5);
-    assert_eq!(batch.dynamic_images[0].opacity, 0.25);
+    assert_eq!(batch.foreground_dynamic_images[0].opacity, 0.5);
     assert_eq!(batch.layer_commands.len(), 2);
 }
 
