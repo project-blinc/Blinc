@@ -8,6 +8,7 @@ mod clip_fill_rule;
 mod display_list;
 mod notch_joins;
 mod primitive_layout;
+mod producer_opacity;
 mod sdf_shaped_rect;
 mod shader_prelude;
 mod shadow_spread;

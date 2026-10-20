@@ -1735,11 +1735,14 @@ impl PrimitiveBatch {
         !self.layer_commands.is_empty()
     }
 
-    /// Check if there are any layer commands with effects
+    /// Whether a layer needs composition, including opacity-only and 3D groups.
     pub fn has_layer_effects(&self) -> bool {
         self.layer_commands.iter().any(|entry| {
             if let LayerCommand::Push { config } = &entry.command {
-                !config.effects.is_empty() || config.blend_mode != blinc_core::BlendMode::Normal
+                !config.effects.is_empty()
+                    || config.blend_mode != blinc_core::BlendMode::Normal
+                    || config.transform_3d.is_some()
+                    || config.opacity < 1.0
             } else {
                 false
             }
@@ -2059,7 +2062,7 @@ impl PrimitiveBatch {
             .collect()
     }
 
-    /// Get the set of primitive indices that belong to effect/blend layers
+    /// Primitive indices already drawn by layer composition, including opacity.
     pub fn effect_layer_indices(&self) -> std::collections::HashSet<usize> {
         let mut indices = std::collections::HashSet::new();
         let mut stack: Vec<(usize, &blinc_core::LayerConfig)> = Vec::new();
@@ -2072,6 +2075,8 @@ impl PrimitiveBatch {
                     if let Some((start_idx, config)) = stack.pop() {
                         if !config.effects.is_empty()
                             || config.blend_mode != blinc_core::BlendMode::Normal
+                            || config.transform_3d.is_some()
+                            || config.opacity < 1.0
                         {
                             for i in start_idx..entry.primitive_index {
                                 indices.insert(i);

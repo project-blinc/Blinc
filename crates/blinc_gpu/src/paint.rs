@@ -737,9 +737,14 @@ impl<'a> GpuPaintContext<'a> {
             .unwrap_or(Affine2D::IDENTITY)
     }
 
-    /// Get the current combined opacity
+    /// Opacity baked into primitive colours. Background group commands own
+    /// their opacity; independently dispatched streams still need it flattened.
     fn combined_opacity(&self) -> f32 {
-        self.opacity_stack.iter().product()
+        if self.aux_batch() == AuxBatch::Static && !self.emit_foreground() {
+            self.opacity_stack.iter().product()
+        } else {
+            self.current_opacity()
+        }
     }
 
     /// Transform a point by the current transform
@@ -4488,11 +4493,6 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             self.blend_mode_stack.push(config.blend_mode);
         }
 
-        // Apply layer's opacity if less than 1.0
-        if config.opacity < 1.0 {
-            self.opacity_stack.push(config.opacity);
-        }
-
         // Record layer command for GPU renderer to process
         self.batch
             .push_layer_command(crate::primitives::LayerCommand::Push {
@@ -4545,7 +4545,15 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
     }
 
     fn current_opacity(&self) -> f32 {
-        self.combined_opacity()
+        // Queries and late image draws need the effective opacity even when
+        // primitive colours leave group opacity to the compositor.
+        self.opacity_stack.iter().product::<f32>()
+            * self
+                .layer_stack
+                .iter()
+                .map(|state| state.config.opacity)
+                .filter(|opacity| *opacity < 1.0)
+                .product::<f32>()
     }
 
     fn current_blend_mode(&self) -> BlendMode {

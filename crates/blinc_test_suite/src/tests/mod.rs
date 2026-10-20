@@ -13,6 +13,7 @@ pub mod opacity;
 pub mod overlay_layers;
 pub mod paint_context;
 pub mod paths;
+mod producer_opacity;
 pub mod sdf;
 pub mod shadows;
 pub mod shapes;
