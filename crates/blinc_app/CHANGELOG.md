@@ -28,6 +28,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Composite scratch fingerprints include raw-image affine matrices, so orientation changes invalidate a bake even when its destination and pixels are unchanged.
 - Ordered foreground RGBA reaches direct, static-cache, canvas, motion and glass dispatch, including image-only groups. Foreground images are deferred with shapes during static baking and retained by cache guards. The separate-layer `render_tree` path now dispatches explicit foreground batches after its layer passes.
 - Self-contained foreground shapes and paths retain group isolation in direct, canvas and motion overlay dispatch. Static-cache composition defers them until after canvas content so translucent groups blend once. Foreground-owned cache edits request a full repaint.
 - Ordered RGBA batches survive dynamic and canvas dispatch, including image-only callbacks, pixel changes, paths and cache rebakes. Groups and paths stay ordered when callbacks stop emitting images, and foreground survives the glass/effect hand-off. Primitive-only cache patchers request full paint for images, and ordered content avoids duplicate path/z overlays.

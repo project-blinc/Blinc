@@ -119,6 +119,7 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
             ],
             h,
         );
+        floats(&image.transform, h);
         floats(&image.clip_bounds, h);
         floats(&image.clip_radius, h);
     }

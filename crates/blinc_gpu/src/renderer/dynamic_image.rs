@@ -38,6 +38,7 @@ impl GpuRenderer {
                 .map(|n| n as usize)
                 != Some(img.data.len())
             || img.opacity <= 0.0
+            || !DynamicImage::valid_geometry(img.dest, img.transform)
         {
             return;
         }
@@ -51,6 +52,12 @@ impl GpuRenderer {
             img.dest.y() - origin[1],
             img.dest.width(),
             img.dest.height(),
+        )
+        .with_transform(
+            img.transform[0],
+            img.transform[1],
+            img.transform[2],
+            img.transform[3],
         )
         .with_opacity(img.opacity)
         .with_border_radius(img.corner_radius);

@@ -94,7 +94,7 @@ fn vs_main(
     let tb = instance.transform.y;
     let tc = instance.transform.z;
     let td = instance.transform.w;
-    let has_transform = abs(ta - 1.0) > 0.0001 || abs(tb) > 0.0001 || abs(tc) > 0.0001 || abs(td - 1.0) > 0.0001;
+    let has_transform = any(instance.transform != vec4<f32>(1.0, 0.0, 0.0, 1.0));
     if has_transform {
         let cx = instance.dst_rect.x + instance.dst_rect.z * 0.5;
         let cy = instance.dst_rect.y + instance.dst_rect.w * 0.5;

@@ -158,7 +158,11 @@ fn bounds(items: &[Node], batch: &PrimitiveBatch, viewport: Bounds) -> Option<Bo
                 bounds(children, batch, viewport).map(|b| b.expand(expansion(config)))
             }
             Node::Image(index) => {
-                let rect = batch.dynamic_images[*index].dest;
+                let image = &batch.dynamic_images[*index];
+                if !crate::primitives::DynamicImage::valid_geometry(image.dest, image.transform) {
+                    return None;
+                }
+                let rect = image.screen_bounds();
                 Some(Bounds {
                     min: [rect.x(), rect.y()],
                     max: [rect.x() + rect.width(), rect.y() + rect.height()],

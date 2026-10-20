@@ -15,7 +15,20 @@ impl GpuPaintContext<'_> {
         {
             return;
         }
+        let affine = self.current_affine_elements();
+        let [a, b, c, d, ..] = affine;
+        let determinant = a * d - b * c;
+        if affine.iter().any(|v| !v.is_finite())
+            || !determinant.is_finite()
+            || determinant.abs() <= 1e-12
+        {
+            return;
+        }
         let transformed = self.transform_rect(dest);
+        let transform = self.current_local_affine();
+        if !DynamicImage::valid_geometry(transformed, transform) {
+            return;
+        }
         let foreground = self.emit_foreground();
         let opacity = self.combined_opacity();
         let (clip_bounds, clip_radius, _, _) = self.get_clip_data();
@@ -46,6 +59,7 @@ impl GpuPaintContext<'_> {
             width,
             height,
             dest: transformed,
+            transform,
             opacity,
             corner_radius: 0.0,
             clip_bounds,

@@ -1660,8 +1660,11 @@ pub struct DynamicImage {
     pub width: u32,
     /// Image height in pixels
     pub height: u32,
-    /// Destination rectangle (layout coordinates)
+    /// Destination quad before its centered transform, in physical pixels.
     pub dest: blinc_core::Rect,
+    /// Centered 2x2 affine applied to dest, matching GpuImageInstance.
+    /// Identity is [1, 0, 0, 1].
+    pub transform: [f32; 4],
     /// Opacity
     pub opacity: f32,
     /// Corner radius
@@ -1674,6 +1677,7 @@ pub struct DynamicImage {
     pub clip_radius: [f32; 4],
 }
 
+mod dynamic_image;
 mod foreground;
 
 impl PrimitiveBatch {
