@@ -27,6 +27,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - Per-corner squircle / scoop / bevel support on `ClipShape::RoundedRect` propagated into the SDF clip primitive uniforms — all 12 SDF shader variants (`sdf_core` / `sdf_shadow` / `sdf_3d` / `sdf_notch` × `vb` / `dt` / msaa) now read and apply per-corner `n` when evaluating clip alpha.
 
 ### Fixed
+- Raw RGBA images retain native circle, ellipse and polygon clips, including polygon fill rules and affine frames. Self-contained image clip rows survive foreground extraction and batch drains, and translate into tight group textures without changing the image-instance GPU layout. Native path clips remain unsupported.
 - Raw RGBA draws retain rotation, shear, reflection and non-uniform scale through the existing image transform. Ordered group bounds use the transformed quad; invalid or near-singular geometry is omitted before allocation/upload. Image shaders apply every non-identity transform without a tolerance cutoff.
 - Foreground raw RGBA shares the active foreground batch, local paint cursors and group opacity with shapes and paths. Foreground projection, merging and clearing retain image ownership; explicit legacy image drawing remains available.
 - Foreground shape groups keep commands and path cursors in their active static or motion batch, and `render_foreground` composes them once after glass. Unrepresented ancestor opacity and separate raw RGBA fallback are retained.

@@ -1675,6 +1675,10 @@ pub struct DynamicImage {
     /// Per-corner clip radius `[tl, tr, br, bl]` from `get_clip_data`,
     /// so a rounded node-body clip rounds the image too.
     pub clip_radius: [f32; 4],
+    /// Five image clip rows, three shape rows, then optional packed polygon points.
+    /// Coordinates are in physical pixels; pointers are relative to these rows.
+    /// Empty for ordinary rectangular or absent clips.
+    pub clip_aux: Vec<[f32; 4]>,
 }
 
 mod dynamic_image;

@@ -1,6 +1,7 @@
 //! RGBA upload drawing shared by ordered batches and the explicit image pass.
 use super::{GpuRenderer, PrimitiveBatch};
 use crate::{GpuImageInstance, primitives::DynamicImage};
+use std::borrow::Cow;
 
 impl GpuRenderer {
     /// Upload and draw a sequence of raw RGBA images in the supplied order.
@@ -65,6 +66,16 @@ impl GpuRenderer {
             instance.clip_bounds = [cx - origin[0], cy - origin[1], cw, ch];
             instance.clip_radius = img.clip_radius;
         }
+        let mut aux = Cow::Borrowed(img.clip_aux.as_slice());
+        if aux.len() >= 8 {
+            instance.abi_clip[0] = 1.0;
+            if origin != [0.0; 2] {
+                let rows = aux.to_mut();
+                let [a, b, c, d] = rows[5];
+                rows[6][0] += a * origin[0] + c * origin[1];
+                rows[6][1] += b * origin[0] + d * origin[1];
+            }
+        }
         let image = crate::image::GpuImage::from_rgba(
             &self.device,
             &self.queue,
@@ -73,7 +84,7 @@ impl GpuRenderer {
             img.height,
             Some("dynamic image"),
         );
-        self.render_images(target, image.view(), &[instance]);
+        self.render_images_with_aux(target, image.view(), &[instance], &aux);
     }
 
     pub(super) fn render_image_backdrop(

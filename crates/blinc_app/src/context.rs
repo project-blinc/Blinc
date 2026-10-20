@@ -37,6 +37,8 @@ mod motion_layers_tests;
 #[cfg(test)]
 mod rgba_affine_tests;
 #[cfg(test)]
+mod rgba_clip_tests;
+#[cfg(test)]
 mod rgba_order_tests;
 
 /// Maximum number of images to keep in cache (prevents unbounded memory growth).

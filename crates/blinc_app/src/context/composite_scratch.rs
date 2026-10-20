@@ -122,6 +122,7 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
         floats(&image.transform, h);
         floats(&image.clip_bounds, h);
         floats(&image.clip_radius, h);
+        bytemuck::cast_slice::<_, u8>(&image.clip_aux).hash(h);
     }
     batch.layer_commands.len().hash(h);
     for entry in &batch.layer_commands {

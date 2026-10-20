@@ -14,6 +14,7 @@ mod notch_joins;
 mod primitive_layout;
 mod producer_opacity;
 mod rgba_affine;
+mod rgba_clip;
 mod rgba_order;
 mod sdf_shaped_rect;
 mod shader_prelude;
