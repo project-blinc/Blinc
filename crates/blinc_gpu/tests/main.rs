@@ -5,6 +5,7 @@ mod aux_routing;
 mod backdrop;
 mod bc4_quality;
 mod clip_fill_rule;
+mod composite_layers;
 mod display_list;
 mod motion_layers;
 mod notch_joins;

@@ -119,13 +119,8 @@ fn routed_children_keep_only_opacity_unrepresented_in_their_batch() {
         } else {
             ctx.take_dynamic_batch()
         };
-        if composite {
-            assert!(routed.layer_commands.is_empty());
-            alpha(&routed, 0.125);
-        } else {
-            assert_eq!(routed.layer_commands.len(), 2);
-            alpha(&routed, 0.25);
-        }
+        assert_eq!(routed.layer_commands.len(), 2);
+        alpha(&routed, 0.25);
         alpha(&ctx.take_batch(), 0.5);
     }
 }

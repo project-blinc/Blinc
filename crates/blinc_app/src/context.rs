@@ -25,6 +25,9 @@ use crate::error::Result;
 use crate::svg_atlas::SvgAtlas;
 
 #[cfg(test)]
+mod composite_layers_tests;
+mod composite_scratch;
+#[cfg(test)]
 mod motion_layers_tests;
 
 /// Maximum number of images to keep in cache (prevents unbounded memory growth).
@@ -1584,64 +1587,10 @@ impl RenderContext {
         out
     }
 
-    /// Hash a composite-layer scratch `PrimitiveBatch` for the
-    /// rasterize-skip check in the slow-path texture step. Hashes
-    /// only the channels that affect rendered pixels: the SDF
-    /// primitives, foreground primitives, the `aux_data` buffer
-    /// (polygon-clip vertices, 3D group descriptors), AND the
-    /// `layer_commands` opacity bits. Glass / nested-glass primitives
-    /// don't appear in composited subtrees today (the walker doesn't
-    /// promote glass) so they're omitted; if a future change ever
-    /// lets glass land in a composite scratch, promotability would
-    /// have to be reconsidered anyway.
-    ///
-    /// `GpuPrimitive` and `aux_data` are `bytemuck::Pod`, so we hash
-    /// their raw bytes. `LayerCommand` is a non-Pod enum (carries
-    /// `LayerConfig` with `Vec<LayerEffect>` etc.), so we hash the
-    /// discriminant + the bits that actually animate per frame
-    /// (Push.config.opacity for CSS-promoted subtrees, Sample's
-    /// source/dest rects, Pop is constant). Without the layer-command
-    /// hash, an animating `push_layer { opacity: t }` around a
-    /// composite-promoted subtree (e.g. cn::popover entry animation)
-    /// produces byte-identical primitives every frame → the dirty-
-    /// skip succeeds → the texture stays frozen at frame-1 (near-
-    /// zero opacity) for the lifetime of the animation. Visible
-    /// today as cn::input / cn::textarea opened inside a cn::popover
-    /// rendering invisible until a mouse-move trips the staleness
-    /// sweep that releases the layer texture.
+    /// Fingerprint the primitive, path, auxiliary and group data used by baking.
+    /// Live promoted-root animation properties are applied by the later blit.
     fn hash_composite_scratch(batch: &blinc_gpu::primitives::PrimitiveBatch) -> u64 {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        bytemuck::cast_slice::<_, u8>(&batch.primitives).hash(&mut hasher);
-        bytemuck::cast_slice::<_, u8>(&batch.foreground_primitives).hash(&mut hasher);
-        bytemuck::cast_slice::<_, u8>(&batch.aux_data).hash(&mut hasher);
-        for entry in &batch.layer_commands {
-            entry.primitive_index.hash(&mut hasher);
-            entry.foreground_primitive_index.hash(&mut hasher);
-            match &entry.command {
-                blinc_gpu::primitives::LayerCommand::Push { config } => {
-                    0u8.hash(&mut hasher);
-                    config.opacity.to_bits().hash(&mut hasher);
-                    std::mem::discriminant(&config.blend_mode).hash(&mut hasher);
-                    config.depth.hash(&mut hasher);
-                }
-                blinc_gpu::primitives::LayerCommand::Pop => {
-                    1u8.hash(&mut hasher);
-                }
-                blinc_gpu::primitives::LayerCommand::Sample { source, dest, .. } => {
-                    2u8.hash(&mut hasher);
-                    source.x().to_bits().hash(&mut hasher);
-                    source.y().to_bits().hash(&mut hasher);
-                    source.width().to_bits().hash(&mut hasher);
-                    source.height().to_bits().hash(&mut hasher);
-                    dest.x().to_bits().hash(&mut hasher);
-                    dest.y().to_bits().hash(&mut hasher);
-                    dest.width().to_bits().hash(&mut hasher);
-                    dest.height().to_bits().hash(&mut hasher);
-                }
-            }
-        }
-        hasher.finish()
+        composite_scratch::hash(batch)
     }
 
     /// Composite each promoted CSS-animated layer's texture onto the
@@ -3153,12 +3102,12 @@ impl RenderContext {
         _scale: f32,
     ) -> CssDeltaResult {
         // CSS patching and re-emission index the static cache. A CSS descendant
-        // routed through motion needs a full paint until that cache path can
-        // dispatch and rebase dynamic records too.
+        // routed through motion or composite scratch needs a full paint until
+        // that cache path can dispatch and rebase those records too.
         if tree
             .css_anim_paint_records()
             .values()
-            .any(|meta| meta.dynamic_batch)
+            .any(|meta| meta.dynamic_batch || meta.composite_batch)
         {
             self.last_css_damage_rects.clear();
             return CssDeltaResult::Bail;

@@ -8,6 +8,8 @@ All notable changes to `blinc_core` will be documented in this file.
 - `ClipShape::RoundedRect` now carries a `CornerShape` (per-corner superellipse `n`) so clips can follow squircle / scoop / bevel outlines instead of always rounding. Constructors default to the existing `CornerShape::ROUND` so untouched callers behave identically.
 
 ### Added
+- `DrawContext::composite_layer_bounds` reports a scratch footprint including paths and group effects; contexts without scratch fall back to primitive-range bounds.
+- `DrawContext::bg_batch_is_composite` identifies per-node scratch ownership of primitive ranges and layer indices. Other contexts default to false.
 - `DrawContext::bg_batch_is_dynamic` identifies whether recorded primitive ranges and layer indices belong to the separately dispatched motion batch. Contexts without that split default to false.
 - `FillRule` (`NonZero`, `EvenOdd`) and `DrawContext::set_clip_fill_rule`, which sets the rule the next polygon `push_clip` uses. The default is nonzero and a context that does not draw polygon clips ignores it.
 - `blinc_core::intern` module with process-wide `Arc<str>` pool. `intern(s: &str) -> Arc<str>` deduplicates repeated identifier strings (CSS class names, type names, stable keys). Pool is append-only; only feed bounded sources into it.

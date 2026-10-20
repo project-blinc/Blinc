@@ -11617,47 +11617,16 @@ impl GpuRenderer {
         (layer_texture, content_size)
     }
 
-    /// Rasterize an entire `PrimitiveBatch` (from a walker scratch
-    /// pass) into a fresh tight `LayerTexture`. Used by the
-    /// composited-layer path for CSS-animated subtrees: the walker
-    /// peels the subtree's primitives into a per-node scratch batch
-    /// (`GpuPaintContext::push_composite_layer` /
-    /// `take_composite_layer_batches`), then this helper turns each
-    /// scratch batch into a cached texture that
-    /// `blit_tight_texture_to_target` composites per frame with the
-    /// active animation transform applied.
-    ///
-    /// `layer_pos` is the physical-pixel screen position the
-    /// primitives were emitted at (typically the screen-space AABB's
-    /// top-left from `bg_primitive_aabb`). Primitives get translated
-    /// by `-layer_pos` so they land at (0, 0) inside the texture.
-    /// `layer_size` is the texture's logical content size; the
-    /// actual texture may be larger due to `LayerTextureCache`'s
-    /// bucket rounding. Both values are returned as
-    /// `content_size`.
-    ///
-    /// Effect-expansion is zero — composite-promoted subtrees can't
-    /// carry layer effects (the promotion predicate disqualifies
-    /// `filter_blur`, `backdrop_*`, etc., and the underlying
-    /// `LayerCommand` Push/Pop pairs aren't in the scratch batch).
+    /// Bake a scratch batch, including nested groups and paths, into an exact
+    /// tight texture. Positions are screen-space; `layer_pos` becomes its origin.
+    /// The returned texture contains straight alpha for the per-frame blit.
     pub fn render_subtree_to_layer_texture(
         &mut self,
         batch: &PrimitiveBatch,
         layer_pos: (f32, f32),
         layer_size: (f32, f32),
     ) -> (LayerTexture, (u32, u32)) {
-        self.render_layer_range_tight(
-            batch,
-            0,
-            batch.primitives.len(),
-            0,
-            0,
-            0,
-            0,
-            layer_pos,
-            layer_size,
-            (0.0, 0.0, 0.0, 0.0),
-        )
+        self.render_composite_subtree(batch, layer_pos, layer_size)
     }
 
     /// Blit a tight texture to the target at the correct position

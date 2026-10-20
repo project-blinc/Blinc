@@ -327,6 +327,62 @@ fn translated(
 }
 
 impl GpuRenderer {
+    pub(crate) fn composite_subtree_bounds(
+        batch: &PrimitiveBatch,
+        viewport: [f32; 2],
+    ) -> Option<[f32; 4]> {
+        bounds(
+            &nodes(batch),
+            batch,
+            Bounds {
+                min: [0.0; 2],
+                max: viewport,
+            },
+        )
+        .map(|b| [b.min[0], b.min[1], b.max[0] - b.min[0], b.max[1] - b.min[1]])
+    }
+
+    pub(super) fn render_composite_subtree(
+        &mut self,
+        batch: &PrimitiveBatch,
+        origin: (f32, f32),
+        size: (f32, f32),
+    ) -> (LayerTexture, (u32, u32)) {
+        let extent = (size.0.ceil().max(1.0) as u32, size.1.ceil().max(1.0) as u32);
+        self.layer_texture_cache.evict_oversized();
+        let target = self
+            .layer_texture_cache
+            .acquire_exact(&self.device, extent, false);
+        let viewport = self.viewport_size;
+        self.viewport_size = extent;
+        self.render_with_clear_simple(&target.view, &PrimitiveBatch::new(), [0.0; 4]);
+        self.draw_overlay_nodes(&target.view, batch, &nodes(batch), [origin.0, origin.1], 1);
+        let straight = self
+            .layer_texture_cache
+            .acquire_exact(&self.device, extent, false);
+        self.ensure_overlay_alpha();
+        self.overlay_alpha.as_ref().unwrap().straighten(
+            &self.device,
+            &self.queue,
+            &self.bind_group_layouts.composite,
+            &self.path_image_sampler,
+            &target,
+            &straight,
+        );
+        self.layer_texture_cache.release(target);
+        self.viewport_size = viewport;
+        self.update_aux_data_buffer(batch);
+        self.queue.write_buffer(
+            &self.buffers.uniforms,
+            0,
+            bytemuck::bytes_of(&crate::primitives::Uniforms {
+                viewport_size: [viewport.0 as f32, viewport.1 as f32],
+                _padding: [0.0; 2],
+            }),
+        );
+        (straight, extent)
+    }
+
     pub(super) fn ensure_overlay_alpha(&mut self) {
         if self.overlay_alpha.is_none() {
             self.overlay_alpha = Some(AlphaPass::new(

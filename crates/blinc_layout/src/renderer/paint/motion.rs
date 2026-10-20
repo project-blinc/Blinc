@@ -2352,7 +2352,7 @@ impl RenderTree {
                 // dynamic batch, so Dark mode visibly drifts. P4.3's
                 // bake-and-blit overlay handles motion updates for
                 // candidates instead.
-                if motion_bindings_ref.is_some() && !pushed_for_motion_subtree {
+                if motion_bindings_ref.is_some() && !ctx.bg_batch_is_composite() {
                     self.composite_bindings.borrow_mut().insert(
                         node,
                         super::super::CompositeBindingMeta {
@@ -2543,6 +2543,7 @@ impl RenderTree {
                             node,
                             super::super::CssAnimPaintMeta {
                                 dynamic_batch: ctx.bg_batch_is_dynamic(),
+                                composite_batch: ctx.bg_batch_is_composite(),
                                 stable_id,
                                 primitive_range: start..end,
                                 layer_push_index: css_anim_layer_push_index,
@@ -2586,7 +2587,10 @@ impl RenderTree {
                     // `v2_motion_ambient` to be Some — pure-CSS
                     // animated nodes have no motion bindings.
                     if pushed_for_css {
-                        let aabb = last_screen_aabb.unwrap_or([0.0, 0.0, 0.0, 0.0]);
+                        let aabb = ctx
+                            .composite_layer_bounds()
+                            .or(last_screen_aabb)
+                            .unwrap_or([0.0, 0.0, 0.0, 0.0]);
                         let natural_w = aabb[2].max(1.0).ceil() as u32;
                         let natural_h = aabb[3].max(1.0).ceil() as u32;
                         let ambient = super::super::AmbientPaintState {
@@ -2623,7 +2627,8 @@ impl RenderTree {
             let start = motion_subtree_bg_start.unwrap_or(0);
             let end = ctx.bg_primitive_count();
             let aabb = ctx
-                .bg_primitive_aabb(start, end)
+                .composite_layer_bounds()
+                .or_else(|| ctx.bg_primitive_aabb(start, end))
                 .unwrap_or([0.0, 0.0, 0.0, 0.0]);
             let natural_w = aabb[2].max(1.0).ceil() as u32;
             let natural_h = aabb[3].max(1.0).ceil() as u32;

@@ -2,7 +2,7 @@
 use super::{ClipShape, GpuPaintContext};
 use smallvec::SmallVec;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum AuxBatch {
     Static,
     Dynamic,

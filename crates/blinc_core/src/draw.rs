@@ -1747,6 +1747,18 @@ pub trait DrawContext {
         false
     }
 
+    /// Whether background counts and layer indices refer to a per-node scratch
+    /// batch whose content is baked into a cached composite texture.
+    fn bg_batch_is_composite(&self) -> bool {
+        false
+    }
+
+    /// Screen-space bounds of the active composite scratch, including paths,
+    /// nested groups and effect margins. Defaults to primitive-range bounds.
+    fn composite_layer_bounds(&self) -> Option<[f32; 4]> {
+        None
+    }
+
     /// Number of layer commands the context has recorded so far this
     /// frame. Read by the walker right after `push_layer` so the
     /// Phase 4 CSS-anim recording can capture the just-pushed

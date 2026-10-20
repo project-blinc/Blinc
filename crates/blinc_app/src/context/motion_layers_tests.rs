@@ -95,6 +95,7 @@ fn motion_layers_css_record_in_dynamic_batch_requests_full_paint() {
         root,
         CssAnimPaintMeta {
             dynamic_batch: true,
+            composite_batch: false,
             stable_id: tree.stable_id(root).unwrap(),
             primitive_range: 0..1,
             layer_push_index: Some(0),

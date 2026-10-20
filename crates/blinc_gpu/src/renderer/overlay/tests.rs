@@ -138,3 +138,19 @@ fn alpha_shader_validates() {
     .validate(&module)
     .unwrap();
 }
+
+#[test]
+fn composite_scratch_path_only_footprint_includes_effects() {
+    let mut batch = PrimitiveBatch::new();
+    let mut config = LayerConfig::new().opacity(0.5);
+    config.effects.push(LayerEffect::blur(2.0));
+    batch.push_layer_command(LayerCommand::Push { config });
+    batch.push_path(crate::path::tessellate_fill(
+        &blinc_core::Path::rect(blinc_core::Rect::new(20.0, 30.0, 40.0, 50.0)),
+        &blinc_core::Color::RED.into(),
+    ));
+    assert_eq!(
+        GpuRenderer::composite_subtree_bounds(&batch, [100.0, 100.0]),
+        Some([16.0, 26.0, 48.0, 58.0])
+    );
+}

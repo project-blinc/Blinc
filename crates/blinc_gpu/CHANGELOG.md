@@ -27,6 +27,8 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - Per-corner squircle / scoop / bevel support on `ClipShape::RoundedRect` propagated into the SDF clip primitive uniforms — all 12 SDF shader variants (`sdf_core` / `sdf_shadow` / `sdf_3d` / `sdf_notch` × `vb` / `dt` / msaa) now read and apply per-corner `n` when evaluating clip alpha.
 
 ### Fixed
+- Composite bake regions include tessellated paths and nested effect margins in their screen-space bounds.
+- Composite scratch groups retain their own commands and opacity. Subtree baking walks nested groups and paths into exact-size textures and returns straight alpha for the live compositor blit.
 - Motion-background groups record Push/Pop commands and animation indices in their own batch. Their children retain only explicit or unrepresented ancestor opacity, so overlapping children fade as a group. Pop uses the saved command owner even after routing changes; composite, foreground and image opacity fallbacks remain in place.
 - `GpuPaintContext` leaves background group opacity to layer composition rather than baking it into children too. Explicit opacity scopes still colour children, including inside nested or zero-opacity groups. Batch routing recognises opacity-only and 3D groups and excludes them from later z-layer overlays. Independently dispatched motion, composite, foreground and late image streams retain their effective opacity.
 - Native MSAA overlays honour nested layer effects, group opacity and blend modes in paint order, including path-only layers. Premultiplied resolve colours are converted for native effects, preserving coverage through no-op boundaries; effect intermediates retain exact texture extents.

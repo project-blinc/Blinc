@@ -5,6 +5,8 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Composite bake regions include tessellated paths and nested effect margins in their screen-space bounds.
+- CSS paint metadata records composite scratch ownership, and scratch motion records stay out of the dynamic-cache patcher. Promoted-root animation opacity remains on the live blit.
 - Dynamic background opacity bindings retain a patchable group at opacity one, so cached fades update group opacity instead of scaling each overlapping child.
 - CSS paint records retain whether their ranges belong to the dynamic motion batch, allowing static-cache patchers to request a full repaint instead of using indices from another batch.
 
