@@ -840,7 +840,14 @@ impl RenderTree {
             } else {
                 render_state.is_motion_active(node)
             };
-        if motion_opacity <= 0.001 && !has_pending_motion {
+        // Foreground bindings use a full repaint instead of background index
+        // patching. Retain their zero-opacity group so later frames can recover.
+        let retain_foreground_binding = target_layer == RenderLayer::Foreground
+            && (inside_foreground
+                || render_node.props.layer == RenderLayer::Foreground
+                || glass_depth > 0)
+            && motion_bindings_ref.is_some_and(|bindings| bindings.opacity.is_some());
+        if motion_opacity <= 0.001 && !has_pending_motion && !retain_foreground_binding {
             // Pop the motion-subtree push from above if we set it,
             // so the dynamic batch's emit gate stays balanced even
             // when this early-out fires.
@@ -1055,11 +1062,14 @@ impl RenderTree {
         let safe_to_flatten =
             !has_motion_opacity_binding && self.layout_tree.children(node).len() <= 1;
         let can_flatten_opacity = only_opacity_drives_layer && safe_to_flatten;
-        // Keep a patchable group at the opaque endpoint of dynamic background
-        // bindings; later frames must update group opacity rather than child alpha.
+        // Keep the group at motion opacity endpoints. Background can patch its
+        // command; foreground requests a full paint with its own command stream.
         let keep_motion_group = has_motion_opacity_binding
             && ctx.bg_batch_is_dynamic()
-            && effective_layer == RenderLayer::Background;
+            && matches!(
+                effective_layer,
+                RenderLayer::Background | RenderLayer::Foreground
+            );
         let has_opacity_layer = !can_flatten_opacity
             && (keep_motion_group
                 || node_motion_opacity < 1.0

@@ -51,6 +51,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - `AudioPlayerWidget` with optional waveform visualization
 
 ### Fixed
+- Foreground motion opacity bindings retain groups at opaque and zero endpoints, allowing full repaint to recover after a settled zero value.
 - Video seek bar wrapped in own Stateful with position/duration signal deps (was invisible until volume clicked)
 - Video volume slider bar colors swapped (active/inactive were reversed)
 

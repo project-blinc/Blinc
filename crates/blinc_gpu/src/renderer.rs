@@ -26,6 +26,7 @@ use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
 mod dynamic_image;
+mod foreground;
 mod overlay;
 
 use crate::gradient_texture::GradientTextureCache;
@@ -5047,6 +5048,8 @@ impl GpuRenderer {
         // are out of scope for this commit; layer_commands are
         // handled below.
         if batch.has_ordered_images()
+            || batch.has_foreground_content()
+            || batch.has_foreground_layers()
             || !batch.paths.vertices.is_empty()
             || !batch.viewports_3d.is_empty()
             || !batch.particle_viewports.is_empty()
@@ -7308,46 +7311,8 @@ impl GpuRenderer {
             self.queue.submit(std::iter::once(encoder.finish()));
         }
 
-        // Pass 4: Render foreground primitives (on top of glass)
-        // This requires a separate submission because we need to overwrite the primitives buffer
-        if !batch.foreground_primitives.is_empty() {
-            // Sort and upload foreground primitives
-            let fg_ranges = self.upload_sorted_primitives(&batch.foreground_primitives);
-
-            let mut encoder = self
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Blinc Foreground Encoder"),
-                });
-
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Foreground Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target,
-                    resolve_target: None,
-                    depth_slice: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-
-            render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
-            Self::draw_split_sdf(
-                &mut render_pass,
-                &self.pipelines,
-                &fg_ranges,
-                false,
-                self.sdf_vb_buffer(),
-            );
-
-            drop(render_pass);
-            self.queue.submit(std::iter::once(encoder.finish()));
-        }
+        // Foreground groups compose in their own stream after glass.
+        self.render_foreground(target, batch);
 
         // Pass 5: Render paths (SVGs) on top of glass
         // Paths are tessellated geometry that need their own pipeline

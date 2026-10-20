@@ -7,10 +7,10 @@ impl CanvasOverlay {
             .iter()
             .any(|batch| batch.requires_ordered_rendering() || batch.has_paths());
         for mut batch in batches {
+            if batch.has_foreground_content() {
+                self.foreground_batches.push(batch.take_foreground());
+            }
             let shift = self.aux_data.len() as f32;
-            RenderContext::shift_aux_offsets(&mut batch.foreground_primitives, shift);
-            self.foreground_primitives
-                .append(&mut batch.foreground_primitives);
             if ordered {
                 self.aux_data.extend_from_slice(&batch.aux_data);
                 let mut images = Vec::new();
@@ -34,6 +34,17 @@ impl CanvasOverlay {
 }
 
 impl RenderContext {
+    pub(super) fn dispatch_canvas_foreground_batches(
+        &mut self,
+        target: &wgpu::TextureView,
+        overlay: &CanvasOverlay,
+    ) {
+        self.rebind_glyph_atlas_for_overlay();
+        for batch in &overlay.foreground_batches {
+            self.renderer.render_overlay_msaa(target, batch, 1);
+        }
+    }
+
     pub(super) fn dispatch_ordered_canvas_batches(
         &mut self,
         target: &wgpu::TextureView,

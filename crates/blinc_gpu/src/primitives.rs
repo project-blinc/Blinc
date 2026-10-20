@@ -1624,6 +1624,8 @@ pub struct PrimitiveBatch {
     pub foreground_paths: PathBatch,
     /// Layer commands for offscreen rendering and composition
     pub layer_commands: Vec<LayerCommandEntry>,
+    /// Foreground-local commands, composed after glass.
+    pub foreground_layer_commands: Vec<LayerCommandEntry>,
     /// 3D viewports to render via raymarching
     pub viewports_3d: Vec<Viewport3D>,
     /// GPU particle viewports to render
@@ -1670,6 +1672,8 @@ pub struct DynamicImage {
     pub clip_radius: [f32; 4],
 }
 
+mod foreground;
+
 impl PrimitiveBatch {
     pub fn new() -> Self {
         Self {
@@ -1681,6 +1685,7 @@ impl PrimitiveBatch {
             paths: PathBatch::default(),
             foreground_paths: PathBatch::default(),
             layer_commands: Vec::new(),
+            foreground_layer_commands: Vec::new(),
             viewports_3d: Vec::new(),
             particle_viewports: Vec::new(),
             aux_data: Vec::new(),
@@ -1697,6 +1702,7 @@ impl PrimitiveBatch {
         self.paths = PathBatch::default();
         self.foreground_paths = PathBatch::default();
         self.layer_commands.clear();
+        self.foreground_layer_commands.clear();
         self.viewports_3d.clear();
         self.particle_viewports.clear();
         self.aux_data.clear();
@@ -1748,7 +1754,7 @@ impl PrimitiveBatch {
             .any(|image| image.paint_order.is_some())
     }
 
-    /// Whether splitting this batch into primitive-only passes would lose content.
+    /// Whether splitting the background into primitive-only passes would lose content.
     pub fn requires_ordered_rendering(&self) -> bool {
         self.has_layer_effects() || self.has_ordered_images()
     }
@@ -2129,6 +2135,9 @@ impl PrimitiveBatch {
     pub fn merge(&mut self, other: PrimitiveBatch) {
         // Record the current primitive count for offsetting layer commands
         let primitive_offset = self.primitives.len();
+        let fg_primitive_offset = self.foreground_primitives.len();
+        let fg_vertex_offset = self.foreground_paths.vertices.len();
+        let fg_index_offset = self.foreground_paths.indices.len();
 
         self.primitives.extend(other.primitives);
         self.foreground_primitives
@@ -2160,6 +2169,16 @@ impl PrimitiveBatch {
         for mut entry in other.layer_commands {
             entry.primitive_index += primitive_offset;
             self.layer_commands.push(entry);
+        }
+
+        for mut entry in other.foreground_layer_commands {
+            entry.primitive_index += fg_primitive_offset;
+            entry.path_vertex_index += fg_vertex_offset;
+            entry.path_index_count += fg_index_offset;
+            entry.foreground_primitive_index += fg_primitive_offset;
+            entry.foreground_path_vertex_index += fg_vertex_offset;
+            entry.foreground_path_index_count += fg_index_offset;
+            self.foreground_layer_commands.push(entry);
         }
 
         // Merge 3D viewports

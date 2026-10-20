@@ -106,6 +106,8 @@ struct LayerState {
     config: LayerConfig,
     /// Batch that owns this group's commands and range snapshots.
     command_batch: AuxBatch,
+    /// Whether the commands use the foreground-local cursor stream.
+    foreground: bool,
     /// Starting primitive index when this layer was pushed
     primitive_start: usize,
     /// Starting foreground primitive index
@@ -685,11 +687,7 @@ impl<'a> GpuPaintContext<'a> {
     }
 
     fn layer_command_batch(&self) -> AuxBatch {
-        if self.emit_foreground() {
-            AuxBatch::Static
-        } else {
-            self.aux_batch()
-        }
+        self.aux_batch()
     }
 
     fn layer_command_batch_mut(&mut self, owner: AuxBatch) -> &mut PrimitiveBatch {
@@ -756,8 +754,8 @@ impl<'a> GpuPaintContext<'a> {
             .unwrap_or(Affine2D::IDENTITY)
     }
 
-    /// Opacity baked into primitive colours. Background group commands own
-    /// their opacity; independently dispatched streams still need it flattened.
+    /// Opacity baked into primitive colours. Groups in this batch and stream
+    /// own their opacity; unrepresented ancestors still need it flattened.
     fn combined_opacity(&self) -> f32 {
         let route = self.aux_batch();
         let foreground = self.emit_foreground();
@@ -765,7 +763,7 @@ impl<'a> GpuPaintContext<'a> {
             * self
                 .layer_stack
                 .iter()
-                .filter(|state| foreground || state.command_batch != route)
+                .filter(|state| state.foreground != foreground || state.command_batch != route)
                 .map(|state| state.config.opacity)
                 .filter(|opacity| *opacity < 1.0)
                 .product::<f32>()
@@ -4498,10 +4496,12 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
     fn push_layer(&mut self, config: LayerConfig) {
         // Record current state indices for restoration on pop
         let command_batch = self.layer_command_batch();
+        let foreground = self.emit_foreground();
         let batch = self.layer_command_batch_mut(command_batch);
         let state = LayerState {
             config: config.clone(),
             command_batch,
+            foreground,
             primitive_start: batch.primitive_count(),
             foreground_primitive_start: batch.foreground_primitive_count(),
             path_start: batch.path_vertex_count(),
@@ -4521,10 +4521,13 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         }
 
         // Record layer command for GPU renderer to process
-        self.layer_command_batch_mut(command_batch)
-            .push_layer_command(crate::primitives::LayerCommand::Push {
-                config: config.clone(),
-            });
+        let command = crate::primitives::LayerCommand::Push { config };
+        let batch = self.layer_command_batch_mut(command_batch);
+        if foreground {
+            batch.push_foreground_layer_command(command);
+        } else {
+            batch.push_layer_command(command);
+        }
     }
 
     fn pop_layer(&mut self) {
@@ -4548,8 +4551,12 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             }
 
             // Record layer command for GPU renderer to process
-            self.layer_command_batch_mut(state.command_batch)
-                .push_layer_command(crate::primitives::LayerCommand::Pop);
+            let batch = self.layer_command_batch_mut(state.command_batch);
+            if state.foreground {
+                batch.push_foreground_layer_command(crate::primitives::LayerCommand::Pop);
+            } else {
+                batch.push_layer_command(crate::primitives::LayerCommand::Pop);
+            }
         }
     }
 

@@ -124,6 +124,6 @@ impl GpuRenderer {
             self.render_glass_frame(target, backdrop, backdrop_size, &glass, true);
         }
         self.update_aux_data_buffer(batch);
-        self.render_primitives_overlay(target, &batch.foreground_primitives);
+        self.render_foreground(target, batch);
     }
 }

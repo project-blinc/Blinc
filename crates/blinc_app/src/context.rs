@@ -29,6 +29,8 @@ mod canvas_order;
 mod composite_layers_tests;
 mod composite_scratch;
 #[cfg(test)]
+mod foreground_layers_tests;
+#[cfg(test)]
 mod motion_layers_tests;
 #[cfg(test)]
 mod rgba_order_tests;
@@ -235,7 +237,7 @@ fn effective_single_clip(primary: Option<[f32; 4]>, scroll: Option<[f32; 4]>) ->
 ///
 /// - **`primitives`** — SDF / glass / text primitives, the
 ///   common case (drawn rounded boxes, gradients, glyphs).
-/// - **`foreground_primitives`** — SDF / mesh / text primitives
+/// - `foreground_batches`: SDF / mesh / text primitives, paths and groups
 ///   emitted while the canvas has `set_foreground_layer(true)` active.
 /// - **`dynamic_images`** — raw-RGBA blits via
 ///   `ctx.draw_rgba_pixels(...)`. Used by video players (one
@@ -253,6 +255,8 @@ fn effective_single_clip(primary: Option<[f32; 4]>, scroll: Option<[f32; 4]>) ->
 pub struct CanvasOverlay {
     /// Whole canvas batches when groups, paths or RGBA draws require paint order.
     pub ordered_batches: Vec<PrimitiveBatch>,
+    /// Foreground shape streams kept with their own commands and auxiliary rows.
+    pub foreground_batches: Vec<PrimitiveBatch>,
     pub primitives: Vec<blinc_gpu::primitives::GpuPrimitive>,
     pub foreground_primitives: Vec<blinc_gpu::primitives::GpuPrimitive>,
     pub dynamic_images: Vec<blinc_gpu::primitives::DynamicImage>,
@@ -1113,7 +1117,10 @@ impl RenderContext {
             None => return false,
         };
 
-        if batch.has_ordered_images() {
+        if batch.has_ordered_images()
+            || batch.has_foreground_content()
+            || batch.has_foreground_layers()
+        {
             return false;
         }
         let records_ref = tree.canvas_paint_records();
@@ -1173,7 +1180,10 @@ impl RenderContext {
             // primitives) so we can splice the whole `primitives`
             // vec back into the cached batch.
             let new_batch = scratch.take_batch();
-            if new_batch.has_ordered_images() {
+            if new_batch.has_ordered_images()
+                || new_batch.has_foreground_content()
+                || new_batch.has_foreground_layers()
+            {
                 return false;
             }
             let new_count = new_batch.primitives.len();
@@ -1234,7 +1244,7 @@ impl RenderContext {
     /// every kind of draw output the closure produced:
     ///
     /// - `primitives`: SDF / mesh / text primitives (the main batch)
-    /// - `foreground_primitives`: SDF / mesh / text primitives emitted
+    /// - `foreground_batches`: foreground shapes, paths and groups emitted
     ///   while `set_foreground_layer(true)` is active
     /// - `ordered_batches`: canvas backgrounds with ordered RGBA draws
     /// - `dynamic_images`: independently dispatched foreground RGBA blits
@@ -1398,7 +1408,7 @@ impl RenderContext {
             // Drain everything the closure emitted: normal SDF/text/mesh
             // primitives go to `overlay.primitives`, foreground
             // SDF/text/mesh primitives go to
-            // `overlay.foreground_primitives`, raw-RGBA blits (video
+            // `overlay.foreground_batches`, raw-RGBA blits (video
             // frames, camera previews) go to
             // `overlay.dynamic_images`, and 3D mesh draws go to
             // `overlay.meshes`. Without draining all of these, the
@@ -2239,7 +2249,10 @@ impl RenderContext {
             Some(b) => b,
             None => return false,
         };
-        if batch.has_ordered_images() {
+        if batch.has_ordered_images()
+            || batch.has_foreground_content()
+            || batch.has_foreground_layers()
+        {
             return false;
         }
         let mut bindings = tree.composite_bindings_mut();
@@ -2799,74 +2812,34 @@ impl RenderContext {
     /// after this helper at the compositor call sites so popovers and
     /// toasts still sit above canvas foreground chrome.
     ///
-    /// Background:
-    /// * The slow paint walker's Pass 4 bakes foreground primitives
-    ///   into the static cache alongside bg + glass content.
-    /// * On compositor frames, `composite_frame` blits that cache then
-    ///   dispatches canvas-emitted primitives as an overlay with
-    ///   `LoadOp::Load`. The canvas overlay paints over the fg pixels
-    ///   that were captured in the cache.
-    /// * Net result without this hook: a host div marked
-    ///   `.layer(RenderLayer::Foreground)` that sits above a canvas
-    ///   appears underneath canvas content because the overlay pass
-    ///   re-paints canvas on top of the cached fg pixels.
-    ///
-    /// Re-dispatching the cached foreground primitives after the
-    /// canvas overlay restores the intended z-order, and dispatching
-    /// canvas foreground after that preserves explicit
-    /// `set_foreground_layer(true)` output from canvas closures:
-    /// `cache (bg + glass + fg) → canvas overlay → fg overlay →
-    /// canvas fg overlay → global overlays`.
-    /// The double-paint of fg pixels (once from cache, once from
-    /// this dispatch) is identical for opaque content.
-    /// Semi-transparent fg over a canvas will blend twice
-    /// (acceptable for most overlay use; revisit if a
-    /// pixel-perfect single-blend variant is needed).
-    ///
+    /// The static cache contains background and glass. Foreground shapes are
+    /// retained in the cached batch and dispatched once after canvas content;
+    /// canvas foreground follows in callback order. Separate text keeps its
+    /// existing overlay dispatch.
     fn render_foreground_overlay(
         &mut self,
         target_view: &wgpu::TextureView,
         canvas_overlays: &[&CanvasOverlay],
     ) {
-        let fg_prims = self
+        let foreground = self
             .cached_bg_batch
             .as_ref()
-            .map(|b| b.foreground_primitives.clone())
-            .filter(|v| !v.is_empty());
+            .filter(|batch| batch.has_foreground_content())
+            .map(PrimitiveBatch::foreground_batch);
         let fg_glyphs = self
             .cached_fg_glyphs
             .as_ref()
             .filter(|v| !v.is_empty())
             .cloned();
-        let has_canvas_fg = canvas_overlays
-            .iter()
-            .any(|overlay| !overlay.foreground_primitives.is_empty());
-        if fg_prims.is_none() && fg_glyphs.is_none() && !has_canvas_fg {
+        let has_canvas_fg = canvas_overlays.iter().any(|overlay| {
+            !overlay.foreground_primitives.is_empty() || !overlay.foreground_batches.is_empty()
+        });
+        if foreground.is_none() && fg_glyphs.is_none() && !has_canvas_fg {
             return;
         }
         self.rebind_glyph_atlas_for_overlay();
-        if let Some(prims) = fg_prims {
-            // `composite_frame` ran immediately before this dispatch
-            // and overwrote the GPU's `aux_data` buffer with the
-            // canvas-overlay's `merged_aux` (canvas-overlay aux +
-            // dynamic aux). The foreground primitives we're about to
-            // dispatch carry aux offsets that were computed against
-            // the STATIC batch's `aux_data` — the buffer state from
-            // before composite_frame. Without re-uploading the
-            // static aux_data here, any foreground primitive that
-            // references aux entries (polygon clip-paths, 3D-group
-            // SDF, mesh-triangle offsets — anything routed through
-            // `shift_aux_offsets`) samples garbage indices. Symptom
-            // matches the documented `gotcha_dynamic_batch_aux_data`
-            // bug (cn_demo spinner arcs lost their tail) but on the
-            // foreground-layer dispatch path. Re-upload restores
-            // the index space these primitives were built against.
-            if let Some(batch) = self.cached_bg_batch.as_ref() {
-                if !batch.aux_data.is_empty() {
-                    self.renderer.update_aux_data_for_batch(batch);
-                }
-            }
-            self.renderer.render_primitives_overlay(target_view, &prims);
+        if let Some(batch) = foreground {
+            self.renderer.render_overlay_msaa(target_view, &batch, 1);
         }
         // Foreground text glyphs go through the dedicated text shader
         // pipeline (not the SDF PRIM_TEXT path), so they need their
@@ -2877,6 +2850,7 @@ impl RenderContext {
             self.render_text(target_view, &glyphs);
         }
         for canvas_overlay in canvas_overlays {
+            self.dispatch_canvas_foreground_batches(target_view, canvas_overlay);
             if canvas_overlay.foreground_primitives.is_empty() {
                 continue;
             }
@@ -2936,6 +2910,7 @@ impl RenderContext {
                     self.renderer.render_overlay(target_view, batch);
                 }
             }
+            self.renderer.render_foreground(target_view, batch);
         }
     }
 
@@ -2962,6 +2937,7 @@ impl RenderContext {
         if overlay.primitives.is_empty()
             && overlay.foreground_primitives.is_empty()
             && overlay.ordered_batches.is_empty()
+            && overlay.foreground_batches.is_empty()
             && overlay.dynamic_images.is_empty()
         {
             return;
@@ -2977,6 +2953,7 @@ impl RenderContext {
         self.dispatch_ordered_canvas_batches(target_view, overlay);
         self.renderer
             .render_unordered_dynamic_images(target_view, &overlay.dynamic_images);
+        self.dispatch_canvas_foreground_batches(target_view, overlay);
         if !overlay.foreground_primitives.is_empty() {
             self.renderer.update_aux_data_slice(&overlay.aux_data);
             self.renderer
@@ -3082,17 +3059,22 @@ impl RenderContext {
         tree: &blinc_layout::RenderTree,
         _scale: f32,
     ) -> CssDeltaResult {
-        if self
-            .cached_bg_batch
-            .as_ref()
-            .is_some_and(PrimitiveBatch::has_ordered_images)
-        {
+        if [
+            self.cached_bg_batch.as_ref(),
+            self.cached_dynamic_batch.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        .any(|batch| {
+            batch.has_ordered_images()
+                || batch.has_foreground_content()
+                || batch.has_foreground_layers()
+        }) {
             self.last_css_damage_rects.clear();
             return CssDeltaResult::Bail;
         }
-        // CSS patching and re-emission index the static cache. A CSS descendant
-        // routed through motion or composite scratch needs a full paint until
-        // that cache path can dispatch and rebase those records too.
+        // CSS patching and re-emission index the static cache. Keep foreign
+        // motion and scratch ranges out of that index space.
         if tree
             .css_anim_paint_records()
             .values()
@@ -8201,6 +8183,8 @@ impl RenderContext {
                     if !walked.primitives.is_empty()
                         || walked.has_paths()
                         || walked.has_ordered_images()
+                        || walked.has_foreground_content()
+                        || walked.has_foreground_layers()
                     {
                         self.cached_dynamic_batch = Some(walked);
                     }
@@ -8348,7 +8332,14 @@ impl RenderContext {
             // cached dynamic batch in the same pass; the rect set is
             // then consumed by the damage-rect branch below.
             let mut damage_rect_failed = false;
-            let patched = if bindings_animating && self.cached_dynamic_batch.is_some() {
+            // Foreground bindings have no background primitive range. Repaint
+            // their stream even when a direct write leaves the spring settled.
+            let foreground_repaint = self.cached_dynamic_batch.as_ref().is_some_and(|batch| {
+                batch.has_foreground_content() || batch.has_foreground_layers()
+            });
+            let patched = if (bindings_animating || foreground_repaint)
+                && self.cached_dynamic_batch.is_some()
+            {
                 let scale_factor = tree.scale_factor();
                 self.apply_binding_deltas(tree, scale_factor)
             } else {
@@ -8580,6 +8571,8 @@ impl RenderContext {
                     if !walked.primitives.is_empty()
                         || walked.has_paths()
                         || walked.has_ordered_images()
+                        || walked.has_foreground_content()
+                        || walked.has_foreground_layers()
                     {
                         self.cached_dynamic_batch = Some(walked);
                     }
@@ -10004,6 +9997,11 @@ impl RenderContext {
             "cached_bg_batch_set",
         );
         self.cached_bg_batch = Some(batch.clone());
+        if self.in_compositor_inner_call {
+            batch.foreground_primitives.clear();
+            batch.foreground_paths = Default::default();
+            batch.foreground_layer_commands.clear();
+        }
 
         let has_glass = batch.glass_count() > 0;
         let has_layer_effects_in_batch = batch.has_layer_effects();
@@ -10111,8 +10109,7 @@ impl RenderContext {
 
             if has_layer_effects_in_batch {
                 self.renderer.update_aux_data_for_batch(&batch);
-                self.renderer
-                    .render_primitives_overlay(target, &batch.foreground_primitives);
+                self.renderer.render_foreground(target, &batch);
             }
 
             // Interleaved z-layer rendering for proper text z-ordering in glass path
@@ -10309,9 +10306,8 @@ impl RenderContext {
                 }
 
                 // Render foreground primitives (e.g. borders on top)
-                if !batch.foreground_primitives.is_empty() {
-                    self.renderer
-                        .render_primitives_overlay(target, &batch.foreground_primitives);
+                if batch.has_foreground_content() {
+                    self.renderer.render_foreground(target, &batch);
                 }
 
                 // Render foreground text (inside foreground-layer elements, after foreground primitives)
@@ -10375,9 +10371,8 @@ impl RenderContext {
                 self.render_images(target, &images, width as f32, height as f32, scale_factor);
 
                 // Render foreground primitives (e.g. borders on top)
-                if !batch.foreground_primitives.is_empty() {
-                    self.renderer
-                        .render_primitives_overlay(target, &batch.foreground_primitives);
+                if batch.has_foreground_content() {
+                    self.renderer.render_foreground(target, &batch);
                 }
 
                 // Render SVGs as rasterized images for high-quality anti-aliasing
@@ -10543,6 +10538,8 @@ impl RenderContext {
                     // handles aux_data sequencing internally.)
                     self.renderer.update_aux_data_for_batch(&batch);
                 }
+                self.renderer.render_foreground(target, dynamic_batch);
+                self.renderer.update_aux_data_for_batch(&batch);
             }
         }
 
@@ -11007,9 +11004,8 @@ impl RenderContext {
         self.render_images(target, &images, width as f32, height as f32, scale_factor);
 
         // Render foreground primitives (e.g. borders on top)
-        if !batch.foreground_primitives.is_empty() {
-            self.renderer
-                .render_primitives_overlay(target, &batch.foreground_primitives);
+        if batch.has_foreground_content() {
+            self.renderer.render_foreground(target, &batch);
         }
 
         // Poll the device to free completed command buffers
