@@ -25,6 +25,8 @@ use std::sync::Arc;
 
 use wgpu::util::DeviceExt;
 
+mod overlay;
+
 use crate::gradient_texture::GradientTextureCache;
 use crate::image::GpuImageInstance;
 use crate::path::PathVertex;
@@ -971,6 +973,30 @@ impl LayerTextureCache {
         LayerTexture::new(device, rounded_size, self.format, with_depth)
     }
 
+    /// Acquire an exact extent for passes that sample the whole input.
+    fn acquire_exact(
+        &mut self,
+        device: &wgpu::Device,
+        size: (u32, u32),
+        with_depth: bool,
+    ) -> LayerTexture {
+        let bucket = TextureSizeBucket::from_size(size);
+        let pool = self.get_pool_mut(bucket);
+        if let Some(index) = pool
+            .iter()
+            .position(|t| t.size == size && t.has_depth == with_depth)
+        {
+            let texture = pool.swap_remove(index);
+            self.stats.hits += 1;
+            self.idle_frames = 0;
+            self.update_pool_stats();
+            return texture;
+        }
+        self.stats.misses += 1;
+        self.idle_frames = 0;
+        LayerTexture::new(device, size, self.format, with_depth)
+    }
+
     /// Release a texture back to the pool
     ///
     /// If the pool bucket is full or the texture is too large, it's dropped.
@@ -1250,6 +1276,7 @@ pub struct GpuRenderer {
     memory_budget: GpuMemoryBudget,
     /// Cached MSAA textures for overlay rendering (avoids per-frame allocation)
     cached_msaa: Option<CachedMsaaTextures>,
+    overlay_alpha: Option<overlay::AlphaPass>,
     /// Cached glass resources (avoids per-frame allocation)
     cached_glass: Option<CachedGlassResources>,
     /// Cached text resources (avoids per-frame allocation)
@@ -2681,6 +2708,7 @@ impl GpuRenderer {
             mesh_pipeline: None,
             custom_passes: crate::custom_pass::CustomPassManager::new(),
             cached_msaa: None,
+            overlay_alpha: None,
             cached_glass: None,
             cached_text: None,
             placeholder_glyph_atlas_view,
@@ -4300,13 +4328,19 @@ impl GpuRenderer {
             push_constant_ranges: &[],
         });
 
+        let sdf_vb_buffers: &[wgpu::VertexBufferLayout<'_>] = if has_vertex_storage {
+            &[]
+        } else {
+            &[SdfVertexInstance::LAYOUT]
+        };
+
         let sdf = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("SDF Pipeline (MSAA)"),
             layout: Some(&sdf_layout),
             vertex: wgpu::VertexState {
                 module: &sdf_shader,
                 entry_point: Some("vs_main"),
-                buffers: &[],
+                buffers: sdf_vb_buffers,
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -4323,11 +4357,6 @@ impl GpuRenderer {
         });
 
         // Split SDF shader modules (MSAA)
-        let sdf_vb_buffers: &[wgpu::VertexBufferLayout<'_>] = if has_vertex_storage {
-            &[]
-        } else {
-            &[SdfVertexInstance::LAYOUT]
-        };
         let make_msaa_sdf_pipeline = |source: &str, label: &str| -> wgpu::RenderPipeline {
             let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some(label),
@@ -7923,7 +7952,23 @@ impl GpuRenderer {
     /// * `target` - The single-sampled texture view to render to (existing content is preserved)
     /// * `batch` - The primitive batch to render
     /// * `sample_count` - MSAA sample count (typically 4)
+    ///
+    /// Layer push/pop commands retain paint order and apply group effects.
+    /// Non-normal layer blend modes require `COPY_SRC` on the target texture.
     pub fn render_overlay_msaa(
+        &mut self,
+        target: &wgpu::TextureView,
+        batch: &PrimitiveBatch,
+        sample_count: u32,
+    ) {
+        if batch.has_layer_commands() {
+            self.render_layered_overlay_msaa(target, batch, sample_count);
+        } else {
+            self.render_overlay_msaa_flat(target, batch, sample_count);
+        }
+    }
+
+    fn render_overlay_msaa_flat(
         &mut self,
         target: &wgpu::TextureView,
         batch: &PrimitiveBatch,
@@ -7932,6 +7977,8 @@ impl GpuRenderer {
         if batch.paths.vertices.is_empty() && batch.primitives.is_empty() {
             return;
         }
+
+        self.ensure_overlay_alpha();
 
         // Ensure we have MSAA pipelines for this sample count
         let need_new_pipelines = match &self.msaa_pipelines {
@@ -8226,7 +8273,7 @@ impl GpuRenderer {
                 occlusion_query_set: None,
             });
 
-            render_pass.set_pipeline(&self.pipelines.composite_overlay);
+            render_pass.set_pipeline(&self.overlay_alpha.as_ref().unwrap().premultiplied);
             render_pass.set_bind_group(0, &cached.composite_bind_group, &[]);
             render_pass.draw(0..3, 0..1); // Fullscreen triangle
         }
@@ -10200,7 +10247,7 @@ impl GpuRenderer {
             // No blur needed, return a copy
             let output = self
                 .layer_texture_cache
-                .acquire(&self.device, input.size, false);
+                .acquire_exact(&self.device, input.size, false);
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -10251,8 +10298,12 @@ impl GpuRenderer {
         }
 
         // For ping-pong we need two temp textures
-        let temp_a = self.layer_texture_cache.acquire(&self.device, size, false);
-        let temp_b = self.layer_texture_cache.acquire(&self.device, size, false);
+        let temp_a = self
+            .layer_texture_cache
+            .acquire_exact(&self.device, size, false);
+        let temp_b = self
+            .layer_texture_cache
+            .acquire_exact(&self.device, size, false);
 
         // Pre-create bind groups: pass 0 reads input, subsequent passes alternate temp_a/temp_b
         let bind_groups: Vec<wgpu::BindGroup> = (0..passes)
@@ -10887,7 +10938,7 @@ impl GpuRenderer {
             // No effects, just return a copy
             let output = self
                 .layer_texture_cache
-                .acquire(&self.device, input.size, false);
+                .acquire_exact(&self.device, input.size, false);
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -10944,7 +10995,9 @@ impl GpuRenderer {
                     spread,
                     color,
                 } => {
-                    let temp = self.layer_texture_cache.acquire(&self.device, size, false);
+                    let temp = self
+                        .layer_texture_cache
+                        .acquire_exact(&self.device, size, false);
                     self.apply_drop_shadow(
                         &working.view,
                         &working.view,
@@ -10967,7 +11020,9 @@ impl GpuRenderer {
                     range,
                     opacity,
                 } => {
-                    let temp = self.layer_texture_cache.acquire(&self.device, size, false);
+                    let temp = self
+                        .layer_texture_cache
+                        .acquire_exact(&self.device, size, false);
                     self.apply_glow(
                         &working.view,
                         &temp.view,
@@ -10984,7 +11039,9 @@ impl GpuRenderer {
                 }
 
                 LayerEffect::ColorMatrix { matrix } => {
-                    let temp = self.layer_texture_cache.acquire(&self.device, size, false);
+                    let temp = self
+                        .layer_texture_cache
+                        .acquire_exact(&self.device, size, false);
                     self.apply_color_matrix(&working.view, &temp.view, matrix);
                     if let Some(prev) = current.take() {
                         self.layer_texture_cache.release(prev);
@@ -11000,7 +11057,9 @@ impl GpuRenderer {
                     self.load_mask_image(image_url);
                     // Apply mask if the texture was loaded successfully
                     if self.mask_image_cache.contains_key(image_url.as_str()) {
-                        let temp = self.layer_texture_cache.acquire(&self.device, size, false);
+                        let temp =
+                            self.layer_texture_cache
+                                .acquire_exact(&self.device, size, false);
                         let mode_val = match mask_mode {
                             blinc_core::MaskMode::Alpha => 0u32,
                             blinc_core::MaskMode::Luminance => 1u32,
@@ -11025,7 +11084,7 @@ impl GpuRenderer {
         current.unwrap_or_else(|| {
             let output = self
                 .layer_texture_cache
-                .acquire(&self.device, input.size, false);
+                .acquire_exact(&self.device, input.size, false);
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -11775,11 +11834,14 @@ impl GpuRenderer {
 
         // For non-Normal blend modes, snapshot the target so the shader can sample dest
         let dest_snapshot = if is_blend {
-            if let Some(target_ptr) = self.blend_target_ptr {
-                let target_texture = unsafe { &*target_ptr };
+            let target_texture = target.texture();
+            if target_texture
+                .usage()
+                .contains(wgpu::TextureUsages::COPY_SRC)
+            {
                 let temp =
                     self.layer_texture_cache
-                        .acquire(&self.device, self.viewport_size, false);
+                        .acquire_exact(&self.device, self.viewport_size, false);
 
                 let mut copy_encoder =
                     self.device

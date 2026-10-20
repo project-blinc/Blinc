@@ -10,6 +10,7 @@ pub mod gradients;
 pub mod layout;
 pub mod notch;
 pub mod opacity;
+pub mod overlay_layers;
 pub mod paint_context;
 pub mod paths;
 pub mod sdf;
