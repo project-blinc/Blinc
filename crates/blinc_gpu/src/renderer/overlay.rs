@@ -38,6 +38,7 @@ struct Cursor {
 
 enum Node {
     Run(Cursor, Cursor),
+    Image(usize),
     Layer(LayerConfig, Vec<Node>),
 }
 
@@ -55,7 +56,33 @@ fn nodes(batch: &PrimitiveBatch) -> Vec<Node> {
             out.push(Node::Run(start, end));
         }
     };
-    for entry in &batch.layer_commands {
+    let mut images = batch
+        .dynamic_images
+        .iter()
+        .enumerate()
+        .filter_map(|(index, image)| image.paint_order.map(|order| (index, order)))
+        .peekable();
+    for command_index in 0..=batch.layer_commands.len() {
+        while images.peek().is_some_and(|(_, order)| {
+            order.layer_command_count <= command_index
+                || command_index == batch.layer_commands.len()
+        }) {
+            let (index, order) = images.next().unwrap();
+            let next = Cursor {
+                primitive: order
+                    .primitive_index
+                    .min(end.primitive)
+                    .max(cursor.primitive),
+                vertex: order.path_vertex_index.min(end.vertex).max(cursor.vertex),
+                index: order.path_index_count.min(end.index).max(cursor.index),
+            };
+            run(stack.last_mut().unwrap(), cursor, next);
+            stack.last_mut().unwrap().push(Node::Image(index));
+            cursor = next;
+        }
+        let Some(entry) = batch.layer_commands.get(command_index) else {
+            break;
+        };
         let next = Cursor {
             primitive: entry
                 .primitive_index
@@ -130,6 +157,13 @@ fn bounds(items: &[Node], batch: &PrimitiveBatch, viewport: Bounds) -> Option<Bo
             Node::Layer(config, children) => {
                 bounds(children, batch, viewport).map(|b| b.expand(expansion(config)))
             }
+            Node::Image(index) => {
+                let rect = batch.dynamic_images[*index].dest;
+                Some(Bounds {
+                    min: [rect.x(), rect.y()],
+                    max: [rect.x() + rect.width(), rect.y() + rect.height()],
+                })
+            }
             Node::Run(start, end) => {
                 let mut result: Option<Bounds> = None;
                 let mut add = |b| result = Some(result.map_or(b, |a| a.union(b)));
@@ -194,6 +228,11 @@ fn common_clip(items: &[Node], batch: &PrimitiveBatch) -> Option<([f32; 4], [f32
     for node in items {
         match node {
             Node::Layer(_, children) => add(common_clip(children, batch)),
+            Node::Image(index) => {
+                let image = &batch.dynamic_images[*index];
+                add(has_clip(image.clip_bounds).then_some((image.clip_bounds, image.clip_radius)));
+            }
+
             Node::Run(start, end) => {
                 for p in &batch.primitives[start.primitive..end.primitive] {
                     add(has_clip(p.clip_bounds).then_some((
@@ -426,6 +465,9 @@ impl GpuRenderer {
         };
         for node in items {
             match node {
+                Node::Image(index) => {
+                    self.render_dynamic_image_at(target, &batch.dynamic_images[*index], origin)
+                }
                 Node::Run(start, end) => {
                     let run = translated(batch, *start, *end, origin);
                     self.render_overlay_msaa_flat(target, &run, samples);

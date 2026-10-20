@@ -354,6 +354,8 @@ pub struct DynamicRegion {
 /// walker had when it last invoked the closure.
 #[derive(Clone)]
 pub struct CanvasPaintRecord {
+    /// Walker visit order, including callbacks that emit no SDF primitives.
+    pub visit_seq: usize,
     /// Inclusive-exclusive range into the cached primitive batch
     /// covering every primitive the `render_fn` emitted on the last
     /// full paint. The fast path splices new primitives into this

@@ -25,6 +25,7 @@ use std::sync::Arc;
 
 use wgpu::util::DeviceExt;
 
+mod dynamic_image;
 mod overlay;
 
 use crate::gradient_texture::GradientTextureCache;
@@ -5045,7 +5046,8 @@ impl GpuRenderer {
         // particles need their own scissored dispatch routines and
         // are out of scope for this commit; layer_commands are
         // handled below.
-        if !batch.paths.vertices.is_empty()
+        if batch.has_ordered_images()
+            || !batch.paths.vertices.is_empty()
             || !batch.viewports_3d.is_empty()
             || !batch.particle_viewports.is_empty()
         {
@@ -5575,6 +5577,12 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         clear_color: [f64; 4],
     ) {
+        if batch.has_ordered_images() {
+            self.render_with_clear_simple(target, &PrimitiveBatch::new(), clear_color);
+            self.render_layered_overlay_msaa(target, batch, 1);
+            return;
+        }
+
         // Evict oversized textures from the pool at frame start
         // This prevents memory bloat from accumulated large textures
         self.layer_texture_cache.evict_oversized();
@@ -6578,6 +6586,15 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         clear_color: [f64; 4],
     ) {
+        if batch.has_ordered_images() {
+            self.render_with_clear_simple(resolve_target, &PrimitiveBatch::new(), clear_color);
+            self.render_layered_overlay_msaa(
+                resolve_target,
+                batch,
+                msaa_target.texture().sample_count(),
+            );
+            return;
+        }
         // Update uniforms
         let uniforms = Uniforms {
             viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
@@ -6842,6 +6859,10 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         has_backdrop_content: bool,
     ) {
+        if batch.has_ordered_images() {
+            self.render_image_backdrop(backdrop, batch, has_backdrop_content);
+            return;
+        }
         if batch.primitives.is_empty() {
             return;
         }
@@ -6922,11 +6943,14 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         has_backdrop_content: bool,
     ) {
-        // Glass effects require storage buffers for per-frame primitive data.
-        // On WebGL2 (no storage buffers), skip glass rendering — the glass DT
-        // shader exists but needs a per-frame glass data texture + bind group
-        // plumbing that isn't implemented yet.
-        if !self.has_storage_buffers {
+        if batch.has_ordered_images() || !self.has_storage_buffers {
+            self.render_image_glass_frame(
+                target,
+                backdrop,
+                _backdrop_size,
+                batch,
+                has_backdrop_content,
+            );
             return;
         }
         self.ensure_glass_pipelines();
@@ -7380,6 +7404,10 @@ impl GpuRenderer {
     /// * `target` - The single-sampled texture view to render to (existing content is preserved)
     /// * `batch` - The primitive batch to render
     pub fn render_overlay(&mut self, target: &wgpu::TextureView, batch: &PrimitiveBatch) {
+        if batch.has_ordered_images() {
+            self.render_layered_overlay_msaa(target, batch, 1);
+            return;
+        }
         // Phase 4a: include pure-opacity layers in the gate so an
         // overlay containing only opacity-animated content takes the
         // layer-aware path (which actually composites with the
@@ -7961,7 +7989,7 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         sample_count: u32,
     ) {
-        if batch.has_layer_commands() {
+        if batch.has_layer_commands() || batch.has_ordered_images() {
             self.render_layered_overlay_msaa(target, batch, sample_count);
         } else {
             self.render_overlay_msaa_flat(target, batch, sample_count);
@@ -9773,73 +9801,6 @@ impl GpuRenderer {
     // ─────────────────────────────────────────────────────────────────────────
     // Layer Texture Cache Accessors
     // ─────────────────────────────────────────────────────────────────────────
-
-    /// Render dynamic RGBA images (video frames, camera preview, etc.)
-    ///
-    /// Uploads each image as a temporary GPU texture and renders it
-    /// to the destination rect using the image pipeline.
-    pub fn render_dynamic_images(
-        &mut self,
-        target: &wgpu::TextureView,
-        images: &[crate::primitives::DynamicImage],
-    ) {
-        for img in images {
-            if img.data.len() != (img.width * img.height * 4) as usize {
-                continue; // Invalid RGBA data
-            }
-
-            // Create temporary GPU texture from RGBA data
-            let gpu_image = crate::image::GpuImage::from_rgba(
-                &self.device,
-                &self.queue,
-                &img.data,
-                img.width,
-                img.height,
-                Some("dynamic_image"),
-            );
-
-            // Create an instance for the image pipeline. Apply the
-            // emit-time clip (node body / scroll container) as the
-            // image shader's PER-INSTANCE clip — the same in-shader
-            // clip SDF primitives respect — so the upload stays inside
-            // its element on every render path (overlay, motion
-            // subtree, static), with no dependence on scissor / pass
-            // order. `clip_bounds` is already [x, y, width, height]
-            // (the format `get_clip_data` / `GpuImageInstance` use); it
-            // is NOT [minx, miny, maxx, maxy]. The no-clip sentinel
-            // (x == -10000, w == 100000) is left as the instance
-            // default so genuinely-unclipped callers (root video,
-            // camera preview) keep full coverage.
-            let mut instance = GpuImageInstance::new(
-                img.dest.x(),
-                img.dest.y(),
-                img.dest.width(),
-                img.dest.height(),
-            )
-            .with_opacity(img.opacity)
-            .with_border_radius(img.corner_radius);
-
-            let [cx, cy, cw, ch] = img.clip_bounds;
-            let no_clip = cx <= -9999.0; // sentinel = unclipped (root video, camera preview)
-            if !no_clip && (cw <= 0.0 || ch <= 0.0) {
-                // Empty clip: the element is fully outside its clip
-                // region this frame (e.g. a canvas node panned past the
-                // canvas-area edge — `get_clip_data` intersects the
-                // node body with the canvas overflow_clip to nothing).
-                // Render NOTHING rather than falling through to a full-
-                // coverage draw that escapes the canvas (the bug: an
-                // image past the edge painted over the header/minimap).
-                continue;
-            }
-            if !no_clip {
-                instance.clip_bounds = [cx, cy, cw, ch];
-                instance.clip_radius = img.clip_radius;
-            }
-
-            // Render using the existing image pipeline
-            self.render_images(target, gpu_image.view(), &[instance]);
-        }
-    }
 
     // ─── Custom Render Pass API ────────────────────────────────────────────
 

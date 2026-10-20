@@ -1636,9 +1636,20 @@ pub struct PrimitiveBatch {
     pub dynamic_images: Vec<DynamicImage>,
 }
 
+/// Paint cursor at which an image was emitted into its background batch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ImagePaintOrder {
+    pub primitive_index: usize,
+    pub path_vertex_index: usize,
+    pub path_index_count: usize,
+    pub layer_command_count: usize,
+}
+
 /// An RGBA image to upload to the GPU and render in a single frame
 #[derive(Clone)]
 pub struct DynamicImage {
+    /// Background paint cursor, or None for a separately dispatched foreground image.
+    pub paint_order: Option<ImagePaintOrder>,
     /// RGBA pixel data (4 bytes per pixel)
     pub data: Vec<u8>,
     /// Image width in pixels
@@ -1651,13 +1662,8 @@ pub struct DynamicImage {
     pub opacity: f32,
     /// Corner radius
     pub corner_radius: f32,
-    /// Active clip rect at emit time, in transformed/physical space,
-    /// as `[min_x, min_y, max_x, max_y]` (the form `get_clip_data`
-    /// returns). Fed to the image shader's per-instance clip at render
-    /// (the same in-shader clip SDF primitives use) so a canvas-emitted
-    /// image stays inside its node body / scroll container. The
-    /// no-clip sentinel (`[-10000, -10000, 100000, 100000]`) means
-    /// full-coverage.
+    /// Active rectangular clip in physical pixels as `[x, y, width, height]`.
+    /// The no-clip sentinel is `[-10000, -10000, 100000, 100000]`.
     pub clip_bounds: [f32; 4],
     /// Per-corner clip radius `[tl, tr, br, bl]` from `get_clip_data`,
     /// so a rounded node-body clip rounds the image too.
@@ -1733,6 +1739,18 @@ impl PrimitiveBatch {
     /// Check if there are any layer commands recorded
     pub fn has_layer_commands(&self) -> bool {
         !self.layer_commands.is_empty()
+    }
+
+    /// Images whose paint cursors are part of this batch's ordered stream.
+    pub fn has_ordered_images(&self) -> bool {
+        self.dynamic_images
+            .iter()
+            .any(|image| image.paint_order.is_some())
+    }
+
+    /// Whether splitting this batch into primitive-only passes would lose content.
+    pub fn requires_ordered_rendering(&self) -> bool {
+        self.has_layer_effects() || self.has_ordered_images()
     }
 
     /// Whether a layer needs composition, including opacity-only and 3D groups.
@@ -1990,6 +2008,7 @@ impl PrimitiveBatch {
             && self.paths.vertices.is_empty()
             && self.foreground_paths.vertices.is_empty()
             && self.viewports_3d.is_empty()
+            && self.dynamic_images.is_empty()
     }
 
     /// Check if the batch contains any tessellated path geometry

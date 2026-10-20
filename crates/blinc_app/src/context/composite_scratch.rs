@@ -102,6 +102,26 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
     path.use_glass_effect.hash(h);
     floats(&path.glass_params, h);
     floats(&path.glass_tint, h);
+    batch.dynamic_images.len().hash(h);
+    for image in &batch.dynamic_images {
+        image.paint_order.hash(h);
+        image.data.hash(h);
+        image.width.hash(h);
+        image.height.hash(h);
+        floats(
+            &[
+                image.dest.x(),
+                image.dest.y(),
+                image.dest.width(),
+                image.dest.height(),
+                image.opacity,
+                image.corner_radius,
+            ],
+            h,
+        );
+        floats(&image.clip_bounds, h);
+        floats(&image.clip_radius, h);
+    }
     batch.layer_commands.len().hash(h);
     for entry in &batch.layer_commands {
         entry.primitive_index.hash(h);

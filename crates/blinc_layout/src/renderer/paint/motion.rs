@@ -1783,12 +1783,10 @@ impl RenderTree {
                     // captured `(start..start)` empty range would
                     // clobber the real one via HashMap::insert. When
                     // `skip_drawing` is set the primitive range is
-                    // empty (no emission) — record it anyway so the
-                    // overlay pass has a `render_fn` + transform
-                    // state to replay; the empty range is just a
-                    // bookkeeping marker.
+                    // empty (no emission). Always record a matching dynamic
+                    // callback, including image-only and currently empty draws,
+                    // so later frames can replay every output channel.
                     let layer_matches = effective_layer == target_layer;
-                    let has_emission = canvas_end > canvas_start;
                     // Static canvases (notch) emit to the static
                     // cache once and stay valid until a layout
                     // change forces a full repaint. Skipping the
@@ -1801,7 +1799,7 @@ impl RenderTree {
                     // so the dynamic-batch path doesn't replay the
                     // static canvas every frame either.
                     let is_static_canvas = canvas_data.is_static;
-                    if layer_matches && (has_emission || skip_drawing) && !is_static_canvas {
+                    if layer_matches && !is_static_canvas {
                         // Route into the overlay-subtree pool when
                         // the walker is currently inside an
                         // `is_overlay_root` ancestor. That pool is
@@ -1810,7 +1808,10 @@ impl RenderTree {
                         // cn::input stays above the popover bg/
                         // border instead of being overdrawn by it.
                         let nested_overlay = ctx.in_overlay_subtree();
+                        let visit_seq = self.canvas_paint_records.borrow().len()
+                            + self.overlay_canvas_paint_records.borrow().len();
                         let record = super::super::CanvasPaintRecord {
+                            visit_seq,
                             primitive_range: canvas_start..canvas_end,
                             affine: saved_affine,
                             bounds_wh: (bounds.width, bounds.height),

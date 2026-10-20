@@ -24,11 +24,14 @@ use std::sync::{Arc, Mutex};
 use crate::error::Result;
 use crate::svg_atlas::SvgAtlas;
 
+mod canvas_order;
 #[cfg(test)]
 mod composite_layers_tests;
 mod composite_scratch;
 #[cfg(test)]
 mod motion_layers_tests;
+#[cfg(test)]
+mod rgba_order_tests;
 
 /// Maximum number of images to keep in cache (prevents unbounded memory growth).
 ///
@@ -248,6 +251,8 @@ fn effective_single_clip(primary: Option<[f32; 4]>, scroll: Option<[f32; 4]>) ->
 /// content never reached the GPU under compositor mode.
 #[derive(Default)]
 pub struct CanvasOverlay {
+    /// Whole canvas batches when groups, paths or RGBA draws require paint order.
+    pub ordered_batches: Vec<PrimitiveBatch>,
     pub primitives: Vec<blinc_gpu::primitives::GpuPrimitive>,
     pub foreground_primitives: Vec<blinc_gpu::primitives::GpuPrimitive>,
     pub dynamic_images: Vec<blinc_gpu::primitives::DynamicImage>,
@@ -1108,6 +1113,9 @@ impl RenderContext {
             None => return false,
         };
 
+        if batch.has_ordered_images() {
+            return false;
+        }
         let records_ref = tree.canvas_paint_records();
         if records_ref.is_empty() {
             return true;
@@ -1165,6 +1173,9 @@ impl RenderContext {
             // primitives) so we can splice the whole `primitives`
             // vec back into the cached batch.
             let new_batch = scratch.take_batch();
+            if new_batch.has_ordered_images() {
+                return false;
+            }
             let new_count = new_batch.primitives.len();
             let old_count = record.primitive_range.end - record.primitive_range.start;
             if new_count != old_count {
@@ -1207,7 +1218,15 @@ impl RenderContext {
         width: u32,
         height: u32,
     ) -> Vec<blinc_gpu::primitives::GpuPrimitive> {
-        self.collect_canvas_overlay(tree, width, height).primitives
+        let overlay = self.collect_canvas_overlay(tree, width, height);
+        let mut primitives = overlay.primitives;
+        let mut shift = 0.0;
+        for mut batch in overlay.ordered_batches {
+            Self::shift_aux_offsets(&mut batch.primitives, shift);
+            shift += batch.aux_data.len() as f32;
+            primitives.extend(batch.primitives);
+        }
+        primitives
     }
 
     /// Full canvas overlay collection: re-invokes every recorded
@@ -1217,13 +1236,14 @@ impl RenderContext {
     /// - `primitives`: SDF / mesh / text primitives (the main batch)
     /// - `foreground_primitives`: SDF / mesh / text primitives emitted
     ///   while `set_foreground_layer(true)` is active
-    /// - `dynamic_images`: raw-RGBA blits like video frames
+    /// - `ordered_batches`: canvas backgrounds with ordered RGBA draws
+    /// - `dynamic_images`: independently dispatched foreground RGBA blits
     ///   (`ctx.draw_rgba_pixels(...)`)
     /// - `meshes`: 3D mesh draws (`ctx.draw_mesh_data(...)`) from
     ///   `blinc_canvas_kit::SceneKit3D` or direct API users
     ///
     /// The legacy `collect_canvas_overlay_primitives` is preserved
-    /// as a thin shim that returns only `.primitives` — callers
+    /// as a shim that returns only SDF primitives; callers
     /// that need the full overlay state (video, 3D) should call
     /// this method instead.
     ///
@@ -1279,15 +1299,8 @@ impl RenderContext {
             return CanvasOverlay::default();
         }
 
-        // Sort by z_layer so overlays render bottom-up. Stable
-        // sort on (z_layer, primitive_range.start) keeps siblings
-        // at the same z in tree-emit order (the order the walker
-        // recorded them).
-        records.sort_by(|a, b| {
-            a.z_layer
-                .cmp(&b.z_layer)
-                .then_with(|| a.primitive_range.start.cmp(&b.primitive_range.start))
-        });
+        // Image-only callbacks have no primitive cursor to break z ties.
+        records.sort_by_key(|record| (record.z_layer, record.visit_seq));
 
         // Reuse a single scratch `GpuPaintContext` across every
         // canvas in the frame. `GpuPaintContext::new` allocates a
@@ -1312,6 +1325,7 @@ impl RenderContext {
         let mut scratch = GpuPaintContext::new(width as f32, height as f32);
         scratch.set_text_context(&mut self.text_ctx);
         let mut overlay = CanvasOverlay::default();
+        let mut batches = Vec::new();
         for record in records {
             // Replay the ancestor clip stack BEFORE pushing the
             // canvas's affine. `push_clip` transforms the supplied
@@ -1392,55 +1406,12 @@ impl RenderContext {
             // mesh / image content while the non-compositor path renders
             // them correctly — the canonical "minimap missing" /
             // "video doesn't render" / "3D helmet missing" bugs.
-            let mut new_batch = scratch.take_batch();
+            batches.push(scratch.take_batch());
 
-            // Shift per-primitive aux_data offsets by the amount
-            // already accumulated in `overlay.aux_data`. Each scratch
-            // canvas builds offsets relative to its own (initially
-            // empty) `PrimitiveBatch::aux_data`; we concatenate
-            // every closure's aux_data into one buffer that
-            // `composite_frame` re-uploads, so offsets recorded
-            // against the first closure's [0..) range have to be
-            // rebased to [prev_total..) after the second closure
-            // appends.
-            //
-            // Three primitive types index into aux_data — keep all
-            // three in sync or canvas-emitted variants render as
-            // garbage / invisible:
-            //
-            //   - PRIM_MESH (PrimitiveType::Mesh = 9): triangle
-            //     vertex positions in `border[2]` (per-triangle
-            //     emit from `push_mesh_primitives_brush`). SVG
-            //     icons rendered via `SvgDocument::render_fit` hit
-            //     this path — pre-fix every icon's border[2] held a
-            //     scratch-local offset that pointed into the
-            //     dropped scratch aux_data, so the fragment shader
-            //     sampled stale BG-batch triangles → icons silently
-            //     invisible (despite text + rects working fine).
-            //
-            //   - 3D group SDF (any prim_type with `border[1]` =
-            //     shape_count > 0): ShapeDesc records in
-            //     `border[2]`. Rare in node-graph closures but
-            //     symmetric with the mesh fix.
-            //
-            //   - Polygon clip (`type_info[2] = ClipType::Polygon`):
-            //     polygon vertex pairs in `clip_radius[3]`. Hit by
-            //     any canvas closure that pushes a polygon clip
-            //     (e.g. cn::spinner arcs once those were canvas-
-            //     hosted) — same garbage-read failure mode.
-            let aux_shift = overlay.aux_data.len() as f32;
-            Self::shift_aux_offsets(&mut new_batch.primitives, aux_shift);
-            Self::shift_aux_offsets(&mut new_batch.foreground_primitives, aux_shift);
-
-            overlay.aux_data.extend(new_batch.aux_data);
-            overlay.primitives.extend(new_batch.primitives);
-            overlay
-                .foreground_primitives
-                .extend(new_batch.foreground_primitives);
-            overlay.dynamic_images.extend(new_batch.dynamic_images);
             overlay.meshes.extend(scratch.take_pending_meshes());
             overlay.gpu_passes.extend(scratch.take_pending_gpu_passes());
         }
+        overlay.finish_batches(batches);
         overlay
     }
 
@@ -2268,6 +2239,9 @@ impl RenderContext {
             Some(b) => b,
             None => return false,
         };
+        if batch.has_ordered_images() {
+            return false;
+        }
         let mut bindings = tree.composite_bindings_mut();
         if bindings.is_empty() {
             // Cache is valid but nothing animated changed — fast
@@ -2953,8 +2927,8 @@ impl RenderContext {
     fn dispatch_dynamic_batch_overlay(&mut self, target_view: &wgpu::TextureView) {
         self.rebind_glyph_atlas_for_overlay();
         if let Some(batch) = self.cached_dynamic_batch.as_ref() {
-            if !batch.primitives.is_empty() || batch.has_paths() {
-                if batch.has_layer_effects() {
+            if !batch.primitives.is_empty() || batch.has_paths() || batch.has_ordered_images() {
+                if batch.requires_ordered_rendering() {
                     // Keep paths and group commands together. One sample retains
                     // SDF coverage across opacity/effect boundaries.
                     self.renderer.render_overlay_msaa(target_view, batch, 1);
@@ -2978,15 +2952,18 @@ impl RenderContext {
     /// here too, rather than in `render_foreground_overlay`, because
     /// overlay-subtree canvases need to sit above their own overlay
     /// panel while main canvas foreground must stay below global
-    /// OverlayStack / ToastTray surfaces. The dynamic_images / meshes /
-    /// gpu_passes channels stay with the main canvas overlay (their
-    /// dispatch paths live just after this in the call sites).
+    /// OverlayStack / ToastTray surfaces. Ordered RGBA draws stay with their
+    /// canvas background; meshes and custom GPU passes use the main overlay.
     fn dispatch_overlay_canvas_overlay(
         &mut self,
         target_view: &wgpu::TextureView,
         overlay: &CanvasOverlay,
     ) {
-        if overlay.primitives.is_empty() && overlay.foreground_primitives.is_empty() {
+        if overlay.primitives.is_empty()
+            && overlay.foreground_primitives.is_empty()
+            && overlay.ordered_batches.is_empty()
+            && overlay.dynamic_images.is_empty()
+        {
             return;
         }
         if !overlay.aux_data.is_empty() {
@@ -2997,7 +2974,11 @@ impl RenderContext {
             self.renderer
                 .render_primitives_overlay(target_view, &overlay.primitives);
         }
+        self.dispatch_ordered_canvas_batches(target_view, overlay);
+        self.renderer
+            .render_unordered_dynamic_images(target_view, &overlay.dynamic_images);
         if !overlay.foreground_primitives.is_empty() {
+            self.renderer.update_aux_data_slice(&overlay.aux_data);
             self.renderer
                 .render_primitives_overlay(target_view, &overlay.foreground_primitives);
         }
@@ -3101,6 +3082,14 @@ impl RenderContext {
         tree: &blinc_layout::RenderTree,
         _scale: f32,
     ) -> CssDeltaResult {
+        if self
+            .cached_bg_batch
+            .as_ref()
+            .is_some_and(PrimitiveBatch::has_ordered_images)
+        {
+            self.last_css_damage_rects.clear();
+            return CssDeltaResult::Bail;
+        }
         // CSS patching and re-emission index the static cache. A CSS descendant
         // routed through motion or composite scratch needs a full paint until
         // that cache path can dispatch and rebase those records too.
@@ -3817,7 +3806,7 @@ impl RenderContext {
             // tests) we still have to dispatch the paths, just without
             // the multisample resolve — otherwise SVG icons / subgraph
             // diamonds / any fill_path content stays invisible.
-            if bg_batch.has_paths() {
+            if bg_batch.has_paths() && !bg_batch.has_ordered_images() {
                 if use_msaa_overlay {
                     self.renderer
                         .render_paths_overlay_msaa(target, &bg_batch, self.sample_count);
@@ -3837,16 +3826,16 @@ impl RenderContext {
             // Step 5b: Render dynamic RGBA images (video frames, camera preview)
             if !bg_batch.dynamic_images.is_empty() {
                 self.renderer
-                    .render_dynamic_images(target, &bg_batch.dynamic_images);
+                    .render_unordered_dynamic_images(target, &bg_batch.dynamic_images);
             }
             if !fg_batch.dynamic_images.is_empty() {
                 self.renderer
-                    .render_dynamic_images(target, &fg_batch.dynamic_images);
+                    .render_unordered_dynamic_images(target, &fg_batch.dynamic_images);
             }
 
             // Step 6: Render foreground and text
             // Use batch-based rendering when layer effects are present
-            let has_layer_effects = fg_batch.has_layer_effects();
+            let has_layer_effects = fg_batch.requires_ordered_rendering();
             if has_layer_effects {
                 // Layer effects require batch-based rendering to process layer commands
                 fg_batch.convert_glyphs_to_primitives();
@@ -3876,7 +3865,7 @@ impl RenderContext {
                 // Render paths (not included in unified primitives).
                 // MSAA when available; non-MSAA dispatch when not so
                 // web (sample_count = 1) still gets fill_path content.
-                if fg_batch.has_paths() {
+                if fg_batch.has_paths() && !fg_batch.has_ordered_images() {
                     if use_msaa_overlay {
                         self.renderer.render_paths_overlay_msaa(
                             target,
@@ -3911,7 +3900,7 @@ impl RenderContext {
                 // Paths in the legacy branch also need a 1×-sample
                 // fallback dispatch — same reason as the unified
                 // branch above.
-                if fg_batch.has_paths() {
+                if fg_batch.has_paths() && !fg_batch.has_ordered_images() {
                     if use_msaa_overlay {
                         self.renderer.render_paths_overlay_msaa(
                             target,
@@ -3953,7 +3942,7 @@ impl RenderContext {
 
             // Render background paths. Same MSAA/non-MSAA split as the
             // glass branch — 1×-sample targets still have to dispatch.
-            if bg_batch.has_paths() {
+            if bg_batch.has_paths() && !bg_batch.has_ordered_images() {
                 if use_msaa_overlay {
                     self.renderer
                         .render_paths_overlay_msaa(target, &bg_batch, self.sample_count);
@@ -3968,7 +3957,7 @@ impl RenderContext {
             // Render foreground and text
             // Use batch-based rendering when layer effects are present to preserve
             // layer commands for effect processing
-            let has_layer_effects = fg_batch.has_layer_effects();
+            let has_layer_effects = fg_batch.requires_ordered_rendering();
             if has_layer_effects {
                 // Layer effects require batch-based rendering to process layer commands
                 // First convert glyphs to primitives so they're included in the batch
@@ -4005,7 +3994,7 @@ impl RenderContext {
 
                 // Render paths (not included in unified primitives).
                 // 1×-sample fallback dispatch so web still emits.
-                if fg_batch.has_paths() {
+                if fg_batch.has_paths() && !fg_batch.has_ordered_images() {
                     if use_msaa_overlay {
                         self.renderer.render_paths_overlay_msaa(
                             target,
@@ -4039,7 +4028,7 @@ impl RenderContext {
 
                 // Paths in the legacy branch — 1×-sample fallback so
                 // web emits fill_path / stroke_path content.
-                if fg_batch.has_paths() {
+                if fg_batch.has_paths() && !fg_batch.has_ordered_images() {
                     if use_msaa_overlay {
                         self.renderer.render_paths_overlay_msaa(
                             target,
@@ -8209,7 +8198,10 @@ impl RenderContext {
                     // disappear from the surface until the submenu's
                     // CSS enter animation settles and the next slow
                     // walker runs.
-                    if !walked.primitives.is_empty() {
+                    if !walked.primitives.is_empty()
+                        || walked.has_paths()
+                        || walked.has_ordered_images()
+                    {
                         self.cached_dynamic_batch = Some(walked);
                     }
                 }
@@ -8228,9 +8220,10 @@ impl RenderContext {
                 // search bar, host `RenderLayer::Foreground` overlays).
                 // Each image is scissored to its node body by the clip
                 // captured at emit time (see `render_dynamic_images`).
+                self.dispatch_ordered_canvas_batches(target_view, &overlay);
                 if !overlay.dynamic_images.is_empty() {
                     self.renderer
-                        .render_dynamic_images(target_view, &overlay.dynamic_images);
+                        .render_unordered_dynamic_images(target_view, &overlay.dynamic_images);
                 }
                 // Foreground overlay — re-dispatch fg primitives on
                 // top of the canvas overlay so host overlays marked
@@ -8584,7 +8577,10 @@ impl RenderContext {
                     // actively-animating CSS-promoted sibling loses
                     // its panel bg + border for the duration of the
                     // sibling's enter animation.
-                    if !walked.primitives.is_empty() {
+                    if !walked.primitives.is_empty()
+                        || walked.has_paths()
+                        || walked.has_ordered_images()
+                    {
                         self.cached_dynamic_batch = Some(walked);
                     }
                 }
@@ -8599,9 +8595,10 @@ impl RenderContext {
                 // dispatched in the canvas band — before the foreground
                 // overlay — and scissored to their node body. See the
                 // longer note at the first fast-path site.
+                self.dispatch_ordered_canvas_batches(target_view, &overlay);
                 if !overlay.dynamic_images.is_empty() {
                     self.renderer
-                        .render_dynamic_images(target_view, &overlay.dynamic_images);
+                        .render_unordered_dynamic_images(target_view, &overlay.dynamic_images);
                 }
                 // Foreground overlay — re-dispatch fg primitives on
                 // top of the canvas overlay so host overlays marked
@@ -8874,9 +8871,10 @@ impl RenderContext {
         // dispatched in the canvas band — before the foreground overlay
         // — and scissored to their node body. See the longer note at
         // the first fast-path site.
+        self.dispatch_ordered_canvas_batches(target_view, &overlay);
         if !overlay.dynamic_images.is_empty() {
             self.renderer
-                .render_dynamic_images(target_view, &overlay.dynamic_images);
+                .render_unordered_dynamic_images(target_view, &overlay.dynamic_images);
         }
         // Foreground overlay — re-dispatch fg primitives on top of
         // the canvas overlay so host overlays marked
@@ -10068,7 +10066,7 @@ impl RenderContext {
                 // Render dynamic images (video frames from draw_rgba_pixels)
                 if !batch.dynamic_images.is_empty() {
                     self.renderer
-                        .render_dynamic_images(target, &batch.dynamic_images);
+                        .render_unordered_dynamic_images(target, &batch.dynamic_images);
                 }
 
                 // Render background images to target after clear (so they're visible behind glass)
@@ -10096,7 +10094,7 @@ impl RenderContext {
             // Render paths. MSAA when sample_count > 1; non-MSAA
             // dispatch when not so 1×-sample targets (web) still emit
             // fill_path / stroke_path content.
-            if batch.has_paths() {
+            if batch.has_paths() && !batch.has_ordered_images() {
                 if use_msaa_overlay {
                     self.renderer
                         .render_paths_overlay_msaa(target, &batch, self.sample_count);
@@ -10110,6 +10108,12 @@ impl RenderContext {
                 self.render_images_ref(target, &bg_images);
             }
             self.render_images_ref(target, &fg_images);
+
+            if has_layer_effects_in_batch {
+                self.renderer.update_aux_data_for_batch(&batch);
+                self.renderer
+                    .render_primitives_overlay(target, &batch.foreground_primitives);
+            }
 
             // Interleaved z-layer rendering for proper text z-ordering in glass path
             let max_z = batch.max_z_layer();
@@ -10133,7 +10137,11 @@ impl RenderContext {
             self.render_text_decorations_for_layer(target, &decorations_by_layer, 0);
 
             if max_glass_layer > 0 {
-                let effect_indices = batch.effect_layer_indices();
+                let effect_indices = if batch.has_ordered_images() {
+                    (0..batch.primitives.len()).collect()
+                } else {
+                    batch.effect_layer_indices()
+                };
                 for z in 1..=max_glass_layer {
                     // Render primitives for this layer
                     let layer_primitives = if effect_indices.is_empty() {
@@ -10185,7 +10193,7 @@ impl RenderContext {
             let max_text_z = glyphs_by_layer.keys().cloned().max().unwrap_or(0);
             let max_decoration_z = decorations_by_layer.keys().cloned().max().unwrap_or(0);
             let max_layer = max_z.max(max_text_z).max(max_decoration_z);
-            let has_layer_effects = batch.has_layer_effects();
+            let has_layer_effects = batch.requires_ordered_rendering();
 
             if max_layer > 0 && !has_layer_effects {
                 // Interleaved z-layer rendering for proper Stack z-ordering
@@ -10229,7 +10237,7 @@ impl RenderContext {
                 // Render dynamic images (video frames)
                 if !batch.dynamic_images.is_empty() {
                     self.renderer
-                        .render_dynamic_images(target, &batch.dynamic_images);
+                        .render_unordered_dynamic_images(target, &batch.dynamic_images);
                 }
 
                 // Render paths. MSAA/non-MSAA split so 1×-sample
@@ -10347,7 +10355,7 @@ impl RenderContext {
                 // Render dynamic images (video frames)
                 if !batch.dynamic_images.is_empty() {
                     self.renderer
-                        .render_dynamic_images(target, &batch.dynamic_images);
+                        .render_unordered_dynamic_images(target, &batch.dynamic_images);
                 }
 
                 // Path overlay. MSAA when configured; non-MSAA
@@ -10355,7 +10363,7 @@ impl RenderContext {
                 // emit fill_path / stroke_path. The main pass above is
                 // always single-sampled so paths always need their own
                 // dispatch here.
-                if batch.has_paths() {
+                if batch.has_paths() && !batch.has_ordered_images() {
                     if self.sample_count > 1 {
                         self.renderer
                             .render_paths_overlay_msaa(target, &batch, self.sample_count);
@@ -10387,7 +10395,11 @@ impl RenderContext {
                 self.render_text_decorations_for_layer(target, &decorations_by_layer, 0);
 
                 if max_layer > 0 {
-                    let effect_indices = batch.effect_layer_indices();
+                    let effect_indices = if batch.has_ordered_images() {
+                        (0..batch.primitives.len()).collect()
+                    } else {
+                        batch.effect_layer_indices()
+                    };
                     for z in 1..=max_layer {
                         // Render primitives for this z-layer
                         let layer_primitives = if effect_indices.is_empty() {
@@ -10513,8 +10525,11 @@ impl RenderContext {
         // (polygon clip vertices, etc.) before dispatch.
         if !self.in_compositor_inner_call {
             if let Some(ref dynamic_batch) = self.cached_dynamic_batch {
-                if !dynamic_batch.primitives.is_empty() || dynamic_batch.has_paths() {
-                    if dynamic_batch.has_layer_effects() {
+                if !dynamic_batch.primitives.is_empty()
+                    || dynamic_batch.has_paths()
+                    || dynamic_batch.has_ordered_images()
+                {
+                    if dynamic_batch.requires_ordered_rendering() {
                         self.renderer.render_overlay_msaa(target, dynamic_batch, 1);
                     } else {
                         self.renderer.render_overlay(target, dynamic_batch);
