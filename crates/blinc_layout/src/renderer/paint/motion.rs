@@ -1055,8 +1055,17 @@ impl RenderTree {
         let safe_to_flatten =
             !has_motion_opacity_binding && self.layout_tree.children(node).len() <= 1;
         let can_flatten_opacity = only_opacity_drives_layer && safe_to_flatten;
+        // Keep a patchable group at the opaque endpoint of dynamic background
+        // bindings; later frames must update group opacity rather than child alpha.
+        let keep_motion_group = has_motion_opacity_binding
+            && ctx.bg_batch_is_dynamic()
+            && effective_layer == RenderLayer::Background;
         let has_opacity_layer = !can_flatten_opacity
-            && (node_motion_opacity < 1.0 || has_layer_effects || has_blend_mode || use_3d_layer);
+            && (keep_motion_group
+                || node_motion_opacity < 1.0
+                || has_layer_effects
+                || has_blend_mode
+                || use_3d_layer);
         let should_push_layer = has_opacity_layer && effective_layer == target_layer;
         if should_push_layer {
             // Scale layer effect radii by DPI factor (CSS px → physical px)
@@ -2533,6 +2542,7 @@ impl RenderTree {
                         self.css_anim_paint_records.borrow_mut().insert(
                             node,
                             super::super::CssAnimPaintMeta {
+                                dynamic_batch: ctx.bg_batch_is_dynamic(),
                                 stable_id,
                                 primitive_range: start..end,
                                 layer_push_index: css_anim_layer_push_index,

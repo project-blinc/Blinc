@@ -4,6 +4,10 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Dynamic background opacity bindings retain a patchable group at opacity one, so cached fades update group opacity instead of scaling each overlapping child.
+- CSS paint records retain whether their ranges belong to the dynamic motion batch, allowing static-cache patchers to request a full repaint instead of using indices from another batch.
+
 ### Added
 - **`TextInput::on_submit(callback)`** — called when Enter is pressed in the field, with whether Shift was held. Without one Enter does nothing in a single-line field.
 - **`widgets::CODE_EDITOR_STYLES`** — the code editor's find and replace bar is built from classed elements (`.blinc-find`, `.blinc-find-input`, `.blinc-find-toggle--on`, …), and this stylesheet is its designed look. Add it with `ctx.add_css(..)`; the cn theme bundle includes it. The bar's search now runs as the query is typed (Enter and Shift+Enter step through the matches) instead of when the editor next redrew.

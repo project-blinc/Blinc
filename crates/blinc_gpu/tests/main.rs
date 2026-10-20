@@ -6,6 +6,7 @@ mod backdrop;
 mod bc4_quality;
 mod clip_fill_rule;
 mod display_list;
+mod motion_layers;
 mod notch_joins;
 mod primitive_layout;
 mod producer_opacity;

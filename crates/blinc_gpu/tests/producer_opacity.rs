@@ -95,7 +95,7 @@ fn group_pop_restores_unbalanced_child_opacity_scopes() {
 }
 
 #[test]
-fn routed_children_retain_opacity_when_their_batch_has_no_group_commands() {
+fn routed_children_keep_only_opacity_unrepresented_in_their_batch() {
     for composite in [false, true] {
         let mut ctx = GpuPaintContext::new(100.0, 100.0);
         ctx.push_opacity(0.5);
@@ -119,8 +119,13 @@ fn routed_children_retain_opacity_when_their_batch_has_no_group_commands() {
         } else {
             ctx.take_dynamic_batch()
         };
-        assert!(routed.layer_commands.is_empty());
-        alpha(&routed, 0.125);
+        if composite {
+            assert!(routed.layer_commands.is_empty());
+            alpha(&routed, 0.125);
+        } else {
+            assert_eq!(routed.layer_commands.len(), 2);
+            alpha(&routed, 0.25);
+        }
         alpha(&ctx.take_batch(), 0.5);
     }
 }

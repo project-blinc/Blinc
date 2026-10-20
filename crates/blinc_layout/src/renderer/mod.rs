@@ -437,6 +437,8 @@ impl std::fmt::Debug for CanvasPaintRecord {
 /// full paint clears and repopulates.
 #[derive(Clone, Debug)]
 pub struct CssAnimPaintMeta {
+    /// The recorded ranges belong to the motion batch rather than the static cache.
+    pub dynamic_batch: bool,
     /// Stable id of the animated node. The fast path looks up
     /// `css_anim_store.animations[stable_id]` /
     /// `transitions[stable_id]` to read current animated values.

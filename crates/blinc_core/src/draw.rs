@@ -1741,6 +1741,12 @@ pub trait DrawContext {
         0
     }
 
+    /// Whether background counts and layer indices currently refer to the
+    /// separately dispatched motion batch instead of the static batch.
+    fn bg_batch_is_dynamic(&self) -> bool {
+        false
+    }
+
     /// Number of layer commands the context has recorded so far this
     /// frame. Read by the walker right after `push_layer` so the
     /// Phase 4 CSS-anim recording can capture the just-pushed

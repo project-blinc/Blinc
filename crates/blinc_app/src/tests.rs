@@ -40,7 +40,7 @@ macro_rules! require_gpu {
 /// Takes the format from the renderer: a pipeline and its render pass
 /// must agree, and a hardcoded copy here silently broke every pixel test
 /// the moment the renderer's default changed.
-fn create_test_texture(
+pub(crate) fn create_test_texture(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
     width: u32,
@@ -564,7 +564,7 @@ fn test_music_player() {
 /// inner half of `save_to_png`. Lets pixel-asserting tests inspect
 /// the GPU output directly without round-tripping through the
 /// filesystem.
-fn read_rendered_pixels(
+pub(crate) fn read_rendered_pixels(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     texture: &wgpu::Texture,

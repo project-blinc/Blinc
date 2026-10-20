@@ -24,6 +24,9 @@ use std::sync::{Arc, Mutex};
 use crate::error::Result;
 use crate::svg_atlas::SvgAtlas;
 
+#[cfg(test)]
+mod motion_layers_tests;
+
 /// Maximum number of images to keep in cache (prevents unbounded memory growth).
 ///
 /// Sized to comfortably hold the simultaneously-visible image set of typical
@@ -2999,21 +3002,18 @@ impl RenderContext {
     /// upload before dispatch so those indices land on the right data;
     /// mirrors the pattern `render_foreground_overlay` uses.
     fn dispatch_dynamic_batch_overlay(&mut self, target_view: &wgpu::TextureView) {
-        let Some(dyn_batch) = self.cached_dynamic_batch.as_ref() else {
-            return;
-        };
-        if dyn_batch.primitives.is_empty() {
-            return;
-        }
-        if !dyn_batch.aux_data.is_empty() {
-            self.renderer.update_aux_data_for_batch(dyn_batch);
-        }
-        // Clone the primitive slice out of `cached_dynamic_batch` so the
-        // immutable borrow on `self` ends before the `&mut self` call
-        // on the renderer. Borrow checker only; primitives are POD.
-        let prims = dyn_batch.primitives.clone();
         self.rebind_glyph_atlas_for_overlay();
-        self.renderer.render_primitives_overlay(target_view, &prims);
+        if let Some(batch) = self.cached_dynamic_batch.as_ref() {
+            if !batch.primitives.is_empty() || batch.has_paths() {
+                if batch.has_layer_effects() {
+                    // Keep paths and group commands together. One sample retains
+                    // SDF coverage across opacity/effect boundaries.
+                    self.renderer.render_overlay_msaa(target_view, batch, 1);
+                } else {
+                    self.renderer.render_overlay(target_view, batch);
+                }
+            }
+        }
     }
 
     /// Dispatch the overlay-subtree canvas pool — caret canvases and
@@ -3152,6 +3152,17 @@ impl RenderContext {
         tree: &blinc_layout::RenderTree,
         _scale: f32,
     ) -> CssDeltaResult {
+        // CSS patching and re-emission index the static cache. A CSS descendant
+        // routed through motion needs a full paint until that cache path can
+        // dispatch and rebase dynamic records too.
+        if tree
+            .css_anim_paint_records()
+            .values()
+            .any(|meta| meta.dynamic_batch)
+        {
+            self.last_css_damage_rects.clear();
+            return CssDeltaResult::Bail;
+        }
         // CSS-animated primitives live on `cached_bg_batch` (the
         // walker doesn't push a `motion_subtree` for CSS animations
         // — that routing is motion-binding only). Patch through the
@@ -10553,8 +10564,12 @@ impl RenderContext {
         // (polygon clip vertices, etc.) before dispatch.
         if !self.in_compositor_inner_call {
             if let Some(ref dynamic_batch) = self.cached_dynamic_batch {
-                if !dynamic_batch.primitives.is_empty() {
-                    self.renderer.render_overlay(target, dynamic_batch);
+                if !dynamic_batch.primitives.is_empty() || dynamic_batch.has_paths() {
+                    if dynamic_batch.has_layer_effects() {
+                        self.renderer.render_overlay_msaa(target, dynamic_batch, 1);
+                    } else {
+                        self.renderer.render_overlay(target, dynamic_batch);
+                    }
                     // The dynamic batch upload clobbered the static
                     // aux_data the next text/SVG dispatch might rely
                     // on (polygon clip-paths on regular elements).

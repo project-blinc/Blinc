@@ -103,6 +103,8 @@ impl Default for TransformState {
 struct LayerState {
     /// The layer configuration
     config: LayerConfig,
+    /// Whether this group's commands belong to the motion batch.
+    commands_dynamic: bool,
     /// Starting primitive index when this layer was pushed
     primitive_start: usize,
     /// Starting foreground primitive index
@@ -681,6 +683,18 @@ impl<'a> GpuPaintContext<'a> {
         }
     }
 
+    fn layer_commands_are_dynamic(&self) -> bool {
+        self.aux_batch() == AuxBatch::Dynamic && !self.emit_foreground()
+    }
+
+    fn layer_command_batch_mut(&mut self, dynamic: bool) -> &mut PrimitiveBatch {
+        if dynamic {
+            &mut self.dynamic_batch
+        } else {
+            &mut self.batch
+        }
+    }
+
     /// Effective foreground routing for primitive emission.
     ///
     /// Honors `is_foreground` normally, but forces BACKGROUND routing
@@ -740,11 +754,23 @@ impl<'a> GpuPaintContext<'a> {
     /// Opacity baked into primitive colours. Background group commands own
     /// their opacity; independently dispatched streams still need it flattened.
     fn combined_opacity(&self) -> f32 {
-        if self.aux_batch() == AuxBatch::Static && !self.emit_foreground() {
-            self.opacity_stack.iter().product()
-        } else {
-            self.current_opacity()
-        }
+        let route = self.aux_batch();
+        let foreground = self.emit_foreground();
+        self.opacity_stack.iter().product::<f32>()
+            * self
+                .layer_stack
+                .iter()
+                .filter(|state| {
+                    foreground
+                        || match route {
+                            AuxBatch::Static => state.commands_dynamic,
+                            AuxBatch::Dynamic => !state.commands_dynamic,
+                            AuxBatch::Composite(_) => true,
+                        }
+                })
+                .map(|state| state.config.opacity)
+                .filter(|opacity| *opacity < 1.0)
+                .product::<f32>()
     }
 
     /// Transform a point by the current transform
@@ -2143,12 +2169,17 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
     }
 
     fn bg_layer_command_count(&self) -> usize {
-        // Layer commands always live on the BG batch (push_layer
-        // routes to `batch.layer_commands` regardless of motion-
-        // subtree depth). Match that routing so the index the
-        // walker captures lines up with what Phase 4's CSS patch
-        // path reads from `cached_bg_batch.layer_commands`.
-        self.batch.layer_commands.len()
+        // Snapshot the same batch that push_layer uses, so motion binding
+        // metadata indexes cached_dynamic_batch rather than unrelated BG commands.
+        if self.layer_commands_are_dynamic() {
+            self.dynamic_batch.layer_commands.len()
+        } else {
+            self.batch.layer_commands.len()
+        }
+    }
+
+    fn bg_batch_is_dynamic(&self) -> bool {
+        self.aux_batch() == AuxBatch::Dynamic
     }
 
     fn push_motion_subtree(&mut self) {
@@ -4473,12 +4504,15 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
 
     fn push_layer(&mut self, config: LayerConfig) {
         // Record current state indices for restoration on pop
+        let commands_dynamic = self.layer_commands_are_dynamic();
+        let batch = self.layer_command_batch_mut(commands_dynamic);
         let state = LayerState {
             config: config.clone(),
-            primitive_start: self.batch.primitive_count(),
-            foreground_primitive_start: self.batch.foreground_primitive_count(),
-            path_start: self.batch.path_vertex_count(),
-            foreground_path_start: self.batch.foreground_path_vertex_count(),
+            commands_dynamic,
+            primitive_start: batch.primitive_count(),
+            foreground_primitive_start: batch.foreground_primitive_count(),
+            path_start: batch.path_vertex_count(),
+            foreground_path_start: batch.foreground_path_vertex_count(),
             parent_state_indices: (
                 self.transform_stack.len(),
                 self.opacity_stack.len(),
@@ -4494,7 +4528,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         }
 
         // Record layer command for GPU renderer to process
-        self.batch
+        self.layer_command_batch_mut(commands_dynamic)
             .push_layer_command(crate::primitives::LayerCommand::Push {
                 config: config.clone(),
             });
@@ -4521,7 +4555,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             }
 
             // Record layer command for GPU renderer to process
-            self.batch
+            self.layer_command_batch_mut(state.commands_dynamic)
                 .push_layer_command(crate::primitives::LayerCommand::Pop);
         }
     }
