@@ -234,7 +234,11 @@ fn common_clip(items: &[Node], batch: &PrimitiveBatch) -> Option<([f32; 4], [f32
             Node::Layer(_, children) => add(common_clip(children, batch)),
             Node::Image(index) => {
                 let image = &batch.dynamic_images[*index];
-                add(has_clip(image.clip_bounds).then_some((image.clip_bounds, image.clip_radius)));
+                let shaped = image.clip_aux.get(4).is_some_and(|info| info[2] > 0.5);
+                add(has_clip(image.clip_bounds).then_some((
+                    image.clip_bounds,
+                    if shaped { [0.0; 4] } else { image.clip_radius },
+                )));
             }
 
             Node::Run(start, end) => {

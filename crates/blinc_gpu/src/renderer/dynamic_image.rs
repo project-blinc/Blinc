@@ -67,13 +67,18 @@ impl GpuRenderer {
             instance.clip_radius = img.clip_radius;
         }
         let mut aux = Cow::Borrowed(img.clip_aux.as_slice());
-        if aux.len() >= 8 {
+        if aux.len() >= 5 {
             instance.abi_clip[0] = 1.0;
             if origin != [0.0; 2] {
                 let rows = aux.to_mut();
-                let [a, b, c, d] = rows[5];
-                rows[6][0] += a * origin[0] + c * origin[1];
-                rows[6][1] += b * origin[0] + d * origin[1];
+                rows[2][0] -= origin[0];
+                rows[2][1] -= origin[1];
+                let shape = rows[4][3] as usize;
+                if shape >= 1 && shape <= rows.len() - 2 {
+                    let [a, b, c, d] = rows[shape - 1];
+                    rows[shape][0] += a * origin[0] + c * origin[1];
+                    rows[shape][1] += b * origin[0] + d * origin[1];
+                }
             }
         }
         let image = crate::image::GpuImage::from_rgba(

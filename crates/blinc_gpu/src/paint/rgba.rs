@@ -31,9 +31,16 @@ impl GpuPaintContext<'_> {
         }
         let foreground = self.emit_foreground();
         let opacity = self.combined_opacity();
-        let (clip_bounds, mut clip_radius, _, clip_type) =
+        let (clip_bounds, mut clip_radius, corner_shape, clip_type) =
             self.get_clip_data_with_path_scissor(true);
-        let clip_aux = self.rgba_clip_aux(clip_type, clip_radius, transformed, transform);
+        let mut clip_aux = self.rgba_clip_aux(clip_type, clip_radius, transformed, transform);
+        self.rgba_clip_properties(
+            &mut clip_aux,
+            clip_type,
+            clip_bounds,
+            clip_radius,
+            corner_shape,
+        );
         if matches!(
             clip_type,
             ClipType::Circle | ClipType::Ellipse | ClipType::Polygon
@@ -158,5 +165,48 @@ impl GpuPaintContext<'_> {
             _ => unreachable!(),
         };
         aux
+    }
+
+    fn rgba_clip_properties(
+        &self,
+        aux: &mut Vec<[f32; 4]>,
+        kind: ClipType,
+        bounds: [f32; 4],
+        radius: [f32; 4],
+        corners: [f32; 4],
+    ) {
+        let shaped = kind == ClipType::Rect
+            && radius
+                .iter()
+                .zip(corners)
+                .any(|(r, n)| *r > 0.0 && n != 1.0);
+        let start = self.composite_layer_clip_base.first().copied().unwrap_or(0);
+        let fading = self.clip_stack[start..]
+            .iter()
+            .rev()
+            .find(|(_, _, fade)| fade.iter().any(|f| *f > 0.0));
+        if !shaped && fading.is_none() {
+            return;
+        }
+        if aux.is_empty() {
+            aux.reserve_exact(5 + usize::from(shaped));
+            aux.resize(5, [0.0; 4]);
+            aux[4] = [1.0, 0.75, 0.0, 0.0];
+        }
+        if let Some((clip, _, _)) = fading {
+            // Fade from its own screen rectangle even when a later scissor cuts it.
+            aux[2] = match clip {
+                blinc_core::ClipShape::Rect(rect)
+                | blinc_core::ClipShape::RoundedRect { rect, .. } => {
+                    [rect.x(), rect.y(), rect.width(), rect.height()]
+                }
+                _ => bounds,
+            };
+            aux[3] = self.get_clip_fade();
+        }
+        if shaped {
+            aux[4][2] = aux.len() as f32 + 1.0;
+            aux.push(corners);
+        }
     }
 }

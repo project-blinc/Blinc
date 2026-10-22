@@ -37,6 +37,8 @@ mod motion_layers_tests;
 #[cfg(test)]
 mod rgba_affine_tests;
 #[cfg(test)]
+mod rgba_clip_properties_tests;
+#[cfg(test)]
 mod rgba_clip_tests;
 #[cfg(test)]
 mod rgba_order_tests;

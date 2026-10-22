@@ -15,6 +15,7 @@ mod primitive_layout;
 mod producer_opacity;
 mod rgba_affine;
 mod rgba_clip;
+mod rgba_clip_properties;
 mod rgba_order;
 mod rgba_path_clip;
 mod sdf_shaped_rect;

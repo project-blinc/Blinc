@@ -28,6 +28,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Raw-image corner-shape and overflow-fade changes participate in scratch cache fingerprints through the image-owned clip rows.
 - Raw-image path clips retain changing contours and fill rules through canvas cache replay, foreground, motion and composite scratch rendering.
 - Composite scratch fingerprints include raw-image shape clip payloads, so changing a polygon's fill rule invalidates the bake even when its vertices, destination and pixels are unchanged.
 - Composite scratch fingerprints include raw-image affine matrices, so orientation changes invalidate a bake even when its destination and pixels are unchanged.

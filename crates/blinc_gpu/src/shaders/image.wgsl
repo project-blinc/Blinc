@@ -271,7 +271,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let base = u32(input.abi_clip.x) - 1u;
         let info = abi_clip_data(base + 4u);
         if input.clip_bounds.x >= -9000.0 {
-            let distance = sd_shaped_rect(input.world_pos, input.clip_bounds.xy, input.clip_bounds.zw, input.clip_radius, vec4<f32>(info.x));
+            var corners = vec4<f32>(info.x);
+            if info.z > 0.5 { corners = abi_clip_data(u32(info.z) - 1u); }
+            let distance = sd_shaped_rect(input.world_pos, input.clip_bounds.xy, input.clip_bounds.zw, input.clip_radius, corners);
             clip_alpha = 1.0 - smoothstep(-0.75, 0.75, distance);
         }
         let local = abi_clip_data(base);
