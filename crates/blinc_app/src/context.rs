@@ -38,6 +38,8 @@ mod foreground_rgba_tests;
 #[cfg(test)]
 mod glass_path_clip_tests;
 #[cfg(test)]
+mod layer_text_clip_tests;
+#[cfg(test)]
 mod main_text_clip_tests;
 #[cfg(test)]
 mod motion_layers_tests;
@@ -6501,6 +6503,15 @@ impl RenderContext {
                     effective_motion_translate,
                     effective_motion_scale_center,
                     scale,
+                    if tree.get_render_node(node).is_some_and(|n| {
+                        n.props.rotate_x.is_some()
+                            || n.props.rotate_y.is_some()
+                            || n.props.perspective.is_some()
+                    }) {
+                        Some(node)
+                    } else {
+                        inside_3d_layer.as_ref().map(|info| info.node_id)
+                    },
                 )
             })
             .or(inherited_text_path);
@@ -10605,7 +10616,7 @@ impl RenderContext {
 
         // Render offset text glyphs
         if !texts.is_empty() {
-            let mut layer_glyphs: Vec<GpuGlyph> = Vec::new();
+            let mut text_runs = vec![cached_text::TextBatch::default()];
             for text in texts {
                 let alignment = match text.align {
                     TextAlign::Left => TextAlignment::Left,
@@ -10651,7 +10662,7 @@ impl RenderContext {
                     None
                 };
 
-                if let Ok(mut glyphs) = self.text_ctx.prepare_text_with_style(
+                if let Ok(glyphs) = self.text_ctx.prepare_text_with_style(
                     &text.content,
                     text.x - lx,
                     y_pos - ly,
@@ -10668,18 +10679,27 @@ impl RenderContext {
                     layout_height,
                     text.letter_spacing,
                 ) {
-                    // Offset clip bounds to layer-local coords
-                    if let Some(clip) = text.clip_bounds {
-                        for glyph in &mut glyphs {
-                            glyph.clip_bounds = [clip[0] - lx, clip[1] - ly, clip[2], clip[3]];
-                        }
+                    let owned = text_clip::prepare_layer_glyphs(
+                        text,
+                        glyphs,
+                        (tex_w, tex_h),
+                        info,
+                        scale_factor,
+                    );
+                    // A run uses one pipeline. Flush at plain/affine boundaries
+                    // so overlapping text retains its collected paint order.
+                    let previous = text_runs.last().unwrap();
+                    if (!owned.glyphs.is_empty() && !previous.primitives.is_empty())
+                        || (!owned.primitives.is_empty() && !previous.glyphs.is_empty())
+                    {
+                        text_runs.push(cached_text::TextBatch::default());
                     }
-                    layer_glyphs.extend(glyphs);
+                    text_runs.last_mut().unwrap().append(owned);
                 }
             }
 
-            if !layer_glyphs.is_empty() {
-                self.render_legacy_text(&layer_tex.view, &layer_glyphs);
+            for run in &text_runs {
+                self.render_text(&layer_tex.view, run);
             }
         }
 

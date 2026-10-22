@@ -263,6 +263,7 @@ fn overlay_text_clip_owned_payload_survives_clones_and_batch_rebase() {
         (5.0, 6.0),
         Some((30.0, 40.0)),
         2.0,
+        None,
     )
     .unwrap();
     let clone = owned.clone();
