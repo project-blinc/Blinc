@@ -2,6 +2,33 @@
 use super::{ClipData, ClipShape, ClipType, GpuPaintContext, GpuPrimitive};
 
 impl GpuPaintContext<'_> {
+    /// Append prepared screen-space glyphs to the active batch's separate text
+    /// stream, capturing the selected path, rectangular scissor and fade.
+    /// Other nonrectangular clips retain the separate glyph stream's rect fallback.
+    /// Incoming clip metadata is replaced; its auxiliary rows belong to its source.
+    /// Glyph positions and colors are already prepared and are left unchanged.
+    /// Render with `GpuRenderer::render_text_batch`, or convert within this batch.
+    pub fn push_prepared_glyphs(&mut self, glyphs: &[crate::primitives::GpuGlyph]) {
+        if glyphs.is_empty() {
+            return;
+        }
+        let (bounds, pointer) = if let Some(clip) = self.native_primitive_path_clip() {
+            clip
+        } else {
+            (self.get_clip_data().0, 0.0)
+        };
+        let fade = self.get_clip_fade();
+        self.active_batch_mut()
+            .glyphs
+            .extend(glyphs.iter().map(|g| {
+                let mut glyph = *g;
+                glyph.clip_bounds = bounds;
+                glyph.clip_fade = fade;
+                glyph.flags[1] = pointer;
+                glyph
+            }));
+    }
+
     fn native_path_clip(&mut self) -> Option<f32> {
         let start = self.composite_layer_clip_base.first().copied().unwrap_or(0);
         let index = self.clip_stack[start..].iter().rposition(|(shape, _, _)| {

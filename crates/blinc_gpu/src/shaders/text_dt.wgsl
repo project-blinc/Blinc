@@ -12,6 +12,7 @@ struct VertexOutput {
     @location(3) @interpolate(flat) clip_bounds: vec4<f32>,
     @location(4) @interpolate(flat) clip_fade: vec4<f32>,
     @location(5) @interpolate(flat) is_color: f32,
+    @location(6) @interpolate(flat) clip_shape: f32,
 }
 
 struct TextUniforms {
@@ -34,6 +35,8 @@ struct GlyphInstance {
 @group(0) @binding(2) var glyph_atlas: texture_2d<f32>;
 @group(0) @binding(3) var glyph_sampler: sampler;
 @group(0) @binding(4) var color_atlas: texture_2d<f32>;
+@group(0) @binding(5) var aux_tex: texture_2d<f32>;
+fn load_aux(index: u32) -> vec4<f32> { return textureLoad(aux_tex, vec2<i32>(i32(index % 1024u), i32(index / 1024u)), 0); }
 
 // Load a glyph from the data texture.
 // Layout: width = 6 texels (one vec4 per field), height = max_glyphs.
@@ -104,6 +107,7 @@ fn vs_main(
     out.clip_bounds = glyph.clip_bounds;
     out.clip_fade = glyph.clip_fade;
     out.is_color = glyph.flags.x;
+    out.clip_shape = glyph.flags.y;
 
     return out;
 }
@@ -136,7 +140,7 @@ fn calculate_clip_alpha(p: vec2<f32>, clip_bounds: vec4<f32>, clip_fade: vec4<f3
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let clip_alpha = calculate_clip_alpha(in.world_pos, in.clip_bounds, in.clip_fade);
+    let clip_alpha = calculate_clip_alpha(in.world_pos, in.clip_bounds, in.clip_fade) * abi_shape_clip_alpha(in.world_pos, in.clip_shape);
     if clip_alpha < 0.001 {
         discard;
     }

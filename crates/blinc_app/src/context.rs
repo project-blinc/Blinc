@@ -41,6 +41,8 @@ mod native_path_clip_tests;
 #[cfg(test)]
 mod path_brush_clip_tests;
 #[cfg(test)]
+mod prepared_glyph_clip_tests;
+#[cfg(test)]
 mod rgba_affine_tests;
 #[cfg(test)]
 mod rgba_clip_properties_tests;

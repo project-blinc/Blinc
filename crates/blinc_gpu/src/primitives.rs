@@ -671,6 +671,8 @@ impl GpuPrimitive {
     ///
     /// The glyph's UV bounds are stored in `gradient_params` and the color in `color`.
     /// For color emoji, `flags[0]` is 1.0 (stored in `type_info[1]`).
+    /// Path headers retain their batch-relative offsets; keep the owning auxiliary
+    /// rows with the converted primitive.
     pub fn from_glyph(glyph: &GpuGlyph) -> Self {
         // Use type_info[1] to store is_color flag (1 = color emoji, 0 = grayscale)
         let is_color_flag = if glyph.flags[0] > 0.5 { 1u32 } else { 0u32 };
@@ -701,7 +703,11 @@ impl GpuPrimitive {
             type_info: [
                 PrimitiveType::Text as u32,
                 is_color_flag,
-                ClipType::None as u32,
+                if glyph.flags[1] > 0.0 {
+                    ClipType::Rect as u32
+                } else {
+                    ClipType::None as u32
+                },
                 0,
             ],
             side_color_top: [0.0; 4],
@@ -713,7 +719,7 @@ impl GpuPrimitive {
             local_clip_radius: [0.0; 4],
             clip_fade_bounds: [0.0; 4],
             notch_info: [0.0; 4],
-            clip_shape: [0.0; 4],
+            clip_shape: [glyph.flags[1], 0.0, 0.0, 0.0],
         }
     }
 
@@ -1094,7 +1100,8 @@ pub struct GpuGlyph {
     pub clip_bounds: [f32; 4],
     /// Overflow fade distances (top, right, bottom, left) in pixels
     pub clip_fade: [f32; 4],
-    /// Flags: [is_color, unused, unused, unused]
+    /// Flags: [is_color, path_header, unused, unused]. The path header is a
+    /// one-based auxiliary row in the owning batch, or zero for no shape clip.
     /// is_color: 1.0 for color emoji (use color atlas), 0.0 for grayscale (use main atlas)
     pub flags: [f32; 4],
 }
@@ -1123,6 +1130,7 @@ impl GpuGlyph {
     /// Clear clip bounds (no clipping)
     pub fn with_no_clip(mut self) -> Self {
         self.clip_bounds = [-10000.0, -10000.0, 100000.0, 100000.0];
+        self.flags[1] = 0.0;
         self
     }
 }
@@ -2154,6 +2162,11 @@ impl PrimitiveBatch {
     /// Useful for combining batches from different paint contexts.
     pub fn merge(&mut self, mut other: PrimitiveBatch) {
         let shift = self.aux_data.len() as f32;
+        for glyph in &mut other.glyphs {
+            if glyph.flags[1] > 0.0 {
+                glyph.flags[1] += shift;
+            }
+        }
         for p in other
             .primitives
             .iter_mut()
