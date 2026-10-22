@@ -28,6 +28,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Motion-subtree text retains collected polygon/path clips and matching auxiliary rows through converted glyph preparation and cached overlay replay. Existing binding repaint and CSS text-promotion guards remain in place.
 - Motion-renderer static and foreground text caches retain polygon/path rows through cloning, damage filtering, transformed glyphs and replay. Fast paint reuses cached CSS text without appending duplicate primitives or rows.
 - Main `render_tree` text retains collected polygon/path clips in direct, unified, glass and foreground-effect branches. Prepared glyphs and converted text carry their owning auxiliary rows through batch merges.
 - Overlay-tree text retains inherited CSS polygon/path clips in each clip owner's physical frame, including styled spans and transformed glyphs. Direct glyph layers and converted primitives own and restore their matching auxiliary rows.

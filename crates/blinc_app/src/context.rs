@@ -42,6 +42,8 @@ mod main_text_clip_tests;
 #[cfg(test)]
 mod motion_layers_tests;
 #[cfg(test)]
+mod motion_text_clip_tests;
+#[cfg(test)]
 mod native_path_clip_tests;
 #[cfg(test)]
 mod overlay_text_clip_tests;
@@ -403,7 +405,10 @@ pub struct RenderContext {
     /// the motion-bound bg primitives (which route through the dynamic
     /// batch / overlay). Without this, text inside motion containers
     /// gets covered by their bg paint.
-    cached_motion_subtree_text_prims: Option<Vec<GpuPrimitive>>,
+    /// Owns path rows with the converted text through cache replay. Active
+    /// bindings repaint; layout also excludes text subtrees from CSS promotion,
+    /// so their glyph and clip frames are collected together on every update.
+    cached_motion_subtree_text_prims: Option<cached_text::TextBatch>,
     /// Live-patch records for `cached_motion_subtree_text_prims`:
     /// (prim index range, composite-promoted ancestor stable id). The
     /// glyph prims in the range were baked at BASE alpha (the
@@ -1769,8 +1774,8 @@ impl RenderContext {
         target_view: &wgpu::TextureView,
     ) {
         // TEXT — alpha + blit-anchored center remap.
-        if let Some(mut prims) = self.cached_motion_subtree_text_prims.clone() {
-            if !prims.is_empty() {
+        if let Some(mut text) = self.cached_motion_subtree_text_prims.clone() {
+            if !text.is_empty() {
                 if !self.motion_subtree_text_patch.is_empty() {
                     let dpi = tree.scale_factor().max(1.0);
                     if let Ok(store) = tree.css_anim_store().lock() {
@@ -1795,7 +1800,7 @@ impl RenderContext {
                             );
                             let s1 = (props.scale_x.unwrap_or(1.0), props.scale_y.unwrap_or(1.0));
                             let baseline = self.composite_patch_baselines.get(sid).copied();
-                            for prim in &mut prims[range.clone()] {
+                            for prim in &mut text.primitives[range.clone()] {
                                 prim.color[3] *= live_opacity;
                                 if let Some((aabb, t0, s0)) = baseline {
                                     // p_base = aabb + (p0 - aabb - t0*dpi)/s0
@@ -1813,8 +1818,7 @@ impl RenderContext {
                         }
                     }
                 }
-                self.rebind_glyph_atlas_for_overlay();
-                self.renderer.render_primitives_overlay(target_view, &prims);
+                self.render_text(target_view, &text);
             }
         }
         // SVG — alpha only (icons are small; the settle repaint lands
@@ -9757,13 +9761,13 @@ impl RenderContext {
         // (instead of the simpler glyph pipeline) means the motion
         // container's scale / translate / rotate is applied per-glyph,
         // so the text follows the bg as the animation progresses.
-        let mut motion_subtree_text_prims: Vec<GpuPrimitive> = Vec::new();
+        let mut motion_subtree_text_prims = cached_text::TextBatch::default();
         let mut motion_subtree_text_patch: Vec<(
             std::ops::Range<usize>,
             blinc_layout::tree::StableNodeId,
         )> = Vec::new();
         for text in &motion_subtree_texts {
-            let patch_start = motion_subtree_text_prims.len();
+            let patch_start = motion_subtree_text_prims.primitives.len();
             if let Some([clip_x, clip_y, clip_w, clip_h]) = text.clip_bounds {
                 let text_right = text.x + text.width;
                 let text_bottom = text.y + text.height;
@@ -9822,7 +9826,7 @@ impl RenderContext {
                 None
             };
 
-            if let Ok(mut glyphs) = self.text_ctx.prepare_text_with_style(
+            if let Ok(glyphs) = self.text_ctx.prepare_text_with_style(
                 &text.content,
                 text.x,
                 y_pos,
@@ -9839,43 +9843,19 @@ impl RenderContext {
                 layout_height,
                 text.letter_spacing,
             ) {
-                if let Some(clip) = text.clip_bounds {
-                    for glyph in &mut glyphs {
-                        glyph.clip_bounds = clip;
-                    }
-                }
-                // Convert glyphs to PRIM_TEXT primitives with the
-                // motion / css affine baked in. Identity affine when
-                // the text has none — the SDF pipeline still works
-                // and the glyphs render at base position, matching
-                // the behaviour of `render_text` for unaffined text.
-                let (a, b, c, d, tx_aff, ty_aff) = match text.css_affine {
-                    Some([a, b, c, d, tx, ty]) => (a, b, c, d, tx, ty),
-                    None => (1.0, 0.0, 0.0, 1.0, 0.0, 0.0),
-                };
-                let tx_scaled = tx_aff * scale_factor;
-                let ty_scaled = ty_aff * scale_factor;
-                for glyph in &glyphs {
-                    let gc_x = glyph.bounds[0] + glyph.bounds[2] / 2.0;
-                    let gc_y = glyph.bounds[1] + glyph.bounds[3] / 2.0;
-                    let new_gc_x = a * gc_x + c * gc_y + tx_scaled;
-                    let new_gc_y = b * gc_x + d * gc_y + ty_scaled;
-                    let mut prim = GpuPrimitive::from_glyph(glyph);
-                    prim.bounds = [
-                        new_gc_x - glyph.bounds[2] / 2.0,
-                        new_gc_y - glyph.bounds[3] / 2.0,
-                        glyph.bounds[2],
-                        glyph.bounds[3],
-                    ];
-                    prim.local_affine = [a, b, c, d];
-                    prim.set_z_layer(text.z_index);
-                    motion_subtree_text_prims.push(prim);
-                }
+                let mut owned = text_clip::prepare_glyphs(text, glyphs, (width, height));
+                cached_text::convert_affine(
+                    &mut owned,
+                    text.css_affine.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
+                    scale_factor,
+                    text.z_index,
+                );
+                motion_subtree_text_prims.append(owned);
             }
             // Record the emitted range for the dispatch-time live
             // patch when this text sits under a composite-promoted
             // ancestor (its alpha was baked at BASE, factor excluded).
-            let patch_end = motion_subtree_text_prims.len();
+            let patch_end = motion_subtree_text_prims.primitives.len();
             if patch_end > patch_start {
                 if let Some(ancestor) = text.composite_ancestor {
                     motion_subtree_text_patch.push((patch_start..patch_end, ancestor));
