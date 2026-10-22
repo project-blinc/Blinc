@@ -4,7 +4,7 @@ use blinc_core::{ClipLength, ClipPath};
 const W: u32 = 240;
 const H: u32 = 180;
 const BLUE: [u8; 4] = [0, 0, 255, 255];
-fn context(unified: bool, samples: u32) -> RenderContext {
+pub(super) fn context(unified: bool, samples: u32) -> RenderContext {
     blinc_theme::ThemeState::init(
         blinc_theme::HybridTheme::bundle(),
         blinc_theme::ColorScheme::Light,
@@ -31,7 +31,7 @@ fn context(unified: bool, samples: u32) -> RenderContext {
     text.preload_generic_styles(GpuGenericFont::SansSerif, &[400, 700], false);
     RenderContext::new(renderer, text, device, queue, samples)
 }
-fn tree(clip: bool, polygon: bool) -> RenderTree {
+pub(super) fn tree(clip: bool, polygon: bool) -> RenderTree {
     let mut parent = div()
         .id("owner")
         .absolute()
@@ -70,7 +70,7 @@ fn render(c: &mut RenderContext, t: &RenderTree) -> image::RgbaImage {
     c.render_tree(t, W, H, &view).unwrap();
     read_rendered_pixels(c.device(), c.queue(), &texture, W, H)
 }
-fn triangle(u: f32, v: f32) -> Option<bool> {
+pub(super) fn triangle(u: f32, v: f32) -> Option<bool> {
     let edge = u / 75.0 + v / 80.0;
     if u.abs() < 3.0 || v.abs() < 3.0 || (edge - 1.0).abs() < 0.06 {
         None
@@ -78,7 +78,7 @@ fn triangle(u: f32, v: f32) -> Option<bool> {
         Some(u > 0.0 && v > 0.0 && edge < 1.0)
     }
 }
-fn compare(
+pub(super) fn compare(
     page: &image::RgbaImage,
     baseline: &image::RgbaImage,
     member: impl Fn(f32, f32) -> Option<bool>,

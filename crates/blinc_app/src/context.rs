@@ -24,6 +24,9 @@ use std::sync::{Arc, Mutex};
 use crate::error::Result;
 use crate::svg_atlas::SvgAtlas;
 
+mod cached_text;
+#[cfg(test)]
+mod cached_text_clip_tests;
 mod canvas_order;
 #[cfg(test)]
 mod composite_layers_tests;
@@ -382,11 +385,11 @@ pub struct RenderContext {
     /// be re-dispatched (the scissored clear in
     /// `render_static_layer_damaged` would otherwise wipe those
     /// pixels). Invalidated alongside `cached_texts`.
-    cached_glyphs_by_layer: Option<std::collections::BTreeMap<u32, Vec<GpuGlyph>>>,
+    cached_glyphs_by_layer: Option<std::collections::BTreeMap<u32, cached_text::TextBatch>>,
     /// Same as `cached_glyphs_by_layer` but for the foreground-text
     /// pass — glyphs inside `.foreground()` elements, dispatched
     /// after the rest of the scene.
-    cached_fg_glyphs: Option<Vec<GpuGlyph>>,
+    cached_fg_glyphs: Option<cached_text::TextBatch>,
     /// Cached text *primitives* (PRIM_TEXT GpuPrimitives) for text that
     /// lives inside a motion-bound subtree. Stored as primitives (not
     /// glyphs) so the SDF pipeline can apply `local_affine` — that's
@@ -427,7 +430,7 @@ pub struct RenderContext {
     /// Same as `cached_glyphs_by_layer` but for CSS-transformed text
     /// primitives (text with a `transform:` style — routed through
     /// the SDF pipeline, not the glyph pipeline).
-    cached_css_transformed_text_prims: Option<Vec<GpuPrimitive>>,
+    cached_css_transformed_text_prims: Option<PrimitiveBatch>,
     /// Per-source fade end deadline (`loaded_at + fade_duration_ms`).
     /// Populated only when the element that triggered the load specified
     /// `fade_duration_ms > 0`. Used at the frame boundary to decide
@@ -443,7 +446,6 @@ pub struct RenderContext {
     // Texture atlas for rasterized SVGs (single shared GPU texture, shelf-packed)
     svg_atlas: SvgAtlas,
     // Scratch buffers for per-frame allocations (reused to avoid allocations)
-    scratch_glyphs: Vec<GpuGlyph>,
     scratch_texts: Vec<TextElement>,
     scratch_svgs: Vec<SvgElement>,
     scratch_images: Vec<ImageElement>,
@@ -885,10 +887,9 @@ impl RenderContext {
             cached_css_transformed_text_prims: None,
             svg_cache: LruCache::new(NonZeroUsize::new(SVG_CACHE_CAPACITY).unwrap()),
             svg_atlas,
-            scratch_glyphs: Vec::with_capacity(1024), // Pre-allocate for typical text
-            scratch_texts: Vec::with_capacity(64),    // Pre-allocate for text elements
-            scratch_svgs: Vec::with_capacity(32),     // Pre-allocate for SVG elements
-            scratch_images: Vec::with_capacity(32),   // Pre-allocate for image elements
+            scratch_texts: Vec::with_capacity(64), // Pre-allocate for text elements
+            scratch_svgs: Vec::with_capacity(32),  // Pre-allocate for SVG elements
+            scratch_images: Vec::with_capacity(32), // Pre-allocate for image elements
             cursor_pos: [0.0; 2],
             has_active_flows: false,
             has_pending_image_fade: false,
@@ -2100,9 +2101,9 @@ impl RenderContext {
         };
         if let Some(by_layer) = self.cached_glyphs_by_layer.as_ref() {
             for glyphs in by_layer.values() {
-                for g in glyphs {
+                for bounds in glyphs.bounds() {
                     for a in &aabbs {
-                        if intersects(g.bounds, *a) {
+                        if intersects(bounds, *a) {
                             return true;
                         }
                     }
@@ -2110,9 +2111,9 @@ impl RenderContext {
             }
         }
         if let Some(fg) = self.cached_fg_glyphs.as_ref() {
-            for g in fg {
+            for bounds in fg.bounds() {
                 for a in &aabbs {
-                    if intersects(g.bounds, *a) {
+                    if intersects(bounds, *a) {
                         return true;
                     }
                 }
@@ -2868,11 +2869,8 @@ impl RenderContext {
         if let Some(batch) = foreground {
             self.renderer.render_overlay_msaa(target_view, &batch, 1);
         }
-        // Foreground text glyphs go through the dedicated text shader
-        // pipeline (not the SDF PRIM_TEXT path), so they need their
-        // own overlay dispatch on top of the canvas. Without this,
-        // text inside a `.layer(RenderLayer::Foreground)` element
-        // appears muffled or hidden under canvas-drawn content.
+        // Replay direct and converted foreground text with its own rows
+        // after canvas content, matching the separate foreground stream.
         if let Some(glyphs) = fg_glyphs {
             self.render_text(target_view, &glyphs);
         }
@@ -4234,7 +4232,7 @@ impl RenderContext {
     }
 
     /// Render text glyphs
-    fn render_text(&mut self, target: &wgpu::TextureView, glyphs: &[GpuGlyph]) {
+    fn render_legacy_text(&mut self, target: &wgpu::TextureView, glyphs: &[GpuGlyph]) {
         if let (Some(atlas_view), Some(color_atlas_view)) =
             (self.text_ctx.atlas_view(), self.text_ctx.color_atlas_view())
         {
@@ -8095,22 +8093,16 @@ impl RenderContext {
                             self.renderer.set_pending_scissor(scissor);
                             if let Some(glyphs_by_layer) = self.cached_glyphs_by_layer.clone() {
                                 for glyphs in glyphs_by_layer.values() {
-                                    let filtered: Vec<_> = glyphs
-                                        .iter()
-                                        .filter(|g| aabb_intersects_any(g.bounds, &damaged))
-                                        .copied()
-                                        .collect();
+                                    let filtered = glyphs
+                                        .filtered(|bounds| aabb_intersects_any(bounds, &damaged));
                                     if !filtered.is_empty() {
                                         self.render_text(&static_view, &filtered);
                                     }
                                 }
                             }
                             if let Some(fg_glyphs) = self.cached_fg_glyphs.clone() {
-                                let filtered: Vec<_> = fg_glyphs
-                                    .iter()
-                                    .filter(|g| aabb_intersects_any(g.bounds, &damaged))
-                                    .copied()
-                                    .collect();
+                                let filtered = fg_glyphs
+                                    .filtered(|bounds| aabb_intersects_any(bounds, &damaged));
                                 if !filtered.is_empty() {
                                     self.render_text(&static_view, &filtered);
                                 }
@@ -8459,22 +8451,17 @@ impl RenderContext {
                                 self.renderer.set_pending_scissor(scissor);
                                 if let Some(glyphs_by_layer) = self.cached_glyphs_by_layer.clone() {
                                     for glyphs in glyphs_by_layer.values() {
-                                        let filtered: Vec<_> = glyphs
-                                            .iter()
-                                            .filter(|g| aabb_intersects_any(g.bounds, &damaged))
-                                            .copied()
-                                            .collect();
+                                        let filtered = glyphs.filtered(|bounds| {
+                                            aabb_intersects_any(bounds, &damaged)
+                                        });
                                         if !filtered.is_empty() {
                                             self.render_text(&static_view, &filtered);
                                         }
                                     }
                                 }
                                 if let Some(fg_glyphs) = self.cached_fg_glyphs.clone() {
-                                    let filtered: Vec<_> = fg_glyphs
-                                        .iter()
-                                        .filter(|g| aabb_intersects_any(g.bounds, &damaged))
-                                        .copied()
-                                        .collect();
+                                    let filtered = fg_glyphs
+                                        .filtered(|bounds| aabb_intersects_any(bounds, &damaged));
                                     if !filtered.is_empty() {
                                         self.render_text(&static_view, &filtered);
                                     }
@@ -9499,9 +9486,9 @@ impl RenderContext {
 
         // Prepare text glyphs with z_layer information
         // Store (z_layer, glyphs) to enable interleaved rendering
-        let mut glyphs_by_layer: std::collections::BTreeMap<u32, Vec<GpuGlyph>> =
+        let mut glyphs_by_layer: std::collections::BTreeMap<u32, cached_text::TextBatch> =
             std::collections::BTreeMap::new();
-        let mut css_transformed_text_prims: Vec<GpuPrimitive> = Vec::new();
+        let mut css_transformed_text_prims = PrimitiveBatch::new();
         for text in &texts {
             // Skip text that's completely outside its clip bounds (visibility culling)
             // This prevents loading emoji fonts for off-screen text in scroll containers
@@ -9591,7 +9578,7 @@ impl RenderContext {
                 ];
                 let shadow_x = text.x + shadow.offset_x * scale_factor;
                 let shadow_y = y_pos + shadow.offset_y * scale_factor;
-                if let Ok(mut shadow_glyphs) = self.text_ctx.prepare_text_with_style(
+                if let Ok(shadow_glyphs) = self.text_ctx.prepare_text_with_style(
                     &text.content,
                     shadow_x,
                     shadow_y,
@@ -9608,36 +9595,15 @@ impl RenderContext {
                     layout_height,
                     text.letter_spacing,
                 ) {
-                    if let Some(clip) = text.clip_bounds {
-                        for glyph in &mut shadow_glyphs {
-                            glyph.clip_bounds = clip;
-                        }
-                    }
+                    let mut owned = text_clip::prepare_glyphs(text, shadow_glyphs, (width, height));
                     if let Some(affine) = text.css_affine {
-                        let [a, b, c, d, tx, ty] = affine;
-                        let tx_scaled = tx * scale_factor;
-                        let ty_scaled = ty * scale_factor;
-                        for glyph in &shadow_glyphs {
-                            let gc_x = glyph.bounds[0] + glyph.bounds[2] / 2.0;
-                            let gc_y = glyph.bounds[1] + glyph.bounds[3] / 2.0;
-                            let new_gc_x = a * gc_x + c * gc_y + tx_scaled;
-                            let new_gc_y = b * gc_x + d * gc_y + ty_scaled;
-                            let mut prim = GpuPrimitive::from_glyph(glyph);
-                            prim.bounds = [
-                                new_gc_x - glyph.bounds[2] / 2.0,
-                                new_gc_y - glyph.bounds[3] / 2.0,
-                                glyph.bounds[2],
-                                glyph.bounds[3],
-                            ];
-                            prim.local_affine = [a, b, c, d];
-                            prim.set_z_layer(text.z_index);
-                            css_transformed_text_prims.push(prim);
-                        }
+                        cached_text::convert_affine(&mut owned, affine, scale_factor, text.z_index);
+                        css_transformed_text_prims.merge(owned);
                     } else {
                         glyphs_by_layer
                             .entry(text.z_index)
                             .or_default()
-                            .extend(shadow_glyphs);
+                            .append(owned);
                     }
                 }
             }
@@ -9659,56 +9625,31 @@ impl RenderContext {
                 layout_height,
                 text.letter_spacing,
             ) {
-                Ok(mut glyphs) => {
+                Ok(glyphs) => {
                     tracing::trace!(
                         "render_tree_with_motion: prepared {} glyphs for '{}' (font={:?})",
                         glyphs.len(),
                         text.content,
                         font_name
                     );
-                    // Apply clip bounds if present
-                    if let Some(clip) = text.clip_bounds {
-                        for glyph in &mut glyphs {
-                            glyph.clip_bounds = clip;
-                        }
-                    }
-
+                    let mut owned = text_clip::prepare_glyphs(text, glyphs, (width, height));
                     if let Some(affine) = text.css_affine {
-                        // CSS-transformed text: convert glyphs to SDF primitives with local_affine
-                        let [a, b, c, d, tx, ty] = affine;
-                        let tx_scaled = tx * scale_factor;
-                        let ty_scaled = ty * scale_factor;
-                        for glyph in &glyphs {
-                            // Transform glyph center through the affine
-                            let gc_x = glyph.bounds[0] + glyph.bounds[2] / 2.0;
-                            let gc_y = glyph.bounds[1] + glyph.bounds[3] / 2.0;
-                            let new_gc_x = a * gc_x + c * gc_y + tx_scaled;
-                            let new_gc_y = b * gc_x + d * gc_y + ty_scaled;
-                            let mut prim = GpuPrimitive::from_glyph(glyph);
-                            prim.bounds = [
-                                new_gc_x - glyph.bounds[2] / 2.0,
-                                new_gc_y - glyph.bounds[3] / 2.0,
-                                glyph.bounds[2],
-                                glyph.bounds[3],
-                            ];
-                            prim.local_affine = [a, b, c, d];
-                            prim.set_z_layer(text.z_index);
-                            css_transformed_text_prims.push(prim);
-                        }
+                        cached_text::convert_affine(&mut owned, affine, scale_factor, text.z_index);
+                        css_transformed_text_prims.merge(owned);
                     } else {
                         // Normal text: pixel-snap the glyph origin to the
                         // physical grid before the glyph pipeline. See the
                         // matching snap on the DrawContext path — without it
                         // the Linear atlas sampler softens every glyph at 1x
                         // (standard-DPI); crisp and unchanged at 2x.
-                        for glyph in &mut glyphs {
+                        for glyph in &mut owned.glyphs {
                             glyph.bounds[0] = glyph.bounds[0].round();
                             glyph.bounds[1] = glyph.bounds[1].round();
                         }
                         glyphs_by_layer
                             .entry(text.z_index)
                             .or_default()
-                            .extend(glyphs);
+                            .append(owned);
                     }
                 }
                 Err(e) => {
@@ -9722,7 +9663,7 @@ impl RenderContext {
         }
 
         // Prepare foreground text glyphs (rendered after foreground primitives)
-        let mut fg_glyphs: Vec<GpuGlyph> = Vec::new();
+        let mut fg_glyphs = cached_text::TextBatch::default();
         for text in &fg_texts {
             if let Some([clip_x, clip_y, clip_w, clip_h]) = text.clip_bounds {
                 let text_right = text.x + text.width;
@@ -9782,7 +9723,7 @@ impl RenderContext {
                 None
             };
 
-            if let Ok(mut glyphs) = self.text_ctx.prepare_text_with_style(
+            if let Ok(glyphs) = self.text_ctx.prepare_text_with_style(
                 &text.content,
                 text.x,
                 y_pos,
@@ -9799,12 +9740,11 @@ impl RenderContext {
                 layout_height,
                 text.letter_spacing,
             ) {
-                if let Some(clip) = text.clip_bounds {
-                    for glyph in &mut glyphs {
-                        glyph.clip_bounds = clip;
-                    }
+                let mut owned = text_clip::prepare_glyphs(text, glyphs, (width, height));
+                if let Some(affine) = text.css_affine {
+                    cached_text::convert_affine(&mut owned, affine, scale_factor, text.z_index);
                 }
-                fg_glyphs.extend(glyphs);
+                fg_glyphs.append(owned);
             }
         }
 
@@ -9975,7 +9915,7 @@ impl RenderContext {
             texts.len(),
             fg_texts.len(),
             glyphs_by_layer.len(),
-            css_transformed_text_prims.len()
+            css_transformed_text_prims.primitives.len()
         );
 
         // SVGs are rendered as rasterized images (not tessellated paths) for better anti-aliasing
@@ -9994,8 +9934,9 @@ impl RenderContext {
         if let (Some(atlas), Some(color_atlas)) =
             (self.text_ctx.atlas_view(), self.text_ctx.color_atlas_view())
         {
-            if !css_transformed_text_prims.is_empty() {
-                batch.primitives.append(&mut css_transformed_text_prims);
+            // The fast-path batch already contains these primitives and clip rows.
+            if !used_fast_paint {
+                batch.merge(css_transformed_text_prims);
             }
             self.renderer.set_glyph_atlas(atlas, color_atlas);
         }
@@ -10143,16 +10084,8 @@ impl RenderContext {
             let max_glass_layer = max_z.max(max_text_z).max(max_decoration_z);
 
             // Render z=0 text first (before any z>0 primitives)
-            {
-                let mut scratch = std::mem::take(&mut self.scratch_glyphs);
-                scratch.clear();
-                if let Some(glyphs) = glyphs_by_layer.get(&0) {
-                    scratch.extend_from_slice(glyphs);
-                }
-                if !scratch.is_empty() {
-                    self.render_text(target, &scratch);
-                }
-                self.scratch_glyphs = scratch;
+            if let Some(glyphs) = glyphs_by_layer.get(&0) {
+                self.render_text(target, glyphs);
             }
             self.render_text_decorations_for_layer(target, &decorations_by_layer, 0);
 
@@ -10170,21 +10103,14 @@ impl RenderContext {
                         batch.primitives_for_layer_excluding_effects(z, &effect_indices)
                     };
                     if !layer_primitives.is_empty() {
+                        self.renderer.update_aux_data_for_batch(&batch);
                         self.renderer
                             .render_primitives_overlay(target, &layer_primitives);
                     }
 
                     // Render text for this layer (interleaved for proper z-order)
-                    {
-                        let mut scratch = std::mem::take(&mut self.scratch_glyphs);
-                        scratch.clear();
-                        if let Some(glyphs) = glyphs_by_layer.get(&z) {
-                            scratch.extend_from_slice(glyphs);
-                        }
-                        if !scratch.is_empty() {
-                            self.render_text(target, &scratch);
-                        }
-                        self.scratch_glyphs = scratch;
+                    if let Some(glyphs) = glyphs_by_layer.get(&z) {
+                        self.render_text(target, glyphs);
                     }
                     self.render_text_decorations_for_layer(target, &decorations_by_layer, z);
                 }
@@ -10297,6 +10223,7 @@ impl RenderContext {
                     // helper because it fuses clearing with drawing.
                     let layer_primitives = batch.primitives_for_layer(z);
                     if !layer_primitives.is_empty() {
+                        self.renderer.update_aux_data_for_batch(&batch);
                         if use_msaa_overlay {
                             self.renderer.render_primitives_overlay_msaa(
                                 target,
@@ -10426,6 +10353,7 @@ impl RenderContext {
                             batch.primitives_for_layer_excluding_effects(z, &effect_indices)
                         };
                         if !layer_primitives.is_empty() {
+                            self.renderer.update_aux_data_for_batch(&batch);
                             self.renderer
                                 .render_primitives_overlay(target, &layer_primitives);
                         }
@@ -10771,7 +10699,7 @@ impl RenderContext {
             }
 
             if !layer_glyphs.is_empty() {
-                self.render_text(&layer_tex.view, &layer_glyphs);
+                self.render_legacy_text(&layer_tex.view, &layer_glyphs);
             }
         }
 

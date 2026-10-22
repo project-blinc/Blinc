@@ -27,6 +27,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - Per-corner squircle / scoop / bevel support on `ClipShape::RoundedRect` propagated into the SDF clip primitive uniforms — all 12 SDF shader variants (`sdf_core` / `sdf_shadow` / `sdf_3d` / `sdf_notch` × `vb` / `dt` / msaa) now read and apply per-corner `n` when evaluating clip alpha.
 
 ### Fixed
+- Primitive overlay draws respect the pending damage scissor, including converted cached-text glyphs.
 - Text-only primitive batches participate in the MSAA dispatch range instead of being skipped as empty.
 - Prepared glyph batches retain path clip headers through merges, primitive conversion and explicit text-batch rendering. Storage and data-texture text shaders share the contour evaluator; glyph size stays 96 bytes, and direct text bindings follow current atlas and auxiliary resources.
 - Standalone glass/blur primitives retain path clip headers and rectangular scissors, including circles, nested materials and merged batches. Native glass now dispatches its existing DT readers; backdrop and auxiliary bindings refresh per draw. Instance size remains 144 bytes.

@@ -7753,6 +7753,9 @@ impl GpuRenderer {
                 occlusion_query_set: None,
             });
 
+            if let Some((x, y, w, h)) = self.pending_scissor {
+                render_pass.set_scissor_rect(x, y, w, h);
+            }
             // Render SDF primitives via split overlay pipelines
             render_pass.set_bind_group(0, &self.bind_groups.sdf, &[]);
             Self::draw_split_sdf(
