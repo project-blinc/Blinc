@@ -1,5 +1,5 @@
 //! Raw images share their shape stream's active batch and paint cursor.
-use super::GpuPaintContext;
+use super::{ClipData, GpuPaintContext};
 use crate::primitives::{ClipType, DynamicImage, ImagePaintOrder};
 use blinc_core::{DrawContext, Rect};
 
@@ -31,7 +31,8 @@ impl GpuPaintContext<'_> {
         }
         let foreground = self.emit_foreground();
         let opacity = self.combined_opacity();
-        let (clip_bounds, mut clip_radius, _, clip_type) = self.get_clip_data();
+        let (clip_bounds, mut clip_radius, _, clip_type) =
+            self.get_clip_data_with_path_scissor(true);
         let clip_aux = self.rgba_clip_aux(clip_type, clip_radius, transformed, transform);
         if matches!(
             clip_type,
@@ -82,6 +83,17 @@ impl GpuPaintContext<'_> {
         dest: Rect,
         transform: [f32; 4],
     ) -> Vec<[f32; 4]> {
+        let start = self.composite_layer_clip_base.first().copied().unwrap_or(0);
+        let selected = self.clip_stack[start..].iter().rev().find(|(shape, _, _)| {
+            !matches!(
+                shape,
+                blinc_core::ClipShape::Rect(_) | blinc_core::ClipShape::RoundedRect { .. }
+            )
+        });
+        if let Some((blinc_core::ClipShape::Path(shape), Some(ClipData::Path(path)), _)) = selected
+        {
+            return path.rows(shape).to_vec();
+        }
         if !matches!(
             kind,
             ClipType::Circle | ClipType::Ellipse | ClipType::Polygon

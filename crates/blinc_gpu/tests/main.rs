@@ -16,6 +16,7 @@ mod producer_opacity;
 mod rgba_affine;
 mod rgba_clip;
 mod rgba_order;
+mod rgba_path_clip;
 mod sdf_shaped_rect;
 mod shader_prelude;
 mod shadow_spread;

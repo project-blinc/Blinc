@@ -5,6 +5,7 @@ All notable changes to `blinc_core` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- `DrawContext::set_clip_fill_rule` documents path clips as well as polygons when supported by the drawing context.
 - `ClipShape::RoundedRect` now carries a `CornerShape` (per-corner superellipse `n`) so clips can follow squircle / scoop / bevel outlines instead of always rounding. Constructors default to the existing `CornerShape::ROUND` so untouched callers behave identically.
 
 ### Added

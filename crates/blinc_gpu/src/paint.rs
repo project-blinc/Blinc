@@ -63,8 +63,9 @@ use crate::primitives::{
 use crate::text::TextRenderingContext;
 
 mod aux_data;
+mod path_clip;
 mod rgba;
-use aux_data::{AuxBatch, PolygonClipData};
+use aux_data::{AuxBatch, ClipData, PolygonClipData};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Transform Stack
@@ -120,8 +121,8 @@ struct LayerState {
     parent_state_indices: (usize, usize, usize, usize),
 }
 
-/// Clip stack entry: shape, optional polygon payload offsets, overflow fade.
-type ClipStackEntry = (ClipShape, Option<PolygonClipData>, [f32; 4]);
+/// Clip stack entry: shape, optional clip metadata, overflow fade.
+type ClipStackEntry = (ClipShape, Option<ClipData>, [f32; 4]);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pending 3D Mesh Draw
@@ -323,7 +324,7 @@ pub struct GpuPaintContext<'a> {
     current_corner_shape: [f32; 4], // superellipse n per corner (default [1.0; 4] = round)
     // Overflow fade: pending value consumed by next push_clip
     pending_overflow_fade: [f32; 4], // [top, right, bottom, left] in CSS pixels
-    /// Fill rule of the next polygon clip, taken by `push_clip`.
+    /// Fill rule of the next polygon or path clip, taken by `push_clip`.
     pending_clip_fill_rule: FillRule,
     /// 3D mesh draws captured during this frame. `draw_mesh_data` pushes
     /// here; the outer render loop drains with `take_pending_meshes`
@@ -1276,7 +1277,7 @@ impl<'a> GpuPaintContext<'a> {
                 }
             }
             ClipShape::Path(path) => {
-                // Path clipping with transforms not supported - keep as-is
+                // Raw-image path clips capture their push-time affine separately.
                 ClipShape::Path(path)
             }
             ClipShape::Polygon(pts) => {
@@ -1407,6 +1408,13 @@ impl<'a> GpuPaintContext<'a> {
     /// child with overflow_clip() doesn't inherit rounded corners
     /// from a parent.
     fn get_clip_data(&mut self) -> ([f32; 4], [f32; 4], [f32; 4], ClipType) {
+        self.get_clip_data_with_path_scissor(false)
+    }
+
+    fn get_clip_data_with_path_scissor(
+        &mut self,
+        keep_path_scissor: bool,
+    ) -> ([f32; 4], [f32; 4], [f32; 4], ClipType) {
         // P4.3 Option B clip-aware bake: while inside the OUTERMOST
         // composite layer, ancestor clips below the snapshot base
         // are stripped from per-primitive clip rects. They get
@@ -1721,7 +1729,7 @@ impl<'a> GpuPaintContext<'a> {
             ),
             ClipShape::Polygon(_) => {
                 // clip_bounds = rect scissor, clip_radius = [even_odd, 0, vertex_count, aux_offset]
-                let packed = poly_meta.as_ref().unwrap().packed_count;
+                let packed = poly_meta.as_ref().unwrap().polygon().unwrap().packed_count;
                 let aux_offset = self.polygon_clip_offset(start + shape_idx);
                 let even_odd = packed & POLYGON_EVEN_ODD != 0;
                 let vertex_count = packed & !POLYGON_EVEN_ODD;
@@ -1738,9 +1746,13 @@ impl<'a> GpuPaintContext<'a> {
                 )
             }
             ClipShape::Path(_) => {
-                // Path clipping not supported in GPU - fall back to no clip
+                // Raw images carry the path separately; other native draws retain their fallback.
                 (
-                    [-10000.0, -10000.0, 100000.0, 100000.0],
+                    if keep_path_scissor {
+                        scissor_bounds
+                    } else {
+                        [-10000.0, -10000.0, 100000.0, 100000.0]
+                    },
                     [0.0; 4],
                     [1.0; 4],
                     ClipType::None,
@@ -2089,7 +2101,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         } else {
             0
         };
-        let poly_meta = if let ClipShape::Polygon(ref pts) = transformed_shape {
+        let clip_data = if let ClipShape::Polygon(ref pts) = transformed_shape {
             let batch = self.aux_batch();
             let active = self.active_batch_mut();
             let aux_offset = active.aux_data.len() as u32;
@@ -2107,16 +2119,21 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 active.aux_data.push([x0, y0, x1, y1]);
                 i += 2;
             }
-            Some(PolygonClipData::new(
+            Some(ClipData::Polygon(PolygonClipData::new(
                 batch,
                 aux_offset,
                 vertex_count | rule_bit,
-            ))
+            )))
+        } else if let ClipShape::Path(_) = &transformed_shape {
+            Some(ClipData::Path(path_clip::PathClipData::new(
+                self.current_affine(),
+                rule,
+            )))
         } else {
             None
         };
         let fade = std::mem::replace(&mut self.pending_overflow_fade, [0.0; 4]);
-        self.clip_stack.push((transformed_shape, poly_meta, fade));
+        self.clip_stack.push((transformed_shape, clip_data, fade));
     }
 
     fn pop_clip(&mut self) {

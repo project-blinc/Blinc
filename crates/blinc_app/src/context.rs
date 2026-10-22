@@ -40,6 +40,8 @@ mod rgba_affine_tests;
 mod rgba_clip_tests;
 #[cfg(test)]
 mod rgba_order_tests;
+#[cfg(test)]
+mod rgba_path_clip_tests;
 
 /// Maximum number of images to keep in cache (prevents unbounded memory growth).
 ///
