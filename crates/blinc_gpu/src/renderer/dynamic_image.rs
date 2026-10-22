@@ -134,9 +134,7 @@ impl GpuRenderer {
             self.clear_target(target, wgpu::Color::BLACK);
         }
         self.render_overlay_msaa(target, batch, 1);
-        if self.has_storage_buffers
-            && (!batch.glass_primitives.is_empty() || !batch.nested_glass_primitives.is_empty())
-        {
+        if !batch.glass_primitives.is_empty() || !batch.nested_glass_primitives.is_empty() {
             // Reuse the native glass sequence without replaying the background.
             let mut glass = PrimitiveBatch::new();
             glass.glass_primitives.clone_from(&batch.glass_primitives);

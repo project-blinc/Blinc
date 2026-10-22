@@ -27,6 +27,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - Per-corner squircle / scoop / bevel support on `ClipShape::RoundedRect` propagated into the SDF clip primitive uniforms — all 12 SDF shader variants (`sdf_core` / `sdf_shadow` / `sdf_3d` / `sdf_notch` × `vb` / `dt` / msaa) now read and apply per-corner `n` when evaluating clip alpha.
 
 ### Fixed
+- Standalone glass/blur primitives retain path clip headers and rectangular scissors, including circles, nested materials and merged batches. Native glass now dispatches its existing DT readers; backdrop and auxiliary bindings refresh per draw. Instance size remains 144 bytes.
 - Native tessellated path brushes retain path clips through per-vertex contour pointers, owning batches and tight targets. Path auxiliary data uses storage or data textures, including MSAA and texture growth, without increasing vertex stride. `PathVertex::clip_shape` uses a former padding lane; `_padding` now has two lanes.
 - Native SDF primitives, solid/gradient path meshes, shadows and canvas text retain path clips with push-time transforms, fill rules and rectangular scissors. Contours are shared per batch; merges and canvas collection rebase auxiliary references.
 - Raw RGBA clips retain per-corner shapes and overflow fades, with fade edges anchored to their owning rectangle through inner scissors and tight bakes. Image clip headers carry optional corner rows, and grouped shaped clips avoid an extra circular crop. Scratch ancestor fades remain stripped; the image-instance GPU layout is unchanged.

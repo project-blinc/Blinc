@@ -53,6 +53,9 @@ struct GlassPrimitive {
 @group(0) @binding(1) var prim_data: texture_2d<f32>;
 @group(0) @binding(2) var backdrop_texture: texture_2d<f32>;
 @group(0) @binding(3) var backdrop_sampler: sampler;
+@group(0) @binding(4) var aux_tex: texture_2d<f32>;
+fn load_aux(index: u32) -> vec4<f32> { return textureLoad(aux_tex, vec2<i32>(i32(index % 1024u), i32(index / 1024u)), 0); }
+
 
 // ============================================================================
 // Data Texture Loader
@@ -163,34 +166,7 @@ fn shadow_rounded_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius:
     return 0.5 * (1.0 - erf(d / blur_factor));
 }
 
-fn sd_rounded_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec4<f32>) -> f32 {
-    let half_size = size * 0.5;
-    let center = origin + half_size;
-    let rel = p - center;
-    let q = abs(rel) - half_size;
 
-    // Select corner radius based on quadrant
-    // radius: (top-left, top-right, bottom-right, bottom-left)
-    // In screen coords: Y increases downward, so rel.y < 0 means top half
-    var r: f32;
-    if rel.y < 0.0 {
-        if rel.x > 0.0 {
-            r = radius.y; // top-right
-        } else {
-            r = radius.x; // top-left
-        }
-    } else {
-        if rel.x > 0.0 {
-            r = radius.z; // bottom-right
-        } else {
-            r = radius.w; // bottom-left
-        }
-    }
-
-    r = min(r, min(half_size.x, half_size.y));
-    let q_adjusted = q + vec2<f32>(r);
-    return length(max(q_adjusted, vec2<f32>(0.0))) + min(max(q_adjusted.x, q_adjusted.y), 0.0) - r;
-}
 
 // Hash function for noise
 fn hash(p: vec2<f32>) -> f32 {
@@ -376,7 +352,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let p = in.uv;
 
     // Calculate clip alpha first - discard if completely outside clip bounds
-    let clip_alpha = calculate_glass_clip_alpha(p, prim.clip_bounds);
+    let clip_alpha = calculate_glass_clip_alpha(p, prim.clip_bounds) * abi_shape_clip_alpha(p, select(0.0, prim.clip_radius.x, prim.clip_radius.w < 0.0));
     if clip_alpha < 0.001 {
         discard;
     }

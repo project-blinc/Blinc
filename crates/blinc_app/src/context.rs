@@ -33,6 +33,8 @@ mod foreground_layers_tests;
 #[cfg(test)]
 mod foreground_rgba_tests;
 #[cfg(test)]
+mod glass_path_clip_tests;
+#[cfg(test)]
 mod motion_layers_tests;
 #[cfg(test)]
 mod native_path_clip_tests;

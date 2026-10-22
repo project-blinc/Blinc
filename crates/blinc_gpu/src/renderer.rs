@@ -27,6 +27,7 @@ use wgpu::util::DeviceExt;
 
 mod dynamic_image;
 mod foreground;
+mod glass;
 mod overlay;
 
 use crate::gradient_texture::GradientTextureCache;
@@ -610,8 +611,7 @@ struct CachedGlassResources {
     sampler: wgpu::Sampler,
     /// Cached bind group (valid when backdrop texture hasn't changed)
     bind_group: Option<wgpu::BindGroup>,
-    /// Width/height when bind group was created (for invalidation)
-    bind_group_size: (u32, u32),
+    data: Option<glass::GlassDataTexture>,
 }
 
 /// Cached text resources to avoid per-frame allocations
@@ -2926,6 +2926,24 @@ impl GpuRenderer {
                     binding: 3,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: if has_storage_buffers {
+                        wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        }
+                    } else {
+                        wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        }
+                    },
                     count: None,
                 },
             ],
@@ -6735,7 +6753,7 @@ impl GpuRenderer {
         backdrop: &wgpu::TextureView,
         batch: &PrimitiveBatch,
     ) {
-        if batch.glass_primitives.is_empty() || !self.has_storage_buffers {
+        if batch.glass_primitives.is_empty() {
             return;
         }
         self.ensure_glass_pipelines();
@@ -6764,85 +6782,8 @@ impl GpuRenderer {
         let mut ordered_primitives = simple_primitives;
         ordered_primitives.extend(liquid_primitives);
 
-        // Ensure glass resources are cached (sampler is reused across frames)
-        let current_size = self.viewport_size;
-
-        // Check if we need to create or recreate the cached glass resources
-        let need_new_bind_group = match &self.cached_glass {
-            None => true,
-            Some(cached) => cached.bind_group.is_none() || cached.bind_group_size != current_size,
-        };
-
-        if self.cached_glass.is_none() {
-            let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-                label: Some("Glass Backdrop Sampler"),
-                address_mode_u: wgpu::AddressMode::ClampToEdge,
-                address_mode_v: wgpu::AddressMode::ClampToEdge,
-                address_mode_w: wgpu::AddressMode::ClampToEdge,
-                mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Linear,
-                mipmap_filter: wgpu::FilterMode::Nearest,
-                ..Default::default()
-            });
-            self.cached_glass = Some(CachedGlassResources {
-                sampler,
-                bind_group: None,
-                bind_group_size: (0, 0),
-            });
-        }
-
-        // Update glass uniforms
-        let glass_uniforms = GlassUniforms {
-            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
-            time: self.time,
-            _padding: 0.0,
-        };
-        self.queue.write_buffer(
-            &self.buffers.glass_uniforms,
-            0,
-            bytemuck::bytes_of(&glass_uniforms),
-        );
-
-        // Update glass primitives buffer with ordered primitives
-        self.queue.write_buffer(
-            &self.buffers.glass_primitives,
-            0,
-            bytemuck::cast_slice(&ordered_primitives),
-        );
-
-        // Create or reuse glass bind group
-        if need_new_bind_group {
-            let cached_glass = self.cached_glass.as_ref().unwrap();
-            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Glass Bind Group"),
-                layout: &self.bind_group_layouts.glass,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.buffers.glass_uniforms.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: self.buffers.glass_primitives.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::TextureView(backdrop),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::Sampler(&cached_glass.sampler),
-                    },
-                ],
-            });
-
-            // Update cache
-            if let Some(ref mut cached) = self.cached_glass {
-                cached.bind_group = Some(bind_group);
-                cached.bind_group_size = current_size;
-            }
-        }
-
+        self.update_aux_data_buffer(batch);
+        self.prepare_glass_draw(backdrop, &ordered_primitives);
         let glass_bind_group = self
             .cached_glass
             .as_ref()
@@ -6993,7 +6934,7 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         has_backdrop_content: bool,
     ) {
-        if batch.has_ordered_draws() || !self.has_storage_buffers {
+        if batch.has_ordered_draws() {
             self.render_image_glass_frame(
                 target,
                 backdrop,
@@ -7035,81 +6976,7 @@ impl GpuRenderer {
         let mut ordered_glass_primitives = simple_primitives;
         ordered_glass_primitives.extend(liquid_primitives);
 
-        // Update glass primitives buffer with ordered primitives
-        if !ordered_glass_primitives.is_empty() {
-            self.queue.write_buffer(
-                &self.buffers.glass_primitives,
-                0,
-                bytemuck::cast_slice(&ordered_glass_primitives),
-            );
-        }
-
-        // Update glass uniforms
-        let glass_uniforms = GlassUniforms {
-            viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
-            time: self.time,
-            _padding: 0.0,
-        };
-        self.queue.write_buffer(
-            &self.buffers.glass_uniforms,
-            0,
-            bytemuck::bytes_of(&glass_uniforms),
-        );
-
-        // Ensure glass bind group is cached
-        let current_size = self.viewport_size;
-        let need_new_bind_group = match &self.cached_glass {
-            None => true,
-            Some(cached) => cached.bind_group.is_none() || cached.bind_group_size != current_size,
-        };
-
-        if self.cached_glass.is_none() {
-            let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-                label: Some("Glass Backdrop Sampler"),
-                address_mode_u: wgpu::AddressMode::ClampToEdge,
-                address_mode_v: wgpu::AddressMode::ClampToEdge,
-                address_mode_w: wgpu::AddressMode::ClampToEdge,
-                mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Linear,
-                mipmap_filter: wgpu::FilterMode::Nearest,
-                ..Default::default()
-            });
-            self.cached_glass = Some(CachedGlassResources {
-                sampler,
-                bind_group: None,
-                bind_group_size: (0, 0),
-            });
-        }
-
-        if need_new_bind_group {
-            let cached_glass = self.cached_glass.as_ref().unwrap();
-            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Glass Bind Group"),
-                layout: &self.bind_group_layouts.glass,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.buffers.glass_uniforms.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: self.buffers.glass_primitives.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::TextureView(backdrop),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::Sampler(&cached_glass.sampler),
-                    },
-                ],
-            });
-            if let Some(ref mut cached) = self.cached_glass {
-                cached.bind_group = Some(bind_group);
-                cached.bind_group_size = current_size;
-            }
-        }
+        self.prepare_glass_draw(backdrop, &ordered_glass_primitives);
 
         // Create single command encoder for entire frame
         let mut encoder = self
@@ -7272,42 +7139,7 @@ impl GpuRenderer {
             let mut ordered_nested = nested_simple;
             ordered_nested.extend(nested_liquid);
 
-            // Upload nested glass primitives to buffer
-            self.queue.write_buffer(
-                &self.buffers.glass_primitives,
-                0,
-                bytemuck::cast_slice(&ordered_nested),
-            );
-
-            // Recreate bind group since glass_primitives buffer contents changed
-            {
-                let cached_glass = self.cached_glass.as_ref().unwrap();
-                let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Nested Glass Bind Group"),
-                    layout: &self.bind_group_layouts.glass,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: self.buffers.glass_uniforms.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: self.buffers.glass_primitives.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::TextureView(backdrop),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: wgpu::BindingResource::Sampler(&cached_glass.sampler),
-                        },
-                    ],
-                });
-                if let Some(ref mut cached) = self.cached_glass {
-                    cached.bind_group = Some(bind_group);
-                }
-            }
+            self.prepare_glass_draw(backdrop, &ordered_nested);
 
             let mut encoder = self
                 .device

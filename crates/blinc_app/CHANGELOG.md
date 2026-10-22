@@ -28,6 +28,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Standalone glass path-clip regressions cover direct/frame rendering, active paint owners, transformed fill rules and changing backdrops.
 - Image/glass/blur brushes used by canvas path fills and strokes retain path clips through cached canvas collection and foreground dispatch.
 - Canvas primitive path clips survive concatenation across callbacks, including shared contour rows and text rendered through the primitive stream. Auxiliary rebasing preserves ordinary per-side border widths.
 - Raw-image corner-shape and overflow-fade changes participate in scratch cache fingerprints through the image-owned clip rows.

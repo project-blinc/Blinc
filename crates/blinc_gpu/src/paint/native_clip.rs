@@ -83,4 +83,21 @@ impl GpuPaintContext<'_> {
                 .push_path_with_brush_info(path, bounds, radius, kind, brush);
         }
     }
+    pub(super) fn emit_native_glass(&mut self, mut glass: super::GpuGlassPrimitive, nested: bool) {
+        if let Some((bounds, pointer)) = self.native_primitive_path_clip() {
+            glass.clip_bounds = bounds;
+            glass.clip_radius = [pointer, 0.0, 0.0, -1.0];
+        } else if glass.clip_bounds[0] < -5000.0 {
+            let (bounds, radius, _, kind) = self.get_clip_data();
+            if kind == ClipType::Rect {
+                glass.clip_bounds = bounds;
+                glass.clip_radius = radius;
+            }
+        }
+        if nested {
+            self.active_batch_mut().push_nested_glass(glass);
+        } else {
+            self.active_batch_mut().push_glass(glass);
+        }
+    }
 }

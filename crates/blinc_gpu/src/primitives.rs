@@ -825,7 +825,7 @@ pub struct GpuGlassPrimitive {
     pub type_info: [u32; 4],
     /// Clip bounds (x, y, width, height) for clipping blur samples
     pub clip_bounds: [f32; 4],
-    /// Clip corner radii (for rounded rect clips)
+    /// Rounded clip radii, or [path_header, 0, 0, -1] for a prepared shape clip.
     pub clip_radius: [f32; 4],
     /// Border color (RGBA) - when alpha > 0, renders a solid border instead of light-based highlights
     pub border_color: [f32; 4],
@@ -2171,6 +2171,15 @@ impl PrimitiveBatch {
         }
         let bg_vertex_offset = self.paths.vertices.len();
         let bg_index_offset = self.paths.indices.len();
+        for glass in other
+            .glass_primitives
+            .iter_mut()
+            .chain(&mut other.nested_glass_primitives)
+        {
+            if glass.clip_radius[3] < 0.0 {
+                glass.clip_radius[0] += shift;
+            }
+        }
         // Record the current primitive count for offsetting layer commands
         let primitive_offset = self.primitives.len();
         let fg_primitive_offset = self.foreground_primitives.len();
@@ -2182,6 +2191,8 @@ impl PrimitiveBatch {
         self.foreground_primitives
             .extend(other.foreground_primitives);
         self.glass_primitives.extend(other.glass_primitives);
+        self.nested_glass_primitives
+            .extend(other.nested_glass_primitives);
         self.glyphs.extend(other.glyphs);
 
         // Merge paths with index offset

@@ -2802,11 +2802,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 glass = glass.with_glass_type(GlassType::Simple);
             }
 
-            if style.depth > 0 {
-                self.active_batch_mut().push_nested_glass(glass);
-            } else {
-                self.active_batch_mut().push_glass(glass);
-            }
+            self.emit_native_glass(glass, style.depth > 0);
             return;
         }
 
@@ -2872,7 +2868,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 }
             }
 
-            self.active_batch_mut().push_glass(glass);
+            self.emit_native_glass(glass, false);
             return;
         }
 
@@ -3414,11 +3410,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             if let Some(bc) = style.border_color {
                 glass = glass.with_border_color(bc.r, bc.g, bc.b, bc.a);
             }
-            if style.depth > 0 {
-                self.active_batch_mut().push_nested_glass(glass);
-            } else {
-                self.active_batch_mut().push_glass(glass);
-            }
+            self.emit_native_glass(glass, style.depth > 0);
             return;
         }
 

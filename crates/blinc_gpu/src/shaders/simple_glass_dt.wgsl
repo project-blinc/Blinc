@@ -38,6 +38,9 @@ struct SimpleGlassPrimitive {
 @group(0) @binding(1) var prim_data: texture_2d<f32>;
 @group(0) @binding(2) var backdrop_texture: texture_2d<f32>;
 @group(0) @binding(3) var backdrop_sampler: sampler;
+@group(0) @binding(4) var aux_tex: texture_2d<f32>;
+fn load_aux(index: u32) -> vec4<f32> { return textureLoad(aux_tex, vec2<i32>(i32(index % 1024u), i32(index / 1024u)), 0); }
+
 
 // ============================================================================
 // Data Texture Loader
@@ -121,25 +124,7 @@ fn vs_main(
 // SDF and Blur Functions
 // ============================================================================
 
-fn sd_rounded_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec4<f32>) -> f32 {
-    let half_size = size * 0.5;
-    let center = origin + half_size;
-    let rel = p - center;
-    let q = abs(rel) - half_size;
 
-    var r: f32;
-    if (rel.x < 0.0 && rel.y < 0.0) { r = radius.x; }
-    else if (rel.x >= 0.0 && rel.y < 0.0) { r = radius.y; }
-    else if (rel.x >= 0.0 && rel.y >= 0.0) { r = radius.z; }
-    else { r = radius.w; }
-
-    // Clamp radius to half the minimum dimension (CSS spec)
-    r = min(r, min(half_size.x, half_size.y));
-
-    let outer_dist = length(max(q + r, vec2<f32>(0.0)));
-    let inner_dist = min(max(q.x + r, q.y + r), 0.0);
-    return outer_dist + inner_dist - r;
-}
 
 fn shadow_rounded_rect(p: vec2<f32>, origin: vec2<f32>, size: vec2<f32>, radius: vec4<f32>, blur: f32) -> f32 {
     let d = sd_rounded_rect(p, origin, size, radius);
@@ -248,7 +233,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let p = in.uv;
 
     // Calculate clip alpha
-    let clip_alpha = calculate_clip_alpha(p, prim.clip_bounds);
+    let clip_alpha = calculate_clip_alpha(p, prim.clip_bounds) * abi_shape_clip_alpha(p, select(0.0, prim.clip_radius.x, prim.clip_radius.w < 0.0));
     if clip_alpha < 0.001 {
         discard;
     }

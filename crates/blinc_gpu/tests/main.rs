@@ -9,6 +9,7 @@ mod composite_layers;
 mod display_list;
 mod foreground_layers;
 mod foreground_rgba;
+mod glass_path_clip;
 mod motion_layers;
 mod native_path_clip;
 mod notch_joins;

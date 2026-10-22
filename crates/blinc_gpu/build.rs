@@ -137,6 +137,13 @@ fn main() {
                         || n == "backdrop.wgsl"
                         || n == "canvas.wgsl"
                         || n == "path.wgsl"
+                        || matches!(
+                            n,
+                            "glass.wgsl"
+                                | "simple_glass.wgsl"
+                                | "glass_dt.wgsl"
+                                | "simple_glass_dt.wgsl"
+                        )
                 })
         })
         .collect();
@@ -166,10 +173,12 @@ fn main() {
             body.replacen("\n@fragment", &format!("\n{clip}\n@fragment"), 1)
         };
 
+        // Bodies can provide their own material-specific helper implementations.
+        let provided = split_functions(&body);
         // Everything the shader reaches, transitively through the prelude.
         let mut needed: BTreeSet<String> = order
             .iter()
-            .filter(|n| mentions(&body, n))
+            .filter(|n| mentions(&body, n) && !provided.contains_key(*n))
             .cloned()
             .collect();
         loop {
@@ -177,7 +186,11 @@ fn main() {
             for n in needed.clone() {
                 let def = &helpers[&n];
                 for m in &order {
-                    if !needed.contains(m) && m != &n && mentions(def, m) {
+                    if !needed.contains(m)
+                        && !provided.contains_key(m)
+                        && m != &n
+                        && mentions(def, m)
+                    {
                         needed.insert(m.clone());
                         added = true;
                     }
