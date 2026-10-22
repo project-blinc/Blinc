@@ -63,6 +63,7 @@ use crate::primitives::{
 use crate::text::TextRenderingContext;
 
 mod aux_data;
+mod native_clip;
 mod path_clip;
 mod rgba;
 use aux_data::{AuxBatch, ClipData, PolygonClipData};
@@ -667,7 +668,7 @@ impl<'a> GpuPaintContext<'a> {
     pub fn take_composite_layer_batches(
         &mut self,
     ) -> std::collections::HashMap<u64, PrimitiveBatch> {
-        self.forget_composite_polygon_offsets();
+        self.forget_composite_clip_offsets();
         std::mem::take(&mut self.composite_layer_batches)
     }
 
@@ -743,7 +744,7 @@ impl<'a> GpuPaintContext<'a> {
     /// fast path) dispatches it per frame on top of the static cache
     /// blit. Leaves `dynamic_batch` empty for the next paint pass.
     pub fn take_dynamic_batch(&mut self) -> PrimitiveBatch {
-        self.forget_polygon_offsets(AuxBatch::Dynamic);
+        self.forget_clip_offsets(AuxBatch::Dynamic);
         std::mem::take(&mut self.dynamic_batch)
     }
 
@@ -1746,7 +1747,7 @@ impl<'a> GpuPaintContext<'a> {
                 )
             }
             ClipShape::Path(_) => {
-                // Raw images carry the path separately; other native draws retain their fallback.
+                // Images and native primitives attach path shape rows separately.
                 (
                     if keep_path_scissor {
                         scissor_bounds
@@ -1763,7 +1764,7 @@ impl<'a> GpuPaintContext<'a> {
 
     /// Take the accumulated batch for rendering
     pub fn take_batch(&mut self) -> PrimitiveBatch {
-        self.forget_polygon_offsets(AuxBatch::Static);
+        self.forget_clip_offsets(AuxBatch::Static);
         std::mem::take(&mut self.batch)
     }
 
@@ -3009,11 +3010,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             clip_shape: [0.0; 4],
         };
 
-        if self.emit_foreground() {
-            self.active_batch_mut().push_foreground(primitive);
-        } else {
-            self.active_batch_mut().push(primitive);
-        }
+        self.emit_native_primitive(primitive);
 
         // Visible companion to the BLINC_DEBUG_FILL_RECT log: when
         // enabled, paint a thin coloured outline around every fill.
@@ -3195,11 +3192,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             clip_shape: [0.0; 4],
         };
 
-        if self.emit_foreground() {
-            self.active_batch_mut().push_foreground(primitive);
-        } else {
-            self.active_batch_mut().push(primitive);
-        }
+        self.emit_native_primitive(primitive);
     }
 
     fn fill_rect_with_per_side_border(
@@ -3300,11 +3293,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             clip_shape: [0.0; 4],
         };
 
-        if self.emit_foreground() {
-            self.active_batch_mut().push_foreground(primitive);
-        } else {
-            self.active_batch_mut().push(primitive);
-        }
+        self.emit_native_primitive(primitive);
     }
 
     fn stroke_rect(
@@ -3434,11 +3423,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             clip_shape: [0.0; 4],
         };
 
-        if self.emit_foreground() {
-            self.active_batch_mut().push_foreground(primitive);
-        } else {
-            self.active_batch_mut().push(primitive);
-        }
+        self.emit_native_primitive(primitive);
     }
 
     fn fill_circle(&mut self, center: Point, radius: f32, brush: Brush) {
@@ -3543,11 +3528,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             clip_shape: [0.0; 4],
         };
 
-        if self.emit_foreground() {
-            self.active_batch_mut().push_foreground(primitive);
-        } else {
-            self.active_batch_mut().push(primitive);
-        }
+        self.emit_native_primitive(primitive);
     }
 
     fn stroke_circle(&mut self, center: Point, radius: f32, stroke: &Stroke, brush: Brush) {
@@ -3628,11 +3609,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             clip_shape: [0.0; 4],
         };
 
-        if self.emit_foreground() {
-            self.active_batch_mut().push_foreground(primitive);
-        } else {
-            self.active_batch_mut().push(primitive);
-        }
+        self.emit_native_primitive(primitive);
     }
 
     fn draw_text(&mut self, text: &str, origin: Point, style: &TextStyle) {
@@ -3819,11 +3796,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
                 prim.type_info[2] = clip_kind_u32;
                 prim.clip_bounds = clip_bounds;
                 prim.clip_radius = clip_radius;
-                if self.emit_foreground() {
-                    self.active_batch_mut().push_foreground(prim);
-                } else {
-                    self.active_batch_mut().push(prim);
-                }
+                self.emit_native_primitive(prim);
             }
         }
     }
@@ -3912,11 +3885,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             clip_shape: [0.0; 4],
         };
 
-        if self.emit_foreground() {
-            self.active_batch_mut().push_foreground(primitive);
-        } else {
-            self.active_batch_mut().push(primitive);
-        }
+        self.emit_native_primitive(primitive);
     }
 
     fn draw_inner_shadow(&mut self, rect: Rect, corner_radius: CornerRadius, shadow: Shadow) {
@@ -3990,11 +3959,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             clip_shape: [0.0; 4],
         };
 
-        if self.emit_foreground() {
-            self.active_batch_mut().push_foreground(primitive);
-        } else {
-            self.active_batch_mut().push(primitive);
-        }
+        self.emit_native_primitive(primitive);
     }
 
     fn draw_circle_shadow(&mut self, center: Point, radius: f32, shadow: Shadow) {
@@ -4056,11 +4021,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             clip_shape: [0.0; 4],
         };
 
-        if self.emit_foreground() {
-            self.active_batch_mut().push_foreground(primitive);
-        } else {
-            self.active_batch_mut().push(primitive);
-        }
+        self.emit_native_primitive(primitive);
     }
 
     fn draw_circle_inner_shadow(&mut self, center: Point, radius: f32, shadow: Shadow) {
@@ -4121,11 +4082,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             clip_shape: [0.0; 4],
         };
 
-        if self.emit_foreground() {
-            self.active_batch_mut().push_foreground(primitive);
-        } else {
-            self.active_batch_mut().push(primitive);
-        }
+        self.emit_native_primitive(primitive);
     }
 
     fn sdf_build(&mut self, f: &mut dyn FnMut(&mut dyn SdfBuilder)) {
@@ -4784,6 +4741,25 @@ impl<'a> GpuPaintContext<'a> {
                 [0.0, 0.0, 0.0, 0.0],
             ),
         };
+        // Resolve the shared clip once for this mesh, rather than per triangle.
+        let (clip_bounds, clip_radius, clip_corner_shape, clip_type, clip_shape) =
+            if let Some((bounds, pointer)) = self.native_primitive_path_clip() {
+                (
+                    bounds,
+                    [0.0; 4],
+                    [1.0; 4],
+                    ClipType::Rect,
+                    [pointer, 0.0, 0.0, 0.0],
+                )
+            } else {
+                (
+                    clip_bounds,
+                    clip_radius,
+                    clip_corner_shape,
+                    clip_type,
+                    [0.0; 4],
+                )
+            };
         let clip_type_u = clip_type as u32;
 
         let mut i = 0;
@@ -4853,6 +4829,7 @@ impl<'a> GpuPaintContext<'a> {
                 clip_bounds,
                 clip_radius,
                 clip_corner_shape,
+                clip_shape,
                 type_info: [
                     PrimitiveType::Mesh as u32,
                     fill_type,
@@ -4863,11 +4840,7 @@ impl<'a> GpuPaintContext<'a> {
             };
             prim.local_affine = [1.0, 0.0, 0.0, 1.0];
 
-            if self.emit_foreground() {
-                self.active_batch_mut().push_foreground(prim);
-            } else {
-                self.active_batch_mut().push(prim);
-            }
+            self.push_native_primitive(prim);
         }
     }
 }

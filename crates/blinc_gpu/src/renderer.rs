@@ -11326,6 +11326,18 @@ impl GpuRenderer {
         // entries that follow (when `type_info[3] == 1`) stay unchanged.
         let mut tight_aux_data: Vec<[f32; 4]> = batch.aux_data.clone();
         let mut needs_aux_upload = false;
+        let mut translated_frames = std::collections::HashSet::new();
+        for op in &offset_primitives {
+            if op.clip_shape[0] > 0.5 {
+                let at = op.clip_shape[0] as usize - 1;
+                if at + 1 < tight_aux_data.len() && translated_frames.insert(at) {
+                    let [a, b, c, d] = tight_aux_data[at];
+                    tight_aux_data[at + 1][0] += a * offset_x + c * offset_y;
+                    tight_aux_data[at + 1][1] += b * offset_x + d * offset_y;
+                    needs_aux_upload = true;
+                }
+            }
+        }
         for op in &offset_primitives {
             if op.type_info[0] != 9 {
                 continue;

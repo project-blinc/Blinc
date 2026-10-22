@@ -1,4 +1,4 @@
-//! Filled path contours captured in physical screen space for raw images.
+//! Filled path contours captured in physical screen space.
 use blinc_core::{Affine2D, FillRule, Path, PathCommand, Point};
 use lyon::geom::euclid::{Angle, default::Point2D};
 use lyon::geom::{ArcFlags, CubicBezierSegment, QuadraticBezierSegment, SvgArc};
@@ -15,6 +15,7 @@ pub(super) struct PathClipData {
     affine: Affine2D,
     rule: FillRule,
     rows: OnceCell<Vec<[f32; 4]>>,
+    pub(super) offsets: smallvec::SmallVec<[(super::AuxBatch, u32); 2]>,
 }
 
 impl PathClipData {
@@ -23,6 +24,7 @@ impl PathClipData {
             affine,
             rule,
             rows: OnceCell::new(),
+            offsets: smallvec::SmallVec::new(),
         }
     }
 

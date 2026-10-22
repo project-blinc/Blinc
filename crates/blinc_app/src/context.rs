@@ -35,6 +35,8 @@ mod foreground_rgba_tests;
 #[cfg(test)]
 mod motion_layers_tests;
 #[cfg(test)]
+mod native_path_clip_tests;
+#[cfg(test)]
 mod rgba_affine_tests;
 #[cfg(test)]
 mod rgba_clip_properties_tests;
@@ -1190,7 +1192,9 @@ impl RenderContext {
             // primitives) so we can splice the whole `primitives`
             // vec back into the cached batch.
             let new_batch = scratch.take_batch();
-            if new_batch.has_ordered_images()
+            // This splice replaces primitives only; referenced rows need a full paint.
+            if !new_batch.aux_data.is_empty()
+                || new_batch.has_ordered_images()
                 || new_batch.has_foreground_content()
                 || new_batch.has_foreground_layers()
             {
@@ -2971,34 +2975,10 @@ impl RenderContext {
         }
     }
 
-    /// Shift every `aux_data` index on `prims` by `shift`.
-    ///
-    /// Used when concatenating one source's primitives into a
-    /// merged `aux_data` buffer that already contains entries from
-    /// another source. Three index sites need adjusting in lockstep:
-    ///
-    /// - **Mesh primitives** (`type_info[0] == PrimitiveType::Mesh`)
-    ///   carry the triangle's aux offset in `border[2]`.
-    /// - **3D-group SDF** primitives (any `prim_type` with
-    ///   `border[1]` = `shape_count > 0`) also use `border[2]` for
-    ///   the ShapeDesc-records offset.
-    /// - **Polygon clip** is host-primitive-agnostic
-    ///   (`type_info[2] == ClipType::Polygon`); the offset lives on
-    ///   `clip_radius[3]`.
-    fn shift_aux_offsets(prims: &mut [blinc_gpu::primitives::GpuPrimitive], shift: f32) {
-        if shift == 0.0 {
-            return;
-        }
+    /// Rebase primitive references when concatenating auxiliary buffers.
+    fn shift_aux_offsets(prims: &mut [GpuPrimitive], shift: f32) {
         for prim in prims {
-            let prim_type = prim.type_info[0];
-            if prim_type == blinc_gpu::primitives::PrimitiveType::Mesh as u32
-                || prim.border[1] > 0.0
-            {
-                prim.border[2] += shift;
-            }
-            if prim.type_info[2] == blinc_gpu::primitives::ClipType::Polygon as u32 {
-                prim.clip_radius[3] += shift;
-            }
+            prim.rebase_aux(shift);
         }
     }
 

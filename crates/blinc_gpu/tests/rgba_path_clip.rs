@@ -90,7 +90,7 @@ fn rgba_path_clip_rule_is_consumed_once_and_topmost_shape_still_wins() {
 }
 
 #[test]
-fn rgba_path_clip_keeps_other_native_primitives_on_their_existing_fallback() {
+fn rgba_path_clip_shares_capture_with_native_primitives_and_preserves_scissors() {
     let mut paint = GpuPaintContext::new(180.0, 150.0);
     paint.push_clip(ClipShape::rect(Rect::new(40.0, 30.0, 40.0, 50.0)));
     paint.push_clip(ClipShape::Path(Path::new()));
@@ -101,11 +101,9 @@ fn rgba_path_clip_keeps_other_native_primitives_on_their_existing_fallback() {
     );
     draw(&mut paint);
     let batch = paint.take_batch();
-    assert_eq!(batch.primitives[0].type_info[2], ClipType::None as u32);
-    assert_eq!(
-        batch.primitives[0].clip_bounds,
-        [-10000.0, -10000.0, 100000.0, 100000.0]
-    );
+    assert_eq!(batch.primitives[0].type_info[2], ClipType::Rect as u32);
+    assert!(batch.primitives[0].clip_shape[0] > 0.5);
+    assert_eq!(batch.primitives[0].clip_bounds, [40.0, 30.0, 40.0, 50.0]);
     assert_eq!(
         batch.dynamic_images[0].clip_bounds,
         [40.0, 30.0, 40.0, 50.0]

@@ -387,7 +387,7 @@ pub struct GpuPrimitive {
     /// Geometry occupies the native notch slots in `perspective`, `sdf_3d`,
     /// `light` and `corner_radius`.
     pub notch_info: [f32; 4],
-    /// One more than the offset in `aux_data` of an ABI shape clip, zero for
+    /// One more than the offset in `aux_data` of a shape clip, zero for
     /// none. Three rows hold its inverse screen frame, translation/kind/radius,
     /// and shape parameters, followed by polygon points two per row. A polygon
     /// offset is relative to that header, so moving a run only rebases this pointer.
@@ -1681,6 +1681,7 @@ pub struct DynamicImage {
     pub clip_aux: Vec<[f32; 4]>,
 }
 
+mod aux_data;
 mod dynamic_image;
 mod foreground;
 
@@ -2145,7 +2146,15 @@ impl PrimitiveBatch {
     /// Merge another batch into this one
     ///
     /// Useful for combining batches from different paint contexts.
-    pub fn merge(&mut self, other: PrimitiveBatch) {
+    pub fn merge(&mut self, mut other: PrimitiveBatch) {
+        let shift = self.aux_data.len() as f32;
+        for p in other
+            .primitives
+            .iter_mut()
+            .chain(&mut other.foreground_primitives)
+        {
+            p.rebase_aux(shift);
+        }
         // Record the current primitive count for offsetting layer commands
         let primitive_offset = self.primitives.len();
         let fg_primitive_offset = self.foreground_primitives.len();
@@ -2208,8 +2217,7 @@ impl PrimitiveBatch {
         // Merge 3D viewports
         self.viewports_3d.extend(other.viewports_3d);
 
-        // Merge aux_data (offsets in primitives already point to correct positions
-        // because aux_data offsets are absolute within a batch — callers must rebind)
+        // Primitive references were rebased before moving their rows.
         self.aux_data.extend(other.aux_data);
     }
 }

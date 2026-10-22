@@ -10,6 +10,7 @@ mod display_list;
 mod foreground_layers;
 mod foreground_rgba;
 mod motion_layers;
+mod native_path_clip;
 mod notch_joins;
 mod primitive_layout;
 mod producer_opacity;

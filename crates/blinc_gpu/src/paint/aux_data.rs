@@ -1,4 +1,4 @@
-//! Clip metadata and polygon offsets cached per batch.
+//! Clip metadata and auxiliary offsets cached per batch.
 use super::path_clip::PathClipData;
 use super::{ClipShape, GpuPaintContext};
 use smallvec::SmallVec;
@@ -84,21 +84,26 @@ impl GpuPaintContext<'_> {
         offset
     }
 
-    pub(super) fn forget_polygon_offsets(&mut self, batch: AuxBatch) {
+    pub(super) fn forget_clip_offsets(&mut self, batch: AuxBatch) {
         for (_, metadata, _) in &mut self.clip_stack {
-            if let Some(ClipData::Polygon(metadata)) = metadata {
-                metadata.offsets.retain(|(key, _)| *key != batch);
+            match metadata {
+                Some(ClipData::Polygon(metadata)) => {
+                    metadata.offsets.retain(|(key, _)| *key != batch)
+                }
+                Some(ClipData::Path(metadata)) => metadata.offsets.retain(|(key, _)| *key != batch),
+                None => {}
             }
         }
     }
 
-    pub(super) fn forget_composite_polygon_offsets(&mut self) {
+    pub(super) fn forget_composite_clip_offsets(&mut self) {
         for (_, metadata, _) in &mut self.clip_stack {
-            if let Some(ClipData::Polygon(metadata)) = metadata {
-                metadata
-                    .offsets
-                    .retain(|(key, _)| !matches!(key, AuxBatch::Composite(_)));
-            }
+            let offsets = match metadata {
+                Some(ClipData::Polygon(metadata)) => &mut metadata.offsets,
+                Some(ClipData::Path(metadata)) => &mut metadata.offsets,
+                None => continue,
+            };
+            offsets.retain(|(key, _)| !matches!(key, AuxBatch::Composite(_)));
         }
     }
 }
