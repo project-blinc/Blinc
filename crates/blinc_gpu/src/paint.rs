@@ -2549,26 +2549,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         }
 
         if !tessellated.is_empty() {
-            let (clip_bounds, clip_radius, clip_corner_shape, clip_type) = self.get_clip_data();
-
-            if self.emit_foreground() {
-                self.active_batch_mut()
-                    .push_foreground_path_with_brush_info(
-                        tessellated,
-                        clip_bounds,
-                        clip_radius,
-                        clip_type,
-                        &brush_info,
-                    );
-            } else {
-                self.active_batch_mut().push_path_with_brush_info(
-                    tessellated,
-                    clip_bounds,
-                    clip_radius,
-                    clip_type,
-                    &brush_info,
-                );
-            }
+            self.emit_native_path(tessellated, &brush_info);
         }
     }
 
@@ -2627,26 +2608,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         }
 
         if !tessellated.is_empty() {
-            let (clip_bounds, clip_radius, clip_corner_shape, clip_type) = self.get_clip_data();
-
-            if self.emit_foreground() {
-                self.active_batch_mut()
-                    .push_foreground_path_with_brush_info(
-                        tessellated,
-                        clip_bounds,
-                        clip_radius,
-                        clip_type,
-                        &brush_info,
-                    );
-            } else {
-                self.active_batch_mut().push_path_with_brush_info(
-                    tessellated,
-                    clip_bounds,
-                    clip_radius,
-                    clip_type,
-                    &brush_info,
-                );
-            }
+            self.emit_native_path(tessellated, &brush_info);
         }
     }
 

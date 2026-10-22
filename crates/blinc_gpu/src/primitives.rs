@@ -1769,7 +1769,13 @@ impl PrimitiveBatch {
 
     /// Whether splitting the background into primitive-only passes would lose content.
     pub fn requires_ordered_rendering(&self) -> bool {
-        self.has_layer_effects() || self.has_ordered_images()
+        self.has_layer_effects() || self.has_ordered_draws()
+    }
+
+    /// Draws consumed together by the ordered renderer, including path-only groups.
+    pub fn has_ordered_draws(&self) -> bool {
+        self.has_ordered_images()
+            || (!self.aux_data.is_empty() && self.paths.vertices.iter().any(|v| v.clip_shape > 0))
     }
 
     /// Whether a layer needs composition, including opacity-only and 3D groups.
@@ -2155,6 +2161,16 @@ impl PrimitiveBatch {
         {
             p.rebase_aux(shift);
         }
+        for v in other
+            .paths
+            .vertices
+            .iter_mut()
+            .chain(&mut other.foreground_paths.vertices)
+        {
+            v.rebase_aux(shift as u32);
+        }
+        let bg_vertex_offset = self.paths.vertices.len();
+        let bg_index_offset = self.paths.indices.len();
         // Record the current primitive count for offsetting layer commands
         let primitive_offset = self.primitives.len();
         let fg_primitive_offset = self.foreground_primitives.len();
@@ -2191,6 +2207,11 @@ impl PrimitiveBatch {
         // Merge layer commands with offset primitive indices
         for mut entry in other.layer_commands {
             entry.primitive_index += primitive_offset;
+            entry.path_vertex_index += bg_vertex_offset;
+            entry.path_index_count += bg_index_offset;
+            entry.foreground_primitive_index += fg_primitive_offset;
+            entry.foreground_path_vertex_index += fg_vertex_offset;
+            entry.foreground_path_index_count += fg_index_offset;
             self.layer_commands.push(entry);
         }
 

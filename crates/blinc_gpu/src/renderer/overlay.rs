@@ -268,6 +268,25 @@ fn common_clip(items: &[Node], batch: &PrimitiveBatch) -> Option<([f32; 4], [f32
     if matching { first.flatten() } else { None }
 }
 
+pub(super) fn translate_clip_frames(
+    aux: &mut [[f32; 4]],
+    pointers: impl Iterator<Item = u32>,
+    origin: [f32; 2],
+) -> bool {
+    let mut frames = BTreeSet::new();
+    let mut changed = false;
+    for pointer in pointers.filter(|p| *p > 0) {
+        let at = pointer as usize - 1;
+        if at + 1 < aux.len() && frames.insert(at) {
+            let [a, b, c, d] = aux[at];
+            aux[at + 1][0] += a * origin[0] + c * origin[1];
+            aux[at + 1][1] += b * origin[0] + d * origin[1];
+            changed = true;
+        }
+    }
+    changed
+}
+
 fn translated(
     batch: &PrimitiveBatch,
     start: Cursor,
@@ -302,7 +321,6 @@ fn translated(
         out.paths.clip_radius[1] += dy;
     }
     let mut meshes = BTreeSet::new();
-    let mut frames = BTreeSet::new();
     for p in &batch.primitives[start.primitive..end.primitive] {
         let mut p = *p;
         p.bounds[0] += dx;
@@ -340,16 +358,20 @@ fn translated(
                 out.aux_data[at + 1][1] += dy;
             }
         }
-        if p.clip_shape[0] > 0.5 {
-            let at = p.clip_shape[0] as usize - 1;
-            if at + 1 < out.aux_data.len() && frames.insert(at) {
-                let [a, b, c, d] = out.aux_data[at];
-                out.aux_data[at + 1][0] -= a * dx + c * dy;
-                out.aux_data[at + 1][1] -= b * dx + d * dy;
-            }
-        }
         out.primitives.push(p);
     }
+    translate_clip_frames(
+        &mut out.aux_data,
+        batch.primitives[start.primitive..end.primitive]
+            .iter()
+            .map(|p| p.clip_shape[0] as u32)
+            .chain(
+                batch.paths.vertices[start.vertex..end.vertex]
+                    .iter()
+                    .map(|v| v.clip_shape),
+            ),
+        origin,
+    );
     for v in &batch.paths.vertices[start.vertex..end.vertex] {
         let mut v = *v;
         v.position[0] += dx;

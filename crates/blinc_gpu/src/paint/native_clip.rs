@@ -60,4 +60,27 @@ impl GpuPaintContext<'_> {
             self.active_batch_mut().push(primitive);
         }
     }
+    pub(super) fn emit_native_path(
+        &mut self,
+        mut path: crate::path::TessellatedPath,
+        brush: &crate::path::PathBrushInfo,
+    ) {
+        let (bounds, radius, kind) =
+            if let Some((bounds, pointer)) = self.native_primitive_path_clip() {
+                for v in &mut path.vertices {
+                    v.clip_shape = pointer as u32;
+                }
+                (bounds, [0.0; 4], ClipType::Rect)
+            } else {
+                let (bounds, radius, _, kind) = self.get_clip_data();
+                (bounds, radius, kind)
+            };
+        if self.emit_foreground() {
+            self.active_batch_mut()
+                .push_foreground_path_with_brush_info(path, bounds, radius, kind, brush);
+        } else {
+            self.active_batch_mut()
+                .push_path_with_brush_info(path, bounds, radius, kind, brush);
+        }
+    }
 }

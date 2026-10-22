@@ -12,6 +12,7 @@ mod foreground_rgba;
 mod motion_layers;
 mod native_path_clip;
 mod notch_joins;
+mod path_brush_clip;
 mod primitive_layout;
 mod producer_opacity;
 mod rgba_affine;

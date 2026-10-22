@@ -136,6 +136,7 @@ fn main() {
                         || n == "image.wgsl"
                         || n == "backdrop.wgsl"
                         || n == "canvas.wgsl"
+                        || n == "path.wgsl"
                 })
         })
         .collect();
@@ -204,10 +205,11 @@ fn main() {
             used.len(),
             order.len()
         );
-        if name == "image.wgsl" {
+        if name == "image.wgsl" || name == "path.wgsl" {
             let dt = out.replace("var<storage, read> aux_data: array<vec4<f32>>;", "var aux_tex: texture_2d<f32>;")
                 .replace("return aux_data[index];", "return textureLoad(aux_tex, vec2<i32>(i32(index % 1024u), i32(index / 1024u)), 0);");
-            std::fs::write(out_dir.join("image_dt.wgsl"), dt).expect("write image DT shader");
+            std::fs::write(out_dir.join(name.replace(".wgsl", "_dt.wgsl")), dt)
+                .expect("write auxiliary DT shader");
         }
         std::fs::write(out_dir.join(&name), out)
             .unwrap_or_else(|e| panic!("cannot write {name}: {e}"));

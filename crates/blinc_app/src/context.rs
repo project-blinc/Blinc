@@ -37,6 +37,8 @@ mod motion_layers_tests;
 #[cfg(test)]
 mod native_path_clip_tests;
 #[cfg(test)]
+mod path_brush_clip_tests;
+#[cfg(test)]
 mod rgba_affine_tests;
 #[cfg(test)]
 mod rgba_clip_properties_tests;
@@ -1129,7 +1131,7 @@ impl RenderContext {
             None => return false,
         };
 
-        if batch.has_ordered_images()
+        if batch.has_ordered_draws()
             || batch.has_foreground_content()
             || batch.has_foreground_layers()
         {
@@ -1194,7 +1196,7 @@ impl RenderContext {
             let new_batch = scratch.take_batch();
             // This splice replaces primitives only; referenced rows need a full paint.
             if !new_batch.aux_data.is_empty()
-                || new_batch.has_ordered_images()
+                || new_batch.has_ordered_draws()
                 || new_batch.has_foreground_content()
                 || new_batch.has_foreground_layers()
             {
@@ -2263,7 +2265,7 @@ impl RenderContext {
             Some(b) => b,
             None => return false,
         };
-        if batch.has_ordered_images()
+        if batch.has_ordered_draws()
             || batch.has_foreground_content()
             || batch.has_foreground_layers()
         {
@@ -2915,7 +2917,7 @@ impl RenderContext {
     fn dispatch_dynamic_batch_overlay(&mut self, target_view: &wgpu::TextureView) {
         self.rebind_glyph_atlas_for_overlay();
         if let Some(batch) = self.cached_dynamic_batch.as_ref() {
-            if !batch.primitives.is_empty() || batch.has_paths() || batch.has_ordered_images() {
+            if !batch.primitives.is_empty() || batch.has_paths() || batch.has_ordered_draws() {
                 if batch.requires_ordered_rendering() {
                     // Keep paths and group commands together. One sample retains
                     // SDF coverage across opacity/effect boundaries.
@@ -3056,7 +3058,7 @@ impl RenderContext {
         .into_iter()
         .flatten()
         .any(|batch| {
-            batch.has_ordered_images()
+            batch.has_ordered_draws()
                 || batch.has_foreground_content()
                 || batch.has_foreground_layers()
         }) {
@@ -3780,7 +3782,7 @@ impl RenderContext {
             // tests) we still have to dispatch the paths, just without
             // the multisample resolve — otherwise SVG icons / subgraph
             // diamonds / any fill_path content stays invisible.
-            if bg_batch.has_paths() && !bg_batch.has_ordered_images() {
+            if bg_batch.has_paths() && !bg_batch.has_ordered_draws() {
                 if use_msaa_overlay {
                     self.renderer
                         .render_paths_overlay_msaa(target, &bg_batch, self.sample_count);
@@ -3839,7 +3841,7 @@ impl RenderContext {
                 // Render paths (not included in unified primitives).
                 // MSAA when available; non-MSAA dispatch when not so
                 // web (sample_count = 1) still gets fill_path content.
-                if fg_batch.has_paths() && !fg_batch.has_ordered_images() {
+                if fg_batch.has_paths() && !fg_batch.has_ordered_draws() {
                     if use_msaa_overlay {
                         self.renderer.render_paths_overlay_msaa(
                             target,
@@ -3874,7 +3876,7 @@ impl RenderContext {
                 // Paths in the legacy branch also need a 1×-sample
                 // fallback dispatch — same reason as the unified
                 // branch above.
-                if fg_batch.has_paths() && !fg_batch.has_ordered_images() {
+                if fg_batch.has_paths() && !fg_batch.has_ordered_draws() {
                     if use_msaa_overlay {
                         self.renderer.render_paths_overlay_msaa(
                             target,
@@ -3916,7 +3918,7 @@ impl RenderContext {
 
             // Render background paths. Same MSAA/non-MSAA split as the
             // glass branch — 1×-sample targets still have to dispatch.
-            if bg_batch.has_paths() && !bg_batch.has_ordered_images() {
+            if bg_batch.has_paths() && !bg_batch.has_ordered_draws() {
                 if use_msaa_overlay {
                     self.renderer
                         .render_paths_overlay_msaa(target, &bg_batch, self.sample_count);
@@ -3968,7 +3970,7 @@ impl RenderContext {
 
                 // Render paths (not included in unified primitives).
                 // 1×-sample fallback dispatch so web still emits.
-                if fg_batch.has_paths() && !fg_batch.has_ordered_images() {
+                if fg_batch.has_paths() && !fg_batch.has_ordered_draws() {
                     if use_msaa_overlay {
                         self.renderer.render_paths_overlay_msaa(
                             target,
@@ -4002,7 +4004,7 @@ impl RenderContext {
 
                 // Paths in the legacy branch — 1×-sample fallback so
                 // web emits fill_path / stroke_path content.
-                if fg_batch.has_paths() && !fg_batch.has_ordered_images() {
+                if fg_batch.has_paths() && !fg_batch.has_ordered_draws() {
                     if use_msaa_overlay {
                         self.renderer.render_paths_overlay_msaa(
                             target,
@@ -8181,7 +8183,7 @@ impl RenderContext {
                     // walker runs.
                     if !walked.primitives.is_empty()
                         || walked.has_paths()
-                        || walked.has_ordered_images()
+                        || walked.has_ordered_draws()
                         || walked.has_foreground_content()
                         || walked.has_foreground_layers()
                     {
@@ -8569,7 +8571,7 @@ impl RenderContext {
                     // sibling's enter animation.
                     if !walked.primitives.is_empty()
                         || walked.has_paths()
-                        || walked.has_ordered_images()
+                        || walked.has_ordered_draws()
                         || walked.has_foreground_content()
                         || walked.has_foreground_layers()
                     {
@@ -10092,7 +10094,7 @@ impl RenderContext {
             // Render paths. MSAA when sample_count > 1; non-MSAA
             // dispatch when not so 1×-sample targets (web) still emit
             // fill_path / stroke_path content.
-            if batch.has_paths() && !batch.has_ordered_images() {
+            if batch.has_paths() && !batch.has_ordered_draws() {
                 if use_msaa_overlay {
                     self.renderer
                         .render_paths_overlay_msaa(target, &batch, self.sample_count);
@@ -10134,7 +10136,7 @@ impl RenderContext {
             self.render_text_decorations_for_layer(target, &decorations_by_layer, 0);
 
             if max_glass_layer > 0 {
-                let effect_indices = if batch.has_ordered_images() {
+                let effect_indices = if batch.has_ordered_draws() {
                     (0..batch.primitives.len()).collect()
                 } else {
                     batch.effect_layer_indices()
@@ -10359,7 +10361,7 @@ impl RenderContext {
                 // emit fill_path / stroke_path. The main pass above is
                 // always single-sampled so paths always need their own
                 // dispatch here.
-                if batch.has_paths() && !batch.has_ordered_images() {
+                if batch.has_paths() && !batch.has_ordered_draws() {
                     if self.sample_count > 1 {
                         self.renderer
                             .render_paths_overlay_msaa(target, &batch, self.sample_count);
@@ -10390,7 +10392,7 @@ impl RenderContext {
                 self.render_text_decorations_for_layer(target, &decorations_by_layer, 0);
 
                 if max_layer > 0 {
-                    let effect_indices = if batch.has_ordered_images() {
+                    let effect_indices = if batch.has_ordered_draws() {
                         (0..batch.primitives.len()).collect()
                     } else {
                         batch.effect_layer_indices()
@@ -10522,7 +10524,7 @@ impl RenderContext {
             if let Some(ref dynamic_batch) = self.cached_dynamic_batch {
                 if !dynamic_batch.primitives.is_empty()
                     || dynamic_batch.has_paths()
-                    || dynamic_batch.has_ordered_images()
+                    || dynamic_batch.has_ordered_draws()
                 {
                     if dynamic_batch.requires_ordered_rendering() {
                         self.renderer.render_overlay_msaa(target, dynamic_batch, 1);

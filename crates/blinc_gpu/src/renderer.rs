@@ -40,11 +40,11 @@ use crate::primitives::{
 use crate::shaders::{
     BLUR_SHADER, CLEAR_QUAD_SHADER, COLOR_MATRIX_SHADER, COMPOSITE_SHADER, DROP_SHADOW_SHADER,
     GLASS_DT_SHADER, GLASS_SHADER, GLOW_SHADER, IMAGE_DT_SHADER, IMAGE_SHADER,
-    LAYER_COMPOSITE_SHADER, MASK_IMAGE_SHADER, MESH_DT_SHADER, PATH_SHADER, SDF_3D_DT_SHADER,
-    SDF_3D_SHADER, SDF_3D_VB_SHADER, SDF_CORE_DT_SHADER, SDF_CORE_SHADER, SDF_CORE_VB_SHADER,
-    SDF_NOTCH_DT_SHADER, SDF_NOTCH_SHADER, SDF_NOTCH_VB_SHADER, SDF_SHADER, SDF_SHADOW_DT_SHADER,
-    SDF_SHADOW_SHADER, SDF_SHADOW_VB_SHADER, SIMPLE_GLASS_DT_SHADER, SIMPLE_GLASS_SHADER,
-    TEXT_DT_SHADER, TEXT_SHADER,
+    LAYER_COMPOSITE_SHADER, MASK_IMAGE_SHADER, MESH_DT_SHADER, PATH_DT_SHADER, PATH_SHADER,
+    SDF_3D_DT_SHADER, SDF_3D_SHADER, SDF_3D_VB_SHADER, SDF_CORE_DT_SHADER, SDF_CORE_SHADER,
+    SDF_CORE_VB_SHADER, SDF_NOTCH_DT_SHADER, SDF_NOTCH_SHADER, SDF_NOTCH_VB_SHADER, SDF_SHADER,
+    SDF_SHADOW_DT_SHADER, SDF_SHADOW_SHADER, SDF_SHADOW_VB_SHADER, SIMPLE_GLASS_DT_SHADER,
+    SIMPLE_GLASS_SHADER, TEXT_DT_SHADER, TEXT_SHADER,
 };
 
 fn env_u64(name: &str) -> Option<u64> {
@@ -2391,7 +2391,14 @@ impl GpuRenderer {
 
         let path_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Path Shader"),
-            source: wgpu::ShaderSource::Wgsl(PATH_SHADER.into()),
+            source: wgpu::ShaderSource::Wgsl(
+                if has_storage_buffers {
+                    PATH_SHADER
+                } else {
+                    PATH_DT_SHADER
+                }
+                .into(),
+            ),
         });
 
         let layer_composite_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -3100,19 +3107,22 @@ impl GpuRenderer {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
-                // Aux data storage buffer — carries polygon clip vertices
-                // packed 2-per-vec4. Shared with the SDF pipeline's
-                // binding(5) so tessellated path fills honour the same
-                // `ClipShape::Polygon` clips (Lottie track mattes are
-                // built this way). Re-bound via `recreate_path_bind_group`
-                // whenever the aux buffer gets resized.
+                // Clip rows share the SDF auxiliary buffer or data texture.
                 wgpu::BindGroupLayoutEntry {
                     binding: 7,
                     visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                    ty: if has_storage_buffers {
+                        wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        }
+                    } else {
+                        wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        }
                     },
                     count: None,
                 },
@@ -3726,7 +3736,7 @@ impl GpuRenderer {
         });
 
         // Vertex buffer layout for PathVertex
-        // PathVertex layout (80 bytes total):
+        // PathVertex layout (120 bytes total):
         //   position: [f32; 2]       - 8 bytes, offset 0
         //   color: [f32; 4]          - 16 bytes, offset 8
         //   end_color: [f32; 4]      - 16 bytes, offset 24
@@ -3737,7 +3747,8 @@ impl GpuRenderer {
         //   clip_bounds: [f32;4]     - 16 bytes, offset 72
         //   clip_radius: [f32;4]     - 16 bytes, offset 88
         //   clip_type: u32           - 4 bytes, offset 104
-        //   _padding: [u32; 3]       - 12 bytes, offset 108
+        //   clip_shape: u32          - 4 bytes, offset 108
+        //   _padding: [u32; 2]       - 8 bytes, offset 112
         let path_vertex_layout = wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<PathVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -3801,6 +3812,11 @@ impl GpuRenderer {
                     format: wgpu::VertexFormat::Uint32,
                     offset: 104,
                     shader_location: 9,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Uint32,
+                    offset: 108,
+                    shader_location: 10,
                 },
             ],
         };
@@ -4253,7 +4269,16 @@ impl GpuRenderer {
                 // Aux data (binding 7) — shared with the SDF pipeline.
                 wgpu::BindGroupEntry {
                     binding: 7,
-                    resource: buffers.aux_data.as_entire_binding(),
+                    resource: if has_storage_buffers {
+                        buffers.aux_data.as_entire_binding()
+                    } else {
+                        wgpu::BindingResource::TextureView(
+                            buffers
+                                .aux_data_view
+                                .as_ref()
+                                .expect("DT auxiliary texture"),
+                        )
+                    },
                 },
             ],
         });
@@ -4419,7 +4444,14 @@ impl GpuRenderer {
         // Create path shader
         let path_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Path Shader (MSAA)"),
-            source: wgpu::ShaderSource::Wgsl(PATH_SHADER.into()),
+            source: wgpu::ShaderSource::Wgsl(
+                if has_storage_buffers {
+                    PATH_SHADER
+                } else {
+                    PATH_DT_SHADER
+                }
+                .into(),
+            ),
         });
 
         let path_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -4485,6 +4517,11 @@ impl GpuRenderer {
                     format: wgpu::VertexFormat::Uint32,
                     offset: 104,
                     shader_location: 9,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Uint32,
+                    offset: 108,
+                    shader_location: 10,
                 },
             ],
         };
@@ -5047,7 +5084,7 @@ impl GpuRenderer {
         // particles need their own scissored dispatch routines and
         // are out of scope for this commit; layer_commands are
         // handled below.
-        if batch.has_ordered_images()
+        if batch.has_ordered_draws()
             || batch.has_foreground_content()
             || batch.has_foreground_layers()
             || !batch.paths.vertices.is_empty()
@@ -5580,7 +5617,7 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         clear_color: [f64; 4],
     ) {
-        if batch.has_ordered_images() {
+        if batch.has_ordered_draws() {
             self.render_with_clear_simple(target, &PrimitiveBatch::new(), clear_color);
             self.render_layered_overlay_msaa(target, batch, 1);
             return;
@@ -6338,6 +6375,7 @@ impl GpuRenderer {
 
             // Rebind since the texture changed
             self.rebind_sdf_bind_group();
+            self.rebind_path_bind_group();
         }
 
         if let Some(ref tex) = self.buffers.aux_data_texture {
@@ -6410,7 +6448,16 @@ impl GpuRenderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 7,
-                    resource: self.buffers.aux_data.as_entire_binding(),
+                    resource: if self.has_storage_buffers {
+                        self.buffers.aux_data.as_entire_binding()
+                    } else {
+                        wgpu::BindingResource::TextureView(
+                            self.buffers
+                                .aux_data_view
+                                .as_ref()
+                                .expect("DT auxiliary texture"),
+                        )
+                    },
                 },
             ],
         });
@@ -6589,7 +6636,7 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         clear_color: [f64; 4],
     ) {
-        if batch.has_ordered_images() {
+        if batch.has_ordered_draws() {
             self.render_with_clear_simple(resolve_target, &PrimitiveBatch::new(), clear_color);
             self.render_layered_overlay_msaa(
                 resolve_target,
@@ -6862,7 +6909,7 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         has_backdrop_content: bool,
     ) {
-        if batch.has_ordered_images() {
+        if batch.has_ordered_draws() {
             self.render_image_backdrop(backdrop, batch, has_backdrop_content);
             return;
         }
@@ -6946,7 +6993,7 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         has_backdrop_content: bool,
     ) {
-        if batch.has_ordered_images() || !self.has_storage_buffers {
+        if batch.has_ordered_draws() || !self.has_storage_buffers {
             self.render_image_glass_frame(
                 target,
                 backdrop,
@@ -7369,7 +7416,7 @@ impl GpuRenderer {
     /// * `target` - The single-sampled texture view to render to (existing content is preserved)
     /// * `batch` - The primitive batch to render
     pub fn render_overlay(&mut self, target: &wgpu::TextureView, batch: &PrimitiveBatch) {
-        if batch.has_ordered_images() {
+        if batch.has_ordered_draws() {
             self.render_layered_overlay_msaa(target, batch, 1);
             return;
         }
@@ -7739,6 +7786,8 @@ impl GpuRenderer {
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
 
+        self.update_aux_data_buffer(batch);
+
         // Sort and upload primitives
         let sdf_ranges = self.upload_sorted_primitives(&batch.primitives);
 
@@ -7879,6 +7928,8 @@ impl GpuRenderer {
             return;
         }
 
+        self.update_aux_data_buffer(batch);
+
         // Update path buffers
         self.update_path_buffers(batch);
 
@@ -7954,7 +8005,7 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         sample_count: u32,
     ) {
-        if batch.has_layer_commands() || batch.has_ordered_images() {
+        if batch.has_layer_commands() || batch.has_ordered_draws() {
             self.render_layered_overlay_msaa(target, batch, sample_count);
         } else {
             self.render_overlay_msaa_flat(target, batch, sample_count);
@@ -8422,6 +8473,8 @@ impl GpuRenderer {
         };
         self.queue
             .write_buffer(&self.buffers.uniforms, 0, bytemuck::bytes_of(&uniforms));
+
+        self.update_aux_data_buffer(batch);
 
         // Update path buffers
         self.update_path_buffers(batch);
@@ -11325,19 +11378,14 @@ impl GpuRenderer {
         // primitive in the layer range. The optional per-vertex colour
         // entries that follow (when `type_info[3] == 1`) stay unchanged.
         let mut tight_aux_data: Vec<[f32; 4]> = batch.aux_data.clone();
-        let mut needs_aux_upload = false;
-        let mut translated_frames = std::collections::HashSet::new();
-        for op in &offset_primitives {
-            if op.clip_shape[0] > 0.5 {
-                let at = op.clip_shape[0] as usize - 1;
-                if at + 1 < tight_aux_data.len() && translated_frames.insert(at) {
-                    let [a, b, c, d] = tight_aux_data[at];
-                    tight_aux_data[at + 1][0] += a * offset_x + c * offset_y;
-                    tight_aux_data[at + 1][1] += b * offset_x + d * offset_y;
-                    needs_aux_upload = true;
-                }
-            }
-        }
+        let mut needs_aux_upload = overlay::translate_clip_frames(
+            &mut tight_aux_data,
+            offset_primitives
+                .iter()
+                .map(|p| p.clip_shape[0] as u32)
+                .chain(path_verts.iter().map(|v| v.clip_shape)),
+            [offset_x, offset_y],
+        );
         for op in &offset_primitives {
             if op.type_info[0] != 9 {
                 continue;

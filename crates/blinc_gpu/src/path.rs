@@ -27,9 +27,22 @@ pub struct PathVertex {
     pub clip_radius: [f32; 4], // 16 bytes, offset 88
     /// Per-vertex clip type: 0=none, 1=rect, 2=circle, 3=ellipse
     pub clip_type: u32, // 4 bytes, offset 104
-    pub _padding: [u32; 3],        // 12 bytes, offset 108, Padding for 16-byte alignment
+    /// One-based auxiliary shape-header pointer, zero for no independent shape.
+    pub clip_shape: u32, // 4 bytes, offset 108
+    pub _padding: [u32; 2],        // 8 bytes, offset 112
 }
 // Total: 120 bytes
+
+impl PathVertex {
+    pub(crate) fn rebase_aux(&mut self, shift: u32) {
+        if self.clip_shape > 0 {
+            self.clip_shape += shift;
+        }
+        if self.clip_type == crate::primitives::ClipType::Polygon as u32 {
+            self.clip_radius[3] += shift as f32;
+        }
+    }
+}
 
 /// Tessellated path geometry ready for GPU rendering
 #[derive(Default)]
@@ -1001,7 +1014,8 @@ pub fn tessellate_fill_with_tolerance(
                 clip_bounds: [-10000.0, -10000.0, 100000.0, 100000.0],
                 clip_radius: [0.0; 4],
                 clip_type: 0,
-                _padding: [0, 0, 0],
+                clip_shape: 0,
+                _padding: [0, 0],
             }
         }),
     );
@@ -1108,7 +1122,8 @@ pub fn tessellate_stroke_with_tolerance(
                 clip_bounds: [-10000.0, -10000.0, 100000.0, 100000.0],
                 clip_radius: [0.0; 4],
                 clip_type: 0,
-                _padding: [0, 0, 0],
+                clip_shape: 0,
+                _padding: [0, 0],
             }
         }),
     );
