@@ -28,6 +28,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Overlay-tree text retains inherited CSS polygon/path clips in each clip owner's physical frame, including styled spans and transformed glyphs. Direct glyph layers and converted primitives own and restore their matching auxiliary rows.
 - Prepared glyph path-clip controls cover direct/unified rendering, transformed fill rules, active owners, merged auxiliary growth and replacement atlases.
 - Standalone glass path-clip regressions cover direct/frame rendering, active paint owners, transformed fill rules and changing backdrops.
 - Image/glass/blur brushes used by canvas path fills and strokes retain path clips through cached canvas collection and foreground dispatch.

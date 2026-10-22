@@ -39,6 +39,8 @@ mod motion_layers_tests;
 #[cfg(test)]
 mod native_path_clip_tests;
 #[cfg(test)]
+mod overlay_text_clip_tests;
+#[cfg(test)]
 mod path_brush_clip_tests;
 #[cfg(test)]
 mod prepared_glyph_clip_tests;
@@ -52,6 +54,7 @@ mod rgba_clip_tests;
 mod rgba_order_tests;
 #[cfg(test)]
 mod rgba_path_clip_tests;
+mod text_clip;
 
 /// Maximum number of images to keep in cache (prevents unbounded memory growth).
 ///
@@ -637,6 +640,8 @@ struct TextElement {
     v_align: TextVerticalAlign,
     /// Clip bounds from parent scroll container (x, y, width, height)
     clip_bounds: Option<[f32; 4]>,
+    /// Clip geometry and its owner's physical frame, shared across collected spans.
+    path_clip: Option<Arc<text_clip::CollectedTextPath>>,
     /// Motion opacity inherited from parent motion container
     motion_opacity: f32,
     /// Whether to wrap text at container bounds
@@ -5992,6 +5997,7 @@ impl RenderContext {
                 &composite_layer_opacities,
                 1.0,  // Initial composite-layer opacity (no ancestor promoted)
                 None, // No composite-promoted ancestor at root
+                None, // No inherited text path at root
             );
         }
 
@@ -6084,6 +6090,7 @@ impl RenderContext {
         // animation, threaded down so text / SVG elements can record
         // it for the dispatch-time live patch.
         nearest_composite_ancestor: Option<blinc_layout::tree::StableNodeId>,
+        inherited_text_path: Option<Arc<text_clip::CollectedTextPath>>,
     ) {
         use blinc_layout::Material;
 
@@ -6489,6 +6496,22 @@ impl RenderContext {
             inherited_css_affine
         };
 
+        let text_path = tree
+            .get_render_node(node)
+            .and_then(|n| n.props.clip_path.as_ref())
+            .and_then(|clip| {
+                text_clip::CollectedTextPath::capture(
+                    clip,
+                    [abs_x, abs_y, bounds.width, bounds.height],
+                    node_css_affine,
+                    effective_motion_scale,
+                    effective_motion_translate,
+                    effective_motion_scale_center,
+                    scale,
+                )
+            })
+            .or(inherited_text_path);
+
         if let Some(render_node) = tree.get_render_node(node) {
             // Determine effective layer: children inside glass render in Foreground
             let effective_layer = if inside_glass && !is_glass {
@@ -6675,6 +6698,7 @@ impl RenderContext {
 
                     texts.push(TextElement {
                         content,
+                        path_clip: text_path.clone(),
                         x: scaled_x,
                         y: scaled_y,
                         width: scaled_width,
@@ -7255,6 +7279,7 @@ impl RenderContext {
 
                             texts.push(TextElement {
                                 content: segment_text.to_string(),
+                                path_clip: text_path.clone(),
                                 x: scaled_x + x_offset,
                                 y: line_y,
                                 width: segment_width,
@@ -7418,6 +7443,7 @@ impl RenderContext {
                 composite_layer_opacities,
                 effective_composite_layer_opacity,
                 nearest_composite_ancestor,
+                text_path.clone(),
             );
         }
 
@@ -10843,9 +10869,9 @@ impl RenderContext {
         self.preload_images(&images, width as f32, height as f32);
 
         // Prepare text glyphs with z_layer information
-        let mut glyphs_by_layer: std::collections::BTreeMap<u32, Vec<GpuGlyph>> =
+        let mut glyphs_by_layer: std::collections::BTreeMap<u32, PrimitiveBatch> =
             std::collections::BTreeMap::new();
-        let mut css_transformed_text_prims: Vec<GpuPrimitive> = Vec::new();
+        let mut css_text = PrimitiveBatch::new();
         for text in &texts {
             let alignment = match text.align {
                 TextAlign::Left => TextAlignment::Left,
@@ -10918,13 +10944,20 @@ impl RenderContext {
                     }
                 }
 
+                let mut owned = if let Some(path) = &text.path_clip {
+                    path.prepare(&glyphs, text.clip_bounds, (width, height))
+                } else {
+                    let mut owned = PrimitiveBatch::new();
+                    owned.glyphs = glyphs;
+                    owned
+                };
                 if let Some(affine) = text.css_affine {
                     // CSS-transformed text: convert to SDF primitives with local_affine
-                    // Pushed into fg_batch.primitives to render in the main SDF pass
+                    // Join the walker batch with the glyphs' own auxiliary rows.
                     let [a, b, c, d, tx, ty] = affine;
                     let tx_scaled = tx * scale_factor;
                     let ty_scaled = ty * scale_factor;
-                    for glyph in &glyphs {
+                    for glyph in &owned.glyphs {
                         let gc_x = glyph.bounds[0] + glyph.bounds[2] / 2.0;
                         let gc_y = glyph.bounds[1] + glyph.bounds[3] / 2.0;
                         let new_gc_x = a * gc_x + c * gc_y + tx_scaled;
@@ -10938,13 +10971,15 @@ impl RenderContext {
                         ];
                         prim.local_affine = [a, b, c, d];
                         prim.set_z_layer(text.z_index);
-                        css_transformed_text_prims.push(prim);
+                        owned.primitives.push(prim);
                     }
+                    owned.glyphs.clear();
+                    css_text.merge(owned);
                 } else {
                     glyphs_by_layer
                         .entry(text.z_index)
                         .or_default()
-                        .extend(glyphs);
+                        .merge(owned);
                 }
             }
         }
@@ -10962,9 +10997,7 @@ impl RenderContext {
         if let (Some(atlas), Some(color_atlas)) =
             (self.text_ctx.atlas_view(), self.text_ctx.color_atlas_view())
         {
-            if !css_transformed_text_prims.is_empty() {
-                batch.primitives.append(&mut css_transformed_text_prims);
-            }
+            batch.merge(css_text);
             self.renderer.set_glyph_atlas(atlas, color_atlas);
         }
 
@@ -10990,18 +11023,29 @@ impl RenderContext {
                     layer_primitives.len(),
                     z
                 );
+                self.renderer.update_aux_data_for_batch(&batch);
                 self.renderer
                     .render_primitives_overlay(target, &layer_primitives);
             }
 
             if let Some(glyphs) = glyphs_by_layer.get(&z) {
-                if !glyphs.is_empty() {
+                if !glyphs.glyphs.is_empty() {
                     tracing::trace!(
                         "render_overlay_tree: rendering {} glyphs at z={}",
-                        glyphs.len(),
+                        glyphs.glyphs.len(),
                         z
                     );
-                    self.render_text(target, glyphs);
+                    if let (Some(atlas), Some(color)) =
+                        (self.text_ctx.atlas_view(), self.text_ctx.color_atlas_view())
+                    {
+                        self.renderer.render_text_batch(
+                            target,
+                            glyphs,
+                            atlas,
+                            color,
+                            self.text_ctx.sampler(),
+                        );
+                    }
                 }
             }
         }
