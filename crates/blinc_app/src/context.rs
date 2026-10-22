@@ -35,6 +35,8 @@ mod foreground_rgba_tests;
 #[cfg(test)]
 mod glass_path_clip_tests;
 #[cfg(test)]
+mod main_text_clip_tests;
+#[cfg(test)]
 mod motion_layers_tests;
 #[cfg(test)]
 mod native_path_clip_tests;
@@ -3572,8 +3574,8 @@ impl RenderContext {
         self.preload_images(&images, width as f32, height as f32);
 
         // Prepare text glyphs
-        let mut all_glyphs = Vec::new();
-        let mut css_transformed_text_prims: Vec<GpuPrimitive> = Vec::new();
+        let mut text_batch = PrimitiveBatch::new();
+        let mut css_text = PrimitiveBatch::new();
         for text in &texts {
             // Convert layout TextAlign to GPU TextAlignment
             let alignment = match text.align {
@@ -3645,7 +3647,7 @@ impl RenderContext {
                 layout_height,
                 text.letter_spacing,
             ) {
-                Ok(mut glyphs) => {
+                Ok(glyphs) => {
                     tracing::trace!(
                         "Prepared {} glyphs for text '{}' (font={:?}, generic={:?})",
                         glyphs.len(),
@@ -3653,19 +3655,14 @@ impl RenderContext {
                         font_name,
                         generic
                     );
-                    // Apply clip bounds to all glyphs if the text element has clip bounds
-                    if let Some(clip) = text.clip_bounds {
-                        for glyph in &mut glyphs {
-                            glyph.clip_bounds = clip;
-                        }
-                    }
+                    let mut owned = text_clip::prepare_glyphs(text, glyphs, (width, height));
 
                     if let Some(affine) = text.css_affine {
                         // CSS-transformed text: convert to SDF primitives with local_affine
                         let [a, b, c, d, tx, ty] = affine;
                         let tx_scaled = tx * scale_factor;
                         let ty_scaled = ty * scale_factor;
-                        for glyph in &glyphs {
+                        for glyph in &owned.glyphs {
                             let gc_x = glyph.bounds[0] + glyph.bounds[2] / 2.0;
                             let gc_y = glyph.bounds[1] + glyph.bounds[3] / 2.0;
                             let new_gc_x = a * gc_x + c * gc_y + tx_scaled;
@@ -3678,8 +3675,10 @@ impl RenderContext {
                                 glyph.bounds[3],
                             ];
                             prim.local_affine = [a, b, c, d];
-                            css_transformed_text_prims.push(prim);
+                            owned.primitives.push(prim);
                         }
+                        owned.glyphs.clear();
+                        css_text.merge(owned);
                     } else {
                         // Pixel-snap the glyph origin to the physical grid.
                         // Quad w/h and per-glyph advance/bearing are already
@@ -3692,11 +3691,11 @@ impl RenderContext {
                         // visibly soft at 1x on standard-DPI displays. Rounding
                         // the origin makes every quad span an exact integer
                         // pixel range so the SDF shader hits texel centers.
-                        for glyph in &mut glyphs {
+                        for glyph in &mut owned.glyphs {
                             glyph.bounds[0] = glyph.bounds[0].round();
                             glyph.bounds[1] = glyph.bounds[1].round();
                         }
-                        all_glyphs.extend(glyphs);
+                        text_batch.merge(owned);
                     }
                 }
                 Err(e) => {
@@ -3708,8 +3707,11 @@ impl RenderContext {
         tracing::trace!(
             "Text rendering: {} texts collected, {} total glyphs prepared",
             texts.len(),
-            all_glyphs.len()
+            text_batch.glyphs.len()
         );
+
+        // Prepared text and its headers travel with the foreground batch.
+        fg_batch.merge(text_batch);
 
         // SVGs are rendered as rasterized images (not tessellated paths) for better anti-aliasing
         // They will be rendered later via render_rasterized_svgs
@@ -3727,9 +3729,7 @@ impl RenderContext {
         if let (Some(atlas), Some(color_atlas)) =
             (self.text_ctx.atlas_view(), self.text_ctx.color_atlas_view())
         {
-            if !css_transformed_text_prims.is_empty() {
-                bg_batch.primitives.append(&mut css_transformed_text_prims);
-            }
+            bg_batch.merge(css_text);
             self.renderer.set_glyph_atlas(atlas, color_atlas);
         }
 
@@ -3823,7 +3823,12 @@ impl RenderContext {
             let has_layer_effects = fg_batch.requires_ordered_rendering();
             if has_layer_effects {
                 // Layer effects require batch-based rendering to process layer commands
-                fg_batch.convert_glyphs_to_primitives();
+                fg_batch.primitives.extend(
+                    fg_batch
+                        .glyphs
+                        .drain(..)
+                        .map(|glyph| GpuPrimitive::from_glyph(&glyph)),
+                );
                 if !fg_batch.is_empty() {
                     // Pre-load any mask images referenced by layer effects
                     self.preload_mask_images(&fg_batch);
@@ -3834,16 +3839,10 @@ impl RenderContext {
                     self.render_rasterized_svgs(target, &svgs, scale_factor);
                 }
             } else if self.renderer.unified_text_rendering() {
-                // Unified rendering: combine text glyphs with foreground primitives.
-                // See the simple-path branch below for the rationale on
-                // extending `unified_primitives` with the local
-                // `all_glyphs` — `get_unified_foreground_primitives()`
-                // reads from `fg_batch.glyphs`, which is empty here.
-                let mut unified_primitives = fg_batch.get_unified_foreground_primitives();
-                for glyph in &all_glyphs {
-                    unified_primitives.push(GpuPrimitive::from_glyph(glyph));
-                }
+                // The foreground batch owns both converted glyphs and their aux rows.
+                let unified_primitives = fg_batch.get_unified_foreground_primitives();
                 if !unified_primitives.is_empty() {
+                    self.renderer.update_aux_data_for_batch(&fg_batch);
                     self.render_unified(target, &unified_primitives);
                 }
 
@@ -3878,8 +3877,8 @@ impl RenderContext {
                 }
 
                 // Step 7: Render text
-                if !all_glyphs.is_empty() {
-                    self.render_text(target, &all_glyphs);
+                if !fg_batch.glyphs.is_empty() {
+                    self.render_owned_text(target, &fg_batch);
                 }
 
                 // Paths in the legacy branch also need a 1×-sample
@@ -3946,7 +3945,12 @@ impl RenderContext {
             if has_layer_effects {
                 // Layer effects require batch-based rendering to process layer commands
                 // First convert glyphs to primitives so they're included in the batch
-                fg_batch.convert_glyphs_to_primitives();
+                fg_batch.primitives.extend(
+                    fg_batch
+                        .glyphs
+                        .drain(..)
+                        .map(|glyph| GpuPrimitive::from_glyph(&glyph)),
+                );
 
                 // Use render_overlay which supports layer effect processing
                 if !fg_batch.is_empty() {
@@ -3957,23 +3961,10 @@ impl RenderContext {
                     self.render_rasterized_svgs(target, &svgs, scale_factor);
                 }
             } else if self.renderer.unified_text_rendering() {
-                // Unified rendering: combine text glyphs with foreground primitives
-                // This ensures text and shapes transform together during animations.
-                //
-                // `get_unified_foreground_primitives()` reads from
-                // `fg_batch.glyphs`, which is empty here — the glyph
-                // preparation loop above writes into the local
-                // `all_glyphs` vec, not into the batch. We have to
-                // extend the unified primitive list with our local
-                // glyphs ourselves, otherwise the unified path silently
-                // drops every text element. (The `render_tree_with_motion`
-                // variant doesn't hit this because it pushes glyphs
-                // through a different intermediate buffer.)
-                let mut unified_primitives = fg_batch.get_unified_foreground_primitives();
-                for glyph in &all_glyphs {
-                    unified_primitives.push(GpuPrimitive::from_glyph(glyph));
-                }
+                // Unified glyphs retain the foreground batch's auxiliary offsets.
+                let unified_primitives = fg_batch.get_unified_foreground_primitives();
                 if !unified_primitives.is_empty() {
+                    self.renderer.update_aux_data_for_batch(&fg_batch);
                     self.render_unified(target, &unified_primitives);
                 }
 
@@ -4007,8 +3998,8 @@ impl RenderContext {
                 }
 
                 // Render text
-                if !all_glyphs.is_empty() {
-                    self.render_text(target, &all_glyphs);
+                if !fg_batch.glyphs.is_empty() {
+                    self.render_owned_text(target, &fg_batch);
                 }
 
                 // Paths in the legacy branch — 1×-sample fallback so
@@ -10937,20 +10928,7 @@ impl RenderContext {
                 layout_height,
                 text.letter_spacing,
             ) {
-                let mut glyphs = glyphs;
-                if let Some(clip) = text.clip_bounds {
-                    for glyph in &mut glyphs {
-                        glyph.clip_bounds = clip;
-                    }
-                }
-
-                let mut owned = if let Some(path) = &text.path_clip {
-                    path.prepare(&glyphs, text.clip_bounds, (width, height))
-                } else {
-                    let mut owned = PrimitiveBatch::new();
-                    owned.glyphs = glyphs;
-                    owned
-                };
+                let mut owned = text_clip::prepare_glyphs(text, glyphs, (width, height));
                 if let Some(affine) = text.css_affine {
                     // CSS-transformed text: convert to SDF primitives with local_affine
                     // Join the walker batch with the glyphs' own auxiliary rows.
@@ -11035,17 +11013,7 @@ impl RenderContext {
                         glyphs.glyphs.len(),
                         z
                     );
-                    if let (Some(atlas), Some(color)) =
-                        (self.text_ctx.atlas_view(), self.text_ctx.color_atlas_view())
-                    {
-                        self.renderer.render_text_batch(
-                            target,
-                            glyphs,
-                            atlas,
-                            color,
-                            self.text_ctx.sampler(),
-                        );
-                    }
+                    self.render_owned_text(target, glyphs);
                 }
             }
         }

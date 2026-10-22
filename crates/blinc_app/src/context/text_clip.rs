@@ -1,10 +1,42 @@
 //! Collected text keeps geometry and a push-time frame, never foreign aux offsets.
-use super::{Arc, DrawContext, GpuGlyph, GpuPaintContext, PrimitiveBatch, Rect};
+use super::{
+    Arc, DrawContext, GpuGlyph, GpuPaintContext, PrimitiveBatch, Rect, RenderContext, TextElement,
+};
 use blinc_core::{Affine2D, ClipPath, ClipShape, Path, Transform};
 
 pub(super) struct CollectedTextPath {
     path: Path,
     frame: [f32; 6],
+}
+
+pub(super) fn prepare_glyphs(
+    text: &TextElement,
+    mut glyphs: Vec<GpuGlyph>,
+    size: (u32, u32),
+) -> PrimitiveBatch {
+    if let Some(clip) = text.clip_bounds {
+        for glyph in &mut glyphs {
+            glyph.clip_bounds = clip;
+        }
+    }
+    if let Some(path) = &text.path_clip {
+        path.prepare(&glyphs, text.clip_bounds, size)
+    } else {
+        let mut owned = PrimitiveBatch::new();
+        owned.glyphs = glyphs;
+        owned
+    }
+}
+
+impl RenderContext {
+    pub(super) fn render_owned_text(&mut self, target: &wgpu::TextureView, batch: &PrimitiveBatch) {
+        if let (Some(atlas), Some(color)) =
+            (self.text_ctx.atlas_view(), self.text_ctx.color_atlas_view())
+        {
+            self.renderer
+                .render_text_batch(target, batch, atlas, color, self.text_ctx.sampler());
+        }
+    }
 }
 
 impl CollectedTextPath {

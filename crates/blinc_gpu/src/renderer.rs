@@ -1754,16 +1754,28 @@ impl GpuRenderer {
             render_pass.set_vertex_buffer(0, buf.slice(..));
         }
         // Full range for z-order preservation (same approach as draw_split_sdf)
-        let total_start = [&ranges.core, &ranges.shadow, &ranges.sdf_3d, &ranges.notch]
-            .iter()
-            .filter(|r| !r.is_empty())
-            .map(|r| r.start)
-            .min();
-        let total_end = [&ranges.core, &ranges.shadow, &ranges.sdf_3d, &ranges.notch]
-            .iter()
-            .filter(|r| !r.is_empty())
-            .map(|r| r.end)
-            .max();
+        let total_start = [
+            &ranges.core,
+            &ranges.shadow,
+            &ranges.sdf_3d,
+            &ranges.notch,
+            &ranges.text,
+        ]
+        .iter()
+        .filter(|r| !r.is_empty())
+        .map(|r| r.start)
+        .min();
+        let total_end = [
+            &ranges.core,
+            &ranges.shadow,
+            &ranges.sdf_3d,
+            &ranges.notch,
+            &ranges.text,
+        ]
+        .iter()
+        .filter(|r| !r.is_empty())
+        .map(|r| r.end)
+        .max();
         let full_range = match (total_start, total_end) {
             (Some(s), Some(e)) => s..e,
             _ => return,
