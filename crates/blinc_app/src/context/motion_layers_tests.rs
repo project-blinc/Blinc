@@ -252,3 +252,300 @@ fn motion_layers_binding_patch_uses_dynamic_index_and_recovers_from_zero() {
     };
     assert_eq!(config.opacity, 1.0);
 }
+
+#[test]
+#[ignore] // Requires GPU
+fn static_motion_group_public_keeps_overlap_isolated_during_binding_updates() {
+    use blinc_animation::{AnimatedValue, AnimationScheduler};
+    blinc_theme::ThemeState::init(
+        blinc_theme::HybridTheme::bundle(),
+        blinc_theme::ColorScheme::Light,
+    );
+    for compositor in [false, true] {
+        let mut app = app();
+        let scheduler = Arc::new(Mutex::new(AnimationScheduler::new()));
+        let x = Arc::new(Mutex::new(AnimatedValue::with_default(
+            scheduler.lock().unwrap().handle(),
+            0.0,
+        )));
+        let ui = div().w(160.0).h(120.0).bg(Color::BLUE).child(
+            div()
+                .w(160.0)
+                .h(120.0)
+                .opacity(0.5)
+                .child(
+                    div()
+                        .absolute()
+                        .left(20.0)
+                        .top(20.0)
+                        .w(60.0)
+                        .h(60.0)
+                        .bg(Color::RED),
+                )
+                .child(
+                    div()
+                        .w(120.0)
+                        .h(120.0)
+                        .child(
+                            div()
+                                .absolute()
+                                .left(40.0)
+                                .top(40.0)
+                                .w(60.0)
+                                .h(60.0)
+                                .bg(Color::GREEN),
+                        )
+                        .motion()
+                        .translate_x(x.clone()),
+                ),
+        );
+        let mut tree = RenderTree::from_element(&ui);
+        tree.compute_layout(160.0, 120.0);
+        let state = RenderState::new(scheduler.clone());
+        let c = app.context();
+        for dx in [0.0, 10.0, -10.0, 0.0] {
+            x.lock().unwrap().set_immediate(dx);
+            x.lock().unwrap().set_target(dx + 20.0);
+            tree.compute_animation_status();
+            let (texture, view) = static_motion_group_surface(c);
+            c.render_tree_with_motion_opt(
+                &tree,
+                &state,
+                160,
+                120,
+                &view,
+                compositor.then_some(&texture),
+                false,
+            )
+            .unwrap();
+            let page = read_rendered_pixels(c.device(), c.queue(), &texture, 160, 120);
+            for (xy, expected) in [
+                ((55, 55), [0, 128, 127, 255]),
+                ((25, 25), [128, 0, 127, 255]),
+                ((5, 5), [0, 0, 255, 255]),
+            ] {
+                let actual = page.get_pixel(xy.0, xy.1).0;
+                assert!(
+                    actual.iter().zip(expected).all(|(a, b)| a.abs_diff(b) <= 2),
+                    "compositor={compositor} dx={dx} {xy:?} {actual:?} expected {expected:?}"
+                );
+            }
+            assert!(tree.composite_bindings().values().any(|m| !m.dynamic_batch));
+            assert!(c.motion_subtree_textures.is_empty());
+            let mut sentinel = PrimitiveBatch::new();
+            sentinel.primitives = vec![GpuPrimitive::rect(5.0, 5.0, 5.0, 5.0); 8];
+            let bounds: Vec<_> = sentinel.primitives.iter().map(|p| p.bounds).collect();
+            c.cached_dynamic_batch = Some(sentinel);
+            x.lock().unwrap().set_immediate(dx + 5.0);
+            assert!(
+                !c.apply_binding_deltas(&tree, 1.0),
+                "group-owned bindings require repaint"
+            );
+            assert_eq!(
+                c.cached_dynamic_batch
+                    .as_ref()
+                    .unwrap()
+                    .primitives
+                    .iter()
+                    .map(|p| p.bounds)
+                    .collect::<Vec<_>>(),
+                bounds
+            );
+        }
+    }
+}
+
+fn static_motion_group_surface(c: &RenderContext) -> (wgpu::Texture, wgpu::TextureView) {
+    let texture = c.device().create_texture(&wgpu::TextureDescriptor {
+        label: Some("Static motion group surface"),
+        size: wgpu::Extent3d {
+            width: 160,
+            height: 120,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: c.texture_format(),
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&Default::default());
+    (texture, view)
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn static_motion_group_suppresses_css_child_promotion() {
+    use blinc_animation::{AnimationScheduler, MultiKeyframeAnimation};
+    use blinc_layout::render_state::ActiveCssAnimation;
+    blinc_theme::ThemeState::init(
+        blinc_theme::HybridTheme::bundle(),
+        blinc_theme::ColorScheme::Light,
+    );
+    let mut app = app();
+    let ui = div().w(160.0).h(120.0).bg(Color::BLUE).child(
+        div()
+            .w(160.0)
+            .h(120.0)
+            .opacity(0.5)
+            .child(
+                div()
+                    .absolute()
+                    .left(20.0)
+                    .top(20.0)
+                    .w(60.0)
+                    .h(60.0)
+                    .bg(Color::RED),
+            )
+            .child(
+                div()
+                    .id("css-child")
+                    .absolute()
+                    .left(40.0)
+                    .top(40.0)
+                    .w(60.0)
+                    .h(60.0)
+                    .opacity(0.5)
+                    .bg(Color::GREEN),
+            ),
+    );
+    let mut tree = RenderTree::from_element(&ui);
+    tree.compute_layout(160.0, 120.0);
+    let child = tree.query_by_id("css-child").unwrap();
+    let sid = tree.stable_id(child).unwrap();
+    let mut animation = ActiveCssAnimation::new(MultiKeyframeAnimation::new(1000));
+    animation.current_properties.opacity = Some(0.5);
+    tree.css_anim_store()
+        .lock()
+        .unwrap()
+        .animations
+        .insert(sid, animation);
+    tree.compute_animation_status();
+    assert!(tree.composite_promotion().contains(&child));
+    let state = RenderState::new(Arc::new(Mutex::new(AnimationScheduler::new())));
+    let c = app.context();
+    for compositor in [false, true] {
+        c.invalidate_render_cache();
+        let (texture, view) = static_motion_group_surface(c);
+        c.render_tree_with_motion_opt(
+            &tree,
+            &state,
+            160,
+            120,
+            &view,
+            compositor.then_some(&texture),
+            false,
+        )
+        .unwrap();
+        let page = read_rendered_pixels(c.device(), c.queue(), &texture, 160, 120);
+        let actual = page.get_pixel(55, 55).0;
+        assert!(
+            actual
+                .iter()
+                .zip([64u8, 64, 127, 255])
+                .all(|(a, b)| a.abs_diff(b) <= 2),
+            "compositor={compositor} {actual:?}"
+        );
+        assert!(c.css_composited_textures.is_empty());
+        let records = tree.css_anim_paint_records();
+        let record = records.get(&child).unwrap();
+        assert!(!record.dynamic_batch && !record.composite_batch);
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn static_motion_group_opacity_endpoints_keep_repaint_records() {
+    use blinc_animation::{AnimatedValue, AnimationScheduler};
+    blinc_theme::ThemeState::init(
+        blinc_theme::HybridTheme::bundle(),
+        blinc_theme::ColorScheme::Light,
+    );
+    for compositor in [false, true] {
+        let mut app = app();
+        let scheduler = Arc::new(Mutex::new(AnimationScheduler::new()));
+        let opacity = Arc::new(Mutex::new(AnimatedValue::with_default(
+            scheduler.lock().unwrap().handle(),
+            1.0,
+        )));
+        let ui = div().w(160.0).h(120.0).bg(Color::BLUE).child(
+            div()
+                .w(160.0)
+                .h(120.0)
+                .opacity(0.5)
+                .child(
+                    div()
+                        .absolute()
+                        .left(20.0)
+                        .top(20.0)
+                        .w(60.0)
+                        .h(60.0)
+                        .bg(Color::RED),
+                )
+                .child(
+                    div()
+                        .w(120.0)
+                        .h(120.0)
+                        .child(
+                            div()
+                                .absolute()
+                                .left(40.0)
+                                .top(40.0)
+                                .w(60.0)
+                                .h(60.0)
+                                .bg(Color::GREEN),
+                        )
+                        .motion()
+                        .opacity(opacity.clone()),
+                ),
+        );
+        let mut tree = RenderTree::from_element(&ui);
+        tree.compute_layout(160.0, 120.0);
+        let state = RenderState::new(scheduler.clone());
+        let c = app.context();
+        for (i, value) in [1.0_f32, 0.5, 0.0, 0.75, 1.0].into_iter().enumerate() {
+            opacity.lock().unwrap().set_immediate(value);
+            opacity
+                .lock()
+                .unwrap()
+                .set_target(if value < 0.5 { 1.0 } else { 0.0 });
+            tree.compute_animation_status();
+            let (texture, view) = static_motion_group_surface(c);
+            c.render_tree_with_motion_opt(
+                &tree,
+                &state,
+                160,
+                120,
+                &view,
+                compositor.then_some(&texture),
+                i > 0,
+            )
+            .unwrap();
+            let page = read_rendered_pixels(c.device(), c.queue(), &texture, 160, 120);
+            let expected = [
+                (127.5 * (1.0 - value)).round() as u8,
+                (127.5 * value).round() as u8,
+                127,
+                255,
+            ];
+            let actual = page.get_pixel(55, 55).0;
+            assert!(
+                actual.iter().zip(expected).all(|(a, b)| a.abs_diff(b) <= 2),
+                "compositor={compositor} value={value} {actual:?} expected {expected:?}"
+            );
+            let bindings = tree.composite_bindings();
+            assert_eq!(bindings.len(), 1);
+            let record = bindings.values().next().unwrap();
+            assert!(!record.dynamic_batch);
+            let index = record.layer_push_index.unwrap();
+            let batch = c.cached_bg_batch.as_ref().unwrap();
+            assert_eq!(batch.layer_commands.len(), 4);
+            assert!(
+                matches!(&batch.layer_commands[index].command, blinc_gpu::primitives::LayerCommand::Push { config } if config.opacity == value)
+            );
+        }
+    }
+}

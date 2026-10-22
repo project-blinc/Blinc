@@ -643,25 +643,26 @@ impl RenderTree {
         // emit (so scale/translate animations don't drag a baked
         // ancestor clip along with them). The overlay reapplies the
         // captured AABB as a scissor.
+        let can_promote = ctx.can_promote_composite_layer();
         let css_anim_ancestor_clip =
-            if in_css_subtree && self.composite_promotion.borrow().contains(&node) {
+            if can_promote && in_css_subtree && self.composite_promotion.borrow().contains(&node) {
                 ctx.current_clip_rounded()
             } else {
                 None
             };
-        let pushed_for_css = if in_css_subtree && self.composite_promotion.borrow().contains(&node)
-        {
-            // Use the slotmap key bits as the routing key — stable
-            // for the duration of the paint (slotmap version doesn't
-            // bump within a single paint pass). `Key::data().as_ffi()`
-            // packs (index, version) into a single u64.
-            use slotmap::Key as _;
-            let key = node.data().as_ffi();
-            ctx.push_composite_layer(key);
-            true
-        } else {
-            false
-        };
+        let pushed_for_css =
+            if can_promote && in_css_subtree && self.composite_promotion.borrow().contains(&node) {
+                // Use the slotmap key bits as the routing key — stable
+                // for the duration of the paint (slotmap version doesn't
+                // bump within a single paint pass). `Key::data().as_ffi()`
+                // packs (index, version) into a single u64.
+                use slotmap::Key as _;
+                let key = node.data().as_ffi();
+                ctx.push_composite_layer(key);
+                true
+            } else {
+                false
+            };
         // Phase 4.3 — composite-layer push for motion-bound subtrees
         // detected as texture-safe by `compute_subtree_texture_candidates`
         // (root has animating transform/opacity binding AND no descendant
@@ -676,21 +677,25 @@ impl RenderTree {
         // P4.3 walker gate (Option B clip-aware bake) — see
         // [paint.rs:composite_layer_nested_push_preserves_outer_clip_base]
         // for the clip-stack stack semantics this depends on.
-        let ambient_clip_for_bake =
-            if !pushed_for_css && self.subtree_texture_candidates.borrow().contains(&node) {
-                ctx.current_clip_rounded()
-            } else {
-                None
-            };
-        let pushed_for_motion_subtree =
-            if !pushed_for_css && self.subtree_texture_candidates.borrow().contains(&node) {
-                use slotmap::Key as _;
-                let key = node.data().as_ffi();
-                ctx.push_composite_layer(key);
-                true
-            } else {
-                false
-            };
+        let ambient_clip_for_bake = if can_promote
+            && !pushed_for_css
+            && self.subtree_texture_candidates.borrow().contains(&node)
+        {
+            ctx.current_clip_rounded()
+        } else {
+            None
+        };
+        let pushed_for_motion_subtree = if can_promote
+            && !pushed_for_css
+            && self.subtree_texture_candidates.borrow().contains(&node)
+        {
+            use slotmap::Key as _;
+            let key = node.data().as_ffi();
+            ctx.push_composite_layer(key);
+            true
+        } else {
+            false
+        };
         let pushed_composite_layer = pushed_for_css || pushed_for_motion_subtree;
         let css_anim_bg_start = in_css_subtree.then(|| ctx.bg_primitive_count());
         // P4.3 sibling of `css_anim_bg_start`. We snapshot the scratch
@@ -714,7 +719,7 @@ impl RenderTree {
         // The actual `DynamicRegion` insert happens at the bottom of
         // this fn alongside the legacy `composite_bindings` insert,
         // gated on the node's `AnimationStatus` being `Animating`.
-        let v2_motion_ambient = in_motion_subtree.then(|| {
+        let v2_motion_ambient = (in_motion_subtree && ctx.bg_batch_is_dynamic()).then(|| {
             (
                 ctx.current_affine_elements(),
                 ctx.current_opacity(),
@@ -1065,7 +1070,7 @@ impl RenderTree {
         // Keep the group at motion opacity endpoints. Background can patch its
         // command; foreground requests a full paint with its own command stream.
         let keep_motion_group = has_motion_opacity_binding
-            && ctx.bg_batch_is_dynamic()
+            && (ctx.bg_batch_is_dynamic() || !ctx.can_promote_composite_layer())
             && matches!(
                 effective_layer,
                 RenderLayer::Background | RenderLayer::Foreground
@@ -2367,6 +2372,7 @@ impl RenderTree {
                     self.composite_bindings.borrow_mut().insert(
                         node,
                         super::super::CompositeBindingMeta {
+                            dynamic_batch: ctx.bg_batch_is_dynamic(),
                             primitive_range: start..end,
                             last_translate,
                             last_scale,

@@ -228,6 +228,8 @@ pub struct GpuPaintContext<'a> {
     /// so nested motion bindings (rare but possible) still route
     /// correctly.
     motion_subtree_depth: u32,
+    /// Outermost motion scope retained by an open static background group.
+    static_motion_depth: Option<u32>,
     /// How deep the walker currently is inside `is_overlay_root`
     /// subtrees specifically (portals / popovers / dropdowns /
     /// dialogs / toasts). Tracked separately from
@@ -388,6 +390,7 @@ impl<'a> GpuPaintContext<'a> {
             pending_gpu_passes: Vec::new(),
             dynamic_batch: PrimitiveBatch::new(),
             motion_subtree_depth: 0,
+            static_motion_depth: None,
             overlay_subtree_depth: 0,
             composite_layer_batches: std::collections::HashMap::new(),
             active_composite_layer: None,
@@ -448,6 +451,7 @@ impl<'a> GpuPaintContext<'a> {
             pending_gpu_passes: Vec::new(),
             dynamic_batch: PrimitiveBatch::new(),
             motion_subtree_depth: 0,
+            static_motion_depth: None,
             overlay_subtree_depth: 0,
             composite_layer_batches: std::collections::HashMap::new(),
             active_composite_layer: None,
@@ -461,13 +465,16 @@ impl<'a> GpuPaintContext<'a> {
     }
 
     /// Mark that the walker has entered a motion-bound subtree.
-    /// All subsequent emit calls (primitives, paths, glass, etc.)
-    /// route into `dynamic_batch` instead of `batch` until the
+    /// Subsequent emit calls route into `dynamic_batch` unless an open
+    /// static background group retains them for joint composition, until the
     /// matching `pop_motion_subtree`. Nested motion subtrees track
     /// via a depth counter — only the outermost pop returns to
     /// static-batch emission.
     pub fn push_motion_subtree(&mut self) {
         self.motion_subtree_depth = self.motion_subtree_depth.saturating_add(1);
+        if self.static_motion_depth.is_none() && self.has_static_background_group() {
+            self.static_motion_depth = Some(self.motion_subtree_depth);
+        }
     }
 
     /// Pair with [`Self::push_motion_subtree`]. No-op when depth
@@ -475,7 +482,16 @@ impl<'a> GpuPaintContext<'a> {
     /// well-formed walker traversal but avoids underflow if a
     /// future caller forgets balance).
     pub fn pop_motion_subtree(&mut self) {
+        if self.static_motion_depth == Some(self.motion_subtree_depth) {
+            self.static_motion_depth = None;
+        }
         self.motion_subtree_depth = self.motion_subtree_depth.saturating_sub(1);
+    }
+
+    fn has_static_background_group(&self) -> bool {
+        self.layer_stack
+            .iter()
+            .any(|state| state.command_batch == AuxBatch::Static && !state.foreground)
     }
 
     /// Mark that the walker has entered an `is_overlay_root` subtree
@@ -494,9 +510,8 @@ impl<'a> GpuPaintContext<'a> {
         self.overlay_subtree_depth = self.overlay_subtree_depth.saturating_sub(1);
     }
 
-    /// `true` if the walker is currently inside one or more motion-
-    /// bound subtrees. Read by the emit helpers to choose between
-    /// `batch` (static) and `dynamic_batch`.
+    /// Whether the walker is inside a motion-bound subtree. An ancestor
+    /// group may retain its emission in the static batch.
     #[inline]
     pub fn in_motion_subtree(&self) -> bool {
         self.motion_subtree_depth > 0
@@ -1811,6 +1826,7 @@ impl<'a> GpuPaintContext<'a> {
         self.blend_mode_stack = vec![BlendMode::Normal];
         self.clip_stack.clear();
         self.layer_stack.clear();
+        self.static_motion_depth = None;
         self.is_3d = false;
         self.camera = None;
     }
@@ -2209,6 +2225,10 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
 
     fn bg_batch_is_dynamic(&self) -> bool {
         self.aux_batch() == AuxBatch::Dynamic
+    }
+
+    fn can_promote_composite_layer(&self) -> bool {
+        !self.has_static_background_group()
     }
 
     fn push_motion_subtree(&mut self) {

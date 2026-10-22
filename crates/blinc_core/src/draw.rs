@@ -1753,6 +1753,12 @@ pub trait DrawContext {
         false
     }
 
+    /// Whether a descendant may leave the current batch for a separately
+    /// composited texture. An open ancestor group can require one shared owner.
+    fn can_promote_composite_layer(&self) -> bool {
+        true
+    }
+
     /// Screen-space bounds of the active composite scratch, including paths,
     /// nested groups and effect margins. Defaults to primitive-range bounds.
     fn composite_layer_bounds(&self) -> Option<[f32; 4]> {

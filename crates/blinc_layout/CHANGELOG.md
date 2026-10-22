@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Motion binding metadata identifies static-owned ranges. Ancestor group ownership blocks descendant CSS/motion texture promotion, keeps opacity endpoint groups, and requests repaint for retained motion ranges.
 - Canvas paint records retain visit order independently of primitive counts and include dynamic callbacks that emit only images or no current primitives.
 - Composite bake regions include tessellated paths and nested effect margins in their screen-space bounds.
 - CSS paint metadata records composite scratch ownership, and scratch motion records stay out of the dynamic-cache patcher. Promoted-root animation opacity remains on the live blit.

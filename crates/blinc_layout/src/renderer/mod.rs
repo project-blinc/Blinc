@@ -507,6 +507,9 @@ pub struct CssAnimPaintMeta {
 /// transform/opacity on the affected primitives.
 #[derive(Clone, Debug)]
 pub struct CompositeBindingMeta {
+    /// False when an ancestor group retains this binding's geometry in the
+    /// static batch. Its ranges require repaint instead of dynamic patching.
+    pub dynamic_batch: bool,
     /// Inclusive-exclusive range into the cached primitive buffer
     /// covering every primitive emitted while this binding's
     /// transform stack was active (the binding's owning node plus

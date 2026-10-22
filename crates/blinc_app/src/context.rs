@@ -2290,6 +2290,9 @@ impl RenderContext {
             return false;
         }
         let mut bindings = tree.composite_bindings_mut();
+        if bindings.values().any(|meta| !meta.dynamic_batch) {
+            return false;
+        }
         if bindings.is_empty() {
             // Cache is valid but nothing animated changed — fast
             // path can re-use the cache as-is. Caller still needs
@@ -9960,6 +9963,29 @@ impl RenderContext {
 
         let has_glass = batch.glass_count() > 0;
         let has_layer_effects_in_batch = batch.has_layer_effects();
+        let retained_motion = tree
+            .composite_bindings()
+            .values()
+            .any(|meta| !meta.dynamic_batch);
+        let clear = [0.0, 0.0, 0.0, self.clear_alpha as f64];
+        let render_background = |renderer: &mut GpuRenderer, batch: &PrimitiveBatch| {
+            if retained_motion && batch.requires_ordered_rendering() {
+                // Retained motion can nest groups in the static owner. Replay
+                // them together through the ordered single-sample compositor.
+                renderer.clear_target(
+                    target,
+                    wgpu::Color {
+                        r: clear[0],
+                        g: clear[1],
+                        b: clear[2],
+                        a: clear[3],
+                    },
+                );
+                renderer.render_overlay_msaa(target, batch, 1);
+            } else {
+                renderer.render_with_clear(target, batch, clear);
+            }
+        };
 
         // Only allocate glass textures when glass is actually used
         if has_glass {
@@ -10010,11 +10036,7 @@ impl RenderContext {
                 }
 
                 // Then use render_with_clear which handles layer effects
-                self.renderer.render_with_clear(
-                    target,
-                    &batch,
-                    [0.0, 0.0, 0.0, self.clear_alpha as f64],
-                );
+                render_background(&mut self.renderer, &batch);
 
                 // Render dynamic images (video frames from draw_rgba_pixels)
                 if !batch.dynamic_images.is_empty() {
@@ -10283,11 +10305,7 @@ impl RenderContext {
                 // but the shader-side edge AA they fall back to is
                 // already 1 px wide and is the same path that runs
                 // when effects DO exist — no per-frame discontinuity.
-                self.renderer.render_with_clear(
-                    target,
-                    &batch,
-                    [0.0, 0.0, 0.0, self.clear_alpha as f64],
-                );
+                render_background(&mut self.renderer, &batch);
 
                 // Render dynamic images (video frames)
                 if !batch.dynamic_images.is_empty() {

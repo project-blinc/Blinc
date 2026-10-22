@@ -114,13 +114,14 @@ fn routed_children_keep_only_opacity_unrepresented_in_their_batch() {
         draw(&mut ctx);
         ctx.pop_layer();
         ctx.pop_opacity();
-        let routed = if composite {
-            ctx.take_composite_layer_batches().remove(&7).unwrap()
+        if composite {
+            let routed = ctx.take_composite_layer_batches().remove(&7).unwrap();
+            assert_eq!(routed.layer_commands.len(), 2);
+            alpha(&routed, 0.25);
         } else {
-            ctx.take_dynamic_batch()
-        };
-        assert_eq!(routed.layer_commands.len(), 2);
-        alpha(&routed, 0.25);
+            assert!(ctx.take_dynamic_batch().is_empty());
+            assert_eq!(ctx.batch().layer_commands.len(), 4);
+        }
         alpha(&ctx.take_batch(), 0.5);
     }
 }
@@ -143,4 +144,43 @@ fn foreground_and_images_keep_unrepresented_background_opacity() {
         assert_eq!(primitive.color[3], 0.25);
     }
     assert_eq!(batch.foreground_dynamic_images[0].opacity, 0.25);
+}
+
+#[test]
+fn static_motion_group_keeps_nested_routes_and_aux_ownership() {
+    use blinc_core::ClipShape;
+    let mut ctx = GpuPaintContext::new(100.0, 100.0);
+    ctx.push_layer(LayerConfig::new().opacity(0.5));
+    assert!(!ctx.can_promote_composite_layer());
+    draw(&mut ctx);
+    let per_draw = ctx.bg_primitive_count();
+    ctx.push_motion_subtree();
+    assert!(!ctx.bg_batch_is_dynamic());
+    ctx.push_clip(ClipShape::Path(Path::rect(Rect::new(0.0, 0.0, 80.0, 80.0))));
+    draw(&mut ctx);
+    ctx.push_motion_subtree();
+    draw(&mut ctx);
+    ctx.pop_motion_subtree();
+    assert!(!ctx.bg_batch_is_dynamic());
+    ctx.pop_clip();
+    ctx.pop_motion_subtree();
+    ctx.pop_layer();
+    assert!(ctx.can_promote_composite_layer());
+    ctx.push_motion_subtree();
+    assert!(ctx.bg_batch_is_dynamic());
+    draw(&mut ctx);
+    ctx.pop_motion_subtree();
+    let b = ctx.take_batch();
+    assert_eq!(b.layer_commands.len(), 2);
+    assert_eq!(b.primitives.len(), per_draw * 3);
+    alpha(&b, 1.0);
+    assert!(!b.aux_data.is_empty());
+    assert!(
+        b.primitives[per_draw..]
+            .iter()
+            .all(|p| p.clip_shape[0] > 0.0)
+    );
+    let dynamic = ctx.take_dynamic_batch();
+    assert!(dynamic.layer_commands.is_empty());
+    alpha(&dynamic, 1.0);
 }

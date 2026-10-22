@@ -43,7 +43,7 @@ impl GpuPaintContext<'_> {
     pub(super) fn aux_batch(&self) -> AuxBatch {
         if let Some(node) = self.active_composite_layer {
             AuxBatch::Composite(node)
-        } else if self.motion_subtree_depth > 0 {
+        } else if self.motion_subtree_depth > 0 && self.static_motion_depth.is_none() {
             AuxBatch::Dynamic
         } else {
             AuxBatch::Static
