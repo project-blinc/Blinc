@@ -54,6 +54,8 @@ mod path_brush_clip_tests;
 #[cfg(test)]
 mod prepared_glyph_clip_tests;
 #[cfg(test)]
+mod retained_canvas_tests;
+#[cfg(test)]
 mod rgba_affine_tests;
 #[cfg(test)]
 mod rgba_clip_properties_tests;
@@ -1142,6 +1144,9 @@ impl RenderContext {
         width: u32,
         height: u32,
     ) -> bool {
+        if tree.had_retained_canvas_painted() {
+            return false;
+        }
         use blinc_core::{DrawContext, Rect, Transform, layer::Affine2D};
         use blinc_gpu::GpuPaintContext;
 
@@ -7612,6 +7617,12 @@ impl RenderContext {
     ) -> Result<()> {
         self.renderer.ensure_static_layer(width, height);
 
+        // Retained callbacks share ancestor commands and cannot be refreshed
+        // through the separate canvas overlay or a cached primitive splice.
+        if tree.had_retained_canvas_painted() {
+            self.renderer.invalidate_static_layer();
+        }
+
         // Image fade-in detection at frame boundary — independent
         // of whether the fast or slow path runs this frame. The
         // image dispatch only runs on the slow path; once the
@@ -8311,7 +8322,8 @@ impl RenderContext {
                 // walker didn't run this frame, so reset the flag
                 // from current animation state. Mirrors the motion
                 // damage path's end-of-frame restate.
-                let has_visible_canvas = !tree.canvas_paint_records().is_empty();
+                let has_visible_canvas =
+                    !tree.canvas_paint_records().is_empty() || tree.had_retained_canvas_painted();
                 let any_visible_anim = {
                     let painted_set = tree.painted_node_ids().clone();
                     let painted_stable = tree.painted_stable_ids();
@@ -8703,7 +8715,8 @@ impl RenderContext {
                 // (walker didn't run this frame); use the last walker
                 // pass's set, which the windowed runner's redraw gate
                 // also relies on.
-                let has_visible_canvas = !tree.canvas_paint_records().is_empty();
+                let has_visible_canvas =
+                    !tree.canvas_paint_records().is_empty() || tree.had_retained_canvas_painted();
                 let any_visible_anim = {
                     let painted_set = tree.painted_node_ids().clone();
                     let painted_stable = tree.painted_stable_ids();
@@ -8956,7 +8969,8 @@ impl RenderContext {
         // visibility-gated set_visible_anim_active so the windowed
         // runner's redraw chain gets a consistent signal whether
         // we landed on the fast or slow path.
-        let has_visible_canvas = !tree.canvas_paint_records().is_empty();
+        let has_visible_canvas =
+            !tree.canvas_paint_records().is_empty() || tree.had_retained_canvas_painted();
         let any_visible_anim = {
             let painted_set = tree.painted_node_ids().clone();
             let painted_stable = tree.painted_stable_ids();
@@ -9973,14 +9987,15 @@ impl RenderContext {
 
         let has_glass = batch.glass_count() > 0;
         let has_layer_effects_in_batch = batch.has_layer_effects();
-        let retained_motion = tree
-            .composite_bindings()
-            .values()
-            .any(|meta| !meta.dynamic_batch && !meta.primitive_range.is_empty());
+        let retained_group = tree.had_retained_canvas_painted()
+            || tree
+                .composite_bindings()
+                .values()
+                .any(|meta| !meta.dynamic_batch && !meta.primitive_range.is_empty());
         let clear = [0.0, 0.0, 0.0, self.clear_alpha as f64];
         let render_background = |renderer: &mut GpuRenderer, batch: &PrimitiveBatch| {
-            if retained_motion && batch.requires_ordered_rendering() {
-                // Retained motion can nest groups in the static owner. Replay
+            if retained_group && batch.requires_ordered_rendering() {
+                // Retained content can nest groups in the static owner. Replay
                 // them together through the ordered single-sample compositor.
                 renderer.clear_target(
                     target,

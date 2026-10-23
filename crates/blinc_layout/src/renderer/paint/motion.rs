@@ -73,6 +73,7 @@ impl RenderTree {
         // bail back to the walker so the canvas's draw callback
         // actually runs.
         self.had_canvas_painted.set(false);
+        self.had_retained_canvas_painted.set(false);
         // Same lifecycle for the painted-node set: cleared here, grown
         // by the walk, queried via `painted_node_ids()` to filter
         // animating Statefuls down to those whose node is actually on
@@ -1787,7 +1788,15 @@ impl RenderTree {
                     // is deterministic in bounds + closure captures,
                     // so the cache-only path matches reality and
                     // doesn't overdraw children layered on top.
-                    let skip_drawing = skip_drawing_flag && !canvas_data.is_static;
+                    // A static ancestor group must own the callback's output.
+                    // Repaint it with its siblings instead of collecting it later.
+                    let retained_canvas =
+                        !canvas_data.is_static && !ctx.can_promote_composite_layer();
+                    if retained_canvas {
+                        self.had_retained_canvas_painted.set(true);
+                    }
+                    let skip_drawing =
+                        skip_drawing_flag && !canvas_data.is_static && !retained_canvas;
                     if !skip_drawing {
                         render_fn(ctx, canvas_bounds);
                     }
@@ -1823,7 +1832,7 @@ impl RenderTree {
                     // so the dynamic-batch path doesn't replay the
                     // static canvas every frame either.
                     let is_static_canvas = canvas_data.is_static;
-                    if layer_matches && !is_static_canvas {
+                    if layer_matches && !is_static_canvas && !retained_canvas {
                         // Route into the overlay-subtree pool when
                         // the walker is currently inside an
                         // `is_overlay_root` ancestor. That pool is
