@@ -28,6 +28,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ### Performance
 - **Stateful layout-prop fast path** — `refresh_props_internal` discriminates three rebuild kinds via paired structural / topology hashes: `Visual` (no children change, no taffy `Style` change → visual-only prop update on existing nodes); `LayoutProps` (taffy `Style` changed, no topology change → patch styles in place + re-`compute_layout`); `Structural` (children added / removed / reordered → full subtree rebuild + mint + collect). The middle path is what keeps spring-driven `.w()` / `.h()` / `.left()` / `.top()` cheap — pre-fix every spring tick on a stateful went through the full Structural rebuild path, tearing down + re-collecting handlers / physics / motion bindings each frame.
+- **`FontTextMeasurer` remembers measurements**: taffy asks for each text's size several times per layout at the same few widths, and every ask shaped the text afresh. Results are kept by text, face, size and width (up to 16,384 entries, texts over 1 KiB excluded) and dropped when the font registry's new `generation()` changes. A definite width no longer shapes an unused single-line layout.
 - **`LayoutTree` node maps hash with FxHash**: the Taffy-to-`LayoutNodeId` reverse map and the baseline and incidental-`align_self` tables were std maps, and `children()` hashed every child through the reverse map, so flushing a wide tree was quadratic in SipHash. The keys are integers the tree makes itself.
 
 ### Added

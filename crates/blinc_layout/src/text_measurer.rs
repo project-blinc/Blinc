@@ -11,6 +11,8 @@
 
 use std::sync::{Arc, Mutex};
 
+use rustc_hash::FxHashMap;
+
 use blinc_text::{FontRegistry, GenericFont, LayoutOptions, TextLayoutEngine};
 
 use crate::GenericFont as LayoutGenericFont;
@@ -28,8 +30,35 @@ fn to_text_generic_font(layout_font: LayoutGenericFont) -> GenericFont {
     }
 }
 
+/// What a measurement depends on: the text, the face it resolved to, and the sizes and width it was asked at.
+#[derive(Hash, PartialEq, Eq)]
+struct MeasureKey {
+    text: Box<str>,
+    font: usize,
+    size: u32,
+    line_height: u32,
+    letter_spacing: u32,
+    max_width: Option<u32>,
+}
+
+/// The most measurements kept; past it they are all let go and measured again as asked.
+const MEASURE_CACHE_LIMIT: usize = 16_384;
+
+/// A text longer than this, in bytes, is measured each time: its key would cost more memory than the cache saves.
+const MEASURE_CACHE_TEXT_LIMIT: usize = 1024;
+
+/// Measurements, and the font registry's generation they were made under.
+#[derive(Default)]
+struct MeasureCache {
+    generation: u64,
+    entries: FxHashMap<MeasureKey, TextMetrics>,
+}
+
 /// A text measurer backed by real font metrics.
 pub struct FontTextMeasurer {
+    /// Measurements already made. taffy asks for each text several times in one layout, at the same few widths, and the
+    /// layouts of one frame ask the same again. Dropped whenever the registry's generation changes.
+    measured: Mutex<MeasureCache>,
     /// Where faces are looked up. Shared with the renderer when there is
     /// one, so measurement and drawing cannot disagree.
     font_registry: Arc<Mutex<FontRegistry>>,
@@ -52,6 +81,7 @@ impl FontTextMeasurer {
         Self {
             font_registry,
             layout_engine: Mutex::new(TextLayoutEngine::new()),
+            measured: Mutex::new(MeasureCache::default()),
         }
     }
 
@@ -64,6 +94,7 @@ impl FontTextMeasurer {
         Self {
             font_registry,
             layout_engine: Mutex::new(TextLayoutEngine::new()),
+            measured: Mutex::new(MeasureCache::default()),
         }
     }
 
@@ -145,15 +176,38 @@ impl TextMeasurer for FontTextMeasurer {
 
         // The face the renderer will draw this text in, loaded now if no
         // text has used it yet.
-        let font = match self.font_registry.lock().unwrap().resolve_styled(
-            options.font_name.as_deref(),
-            generic_font,
-            options.font_weight,
-            options.italic,
-        ) {
-            Some(f) => f,
-            None => return Self::estimate_size(text, font_size, options),
+        let (font, generation) = {
+            let mut registry = self.font_registry.lock().unwrap();
+            match registry.resolve_styled(
+                options.font_name.as_deref(),
+                generic_font,
+                options.font_weight,
+                options.italic,
+            ) {
+                Some(f) => (f, registry.generation()),
+                None => return Self::estimate_size(text, font_size, options),
+            }
         };
+        let cacheable = text.len() <= MEASURE_CACHE_TEXT_LIMIT;
+
+        let key = MeasureKey {
+            text: text.into(),
+            font: Arc::as_ptr(&font) as *const () as usize,
+            size: font_size.to_bits(),
+            line_height: options.line_height.to_bits(),
+            letter_spacing: options.letter_spacing.to_bits(),
+            max_width: options.max_width.map(f32::to_bits),
+        };
+        if cacheable {
+            let mut cache = self.measured.lock().unwrap();
+            if cache.generation != generation {
+                cache.entries.clear();
+                cache.generation = generation;
+            }
+            if let Some(found) = cache.entries.get(&key) {
+                return *found;
+            }
+        }
 
         // `blinc_layout::tree::text_measure_function` encodes taffy's
         // three AvailableSpace variants as:
@@ -206,8 +260,9 @@ impl TextMeasurer for FontTextMeasurer {
             line_break: blinc_text::LineBreakMode::None,
             ..LayoutOptions::default()
         };
+        // Only the sizing probes use the single-line layout; a definite width lays the text out once, at that width.
         let single_line =
-            layout_engine.layout_with_fallbacks(text, &font, font_size, &probe, &fallbacks);
+            || layout_engine.layout_with_fallbacks(text, &font, font_size, &probe, &fallbacks);
 
         let (width, height, line_count) = match options.max_width {
             Some(mw) if mw > 0.0 => {
@@ -237,12 +292,14 @@ impl TextMeasurer for FontTextMeasurer {
                             .width
                     })
                     .fold(0.0_f32, f32::max);
-                let mc_width = longest_word.max(1.0).min(single_line.width.max(1.0));
-                (mc_width, single_line.height, 1)
+                let one = single_line();
+                let mc_width = longest_word.max(1.0).min(one.width.max(1.0));
+                (mc_width, one.height, 1)
             }
             None => {
                 // MaxContent: no-wrap single line.
-                (single_line.width, single_line.height, 1)
+                let one = single_line();
+                (one.width, one.height, 1)
             }
         };
 
@@ -250,13 +307,25 @@ impl TextMeasurer for FontTextMeasurer {
         let ascender = metrics.ascender_px(font_size);
         let descender = metrics.descender_px(font_size);
 
-        TextMetrics {
+        let result = TextMetrics {
             width,
             height,
             ascender,
             descender,
             line_count,
+        };
+        if cacheable {
+            let mut cache = self.measured.lock().unwrap();
+            if cache.generation != generation {
+                cache.entries.clear();
+                cache.generation = generation;
+            }
+            if cache.entries.len() >= MEASURE_CACHE_LIMIT {
+                cache.entries.clear();
+            }
+            cache.entries.insert(key, result);
         }
+        result
     }
 
     fn line_spans(&self, text: &str, font_size: f32, options: &TextLayoutOptions) -> Vec<LineSpan> {
@@ -374,6 +443,37 @@ mod tests {
             wide.width
         );
         assert!(narrow.ascender > 0.0 && narrow.descender < 0.0);
+    }
+
+    /// A change to what the registry can answer drops the measurements made before it.
+    #[test]
+    fn a_registry_change_drops_the_cached_measurements() {
+        let registry = Arc::new(Mutex::new(FontRegistry::new()));
+        registry.lock().unwrap().preload_generic_fonts();
+        let measurer = FontTextMeasurer::with_shared_registry(registry.clone());
+        let opts = TextLayoutOptions::new();
+        let estimate = EstimatedTextMeasurer.measure_with_options("hello", 16.0, &opts);
+        let first = measurer.measure_with_options("hello", 16.0, &opts);
+        if (first.width - estimate.width).abs() < 0.01 {
+            eprintln!("no system font resolved; skipping");
+            return;
+        }
+        measurer.measure_with_options("world", 16.0, &opts);
+        assert_eq!(measurer.measured.lock().unwrap().entries.len(), 2);
+        registry.lock().unwrap().invalidate_generic_cache();
+        measurer.measure_with_options("hello", 16.0, &opts);
+        assert_eq!(measurer.measured.lock().unwrap().entries.len(), 1);
+    }
+
+    /// A long text is measured each time and not kept.
+    #[test]
+    fn a_long_text_is_not_cached() {
+        let registry = Arc::new(Mutex::new(FontRegistry::new()));
+        registry.lock().unwrap().preload_generic_fonts();
+        let measurer = FontTextMeasurer::with_shared_registry(registry);
+        let long = "x".repeat(MEASURE_CACHE_TEXT_LIMIT + 1);
+        measurer.measure_with_options(&long, 16.0, &TextLayoutOptions::new());
+        assert_eq!(measurer.measured.lock().unwrap().entries.len(), 0);
     }
 
     /// The estimator is what you get without this installed, and it is

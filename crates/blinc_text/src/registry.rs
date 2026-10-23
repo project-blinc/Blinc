@@ -168,11 +168,18 @@ pub struct FontRegistry {
     registered: FxHashMap<String, Arc<FontFace>>,
     /// Whether full system font scan has been performed
     system_fonts_loaded: bool,
+    /// Counts the changes to what a lookup can answer, so a cache of results made from lookups knows when it is stale.
+    generation: u64,
     /// The full system scan. Replaced in tests with a known set of faces.
     scan_system: fn(&mut Database),
 }
 
 impl FontRegistry {
+    /// A number that changes whenever a lookup could answer differently: a font was loaded, a face registered or released, or the generic cache dropped.
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
     /// Create a new font registry with lazy loading
     ///
     /// Only loads known essential system fonts by path.
@@ -208,6 +215,7 @@ impl FontRegistry {
             faces: FxHashMap::default(),
             registered: FxHashMap::default(),
             system_fonts_loaded: false,
+            generation: 0,
             scan_system: Database::load_system_fonts,
         }
         // Note: We don't preload generic fonts here anymore.
@@ -227,6 +235,7 @@ impl FontRegistry {
         let after = self.db.faces().count();
         let loaded = after - before;
         if loaded > 0 {
+            self.generation += 1;
             tracing::debug!("Loaded {} font faces from data", loaded);
         }
         loaded
@@ -244,13 +253,18 @@ impl FontRegistry {
             return false;
         }
         self.registered.insert(name, face);
+        self.generation += 1;
         true
     }
 
     /// Release an adapter-owned name. Previously returned faces remain alive while
     /// their owners use them. This does not remove installed/system fonts.
     pub fn unregister_face(&mut self, name: &str) -> bool {
-        self.registered.remove(name).is_some()
+        let removed = self.registered.remove(name).is_some();
+        if removed {
+            self.generation += 1;
+        }
+        removed
     }
 
     /// Ensure all system fonts are loaded (lazy initialization)
@@ -889,6 +903,7 @@ impl FontRegistry {
     /// `None` entries from before the font was loaded would otherwise
     /// prevent the newly-loaded font from being found.
     pub fn invalidate_generic_cache(&mut self) {
+        self.generation += 1;
         self.faces
             .retain(|key, val| !key.starts_with("__generic_") || val.is_some());
     }
@@ -1202,6 +1217,7 @@ mod tests {
             faces: FxHashMap::default(),
             registered: FxHashMap::default(),
             system_fonts_loaded: false,
+            generation: 0,
             scan_system: scan_bold,
         }
     }
