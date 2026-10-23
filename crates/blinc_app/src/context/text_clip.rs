@@ -83,6 +83,7 @@ impl RenderContext {
 }
 
 impl CollectedTextPath {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn capture(
         clip: &ClipPath,
         bounds: [f32; 4],

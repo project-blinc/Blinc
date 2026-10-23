@@ -165,8 +165,10 @@ fn motion_text_clip_replay_restores_rebased_rows_and_damage_scissor() {
         render(&mut c, &t, false, false);
         let snapshot = c.cached_motion_subtree_text_prims.clone().unwrap();
         assert!(!snapshot.aux_data.is_empty());
-        let mut owned = cached_text::TextBatch::default();
-        owned.aux_data = Arc::new(vec![[0.0; 4]; 2048]);
+        let mut owned = cached_text::TextBatch {
+            aux_data: Arc::new(vec![[0.0; 4]; 2048]),
+            ..Default::default()
+        };
         let mut source = PrimitiveBatch::new();
         source.primitives = snapshot.primitives.clone();
         source.aux_data = (*snapshot.aux_data).clone();

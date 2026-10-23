@@ -216,8 +216,10 @@ fn cached_text_clip_filtered_snapshots_replay_after_poison_and_invalidation() {
                 .clone()
         };
         assert!(!snapshot.is_empty());
-        let mut owned = cached_text::TextBatch::default();
-        owned.aux_data = Arc::new(vec![[0.0; 4]; 2048]);
+        let mut owned = cached_text::TextBatch {
+            aux_data: Arc::new(vec![[0.0; 4]; 2048]),
+            ..Default::default()
+        };
         let mut source = PrimitiveBatch::new();
         source.glyphs = snapshot.glyphs.clone();
         source.primitives = snapshot.primitives.clone();
