@@ -1738,15 +1738,7 @@ impl RenderTree {
                         ctx.push_clip(ClipShape::rect(clip_rect));
                     }
 
-                    // `bounds.x` / `bounds.y` are already translated
-                    // onto the DrawContext by the `push_transform` at
-                    // the top of `render_node`, so in canvas-local
-                    // space the origin is (0, 0). Surfacing the
-                    // pre-translate offset to the callback is a
-                    // diagnostic breadcrumb, not a correction; forward
-                    // zero for x/y so `Rect::new(bounds.x, bounds.y,
-                    // …)` in callback code resolves to the canvas's
-                    // actual origin without double-offsetting.
+                    // The current transform already positions the canvas origin.
                     let canvas_bounds = crate::canvas::CanvasBounds {
                         x: 0.0,
                         y: 0.0,
@@ -1754,44 +1746,21 @@ impl RenderTree {
                         height: bounds.height,
                     };
 
-                    // Snapshot the transform / opacity / z-layer
-                    // state at canvas paint time. The fast path (and
-                    // the layer compositor's overlay pass) replays
-                    // into a scratch `GpuPaintContext` with these
-                    // values pre-pushed so the canvas closure emits
-                    // primitives at exactly the same screen coords /
-                    // opacity / draw-order it had on this full paint.
+                    // Independent replay restores this paint state, including
+                    // the canvas's own clip and its ancestor clips.
                     let saved_affine = ctx.current_affine_elements();
                     let saved_opacity = ctx.current_opacity();
                     let saved_z_layer = ctx.z_layer();
-                    // Snapshot the ancestor clip stack BEFORE the
-                    // canvas's own clip (if any) is pushed below —
-                    // the overlay pass replays this so canvas
-                    // content scrolled out of its parent's
-                    // viewport stays hidden.
                     let saved_ancestor_clip = ctx.current_clip_aabb();
                     let canvas_start = ctx.bg_primitive_count();
                     let skip_drawing_flag = self.skip_canvas_drawing.get();
 
-                    // The layer compositor uses `skip_canvas_drawing`
-                    // to keep the cached static texture transparent
-                    // in canvas regions — fresh canvas content is
-                    // overlaid each frame on top of the cache. When
-                    // the flag is set, we still walk the canvas (to
-                    // record the paint state for the overlay pass)
-                    // but skip the actual `render_fn` invocation, so
-                    // no primitives land in the static batch.
-                    //
-                    // Static canvases (e.g. notch) take the opposite
-                    // route: they ALWAYS emit into the static cache
-                    // and never go through the overlay. Their output
-                    // is deterministic in bounds + closure captures,
-                    // so the cache-only path matches reality and
-                    // doesn't overdraw children layered on top.
-                    // A static ancestor group must own the callback's output.
-                    // Repaint it with its siblings instead of collecting it later.
-                    let retained_canvas =
-                        !canvas_data.is_static && !ctx.can_promote_composite_layer();
+                    // Retained callbacks paint with their owning group or batch.
+                    // Independent callbacks defer to overlay replay when requested.
+                    let retained_canvas = !canvas_data.is_static
+                        && (!ctx.can_promote_composite_layer()
+                            || ctx.bg_batch_is_dynamic()
+                            || ctx.bg_batch_is_composite());
                     if retained_canvas {
                         self.had_retained_canvas_painted.set(true);
                     }
@@ -1807,39 +1776,12 @@ impl RenderTree {
                         ctx.pop_clip();
                     }
 
-                    // Only record when on the matching layer pass —
-                    // mirrors the `composite_bindings` recording at
-                    // the bottom of this fn. The walker runs three
-                    // times per frame (Background / Glass /
-                    // Foreground); on the two non-matching passes the
-                    // canvas doesn't emit to the bg batch and a
-                    // captured `(start..start)` empty range would
-                    // clobber the real one via HashMap::insert. When
-                    // `skip_drawing` is set the primitive range is
-                    // empty (no emission). Always record a matching dynamic
-                    // callback, including image-only and currently empty draws,
-                    // so later frames can replay every output channel.
+                    // Record independent callbacks only on their matching pass,
+                    // including image-only and empty draws that can change later.
                     let layer_matches = effective_layer == target_layer;
-                    // Static canvases (notch) emit to the static
-                    // cache once and stay valid until a layout
-                    // change forces a full repaint. Skipping the
-                    // overlay record means `composite_frame` won't
-                    // re-invoke `render_fn` on top of the surface
-                    // each frame — which would otherwise overdraw
-                    // any children the walker layered on top of
-                    // the canvas in the static cache. The matching
-                    // `DynamicRegion` insert below is also skipped
-                    // so the dynamic-batch path doesn't replay the
-                    // static canvas every frame either.
                     let is_static_canvas = canvas_data.is_static;
                     if layer_matches && !is_static_canvas && !retained_canvas {
-                        // Route into the overlay-subtree pool when
-                        // the walker is currently inside an
-                        // `is_overlay_root` ancestor. That pool is
-                        // dispatched AFTER the popover's dyn-batch
-                        // SDF so a caret canvas nested in a focused
-                        // cn::input stays above the popover bg/
-                        // border instead of being overdrawn by it.
+                        // Overlay callbacks follow their host's dynamic content.
                         let nested_overlay = ctx.in_overlay_subtree();
                         let visit_seq = self.canvas_paint_records.borrow().len()
                             + self.overlay_canvas_paint_records.borrow().len();
@@ -1863,14 +1805,7 @@ impl RenderTree {
                             self.canvas_paint_records.borrow_mut().insert(node, record);
                         }
 
-                        // Compositor v2 parallel-populate: every
-                        // canvas is unconditionally
-                        // `Animating(Canvas)` in the new status
-                        // model, so record a `DynamicRegion`
-                        // alongside the legacy paint record. The
-                        // composite path won't read these yet
-                        // (Phase 3 makes the swap); this is purely
-                        // verification scaffolding.
+                        // Keep the independent region and replay record aligned.
                         let region_screen_aabb = Self::affine_screen_aabb(
                             &saved_affine,
                             bounds.width,

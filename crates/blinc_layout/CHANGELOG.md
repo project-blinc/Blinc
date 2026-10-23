@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Dynamic canvases retain callback output in motion, overlay and explicit composite scratch owners. Their commands, clips and image payloads stay in the same batch, with fresh paint requested instead of independent replay.
 - Dynamic canvases inside static native groups paint with their ancestor commands and stay out of independent overlay/region collection. Their retained-owner flag resets on each full paint.
 - Retained foreground motion and CSS records keep invalidation metadata without background ranges. Static-owned opacity bindings and retained foreground CSS groups survive zero-opacity frames; ancestor groups suppress separate foreground promotion.
 - Motion binding metadata identifies static-owned ranges. Ancestor group ownership blocks descendant CSS/motion texture promotion, keeps opacity endpoint groups, and requests repaint for retained motion ranges.

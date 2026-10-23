@@ -661,8 +661,8 @@ pub struct RenderTree {
     /// `true` from `render_layer_with_motion` when a Canvas node
     /// intersects the viewport.
     had_canvas_painted: Cell<bool>,
-    /// Dynamic canvas output retained by a static ancestor group. Its callback
-    /// requires a full walk so content and group commands keep one owner.
+    /// Dynamic canvas output retained by its owning group or batch. Its callback
+    /// requires a full walk so content and commands keep one owner.
     had_retained_canvas_painted: Cell<bool>,
     /// When `true`, the paint walker skips invoking each
     /// `Canvas` node's `render_fn` while still recording the
@@ -1494,7 +1494,7 @@ impl RenderTree {
         self.had_canvas_painted.get()
     }
 
-    /// Whether the last full paint retained a dynamic canvas in a static group.
+    /// Whether the last full paint retained a dynamic canvas in its owning batch.
     /// Such callbacks must repaint with their owning commands each frame.
     pub fn had_retained_canvas_painted(&self) -> bool {
         self.had_retained_canvas_painted.get()
