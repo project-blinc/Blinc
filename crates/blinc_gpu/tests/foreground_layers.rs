@@ -129,3 +129,82 @@ fn foreground_layers_projection_moves_paths_and_merge_rebases_cursors() {
     batch.clear();
     assert!(batch.foreground_layer_commands.is_empty());
 }
+
+#[test]
+fn foreground_layers_static_owner_retains_nested_motion_and_aux_rows() {
+    use blinc_core::{ClipShape, Path};
+    let mut ctx = GpuPaintContext::new(160.0, 120.0);
+    ctx.fill_rect(
+        Rect::new(130.0, 5.0, 5.0, 5.0),
+        0.0.into(),
+        Color::WHITE.into(),
+    );
+    ctx.set_foreground_layer(true);
+    ctx.push_layer(LayerConfig::new().opacity(0.5));
+    assert!(!ctx.can_promote_composite_layer());
+    ctx.fill_rect(
+        Rect::new(20.0, 20.0, 60.0, 60.0),
+        0.0.into(),
+        Color::RED.into(),
+    );
+    ctx.push_motion_subtree();
+    assert!(!ctx.bg_batch_is_dynamic());
+    ctx.push_opacity(0.5);
+    ctx.push_clip(ClipShape::Path(Path::rect(Rect::new(
+        0.0, 0.0, 100.0, 100.0,
+    ))));
+    ctx.fill_rect(
+        Rect::new(40.0, 40.0, 60.0, 60.0),
+        0.0.into(),
+        Color::GREEN.into(),
+    );
+    ctx.draw_rgba_pixels(&[0, 255, 0, 255], 1, 1, Rect::new(40.0, 40.0, 60.0, 60.0));
+    ctx.push_motion_subtree();
+    ctx.fill_rect(
+        Rect::new(50.0, 50.0, 20.0, 20.0),
+        0.0.into(),
+        Color::BLUE.into(),
+    );
+    ctx.pop_motion_subtree();
+    assert!(!ctx.bg_batch_is_dynamic());
+    ctx.pop_clip();
+    ctx.pop_opacity();
+    ctx.pop_motion_subtree();
+    ctx.pop_layer();
+    assert!(ctx.can_promote_composite_layer());
+    ctx.push_motion_subtree();
+    assert!(ctx.bg_batch_is_dynamic());
+    ctx.fill_rect(
+        Rect::new(100.0, 5.0, 5.0, 5.0),
+        0.0.into(),
+        Color::WHITE.into(),
+    );
+    ctx.pop_motion_subtree();
+    let b = ctx.take_batch();
+    assert_eq!(b.primitives.len(), 1);
+    assert_eq!(b.foreground_primitives.len(), 3);
+    assert_eq!(b.foreground_primitives[0].color[3], 1.0);
+    assert!(
+        b.foreground_primitives[1..]
+            .iter()
+            .all(|p| p.color[3] == 0.5 && p.clip_shape[0] > 0.0)
+    );
+    assert!(!b.aux_data.is_empty());
+    assert_eq!(b.foreground_dynamic_images.len(), 1);
+    assert_eq!(b.foreground_dynamic_images[0].opacity, 0.5);
+    assert!(!b.foreground_dynamic_images[0].clip_aux.is_empty());
+    assert_eq!(b.foreground_layer_commands.len(), 2);
+    assert_eq!(b.foreground_layer_commands[0].primitive_index, 0);
+    assert_eq!(b.foreground_layer_commands[1].primitive_index, 3);
+    assert_eq!(
+        b.foreground_dynamic_images[0]
+            .paint_order
+            .unwrap()
+            .layer_command_count,
+        1
+    );
+    let dynamic = ctx.take_dynamic_batch();
+    assert_eq!(dynamic.foreground_primitives.len(), 1);
+    assert!(dynamic.foreground_layer_commands.is_empty());
+    assert_eq!(dynamic.foreground_primitives[0].color[3], 1.0);
+}

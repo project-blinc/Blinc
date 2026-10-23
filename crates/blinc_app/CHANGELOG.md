@@ -28,6 +28,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Retained foreground motion and CSS groups request repaint before cache replay or background-index mutation. Settled writes and opacity recovery preserve isolation with static foreground siblings.
 - Static-owned motion binding ranges request repaint before dynamic-cache mutation. Their nested groups use ordered single-sample replay, preserving overlap isolation with static siblings.
 - 3D text bakes retain polygon/path clip rows in layer coordinates. Clips owned inside the layer tilt with its text; outside ancestor contours stay in screen space. Transformed text keeps its affine when moved into the layer viewport.
 - Motion-subtree text retains collected polygon/path clips and matching auxiliary rows through converted glyph preparation and cached overlay replay. Existing binding repaint and CSS text-promotion guards remain in place.

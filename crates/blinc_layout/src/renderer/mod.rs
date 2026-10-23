@@ -439,6 +439,8 @@ impl std::fmt::Debug for CanvasPaintRecord {
 /// full paint clears and repopulates.
 #[derive(Clone, Debug)]
 pub struct CssAnimPaintMeta {
+    /// Foreground-owned ranges cannot be patched through the background cache.
+    pub foreground_batch: bool,
     /// The recorded ranges belong to the motion batch rather than the static cache.
     pub dynamic_batch: bool,
     /// The recorded ranges belong to composite scratch instead of the static cache.

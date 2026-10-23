@@ -261,6 +261,7 @@ fn composite_layers_scratch_css_indices_request_full_repaint() {
     tree.css_anim_paint_records_mut().insert(
         root,
         CssAnimPaintMeta {
+            foreground_batch: false,
             dynamic_batch: false,
             composite_batch: true,
             stable_id: tree.stable_id(root).unwrap(),

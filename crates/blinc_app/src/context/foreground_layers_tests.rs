@@ -395,3 +395,384 @@ fn foreground_layers_motion_opacity_endpoints_request_repaint_and_recover() {
         }
     }
 }
+
+#[test]
+#[ignore] // Requires GPU
+fn foreground_layers_static_group_retains_motion_descendants() {
+    use blinc_animation::{AnimatedValue, AnimationScheduler};
+    blinc_theme::ThemeState::init(
+        blinc_theme::HybridTheme::bundle(),
+        blinc_theme::ColorScheme::Light,
+    );
+    for compositor in [false, true] {
+        let mut app = app();
+        let scheduler = Arc::new(Mutex::new(AnimationScheduler::new()));
+        let x = Arc::new(Mutex::new(AnimatedValue::with_default(
+            scheduler.lock().unwrap().handle(),
+            0.0,
+        )));
+        let tree = foreground_static_motion_tree(x.clone(), false, true);
+        let state = RenderState::new(scheduler.clone());
+        for (frame, dx) in [0.0, 10.0, -10.0, 0.0].into_iter().enumerate() {
+            x.lock().unwrap().set_immediate(dx);
+            x.lock().unwrap().set_target(dx + 20.0);
+            tree.compute_animation_status();
+            let texture = app.device().create_texture(&wgpu::TextureDescriptor {
+                label: Some("Foreground static motion group surface"),
+                size: wgpu::Extent3d {
+                    width: 160,
+                    height: 120,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: app.texture_format(),
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::COPY_SRC
+                    | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&Default::default());
+            app.render_tree_with_motion_opt(
+                &tree,
+                &state,
+                &view,
+                compositor.then_some(&texture),
+                160,
+                120,
+                frame > 0,
+            )
+            .unwrap();
+            let page = read_rendered_pixels(app.device(), app.queue(), &texture, 160, 120);
+            eprintln!("compositor={compositor} frame={frame} dx={dx}");
+            pixel(&page, (55, 55), [0, 128, 127, 255]);
+            pixel(&page, (25, 25), [128, 0, 127, 255]);
+            pixel(&page, (5, 5), [0, 0, 255, 255]);
+            let c = app.context();
+            assert!(tree.composite_bindings().values().any(|m| !m.dynamic_batch));
+            assert!(
+                c.cached_dynamic_batch
+                    .as_ref()
+                    .is_none_or(|b| b.foreground_primitives.is_empty())
+            );
+            assert_eq!(
+                c.cached_bg_batch
+                    .as_ref()
+                    .unwrap()
+                    .foreground_primitives
+                    .len(),
+                2
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn foreground_layers_retained_motion_images_replay_with_owning_rows() {
+    use blinc_core::{ClipShape, Path};
+    let mut app = app();
+    let c = app.context();
+    c.renderer.resize(160, 120);
+    for value in [1.0_f32, 0.5, 0.0, 0.75, 1.0] {
+        let mut paint = GpuPaintContext::new(160.0, 120.0);
+        paint.set_foreground_layer(true);
+        paint.push_layer(LayerConfig::new().opacity(0.5));
+        paint.fill_rect(
+            Rect::new(20.0, 20.0, 60.0, 60.0),
+            0.0.into(),
+            Color::RED.into(),
+        );
+        paint.push_motion_subtree();
+        paint.push_opacity(value);
+        paint.push_clip(ClipShape::Path(
+            Path::new()
+                .move_to(0.0, 0.0)
+                .line_to(140.0, 0.0)
+                .line_to(0.0, 140.0)
+                .close(),
+        ));
+        paint.push_clip(ClipShape::rect(Rect::new(45.0, 45.0, 45.0, 45.0)));
+        paint.draw_rgba_pixels(&[0, 255, 0, 255], 1, 1, Rect::new(40.0, 40.0, 60.0, 60.0));
+        paint.pop_clip();
+        paint.pop_clip();
+        paint.pop_opacity();
+        paint.pop_motion_subtree();
+        paint.pop_layer();
+        c.cached_bg_batch = Some(paint.take_batch());
+        assert!(paint.take_dynamic_batch().is_empty());
+        for _ in 0..2 {
+            let (texture, view) = create_test_texture(c.device(), c.texture_format(), 160, 120);
+            c.renderer.clear_target(&view, wgpu::Color::BLUE);
+            c.renderer.update_aux_data_slice(&vec![[0.0; 4]; 4096]);
+            c.render_foreground_overlay(&view, &[]);
+            let page = read_rendered_pixels(c.device(), c.queue(), &texture, 160, 120);
+            pixel(
+                &page,
+                (55, 55),
+                [
+                    (127.5 * (1.0 - value)).round() as u8,
+                    (127.5 * value).round() as u8,
+                    127,
+                    255,
+                ],
+            );
+            pixel(&page, (75, 75), [128, 0, 127, 255]);
+            pixel(&page, (42, 55), [128, 0, 127, 255]);
+            pixel(&page, (95, 55), [0, 0, 255, 255]);
+        }
+    }
+}
+
+fn foreground_static_motion_tree(
+    value: blinc_layout::motion::SharedAnimatedValue,
+    opacity: bool,
+    foreground: bool,
+) -> RenderTree {
+    let motion = div()
+        .w(120.0)
+        .h(120.0)
+        .child(
+            div()
+                .absolute()
+                .left(40.0)
+                .top(40.0)
+                .w(60.0)
+                .h(60.0)
+                .bg(Color::GREEN),
+        )
+        .motion();
+    let motion = if opacity {
+        motion.opacity(value)
+    } else {
+        motion.translate_x(value)
+    };
+    let mut parent = div().absolute().w(160.0).h(120.0).opacity(0.5);
+    if foreground {
+        parent = parent.foreground();
+    }
+    let ui = div().w(160.0).h(120.0).bg(Color::BLUE).child(
+        parent
+            .child(
+                div()
+                    .absolute()
+                    .left(20.0)
+                    .top(20.0)
+                    .w(60.0)
+                    .h(60.0)
+                    .bg(Color::RED),
+            )
+            .child(motion),
+    );
+    let mut tree = RenderTree::from_element(&ui);
+    tree.compute_layout(160.0, 120.0);
+    tree
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn foreground_layers_static_group_opacity_endpoints_retain_nested_commands() {
+    use blinc_animation::{AnimatedValue, AnimationScheduler};
+    blinc_theme::ThemeState::init(
+        blinc_theme::HybridTheme::bundle(),
+        blinc_theme::ColorScheme::Light,
+    );
+    for (foreground, compositor) in [(false, false), (false, true), (true, false), (true, true)] {
+        let mut app = app();
+        let scheduler = Arc::new(Mutex::new(AnimationScheduler::new()));
+        let opacity = Arc::new(Mutex::new(AnimatedValue::with_default(
+            scheduler.lock().unwrap().handle(),
+            1.0,
+        )));
+        let tree = foreground_static_motion_tree(opacity.clone(), true, foreground);
+        let state = RenderState::new(scheduler.clone());
+        for (frame, value) in [1.0_f32, 0.5, 0.0, 0.75, 1.0].into_iter().enumerate() {
+            opacity.lock().unwrap().set_immediate(value);
+            tree.compute_animation_status();
+            let texture = app.device().create_texture(&wgpu::TextureDescriptor {
+                label: Some("Foreground retained opacity surface"),
+                size: wgpu::Extent3d {
+                    width: 160,
+                    height: 120,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: app.texture_format(),
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::COPY_SRC
+                    | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&Default::default());
+            app.render_tree_with_motion_opt(
+                &tree,
+                &state,
+                &view,
+                compositor.then_some(&texture),
+                160,
+                120,
+                frame > 0,
+            )
+            .unwrap();
+            let page = read_rendered_pixels(app.device(), app.queue(), &texture, 160, 120);
+            pixel(
+                &page,
+                (55, 55),
+                [
+                    (127.5 * (1.0 - value)).round() as u8,
+                    (127.5 * value).round() as u8,
+                    127,
+                    255,
+                ],
+            );
+            pixel(&page, (25, 25), [128, 0, 127, 255]);
+            let c = app.context();
+            let b = c.cached_bg_batch.as_ref().unwrap();
+            let commands = if foreground {
+                &b.foreground_layer_commands
+            } else {
+                &b.layer_commands
+            };
+            assert_eq!(commands.len(), 4);
+            assert!(
+                matches!(&commands[1].command, blinc_gpu::primitives::LayerCommand::Push { config } if config.opacity == value)
+            );
+            assert_eq!(tree.composite_bindings().len(), 1);
+            assert!(tree.composite_bindings().values().all(|m| !m.dynamic_batch));
+        }
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn foreground_layers_static_group_css_updates_repaint_retained_content() {
+    use blinc_animation::{AnimationScheduler, MultiKeyframeAnimation};
+    use blinc_layout::render_state::ActiveCssAnimation;
+    blinc_theme::ThemeState::init(
+        blinc_theme::HybridTheme::bundle(),
+        blinc_theme::ColorScheme::Light,
+    );
+    let mut app = app();
+    let ui = div().w(160.0).h(120.0).bg(Color::BLUE).child(
+        div()
+            .absolute()
+            .w(160.0)
+            .h(120.0)
+            .foreground()
+            .opacity(0.5)
+            .child(
+                div()
+                    .absolute()
+                    .left(20.0)
+                    .top(20.0)
+                    .w(60.0)
+                    .h(60.0)
+                    .bg(Color::RED),
+            )
+            .child(
+                div()
+                    .id("retained-css")
+                    .absolute()
+                    .left(40.0)
+                    .top(40.0)
+                    .w(60.0)
+                    .h(60.0)
+                    .bg(Color::GREEN)
+                    .opacity(0.5),
+            ),
+    );
+    let mut tree = RenderTree::from_element(&ui);
+    tree.compute_layout(160.0, 120.0);
+    let child = tree.query_by_id("retained-css").unwrap();
+    let stable = tree.stable_id(child).unwrap();
+    let mut animation = ActiveCssAnimation::new(MultiKeyframeAnimation::new(1000));
+    animation.current_properties.opacity = Some(0.5);
+    tree.css_anim_store()
+        .lock()
+        .unwrap()
+        .animations
+        .insert(stable, animation);
+    let state = RenderState::new(Arc::new(Mutex::new(AnimationScheduler::new())));
+    for compositor in [false, true] {
+        app.context().invalidate_render_cache();
+        for (frame, value) in [0.5_f32, 0.0, 0.75, 1.0].into_iter().enumerate() {
+            tree.update_render_props(child, |p| p.opacity = value);
+            tree.css_anim_store()
+                .lock()
+                .unwrap()
+                .animations
+                .get_mut(&stable)
+                .unwrap()
+                .current_properties
+                .opacity = Some(value);
+            tree.compute_animation_status();
+            assert!(tree.composite_promotion().contains(&child));
+            let texture = app.device().create_texture(&wgpu::TextureDescriptor {
+                label: Some("Foreground retained CSS surface"),
+                size: wgpu::Extent3d {
+                    width: 160,
+                    height: 120,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: app.texture_format(),
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::COPY_SRC
+                    | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&Default::default());
+            app.render_tree_with_motion_opt(
+                &tree,
+                &state,
+                &view,
+                compositor.then_some(&texture),
+                160,
+                120,
+                frame > 0,
+            )
+            .unwrap();
+            let page = read_rendered_pixels(app.device(), app.queue(), &texture, 160, 120);
+            eprintln!("css compositor={compositor} frame={frame} value={value}");
+            pixel(
+                &page,
+                (55, 55),
+                [
+                    (127.5 * (1.0 - value)).round() as u8,
+                    (127.5 * value).round() as u8,
+                    127,
+                    255,
+                ],
+            );
+            assert!(
+                tree.css_anim_paint_records()
+                    .get(&child)
+                    .unwrap()
+                    .foreground_batch
+            );
+            let c = app.context();
+            let saved = c.cached_bg_batch.take();
+            let mut sentinel = PrimitiveBatch::new();
+            sentinel.primitives = vec![GpuPrimitive::rect(1.0, 2.0, 3.0, 4.0); 8];
+            c.cached_bg_batch = Some(sentinel);
+            assert!(matches!(
+                c.apply_css_deltas(&tree, 1.0),
+                CssDeltaResult::Bail
+            ));
+            assert!(
+                c.cached_bg_batch
+                    .as_ref()
+                    .unwrap()
+                    .primitives
+                    .iter()
+                    .all(|p| p.bounds == [1.0, 2.0, 3.0, 4.0])
+            );
+            c.cached_bg_batch = saved;
+        }
+    }
+}

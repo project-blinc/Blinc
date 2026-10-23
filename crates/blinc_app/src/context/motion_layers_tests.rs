@@ -94,6 +94,7 @@ fn motion_layers_css_record_in_dynamic_batch_requests_full_paint() {
     tree.css_anim_paint_records_mut().insert(
         root,
         CssAnimPaintMeta {
+            foreground_batch: false,
             dynamic_batch: true,
             composite_batch: false,
             stable_id: tree.stable_id(root).unwrap(),

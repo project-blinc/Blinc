@@ -847,12 +847,21 @@ impl RenderTree {
             };
         // Foreground bindings use a full repaint instead of background index
         // patching. Retain their zero-opacity group so later frames can recover.
-        let retain_foreground_binding = target_layer == RenderLayer::Foreground
+        let retain_foreground_animation = target_layer == RenderLayer::Foreground
             && (inside_foreground
                 || render_node.props.layer == RenderLayer::Foreground
                 || glass_depth > 0)
+            && (motion_bindings_ref.is_some_and(|bindings| bindings.opacity.is_some())
+                || (in_css_subtree && !ctx.can_promote_composite_layer()));
+        // Static-owned bindings also repaint instead of patching. Keep their
+        // zero-opacity group and baseline for settled writes on later frames.
+        let retain_static_binding = !ctx.can_promote_composite_layer()
             && motion_bindings_ref.is_some_and(|bindings| bindings.opacity.is_some());
-        if motion_opacity <= 0.001 && !has_pending_motion && !retain_foreground_binding {
+        if motion_opacity <= 0.001
+            && !has_pending_motion
+            && !retain_foreground_animation
+            && !retain_static_binding
+        {
             // Pop the motion-subtree push from above if we set it,
             // so the dynamic batch's emit gate stays balanced even
             // when this early-out fires.
@@ -2198,7 +2207,13 @@ impl RenderTree {
         // primitives, patches nothing, and the bar appears frozen.
         if let Some(start) = composite_bg_start.filter(|_| effective_layer == target_layer) {
             let end = ctx.bg_primitive_count();
-            if end > start {
+            // Retained foreground bindings have no background range, but their
+            // baseline still invalidates cached foreground content on updates.
+            let retained_foreground = effective_layer == RenderLayer::Foreground
+                && motion_bindings_ref.is_some()
+                && !ctx.bg_batch_is_dynamic()
+                && !ctx.bg_batch_is_composite();
+            if end > start || retained_foreground {
                 let (binding_tx, binding_ty) = motion_bindings_ref
                     .map(|b| {
                         let tx = b
@@ -2486,7 +2501,10 @@ impl RenderTree {
         // transforms becomes a target case.
         if let Some(start) = css_anim_bg_start.filter(|_| effective_layer == target_layer) {
             let end = ctx.bg_primitive_count();
-            if end > start {
+            let retained_foreground = effective_layer == RenderLayer::Foreground
+                && !ctx.bg_batch_is_dynamic()
+                && !ctx.bg_batch_is_composite();
+            if end > start || retained_foreground {
                 if let Some(stable_id) = self.stable_id(node) {
                     let centre = self
                         .layout_tree
@@ -2559,6 +2577,7 @@ impl RenderTree {
                         self.css_anim_paint_records.borrow_mut().insert(
                             node,
                             super::super::CssAnimPaintMeta {
+                                foreground_batch: retained_foreground,
                                 dynamic_batch: ctx.bg_batch_is_dynamic(),
                                 composite_batch: ctx.bg_batch_is_composite(),
                                 stable_id,

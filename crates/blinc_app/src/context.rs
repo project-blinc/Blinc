@@ -3088,7 +3088,7 @@ impl RenderContext {
         if tree
             .css_anim_paint_records()
             .values()
-            .any(|meta| meta.dynamic_batch || meta.composite_batch)
+            .any(|meta| meta.dynamic_batch || meta.composite_batch || meta.foreground_batch)
         {
             self.last_css_damage_rects.clear();
             return CssDeltaResult::Bail;
@@ -7830,6 +7830,14 @@ impl RenderContext {
                 Err(_) => false,
             }
         };
+        if css_anim_active
+            && tree
+                .css_anim_paint_records()
+                .values()
+                .any(|meta| meta.foreground_batch)
+        {
+            self.renderer.invalidate_static_layer();
+        }
         // CSS animations / transitions no longer force a static-cache
         // invalidation on their own — Phase 3a routed the CSS-animated
         // subtrees out of the static batch and into `dynamic_batch`
@@ -8364,19 +8372,21 @@ impl RenderContext {
             // cached dynamic batch in the same pass; the rect set is
             // then consumed by the damage-rect branch below.
             let mut damage_rect_failed = false;
-            // Foreground bindings have no background primitive range. Repaint
-            // their stream even when a direct write leaves the spring settled.
-            let foreground_repaint = self.cached_dynamic_batch.as_ref().is_some_and(|batch| {
+            // Foreground and retained static bindings need repaint even when a
+            // direct write leaves the spring settled.
+            let binding_repaint = self.cached_dynamic_batch.as_ref().is_some_and(|batch| {
                 batch.has_foreground_content() || batch.has_foreground_layers()
-            });
-            let patched = if (bindings_animating || foreground_repaint)
-                && self.cached_dynamic_batch.is_some()
-            {
-                let scale_factor = tree.scale_factor();
-                self.apply_binding_deltas(tree, scale_factor)
-            } else {
-                true
-            };
+            }) || tree
+                .composite_bindings()
+                .values()
+                .any(|meta| !meta.dynamic_batch);
+            let patched =
+                if (bindings_animating || binding_repaint) && self.cached_dynamic_batch.is_some() {
+                    let scale_factor = tree.scale_factor();
+                    self.apply_binding_deltas(tree, scale_factor)
+                } else {
+                    true
+                };
             // Bail handling MUST run regardless of
             // `damage_rect_eligible`. `apply_binding_deltas` returns
             // false on the last-opacity-is-zero guard (opacity
@@ -9966,7 +9976,7 @@ impl RenderContext {
         let retained_motion = tree
             .composite_bindings()
             .values()
-            .any(|meta| !meta.dynamic_batch);
+            .any(|meta| !meta.dynamic_batch && !meta.primitive_range.is_empty());
         let clear = [0.0, 0.0, 0.0, self.clear_alpha as f64];
         let render_background = |renderer: &mut GpuRenderer, batch: &PrimitiveBatch| {
             if retained_motion && batch.requires_ordered_rendering() {

@@ -228,7 +228,7 @@ pub struct GpuPaintContext<'a> {
     /// so nested motion bindings (rare but possible) still route
     /// correctly.
     motion_subtree_depth: u32,
-    /// Outermost motion scope retained by an open static background group.
+    /// Outermost motion scope retained by an open static group.
     static_motion_depth: Option<u32>,
     /// How deep the walker currently is inside `is_overlay_root`
     /// subtrees specifically (portals / popovers / dropdowns /
@@ -466,13 +466,13 @@ impl<'a> GpuPaintContext<'a> {
 
     /// Mark that the walker has entered a motion-bound subtree.
     /// Subsequent emit calls route into `dynamic_batch` unless an open
-    /// static background group retains them for joint composition, until the
+    /// static group retains them for joint composition, until the
     /// matching `pop_motion_subtree`. Nested motion subtrees track
     /// via a depth counter — only the outermost pop returns to
     /// static-batch emission.
     pub fn push_motion_subtree(&mut self) {
         self.motion_subtree_depth = self.motion_subtree_depth.saturating_add(1);
-        if self.static_motion_depth.is_none() && self.has_static_background_group() {
+        if self.static_motion_depth.is_none() && self.has_static_group() {
             self.static_motion_depth = Some(self.motion_subtree_depth);
         }
     }
@@ -488,10 +488,10 @@ impl<'a> GpuPaintContext<'a> {
         self.motion_subtree_depth = self.motion_subtree_depth.saturating_sub(1);
     }
 
-    fn has_static_background_group(&self) -> bool {
+    fn has_static_group(&self) -> bool {
         self.layer_stack
             .iter()
-            .any(|state| state.command_batch == AuxBatch::Static && !state.foreground)
+            .any(|state| state.command_batch == AuxBatch::Static)
     }
 
     /// Mark that the walker has entered an `is_overlay_root` subtree
@@ -2228,7 +2228,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
     }
 
     fn can_promote_composite_layer(&self) -> bool {
-        !self.has_static_background_group()
+        !self.has_static_group()
     }
 
     fn push_motion_subtree(&mut self) {

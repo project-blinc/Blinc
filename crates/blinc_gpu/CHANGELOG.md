@@ -27,6 +27,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - Per-corner squircle / scoop / bevel support on `ClipShape::RoundedRect` propagated into the SDF clip primitive uniforms — all 12 SDF shader variants (`sdf_core` / `sdf_shadow` / `sdf_3d` / `sdf_notch` × `vb` / `dt` / msaa) now read and apply per-corner `n` when evaluating clip alpha.
 
 ### Fixed
+- Static foreground groups retain native motion descendants, images and auxiliary rows with their owning commands. Nested motion scopes restore independent routing after the group exits.
 - Native motion background draws stay in an open static ancestor group, retaining group opacity, command ranges and auxiliary ownership. Nested motion exits restore normal routing.
 - Primitive overlay draws respect the pending damage scissor, including converted cached-text glyphs.
 - Text-only primitive batches participate in the MSAA dispatch range instead of being skipped as empty.
