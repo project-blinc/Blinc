@@ -483,3 +483,153 @@ impl RenderContext {
         self.renderer.release_layer_texture(layer_tex);
     }
 }
+
+/// Refresh promoted subtree textures without borrowing the active text context.
+pub(super) fn update_subtree_bakes(
+    renderer: &mut super::GpuRenderer,
+    tree: &RenderTree,
+    scratch_batches: std::collections::HashMap<u64, PrimitiveBatch>,
+    css_composited_textures: &mut std::collections::HashMap<
+        u64,
+        (blinc_gpu::LayerTexture, (u32, u32)),
+    >,
+    css_composited_scratch_hash: &mut std::collections::HashMap<u64, u64>,
+    motion_subtree_textures: &mut std::collections::HashMap<
+        u64,
+        (blinc_gpu::LayerTexture, (u32, u32)),
+    >,
+    motion_subtree_scratch_hash: &mut std::collections::HashMap<u64, u64>,
+) {
+    if !scratch_batches.is_empty() {
+        // Match scratch batches and regions by their slotmap key.
+        use slotmap::Key as _;
+        let regions = tree.dynamic_regions();
+        for (region_node, region) in regions.iter() {
+            let key = region_node.data().as_ffi();
+            let Some(scratch_batch) = scratch_batches.get(&key) else {
+                continue;
+            };
+            let natural_size = match region.kind {
+                blinc_layout::renderer::DynamicKind::CssAnimated { natural_size, .. } => {
+                    natural_size
+                }
+                _ => continue,
+            };
+            if natural_size.0 == 0 || natural_size.1 == 0 {
+                continue;
+            }
+            // Reuse the texture when intrinsic content is unchanged; live animation
+            // is applied by the blit.
+            let scratch_hash = RenderContext::hash_composite_scratch(scratch_batch);
+            if css_composited_textures.contains_key(&key)
+                && css_composited_scratch_hash.get(&key).copied() == Some(scratch_hash)
+            {
+                continue;
+            }
+            let layer_pos = (region.screen_aabb[0], region.screen_aabb[1]);
+            let layer_size = (natural_size.0 as f32, natural_size.1 as f32);
+            let (layer_texture, content_size) =
+                renderer.render_subtree_to_layer_texture(scratch_batch, layer_pos, layer_size);
+            if let Some((old, _)) = css_composited_textures.remove(&key) {
+                renderer.layer_texture_cache_mut().release(old);
+            }
+            css_composited_textures.insert(key, (layer_texture, content_size));
+            css_composited_scratch_hash.insert(key, scratch_hash);
+        }
+    }
+    // Release textures for nodes that no longer have a promoted CSS region.
+    use slotmap::Key as _;
+    let live_keys: std::collections::HashSet<u64> = {
+        let regions = tree.dynamic_regions();
+        regions
+            .iter()
+            .filter_map(|(node, region)| {
+                if matches!(
+                    region.kind,
+                    blinc_layout::renderer::DynamicKind::CssAnimated { .. }
+                ) {
+                    Some(node.data().as_ffi())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    };
+    let stale_keys: Vec<u64> = css_composited_textures
+        .keys()
+        .copied()
+        .filter(|k| !live_keys.contains(k))
+        .collect();
+    for key in stale_keys {
+        if let Some((old, _)) = css_composited_textures.remove(&key) {
+            renderer.layer_texture_cache_mut().release(old);
+        }
+        css_composited_scratch_hash.remove(&key);
+    }
+
+    // Bake promoted motion subtrees using the same fingerprint and texture-pool
+    // rules as CSS layers.
+    if !scratch_batches.is_empty() {
+        let regions = tree.dynamic_regions();
+        for (region_node, region) in regions.iter() {
+            let key = region_node.data().as_ffi();
+            let Some(scratch_batch) = scratch_batches.get(&key) else {
+                continue;
+            };
+            let natural_size = match region.kind {
+                blinc_layout::renderer::DynamicKind::MotionSubtreeTexture {
+                    natural_size, ..
+                } => natural_size,
+                _ => continue,
+            };
+            if natural_size.0 == 0 || natural_size.1 == 0 {
+                continue;
+            }
+            let scratch_hash = RenderContext::hash_composite_scratch(scratch_batch);
+            if motion_subtree_textures.contains_key(&key)
+                && motion_subtree_scratch_hash.get(&key).copied() == Some(scratch_hash)
+            {
+                continue;
+            }
+            let layer_pos = (region.screen_aabb[0], region.screen_aabb[1]);
+            let layer_size = (natural_size.0 as f32, natural_size.1 as f32);
+            let (layer_texture, content_size) =
+                renderer.render_subtree_to_layer_texture(scratch_batch, layer_pos, layer_size);
+            if let Some((old, _)) = motion_subtree_textures.remove(&key) {
+                renderer.layer_texture_cache_mut().release(old);
+            }
+            motion_subtree_textures.insert(key, (layer_texture, content_size));
+            motion_subtree_scratch_hash.insert(key, scratch_hash);
+            tree.mark_motion_subtree_baked(*region_node);
+        }
+    }
+    // Release motion textures after their promotion lapses.
+    let _demoted = tree.demote_lapsed_motion_bake_records();
+    let live_motion_keys: std::collections::HashSet<u64> = {
+        let regions = tree.dynamic_regions();
+        regions
+            .iter()
+            .filter_map(|(node, region)| {
+                if matches!(
+                    region.kind,
+                    blinc_layout::renderer::DynamicKind::MotionSubtreeTexture { .. }
+                ) {
+                    Some(node.data().as_ffi())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    };
+    let stale_motion_keys: Vec<u64> = motion_subtree_textures
+        .keys()
+        .copied()
+        .filter(|k| !live_motion_keys.contains(k))
+        .collect();
+    for key in stale_motion_keys {
+        if let Some((old, _)) = motion_subtree_textures.remove(&key) {
+            renderer.layer_texture_cache_mut().release(old);
+        }
+        motion_subtree_scratch_hash.remove(&key);
+    }
+}
