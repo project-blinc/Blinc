@@ -35,6 +35,9 @@ mod cache_lifecycle;
 mod canvas_replay;
 mod composite_replay;
 mod compositor;
+mod css_cache_lifecycle;
+#[cfg(test)]
+mod css_lifecycle_tests;
 mod css_updates;
 mod debug_rendering;
 mod image_rendering;
@@ -306,6 +309,11 @@ pub struct RenderContext {
     last_binding_damage_rects: Vec<[f32; 4]>,
     /// Screen-space bounds of CSS records changed by the most recent patch.
     last_css_damage_rects: Vec<[f32; 4]>,
+    /// CSS sources and promotion ownership observed on the last public frame.
+    css_cache_owners: std::collections::HashMap<LayoutNodeId, css_cache_lifecycle::CssCacheOwner>,
+    /// Reused storage for the next ownership snapshot.
+    scratch_css_cache_owners:
+        std::collections::HashMap<LayoutNodeId, css_cache_lifecycle::CssCacheOwner>,
     /// Prepared glyphs grouped by z-layer for cache and damage replay.
     cached_glyphs_by_layer: Option<std::collections::BTreeMap<u32, cached_text::TextBatch>>,
     /// Same as `cached_glyphs_by_layer` but for the foreground-text
@@ -631,6 +639,8 @@ impl RenderContext {
             image_fade_deadlines: std::collections::HashMap::new(),
             last_binding_damage_rects: Vec::new(),
             last_css_damage_rects: Vec::new(),
+            css_cache_owners: std::collections::HashMap::new(),
+            scratch_css_cache_owners: std::collections::HashMap::new(),
             cached_glyphs_by_layer: None,
             cached_fg_glyphs: None,
             cached_motion_subtree_text_prims: None,

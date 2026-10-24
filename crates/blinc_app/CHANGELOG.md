@@ -30,6 +30,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- CSS cache ownership refreshes on animation/transition start, completion, removal and promotion changes. Visible output omitted by an earlier transparent paint requests a fresh walk; unchanged transparent, offscreen and settled ownership keeps its cache.
 - CSS opacity cache updates require a valid group command and preserve child colors through zero. Rejected patches force repaint before cache reuse; direct frames with active CSS use the full walker.
 - Native leaves, canvas callbacks and single-child wrappers preserve group opacity across overlapping output, nested groups and cached frame replay.
 - Motion and overlay groups keep canvas images, shapes and nested opacity together across cached frames, empty output and zero-opacity recovery. Existing retained-callback guards request a full repaint.

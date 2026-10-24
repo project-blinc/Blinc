@@ -117,7 +117,7 @@ fn fixture(content: Content, foreground: bool) -> RenderTree {
     tree
 }
 
-fn init_theme() {
+pub(super) fn init_theme() {
     blinc_theme::ThemeState::init(
         blinc_theme::HybridTheme::bundle(),
         blinc_theme::ColorScheme::Light,
@@ -201,7 +201,7 @@ fn opacity_groups_single_child_and_leaf_output_keep_commands_with_their_owner() 
     }
 }
 
-fn pixel(page: &image::RgbaImage, xy: (u32, u32), expected: [u8; 4]) {
+pub(super) fn pixel(page: &image::RgbaImage, xy: (u32, u32), expected: [u8; 4]) {
     let actual = page.get_pixel(xy.0, xy.1).0;
     assert!(
         actual.iter().zip(expected).all(|(a, b)| a.abs_diff(b) <= 2),
@@ -267,7 +267,7 @@ fn opacity_groups_foreign_pass_keeps_inherited_fallback() {
     }
 }
 
-fn surface(app: &BlincApp) -> wgpu::Texture {
+pub(super) fn surface(app: &BlincApp) -> wgpu::Texture {
     app.device().create_texture(&wgpu::TextureDescriptor {
         label: Some("Opacity group surface"),
         size: wgpu::Extent3d {
@@ -368,12 +368,17 @@ fn opacity_groups_single_child_and_leaf_frames_preserve_overlap_and_recovery() {
 }
 
 #[derive(Clone, Copy, Debug)]
-enum CssSource {
+pub(super) enum CssSource {
     Animation,
     Transition,
 }
 
-fn css_value(tree: &RenderTree, node: LayoutNodeId, source: CssSource, opacity: Option<f32>) {
+pub(super) fn css_value(
+    tree: &RenderTree,
+    node: LayoutNodeId,
+    source: CssSource,
+    opacity: Option<f32>,
+) {
     use blinc_animation::MultiKeyframeAnimation;
     use blinc_layout::render_state::ActiveCssAnimation;
     let color = tree
@@ -404,7 +409,7 @@ fn css_value(tree: &RenderTree, node: LayoutNodeId, source: CssSource, opacity: 
     animation.current_properties.background_color = Some(color);
 }
 
-fn css_fixture(opacity: f32, source: CssSource) -> (RenderTree, LayoutNodeId) {
+pub(super) fn css_fixture(opacity: f32, source: CssSource) -> (RenderTree, LayoutNodeId) {
     let ui = div()
         .w(160.0)
         .h(120.0)

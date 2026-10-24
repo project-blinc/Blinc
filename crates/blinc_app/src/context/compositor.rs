@@ -54,6 +54,7 @@ impl RenderContext {
             );
         }
         tree.commit_animation_status(&v2_statuses);
+        self.refresh_css_cache_ownership(tree);
 
         // Ignore subpixel spring tails when deciding whether binding changes are visible.
         // Timeline rotations remain active while playing.

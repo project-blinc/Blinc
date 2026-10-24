@@ -45,6 +45,9 @@ impl RenderContext {
         // Commit animation and promotion status for both direct and compositor rendering.
         let v2_statuses = tree.compute_animation_status();
         tree.commit_animation_status(&v2_statuses);
+        if !self.in_compositor_inner_call {
+            self.refresh_css_cache_ownership(tree);
+        }
 
         // Direct frames have no CSS cache patch pass; active CSS needs a full walk.
         let used_fast_paint = try_fast_paint

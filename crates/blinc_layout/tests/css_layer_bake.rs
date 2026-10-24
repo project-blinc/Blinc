@@ -135,3 +135,42 @@ fn a_finished_animation_leaves_its_final_values() {
         "a settled animation still counts as active"
     );
 }
+
+#[test]
+fn css_lifecycle_baked_sources_write_final_values_once() {
+    for transition in [false, true] {
+        let (mut tree, panel) = scene(Inside::Nothing);
+        let stable = tree.stable_id(panel).unwrap();
+        if transition {
+            let store = tree.css_anim_store();
+            let mut store = store.lock().unwrap();
+            let animation = store.animations.remove(&stable).unwrap();
+            store.transitions.insert(stable, animation);
+        }
+        tree.apply_all_css_animation_props();
+        tree.apply_all_css_transition_props();
+        assert!(tree.css_active_all_composite_promotable());
+        {
+            let store = tree.css_anim_store();
+            let mut store = store.lock().unwrap();
+            let entries = if transition {
+                &mut store.transitions
+            } else {
+                &mut store.animations
+            };
+            let animation = entries.get_mut(&stable).unwrap();
+            animation.current_properties.opacity = Some(0.6);
+            animation.is_playing = false;
+        }
+        assert!(tree.css_has_active());
+        assert!(!tree.css_active_all_composite_promotable());
+        tree.apply_all_css_animation_props();
+        tree.apply_all_css_transition_props();
+        assert_eq!(tree.get_render_node(panel).unwrap().props.opacity, 0.6);
+        assert!(!tree.css_has_active());
+        tree.update_render_props(panel, |props| props.opacity = 0.3);
+        tree.apply_all_css_animation_props();
+        tree.apply_all_css_transition_props();
+        assert_eq!(tree.get_render_node(panel).unwrap().props.opacity, 0.3);
+    }
+}

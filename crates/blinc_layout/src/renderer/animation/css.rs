@@ -352,14 +352,20 @@ impl RenderTree {
     /// satisfied) so callers can use it as a single predicate without
     /// also checking `css_has_active`.
     pub fn css_active_all_composite_promotable(&self) -> bool {
-        // A node an animation wrote onto is painted with its values, not
-        // baked, and has its final values still to be painted when the
-        // animation stops.
-        if !self.css_anim_written.is_empty() || !self.css_trans_written.is_empty() {
+        let store = self.css_anim_store.lock().unwrap();
+        // Stopped sources must write their final properties before cache reuse.
+        if self
+            .css_anim_written
+            .iter()
+            .any(|id| store.animations.get(id).is_some_and(|a| !a.is_playing))
+            || self
+                .css_trans_written
+                .iter()
+                .any(|id| store.transitions.get(id).is_some_and(|t| !t.is_playing))
+        {
             return false;
         }
         let painted = self.painted_node_ids.borrow();
-        let store = self.css_anim_store.lock().unwrap();
         for (stable, anim) in store.animations.iter() {
             if !anim.is_playing {
                 continue;
@@ -516,19 +522,17 @@ impl RenderTree {
     /// Write the playing CSS animations' current values onto their nodes.
     ///
     /// A subtree that is baked is skipped: it is rasterized at its base
-    /// values and the composite applies the animated ones. An animation that
-    /// has stopped since it last wrote onto its node writes its final values
-    /// once more, so the node rests where the animation ends rather than at
-    /// the last frame it was sampled at.
+    /// values and the composite applies the animated ones. Every sampled source
+    /// writes its final values once after stopping, including baked sources.
     pub fn apply_all_css_animation_props(&mut self) {
         let written = std::mem::take(&mut self.css_anim_written);
         self.css_anim_written = self.apply_css_driven_props(written, false);
     }
 
     /// Write the values of the store's animations (or, with `transitions`,
-    /// its transitions) onto their nodes: the playing ones that are not
-    /// baked, and the final values of those in `written` that have stopped.
-    /// Returns the ones written that are still playing.
+    /// its transitions) onto their nodes: playing sources that are not baked,
+    /// and final values of previously sampled sources that have stopped.
+    /// Returns the sampled sources that are still playing.
     ///
     /// Settled entries stay in the store for the same-target restart guard;
     /// re-applying their unchanging values each frame would be wasted work,
@@ -575,12 +579,12 @@ impl RenderTree {
             let Some(node_id) = self.layout_id(stable_id) else {
                 continue;
             };
+            still_playing.insert(stable_id);
             if self.css_layer_bakeable(node_id, &props) {
                 continue;
             }
             if let Some(render_node) = self.render_nodes.get_mut(&node_id) {
                 Self::apply_keyframe_props_to_render(&mut render_node.props, &props);
-                still_playing.insert(stable_id);
             }
         }
         still_playing

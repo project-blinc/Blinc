@@ -773,9 +773,8 @@ pub struct RenderTree {
     /// into the bg batch (the composited-layer path rasterizes it
     /// into a `LayerTexture` instead).
     composite_promotion: RefCell<std::collections::HashSet<LayoutNodeId>>,
-    /// Nodes a CSS animation that is not baked has written its values
-    /// onto, by stable id. When the animation stops, its final values are
-    /// written once more and the node leaves the set.
+    /// CSS animations sampled while playing, including baked sources. Their final
+    /// values are written once when they stop, then the node leaves the set.
     css_anim_written: HashSet<crate::tree::StableNodeId>,
     /// The same for CSS transitions.
     css_trans_written: HashSet<crate::tree::StableNodeId>,
