@@ -70,6 +70,8 @@ mod motion_text_clip_tests;
 #[cfg(test)]
 mod native_path_clip_tests;
 #[cfg(test)]
+mod opacity_group_tests;
+#[cfg(test)]
 mod overlay_text_clip_tests;
 #[cfg(test)]
 mod path_brush_clip_tests;

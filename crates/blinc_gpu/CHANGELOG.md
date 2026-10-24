@@ -4,6 +4,9 @@ All notable changes to `blinc_gpu` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Native clear rendering sends nested groups through ordered composition so child groups render into their parent instead of blending independently onto the target.
+
 ### Added
 - Display-list layer masks support producer stop tables beyond 16 entries, including repeated gradients and hard stops. Nested masks follow cropped layer origins. Small masks retain inline uniforms; larger masks use a reusable float texture with no extra render pass or primitive fields. `LayerMask::stops` is a shared slice, and `LayerMask` and `LayerFx` are now `Clone` rather than `Copy`. Invalid mask table ranges and selectors report `Unsupported::LayerEffect`.
 - Display-list colour glyph shadows use colour-atlas alpha in the producer tint, with hard and blurred shadows, clips and layer effects. Colour glyphs honour record opacity, and transformed glyphs stay within their atlas rectangles. Native glyph modes and primitive layouts remain unchanged. Invalid atlas selectors report `Unsupported::GlyphMode`.

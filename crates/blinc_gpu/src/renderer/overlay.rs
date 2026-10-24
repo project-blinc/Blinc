@@ -396,6 +396,25 @@ fn translated(
 }
 
 impl GpuRenderer {
+    /// Nested groups must composite into their parent, not as independent ranges.
+    pub(super) fn has_nested_layers(batch: &PrimitiveBatch) -> bool {
+        let mut depth = 0_u32;
+        batch
+            .layer_commands
+            .iter()
+            .any(|entry| match &entry.command {
+                LayerCommand::Push { .. } => {
+                    depth += 1;
+                    depth > 1
+                }
+                LayerCommand::Pop => {
+                    depth = depth.saturating_sub(1);
+                    false
+                }
+                LayerCommand::Sample { .. } => false,
+            })
+    }
+
     pub(crate) fn composite_subtree_bounds(
         batch: &PrimitiveBatch,
         viewport: [f32; 2],

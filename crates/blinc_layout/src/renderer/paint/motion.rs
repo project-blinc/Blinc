@@ -1029,54 +1029,9 @@ impl RenderTree {
         let has_3d_shape =
             render_node.props.depth.unwrap_or(0.0) > 0.0 || render_node.props.shape_3d.is_some();
         let use_3d_layer = has_3d_css_transform && !has_3d_shape;
-        // Hybrid opacity flatten (Phase 4a): if `opacity < 1.0` is
-        // the *only* reason we'd push a layer (no blur / drop-shadow /
-        // blend / 3D), and the element is structurally simple enough
-        // that per-primitive alpha gives the correct result, skip the
-        // layer push entirely and multiply opacity into descendants'
-        // primitive colours instead. Same model `apply_binding_deltas`
-        // uses for motion-bound opacity.
-        //
-        // Pre-fix, pure-opacity layers were pushed but then silently
-        // dropped by `render_with_clear_simple` / `render_with_layer_effects`
-        // (their `effect_layers` gate only matched layers with
-        // effects / blend / 3D), so the configured opacity went
-        // nowhere — CSS `@keyframes` like pulse / glow that animate
-        // only `opacity` never actually rendered the keyframed alpha.
-        //
-        // The `safe_to_flatten` check is conservative for first cut:
-        // we flatten only when the element has at most one child.
-        // Anything more complex (multiple children, possible overlap,
-        // nested opacity) takes the push_layer path, which the
-        // renderer now processes correctly via the relaxed
-        // `effect_layers` gate in `render_with_layer_effects`.
-        let only_opacity_drives_layer =
-            node_motion_opacity < 1.0 && !has_layer_effects && !has_blend_mode && !use_3d_layer;
-        // Don't flatten when a motion-binding opacity is in play.
-        // Flattening makes children inherit the parent's current
-        // motion_opacity — and when that opacity is at / near 0 on
-        // the slow-path frame (e.g. cn::switch's
-        // `motion().opacity(color_anim)` animating off → on with
-        // the spring just starting from 0.0), descendants hit the
-        // transparency guard above (their own `has_pending_motion`
-        // is false because the binding is on the ancestor, not on
-        // them) and get skipped entirely. Their primitives never
-        // land in `cached_dynamic_batch`; `apply_binding_deltas`
-        // has nothing to multiply when the spring climbs above
-        // 0.001, and the subtree stays invisible until a slow-path
-        // repaint forced by something else (mouse motion via
-        // state-style apply). Symptom: switch toggle off → on
-        // shows no bg fade.
-        //
-        // Pushing a layer is correct here: children inherit 1.0
-        // (layer composite owns the opacity), so they emit
-        // primitives regardless of the binding's current value.
-        // `apply_binding_deltas` patches `LayerConfig.opacity` at
-        // the recorded push index so the spring becomes visible.
+        // Child count does not bound overlapping draws, including canvas output.
+        // Compose partial opacity as a group on the node's matching paint pass.
         let has_motion_opacity_binding = motion_bindings_ref.is_some_and(|b| b.opacity.is_some());
-        let safe_to_flatten =
-            !has_motion_opacity_binding && self.layout_tree.children(node).len() <= 1;
-        let can_flatten_opacity = only_opacity_drives_layer && safe_to_flatten;
         // Keep the group at motion opacity endpoints. Background can patch its
         // command; foreground requests a full paint with its own command stream.
         let keep_motion_group = has_motion_opacity_binding
@@ -1085,12 +1040,11 @@ impl RenderTree {
                 effective_layer,
                 RenderLayer::Background | RenderLayer::Foreground
             );
-        let has_opacity_layer = !can_flatten_opacity
-            && (keep_motion_group
-                || node_motion_opacity < 1.0
-                || has_layer_effects
-                || has_blend_mode
-                || use_3d_layer);
+        let has_opacity_layer = keep_motion_group
+            || node_motion_opacity < 1.0
+            || has_layer_effects
+            || has_blend_mode
+            || use_3d_layer;
         let should_push_layer = has_opacity_layer && effective_layer == target_layer;
         if should_push_layer {
             // Scale layer effect radii by DPI factor (CSS px → physical px)
@@ -1139,7 +1093,7 @@ impl RenderTree {
                 position: Some(blinc_core::Point::new(bounds.x, bounds.y)),
                 size: Some(blinc_core::Size::new(bounds.width, bounds.height)),
                 blend_mode: node_blend_mode,
-                opacity: node_motion_opacity,
+                opacity: motion_opacity,
                 depth: false,
                 effects: scaled_effects,
                 transform_3d,
@@ -1948,10 +1902,9 @@ impl RenderTree {
             ctx.push_transform(Transform::translate(scroll_offset.0, scroll_offset.1));
         }
 
-        // Render children, passing down the effective opacity and layer inheritance
-        // When we pushed an opacity layer, pass 1.0 to children (layer handles the opacity)
-        // Otherwise, pass the combined opacity for brush-based fallback
-        let child_inherited_opacity = if has_opacity_layer {
+        // Only the matching pass represents this opacity with group commands.
+        // Other passes retain the inherited fallback for independently drawn content.
+        let child_inherited_opacity = if should_push_layer {
             1.0
         } else {
             motion_opacity

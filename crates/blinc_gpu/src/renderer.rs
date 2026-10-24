@@ -5653,7 +5653,7 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         clear_color: [f64; 4],
     ) {
-        if batch.has_ordered_draws() {
+        if batch.has_ordered_draws() || Self::has_nested_layers(batch) {
             self.render_with_clear_simple(target, &PrimitiveBatch::new(), clear_color);
             self.render_layered_overlay_msaa(target, batch, 1);
             return;
