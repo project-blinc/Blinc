@@ -46,9 +46,9 @@ impl RenderContext {
         let v2_statuses = tree.compute_animation_status();
         tree.commit_animation_status(&v2_statuses);
 
-        // Refresh independent canvases and patch bindings when the cached batch permits it;
-        // otherwise walk the tree.
+        // Direct frames have no CSS cache patch pass; active CSS needs a full walk.
         let used_fast_paint = try_fast_paint
+            && !tree.css_has_active()
             && self.redraw_canvases(tree, width, height)
             && self.apply_binding_deltas(tree, scale_factor);
 

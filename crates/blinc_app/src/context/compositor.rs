@@ -417,9 +417,8 @@ impl RenderContext {
                 );
                 return Ok(());
             }
-            // apply_css_deltas returned false — out-of-scope
-            // property, cache shape mismatch, or divide-by-zero.
-            // Fall through to slow path.
+            // A rejected CSS patch must not fall through to ordinary cache replay.
+            self.renderer.invalidate_static_layer();
         }
 
         // Fast path: cache valid AND caller is fine with reusing it.

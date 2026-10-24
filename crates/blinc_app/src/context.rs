@@ -278,9 +278,7 @@ pub enum CssDeltaResult {
     Patched,
     /// These subtrees need re-emission before the patched cache can be replayed.
     PatchedWithReemits { reemit_nodes: Vec<LayoutNodeId> },
-    /// The patch path couldn't proceed (cache missing, lock poisoned,
-    /// opacity-zero ratio, layer-push-index drift). Caller takes the
-    /// full slow path.
+    /// The patch path cannot safely update this cache. Caller takes a full paint.
     Bail,
 }
 

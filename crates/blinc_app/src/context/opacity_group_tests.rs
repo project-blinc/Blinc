@@ -366,3 +366,280 @@ fn opacity_groups_single_child_and_leaf_frames_preserve_overlap_and_recovery() {
         }
     }
 }
+
+#[derive(Clone, Copy, Debug)]
+enum CssSource {
+    Animation,
+    Transition,
+}
+
+fn css_value(tree: &RenderTree, node: LayoutNodeId, source: CssSource, opacity: Option<f32>) {
+    use blinc_animation::MultiKeyframeAnimation;
+    use blinc_layout::render_state::ActiveCssAnimation;
+    let color = tree
+        .get_render_node(node)
+        .unwrap()
+        .props
+        .background
+        .as_ref()
+        .and_then(|brush| {
+            if let Brush::Solid(c) = brush {
+                Some([c.r, c.g, c.b, c.a])
+            } else {
+                None
+            }
+        })
+        .unwrap_or([0.0; 4]);
+    let store = tree.css_anim_store();
+    let mut store = store.lock().unwrap();
+    let entries = match source {
+        CssSource::Animation => &mut store.animations,
+        CssSource::Transition => &mut store.transitions,
+    };
+    let animation = entries
+        .entry(tree.stable_id(node).unwrap())
+        .or_insert_with(|| ActiveCssAnimation::new(MultiKeyframeAnimation::new(1000)));
+    animation.current_properties.opacity = opacity;
+    // A constant color keeps the fixture on the non-promoted CSS patch path.
+    animation.current_properties.background_color = Some(color);
+}
+
+fn css_fixture(opacity: f32, source: CssSource) -> (RenderTree, LayoutNodeId) {
+    let ui = div()
+        .w(160.0)
+        .h(120.0)
+        .bg(Color::BLUE)
+        .child(
+            div()
+                .id("css-owner")
+                .absolute()
+                .w(160.0)
+                .h(120.0)
+                .bg(Color::TRANSPARENT)
+                .opacity(opacity)
+                .child(rectangles()),
+        )
+        .child(
+            div()
+                .id("css-peer")
+                .absolute()
+                .left(130.0)
+                .top(100.0)
+                .w(10.0)
+                .h(10.0)
+                .bg(Color::WHITE)
+                .opacity(0.5),
+        );
+    let mut tree = RenderTree::from_element(&ui);
+    tree.compute_layout(160.0, 120.0);
+    let owner = tree.query_by_id("css-owner").unwrap();
+    css_value(&tree, owner, source, Some(opacity));
+    (tree, owner)
+}
+
+fn cache_css_tree(context: &mut RenderContext, tree: &RenderTree) {
+    tree.compute_animation_status();
+    let state = RenderState::new(Arc::new(Mutex::new(AnimationScheduler::new())));
+    let mut paint = GpuPaintContext::new(160.0, 120.0);
+    tree.render_with_motion(&mut paint, &state);
+    context.cached_bg_batch = Some(paint.take_batch());
+    context.cached_dynamic_batch = Some(paint.take_dynamic_batch());
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn opacity_groups_css_preflight_preserves_cache_when_any_group_is_missing_or_stale() {
+    init_theme();
+    let mut app = BlincApp::with_config(BlincConfig {
+        sample_count: 1,
+        ..Default::default()
+    })
+    .expect("offscreen GPU required");
+    for source in [CssSource::Animation, CssSource::Transition] {
+        for invalid in 0..3 {
+            let (tree, _) = css_fixture(0.5, source);
+            let peer = tree.query_by_id("css-peer").unwrap();
+            css_value(&tree, peer, source, Some(0.5));
+            let context = app.context();
+            cache_css_tree(context, &tree);
+            let ids: Vec<_> = tree.css_anim_paint_records().keys().copied().collect();
+            assert_eq!(ids.len(), 2);
+            let rejected = ids[1];
+            let push = tree
+                .css_anim_paint_records()
+                .get(&rejected)
+                .unwrap()
+                .layer_push_index
+                .unwrap();
+            tree.css_anim_paint_records_mut()
+                .get_mut(&rejected)
+                .unwrap()
+                .layer_push_index = match invalid {
+                0 => None,
+                1 => Some(usize::MAX),
+                _ => Some(push + 1),
+            };
+            for node in ids {
+                css_value(&tree, node, source, Some(0.75));
+            }
+            let before = context.cached_bg_batch.as_ref().unwrap();
+            let primitives = bytemuck::cast_slice::<GpuPrimitive, u8>(&before.primitives).to_vec();
+            let commands = format!("{:?}", before.layer_commands);
+            let metadata = format!("{:?}", &*tree.css_anim_paint_records());
+            context.last_css_damage_rects = vec![[1.0; 4]];
+            assert!(
+                matches!(context.apply_css_deltas(&tree, 1.0), CssDeltaResult::Bail),
+                "{source:?} invalid={invalid}"
+            );
+            let after = context.cached_bg_batch.as_ref().unwrap();
+            assert_eq!(
+                bytemuck::cast_slice::<GpuPrimitive, u8>(&after.primitives),
+                primitives
+            );
+            assert_eq!(format!("{:?}", after.layer_commands), commands);
+            assert_eq!(format!("{:?}", &*tree.css_anim_paint_records()), metadata);
+            assert!(context.last_css_damage_rects.is_empty());
+        }
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn opacity_groups_css_group_patches_recover_from_zero_and_honor_source_precedence() {
+    init_theme();
+    let mut app = BlincApp::with_config(BlincConfig {
+        sample_count: 1,
+        ..Default::default()
+    })
+    .expect("offscreen GPU required");
+    for source in [CssSource::Animation, CssSource::Transition] {
+        let (tree, owner) = css_fixture(0.5, source);
+        let context = app.context();
+        cache_css_tree(context, &tree);
+        let index = tree
+            .css_anim_paint_records()
+            .get(&owner)
+            .unwrap()
+            .layer_push_index
+            .unwrap();
+        let primitives = bytemuck::cast_slice::<GpuPrimitive, u8>(
+            &context.cached_bg_batch.as_ref().unwrap().primitives,
+        )
+        .to_vec();
+        for opacity in [0.0, 0.75, 1.0, 0.25] {
+            css_value(&tree, owner, source, Some(opacity));
+            assert!(matches!(
+                context.apply_css_deltas(&tree, 1.0),
+                CssDeltaResult::Patched
+            ));
+            let batch = context.cached_bg_batch.as_ref().unwrap();
+            assert!(
+                matches!(&batch.layer_commands[index].command, LayerCommand::Push { config } if config.opacity == opacity)
+            );
+            assert_eq!(
+                bytemuck::cast_slice::<GpuPrimitive, u8>(&batch.primitives),
+                primitives
+            );
+            assert_eq!(
+                tree.css_anim_paint_records()
+                    .get(&owner)
+                    .unwrap()
+                    .last_opacity,
+                opacity
+            );
+        }
+        for (animation, transition, expected) in [
+            (Some(0.5), Some(0.75), 0.5),
+            (None, Some(0.0), 0.0),
+            (None, Some(0.75), 0.75),
+        ] {
+            css_value(&tree, owner, CssSource::Animation, animation);
+            css_value(&tree, owner, CssSource::Transition, transition);
+            assert!(matches!(
+                context.apply_css_deltas(&tree, 1.0),
+                CssDeltaResult::Patched
+            ));
+            assert!(
+                matches!(&context.cached_bg_batch.as_ref().unwrap().layer_commands[index].command, LayerCommand::Push { config } if config.opacity == expected)
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn opacity_groups_css_direct_frames_repaint_ungrouped_opacity() {
+    css_frames(false);
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn opacity_groups_css_compositor_frames_repaint_ungrouped_opacity() {
+    css_frames(true);
+}
+
+fn css_frames(compositor: bool) {
+    init_theme();
+    for source in [CssSource::Animation, CssSource::Transition] {
+        let mut app = BlincApp::with_config(BlincConfig {
+            sample_count: 1,
+            ..Default::default()
+        })
+        .expect("offscreen GPU required");
+        let (mut tree, owner) = css_fixture(1.0, source);
+        let state = RenderState::new(Arc::new(Mutex::new(AnimationScheduler::new())));
+        for (frame, opacity) in [1.0_f32, 0.5, 0.0, 0.75, 1.0, 0.5].into_iter().enumerate() {
+            css_value(&tree, owner, source, Some(opacity));
+            tree.update_render_props(owner, |props| props.opacity = opacity);
+            for replay in [false, true] {
+                let texture = surface(&app);
+                let view = texture.create_view(&Default::default());
+                app.render_tree_with_motion_opt(
+                    &tree,
+                    &state,
+                    &view,
+                    compositor.then_some(&texture),
+                    160,
+                    120,
+                    frame > 0 || replay,
+                )
+                .unwrap();
+                let page = read_rendered_pixels(app.device(), app.queue(), &texture, 160, 120);
+                eprintln!(
+                    "{source:?} compositor={compositor} frame={frame} opacity={opacity} replay={replay}"
+                );
+                pixel(
+                    &page,
+                    (55, 55),
+                    [
+                        0,
+                        (255.0 * opacity).round() as u8,
+                        (255.0 * (1.0 - opacity)).round() as u8,
+                        255,
+                    ],
+                );
+                pixel(
+                    &page,
+                    (25, 25),
+                    [
+                        (255.0 * opacity).round() as u8,
+                        0,
+                        (255.0 * (1.0 - opacity)).round() as u8,
+                        255,
+                    ],
+                );
+                pixel(&page, (135, 105), [128, 128, 255, 255]);
+                assert!(!tree.composite_promotion().contains(&owner));
+                if frame == 0 {
+                    assert!(
+                        tree.css_anim_paint_records()
+                            .get(&owner)
+                            .unwrap()
+                            .layer_push_index
+                            .is_none()
+                    );
+                }
+            }
+        }
+    }
+}

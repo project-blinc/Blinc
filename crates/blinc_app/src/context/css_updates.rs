@@ -272,12 +272,37 @@ impl RenderContext {
             }
         };
 
+        // Validate every changed opacity before mutating any record or cached draw.
+        let invalid_opacity_group = records.values().any(|meta| {
+            let opacity = store
+                .animations
+                .get(&meta.stable_id)
+                .filter(|a| a.is_playing)
+                .and_then(|a| a.current_properties.opacity)
+                .or_else(|| {
+                    store
+                        .transitions
+                        .get(&meta.stable_id)
+                        .filter(|t| t.is_playing)
+                        .and_then(|t| t.current_properties.opacity)
+                });
+            opacity.is_some_and(|opacity| {
+                (opacity - meta.last_opacity).abs() > f32::EPSILON
+                    && !matches!(
+                        meta.layer_push_index.and_then(|index| batch.layer_commands.get(index)),
+                        Some(entry) if matches!(entry.command, blinc_gpu::primitives::LayerCommand::Push { .. })
+                    )
+            })
+        });
+        if invalid_opacity_group {
+            self.last_css_damage_rects.clear();
+            return CssDeltaResult::Bail;
+        }
+
         // Track whether any record changed.
         let mut any_changed = false;
         // Collect bounds for changed records; the caller discards them if patching fails.
         let mut damage_rects: Vec<[f32; 4]> = Vec::new();
-        // Defer bail handling until record and batch borrows are released.
-        let mut bail = false;
         // Re-emit records with unsupported properties and include their old bounds in cache
         // damage.
         let mut reemit_nodes: Vec<LayoutNodeId> = Vec::new();
@@ -345,43 +370,16 @@ impl RenderContext {
                     .or_else(|| props_trans.and_then(get))
             };
 
-            // ---- opacity ----
+            // Group opacity leaves child colors intact, including at zero.
             if let Some(new_opacity) = read_f32(|p| p.opacity) {
                 if (new_opacity - meta.last_opacity).abs() > f32::EPSILON {
-                    if meta.last_opacity.abs() < f32::EPSILON {
-                        // Divide-by-zero — primitives were emitted
-                        // at zero alpha last paint; can't recover
-                        // the original color via ratio. Slow path.
-                        bail = true;
-                        break;
-                    }
-                    if let Some(push_idx) = meta.layer_push_index {
-                        use blinc_gpu::primitives::LayerCommand;
-                        match batch.layer_commands.get_mut(push_idx) {
-                            Some(entry) => {
-                                if let LayerCommand::Push { config } = &mut entry.command {
-                                    config.opacity = new_opacity;
-                                } else {
-                                    bail = true;
-                                    break;
-                                }
-                            }
-                            None => {
-                                bail = true;
-                                break;
-                            }
-                        }
-                    } else if let Some(prims) =
-                        batch.primitives.get_mut(meta.primitive_range.clone())
-                    {
-                        let ratio = new_opacity / meta.last_opacity;
-                        for p in prims.iter_mut() {
-                            p.color[3] *= ratio;
-                            p.color2[3] *= ratio;
-                            p.border_color[3] *= ratio;
-                            p.shadow_color[3] *= ratio;
-                        }
-                    }
+                    let index = meta.layer_push_index.expect("validated CSS opacity group");
+                    let blinc_gpu::primitives::LayerCommand::Push { config } =
+                        &mut batch.layer_commands[index].command
+                    else {
+                        unreachable!("validated CSS opacity group");
+                    };
+                    config.opacity = new_opacity;
                     meta.last_opacity = new_opacity;
                     any_changed = true;
                     record_changed = true;
@@ -575,12 +573,6 @@ impl RenderContext {
         let _ = any_changed;
         drop(store);
         drop(records);
-        if bail {
-            // Discard damage metadata after a partial failure; the full paint will replace
-            // the cache.
-            self.last_css_damage_rects.clear();
-            return CssDeltaResult::Bail;
-        }
         self.last_css_damage_rects = damage_rects;
         if reemit_nodes.is_empty() {
             CssDeltaResult::Patched
