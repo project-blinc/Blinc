@@ -6,6 +6,18 @@ impl RenderContext {
     /// affected stream requires a full paint.
     pub fn apply_binding_deltas(&mut self, tree: &blinc_layout::RenderTree, scale: f32) -> bool {
         self.last_binding_damage_rects.clear();
+        // Shared captures rebase native ranges and retain moving output at its paint anchor.
+        if !tree.motion_bindings_map().is_empty()
+            && [
+                self.cached_bg_batch.as_ref(),
+                self.cached_dynamic_batch.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            .any(|batch| batch.has_cross_stream_groups())
+        {
+            return false;
+        }
         // Binding ranges index the dynamic batch. Static-owned ranges require a repaint
         // before mutation.
         let batch = match self.cached_dynamic_batch.as_mut() {

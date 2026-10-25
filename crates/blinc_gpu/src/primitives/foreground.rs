@@ -30,6 +30,7 @@ impl PrimitiveBatch {
     /// Move foreground draws and commands into a renderable batch. Aux rows
     /// retain their original offsets; separate prepared text stays outside.
     pub fn take_foreground(&mut self) -> Self {
+        self.resolve_cross_stream_groups();
         let mut foreground = Self::new();
         foreground.primitives = std::mem::take(&mut self.foreground_primitives);
         foreground.paths = std::mem::take(&mut self.foreground_paths);
@@ -43,6 +44,11 @@ impl PrimitiveBatch {
 
     /// Snapshot the foreground stream for a separate overlay dispatch.
     pub fn foreground_batch(&self) -> Self {
+        if !self.cross_stream_groups.captures.is_empty() {
+            let mut resolved = self.clone();
+            resolved.resolve_cross_stream_groups();
+            return resolved.foreground_batch();
+        }
         let mut foreground = Self::new();
         foreground.primitives = self.foreground_primitives.clone();
         foreground.paths = self.foreground_paths.clone();

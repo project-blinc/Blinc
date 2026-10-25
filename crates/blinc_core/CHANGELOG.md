@@ -9,6 +9,7 @@ All notable changes to `blinc_core` will be documented in this file.
 - `ClipShape::RoundedRect` now carries a `CornerShape` (per-corner superellipse `n`) so clips can follow squircle / scoop / bevel outlines instead of always rounding. Constructors default to the existing `CornerShape::ROUND` so untouched callers behave identically.
 
 ### Added
+- `DrawContext::push_cross_stream_layer` optionally captures one native layer across background and foreground passes; unsupported contexts return false without pushing.
 - `DrawContext::can_promote_composite_layer` lets an open ancestor group retain descendant draws in its batch instead of allowing independent texture promotion.
 - `DrawContext::composite_layer_bounds` reports a scratch footprint including paths and group effects; contexts without scratch fall back to primitive-range bounds.
 - `DrawContext::bg_batch_is_composite` identifies per-node scratch ownership of primitive ranges and layer indices. Other contexts default to false.

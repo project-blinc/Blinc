@@ -11,6 +11,16 @@ pub(super) use alpha::AlphaPass;
 #[cfg(test)]
 mod tests;
 
+fn resolved_batch(batch: &PrimitiveBatch) -> Cow<'_, PrimitiveBatch> {
+    if batch.cross_stream_groups.captures.is_empty() {
+        Cow::Borrowed(batch)
+    } else {
+        let mut batch = batch.clone();
+        batch.resolve_cross_stream_groups();
+        Cow::Owned(batch)
+    }
+}
+
 fn active_effects(effects: &[LayerEffect]) -> Cow<'_, [LayerEffect]> {
     let noop = |effect: &&LayerEffect| {
         matches!(effect, LayerEffect::Blur {radius,..} if *radius<=0.0)
@@ -419,6 +429,8 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         viewport: [f32; 2],
     ) -> Option<[f32; 4]> {
+        let batch = resolved_batch(batch);
+        let batch = batch.as_ref();
         bounds(
             &nodes(batch),
             batch,
@@ -436,6 +448,8 @@ impl GpuRenderer {
         origin: (f32, f32),
         size: (f32, f32),
     ) -> (LayerTexture, (u32, u32)) {
+        let batch = resolved_batch(batch);
+        let batch = batch.as_ref();
         let extent = (size.0.ceil().max(1.0) as u32, size.1.ceil().max(1.0) as u32);
         self.layer_texture_cache.evict_oversized();
         let target = self
@@ -486,6 +500,8 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         samples: u32,
     ) {
+        let batch = resolved_batch(batch);
+        let batch = batch.as_ref();
         self.layer_texture_cache.evict_oversized();
         self.draw_overlay_nodes(target, batch, &nodes(batch), [0.0; 2], samples);
         self.update_aux_data_buffer(batch);

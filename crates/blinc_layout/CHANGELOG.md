@@ -4,6 +4,9 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Native Div/Canvas opacity groups capture foreground descendants together with background content and suppress independent texture promotion. Moving native ancestors retain their background before nested captures. Collected content, global overlays, glass, effects and 3D boundaries keep their existing fallback.
+
 ### Changed
 - Promoted CSS animations and transitions retain completion bookkeeping and write their final properties once. Playing baked sources remain eligible for composite replay.
 - Partial opacity uses an explicit native group for leaves and single-child wrappers, preserving overlapping draws. Other paint passes retain inherited opacity when they do not own the ancestor's commands.

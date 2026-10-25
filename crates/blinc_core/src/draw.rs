@@ -1747,6 +1747,13 @@ pub trait DrawContext {
         false
     }
 
+    /// Begin a native group shared across background and foreground streams.
+    /// Reuse the id for both pass visits and balance each accepted push with `pop_layer`.
+    /// Return false without pushing when the context cannot capture this boundary.
+    fn push_cross_stream_layer(&mut self, _id: u64, _config: crate::LayerConfig) -> bool {
+        false
+    }
+
     /// Whether background counts and layer indices refer to a per-node scratch
     /// batch whose content is baked into a cached composite texture.
     fn bg_batch_is_composite(&self) -> bool {

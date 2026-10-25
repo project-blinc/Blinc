@@ -63,6 +63,7 @@ use crate::primitives::{
 use crate::text::TextRenderingContext;
 
 mod aux_data;
+mod cross_stream;
 mod native_clip;
 mod path_clip;
 mod rgba;
@@ -104,6 +105,8 @@ impl Default for TransformState {
 /// so it can be properly restored when the layer is popped.
 #[derive(Clone, Debug)]
 struct LayerState {
+    cross_stream_static: bool,
+    cross_stream: Option<(crate::primitives::cross_stream::GroupId, usize, usize, bool)>,
     /// The layer configuration
     config: LayerConfig,
     /// Batch that owns this group's commands and range snapshots.
@@ -280,6 +283,9 @@ pub struct GpuPaintContext<'a> {
     /// outer subtree's later emissions with the wrong clip base
     /// and the wrong scratch routing implicit assumptions.
     composite_layer_clip_base: Vec<usize>,
+    rejected_cross_stream_groups: std::collections::HashSet<u64>,
+    next_cross_stream_local: u64,
+    cross_stream_static_depth: usize,
     /// Transform stack
     transform_stack: Vec<Affine2D>,
     /// Opacity stack
@@ -395,6 +401,9 @@ impl<'a> GpuPaintContext<'a> {
             composite_layer_batches: std::collections::HashMap::new(),
             active_composite_layer: None,
             composite_layer_clip_base: Vec::new(),
+            rejected_cross_stream_groups: std::collections::HashSet::new(),
+            next_cross_stream_local: 0,
+            cross_stream_static_depth: 0,
         }
     }
 
@@ -456,6 +465,9 @@ impl<'a> GpuPaintContext<'a> {
             composite_layer_batches: std::collections::HashMap::new(),
             active_composite_layer: None,
             composite_layer_clip_base: Vec::new(),
+            rejected_cross_stream_groups: std::collections::HashSet::new(),
+            next_cross_stream_local: 0,
+            cross_stream_static_depth: 0,
         }
     }
 
@@ -760,6 +772,8 @@ impl<'a> GpuPaintContext<'a> {
     /// blit. Leaves `dynamic_batch` empty for the next paint pass.
     pub fn take_dynamic_batch(&mut self) -> PrimitiveBatch {
         self.forget_clip_offsets(AuxBatch::Dynamic);
+        self.dynamic_batch.resolve_cross_stream_groups();
+        self.rejected_cross_stream_groups.clear();
         std::mem::take(&mut self.dynamic_batch)
     }
 
@@ -780,7 +794,10 @@ impl<'a> GpuPaintContext<'a> {
             * self
                 .layer_stack
                 .iter()
-                .filter(|state| state.foreground != foreground || state.command_batch != route)
+                .filter(|state| {
+                    (state.foreground != foreground && state.cross_stream.is_none())
+                        || state.command_batch != route
+                })
                 .map(|state| state.config.opacity)
                 .filter(|opacity| *opacity < 1.0)
                 .product::<f32>()
@@ -1780,6 +1797,8 @@ impl<'a> GpuPaintContext<'a> {
     /// Take the accumulated batch for rendering
     pub fn take_batch(&mut self) -> PrimitiveBatch {
         self.forget_clip_offsets(AuxBatch::Static);
+        self.batch.resolve_cross_stream_groups();
+        self.rejected_cross_stream_groups.clear();
         std::mem::take(&mut self.batch)
     }
 
@@ -1826,6 +1845,8 @@ impl<'a> GpuPaintContext<'a> {
         self.blend_mode_stack = vec![BlendMode::Normal];
         self.clip_stack.clear();
         self.layer_stack.clear();
+        self.rejected_cross_stream_groups.clear();
+        self.cross_stream_static_depth = 0;
         self.static_motion_depth = None;
         self.is_3d = false;
         self.camera = None;
@@ -2228,7 +2249,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
     }
 
     fn can_promote_composite_layer(&self) -> bool {
-        !self.has_static_group()
+        !self.has_static_group() && !self.layer_stack.iter().any(|s| s.cross_stream.is_some())
     }
 
     fn push_motion_subtree(&mut self) {
@@ -4442,70 +4463,15 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
     }
 
     fn push_layer(&mut self, config: LayerConfig) {
-        // Record current state indices for restoration on pop
-        let command_batch = self.layer_command_batch();
-        let foreground = self.emit_foreground();
-        let batch = self.layer_command_batch_mut(command_batch);
-        let state = LayerState {
-            config: config.clone(),
-            command_batch,
-            foreground,
-            primitive_start: batch.primitive_count(),
-            foreground_primitive_start: batch.foreground_primitive_count(),
-            path_start: batch.path_vertex_count(),
-            foreground_path_start: batch.foreground_path_vertex_count(),
-            parent_state_indices: (
-                self.transform_stack.len(),
-                self.opacity_stack.len(),
-                self.blend_mode_stack.len(),
-                self.clip_stack.len(),
-            ),
-        };
-        self.layer_stack.push(state);
-
-        // Apply layer's blend mode if not Normal
-        if config.blend_mode != BlendMode::Normal {
-            self.blend_mode_stack.push(config.blend_mode);
-        }
-
-        // Record layer command for GPU renderer to process
-        let command = crate::primitives::LayerCommand::Push { config };
-        let batch = self.layer_command_batch_mut(command_batch);
-        if foreground {
-            batch.push_foreground_layer_command(command);
-        } else {
-            batch.push_layer_command(command);
-        }
+        self.push_native_layer(config, None);
     }
 
     fn pop_layer(&mut self) {
-        if let Some(state) = self.layer_stack.pop() {
-            // Restore parent state by trimming stacks to their saved indices
-            let (transform_idx, opacity_idx, blend_idx, clip_idx) = state.parent_state_indices;
+        self.pop_native_layer();
+    }
 
-            // Only truncate if we pushed additional state for this layer
-            // (don't go below the base state)
-            if self.transform_stack.len() > transform_idx {
-                self.transform_stack.truncate(transform_idx.max(1));
-            }
-            if self.opacity_stack.len() > opacity_idx {
-                self.opacity_stack.truncate(opacity_idx.max(1));
-            }
-            if self.blend_mode_stack.len() > blend_idx {
-                self.blend_mode_stack.truncate(blend_idx.max(1));
-            }
-            if self.clip_stack.len() > clip_idx {
-                self.clip_stack.truncate(clip_idx);
-            }
-
-            // Record layer command for GPU renderer to process
-            let batch = self.layer_command_batch_mut(state.command_batch);
-            if state.foreground {
-                batch.push_foreground_layer_command(crate::primitives::LayerCommand::Pop);
-            } else {
-                batch.push_layer_command(crate::primitives::LayerCommand::Pop);
-            }
-        }
+    fn push_cross_stream_layer(&mut self, id: u64, config: LayerConfig) -> bool {
+        self.begin_cross_stream_layer(id, config)
     }
 
     fn sample_layer(&mut self, id: LayerId, source_rect: Rect, dest_rect: Rect) {

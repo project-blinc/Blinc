@@ -65,6 +65,7 @@ impl RenderTree {
         // state) is actually painted. Read by callers via
         // `visible_anim_active()` after this returns to gate the
         // end-of-frame redraw chain.
+        self.plan_cross_stream_groups();
         self.visible_anim_active.set(false);
         // Same lifecycle for the canvas-detection flag: cleared at the
         // top of every full paint, set by `render_layer_with_motion`
@@ -644,7 +645,8 @@ impl RenderTree {
         // emit (so scale/translate animations don't drag a baked
         // ancestor clip along with them). The overlay reapplies the
         // captured AABB as a scissor.
-        let can_promote = ctx.can_promote_composite_layer();
+        let cross_stream_group = self.cross_stream_groups.borrow().contains(&node);
+        let can_promote = ctx.can_promote_composite_layer() && !cross_stream_group;
         let css_anim_ancestor_clip =
             if can_promote && in_css_subtree && self.composite_promotion.borrow().contains(&node) {
                 ctx.current_clip_rounded()
@@ -862,6 +864,7 @@ impl RenderTree {
             && !has_pending_motion
             && !retain_foreground_animation
             && !retain_static_binding
+            && !(cross_stream_group && motion_bindings_ref.is_some_and(|b| b.opacity.is_some()))
         {
             // Pop the motion-subtree push from above if we set it,
             // so the dynamic batch's emit gate stays balanced even
@@ -1009,14 +1012,7 @@ impl RenderTree {
             render_node.props.layer
         };
 
-        // Push layer if this node has partial opacity OR layer effects OR 3D CSS transform.
-        // Children inside the layer automatically inherit the opacity via GPU composition.
-        // Layer effects (blur, drop shadow, glow, color matrix) are applied when layer is composited.
-        // 3D CSS transforms (rotate-x/rotate-y) use layer-based compositing: the entire subtree
-        // (including text) renders flat to a texture, then the texture is composited with perspective
-        // distortion. This ensures ALL children visually transform with the parent.
-        // IMPORTANT: Only push layer when element's layer matches current target to avoid duplicate
-        // layer commands across multiple render passes
+        // Ordinary layers open on their matching pass; native shared layers pair both passes.
         let has_layer_effects = !render_node.props.layer_effects.is_empty();
         let node_blend_mode = render_node
             .props
@@ -1030,7 +1026,6 @@ impl RenderTree {
             render_node.props.depth.unwrap_or(0.0) > 0.0 || render_node.props.shape_3d.is_some();
         let use_3d_layer = has_3d_css_transform && !has_3d_shape;
         // Child count does not bound overlapping draws, including canvas output.
-        // Compose partial opacity as a group on the node's matching paint pass.
         let has_motion_opacity_binding = motion_bindings_ref.is_some_and(|b| b.opacity.is_some());
         // Keep the group at motion opacity endpoints. Background can patch its
         // command; foreground requests a full paint with its own command stream.
@@ -1040,13 +1035,18 @@ impl RenderTree {
                 effective_layer,
                 RenderLayer::Background | RenderLayer::Foreground
             );
-        let has_opacity_layer = keep_motion_group
+        // Retain a moving native ancestor before any of its descendants change owners.
+        let has_opacity_layer = (cross_stream_group && in_motion_subtree)
+            || keep_motion_group
             || node_motion_opacity < 1.0
             || has_layer_effects
             || has_blend_mode
             || use_3d_layer;
-        let should_push_layer = has_opacity_layer && effective_layer == target_layer;
-        if should_push_layer {
+        let mut should_push_layer = false;
+        if has_opacity_layer
+            && (effective_layer == target_layer
+                || (cross_stream_group && target_layer == RenderLayer::Foreground))
+        {
             // Scale layer effect radii by DPI factor (CSS px → physical px)
             let scaled_effects: Vec<LayerEffect> = render_node
                 .props
@@ -1088,7 +1088,7 @@ impl RenderTree {
             } else {
                 None
             };
-            ctx.push_layer(LayerConfig {
+            let config = LayerConfig {
                 id: None,
                 position: Some(blinc_core::Point::new(bounds.x, bounds.y)),
                 size: Some(blinc_core::Size::new(bounds.width, bounds.height)),
@@ -1097,7 +1097,16 @@ impl RenderTree {
                 depth: false,
                 effects: scaled_effects,
                 transform_3d,
-            });
+            };
+            if cross_stream_group {
+                use slotmap::Key as _;
+                should_push_layer =
+                    ctx.push_cross_stream_layer(node.data().as_ffi(), config.clone());
+            }
+            if !should_push_layer && effective_layer == target_layer {
+                ctx.push_layer(config);
+                should_push_layer = true;
+            }
         }
         // Phase 4b: capture the layer-command index of the push we
         // just made, so the CSS post-walk recording can drop it

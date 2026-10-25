@@ -29,6 +29,7 @@
 
 pub mod basic;
 pub mod collect;
+mod cross_stream;
 pub mod helpers;
 pub mod layered;
 pub mod layout_renderer;

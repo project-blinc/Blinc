@@ -1618,6 +1618,8 @@ pub struct LayerCommandEntry {
 /// Batch of GPU primitives for efficient rendering
 #[derive(Clone)]
 pub struct PrimitiveBatch {
+    /// Paired stream captures, joined before native dispatch.
+    pub cross_stream_groups: cross_stream::CrossStreamGroups,
     /// Background primitives (rendered before glass)
     pub primitives: Vec<GpuPrimitive>,
     /// Foreground primitives (rendered after glass)
@@ -1690,12 +1692,14 @@ pub struct DynamicImage {
 }
 
 mod aux_data;
+pub mod cross_stream;
 mod dynamic_image;
 mod foreground;
 
 impl PrimitiveBatch {
     pub fn new() -> Self {
         Self {
+            cross_stream_groups: cross_stream::CrossStreamGroups::default(),
             primitives: Vec::new(),
             foreground_primitives: Vec::new(),
             glass_primitives: Vec::new(),
@@ -1714,6 +1718,7 @@ impl PrimitiveBatch {
     }
 
     pub fn clear(&mut self) {
+        self.cross_stream_groups = cross_stream::CrossStreamGroups::default();
         self.primitives.clear();
         self.foreground_primitives.clear();
         self.glass_primitives.clear();
@@ -1782,7 +1787,8 @@ impl PrimitiveBatch {
 
     /// Draws consumed together by the ordered renderer, including path-only groups.
     pub fn has_ordered_draws(&self) -> bool {
-        self.has_ordered_images()
+        self.has_cross_stream_groups()
+            || self.has_ordered_images()
             || (!self.aux_data.is_empty() && self.paths.vertices.iter().any(|v| v.clip_shape > 0))
     }
 
@@ -2161,6 +2167,9 @@ impl PrimitiveBatch {
     ///
     /// Useful for combining batches from different paint contexts.
     pub fn merge(&mut self, mut other: PrimitiveBatch) {
+        self.resolve_cross_stream_groups();
+        other.resolve_cross_stream_groups();
+        self.cross_stream_groups.resolved |= other.cross_stream_groups.resolved;
         let shift = self.aux_data.len() as f32;
         for glyph in &mut other.glyphs {
             if glyph.flags[1] > 0.0 {

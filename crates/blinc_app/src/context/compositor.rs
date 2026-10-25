@@ -435,11 +435,19 @@ impl RenderContext {
             // Foreground and retained static bindings need repaint even when a
             // direct write leaves the spring settled.
             let binding_repaint = self.cached_dynamic_batch.as_ref().is_some_and(|batch| {
-                batch.has_foreground_content() || batch.has_foreground_layers()
+                batch.has_foreground_content()
+                    || batch.has_foreground_layers()
+                    || batch.has_cross_stream_groups()
             }) || tree
                 .composite_bindings()
                 .values()
                 .any(|meta| !meta.dynamic_batch);
+            let binding_repaint = binding_repaint
+                || (!tree.motion_bindings_map().is_empty()
+                    && self
+                        .cached_bg_batch
+                        .as_ref()
+                        .is_some_and(|b| b.has_cross_stream_groups()));
             let patched =
                 if (bindings_animating || binding_repaint) && self.cached_dynamic_batch.is_some() {
                     let scale_factor = tree.scale_factor();

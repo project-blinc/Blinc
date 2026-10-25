@@ -35,6 +35,8 @@ mod cache_lifecycle;
 mod canvas_replay;
 mod composite_replay;
 mod compositor;
+#[cfg(test)]
+mod cross_stream_tests;
 mod css_cache_lifecycle;
 #[cfg(test)]
 mod css_lifecycle_tests;
