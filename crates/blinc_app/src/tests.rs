@@ -1228,29 +1228,26 @@ fn an_animated_panel_fades_its_text() {
                     .color(Color::rgba(1.0, 0.0, 0.0, 1.0)),
             )
     };
-    // The panel's and the text's alpha. The white panel over black reads
-    // as grey `P = 255 * a`. Red text at alpha `t` over it keeps
-    // `(1 - t) * P` of the panel's green, least where a glyph covers its
-    // pixel fully, so `t = 1 - min_green / P`.
-    let alphas = |px: &[u8]| -> Option<(f32, f32)> {
+    // Shared opacity dims panel and glyph intensities equally over black;
+    // opaque glyph coverage stays unchanged inside the group.
+    let alphas = |px: &[u8]| -> Option<(f32, f32, f32)> {
         let at = |x: u32, y: u32| {
             let i = ((y * w + x) * 4) as usize;
             (px[i] as f32, px[i + 1] as f32)
         };
         let grey = at(195, 95).1;
-        let min_green = (0..100)
+        let (text_red, text_green) = (0..100)
             .flat_map(|y| (0..200).map(move |x| (x, y)))
             .map(|(x, y)| at(x, y))
             .filter(|(r, g)| *r > *g + 20.0)
-            .map(|(_, g)| g)
-            .reduce(f32::min)?;
-        Some((grey / 255.0, 1.0 - min_green / grey))
+            .reduce(|(r0, g0), (r1, g1)| (r0.max(r1), g0.min(g1)))?;
+        Some((grey / 255.0, text_red / 255.0, 1.0 - text_green / grey))
     };
 
     // About half way (200ms into a 400ms animation), and at rest.
     let frames = animate_panel(&mut app, css, panel, &[2 + 13, 39]);
-    let (panel_mid, text_mid) = alphas(&frames[0]).expect("no text mid-animation");
-    let (panel_rest, text_rest) = alphas(&frames[1]).expect("no text at rest");
+    let (panel_mid, text_mid, coverage_mid) = alphas(&frames[0]).expect("no text mid-animation");
+    let (panel_rest, text_rest, coverage_rest) = alphas(&frames[1]).expect("no text at rest");
     assert!(
         panel_rest > 0.99 && text_rest > 0.95,
         "at rest the panel's alpha is {panel_rest} and its text's {text_rest}"
@@ -1262,5 +1259,9 @@ fn an_animated_panel_fades_its_text() {
     assert!(
         (text_mid - panel_mid).abs() < 0.1,
         "mid-animation the panel's alpha is {panel_mid} and its text's {text_mid}"
+    );
+    assert!(
+        coverage_mid > 0.95 && coverage_rest > 0.95,
+        "glyph coverage changed from {coverage_rest} at rest to {coverage_mid} mid-animation"
     );
 }

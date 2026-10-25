@@ -30,6 +30,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- The panel-fade regression measures glyph intensity under shared opacity, preserving the text-presence and mid-animation checks used by hosted compatibility tests.
 - StyledText runs now share their native opacity group, retaining every span and wrapped fragment in collection order through cache replay, nested styles and clips.
 - Motion-frame plain text, shadows and decorations render inside their native opacity group with owned glyph clips and transforms. Independent text keeps its collected pass; CSS content that cannot patch the cache requests a fresh walk.
 - Repaint retained native cross-stream groups when motion bindings change, including settled writes and opacity endpoints, so joined ranges and later siblings retain their paint order.
