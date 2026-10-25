@@ -4,8 +4,8 @@ use slotmap::Key;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub(super) struct CssCacheOwner {
-    animation: bool,
-    transition: bool,
+    animation: u64,
+    transition: u64,
     promoted: bool,
 }
 
@@ -21,14 +21,14 @@ impl RenderContext {
                 if animation.is_playing
                     && let Some(node) = tree.layout_id(*stable)
                 {
-                    next.entry(node).or_default().animation = true;
+                    next.entry(node).or_default().animation = animation.animation.playback_id();
                 }
             }
             for (stable, transition) in &store.transitions {
                 if transition.is_playing
                     && let Some(node) = tree.layout_id(*stable)
                 {
-                    next.entry(node).or_default().transition = true;
+                    next.entry(node).or_default().transition = transition.animation.playback_id();
                 }
             }
         }

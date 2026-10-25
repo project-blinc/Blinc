@@ -285,3 +285,116 @@ fn css_lifecycle_unchanged_transparent_offscreen_and_settled_frames_keep_cache()
         }
     }
 }
+
+fn playback_source(color: Option<Color>) -> ActiveCssAnimation {
+    use blinc_animation::{Easing, KeyframeProperties, MultiKeyframeAnimation};
+    let properties = KeyframeProperties {
+        opacity: Some(0.5),
+        corner_radius: Some([0.0; 4]),
+        background_color: color.map(|c| [c.r, c.g, c.b, c.a]),
+        ..Default::default()
+    };
+    ActiveCssAnimation::new(
+        MultiKeyframeAnimation::new(1000)
+            .iterations(-1)
+            .keyframe(0.0, properties.clone(), Easing::Linear)
+            .keyframe(1.0, properties, Easing::Linear),
+    )
+}
+
+fn playback_frame(
+    app: &mut BlincApp,
+    tree: &RenderTree,
+    state: &RenderState,
+    compositor: bool,
+    expected: [u8; 4],
+) {
+    for _ in 0..2 {
+        let texture = surface(app);
+        let view = texture.create_view(&Default::default());
+        app.render_tree_with_motion_opt(
+            tree,
+            state,
+            &view,
+            compositor.then_some(&texture),
+            160,
+            120,
+            true,
+        )
+        .unwrap();
+        let page = read_rendered_pixels(app.device(), app.queue(), &texture, 160, 120);
+        pixel(&page, (10, 10), expected);
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn css_playback_replacement_repaints_properties_absent_from_the_new_source() {
+    init_theme();
+    for source in [CssSource::Animation, CssSource::Transition] {
+        for compositor in [false, true] {
+            let mut app = app();
+            let (mut tree, owner) = css_fixture(1.0, source);
+            let state = state();
+            change_source(&tree, owner, source, |entry| {
+                *entry = playback_source(Some(Color::RED))
+            });
+            apply(&mut tree);
+            playback_frame(&mut app, &tree, &state, compositor, [128, 0, 128, 255]);
+            change_source(&tree, owner, source, |entry| *entry = playback_source(None));
+            tree.update_render_props(owner, |props| props.background = Some(Color::GREEN.into()));
+            apply(&mut tree);
+            eprintln!("replacement {source:?} compositor={compositor}");
+            playback_frame(&mut app, &tree, &state, compositor, [0, 128, 128, 255]);
+        }
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn css_playback_explicit_restart_invalidates_the_previous_paint_baseline() {
+    init_theme();
+    for source in [CssSource::Animation, CssSource::Transition] {
+        let mut app = app();
+        let (mut tree, owner) = css_fixture(1.0, source);
+        let state = state();
+        change_source(&tree, owner, source, |entry| {
+            *entry = playback_source(Some(Color::RED))
+        });
+        apply(&mut tree);
+        playback_frame(&mut app, &tree, &state, true, [128, 0, 128, 255]);
+        change_source(&tree, owner, source, |entry| entry.animation.start());
+        assert!(
+            app.context().refresh_css_cache_ownership(&tree),
+            "{source:?}"
+        );
+        assert!(app.context().cached_bg_batch.is_none());
+        playback_frame(&mut app, &tree, &state, true, [128, 0, 128, 255]);
+    }
+}
+
+#[test]
+#[ignore] // Requires GPU
+fn css_playback_ticks_loops_and_snapshot_clones_preserve_cache_ownership() {
+    init_theme();
+    for source in [CssSource::Animation, CssSource::Transition] {
+        let mut app = app();
+        let (mut tree, owner) = css_fixture(1.0, source);
+        let state = state();
+        change_source(&tree, owner, source, |entry| {
+            *entry = playback_source(Some(Color::RED))
+        });
+        apply(&mut tree);
+        playback_frame(&mut app, &tree, &state, true, [128, 0, 128, 255]);
+        for dt in [100.0, 1001.0, 1001.0] {
+            change_source(&tree, owner, source, |entry| {
+                entry.tick(dt);
+                *entry = entry.clone();
+            });
+            apply(&mut tree);
+            assert!(!app.context().refresh_css_cache_ownership(&tree));
+            assert!(app.context().cached_bg_batch.is_some());
+            playback_frame(&mut app, &tree, &state, true, [128, 0, 128, 255]);
+        }
+    }
+}

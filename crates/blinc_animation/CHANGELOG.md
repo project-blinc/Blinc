@@ -8,6 +8,7 @@ All notable changes to `blinc_animation` will be documented in this file.
 - **EMA-smoothed tick `dt`** — `AnimationScheduler::tick` now feeds the raw vsync interval through an exponential moving average before stepping springs / keyframes. Single-frame stutters from jittery vsync (Wayland fractional scaling, GPU contention) stop hitting the spring damping equation as a sharp impulse, killing the "shudder" on long-running springs at the cost of a one-frame phase lag — invisible in normal motion, measurable on slow-mo capture.
 
 ### Added
+- `MultiKeyframeAnimation::playback_id()` identifies playback for cache ownership. Construction and explicit starts assign fresh identities; ticks, loops and snapshot clones retain them.
 - Caller-supplied `Easing` on the `scale_in` / `scale_out` / `slide_in` / `slide_out` keyframe presets. Lets callers (cn::dialog / sheet / drawer / toast) feed the active theme's semantic easing role (`ease_default`, `ease_in`, `ease_out`, `ease_in_out`) into the preset instead of the previous hard-coded `EaseInOut`.
 - `AnimationScheduler::wake()` — hint the bg thread that activity has changed, called from `add_spring` / `add_keyframe` / `add_timeline` / `add_tick_callback` / `set_continuous_redraw(true)` / `request_redraw` / `set_target_fps` and the equivalent `SchedulerHandle` paths
 - `target_fps` is read fresh on every iteration so `set_target_fps` takes effect immediately

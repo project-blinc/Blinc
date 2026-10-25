@@ -4,6 +4,7 @@
 //! keyframe animations for animating multiple properties simultaneously.
 
 use crate::easing::Easing;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// A single keyframe in a single-value animation
 #[derive(Clone, Debug)]
@@ -973,6 +974,8 @@ pub enum FillMode {
 /// Multi-property keyframe animation
 #[derive(Clone, Debug)]
 pub struct MultiKeyframeAnimation {
+    /// Cache identity shared by snapshots of the same playback.
+    playback_id: u64,
     /// Duration in milliseconds
     duration_ms: u32,
     /// Keyframes sorted by time
@@ -995,10 +998,13 @@ pub struct MultiKeyframeAnimation {
     delay_ms: u32,
 }
 
+static NEXT_MULTI_KEYFRAME_PLAYBACK_ID: AtomicU64 = AtomicU64::new(1);
+
 impl MultiKeyframeAnimation {
     /// Create a new multi-property animation with given duration
     pub fn new(duration_ms: u32) -> Self {
         Self {
+            playback_id: NEXT_MULTI_KEYFRAME_PLAYBACK_ID.fetch_add(1, Ordering::Relaxed),
             duration_ms,
             keyframes: Vec::new(),
             current_time: 0.0,
@@ -1080,6 +1086,7 @@ impl MultiKeyframeAnimation {
 
     /// Start the animation
     pub fn start(&mut self) {
+        self.playback_id = NEXT_MULTI_KEYFRAME_PLAYBACK_ID.fetch_add(1, Ordering::Relaxed);
         self.current_time = -(self.delay_ms as f32);
         self.current_iteration = 0;
         self.reversed = self.direction == PlayDirection::Reverse;
@@ -1089,6 +1096,14 @@ impl MultiKeyframeAnimation {
     /// Stop the animation
     pub fn stop(&mut self) {
         self.playing = false;
+    }
+
+    /// Process-local identity for cache ownership of this playback.
+    ///
+    /// Construction and explicit starts assign fresh identities. Ticks, loops,
+    /// completion and snapshot clones retain it. Start a clone for independent playback.
+    pub fn playback_id(&self) -> u64 {
+        self.playback_id
     }
 
     /// Check if the animation is currently playing
