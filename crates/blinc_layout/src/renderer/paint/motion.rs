@@ -1806,7 +1806,10 @@ impl RenderTree {
         }
 
         if effective_layer == target_layer
-            && matches!(render_node.element_type, ElementType::Text(_))
+            && matches!(
+                render_node.element_type,
+                ElementType::Text(_) | ElementType::StyledText(_)
+            )
         {
             use slotmap::Key as _;
             ctx.defer_text(node.data().as_ffi());

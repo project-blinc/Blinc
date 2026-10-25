@@ -76,7 +76,7 @@ fn tree(
     tree
 }
 
-fn frame(
+pub(super) fn frame(
     context: &mut RenderContext,
     tree: &RenderTree,
     state: &RenderState,

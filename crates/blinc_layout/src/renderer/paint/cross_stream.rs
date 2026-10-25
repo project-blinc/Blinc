@@ -17,7 +17,11 @@ impl RenderTree {
             };
             let foreground = foreground || render.props.layer == RenderLayer::Foreground;
             let props = &render.props;
-            let mut has_text = deferred_text && matches!(render.element_type, ElementType::Text(_));
+            let mut has_text = deferred_text
+                && matches!(
+                    render.element_type,
+                    ElementType::Text(_) | ElementType::StyledText(_)
+                );
             let mut native = (has_text
                 || matches!(
                     render.element_type,

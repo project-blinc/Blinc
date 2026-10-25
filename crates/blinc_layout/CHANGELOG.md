@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Deferred text capture supports StyledText nodes under the same native-group eligibility and context capability rules as plain text.
 - Plain Text nodes can join native opacity groups when the paint context resolves collected glyphs. Zero-opacity groups retain text ownership, and region repaint checks the current context's text capability before using a capture plan.
 - Native Div/Canvas opacity groups capture foreground descendants together with background content and suppress independent texture promotion. Moving native ancestors retain their background before nested captures. Collected content, global overlays, glass, effects and 3D boundaries keep their existing fallback.
 

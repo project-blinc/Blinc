@@ -47,6 +47,8 @@ mod grouped_text_tests;
 mod image_rendering;
 mod mesh_rendering;
 mod overlay_rendering;
+#[cfg(test)]
+mod styled_group_tests;
 mod svg_rendering;
 mod tree_rendering;
 

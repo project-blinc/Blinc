@@ -195,10 +195,16 @@ impl RenderContext {
             let key = text.node.data().as_ffi();
             if captured_nodes.contains(&key) {
                 if !used_fast_paint {
-                    captured.insert(
-                        key,
-                        self.prepare_captured_text(&text, (width, height), scale_factor),
-                    );
+                    let prepared = self.prepare_captured_text(&text, (width, height), scale_factor);
+                    // A styled node can contribute several span and line runs.
+                    match captured.entry(key) {
+                        std::collections::hash_map::Entry::Vacant(entry) => {
+                            entry.insert(prepared);
+                        }
+                        std::collections::hash_map::Entry::Occupied(mut entry) => {
+                            entry.get_mut().merge(prepared);
+                        }
+                    }
                 }
                 continue;
             }
