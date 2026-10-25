@@ -510,6 +510,9 @@ impl RenderContext {
                     let (mask_params, mask_info) = Self::mask_image_to_arrays(effective_mask);
 
                     images.push(ImageElement {
+                        node,
+                        path_clip: text_path.clone(),
+                        content_opacity: image_data.opacity,
                         source: image_data.source.clone(),
                         x: abs_x * scale,
                         y: abs_y * scale,
@@ -561,6 +564,9 @@ impl RenderContext {
                         });
 
                         images.push(ImageElement {
+                            node,
+                            path_clip: text_path.clone(),
+                            content_opacity: img_brush.opacity,
                             source: img_brush.source.clone(),
                             x: abs_x * scale,
                             y: abs_y * scale,

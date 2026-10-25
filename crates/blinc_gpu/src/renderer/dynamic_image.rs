@@ -1,10 +1,10 @@
-//! RGBA upload drawing shared by ordered batches and the explicit image pass.
+//! Raw uploads and retained textures in ordered batches or the explicit image pass.
 use super::{GpuRenderer, PrimitiveBatch};
 use crate::{GpuImageInstance, primitives::DynamicImage};
 use std::borrow::Cow;
 
 impl GpuRenderer {
-    /// Upload and draw a sequence of raw RGBA images in the supplied order.
+    /// Draw raw uploads or retained textures in the supplied order.
     /// Ordered batch and foreground methods already draw their image records;
     /// `render_unordered_dynamic_images` draws only separate legacy records.
     pub fn render_dynamic_images(&mut self, target: &wgpu::TextureView, images: &[DynamicImage]) {
@@ -32,12 +32,13 @@ impl GpuRenderer {
     ) {
         if img.width == 0
             || img.height == 0
-            || img
-                .width
-                .checked_mul(img.height)
-                .and_then(|n| n.checked_mul(4))
-                .map(|n| n as usize)
-                != Some(img.data.len())
+            || (img.retained.is_none()
+                && img
+                    .width
+                    .checked_mul(img.height)
+                    .and_then(|n| n.checked_mul(4))
+                    .map(|n| n as usize)
+                    != Some(img.data.len()))
             || img.opacity <= 0.0
             || !DynamicImage::valid_geometry(img.dest, img.transform)
         {
@@ -48,20 +49,25 @@ impl GpuRenderer {
         if !no_clip && (cw <= 0.0 || ch <= 0.0) {
             return;
         }
-        let mut instance = GpuImageInstance::new(
+        let mut instance = img
+            .retained
+            .as_ref()
+            .map_or_else(GpuImageInstance::default, |image| image.style);
+        instance.dst_rect = [
             img.dest.x() - origin[0],
             img.dest.y() - origin[1],
             img.dest.width(),
             img.dest.height(),
-        )
-        .with_transform(
-            img.transform[0],
-            img.transform[1],
-            img.transform[2],
-            img.transform[3],
-        )
-        .with_opacity(img.opacity)
-        .with_border_radius(img.corner_radius);
+        ];
+        instance.transform = img.transform;
+        instance.params[0] = img.corner_radius;
+        instance.params[1] *= img.opacity;
+        instance.clip_bounds = [-10000.0, -10000.0, 100000.0, 100000.0];
+        instance.clip_radius = [0.0; 4];
+        if instance.clip2_bounds[0] > -9999.0 {
+            instance.clip2_bounds[0] -= origin[0];
+            instance.clip2_bounds[1] -= origin[1];
+        }
         if !no_clip {
             instance.clip_bounds = [cx - origin[0], cy - origin[1], cw, ch];
             instance.clip_radius = img.clip_radius;
@@ -80,6 +86,10 @@ impl GpuRenderer {
                     rows[shape][1] += b * origin[0] + d * origin[1];
                 }
             }
+        }
+        if let Some(image) = &img.retained {
+            self.render_images_with_aux(target, &image.view, &[instance], &aux);
+            return;
         }
         let image = crate::image::GpuImage::from_rgba(
             &self.device,

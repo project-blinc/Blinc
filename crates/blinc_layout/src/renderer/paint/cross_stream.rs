@@ -1,40 +1,47 @@
-//! Identify native groups and the text-resolution capability they require.
-use super::super::{ElementType, RenderTree};
+//! Identify native groups and their collected-content requirements.
+use super::super::{DeferredContent, ElementType, RenderTree};
 use crate::element::{Material, RenderLayer};
 use crate::tree::LayoutNodeId;
 
 impl RenderTree {
-    pub(super) fn plan_cross_stream_groups(&self, deferred_text: bool, deferred_svg: bool) {
+    pub(super) fn plan_cross_stream_groups(&self, capabilities: DeferredContent) {
         fn visit(
             tree: &RenderTree,
             node: LayoutNodeId,
             foreground: bool,
-            deferred_text: bool,
-            deferred_svg: bool,
-            groups: &mut Vec<(LayoutNodeId, (bool, bool))>,
-        ) -> (bool, bool, bool, bool) {
+            capabilities: DeferredContent,
+            groups: &mut Vec<(LayoutNodeId, DeferredContent)>,
+        ) -> (bool, bool, DeferredContent) {
             let Some(render) = tree.render_nodes.get(&node) else {
-                return (false, false, false, false);
+                return (false, false, DeferredContent::default());
             };
             let foreground = foreground || render.props.layer == RenderLayer::Foreground;
             let props = &render.props;
-            let mut has_text = deferred_text
-                && matches!(
-                    render.element_type,
-                    ElementType::Text(_) | ElementType::StyledText(_)
-                );
-            let mut has_svg = deferred_svg && matches!(render.element_type, ElementType::Svg(_));
-            let mut native = (has_text
-                || has_svg
+            let mut content = DeferredContent {
+                text: capabilities.text
+                    && matches!(
+                        render.element_type,
+                        ElementType::Text(_) | ElementType::StyledText(_)
+                    ),
+                svg: capabilities.svg && matches!(render.element_type, ElementType::Svg(_)),
+                image: capabilities.image
+                    && (matches!(render.element_type, ElementType::Image(_))
+                        || (matches!(render.element_type, ElementType::Div)
+                            && matches!(props.background, Some(blinc_core::Brush::Image(_))))),
+            };
+            let mut native = (content.any()
                 || matches!(
                     render.element_type,
                     ElementType::Div | ElementType::Canvas(_)
                 ))
                 && !matches!(props.material, Some(Material::Glass(_)))
-                && matches!(
-                    props.background,
-                    None | Some(blinc_core::Brush::Solid(_) | blinc_core::Brush::Gradient(_))
-                )
+                && ((capabilities.image
+                    && matches!(render.element_type, ElementType::Div)
+                    && matches!(props.background, Some(blinc_core::Brush::Image(_))))
+                    || matches!(
+                        props.background,
+                        None | Some(blinc_core::Brush::Solid(_) | blinc_core::Brush::Gradient(_))
+                    ))
                 && props.layer != RenderLayer::Glass
                 && !props.is_overlay_root
                 && props.flow.is_none()
@@ -51,12 +58,13 @@ impl RenderTree {
             let mut has_foreground = foreground;
             let start = groups.len();
             for child in tree.layout_tree.children(node) {
-                let (child_native, child_foreground, child_text, child_svg) =
-                    visit(tree, child, foreground, deferred_text, deferred_svg, groups);
+                let (child_native, child_foreground, child_content) =
+                    visit(tree, child, foreground, capabilities, groups);
                 native &= child_native;
                 has_foreground |= child_foreground;
-                has_text |= child_text;
-                has_svg |= child_svg;
+                content.text |= child_content.text;
+                content.svg |= child_content.svg;
+                content.image |= child_content.image;
             }
             // Native children must stay with an unsupported moving owner's later pass.
             if !native
@@ -66,7 +74,7 @@ impl RenderTree {
             {
                 groups.truncate(start);
             }
-            let needs_content_group = (has_text || has_svg)
+            let needs_content_group = content.any()
                 && (props.opacity < 1.0
                     || props.motion.is_some()
                     || tree
@@ -75,15 +83,15 @@ impl RenderTree {
                         .is_some_and(|b| b.opacity.is_some())
                     || groups.len() > start);
             if native && ((!foreground && has_foreground) || needs_content_group) {
-                groups.push((node, (has_text, has_svg)));
+                groups.push((node, content));
             }
-            (native, has_foreground, has_text, has_svg)
+            (native, has_foreground, content)
         }
         let mut groups = self.cross_stream_groups.borrow_mut();
         groups.clear();
         if let Some(root) = self.root {
             let mut planned = Vec::new();
-            visit(self, root, false, deferred_text, deferred_svg, &mut planned);
+            visit(self, root, false, capabilities, &mut planned);
             groups.extend(planned);
         }
     }

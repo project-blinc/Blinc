@@ -1,6 +1,6 @@
-//! Raw images share their shape stream's active batch and paint cursor.
+//! Images share their shape stream's active batch and paint cursor.
 use super::{ClipData, GpuPaintContext};
-use crate::primitives::{ClipType, DynamicImage, ImagePaintOrder};
+use crate::primitives::{ClipType, DynamicImage, ImagePaintOrder, RetainedImage};
 use blinc_core::{DrawContext, Rect};
 
 impl GpuPaintContext<'_> {
@@ -15,6 +15,45 @@ impl GpuPaintContext<'_> {
         {
             return;
         }
+        self.emit_image(data, width, height, dest, None);
+    }
+
+    /// Record a loaded texture using the active frame and clips. `dest` supplies
+    /// geometry; style supplies UVs, tint, opacity, border, filter and mask state.
+    pub fn draw_texture_image(
+        &mut self,
+        view: &wgpu::TextureView,
+        width: u32,
+        height: u32,
+        dest: Rect,
+        mut style: crate::GpuImageInstance,
+    ) {
+        if width == 0 || height == 0 {
+            return;
+        }
+        let scale = self.current_uniform_scale();
+        style.params[0] *= scale;
+        style.params[2] *= scale;
+        self.emit_image(
+            &[],
+            width,
+            height,
+            dest,
+            Some(std::sync::Arc::new(RetainedImage {
+                view: view.clone(),
+                style,
+            })),
+        );
+    }
+
+    fn emit_image(
+        &mut self,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        dest: Rect,
+        retained: Option<std::sync::Arc<RetainedImage>>,
+    ) {
         let affine = self.current_affine_elements();
         let [a, b, c, d, ..] = affine;
         let determinant = a * d - b * c;
@@ -68,15 +107,17 @@ impl GpuPaintContext<'_> {
         } else {
             &mut batch.dynamic_images
         };
+        let corner_radius = retained.as_ref().map_or(0.0, |image| image.style.params[0]);
         images.push(DynamicImage {
             paint_order,
+            retained,
             data: data.to_vec(),
             width,
             height,
             dest: transformed,
             transform,
             opacity,
-            corner_radius: 0.0,
+            corner_radius,
             clip_bounds,
             clip_radius,
             clip_aux,

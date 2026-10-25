@@ -65,7 +65,11 @@ impl RenderTree {
         // state) is actually painted. Read by callers via
         // `visible_anim_active()` after this returns to gate the
         // end-of-frame redraw chain.
-        self.plan_cross_stream_groups(ctx.supports_deferred_text(), ctx.supports_deferred_svg());
+        self.plan_cross_stream_groups(super::super::DeferredContent {
+            text: ctx.supports_deferred_text(),
+            svg: ctx.supports_deferred_svg(),
+            image: ctx.supports_deferred_image(),
+        });
         self.visible_anim_active.set(false);
         // Same lifecycle for the canvas-detection flag: cleared at the
         // top of every full paint, set by `render_layer_with_motion`
@@ -646,9 +650,7 @@ impl RenderTree {
         // ancestor clip along with them). The overlay reapplies the
         // captured AABB as a scissor.
         let cross_stream_content = self.cross_stream_groups.borrow().get(&node).copied();
-        let cross_stream_group = cross_stream_content.is_some_and(|(text, svg)| {
-            (!text || ctx.supports_deferred_text()) && (!svg || ctx.supports_deferred_svg())
-        });
+        let cross_stream_group = cross_stream_content.is_some_and(|content| content.supports(ctx));
         let can_promote = ctx.can_promote_composite_layer() && !cross_stream_group;
         let css_anim_ancestor_clip =
             if can_promote && in_css_subtree && self.composite_promotion.borrow().contains(&node) {
@@ -868,7 +870,7 @@ impl RenderTree {
             && !retain_foreground_animation
             && !retain_static_binding
             && !(cross_stream_group
-                && (cross_stream_content.is_some_and(|(text, svg)| text || svg)
+                && (cross_stream_content.is_some_and(|content| content.any())
                     || motion_bindings_ref.is_some_and(|b| b.opacity.is_some())))
         {
             // Pop the motion-subtree push from above if we set it,
@@ -1477,10 +1479,20 @@ impl RenderTree {
                     && render_node.props.border_color.is_some();
                 let merge_border = (has_uniform_border && !is_glass) || merge_per_side;
 
+                let captured_background = if matches!(render_node.element_type, ElementType::Div)
+                    && matches!(render_node.props.background, Some(Brush::Image(_)))
+                {
+                    use slotmap::Key as _;
+                    ctx.defer_image(node.data().as_ffi())
+                } else {
+                    false
+                };
                 if let Some(ref bg) = render_node.props.background {
                     // When using opacity layer, draw at full opacity (layer handles it)
                     // Otherwise, apply motion opacity to brush for fallback
-                    let brush = if !has_opacity_layer && motion_opacity < 1.0 {
+                    let brush = if captured_background {
+                        Brush::Solid(Color::TRANSPARENT)
+                    } else if !has_opacity_layer && motion_opacity < 1.0 {
                         super::helpers::apply_opacity_to_brush(bg, motion_opacity)
                     } else {
                         bg.clone()
@@ -1820,6 +1832,13 @@ impl RenderTree {
         {
             use slotmap::Key as _;
             ctx.defer_svg(node.data().as_ffi());
+        }
+
+        if effective_layer == target_layer
+            && matches!(render_node.element_type, ElementType::Image(_))
+        {
+            use slotmap::Key as _;
+            ctx.defer_image(node.data().as_ffi());
         }
 
         // Clear corner shape before rendering children — corner-shape is NOT inherited.

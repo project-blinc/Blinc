@@ -1563,6 +1563,8 @@ pub struct PathBatch {
 /// to manage offscreen render targets and layer composition.
 #[derive(Clone, Debug)]
 pub enum LayerCommand {
+    /// Collected image resolved to its retained texture before dispatch.
+    DeferredImage { id: u64, opacity: f32 },
     /// Collected SVG resolved to an ordered raster image before dispatch.
     DeferredSvg { id: u64, opacity: f32 },
     /// Collected text resolved to native glyph primitives before dispatch.
@@ -1663,11 +1665,20 @@ pub struct ImagePaintOrder {
     pub layer_command_count: usize,
 }
 
-/// An RGBA image to upload to the GPU and render in a single frame
+/// A sampled texture handle and its non-geometric image shader state.
+#[derive(Clone)]
+pub struct RetainedImage {
+    pub view: wgpu::TextureView,
+    pub style: crate::GpuImageInstance,
+}
+
+/// An ordered raw upload or retained texture draw.
 #[derive(Clone)]
 pub struct DynamicImage {
     /// Local paint cursor, or None for an explicitly separate legacy draw.
     pub paint_order: Option<ImagePaintOrder>,
+    /// Retained texture and shader styling, or None for raw RGBA uploads.
+    pub retained: Option<std::sync::Arc<RetainedImage>>,
     /// RGBA pixel data (4 bytes per pixel)
     pub data: Vec<u8>,
     /// Image width in pixels
@@ -2149,7 +2160,8 @@ impl PrimitiveBatch {
                 }
                 LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }
-                | LayerCommand::DeferredSvg { .. } => {}
+                | LayerCommand::DeferredSvg { .. }
+                | LayerCommand::DeferredImage { .. } => {}
             }
         }
         indices
@@ -2182,6 +2194,9 @@ impl PrimitiveBatch {
         self.cross_stream_groups
             .svg_nodes
             .extend(other.cross_stream_groups.svg_nodes);
+        self.cross_stream_groups
+            .image_nodes
+            .extend(other.cross_stream_groups.image_nodes);
         let shift = self.aux_data.len() as f32;
         for glyph in &mut other.glyphs {
             if glyph.flags[1] > 0.0 {

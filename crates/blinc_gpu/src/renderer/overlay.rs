@@ -423,7 +423,8 @@ impl GpuRenderer {
                 }
                 LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }
-                | LayerCommand::DeferredSvg { .. } => false,
+                | LayerCommand::DeferredSvg { .. }
+                | LayerCommand::DeferredImage { .. } => false,
             })
     }
 

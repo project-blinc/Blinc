@@ -1774,6 +1774,16 @@ pub trait DrawContext {
         false
     }
 
+    /// Whether collected images can be resolved inside native groups.
+    fn supports_deferred_image(&self) -> bool {
+        false
+    }
+
+    /// Reserve an image node's position for its loaded texture or placeholder.
+    fn defer_image(&mut self, _id: u64) -> bool {
+        false
+    }
+
     /// Whether background counts and layer indices refer to a per-node scratch
     /// batch whose content is baked into a cached composite texture.
     fn bg_batch_is_composite(&self) -> bool {

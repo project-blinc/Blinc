@@ -23,6 +23,7 @@ pub struct CrossStreamGroups {
     pub resolved: bool,
     pub text_nodes: HashSet<u64>,
     pub svg_nodes: HashSet<u64>,
+    pub image_nodes: HashSet<u64>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -277,7 +278,8 @@ fn emit(
             }
             Node::Command(
                 LayerCommand::DeferredText { id, opacity }
-                | LayerCommand::DeferredSvg { id, opacity },
+                | LayerCommand::DeferredSvg { id, opacity }
+                | LayerCommand::DeferredImage { id, opacity },
             ) if text.is_some() => {
                 if let Some(mut batch) = text.as_mut().unwrap().remove(id) {
                     debug_assert!(batch.glyphs.is_empty());
@@ -352,7 +354,9 @@ impl PrimitiveBatch {
             .any(|entry| {
                 matches!(
                     entry.command,
-                    LayerCommand::DeferredText { .. } | LayerCommand::DeferredSvg { .. }
+                    LayerCommand::DeferredText { .. }
+                        | LayerCommand::DeferredSvg { .. }
+                        | LayerCommand::DeferredImage { .. }
                 )
             })
         {
@@ -401,5 +405,6 @@ impl PrimitiveBatch {
         self.cross_stream_groups.resolved = true;
         self.cross_stream_groups.text_nodes = source.cross_stream_groups.text_nodes;
         self.cross_stream_groups.svg_nodes = source.cross_stream_groups.svg_nodes;
+        self.cross_stream_groups.image_nodes = source.cross_stream_groups.image_nodes;
     }
 }

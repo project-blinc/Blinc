@@ -5,6 +5,13 @@ use crate::primitives::LayerCommand;
 use crate::primitives::cross_stream::{Capture, GroupId};
 use blinc_core::{BlendMode, LayerConfig};
 
+#[derive(Clone, Copy)]
+enum DeferredNode {
+    Text,
+    Svg,
+    Image,
+}
+
 impl GpuPaintContext<'_> {
     /// Enable collected text markers when the caller resolves them before dispatch.
     pub fn enable_deferred_text(&mut self) {
@@ -12,7 +19,7 @@ impl GpuPaintContext<'_> {
     }
 
     pub(super) fn capture_text(&mut self, id: u64) -> bool {
-        self.capture_deferred_node(id, false)
+        self.capture_deferred_node(id, DeferredNode::Text)
     }
 
     /// Enable SVG markers when the caller resolves raster images before dispatch.
@@ -21,32 +28,49 @@ impl GpuPaintContext<'_> {
     }
 
     pub(super) fn capture_svg(&mut self, id: u64) -> bool {
-        self.capture_deferred_node(id, true)
+        self.capture_deferred_node(id, DeferredNode::Svg)
     }
 
-    fn capture_deferred_node(&mut self, id: u64, svg: bool) -> bool {
-        if !(if svg {
-            self.deferred_svg
-        } else {
-            self.deferred_text
-        }) || self.active_composite_layer.is_some()
+    /// Enable image markers when the caller resolves loaded textures before dispatch.
+    pub fn enable_deferred_image(&mut self) {
+        self.deferred_image = true;
+    }
+
+    pub(super) fn capture_image(&mut self, id: u64) -> bool {
+        self.capture_deferred_node(id, DeferredNode::Image)
+    }
+
+    fn capture_deferred_node(&mut self, id: u64, kind: DeferredNode) -> bool {
+        let enabled = match kind {
+            DeferredNode::Text => self.deferred_text,
+            DeferredNode::Svg => self.deferred_svg,
+            DeferredNode::Image => self.deferred_image,
+        };
+        if !enabled
+            || self.active_composite_layer.is_some()
             || !self.layer_stack.iter().any(|s| s.cross_stream.is_some())
         {
             return false;
         }
         let opacity = self.combined_opacity();
-        let command = if svg {
-            LayerCommand::DeferredSvg { id, opacity }
-        } else {
-            LayerCommand::DeferredText { id, opacity }
+        let command = match kind {
+            DeferredNode::Text => LayerCommand::DeferredText { id, opacity },
+            DeferredNode::Svg => LayerCommand::DeferredSvg { id, opacity },
+            DeferredNode::Image => LayerCommand::DeferredImage { id, opacity },
         };
         let foreground = self.emit_foreground();
         let owner = self.layer_command_batch();
         let batch = self.layer_command_batch_mut(owner);
-        if svg {
-            batch.cross_stream_groups.svg_nodes.insert(id);
-        } else {
-            batch.cross_stream_groups.text_nodes.insert(id);
+        match kind {
+            DeferredNode::Text => {
+                batch.cross_stream_groups.text_nodes.insert(id);
+            }
+            DeferredNode::Svg => {
+                batch.cross_stream_groups.svg_nodes.insert(id);
+            }
+            DeferredNode::Image => {
+                batch.cross_stream_groups.image_nodes.insert(id);
+            }
         }
         if foreground {
             batch.push_foreground_layer_command(command);

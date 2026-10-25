@@ -5226,7 +5226,8 @@ impl GpuRenderer {
                     }
                     LayerCommand::Sample { .. }
                     | LayerCommand::DeferredText { .. }
-                    | LayerCommand::DeferredSvg { .. } => {}
+                    | LayerCommand::DeferredSvg { .. }
+                    | LayerCommand::DeferredImage { .. } => {}
                 }
             }
             for layer in &effect_layers {
@@ -5959,7 +5960,8 @@ impl GpuRenderer {
                 }
                 LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }
-                | LayerCommand::DeferredSvg { .. } => {}
+                | LayerCommand::DeferredSvg { .. }
+                | LayerCommand::DeferredImage { .. } => {}
             }
         }
 
@@ -7410,7 +7412,8 @@ impl GpuRenderer {
                 }
                 LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }
-                | LayerCommand::DeferredSvg { .. } => {}
+                | LayerCommand::DeferredSvg { .. }
+                | LayerCommand::DeferredImage { .. } => {}
             }
         }
 

@@ -32,7 +32,7 @@ impl RenderContext {
             .retain(|_, deadline| now < *deadline);
         self.has_pending_image_fade = !self.image_fade_deadlines.is_empty();
 
-        if self.has_pending_image_fade {
+        if self.has_pending_image_fade || self.captured_images_need_repaint {
             // Refresh cached pixels while image opacity changes.
             self.renderer.invalidate_static_layer();
         }

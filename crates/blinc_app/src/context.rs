@@ -44,6 +44,8 @@ mod css_updates;
 mod debug_rendering;
 #[cfg(test)]
 mod grouped_text_tests;
+#[cfg(test)]
+mod image_group_tests;
 mod image_rendering;
 mod mesh_rendering;
 mod overlay_rendering;
@@ -61,6 +63,7 @@ mod cached_text;
 #[cfg(test)]
 mod cached_text_clip_tests;
 mod canvas_order;
+mod captured_image;
 mod captured_svg;
 mod captured_text;
 #[cfg(test)]
@@ -367,6 +370,7 @@ pub struct RenderContext {
     has_active_flows: bool,
     /// Whether image fades require another frame, tracked independently of flow shaders.
     has_pending_image_fade: bool,
+    captured_images_need_repaint: bool,
     // Frame counter for periodic cache stats logging
     frame_count: u64,
     // Clear alpha for the current window: one for opaque surfaces, zero for transparent
@@ -489,6 +493,9 @@ struct TextElement {
 /// Image element data for rendering
 #[derive(Clone)]
 struct ImageElement {
+    node: LayoutNodeId,
+    path_clip: Option<Arc<text_clip::CollectedTextPath>>,
+    content_opacity: f32,
     source: String,
     x: f32,
     y: f32,
@@ -669,6 +676,7 @@ impl RenderContext {
             cursor_pos: [0.0; 2],
             has_active_flows: false,
             has_pending_image_fade: false,
+            captured_images_need_repaint: false,
             frame_count: 0,
             clear_alpha: 1.0,
             cached_bg_batch: None,

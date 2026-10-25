@@ -51,6 +51,7 @@ impl RenderContext {
 
         // Direct frames have no CSS cache patch pass; active CSS needs a full walk.
         let used_fast_paint = try_fast_paint
+            && !self.captured_images_need_repaint
             && !tree.css_has_active()
             && self.redraw_canvases(tree, width, height)
             && self.apply_binding_deltas(tree, scale_factor);
@@ -60,6 +61,7 @@ impl RenderContext {
             GpuPaintContext::with_text_context(width as f32, height as f32, &mut self.text_ctx);
         ctx.enable_deferred_text();
         ctx.enable_deferred_svg();
+        ctx.enable_deferred_image();
 
         // A successful patch already contains this frame's geometry.
         if !used_fast_paint {
@@ -267,12 +269,6 @@ impl RenderContext {
                 svgs.push(svg);
             }
         }
-        if !used_fast_paint {
-            batch.resolve_deferred_content(&mut captured);
-            if let Some(dynamic) = &mut self.cached_dynamic_batch {
-                dynamic.resolve_deferred_content(&mut captured);
-            }
-        }
         // Stable layer sorting preserves SVG sibling order at equal z.
         svgs.sort_by_key(|s| s.z_layer);
         motion_subtree_svgs.sort_by_key(|s| s.z_layer);
@@ -280,7 +276,40 @@ impl RenderContext {
         let mut images = Vec::new();
         let mut layer_3d_images: std::collections::HashMap<LayoutNodeId, Vec<ImageElement>> =
             std::collections::HashMap::new();
+        self.preload_images(&all_images, width as f32, height as f32);
+        let captured_images: std::collections::HashSet<_> = batch
+            .cross_stream_groups
+            .image_nodes
+            .iter()
+            .chain(
+                self.cached_dynamic_batch
+                    .iter()
+                    .flat_map(|b| &b.cross_stream_groups.image_nodes),
+            )
+            .copied()
+            .collect();
+        self.captured_images_need_repaint = false;
+        let mut captured_skeleton = false;
         for image in all_images {
+            use slotmap::Key as _;
+            let key = image.node.data().as_ffi();
+            if captured_images.contains(&key) {
+                let missing = !self.image_cache.contains(&image.source);
+                let fading = self
+                    .image_fade_deadlines
+                    .get(&image.source)
+                    .is_some_and(|deadline| web_time::Instant::now() < *deadline);
+                self.captured_images_need_repaint |= missing || fading;
+                captured_skeleton |= missing && image.placeholder_type == 3;
+                if !used_fast_paint {
+                    captured.insert(
+                        key,
+                        self.prepare_captured_image(&image, (width, height), scale_factor),
+                    );
+                }
+                continue;
+            }
+
             if let Some(ref info) = image.transform_3d_layer {
                 layer_3d_images.entry(info.node_id).or_default().push(image);
             } else {
@@ -288,14 +317,14 @@ impl RenderContext {
             }
         }
 
+        if !used_fast_paint {
+            batch.resolve_deferred_content(&mut captured);
+            if let Some(dynamic) = &mut self.cached_dynamic_batch {
+                dynamic.resolve_deferred_content(&mut captured);
+            }
+        }
         // Collect unique 3D layer IDs for rendering
         let layer_3d_ids: Vec<LayoutNodeId> = layer_3d_texts.keys().cloned().collect();
-
-        // Pre-load all images into cache before rendering (both normal and 3D-layer)
-        self.preload_images(&images, width as f32, height as f32);
-        for layer_imgs in layer_3d_images.values() {
-            self.preload_images(layer_imgs, width as f32, height as f32);
-        }
 
         let PreparedFrameText {
             glyphs_by_layer,
@@ -375,7 +404,7 @@ impl RenderContext {
         }
 
         // Render @flow shader elements on top of their SDF base
-        self.has_active_flows = !flow_elements.is_empty();
+        self.has_active_flows = !flow_elements.is_empty() || captured_skeleton;
         if !flow_elements.is_empty() {
             let stylesheet = tree.stylesheet();
 

@@ -105,6 +105,11 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
     batch.dynamic_images.len().hash(h);
     for image in &batch.dynamic_images {
         image.paint_order.hash(h);
+        image.retained.is_some().hash(h);
+        if let Some(retained) = &image.retained {
+            retained.view.hash(h);
+            bytemuck::bytes_of(&retained.style).hash(h);
+        }
         image.data.hash(h);
         image.width.hash(h);
         image.height.hash(h);
@@ -137,7 +142,8 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
             LayerCommand::Push { config: c } => config(c, h),
             LayerCommand::Pop => {}
             LayerCommand::DeferredText { id, opacity }
-            | LayerCommand::DeferredSvg { id, opacity } => {
+            | LayerCommand::DeferredSvg { id, opacity }
+            | LayerCommand::DeferredImage { id, opacity } => {
                 id.hash(h);
                 opacity.to_bits().hash(h);
             }
