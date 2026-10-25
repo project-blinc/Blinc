@@ -22,6 +22,7 @@ pub struct CrossStreamGroups {
     pub captures: Vec<Capture>,
     pub resolved: bool,
     pub text_nodes: HashSet<u64>,
+    pub svg_nodes: HashSet<u64>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -274,7 +275,10 @@ fn emit(
                 emit(&group.foreground, source, groups, output, foreground, text);
                 command(output, LayerCommand::Pop);
             }
-            Node::Command(LayerCommand::DeferredText { id, opacity }) if text.is_some() => {
+            Node::Command(
+                LayerCommand::DeferredText { id, opacity }
+                | LayerCommand::DeferredSvg { id, opacity },
+            ) if text.is_some() => {
                 if let Some(mut batch) = text.as_mut().unwrap().remove(id) {
                     debug_assert!(batch.glyphs.is_empty());
                     let shift = source.aux_data.len() as f32;
@@ -287,6 +291,31 @@ fn emit(
                         output.foreground_primitives.extend(batch.primitives);
                     } else {
                         output.primitives.extend(batch.primitives);
+                    }
+                    for mut image in batch.dynamic_images {
+                        image.opacity *= opacity;
+                        let (primitives, paths, commands, images) = if foreground {
+                            (
+                                &output.foreground_primitives,
+                                &output.foreground_paths,
+                                &output.foreground_layer_commands,
+                                &mut output.foreground_dynamic_images,
+                            )
+                        } else {
+                            (
+                                &output.primitives,
+                                &output.paths,
+                                &output.layer_commands,
+                                &mut output.dynamic_images,
+                            )
+                        };
+                        image.paint_order = Some(ImagePaintOrder {
+                            primitive_index: primitives.len(),
+                            path_vertex_index: paths.vertices.len(),
+                            path_index_count: paths.indices.len(),
+                            layer_command_count: commands.len(),
+                        });
+                        images.push(image);
                     }
                 }
             }
@@ -311,11 +340,21 @@ impl PrimitiveBatch {
 
     /// Replace deferred text markers with prepared native primitives and owned aux rows.
     pub fn resolve_deferred_text(&mut self, text: &mut HashMap<u64, PrimitiveBatch>) {
+        self.resolve_deferred_content(text);
+    }
+
+    /// Insert prepared native primitives followed by raw images at reserved node positions.
+    pub fn resolve_deferred_content(&mut self, text: &mut HashMap<u64, PrimitiveBatch>) {
         if !self
             .layer_commands
             .iter()
             .chain(&self.foreground_layer_commands)
-            .any(|entry| matches!(entry.command, LayerCommand::DeferredText { .. }))
+            .any(|entry| {
+                matches!(
+                    entry.command,
+                    LayerCommand::DeferredText { .. } | LayerCommand::DeferredSvg { .. }
+                )
+            })
         {
             return;
         }
@@ -361,5 +400,6 @@ impl PrimitiveBatch {
         self.particle_viewports = source.particle_viewports;
         self.cross_stream_groups.resolved = true;
         self.cross_stream_groups.text_nodes = source.cross_stream_groups.text_nodes;
+        self.cross_stream_groups.svg_nodes = source.cross_stream_groups.svg_nodes;
     }
 }

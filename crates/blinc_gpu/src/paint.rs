@@ -287,6 +287,7 @@ pub struct GpuPaintContext<'a> {
     next_cross_stream_local: u64,
     cross_stream_static_depth: usize,
     deferred_text: bool,
+    deferred_svg: bool,
     /// Transform stack
     transform_stack: Vec<Affine2D>,
     /// Opacity stack
@@ -406,6 +407,7 @@ impl<'a> GpuPaintContext<'a> {
             next_cross_stream_local: 0,
             cross_stream_static_depth: 0,
             deferred_text: false,
+            deferred_svg: false,
         }
     }
 
@@ -471,6 +473,7 @@ impl<'a> GpuPaintContext<'a> {
             next_cross_stream_local: 0,
             cross_stream_static_depth: 0,
             deferred_text: false,
+            deferred_svg: false,
         }
     }
 
@@ -4483,6 +4486,14 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
 
     fn defer_text(&mut self, id: u64) -> bool {
         self.capture_text(id)
+    }
+
+    fn supports_deferred_svg(&self) -> bool {
+        self.deferred_svg
+    }
+
+    fn defer_svg(&mut self, id: u64) -> bool {
+        self.capture_svg(id)
     }
 
     fn sample_layer(&mut self, id: LayerId, source_rect: Rect, dest_rect: Rect) {

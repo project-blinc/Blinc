@@ -59,6 +59,7 @@ impl RenderContext {
         let mut ctx =
             GpuPaintContext::with_text_context(width as f32, height as f32, &mut self.text_ctx);
         ctx.enable_deferred_text();
+        ctx.enable_deferred_svg();
 
         // A successful patch already contains this frame's geometry.
         if !used_fast_paint {
@@ -227,18 +228,36 @@ impl RenderContext {
             }
         }
 
-        if !used_fast_paint {
-            batch.resolve_deferred_text(&mut captured);
-            if let Some(dynamic) = &mut self.cached_dynamic_batch {
-                dynamic.resolve_deferred_text(&mut captured);
-            }
-        }
-
         let mut svgs = Vec::new();
         let mut motion_subtree_svgs: Vec<SvgElement> = Vec::new();
         let mut layer_3d_svgs: std::collections::HashMap<LayoutNodeId, Vec<SvgElement>> =
             std::collections::HashMap::new();
+        let captured_svgs: std::collections::HashSet<_> = batch
+            .cross_stream_groups
+            .svg_nodes
+            .iter()
+            .chain(
+                self.cached_dynamic_batch
+                    .iter()
+                    .flat_map(|b| &b.cross_stream_groups.svg_nodes),
+            )
+            .copied()
+            .collect();
+        if !used_fast_paint && !captured_svgs.is_empty() {
+            self.svg_atlas.begin_frame(&self.device);
+        }
         for svg in all_svgs {
+            use slotmap::Key as _;
+            let key = svg.node.data().as_ffi();
+            if captured_svgs.contains(&key) {
+                if !used_fast_paint {
+                    captured.insert(
+                        key,
+                        self.prepare_captured_svg(&svg, (width, height), scale_factor),
+                    );
+                }
+                continue;
+            }
             if let Some(ref info) = svg.transform_3d_layer {
                 layer_3d_svgs.entry(info.node_id).or_default().push(svg);
             } else if svg.in_motion_subtree || svg.composite_ancestor.is_some() {
@@ -246,6 +265,12 @@ impl RenderContext {
                 motion_subtree_svgs.push(svg);
             } else {
                 svgs.push(svg);
+            }
+        }
+        if !used_fast_paint {
+            batch.resolve_deferred_content(&mut captured);
+            if let Some(dynamic) = &mut self.cached_dynamic_batch {
+                dynamic.resolve_deferred_content(&mut captured);
             }
         }
         // Stable layer sorting preserves SVG sibling order at equal z.

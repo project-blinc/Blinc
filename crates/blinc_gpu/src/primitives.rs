@@ -1563,6 +1563,8 @@ pub struct PathBatch {
 /// to manage offscreen render targets and layer composition.
 #[derive(Clone, Debug)]
 pub enum LayerCommand {
+    /// Collected SVG resolved to an ordered raster image before dispatch.
+    DeferredSvg { id: u64, opacity: f32 },
     /// Collected text resolved to native glyph primitives before dispatch.
     DeferredText { id: u64, opacity: f32 },
     /// Push a new layer - begins rendering to an offscreen target
@@ -2145,7 +2147,9 @@ impl PrimitiveBatch {
                         }
                     }
                 }
-                LayerCommand::Sample { .. } | LayerCommand::DeferredText { .. } => {}
+                LayerCommand::Sample { .. }
+                | LayerCommand::DeferredText { .. }
+                | LayerCommand::DeferredSvg { .. } => {}
             }
         }
         indices
@@ -2175,6 +2179,9 @@ impl PrimitiveBatch {
         self.cross_stream_groups
             .text_nodes
             .extend(other.cross_stream_groups.text_nodes);
+        self.cross_stream_groups
+            .svg_nodes
+            .extend(other.cross_stream_groups.svg_nodes);
         let shift = self.aux_data.len() as f32;
         for glyph in &mut other.glyphs {
             if glyph.flags[1] > 0.0 {

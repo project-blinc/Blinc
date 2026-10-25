@@ -12,20 +12,42 @@ impl GpuPaintContext<'_> {
     }
 
     pub(super) fn capture_text(&mut self, id: u64) -> bool {
-        if !self.deferred_text
-            || self.active_composite_layer.is_some()
+        self.capture_deferred_node(id, false)
+    }
+
+    /// Enable SVG markers when the caller resolves raster images before dispatch.
+    pub fn enable_deferred_svg(&mut self) {
+        self.deferred_svg = true;
+    }
+
+    pub(super) fn capture_svg(&mut self, id: u64) -> bool {
+        self.capture_deferred_node(id, true)
+    }
+
+    fn capture_deferred_node(&mut self, id: u64, svg: bool) -> bool {
+        if !(if svg {
+            self.deferred_svg
+        } else {
+            self.deferred_text
+        }) || self.active_composite_layer.is_some()
             || !self.layer_stack.iter().any(|s| s.cross_stream.is_some())
         {
             return false;
         }
-        let command = LayerCommand::DeferredText {
-            id,
-            opacity: self.combined_opacity(),
+        let opacity = self.combined_opacity();
+        let command = if svg {
+            LayerCommand::DeferredSvg { id, opacity }
+        } else {
+            LayerCommand::DeferredText { id, opacity }
         };
         let foreground = self.emit_foreground();
         let owner = self.layer_command_batch();
         let batch = self.layer_command_batch_mut(owner);
-        batch.cross_stream_groups.text_nodes.insert(id);
+        if svg {
+            batch.cross_stream_groups.svg_nodes.insert(id);
+        } else {
+            batch.cross_stream_groups.text_nodes.insert(id);
+        }
         if foreground {
             batch.push_foreground_layer_command(command);
         } else {

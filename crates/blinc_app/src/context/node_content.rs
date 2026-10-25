@@ -361,6 +361,8 @@ impl RenderContext {
                     // CSS fill/stroke are explicit overrides injected as SVG attributes.
                     // Both can coexist: tint handles currentColor, CSS handles specifics.
                     svgs.push(SvgElement {
+                        node,
+                        path_clip: text_path.clone(),
                         source: svg_data.source.clone(),
                         x: scaled_x,
                         y: scaled_y,

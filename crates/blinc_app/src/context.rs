@@ -49,6 +49,8 @@ mod mesh_rendering;
 mod overlay_rendering;
 #[cfg(test)]
 mod styled_group_tests;
+#[cfg(test)]
+mod svg_group_tests;
 mod svg_rendering;
 mod tree_rendering;
 
@@ -59,6 +61,7 @@ mod cached_text;
 #[cfg(test)]
 mod cached_text_clip_tests;
 mod canvas_order;
+mod captured_svg;
 mod captured_text;
 #[cfg(test)]
 mod composite_layers_tests;
@@ -541,6 +544,8 @@ struct ImageElement {
 /// SVG element data for rendering
 #[derive(Clone)]
 struct SvgElement {
+    node: LayoutNodeId,
+    path_clip: Option<Arc<text_clip::CollectedTextPath>>,
     source: Arc<str>,
     x: f32,
     y: f32,

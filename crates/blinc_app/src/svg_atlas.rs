@@ -127,6 +127,19 @@ impl SvgAtlas {
         self.used_this_frame.insert(cache_key);
     }
 
+    /// Copy one raster from the CPU shadow without retaining atlas UV coordinates.
+    pub(crate) fn copy_pixels(&self, cache_key: u64) -> Option<(Vec<u8>, u32, u32)> {
+        let region = self.entries.get(&cache_key)?;
+        let source = self.pixels.as_ref()?;
+        let stride = region.width as usize * 4;
+        let mut pixels = Vec::with_capacity(stride * region.height as usize);
+        for y in region.y..region.y + region.height {
+            let start = ((y * self.width + region.x) * 4) as usize;
+            pixels.extend_from_slice(&source[start..start + stride]);
+        }
+        Some((pixels, region.width, region.height))
+    }
+
     /// Allocate space, write pixels, and insert a cache entry. Returns the region.
     ///
     /// Returns `None` if the atlas is full at the maximum size — callers

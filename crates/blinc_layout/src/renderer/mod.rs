@@ -664,8 +664,8 @@ pub struct RenderTree {
     /// Dynamic canvas output retained by its owning group or batch. Its callback
     /// requires a full walk so content and commands keep one owner.
     had_retained_canvas_painted: Cell<bool>,
-    /// Capture candidates and whether each requires deferred text support.
-    cross_stream_groups: RefCell<HashMap<LayoutNodeId, bool>>,
+    /// Capture candidates and their deferred text/SVG requirements.
+    cross_stream_groups: RefCell<HashMap<LayoutNodeId, (bool, bool)>>,
     /// When `true`, the paint walker skips invoking each
     /// `Canvas` node's `render_fn` while still recording the
     /// `CanvasPaintRecord` for later replay. Used by the layer

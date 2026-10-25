@@ -9,6 +9,7 @@ All notable changes to `blinc_core` will be documented in this file.
 - `ClipShape::RoundedRect` now carries a `CornerShape` (per-corner superellipse `n`) so clips can follow squircle / scoop / bevel outlines instead of always rounding. Constructors default to the existing `CornerShape::ROUND` so untouched callers behave identically.
 
 ### Added
+- Optional deferred SVG hooks reserve collected raster content at native group paint positions while unsupported contexts retain fallback.
 - Optional deferred text hooks let native group consumers reserve collected text at its paint position while contexts without a resolver keep collection fallback.
 - `DrawContext::push_cross_stream_layer` optionally captures one native layer across background and foreground passes; unsupported contexts return false without pushing.
 - `DrawContext::can_promote_composite_layer` lets an open ancestor group retain descendant draws in its batch instead of allowing independent texture promotion.

@@ -206,7 +206,7 @@ impl CollectedTextPath {
         paint.take_batch()
     }
 
-    fn clip_context(
+    pub(super) fn clip_context(
         &self,
         scissor: Option<[f32; 4]>,
         size: (u32, u32),
