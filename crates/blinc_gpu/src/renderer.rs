@@ -5224,7 +5224,7 @@ impl GpuRenderer {
                             }
                         }
                     }
-                    LayerCommand::Sample { .. } => {}
+                    LayerCommand::Sample { .. } | LayerCommand::DeferredText { .. } => {}
                 }
             }
             for layer in &effect_layers {
@@ -5955,7 +5955,7 @@ impl GpuRenderer {
                         }
                     }
                 }
-                LayerCommand::Sample { .. } => {}
+                LayerCommand::Sample { .. } | LayerCommand::DeferredText { .. } => {}
             }
         }
 
@@ -7404,7 +7404,7 @@ impl GpuRenderer {
                         }
                     }
                 }
-                LayerCommand::Sample { .. } => {}
+                LayerCommand::Sample { .. } | LayerCommand::DeferredText { .. } => {}
             }
         }
 

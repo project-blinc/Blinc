@@ -421,7 +421,7 @@ impl GpuRenderer {
                     depth = depth.saturating_sub(1);
                     false
                 }
-                LayerCommand::Sample { .. } => false,
+                LayerCommand::Sample { .. } | LayerCommand::DeferredText { .. } => false,
             })
     }
 

@@ -185,13 +185,19 @@ impl RenderContext {
             self.cached_css_transformed_text_prims = None;
         }
 
+        // Collected content requires a fresh walk when CSS cannot patch its cached output.
+        let css_patchable = !css_anim_active || tree.css_active_patchable();
+        if !css_patchable {
+            self.renderer.invalidate_static_layer();
+        }
+
         // Patch eligible CSS-only frames without rewalking the tree.
         let css_patch_eligible = css_only_active
             && !bindings_animating
             && self.cached_bg_batch.is_some()
             && self.renderer.static_layer_valid()
             && !tree.css_anim_paint_records().is_empty()
-            && tree.css_active_patchable();
+            && css_patchable;
         if !css_patch_eligible
             && tracing::enabled!(target: "blinc_app::frame_timing", tracing::Level::TRACE)
         {

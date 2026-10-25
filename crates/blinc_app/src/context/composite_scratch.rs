@@ -136,6 +136,10 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
         match &entry.command {
             LayerCommand::Push { config: c } => config(c, h),
             LayerCommand::Pop => {}
+            LayerCommand::DeferredText { id, opacity } => {
+                id.hash(h);
+                opacity.to_bits().hash(h);
+            }
             LayerCommand::Sample { id, source, dest } => {
                 id.hash(h);
                 floats(

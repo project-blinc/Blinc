@@ -6,6 +6,34 @@ use crate::primitives::cross_stream::{Capture, GroupId};
 use blinc_core::{BlendMode, LayerConfig};
 
 impl GpuPaintContext<'_> {
+    /// Enable collected text markers when the caller resolves them before dispatch.
+    pub fn enable_deferred_text(&mut self) {
+        self.deferred_text = true;
+    }
+
+    pub(super) fn capture_text(&mut self, id: u64) -> bool {
+        if !self.deferred_text
+            || self.active_composite_layer.is_some()
+            || !self.layer_stack.iter().any(|s| s.cross_stream.is_some())
+        {
+            return false;
+        }
+        let command = LayerCommand::DeferredText {
+            id,
+            opacity: self.combined_opacity(),
+        };
+        let foreground = self.emit_foreground();
+        let owner = self.layer_command_batch();
+        let batch = self.layer_command_batch_mut(owner);
+        batch.cross_stream_groups.text_nodes.insert(id);
+        if foreground {
+            batch.push_foreground_layer_command(command);
+        } else {
+            batch.push_layer_command(command);
+        }
+        true
+    }
+
     pub(super) fn begin_cross_stream_layer(&mut self, id: u64, config: LayerConfig) -> bool {
         if self.active_composite_layer.is_some()
             || self.rejected_cross_stream_groups.contains(&id)

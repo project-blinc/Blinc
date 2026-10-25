@@ -42,6 +42,8 @@ mod css_cache_lifecycle;
 mod css_lifecycle_tests;
 mod css_updates;
 mod debug_rendering;
+#[cfg(test)]
+mod grouped_text_tests;
 mod image_rendering;
 mod mesh_rendering;
 mod overlay_rendering;
@@ -55,6 +57,7 @@ mod cached_text;
 #[cfg(test)]
 mod cached_text_clip_tests;
 mod canvas_order;
+mod captured_text;
 #[cfg(test)]
 mod composite_layers_tests;
 mod composite_scratch;
@@ -416,6 +419,7 @@ struct Transform3DLayerInfo {
 /// Text element data for rendering
 #[derive(Clone)]
 struct TextElement {
+    node: LayoutNodeId,
     content: String,
     x: f32,
     y: f32,

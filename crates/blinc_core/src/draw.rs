@@ -1754,6 +1754,16 @@ pub trait DrawContext {
         false
     }
 
+    /// Whether collected text can be resolved at native group paint positions.
+    fn supports_deferred_text(&self) -> bool {
+        false
+    }
+
+    /// Reserve a collected text node's position inside an accepted native group.
+    fn defer_text(&mut self, _id: u64) -> bool {
+        false
+    }
+
     /// Whether background counts and layer indices refer to a per-node scratch
     /// batch whose content is baked into a cached composite texture.
     fn bg_batch_is_composite(&self) -> bool {

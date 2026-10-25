@@ -65,7 +65,7 @@ impl RenderTree {
         // state) is actually painted. Read by callers via
         // `visible_anim_active()` after this returns to gate the
         // end-of-frame redraw chain.
-        self.plan_cross_stream_groups();
+        self.plan_cross_stream_groups(ctx.supports_deferred_text());
         self.visible_anim_active.set(false);
         // Same lifecycle for the canvas-detection flag: cleared at the
         // top of every full paint, set by `render_layer_with_motion`
@@ -645,7 +645,9 @@ impl RenderTree {
         // emit (so scale/translate animations don't drag a baked
         // ancestor clip along with them). The overlay reapplies the
         // captured AABB as a scissor.
-        let cross_stream_group = self.cross_stream_groups.borrow().contains(&node);
+        let cross_stream_text = self.cross_stream_groups.borrow().get(&node).copied();
+        let cross_stream_group =
+            cross_stream_text.is_some_and(|text| !text || ctx.supports_deferred_text());
         let can_promote = ctx.can_promote_composite_layer() && !cross_stream_group;
         let css_anim_ancestor_clip =
             if can_promote && in_css_subtree && self.composite_promotion.borrow().contains(&node) {
@@ -864,7 +866,9 @@ impl RenderTree {
             && !has_pending_motion
             && !retain_foreground_animation
             && !retain_static_binding
-            && !(cross_stream_group && motion_bindings_ref.is_some_and(|b| b.opacity.is_some()))
+            && !(cross_stream_group
+                && (cross_stream_text == Some(true)
+                    || motion_bindings_ref.is_some_and(|b| b.opacity.is_some())))
         {
             // Pop the motion-subtree push from above if we set it,
             // so the dynamic batch's emit gate stays balanced even
@@ -1799,6 +1803,13 @@ impl RenderTree {
                     }
                 }
             }
+        }
+
+        if effective_layer == target_layer
+            && matches!(render_node.element_type, ElementType::Text(_))
+        {
+            use slotmap::Key as _;
+            ctx.defer_text(node.data().as_ffi());
         }
 
         // Clear corner shape before rendering children — corner-shape is NOT inherited.

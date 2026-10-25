@@ -5,10 +5,12 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Batch merging retains background RGBA images and rebases their primitive, path and command cursors.
 - Native shared opacity groups join background and foreground draws at their tree paint position, including nested layers, paths, raw images and clips. Batch drains, merges, foreground projection and borrowed ordered dispatch preserve ownership. Moving captures retain their static paint position and request repaint instead of patching rebased ranges.
 - Native clear rendering sends nested groups through ordered composition so child groups render into their parent instead of blending independently onto the target.
 
 ### Added
+- Opt-in deferred text commands resolve to prepared native glyph primitives and owned auxiliary rows inside shared groups. Captured node identities follow cache replay and merging and reset when their batch is cleared.
 - Display-list layer masks support producer stop tables beyond 16 entries, including repeated gradients and hard stops. Nested masks follow cropped layer origins. Small masks retain inline uniforms; larger masks use a reusable float texture with no extra render pass or primitive fields. `LayerMask::stops` is a shared slice, and `LayerMask` and `LayerFx` are now `Clone` rather than `Copy`. Invalid mask table ranges and selectors report `Unsupported::LayerEffect`.
 - Display-list colour glyph shadows use colour-atlas alpha in the producer tint, with hard and blurred shadows, clips and layer effects. Colour glyphs honour record opacity, and transformed glyphs stay within their atlas rectangles. Native glyph modes and primitive layouts remain unchanged. Invalid atlas selectors report `Unsupported::GlyphMode`.
 - Display-list image mappings: cover, contain, fill, tile, none and scale-down with fractional positions, pixel offsets and independent repeat axes. `Painter::render_with_images` accepts intrinsic logical dimensions, legacy fit and alpha-mask resources; the existing texture resolver remains supported. Masks use the producer tint and opacity, and background image brushes share fitting, clip and layer handling. Mapping uses auxiliary rows without extending image instances or creating render textures.

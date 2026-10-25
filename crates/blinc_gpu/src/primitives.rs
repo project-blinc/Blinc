@@ -1563,6 +1563,8 @@ pub struct PathBatch {
 /// to manage offscreen render targets and layer composition.
 #[derive(Clone, Debug)]
 pub enum LayerCommand {
+    /// Collected text resolved to native glyph primitives before dispatch.
+    DeferredText { id: u64, opacity: f32 },
     /// Push a new layer - begins rendering to an offscreen target
     Push {
         /// Layer configuration
@@ -2143,7 +2145,7 @@ impl PrimitiveBatch {
                         }
                     }
                 }
-                LayerCommand::Sample { .. } => {}
+                LayerCommand::Sample { .. } | LayerCommand::DeferredText { .. } => {}
             }
         }
         indices
@@ -2170,6 +2172,9 @@ impl PrimitiveBatch {
         self.resolve_cross_stream_groups();
         other.resolve_cross_stream_groups();
         self.cross_stream_groups.resolved |= other.cross_stream_groups.resolved;
+        self.cross_stream_groups
+            .text_nodes
+            .extend(other.cross_stream_groups.text_nodes);
         let shift = self.aux_data.len() as f32;
         for glyph in &mut other.glyphs {
             if glyph.flags[1] > 0.0 {
@@ -2208,6 +2213,7 @@ impl PrimitiveBatch {
         let fg_vertex_offset = self.foreground_paths.vertices.len();
         let fg_index_offset = self.foreground_paths.indices.len();
         let fg_command_offset = self.foreground_layer_commands.len();
+        let bg_command_offset = self.layer_commands.len();
 
         self.primitives.extend(other.primitives);
         self.foreground_primitives
@@ -2256,6 +2262,16 @@ impl PrimitiveBatch {
             entry.foreground_path_vertex_index += fg_vertex_offset;
             entry.foreground_path_index_count += fg_index_offset;
             self.foreground_layer_commands.push(entry);
+        }
+
+        for mut image in other.dynamic_images {
+            if let Some(order) = image.paint_order.as_mut() {
+                order.primitive_index += primitive_offset;
+                order.path_vertex_index += bg_vertex_offset;
+                order.path_index_count += bg_index_offset;
+                order.layer_command_count += bg_command_offset;
+            }
+            self.dynamic_images.push(image);
         }
 
         for mut image in other.foreground_dynamic_images {

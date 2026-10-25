@@ -58,6 +58,7 @@ impl RenderContext {
         // Create a single paint context for all layers with text rendering support
         let mut ctx =
             GpuPaintContext::with_text_context(width as f32, height as f32, &mut self.text_ctx);
+        ctx.enable_deferred_text();
 
         // A successful patch already contains this frame's geometry.
         if !used_fast_paint {
@@ -177,7 +178,30 @@ impl RenderContext {
             LayoutNodeId,
             (Transform3DLayerInfo, Vec<TextElement>),
         > = std::collections::HashMap::new();
+        let mut captured = std::collections::HashMap::new();
+        let captured_nodes: std::collections::HashSet<_> = batch
+            .cross_stream_groups
+            .text_nodes
+            .iter()
+            .chain(
+                self.cached_dynamic_batch
+                    .iter()
+                    .flat_map(|b| &b.cross_stream_groups.text_nodes),
+            )
+            .copied()
+            .collect();
         for text in all_texts {
+            use slotmap::Key as _;
+            let key = text.node.data().as_ffi();
+            if captured_nodes.contains(&key) {
+                if !used_fast_paint {
+                    captured.insert(
+                        key,
+                        self.prepare_captured_text(&text, (width, height), scale_factor),
+                    );
+                }
+                continue;
+            }
             if let Some(ref info) = text.transform_3d_layer {
                 layer_3d_texts
                     .entry(info.node_id)
@@ -194,6 +218,13 @@ impl RenderContext {
                 motion_subtree_texts.push(text);
             } else {
                 texts.push(text);
+            }
+        }
+
+        if !used_fast_paint {
+            batch.resolve_deferred_text(&mut captured);
+            if let Some(dynamic) = &mut self.cached_dynamic_batch {
+                dynamic.resolve_deferred_text(&mut captured);
             }
         }
 

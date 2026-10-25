@@ -251,6 +251,7 @@ impl RenderContext {
                     };
 
                     texts.push(TextElement {
+                        node,
                         content,
                         path_clip: text_path.clone(),
                         x: scaled_x,
@@ -826,6 +827,7 @@ impl RenderContext {
                             let segment_width = metrics.width * scale * effective_motion_scale.0;
 
                             texts.push(TextElement {
+                                node,
                                 content: segment_text.to_string(),
                                 path_clip: text_path.clone(),
                                 x: scaled_x + x_offset,

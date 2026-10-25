@@ -1,7 +1,7 @@
 //! Collected text keeps geometry and a push-time frame, never foreign aux offsets.
 use super::{
-    Arc, DrawContext, GpuGlyph, GpuPaintContext, PrimitiveBatch, Rect, RenderContext, TextElement,
-    Transform3DLayerInfo, cached_text,
+    Arc, DrawContext, GpuGlyph, GpuPaintContext, GpuPrimitive, PrimitiveBatch, Rect, RenderContext,
+    TextElement, Transform3DLayerInfo, cached_text,
 };
 use blinc_core::{Affine2D, ClipPath, ClipShape, Path, PathCommand, Transform};
 
@@ -182,6 +182,35 @@ impl CollectedTextPath {
         scissor: Option<[f32; 4]>,
         size: (u32, u32),
     ) -> PrimitiveBatch {
+        let mut paint = self.clip_context(scissor, size);
+        paint.push_prepared_glyphs(glyphs);
+        paint.take_batch()
+    }
+
+    pub(super) fn prepare_rects(
+        &self,
+        primitives: &[GpuPrimitive],
+        scissor: Option<[f32; 4]>,
+        size: (u32, u32),
+    ) -> PrimitiveBatch {
+        let mut paint = self.clip_context(scissor, size);
+        for primitive in primitives {
+            let [x, y, w, h] = primitive.bounds;
+            let [r, g, b, a] = primitive.color;
+            paint.fill_rect(
+                Rect::new(x, y, w, h),
+                0.0.into(),
+                blinc_core::Color::rgba(r, g, b, a).into(),
+            );
+        }
+        paint.take_batch()
+    }
+
+    fn clip_context(
+        &self,
+        scissor: Option<[f32; 4]>,
+        size: (u32, u32),
+    ) -> GpuPaintContext<'static> {
         let mut paint = GpuPaintContext::new(size.0 as f32, size.1 as f32);
         paint.push_transform(Transform::Affine2D(Affine2D {
             elements: self.frame,
@@ -191,8 +220,7 @@ impl CollectedTextPath {
         if let Some([x, y, w, h]) = scissor {
             paint.push_clip(ClipShape::rect(Rect::new(x, y, w, h)));
         }
-        paint.push_prepared_glyphs(glyphs);
-        paint.take_batch()
+        paint
     }
 }
 

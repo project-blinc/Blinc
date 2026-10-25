@@ -30,6 +30,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Motion-frame plain text, shadows and decorations render inside their native opacity group with owned glyph clips and transforms. Independent text keeps its collected pass; CSS content that cannot patch the cache requests a fresh walk.
 - Repaint retained native cross-stream groups when motion bindings change, including settled writes and opacity endpoints, so joined ranges and later siblings retain their paint order.
 - Replacing or explicitly restarting a CSS animation/transition refreshes cached output even when node membership and promotion stay unchanged. Ordinary ticks, loops and snapshot clones preserve cache ownership.
 - CSS cache ownership refreshes on animation/transition start, completion, removal and promotion changes. Visible output omitted by an earlier transparent paint requests a fresh walk; unchanged transparent, offscreen and settled ownership keeps its cache.

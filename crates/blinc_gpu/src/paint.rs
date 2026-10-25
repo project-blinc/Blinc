@@ -286,6 +286,7 @@ pub struct GpuPaintContext<'a> {
     rejected_cross_stream_groups: std::collections::HashSet<u64>,
     next_cross_stream_local: u64,
     cross_stream_static_depth: usize,
+    deferred_text: bool,
     /// Transform stack
     transform_stack: Vec<Affine2D>,
     /// Opacity stack
@@ -404,6 +405,7 @@ impl<'a> GpuPaintContext<'a> {
             rejected_cross_stream_groups: std::collections::HashSet::new(),
             next_cross_stream_local: 0,
             cross_stream_static_depth: 0,
+            deferred_text: false,
         }
     }
 
@@ -468,6 +470,7 @@ impl<'a> GpuPaintContext<'a> {
             rejected_cross_stream_groups: std::collections::HashSet::new(),
             next_cross_stream_local: 0,
             cross_stream_static_depth: 0,
+            deferred_text: false,
         }
     }
 
@@ -4472,6 +4475,14 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
 
     fn push_cross_stream_layer(&mut self, id: u64, config: LayerConfig) -> bool {
         self.begin_cross_stream_layer(id, config)
+    }
+
+    fn supports_deferred_text(&self) -> bool {
+        self.deferred_text
+    }
+
+    fn defer_text(&mut self, id: u64) -> bool {
+        self.capture_text(id)
     }
 
     fn sample_layer(&mut self, id: LayerId, source_rect: Rect, dest_rect: Rect) {

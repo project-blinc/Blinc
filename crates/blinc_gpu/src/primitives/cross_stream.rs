@@ -21,6 +21,7 @@ pub struct Capture {
 pub struct CrossStreamGroups {
     pub captures: Vec<Capture>,
     pub resolved: bool,
+    pub text_nodes: HashSet<u64>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -193,6 +194,7 @@ fn emit(
     groups: &HashMap<GroupId, Group>,
     output: &mut PrimitiveBatch,
     foreground: bool,
+    text: &mut Option<&mut HashMap<u64, PrimitiveBatch>>,
 ) {
     let command = |output: &mut PrimitiveBatch, command| {
         if foreground {
@@ -262,15 +264,31 @@ fn emit(
             }
             Node::Layer(config, None, children) => {
                 command(output, config.clone());
-                emit(children, source, groups, output, foreground);
+                emit(children, source, groups, output, foreground, text);
                 command(output, LayerCommand::Pop);
             }
             Node::Group(id) => {
                 let group = &groups[id];
                 command(output, group.command.clone());
-                emit(&group.background, source, groups, output, foreground);
-                emit(&group.foreground, source, groups, output, foreground);
+                emit(&group.background, source, groups, output, foreground, text);
+                emit(&group.foreground, source, groups, output, foreground, text);
                 command(output, LayerCommand::Pop);
+            }
+            Node::Command(LayerCommand::DeferredText { id, opacity }) if text.is_some() => {
+                if let Some(mut batch) = text.as_mut().unwrap().remove(id) {
+                    debug_assert!(batch.glyphs.is_empty());
+                    let shift = source.aux_data.len() as f32;
+                    for primitive in &mut batch.primitives {
+                        primitive.rebase_aux(shift);
+                        primitive.color[3] *= opacity;
+                    }
+                    source.aux_data.extend(batch.aux_data);
+                    if foreground {
+                        output.foreground_primitives.extend(batch.primitives);
+                    } else {
+                        output.primitives.extend(batch.primitives);
+                    }
+                }
             }
             Node::Command(cmd) => command(output, cmd.clone()),
             Node::Layer(_, Some(_), _) => unreachable!(),
@@ -288,6 +306,23 @@ impl PrimitiveBatch {
         if self.cross_stream_groups.captures.is_empty() {
             return;
         }
+        self.resolve_native_streams(None);
+    }
+
+    /// Replace deferred text markers with prepared native primitives and owned aux rows.
+    pub fn resolve_deferred_text(&mut self, text: &mut HashMap<u64, PrimitiveBatch>) {
+        if !self
+            .layer_commands
+            .iter()
+            .chain(&self.foreground_layer_commands)
+            .any(|entry| matches!(entry.command, LayerCommand::DeferredText { .. }))
+        {
+            return;
+        }
+        self.resolve_native_streams(Some(text));
+    }
+
+    fn resolve_native_streams(&mut self, mut text: Option<&mut HashMap<u64, PrimitiveBatch>>) {
         let mut source = std::mem::take(self);
         let captures = std::mem::take(&mut source.cross_stream_groups.captures);
         let mut groups = HashMap::new();
@@ -304,8 +339,8 @@ impl PrimitiveBatch {
             &mut groups,
             &mut anchors,
         );
-        emit(&background, &mut source, &groups, self, false);
-        emit(&foreground, &mut source, &groups, self, true);
+        emit(&background, &mut source, &groups, self, false, &mut text);
+        emit(&foreground, &mut source, &groups, self, true, &mut text);
         self.dynamic_images.extend(
             source
                 .dynamic_images
@@ -325,5 +360,6 @@ impl PrimitiveBatch {
         self.viewports_3d = source.viewports_3d;
         self.particle_viewports = source.particle_viewports;
         self.cross_stream_groups.resolved = true;
+        self.cross_stream_groups.text_nodes = source.cross_stream_groups.text_nodes;
     }
 }
