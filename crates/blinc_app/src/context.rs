@@ -43,6 +43,8 @@ mod css_lifecycle_tests;
 mod css_updates;
 mod debug_rendering;
 #[cfg(test)]
+mod effect_group_tests;
+#[cfg(test)]
 mod grouped_text_tests;
 #[cfg(test)]
 mod image_group_tests;

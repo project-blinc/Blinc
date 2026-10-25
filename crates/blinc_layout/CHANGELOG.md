@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Native groups accept layer effects and blends when their descendants and collected-content capabilities can share ordered composition.
 - Image elements and Div image backgrounds can join eligible native opacity groups. Background capture precedes borders and children; consumers without image resolution retain fallback.
 - Eligible SVG nodes can join native opacity groups when the consumer resolves raster images. Capture checks text/SVG capabilities independently and excludes explicit flow passes.
 - Deferred text capture supports StyledText nodes under the same native-group eligibility and context capability rules as plain text.

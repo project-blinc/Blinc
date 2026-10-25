@@ -1523,7 +1523,8 @@ impl Default for GlowUniforms {
 pub struct MaskImageUniforms {
     /// 0 = alpha, 1 = luminance
     pub mask_mode: u32,
-    pub _pad: [f32; 3],
+    /// Reserve the shader's aligned vec3 and trailing structure padding.
+    pub _pad: [f32; 7],
 }
 
 /// A batch of tessellated path geometry

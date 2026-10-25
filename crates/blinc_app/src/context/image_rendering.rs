@@ -187,7 +187,11 @@ impl RenderContext {
     /// Prepare image-mask resources referenced by this batch.
     pub(super) fn preload_mask_images(&mut self, batch: &PrimitiveBatch) {
         use blinc_core::LayerEffect;
-        for entry in &batch.layer_commands {
+        for entry in batch
+            .layer_commands
+            .iter()
+            .chain(&batch.foreground_layer_commands)
+        {
             if let blinc_gpu::primitives::LayerCommand::Push { config } = &entry.command {
                 for effect in &config.effects {
                     if let LayerEffect::MaskImage { image_url, .. } = effect {

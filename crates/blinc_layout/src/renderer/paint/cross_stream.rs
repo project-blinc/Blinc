@@ -46,11 +46,6 @@ impl RenderTree {
                 && !props.is_overlay_root
                 && props.flow.is_none()
                 && props.flow_graph.is_none()
-                && props.layer_effects.is_empty()
-                && props
-                    .mix_blend_mode
-                    .unwrap_or(blinc_core::BlendMode::Normal)
-                    == blinc_core::BlendMode::Normal
                 && props.rotate_x.is_none()
                 && props.rotate_y.is_none()
                 && props.depth.unwrap_or(0.0) == 0.0
@@ -66,9 +61,13 @@ impl RenderTree {
                 content.svg |= child_content.svg;
                 content.image |= child_content.image;
             }
-            // Native children must stay with an unsupported moving owner's later pass.
+            // Unsupported moving or effect owners retain their descendants' fallback pass.
             if !native
                 && (tree.motion_bindings.contains_key(&node)
+                    || !props.layer_effects.is_empty()
+                    || props
+                        .mix_blend_mode
+                        .is_some_and(|mode| mode != blinc_core::BlendMode::Normal)
                     || props.motion.is_some()
                     || props.is_overlay_root)
             {
@@ -76,6 +75,10 @@ impl RenderTree {
             }
             let needs_content_group = content.any()
                 && (props.opacity < 1.0
+                    || !props.layer_effects.is_empty()
+                    || props
+                        .mix_blend_mode
+                        .is_some_and(|mode| mode != blinc_core::BlendMode::Normal)
                     || props.motion.is_some()
                     || tree
                         .motion_bindings

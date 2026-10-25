@@ -319,8 +319,11 @@ impl RenderContext {
 
         if !used_fast_paint {
             batch.resolve_deferred_content(&mut captured);
-            if let Some(dynamic) = &mut self.cached_dynamic_batch {
+            self.preload_mask_images(&batch);
+            if let Some(mut dynamic) = self.cached_dynamic_batch.take() {
                 dynamic.resolve_deferred_content(&mut captured);
+                self.preload_mask_images(&dynamic);
+                self.cached_dynamic_batch = Some(dynamic);
             }
         }
         // Collect unique 3D layer IDs for rendering

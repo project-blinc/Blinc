@@ -10540,7 +10540,7 @@ impl GpuRenderer {
 
         let uniforms = MaskImageUniforms {
             mask_mode,
-            _pad: [0.0; 3],
+            _pad: [0.0; 7],
         };
 
         let uniform_buffer = self

@@ -30,6 +30,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Collected text, SVGs and images stay inside eligible native effect and blend groups. Image-mask resources are prepared for both command streams before dispatch.
 - Motion-frame image elements and Div image backgrounds share native group opacity, order, clips and transforms. Captures retain loaded textures with shared fit/filter/mask preparation, refresh load fades and placeholders, and survive image-cache eviction. Asset invalidation also clears captured frame content.
 - Motion-frame SVGs share native group opacity and paint order, including raster overrides, authored alpha, transforms and clips. Captures copy atlas shadow pixels so cached draws survive atlas changes; independent SVG rendering shares the raster preparation path.
 - The panel-fade regression measures glyph intensity under shared opacity, preserving the text-presence and mid-animation checks used by hosted compatibility tests.
