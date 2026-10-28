@@ -4,9 +4,13 @@ use super::{
 };
 
 impl RenderContext {
-    /// Cached batches and promoted textures belong to one layout-tree instance.
-    pub(super) fn bind_tree_cache(&mut self, tree: &blinc_layout::RenderTree) {
-        let scope = tree.tree_scope_id();
+    /// Frame caches belong to one tree and one entry/exit animation-state mode.
+    pub(super) fn bind_tree_cache(
+        &mut self,
+        tree: &blinc_layout::RenderTree,
+        with_motion_state: bool,
+    ) {
+        let scope = (tree.tree_scope_id(), with_motion_state);
         if self.cached_tree_scope == Some(scope) {
             return;
         }

@@ -56,6 +56,8 @@ mod overlay_rendering;
 #[cfg(test)]
 mod release_boundary_tests;
 #[cfg(test)]
+mod snapshot_group_tests;
+#[cfg(test)]
 mod styled_group_tests;
 #[cfg(test)]
 mod svg_group_tests;
@@ -379,7 +381,7 @@ pub struct RenderContext {
     /// Whether image fades require another frame, tracked independently of flow shaders.
     has_pending_image_fade: bool,
     captured_images_need_repaint: bool,
-    cached_tree_scope: Option<u64>,
+    cached_tree_scope: Option<(u64, bool)>,
     // Frame counter for periodic cache stats logging
     frame_count: u64,
     // Clear alpha for the current window: one for opaque surfaces, zero for transparent

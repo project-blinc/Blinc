@@ -1,4 +1,4 @@
-//! Coordinate motion-frame collection, preparation and ordered dispatch.
+//! Coordinate collection and ordered dispatch with optional entry/exit animation state.
 use super::frame_dispatch::FrameContent;
 use super::frame_text::PreparedFrameText;
 use super::{
@@ -19,14 +19,36 @@ impl RenderContext {
         target_texture: Option<&wgpu::Texture>,
         try_fast_paint: bool,
     ) -> Result<()> {
-        self.bind_tree_cache(tree);
+        self.render_tree_frame(
+            tree,
+            Some(render_state),
+            width,
+            height,
+            target,
+            target_texture,
+            try_fast_paint,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn render_tree_frame(
+        &mut self,
+        tree: &RenderTree,
+        render_state: Option<&blinc_layout::RenderState>,
+        width: u32,
+        height: u32,
+        target: &wgpu::TextureView,
+        target_texture: Option<&wgpu::Texture>,
+        try_fast_paint: bool,
+    ) -> Result<()> {
+        self.bind_tree_cache(tree, render_state.is_some());
         // Consume the atlas-growth notification; frame preparation binds the current atlas
         // views.
         let _ = self.text_ctx.take_atlas_grew();
 
         // Use the static compositor when the surface texture is available. Inner cache
         // paints pass no texture.
-        if let Some(texture) = target_texture {
+        if let (Some(texture), Some(render_state)) = (target_texture, render_state) {
             return self.try_render_with_compositor(
                 tree,
                 render_state,
@@ -67,7 +89,11 @@ impl RenderContext {
 
         // A successful patch already contains this frame's geometry.
         if !used_fast_paint {
-            tree.render_with_motion(&mut ctx, render_state);
+            if let Some(state) = render_state {
+                tree.render_with_motion(&mut ctx, state);
+            } else {
+                tree.render_snapshot(&mut ctx);
+            }
         }
         let t_paint_walker = p4_start.elapsed();
 
@@ -113,7 +139,7 @@ impl RenderContext {
         let collect_start = web_time::Instant::now();
         // Refresh collected positions for active motion and direct-write drift. Pure
         // timeline rotation can keep unrelated collected content cached.
-        let any_motion_active = render_state.has_active_motions()
+        let any_motion_active = render_state.is_some_and(|state| state.has_active_motions())
             || tree.has_active_visual_animations()
             || tree.has_active_layout_animations()
             || tree
@@ -167,7 +193,7 @@ impl RenderContext {
                 self.cached_flows.as_ref().unwrap().clone(),
             )
         } else {
-            self.collect_render_elements_with_state(tree, Some(render_state))
+            self.collect_render_elements_with_state(tree, render_state)
         };
         let t_collect_elements = collect_start.elapsed();
         // Cache the collected elements alongside the batch on full-path
@@ -514,7 +540,9 @@ impl RenderContext {
         }
 
         // Render overlays from RenderState
-        self.render_overlays(render_state, width, height, target);
+        if let Some(state) = render_state {
+            self.render_overlays(state, width, height, target);
+        }
 
         // Render debug visualization if enabled (BLINC_DEBUG=text|layout|all)
         let debug = DebugMode::from_env();

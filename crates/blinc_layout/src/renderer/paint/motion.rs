@@ -1,24 +1,4 @@
-//! Motion-aware desktop paint surface.
-//!
-//! `render_layer_with_motion` is the production paint walker on
-//! desktop / mobile — every Blinc app that calls
-//! `WindowedContext::render_with_motion` lands here for the actual
-//! draw calls. It folds together the layered-render strategy
-//! (background / glass / foreground) with motion-pre-replay
-//! (sample `motion_bindings` for transforms + opacity), CSS layer
-//! effects (blur, drop shadow, mask gradient), 3D / clip-path
-//! resolution, and viewport culling for scroll containers that
-//! opted in.
-//!
-//! Two `pub` / `pub(crate)` methods:
-//!
-//! - `render_with_motion` — public entry point. Pulls the root and
-//!   dispatches to `render_layer_with_motion` with zeroed parent
-//!   offset and identity cumulative scroll.
-//! - `render_layer_with_motion` — the recursive walker. ~1,300 LOC
-//!   of layered painting, motion application, layer-effect push/pop,
-//!   3D-SDF group collection, mask-gradient/clip-path resolution,
-//!   per-node scroll offset accumulation, and viewport-cull gating.
+//! Compose tree layers and collected content with optional entry/exit animation state.
 
 use blinc_core::{
     BlendMode, Brush, ClipShape, Color, CornerRadius, DrawContext, GlassStyle, Gradient,
@@ -58,6 +38,19 @@ impl RenderTree {
         &self,
         ctx: &mut dyn DrawContext,
         render_state: &crate::render_state::RenderState,
+    ) {
+        self.render_frame(ctx, Some(render_state));
+    }
+
+    /// Compose current tree properties without an entry/exit animation state.
+    pub fn render_snapshot(&self, ctx: &mut dyn DrawContext) {
+        self.render_frame(ctx, None);
+    }
+
+    fn render_frame(
+        &self,
+        ctx: &mut dyn DrawContext,
+        render_state: Option<&crate::render_state::RenderState>,
     ) {
         let _tree_scope = self.layout_tree.enter_scope();
         // Reset the visible-animation flag for this frame. Set inside
@@ -306,7 +299,7 @@ impl RenderTree {
             crate::element::RenderLayer::Background,
             0,
             false,
-            render_state,
+            Some(render_state),
             1.0,
             (0.0, 0.0),
         );
@@ -318,7 +311,7 @@ impl RenderTree {
             crate::element::RenderLayer::Glass,
             0,
             false,
-            render_state,
+            Some(render_state),
             1.0,
             (0.0, 0.0),
         );
@@ -331,7 +324,7 @@ impl RenderTree {
             crate::element::RenderLayer::Foreground,
             0,
             false,
-            render_state,
+            Some(render_state),
             1.0,
             (0.0, 0.0),
         );
@@ -369,7 +362,7 @@ impl RenderTree {
         target_layer: RenderLayer,
         glass_depth: u32,
         inside_foreground: bool,
-        render_state: &crate::render_state::RenderState,
+        render_state: Option<&crate::render_state::RenderState>,
         inherited_opacity: f32,
         cumulative_scroll: (f32, f32),
     ) {
@@ -396,11 +389,13 @@ impl RenderTree {
 
         // Check if this node should be skipped (motion removed)
         // For stable-keyed motions, check by key; for node-based, check by node_id
-        let motion_removed = if let Some(ref stable_key) = render_node.props.motion_stable_id {
-            render_state.is_stable_motion_removed(stable_key)
-        } else {
-            render_state.is_motion_removed(node)
-        };
+        let motion_removed = render_state.is_some_and(|state| {
+            if let Some(ref stable_key) = render_node.props.motion_stable_id {
+                state.is_stable_motion_removed(stable_key)
+            } else {
+                state.is_motion_removed(node)
+            }
+        });
         if motion_removed {
             return;
         }
@@ -440,7 +435,9 @@ impl RenderTree {
         // `RenderState::set_viewport_size` is called) we fall back to
         // recording every painted node. Otherwise the gate would
         // filter the entire tree out and the chain would never start.
-        let viewport = render_state.viewport();
+        let viewport = render_state
+            .map(|state| state.viewport())
+            .unwrap_or_default();
         let viewport_known = viewport.width() > 0.0 && viewport.height() > 0.0;
         let intersects_viewport = !viewport_known
             || match self.layout_tree.get_absolute_bounds(node) {
@@ -488,11 +485,13 @@ impl RenderTree {
 
         // Get motion values from RenderState (for entry/exit animations)
         // For stable-keyed motions (overlays), look up by key; otherwise by node_id
-        let motion_values = if let Some(ref stable_key) = render_node.props.motion_stable_id {
-            render_state.get_stable_motion_values(stable_key)
-        } else {
-            render_state.get_motion_values(node)
-        };
+        let motion_values = render_state.and_then(|state| {
+            if let Some(ref stable_key) = render_node.props.motion_stable_id {
+                state.get_stable_motion_values(stable_key)
+            } else {
+                state.get_motion_values(node)
+            }
+        });
 
         // Get motion bindings from RenderTree (for continuous AnimatedValue animations).
         //
@@ -784,12 +783,13 @@ impl RenderTree {
                 // the value is now constant — including it here pinned
                 // the chain at vsync forever.
                 let has_active_binding = motion_bindings_ref.is_some_and(|b| b.is_any_animating());
-                let has_active_motion =
+                let has_active_motion = render_state.is_some_and(|state| {
                     if let Some(ref stable_key) = render_node.props.motion_stable_id {
-                        render_state.is_stable_motion_active(stable_key)
+                        state.is_stable_motion_active(stable_key)
                     } else {
-                        render_state.is_motion_active(node)
-                    };
+                        state.is_motion_active(node)
+                    }
+                });
                 if canvas_paints_dynamic || has_active_binding || has_active_motion {
                     self.visible_anim_active.set(true);
                 }
@@ -849,11 +849,13 @@ impl RenderTree {
         // with `opacity: 0` and no animation) so we don't waste
         // cycles emitting primitives no one will see.
         let has_pending_motion = motion_bindings_ref.is_some_and(|b| b.is_any_animating())
-            || if let Some(ref stable_key) = render_node.props.motion_stable_id {
-                render_state.is_stable_motion_active(stable_key)
-            } else {
-                render_state.is_motion_active(node)
-            };
+            || render_state.is_some_and(|state| {
+                if let Some(ref stable_key) = render_node.props.motion_stable_id {
+                    state.is_stable_motion_active(stable_key)
+                } else {
+                    state.is_motion_active(node)
+                }
+            });
         // Foreground bindings use a full repaint instead of background index
         // patching. Retain their zero-opacity group so later frames can recover.
         let retain_foreground_animation = target_layer == RenderLayer::Foreground
