@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 mod alpha;
+mod named;
 pub(super) use alpha::AlphaPass;
 
 #[cfg(test)]
@@ -50,6 +51,7 @@ enum Node {
     Run(Cursor, Cursor),
     Image(usize),
     Layer(LayerConfig, Vec<Node>),
+    Sample(Box<named::Sample>),
 }
 
 fn nodes(batch: &PrimitiveBatch) -> Vec<Node> {
@@ -115,6 +117,22 @@ fn nodes(batch: &PrimitiveBatch) -> Vec<Node> {
                     .unwrap()
                     .push(Node::Layer(configs.pop().unwrap(), children));
             }
+            LayerCommand::Sample {
+                id,
+                source,
+                dest,
+                paint,
+            } => {
+                stack
+                    .last_mut()
+                    .unwrap()
+                    .push(Node::Sample(Box::new(named::Sample::new(
+                        *id,
+                        *source,
+                        *dest,
+                        paint.as_deref(),
+                    ))));
+            }
             _ => {}
         }
     }
@@ -160,12 +178,33 @@ fn expansion(config: &LayerConfig) -> [f32; 4] {
     })
 }
 
-fn bounds(items: &[Node], batch: &PrimitiveBatch, viewport: Bounds) -> Option<Bounds> {
+fn bounds(
+    items: &[Node],
+    batch: &PrimitiveBatch,
+    viewport: Bounds,
+    wanted: &std::collections::HashSet<blinc_core::LayerId>,
+) -> Option<Bounds> {
     items
         .iter()
         .filter_map(|node| match node {
             Node::Layer(config, children) => {
-                bounds(children, batch, viewport).map(|b| b.expand(expansion(config)))
+                let bounds = if config.id.is_some_and(|id| wanted.contains(&id)) {
+                    named::frame(config, viewport)
+                } else {
+                    bounds(children, batch, viewport, wanted)
+                };
+                bounds.map(|b| b.expand(expansion(config)))
+            }
+            Node::Sample(sample) => {
+                let image = &sample.paint;
+                if !crate::primitives::DynamicImage::valid_geometry(image.dest, image.transform) {
+                    return None;
+                }
+                let rect = image.screen_bounds();
+                Some(Bounds {
+                    min: [rect.x(), rect.y()],
+                    max: [rect.x() + rect.width(), rect.y() + rect.height()],
+                })
             }
             Node::Image(index) => {
                 let image = &batch.dynamic_images[*index];
@@ -242,6 +281,14 @@ fn common_clip(items: &[Node], batch: &PrimitiveBatch) -> Option<([f32; 4], [f32
     for node in items {
         match node {
             Node::Layer(_, children) => add(common_clip(children, batch)),
+            Node::Sample(sample) => {
+                let image = &sample.paint;
+                let shaped = image.clip_aux.get(4).is_some_and(|info| info[2] > 0.5);
+                add(has_clip(image.clip_bounds).then_some((
+                    image.clip_bounds,
+                    if shaped { [0.0; 4] } else { image.clip_radius },
+                )));
+            }
             Node::Image(index) => {
                 let image = &batch.dynamic_images[*index];
                 let shaped = image.clip_aux.get(4).is_some_and(|info| info[2] > 0.5);
@@ -434,13 +481,16 @@ impl GpuRenderer {
     ) -> Option<[f32; 4]> {
         let batch = resolved_batch(batch);
         let batch = batch.as_ref();
+        let items = nodes(batch);
+        let outputs = named::Outputs::new(&items);
         bounds(
-            &nodes(batch),
+            &items,
             batch,
             Bounds {
                 min: [0.0; 2],
                 max: viewport,
             },
+            &outputs.wanted,
         )
         .map(|b| [b.min[0], b.min[1], b.max[0] - b.min[0], b.max[1] - b.min[1]])
     }
@@ -461,7 +511,19 @@ impl GpuRenderer {
         let viewport = self.viewport_size;
         self.viewport_size = extent;
         self.render_with_clear_simple(&target.view, &PrimitiveBatch::new(), [0.0; 4]);
-        self.draw_overlay_nodes(&target.view, batch, &nodes(batch), [origin.0, origin.1], 1);
+        let items = nodes(batch);
+        let mut outputs = named::Outputs::new(&items);
+        self.draw_overlay_nodes(
+            &target.view,
+            batch,
+            &items,
+            [origin.0, origin.1],
+            1,
+            &mut outputs,
+        );
+        for (_, output) in outputs.textures {
+            self.layer_texture_cache.release(output.texture);
+        }
         let straight = self
             .layer_texture_cache
             .acquire_exact(&self.device, extent, false);
@@ -506,7 +568,12 @@ impl GpuRenderer {
         let batch = resolved_batch(batch);
         let batch = batch.as_ref();
         self.layer_texture_cache.evict_oversized();
-        self.draw_overlay_nodes(target, batch, &nodes(batch), [0.0; 2], samples);
+        let items = nodes(batch);
+        let mut outputs = named::Outputs::new(&items);
+        self.draw_overlay_nodes(target, batch, &items, [0.0; 2], samples, &mut outputs);
+        for (_, output) in outputs.textures {
+            self.layer_texture_cache.release(output.texture);
+        }
         self.update_aux_data_buffer(batch);
         self.queue.write_buffer(
             &self.buffers.uniforms,
@@ -525,6 +592,7 @@ impl GpuRenderer {
         items: &[Node],
         origin: [f32; 2],
         samples: u32,
+        outputs: &mut named::Outputs,
     ) {
         let size = self.viewport_size;
         let viewport = Bounds {
@@ -533,6 +601,7 @@ impl GpuRenderer {
         };
         for node in items {
             match node {
+                Node::Sample(sample) => self.draw_named_sample(target, sample, origin, outputs),
                 Node::Image(index) => {
                     self.render_dynamic_image_at(target, &batch.dynamic_images[*index], origin)
                 }
@@ -541,7 +610,11 @@ impl GpuRenderer {
                     self.render_overlay_msaa_flat(target, &run, samples);
                 }
                 Node::Layer(config, children) => {
+                    let named_id = config.id.filter(|id| outputs.wanted.contains(id));
                     if config.opacity <= 0.0 {
+                        if let Some(old) = named_id.and_then(|id| outputs.textures.remove(&id)) {
+                            self.layer_texture_cache.release(old.texture);
+                        }
                         continue;
                     }
                     let effects = active_effects(&config.effects);
@@ -549,12 +622,14 @@ impl GpuRenderer {
                         && config.opacity == 1.0
                         && config.blend_mode == BlendMode::Normal
                         && config.transform_3d.is_none()
+                        && named_id.is_none()
                     {
-                        self.draw_overlay_nodes(target, batch, children, origin, samples);
+                        self.draw_overlay_nodes(target, batch, children, origin, samples, outputs);
                         continue;
                     }
                     // Keep primitive-only perspective layers on the native bake path.
                     if config.transform_3d.is_some()
+                        && named_id.is_none()
                         && let [Node::Run(start, end)] = children.as_slice()
                         && start.index == end.index
                     {
@@ -567,39 +642,57 @@ impl GpuRenderer {
                         self.render_overlay_with_layer_effects(target, &native);
                         continue;
                     }
-                    let Some(b) = bounds(children, batch, viewport) else {
+                    let content_bounds = if named_id.is_some() {
+                        named::frame(config, viewport)
+                    } else {
+                        bounds(children, batch, viewport, &outputs.wanted)
+                    };
+                    let Some(b) = content_bounds else {
                         continue;
                     };
                     let e = expansion(config);
                     let b = b.expand(e);
-                    if b.max[0] <= viewport.min[0]
-                        || b.max[1] <= viewport.min[1]
-                        || b.min[0] >= viewport.max[0]
-                        || b.min[1] >= viewport.max[1]
+                    if named_id.is_none()
+                        && (b.max[0] <= viewport.min[0]
+                            || b.max[1] <= viewport.min[1]
+                            || b.min[0] >= viewport.max[0]
+                            || b.min[1] >= viewport.max[1])
                     {
                         continue;
                     }
                     // Retain off-target inputs that a blur or shifted shadow can read.
                     let margin = e.into_iter().fold(0.0, f32::max).ceil();
-                    let min = [
-                        b.min[0].max(viewport.min[0] - margin).floor(),
-                        b.min[1].max(viewport.min[1] - margin).floor(),
-                    ];
-                    let max = [
-                        b.max[0].min(viewport.max[0] + margin).ceil(),
-                        b.max[1].min(viewport.max[1] + margin).ceil(),
-                    ];
+                    let min = if named_id.is_some() {
+                        b.min.map(f32::floor)
+                    } else {
+                        [
+                            b.min[0].max(viewport.min[0] - margin).floor(),
+                            b.min[1].max(viewport.min[1] - margin).floor(),
+                        ]
+                    };
+                    let max = if named_id.is_some() {
+                        b.max.map(f32::ceil)
+                    } else {
+                        [
+                            b.max[0].min(viewport.max[0] + margin).ceil(),
+                            b.max[1].min(viewport.max[1] + margin).ceil(),
+                        ]
+                    };
                     let tight = (
                         (max[0] - min[0]).max(1.0) as u32,
                         (max[1] - min[1]).max(1.0) as u32,
                     );
+                    let limit = self.device.limits().max_texture_dimension_2d;
+                    if tight.0 > limit || tight.1 > limit {
+                        continue;
+                    }
                     let texture =
                         self.layer_texture_cache
                             .acquire_exact(&self.device, tight, false);
                     // Use the acquired extent as viewport; source pixels stay one-to-one.
                     self.viewport_size = texture.size;
                     self.render_with_clear_simple(&texture.view, &PrimitiveBatch::new(), [0.0; 4]);
-                    self.draw_overlay_nodes(&texture.view, batch, children, min, samples);
+                    self.draw_overlay_nodes(&texture.view, batch, children, min, samples, outputs);
                     self.viewport_size = size;
                     let straight =
                         self.layer_texture_cache
@@ -633,10 +726,28 @@ impl GpuRenderer {
                         config.transform_3d,
                         0.0,
                     );
-                    if let Some(effected) = effected {
-                        self.layer_texture_cache.release(effected);
+                    let output = if let Some(effected) = effected {
+                        self.layer_texture_cache.release(straight);
+                        effected
+                    } else {
+                        straight
+                    };
+                    if let Some(id) = named_id {
+                        let local_origin = config.position.map_or(origin, |p| [p.x, p.y]);
+                        if let Some(old) = outputs.textures.insert(
+                            id,
+                            named::Output {
+                                texture: output,
+                                origin: min,
+                                local_origin,
+                                opacity: config.opacity,
+                            },
+                        ) {
+                            self.layer_texture_cache.release(old.texture);
+                        }
+                    } else {
+                        self.layer_texture_cache.release(output);
                     }
-                    self.layer_texture_cache.release(straight);
                     self.layer_texture_cache.release(texture);
                 }
             }

@@ -12,6 +12,7 @@ mod foreground_rgba;
 mod glass_path_clip;
 mod motion_layers;
 mod native_path_clip;
+mod native_samples;
 mod notch_joins;
 mod path_brush_clip;
 mod prepared_glyph_clip;

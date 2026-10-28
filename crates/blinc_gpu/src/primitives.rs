@@ -1577,7 +1577,8 @@ pub enum LayerCommand {
     },
     /// Pop the current layer - composite it back to the parent
     Pop,
-    /// Sample from a named layer's texture into the current target
+    /// Sample a completed named layer in the same ordered paint pass.
+    /// Missing names and source rectangles outside the output draw nothing.
     Sample {
         /// ID of the layer to sample from
         id: blinc_core::LayerId,
@@ -1585,6 +1586,8 @@ pub enum LayerCommand {
         source: blinc_core::Rect,
         /// Destination rectangle in the current target (in pixels)
         dest: blinc_core::Rect,
+        /// Captured destination transform, opacity and clips; None uses viewport geometry.
+        paint: Option<Box<DynamicImage>>,
     },
 }
 
@@ -1667,14 +1670,14 @@ pub struct ImagePaintOrder {
 }
 
 /// A sampled texture handle and its non-geometric image shader state.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RetainedImage {
     pub view: wgpu::TextureView,
     pub style: crate::GpuImageInstance,
 }
 
 /// An ordered raw upload or retained texture draw.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DynamicImage {
     /// Local paint cursor, or None for an explicitly separate legacy draw.
     pub paint_order: Option<ImagePaintOrder>,
@@ -1805,6 +1808,10 @@ impl PrimitiveBatch {
     pub fn has_ordered_draws(&self) -> bool {
         self.has_cross_stream_groups()
             || self.has_ordered_images()
+            || self
+                .layer_commands
+                .iter()
+                .any(|entry| matches!(&entry.command, LayerCommand::Sample { .. }))
             || (!self.aux_data.is_empty() && self.paths.vertices.iter().any(|v| v.clip_shape > 0))
     }
 
@@ -2065,6 +2072,11 @@ impl PrimitiveBatch {
             && self.viewports_3d.is_empty()
             && self.dynamic_images.is_empty()
             && self.foreground_dynamic_images.is_empty()
+            && !self
+                .layer_commands
+                .iter()
+                .chain(&self.foreground_layer_commands)
+                .any(|entry| matches!(entry.command, LayerCommand::Sample { .. }))
     }
 
     /// Check if the batch contains any tessellated path geometry

@@ -5,6 +5,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Native named layers can be sampled in their ordered paint pass, retaining post-effect pixels, source crops, destination transforms/clips and group opacity. Outputs are released after the pass; missing or forward references draw nothing.
 - Ordered composition preserves perspective layer geometry and edge filtering when neighboring collected groups become active.
 - Native layer bakes use their allocated texture extent for raster coordinates and source UVs, keeping output independent of larger pooled textures.
 - Image-mask effect uploads match the existing shader's 32-byte uniform footprint, avoiding validation failures when a mask texture is loaded.
@@ -13,6 +14,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - Native clear rendering sends nested groups through ordered composition so child groups render into their parent instead of blending independently onto the target.
 
 ### Added
+- `LayerCommand::Sample` carries optional captured image geometry in `paint`; raw command producers can set it to `None`. Sample-only batches select ordered dispatch. Only names referenced by the pass retain their outputs.
 - Native ordered images can retain shared texture views and shader styling, avoiding pixel copies and replay uploads. `DeferredImage` reserves collected content positions; `DynamicImage` gains optional retained state without changing GPU instance layouts.
 - `DeferredSvg` commands and deferred-content insertion support ordered raw image payloads alongside native text, retaining opacity, clip rows and rebased image cursors.
 - Opt-in deferred text commands resolve to prepared native glyph primitives and owned auxiliary rows inside shared groups. Captured node identities follow cache replay and merging and reset when their batch is cleared.

@@ -69,6 +69,33 @@ fn config(config: &LayerConfig, h: &mut impl Hasher) {
     }
 }
 
+fn image(image: &blinc_gpu::primitives::DynamicImage, h: &mut impl Hasher) {
+    image.paint_order.hash(h);
+    image.retained.is_some().hash(h);
+    if let Some(retained) = &image.retained {
+        retained.view.hash(h);
+        bytemuck::bytes_of(&retained.style).hash(h);
+    }
+    image.data.hash(h);
+    image.width.hash(h);
+    image.height.hash(h);
+    floats(
+        &[
+            image.dest.x(),
+            image.dest.y(),
+            image.dest.width(),
+            image.dest.height(),
+            image.opacity,
+            image.corner_radius,
+        ],
+        h,
+    );
+    floats(&image.transform, h);
+    floats(&image.clip_bounds, h);
+    floats(&image.clip_radius, h);
+    bytemuck::cast_slice::<_, u8>(&image.clip_aux).hash(h);
+}
+
 pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
     let h = &mut std::collections::hash_map::DefaultHasher::new();
     bytemuck::cast_slice::<_, u8>(&batch.primitives).hash(h);
@@ -103,31 +130,8 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
     floats(&path.glass_params, h);
     floats(&path.glass_tint, h);
     batch.dynamic_images.len().hash(h);
-    for image in &batch.dynamic_images {
-        image.paint_order.hash(h);
-        image.retained.is_some().hash(h);
-        if let Some(retained) = &image.retained {
-            retained.view.hash(h);
-            bytemuck::bytes_of(&retained.style).hash(h);
-        }
-        image.data.hash(h);
-        image.width.hash(h);
-        image.height.hash(h);
-        floats(
-            &[
-                image.dest.x(),
-                image.dest.y(),
-                image.dest.width(),
-                image.dest.height(),
-                image.opacity,
-                image.corner_radius,
-            ],
-            h,
-        );
-        floats(&image.transform, h);
-        floats(&image.clip_bounds, h);
-        floats(&image.clip_radius, h);
-        bytemuck::cast_slice::<_, u8>(&image.clip_aux).hash(h);
+    for draw in &batch.dynamic_images {
+        image(draw, h);
     }
     batch.layer_commands.len().hash(h);
     for entry in &batch.layer_commands {
@@ -147,7 +151,16 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
                 id.hash(h);
                 opacity.to_bits().hash(h);
             }
-            LayerCommand::Sample { id, source, dest } => {
+            LayerCommand::Sample {
+                id,
+                source,
+                dest,
+                paint,
+            } => {
+                paint.is_some().hash(h);
+                if let Some(paint) = paint {
+                    image(paint, h);
+                }
                 id.hash(h);
                 floats(
                     &[
@@ -172,6 +185,35 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
 mod tests {
     use super::*;
     use blinc_core::{Color, Path, Rect};
+
+    #[test]
+    fn composite_layers_scratch_hash_tracks_named_sample_paint_state() {
+        use blinc_core::{DrawContext, LayerId};
+        let mut paint = blinc_gpu::GpuPaintContext::new(160.0, 120.0);
+        let rect = Rect::new(0.0, 0.0, 32.0, 32.0);
+        paint.sample_layer(LayerId(7), rect, rect);
+        let batch = paint.take_batch();
+        let original = hash(&batch);
+        assert_eq!(original, hash(&batch.clone()));
+        let mut changed = batch;
+        let LayerCommand::Sample {
+            paint: Some(paint), ..
+        } = &mut changed.layer_commands[0].command
+        else {
+            panic!("sample")
+        };
+        paint.opacity = 0.5;
+        assert_ne!(original, hash(&changed));
+        let original = hash(&changed);
+        let LayerCommand::Sample {
+            paint: Some(paint), ..
+        } = &mut changed.layer_commands[0].command
+        else {
+            panic!("sample")
+        };
+        paint.clip_aux = vec![[1.0; 4]; 5];
+        assert_ne!(original, hash(&changed));
+    }
 
     #[test]
     fn composite_layers_scratch_hash_tracks_paths_effects_and_command_ranges() {

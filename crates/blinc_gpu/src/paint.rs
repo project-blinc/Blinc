@@ -4507,13 +4507,23 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
     }
 
     fn sample_layer(&mut self, id: LayerId, source_rect: Rect, dest_rect: Rect) {
-        // Record sample command for GPU renderer to process
-        self.batch
-            .push_layer_command(crate::primitives::LayerCommand::Sample {
-                id,
-                source: source_rect,
-                dest: dest_rect,
-            });
+        let Some(paint) = self.image_geometry(dest_rect) else {
+            return;
+        };
+        let command = crate::primitives::LayerCommand::Sample {
+            id,
+            source: source_rect,
+            dest: dest_rect,
+            paint: Some(Box::new(paint)),
+        };
+        let foreground = self.emit_foreground();
+        let owner = self.layer_command_batch();
+        let batch = self.layer_command_batch_mut(owner);
+        if foreground {
+            batch.push_foreground_layer_command(command);
+        } else {
+            batch.push_layer_command(command);
+        }
     }
 
     fn viewport_size(&self) -> Size {

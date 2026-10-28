@@ -50,6 +50,8 @@ mod grouped_text_tests;
 mod image_group_tests;
 mod image_rendering;
 mod mesh_rendering;
+#[cfg(test)]
+mod named_layer_tests;
 mod overlay_rendering;
 #[cfg(test)]
 mod release_boundary_tests;

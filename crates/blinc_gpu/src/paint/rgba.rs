@@ -54,6 +54,39 @@ impl GpuPaintContext<'_> {
         dest: Rect,
         retained: Option<std::sync::Arc<RetainedImage>>,
     ) {
+        let Some(mut image) = self.image_geometry(dest) else {
+            return;
+        };
+        image.width = width;
+        image.height = height;
+        image.corner_radius = retained.as_ref().map_or(0.0, |image| image.style.params[0]);
+        image.retained = retained;
+        image.data = data.to_vec();
+        let foreground = self.emit_foreground();
+        let batch = self.active_batch_mut();
+        image.paint_order = Some(if foreground {
+            ImagePaintOrder {
+                primitive_index: batch.foreground_primitives.len(),
+                path_vertex_index: batch.foreground_paths.vertices.len(),
+                path_index_count: batch.foreground_paths.indices.len(),
+                layer_command_count: batch.foreground_layer_commands.len(),
+            }
+        } else {
+            ImagePaintOrder {
+                primitive_index: batch.primitives.len(),
+                path_vertex_index: batch.paths.vertices.len(),
+                path_index_count: batch.paths.indices.len(),
+                layer_command_count: batch.layer_commands.len(),
+            }
+        });
+        if foreground {
+            batch.foreground_dynamic_images.push(image);
+        } else {
+            batch.dynamic_images.push(image);
+        }
+    }
+
+    pub(super) fn image_geometry(&mut self, dest: Rect) -> Option<DynamicImage> {
         let affine = self.current_affine_elements();
         let [a, b, c, d, ..] = affine;
         let determinant = a * d - b * c;
@@ -61,14 +94,13 @@ impl GpuPaintContext<'_> {
             || !determinant.is_finite()
             || determinant.abs() <= 1e-12
         {
-            return;
+            return None;
         }
         let transformed = self.transform_rect(dest);
         let transform = self.current_local_affine();
         if !DynamicImage::valid_geometry(transformed, transform) {
-            return;
+            return None;
         }
-        let foreground = self.emit_foreground();
         let opacity = self.combined_opacity();
         let (clip_bounds, mut clip_radius, corner_shape, clip_type) =
             self.get_clip_data_with_path_scissor(true);
@@ -86,42 +118,20 @@ impl GpuPaintContext<'_> {
         ) {
             clip_radius = [0.0; 4];
         }
-        let batch = self.active_batch_mut();
-        let paint_order = Some(if foreground {
-            ImagePaintOrder {
-                primitive_index: batch.foreground_primitives.len(),
-                path_vertex_index: batch.foreground_paths.vertices.len(),
-                path_index_count: batch.foreground_paths.indices.len(),
-                layer_command_count: batch.foreground_layer_commands.len(),
-            }
-        } else {
-            ImagePaintOrder {
-                primitive_index: batch.primitives.len(),
-                path_vertex_index: batch.paths.vertices.len(),
-                path_index_count: batch.paths.indices.len(),
-                layer_command_count: batch.layer_commands.len(),
-            }
-        });
-        let images = if foreground {
-            &mut batch.foreground_dynamic_images
-        } else {
-            &mut batch.dynamic_images
-        };
-        let corner_radius = retained.as_ref().map_or(0.0, |image| image.style.params[0]);
-        images.push(DynamicImage {
-            paint_order,
-            retained,
-            data: data.to_vec(),
-            width,
-            height,
+        Some(DynamicImage {
+            paint_order: None,
+            retained: None,
+            data: Vec::new(),
+            width: 1,
+            height: 1,
             dest: transformed,
             transform,
             opacity,
-            corner_radius,
+            corner_radius: 0.0,
             clip_bounds,
             clip_radius,
             clip_aux,
-        });
+        })
     }
 
     fn rgba_clip_aux(

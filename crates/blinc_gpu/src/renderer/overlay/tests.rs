@@ -2,6 +2,25 @@ use super::*;
 use crate::primitives::GpuPrimitive;
 
 #[test]
+fn unsampled_layer_names_keep_the_content_footprint() {
+    let mut batch = PrimitiveBatch::new();
+    batch.push_layer_command(LayerCommand::Push {
+        config: LayerConfig::new()
+            .id(blinc_core::LayerId(7))
+            .opacity(1.0)
+            .position(blinc_core::Point::new(200.0, 200.0))
+            .size(blinc_core::Size::new(100.0, 100.0)),
+    });
+    batch.push(GpuPrimitive::rect(20.0, 30.0, 40.0, 50.0));
+    batch.push_layer_command(LayerCommand::Pop);
+    assert!(!batch.has_ordered_draws());
+    assert_eq!(
+        GpuRenderer::composite_subtree_bounds(&batch, [160.0, 120.0]),
+        Some([19.0, 29.0, 42.0, 52.0])
+    );
+}
+
+#[test]
 fn layer_commands_preserve_nested_primitive_and_path_ranges() {
     let mut batch = PrimitiveBatch::new();
     batch.push(GpuPrimitive::rect(0.0, 0.0, 1.0, 1.0));
