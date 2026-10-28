@@ -87,6 +87,7 @@ impl RenderTree {
     /// **Important:** Children of glass elements are automatically considered
     /// as foreground - no need to mark them with `.foreground()`.
     pub fn render_to_layer(&self, ctx: &mut dyn DrawContext, target_layer: RenderLayer) {
+        let _tree_scope = self.layout_tree.enter_scope();
         if let Some(root) = self.root {
             // Apply DPI scale factor if set (for HiDPI display support)
             let has_scale = self.scale_factor != 1.0;

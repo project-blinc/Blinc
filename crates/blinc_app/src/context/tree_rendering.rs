@@ -14,6 +14,7 @@ impl RenderContext {
         height: u32,
         target: &wgpu::TextureView,
     ) -> Result<()> {
+        self.bind_tree_cache(tree);
         // Get scale factor for HiDPI rendering
         let scale_factor = tree.scale_factor();
 

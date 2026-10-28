@@ -440,6 +440,8 @@ pub enum BeneathWrite {
 /// props that aren't mirrored in RenderProps), or both (compound props
 /// whose visual + layout cells diverge).
 pub struct PartialPropertyUpdate {
+    /// Owning tree namespace; zero preserves the legacy unscoped queue API.
+    pub tree_scope: u64,
     pub node_id: LayoutNodeId,
     pub property: crate::property::PropertyId,
     pub effects: crate::property::SideEffects,
@@ -533,6 +535,8 @@ pub fn current_build_epoch() -> u64 {
 
 /// A pending subtree rebuild operation
 pub struct PendingSubtreeRebuild {
+    /// Owning tree namespace; zero denotes legacy unscoped work.
+    pub tree_scope: u64,
     /// The parent node whose children should be rebuilt
     pub parent_id: LayoutNodeId,
     /// The new child element (a Div that was produced by the callback)
@@ -565,6 +569,7 @@ pub fn queue_subtree_rebuild(parent_id: LayoutNodeId, new_child: crate::div::Div
         .lock()
         .unwrap()
         .push(PendingSubtreeRebuild {
+            tree_scope: crate::tree::scope::current(),
             parent_id,
             new_child,
             kind: RebuildKind::Structural,
@@ -581,6 +586,7 @@ pub fn queue_visual_subtree_rebuild(parent_id: LayoutNodeId, new_child: crate::d
         .lock()
         .unwrap()
         .push(PendingSubtreeRebuild {
+            tree_scope: crate::tree::scope::current(),
             parent_id,
             new_child,
             kind: RebuildKind::Visual,
@@ -600,6 +606,7 @@ pub fn queue_layout_prop_subtree_rebuild(parent_id: LayoutNodeId, new_child: cra
         .lock()
         .unwrap()
         .push(PendingSubtreeRebuild {
+            tree_scope: crate::tree::scope::current(),
             parent_id,
             new_child,
             kind: RebuildKind::LayoutProps,
@@ -607,17 +614,7 @@ pub fn queue_layout_prop_subtree_rebuild(parent_id: LayoutNodeId, new_child: cra
         });
 }
 
-/// Take all pending subtree rebuilds
-///
-/// Called by the windowed app to apply incremental child updates to the RenderTree.
-///
-/// The queue is process-global and holds entries for whatever tree
-/// queued them. An app has one tree, so draining takes its own work.
-/// A TEST BINARY does not: several tests each building a tree and
-/// draining in parallel will take each other's entries, and a
-/// `LayoutNodeId` recycles across trees so a stolen entry can land on
-/// an unrelated node. Tests that build a tree and drain must serialize
-/// against each other.
+/// Take all queued subtree work. Window runners use their tree's scoped drain.
 pub fn take_pending_subtree_rebuilds() -> Vec<PendingSubtreeRebuild> {
     std::mem::take(&mut *PENDING_SUBTREE_REBUILDS.lock().unwrap())
 }
@@ -676,7 +673,7 @@ pub static PENDING_QUEUE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new
 /// from pre-CSS base props and lose CSS overrides like border-radius.
 #[allow(clippy::type_complexity, clippy::incompatible_msrv)]
 static STATEFUL_BASE_UPDATERS: LazyLock<
-    Mutex<HashMap<LayoutNodeId, Arc<dyn Fn(RenderProps) + Send + Sync>>>,
+    Mutex<HashMap<(u64, LayoutNodeId), Arc<dyn Fn(RenderProps) + Send + Sync>>>,
 > = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Register a callback to update a Stateful's base_render_props for a given node.
@@ -689,7 +686,15 @@ pub(crate) fn register_stateful_base_updater(
     STATEFUL_BASE_UPDATERS
         .lock()
         .unwrap()
-        .insert(node_id, updater);
+        .insert((crate::tree::scope::current(), node_id), updater);
+}
+
+pub(crate) fn unregister_stateful_base_updater(node: LayoutNodeId) {
+    let removed = STATEFUL_BASE_UPDATERS
+        .lock()
+        .unwrap()
+        .remove(&(crate::tree::scope::current(), node));
+    drop(removed);
 }
 
 /// Update a Stateful's base_render_props with CSS-applied values.
@@ -697,7 +702,11 @@ pub(crate) fn register_stateful_base_updater(
 /// Called by the renderer after applying CSS base styles to a node.
 /// If the node is not a Stateful, this is a no-op.
 pub fn update_stateful_base_props(node_id: LayoutNodeId, props: RenderProps) {
-    if let Some(updater) = STATEFUL_BASE_UPDATERS.lock().unwrap().get(&node_id) {
+    if let Some(updater) = STATEFUL_BASE_UPDATERS
+        .lock()
+        .unwrap()
+        .get(&(crate::tree::scope::current(), node_id))
+    {
         updater(props);
     }
 }
@@ -709,7 +718,7 @@ pub fn has_stateful_base_updater(node_id: LayoutNodeId) -> bool {
     STATEFUL_BASE_UPDATERS
         .lock()
         .unwrap()
-        .contains_key(&node_id)
+        .contains_key(&(crate::tree::scope::current(), node_id))
 }
 
 /// Clear all Stateful base updaters (called on full tree rebuild).
@@ -1012,13 +1021,20 @@ pub fn queue_prop_update(node_id: LayoutNodeId, props: RenderProps) {
     );
 }
 
-/// Drain all queued property updates. The platform runners call this
-/// once per frame after stateful animation ticks and before paint.
+/// Drain every tree's queued property writes. Window runners use
+/// [`RenderTree::take_pending_property_updates`](crate::renderer::RenderTree::take_pending_property_updates).
 pub fn take_pending_partial_prop_updates() -> Vec<PartialPropertyUpdate> {
     std::mem::take(&mut *PENDING_PARTIAL_PROP_UPDATES.lock().unwrap())
 }
 
+mod update_routing;
+pub(crate) use update_routing::{
+    discard_tree_scope_updates, has_rebuilds_for, take_properties_for, take_rebuilds_for,
+};
+
 /// Queue a partial (in-place, closure-form) property update.
+/// Calls outside tree callbacks can use `RenderTree::with_property_updates`
+/// to select the owning tree explicitly.
 ///
 /// Unlike [`queue_prop_update`] (which replaces the full `RenderProps`),
 /// this writes a single field via the supplied closure and carries
@@ -1057,6 +1073,7 @@ pub fn queue_prop_update_partial<F>(
         .lock()
         .unwrap()
         .push(PartialPropertyUpdate {
+            tree_scope: crate::tree::scope::current(),
             node_id,
             property,
             effects,
@@ -1087,6 +1104,7 @@ pub(crate) fn queue_prop_update_partial_beneath<F, G>(
         .lock()
         .unwrap()
         .push(PartialPropertyUpdate {
+            tree_scope: crate::tree::scope::current(),
             node_id,
             property,
             effects,
@@ -1123,6 +1141,7 @@ pub fn queue_layout_update_partial<F>(
         .lock()
         .unwrap()
         .push(PartialPropertyUpdate {
+            tree_scope: crate::tree::scope::current(),
             node_id,
             property,
             effects,
@@ -1153,6 +1172,7 @@ pub(crate) fn queue_layout_update_partial_beneath<F, G>(
         .lock()
         .unwrap()
         .push(PartialPropertyUpdate {
+            tree_scope: crate::tree::scope::current(),
             node_id,
             property,
             effects,
@@ -1181,6 +1201,7 @@ pub fn queue_text_update(
         .lock()
         .unwrap()
         .push(PartialPropertyUpdate {
+            tree_scope: crate::tree::scope::current(),
             node_id,
             property,
             effects: property.side_effects(),
@@ -1201,6 +1222,7 @@ pub fn queue_class_toggle(node_id: LayoutNodeId, class: std::sync::Arc<str>, on:
         .lock()
         .unwrap()
         .push(PartialPropertyUpdate {
+            tree_scope: crate::tree::scope::current(),
             node_id,
             property: crate::property::PropertyId::Class,
             effects: crate::property::PropertyId::Class.side_effects(),
@@ -1215,11 +1237,13 @@ pub fn queue_class_toggle(node_id: LayoutNodeId, class: std::sync::Arc<str>, on:
 }
 
 /// Put updates taken from the queue back, to be applied on a later drain.
-pub(crate) fn requeue_partial_updates(updates: Vec<PartialPropertyUpdate>) {
+pub(crate) fn requeue_partial_updates(mut updates: Vec<PartialPropertyUpdate>) {
     if updates.is_empty() {
         return;
     }
-    PENDING_PARTIAL_PROP_UPDATES.lock().unwrap().extend(updates);
+    let mut queue = PENDING_PARTIAL_PROP_UPDATES.lock().unwrap();
+    updates.append(&mut queue);
+    *queue = updates;
 }
 
 /// Queue the rows of a region to be brought up to date with its source.
@@ -1228,6 +1252,7 @@ pub fn queue_region_update(node_id: LayoutNodeId, region: u64) {
         .lock()
         .unwrap()
         .push(PartialPropertyUpdate {
+            tree_scope: crate::tree::scope::current(),
             node_id,
             property: crate::property::PropertyId::Region,
             effects: crate::property::PropertyId::Region.side_effects(),
@@ -1771,6 +1796,7 @@ pub struct StatefulInner<S: StateTransitions> {
     /// The layout node ID for this element (set on first event)
     /// Used to apply incremental prop updates without tree rebuild
     pub(crate) node_id: Option<LayoutNodeId>,
+    pub(crate) tree_scope: u64,
 
     /// Signal dependencies - when any of these change, refresh props
     pub(crate) deps: Vec<SignalId>,
@@ -1839,6 +1865,7 @@ impl<S: StateTransitions> StatefulInner<S> {
             base_render_props: None,
             base_style: None,
             node_id: None,
+            tree_scope: 0,
             deps: Vec::new(),
             ancestor_motion_key: None,
             current_event: None,
@@ -3454,6 +3481,7 @@ impl<S: StateTransitions> Stateful<S> {
                 base_render_props: None,
                 base_style: None,
                 node_id: None,
+                tree_scope: 0,
                 deps: Vec::new(),
                 ancestor_motion_key: None,
                 current_event: None,
@@ -3792,6 +3820,7 @@ impl<S: StateTransitions> Stateful<S> {
         if guard.node_id.is_none() {
             if let Some(ref ctx) = event_context {
                 guard.node_id = Some(ctx.node_id);
+                guard.tree_scope = crate::tree::scope::current();
             }
         }
 
@@ -3835,6 +3864,7 @@ impl<S: StateTransitions> Stateful<S> {
             let callback = Arc::clone(callback);
             let state_copy = guard.state;
             let cached_node_id = guard.node_id;
+            let _tree_scope = crate::tree::scope::enter(guard.tree_scope);
             let base_props = guard.base_render_props.clone();
             let base_style = guard.base_style.clone().map(|s| s.0);
             drop(guard); // Release lock before calling callback
@@ -3899,6 +3929,11 @@ impl<S: StateTransitions> Stateful<S> {
     /// Call this when external state (like a label) changes and you need
     /// to update the element's props and/or children without a ButtonState change.
     fn refresh_props_internal(shared: &Arc<Mutex<StatefulInner<S>>>) {
+        let scope = shared.lock().unwrap().tree_scope;
+        if !crate::tree::scope::is_live(scope) {
+            return;
+        }
+        let _tree_scope = crate::tree::scope::enter(scope);
         let mut guard = shared.lock().unwrap();
 
         // Clear current_event - this refresh is due to signal changes, not events.
@@ -5268,7 +5303,11 @@ impl<S: StateTransitions> ElementBuilder for Stateful<S> {
         }
 
         // Store node_id for incremental updates
-        self.shared_state.lock().unwrap().node_id = Some(node);
+        {
+            let mut state = self.shared_state.lock().unwrap();
+            state.node_id = Some(node);
+            state.tree_scope = tree.scope_id();
+        }
 
         // Register a base_render_props updater so CSS base styles can be
         // pushed back into this Stateful after apply_stylesheet_base_styles()

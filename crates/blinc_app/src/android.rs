@@ -1534,7 +1534,10 @@ impl AndroidApp {
 
                 // Drain the unified property channel
                 // ([[project-reactive-architecture-v2]]).
-                let prop_updates = blinc_layout::take_pending_partial_prop_updates();
+                let prop_updates = render_tree
+                    .as_ref()
+                    .map(|tree| tree.take_pending_property_updates())
+                    .unwrap_or_default();
                 let had_prop_updates = !prop_updates.is_empty();
                 let mut prop_effects = blinc_layout::SideEffects::default();
                 if let Some(ref mut tree) = render_tree {

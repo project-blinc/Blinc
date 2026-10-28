@@ -4,6 +4,19 @@ use super::{
 };
 
 impl RenderContext {
+    /// Cached batches and promoted textures belong to one layout-tree instance.
+    pub(super) fn bind_tree_cache(&mut self, tree: &blinc_layout::RenderTree) {
+        let scope = tree.tree_scope_id();
+        if self.cached_tree_scope == Some(scope) {
+            return;
+        }
+        self.invalidate_render_cache_tagged("tree_owner_changed");
+        self.drain_all_layer_textures("tree_owner_changed");
+        self.css_cache_owners.clear();
+        self.scratch_css_cache_owners.clear();
+        self.cached_tree_scope = Some(scope);
+    }
+
     /// Invalidate cached frame content while retaining reusable promoted textures.
     pub fn invalidate_render_cache(&mut self) {
         self.invalidate_render_cache_tagged("unspecified");

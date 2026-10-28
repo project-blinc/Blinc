@@ -59,6 +59,7 @@ impl RenderTree {
         ctx: &mut dyn DrawContext,
         render_state: &crate::render_state::RenderState,
     ) {
+        let _tree_scope = self.layout_tree.enter_scope();
         // Reset the visible-animation flag for this frame. Set inside
         // `render_layer_with_motion` whenever a node that drives a
         // per-frame redraw (Canvas, motion bindings, active motion

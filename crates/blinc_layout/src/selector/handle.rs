@@ -204,6 +204,7 @@ impl<T> ElementHandle<T> {
     /// Use this for more efficient updates when you know exactly what the
     /// new children should be.
     pub fn mark_dirty_subtree(&self, new_children: crate::div::Div) {
+        let _tree_scope = self.registry.enter_tree_scope();
         if let Some(node_id) = self.registry.get(&self.string_id) {
             crate::stateful::queue_subtree_rebuild(node_id, new_children);
         }
@@ -226,6 +227,7 @@ impl<T> ElementHandle<T> {
     /// );
     /// ```
     pub fn mark_visual_dirty(&self, props: RenderProps) {
+        let _tree_scope = self.registry.enter_tree_scope();
         if let Some(node_id) = self.registry.get(&self.string_id) {
             crate::stateful::queue_prop_update(node_id, props);
         }

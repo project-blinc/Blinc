@@ -30,10 +30,7 @@ impl RenderContext {
         use blinc_core::{DrawContext, Rect, Transform, layer::Affine2D};
         use blinc_gpu::GpuPaintContext;
 
-        let batch = match self.cached_bg_batch.as_mut() {
-            Some(b) => b,
-            None => return None,
-        };
+        let batch = self.cached_bg_batch.as_mut()?;
 
         if batch.has_ordered_draws()
             || batch.has_foreground_content()
@@ -73,7 +70,9 @@ impl RenderContext {
                 width: record.bounds_wh.0,
                 height: record.bounds_wh.1,
             };
-            (record.render_fn)(&mut scratch as &mut dyn DrawContext, canvas_bounds);
+            tree.with_property_updates(|| {
+                (record.render_fn)(&mut scratch as &mut dyn DrawContext, canvas_bounds);
+            });
 
             if record.clips_content {
                 scratch.pop_clip();
@@ -139,7 +138,7 @@ impl RenderContext {
         let records: Vec<blinc_layout::renderer::CanvasPaintRecord> =
             records_ref.values().cloned().collect();
         drop(records_ref);
-        self.collect_canvas_overlay_from(records, width, height)
+        tree.with_property_updates(|| self.collect_canvas_overlay_from(records, width, height))
     }
 
     /// Collect canvases belonging to overlay subtrees for dispatch above their hosts.
@@ -153,7 +152,7 @@ impl RenderContext {
         let records: Vec<blinc_layout::renderer::CanvasPaintRecord> =
             records_ref.values().cloned().collect();
         drop(records_ref);
-        self.collect_canvas_overlay_from(records, width, height)
+        tree.with_property_updates(|| self.collect_canvas_overlay_from(records, width, height))
     }
 
     /// Replay the supplied canvas records into ordered output batches.

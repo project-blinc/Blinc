@@ -679,8 +679,7 @@ struct Subscriber {
     write: SubscriberWrite,
 }
 
-/// Process-global registry of signal-bound + derived-bound property
-/// subscribers.
+/// Signal-bound and derived-bound property subscribers for one tree namespace.
 ///
 /// Two parallel index tables — one keyed by `SignalId` (driven by
 /// `State<T>::set` → `notify_property_bindings`) and one keyed by
@@ -1128,44 +1127,70 @@ impl PropertyBindingRegistry {
     }
 }
 
-/// Process-global registry instance. The first call to `global()`
-/// installs the notifier hook in `blinc_core::reactive` — subsequent
-/// `State<T>::set` calls feed into `fire` automatically.
-#[allow(clippy::incompatible_msrv)]
-static REGISTRY: LazyLock<Mutex<PropertyBindingRegistry>> = LazyLock::new(|| {
-    blinc_core::reactive::set_property_binding_notifier(|signal_id| {
-        // Lock the registry on each fire; brief — we drain to the
-        // partial-update queue and release. Drain happens on a different
-        // thread (platform runner main thread) so contention is minimal.
-        if let Ok(reg) = REGISTRY.lock() {
-            reg.fire(signal_id);
-        }
+// Each tree has an independent registry; core notifications fan out by source.
+static REGISTRY_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static REGISTRY: LazyLock<Mutex<HashMap<u64, PropertyBindingRegistry>>> = LazyLock::new(|| {
+    blinc_core::reactive::set_property_binding_notifier(|id| {
+        with_registries(|registry| registry.fire(id));
     });
-    // Pair: when a Computed<T>'s underlying derived flips dirty
-    // inside ReactiveGraph::set's dirty walk, the core fires this
-    // notifier. We dispatch to the parallel derived_bindings map.
-    blinc_core::reactive::set_derived_binding_notifier(|derived_id| {
-        if let Ok(reg) = REGISTRY.lock() {
-            reg.fire_derived(derived_id);
-        }
+    blinc_core::reactive::set_derived_binding_notifier(|id| {
+        with_registries(|registry| registry.fire_derived(id));
     });
-    // A disposed signal or derived takes its subscriptions with it.
     blinc_core::reactive::set_dispose_notifier(|disposed| {
-        if let Ok(mut reg) = REGISTRY.lock() {
-            match disposed {
-                blinc_core::reactive::Disposed::Signal(id) => reg.unregister_signal(id),
-                blinc_core::reactive::Disposed::Derived(id) => reg.unregister_derived(id),
-            }
-        }
+        with_registries(|registry| match disposed {
+            blinc_core::reactive::Disposed::Signal(id) => registry.unregister_signal(id),
+            blinc_core::reactive::Disposed::Derived(id) => registry.unregister_derived(id),
+        });
     });
-    Mutex::new(PropertyBindingRegistry::new())
+    Mutex::new(HashMap::new())
 });
 
-/// Access the global registry. Lazy-initialises + installs the core
-/// notifier hook on first call.
+fn remove_retired(
+    registries: &mut HashMap<u64, PropertyBindingRegistry>,
+) -> Vec<PropertyBindingRegistry> {
+    crate::tree::scope::take_retired()
+        .into_iter()
+        .filter_map(|scope| registries.remove(&scope))
+        .collect()
+}
+
+pub(crate) fn sweep_retired_scopes() {
+    let removed = REGISTRY
+        .try_lock()
+        .ok()
+        .map(|mut all| remove_retired(&mut all));
+    drop(removed);
+}
+
+pub(crate) fn registry_is_initialized() -> bool {
+    REGISTRY_READY.load(std::sync::atomic::Ordering::Acquire)
+}
+
+fn with_registries(mut f: impl FnMut(&mut PropertyBindingRegistry)) {
+    let mut all = REGISTRY.lock().unwrap();
+    REGISTRY_READY.store(true, std::sync::atomic::Ordering::Release);
+    let removed = remove_retired(&mut all);
+    for (&scope, registry) in all.iter_mut() {
+        let _scope = crate::tree::scope::enter(scope);
+        f(registry);
+    }
+    drop(all);
+    drop(removed);
+}
+
+/// Access the current tree's binding registry, or the legacy unscoped registry.
+/// Custom callers can use `RenderTree::with_property_updates` to select a tree.
 pub fn with_registry<R>(f: impl FnOnce(&mut PropertyBindingRegistry) -> R) -> R {
-    let mut reg = REGISTRY.lock().unwrap();
-    f(&mut reg)
+    let mut all = REGISTRY.lock().unwrap();
+    REGISTRY_READY.store(true, std::sync::atomic::Ordering::Release);
+    let removed = remove_retired(&mut all);
+    let registry = all
+        .entry(crate::tree::scope::current())
+        .or_insert_with(PropertyBindingRegistry::new);
+    let result = f(registry);
+    drop(all);
+    drop(removed);
+    result
 }
 
 /// Convenience: register a signal-bound subscription using a typed

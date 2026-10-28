@@ -43,6 +43,7 @@ impl RenderTree {
         parent_id: LayoutNodeId,
         new_children: &[Box<dyn ElementBuilder>],
     ) {
+        let _tree_scope = self.layout_tree.enter_scope();
         if self.try_reconcile_keyed_children(parent_id, new_children) {
             return;
         }
@@ -105,6 +106,7 @@ impl RenderTree {
         parent_id: LayoutNodeId,
         new_children: &[Box<dyn ElementBuilder>],
     ) -> bool {
+        let _tree_scope = self.layout_tree.enter_scope();
         let old_children = self.layout_tree.children(parent_id);
         let mut old_key_counts = HashMap::<String, usize>::new();
         let mut old_by_key = HashMap::<String, LayoutNodeId>::new();

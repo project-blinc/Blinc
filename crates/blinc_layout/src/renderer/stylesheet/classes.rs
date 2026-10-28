@@ -40,6 +40,7 @@ impl RenderTree {
     /// passes that apply base styles, which is when the nodes are new or have
     /// been rebuilt.
     pub(crate) fn sync_dynamic_classes(&mut self) {
+        let _tree_scope = self.layout_tree.enter_scope();
         let toggles = crate::binding::with_registry(|registry| registry.class_toggles());
         for (node, infos) in toggles {
             if !self.render_nodes.contains_key(&node) {

@@ -30,6 +30,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Window runners drain property writes per tree, including secondary windows. Shared renderer caches and promoted textures refresh when their owning tree changes, and canvas replay preserves its update namespace.
 - Cached direct frames retain canvas meshes and custom GPU passes, preserving their viewports and dispatching them once per frame.
 - Collected 3D content uses the allocated texture extent so pooled texture reuse preserves its raster scale and source mapping.
 - Collected text, SVGs and images stay inside eligible native effect and blend groups. Image-mask resources are prepared for both command streams before dispatch.

@@ -36,6 +36,7 @@ impl RenderTree {
         mouse_x: f32,
         mouse_y: f32,
     ) {
+        let _tree_scope = self.layout_tree.enter_scope();
         // Stale hit-test result: node was removed by a rebuild
         // between hit-test and dispatch. Silently skip — handlers
         // for the new node will pick up the next event.
@@ -118,6 +119,7 @@ impl RenderTree {
         alt: bool,
         meta: bool,
     ) {
+        let _tree_scope = self.layout_tree.enter_scope();
         // Stale hit-test: bail if the node was removed by a recent
         // rebuild. The skip itself is normal (queued events for
         // nodes that just disappeared); only log the dropped-event
@@ -174,6 +176,7 @@ impl RenderTree {
         alt: bool,
         meta: bool,
     ) {
+        let _tree_scope = self.layout_tree.enter_scope();
         let Some(stable_id) = self.stable_id(node_id) else {
             return;
         };
@@ -208,6 +211,7 @@ impl RenderTree {
         alt: bool,
         meta: bool,
     ) {
+        let _tree_scope = self.layout_tree.enter_scope();
         let event_type = blinc_core::events::event_types::TEXT_INPUT;
 
         // Try each node in reverse order (leaf to root) until we find a handler
@@ -241,6 +245,7 @@ impl RenderTree {
         alt: bool,
         meta: bool,
     ) {
+        let _tree_scope = self.layout_tree.enter_scope();
         let Some(stable_id) = self.stable_id(node_id) else {
             return;
         };
@@ -270,6 +275,7 @@ impl RenderTree {
         alt: bool,
         meta: bool,
     ) {
+        let _tree_scope = self.layout_tree.enter_scope();
         // Try each node in reverse order (leaf to root) until we find a handler
         for &node_id in ancestors.iter().rev() {
             let Some(stable_id) = self.stable_id(node_id) else {
@@ -300,6 +306,7 @@ impl RenderTree {
         alt: bool,
         meta: bool,
     ) {
+        let _tree_scope = self.layout_tree.enter_scope();
         let ctx = crate::event_handler::EventContext::new(
             blinc_core::events::event_types::TEXT_INPUT,
             crate::tree::LayoutNodeId::default(), // Will be overwritten per-node
@@ -331,6 +338,7 @@ impl RenderTree {
         alt: bool,
         meta: bool,
     ) {
+        let _tree_scope = self.layout_tree.enter_scope();
         let ctx = crate::event_handler::EventContext::new(
             event_type,
             crate::tree::LayoutNodeId::default(), // Will be overwritten per-node
@@ -357,6 +365,7 @@ impl RenderTree {
         scroll_delta_x: f32,
         scroll_delta_y: f32,
     ) {
+        let _tree_scope = self.layout_tree.enter_scope();
         let Some(stable_id) = self.stable_id(node_id) else {
             return;
         };

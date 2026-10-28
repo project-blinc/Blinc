@@ -1343,7 +1343,11 @@ pub extern "C" fn blinc_build_frame(ctx: *mut IOSRenderContext) {
         if has_stateful_updates || has_pending_rebuilds || has_prop_updates {
             // Drain the unified property channel
             // ([[project-reactive-architecture-v2]]).
-            let prop_updates = blinc_layout::take_pending_partial_prop_updates();
+            let prop_updates = ctx
+                .render_tree
+                .as_ref()
+                .map(|tree| tree.take_pending_property_updates())
+                .unwrap_or_default();
             let mut prop_effects = blinc_layout::SideEffects::default();
             if let Some(ref mut tree) = ctx.render_tree {
                 prop_effects = tree.apply_partial_property_updates(prop_updates);

@@ -8,31 +8,15 @@ use taffy::{Baselines, LayoutInput, LayoutOutput, compute_leaf_layout};
 use crate::element::ElementBounds;
 use crate::text_measure::{TextLayoutOptions, measure_text_with_options};
 
+pub(crate) mod scope;
+
 new_key_type! {
     pub struct LayoutNodeId;
 }
 
-/// Stable identity for a layout node across tree rebuilds.
-///
-/// `LayoutNodeId` is a slotmap key — every full rebuild reconstructs the
-/// slotmap and regenerates keys, so any subsystem that holds a
-/// `LayoutNodeId` across builds (motion bindings, FLIP previous bounds,
-/// event-handler captures inside `Stateful`, …) gets a dangling key.
-/// `StableNodeId` survives those rebuilds: it's derived from the build
-/// path (parent stable id ⊕ sibling index, plus the
-/// `InstanceKey` of any source-located widget) and recomputed
-/// deterministically each frame.
-///
-/// The build mints the id and registers a two-way mapping on
-/// `RenderTree` (`stable_to_layout` / `layout_to_stable`). Subsystems
-/// that need rebuild-stable state key on `StableNodeId`; the renderer's
-/// per-frame caches (render_nodes, hashes, layout bounds) stay on
-/// `LayoutNodeId` because they're already wiped and rebuilt every pass.
-///
-/// Layout still flows through `LayoutNodeId` — `StableNodeId` is the
-/// identity bookkeeping handle, not a paint-side replacement. See
-/// `project_stable_node_id_design` (memory) for the phased migration
-/// plan and which maps move when.
+/// Identity derived from a node's build path and explicit key.
+/// Preserved across rebuilds and keyed reordering within a tree.
+/// Separate trees can produce the same ID; resolve it through its owning `RenderTree`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct StableNodeId(u64);
 
@@ -278,6 +262,7 @@ fn measure_text_node(
 
 /// Maps between Blinc node IDs and Taffy node IDs
 pub struct LayoutTree {
+    scope_id: u64,
     taffy: TaffyTree<TextMeasureContext>,
     node_map: SlotMap<LayoutNodeId, NodeId>,
     /// Reverse mapping from Taffy NodeId to our LayoutNodeId
@@ -311,6 +296,7 @@ pub struct LayoutTree {
 impl LayoutTree {
     pub fn new() -> Self {
         Self {
+            scope_id: scope::allocate(),
             taffy: TaffyTree::new(),
             node_map: SlotMap::with_key(),
             reverse_map: FxHashMap::default(),
@@ -318,6 +304,15 @@ impl LayoutTree {
             text_baseline: FxHashMap::default(),
             derived_baseline: FxHashMap::default(),
         }
+    }
+
+    /// Namespace for this layout tree's queued work and subscriptions.
+    pub(crate) fn scope_id(&self) -> u64 {
+        self.scope_id
+    }
+
+    pub(crate) fn enter_scope(&self) -> scope::Guard {
+        scope::enter(self.scope_id)
     }
 
     /// Create a new layout node with the given style
@@ -684,6 +679,12 @@ impl LayoutTree {
         let _ = self.taffy.set_children(parent_taffy, &new_taffy_children);
 
         old_children
+    }
+}
+
+impl Drop for LayoutTree {
+    fn drop(&mut self) {
+        scope::retire(self.scope_id);
     }
 }
 

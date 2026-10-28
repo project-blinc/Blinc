@@ -19,6 +19,7 @@ impl RenderContext {
         target_texture: Option<&wgpu::Texture>,
         try_fast_paint: bool,
     ) -> Result<()> {
+        self.bind_tree_cache(tree);
         // Consume the atlas-growth notification; frame preparation binds the current atlas
         // views.
         let _ = self.text_ctx.take_atlas_grew();

@@ -2666,7 +2666,11 @@ impl WebApp {
             // ([[project-reactive-architecture-v2]]). Accumulate side
             // effects so a layout-affecting update forces relayout even
             // when no subtree rebuild was queued.
-            let prop_updates = blinc_layout::take_pending_partial_prop_updates();
+            let prop_updates = self
+                .current_tree
+                .as_ref()
+                .map(|tree| tree.take_pending_property_updates())
+                .unwrap_or_default();
             let mut prop_effects = blinc_layout::SideEffects::default();
             if let Some(ref mut tree) = self.current_tree {
                 prop_effects = tree.apply_partial_property_updates(prop_updates);
@@ -2855,7 +2859,11 @@ impl WebApp {
             // Unified property channel drain — same shape as the
             // pre-paint pass above. Accumulate side effects so a
             // layout-affecting animation-driven update forces relayout.
-            let prop_updates = blinc_layout::take_pending_partial_prop_updates();
+            let prop_updates = self
+                .current_tree
+                .as_ref()
+                .map(|tree| tree.take_pending_property_updates())
+                .unwrap_or_default();
             let mut animation_prop_effects = blinc_layout::SideEffects::default();
             if let Some(ref mut tree) = self.current_tree {
                 animation_prop_effects = tree.apply_partial_property_updates(prop_updates);

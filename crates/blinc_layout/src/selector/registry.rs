@@ -16,6 +16,7 @@ pub type OnReadyCallback = Arc<dyn Fn(ElementBounds) + Send + Sync>;
 /// This provides O(1) lookup of elements by their string ID.
 /// The registry is cleared and rebuilt on each render cycle.
 pub struct ElementRegistry {
+    tree_scope: std::sync::atomic::AtomicU64,
     /// String ID → LayoutNodeId mapping
     ids: RwLock<HashMap<String, LayoutNodeId>>,
     /// Reverse lookup for debugging (LayoutNodeId → String ID)
@@ -71,6 +72,7 @@ impl ElementRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {
         Self {
+            tree_scope: std::sync::atomic::AtomicU64::new(0),
             ids: RwLock::new(HashMap::new()),
             reverse: RwLock::new(HashMap::new()),
             parents: RwLock::new(HashMap::new()),
@@ -88,6 +90,15 @@ impl ElementRegistry {
     /// Create a new registry wrapped in Arc for sharing
     pub fn new_shared() -> Arc<Self> {
         Arc::new(Self::new())
+    }
+
+    pub(crate) fn set_tree_scope(&self, scope: u64) {
+        self.tree_scope
+            .store(scope, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub(crate) fn enter_tree_scope(&self) -> crate::tree::scope::Guard {
+        crate::tree::scope::enter(self.tree_scope.load(std::sync::atomic::Ordering::Relaxed))
     }
 
     /// Register an element ID

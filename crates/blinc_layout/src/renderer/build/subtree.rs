@@ -163,6 +163,7 @@ impl RenderTree {
         parent_id: LayoutNodeId,
         new_child: &E,
     ) -> LayoutNodeId {
+        let _tree_scope = self.layout_tree.enter_scope();
         // The rebuild registers fresh handlers + applies stylesheet
         // base styles for the new subtree. Invalidate the
         // bare-mouse-move pipeline cache so the next mouse-move
@@ -207,6 +208,7 @@ impl RenderTree {
 
     /// Remove render nodes for a subtree (but don't touch layout tree)
     pub(crate) fn remove_subtree_nodes(&mut self, node_id: LayoutNodeId) {
+        let _tree_scope = self.layout_tree.enter_scope();
         // Remove children first
         let children = self.layout_tree.children(node_id);
         for child_id in children {
@@ -250,6 +252,7 @@ impl RenderTree {
         // dead LayoutNodeId. See [[project-reactive-architecture-v2]]
         // Phase 2.
         crate::binding::unregister_node(node_id);
+        crate::stateful::unregister_stateful_base_updater(node_id);
         crate::region::forget(node_id);
 
         // CSS animations/transitions are stable-keyed and intentionally
@@ -330,10 +333,12 @@ impl RenderTree {
         const MAX_PASSES: usize = 4;
         let mut any = false;
         for pass in 0..MAX_PASSES {
-            if !crate::stateful::has_pending_subtree_rebuilds() {
+            if !crate::stateful::has_rebuilds_for(self.layout_tree.scope_id()) {
                 break;
             }
-            if pass + 1 == MAX_PASSES && crate::stateful::has_pending_subtree_rebuilds() {
+            if pass + 1 == MAX_PASSES
+                && crate::stateful::has_rebuilds_for(self.layout_tree.scope_id())
+            {
                 tracing::debug!(
                     "process_pending_subtree_rebuilds: still queued after {MAX_PASSES} passes, \
                      deferring the rest to the next frame"
@@ -351,7 +356,8 @@ impl RenderTree {
         &mut self,
         router: Option<&crate::event_router::EventRouter>,
     ) -> bool {
-        let pending = crate::stateful::take_pending_subtree_rebuilds();
+        let _tree_scope = self.layout_tree.enter_scope();
+        let pending = crate::stateful::take_rebuilds_for(self.layout_tree.scope_id());
         if pending.is_empty() {
             return false;
         }

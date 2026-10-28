@@ -997,15 +997,9 @@ pub struct RenderTree {
     mouse_move_pipeline_cache: std::sync::atomic::AtomicI8,
 
     // ========================================================================
-    // Stable Node Identity (Phase 1 — foundation, no consumer migration yet)
+    // Stable node identities resolve within this tree's namespace.
     // ========================================================================
-    /// `StableNodeId` → current frame's `LayoutNodeId`. Populated during
-    /// build; lets subsystems that key on stable identity resolve to the
-    /// live slotmap key for paint / layout queries.
-    ///
-    /// See `project_stable_node_id_design` for the migration plan.
-    /// Today this is read-only plumbing: no internal map consumes it
-    /// yet. Phase 2 (motion/animation/FLIP) is the first migration.
+    /// Stable identity to the current live layout key.
     stable_to_layout: HashMap<crate::tree::StableNodeId, LayoutNodeId>,
     /// Reverse: `LayoutNodeId` → `StableNodeId`. Used during the
     /// post-build sweep to evict stable entries whose backing layout
@@ -1337,6 +1331,7 @@ impl RenderTree {
     /// Caller responsibility: bump `build_generation` before calling so
     /// the eventual sweep can compare against stamps.
     pub(crate) fn mint_stable_ids_walk(&mut self) {
+        let _tree_scope = self.layout_tree.enter_scope();
         // Wipe the maps; they're entirely regenerated each rebuild
         // (consumers that need cross-frame stability key by
         // `StableNodeId` directly; the mapping cache is rebuild-local).
@@ -2972,6 +2967,22 @@ impl RenderTree {
         }
     }
 
+    /// Identity of this layout-tree instance, within which stable node IDs are resolved.
+    pub fn tree_scope_id(&self) -> u64 {
+        self.layout_tree.scope_id()
+    }
+
+    /// Take this tree's pending property writes, leaving other trees' work queued.
+    pub fn take_pending_property_updates(&self) -> Vec<crate::stateful::PartialPropertyUpdate> {
+        crate::stateful::take_properties_for(self.layout_tree.scope_id())
+    }
+
+    /// Run callbacks that queue property writes in this tree's namespace.
+    pub fn with_property_updates<R>(&self, update: impl FnOnce() -> R) -> R {
+        let _scope = self.layout_tree.enter_scope();
+        update()
+    }
+
     /// Apply queued property updates and return their combined side
     /// effects.
     ///
@@ -2984,11 +2995,19 @@ impl RenderTree {
         &mut self,
         updates: Vec<crate::stateful::PartialPropertyUpdate>,
     ) -> crate::property::SideEffects {
+        let _tree_scope = self.layout_tree.enter_scope();
         let mut effects = crate::property::SideEffects::default();
         // A region is brought up to date once per batch, however many times
         // it was queued.
         let mut regions_seen: HashSet<(LayoutNodeId, u64)> = HashSet::new();
+        let mut foreign = Vec::new();
         for update in updates {
+            if update.tree_scope != 0 && update.tree_scope != self.layout_tree.scope_id() {
+                if crate::tree::scope::is_live(update.tree_scope) {
+                    foreign.push(update);
+                }
+                continue;
+            }
             effects = effects.or(update.effects);
             if let Some(write) = update.render_write {
                 self.update_render_props(update.node_id, |p| write(p));
@@ -3014,6 +3033,7 @@ impl RenderTree {
                 }
             }
         }
+        crate::stateful::requeue_partial_updates(foreign);
         effects
     }
 

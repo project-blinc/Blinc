@@ -3364,6 +3364,23 @@ impl WindowedApp {
                                         sws.needs_rebuild = false;
                                     }
 
+                                    if let Some(tree) = sws.render_tree.as_mut() {
+                                        let updates = tree.take_pending_property_updates();
+                                        let effects = tree.apply_partial_property_updates(updates);
+                                        let rebuilt = tree.process_pending_subtree_rebuilds_routed(
+                                            sws.ctx.as_ref().map(|ctx| &ctx.event_router),
+                                        );
+                                        if effects.needs_layout || rebuilt {
+                                            let (w, h) = sws.ctx.as_ref()
+                                                .map(|ctx| (ctx.width, ctx.height))
+                                                .unwrap_or((400.0, 300.0));
+                                            tree.apply_stylesheet_layout_overrides();
+                                            tree.compute_layout(w, h);
+                                            tree.apply_flip_transitions();
+                                            tree.update_flip_bounds();
+                                        }
+                                    }
+
                                     // Render the tree (skip if minimized / zero size)
                                     if config.width > 0 && config.height > 0 {
                                         if let (Some(tree), Some(rs)) =
@@ -5779,7 +5796,7 @@ impl WindowedApp {
                                 // side effects decide whether the drain forces a layout
                                 // pass.
                                 let prop_updates =
-                                    blinc_layout::take_pending_partial_prop_updates();
+                                    ws.render_tree.as_ref().map(|tree| tree.take_pending_property_updates()).unwrap_or_default();
                                 let had_prop_updates = !prop_updates.is_empty();
                                 let mut prop_effects = blinc_layout::SideEffects::default();
                                 if let Some(ref mut tree) = ws.render_tree {
@@ -5873,7 +5890,7 @@ impl WindowedApp {
                                 // Focused props flow into render_node.props
                                 // before Phase 4 paints this frame.
                                 let post_focus_updates =
-                                    blinc_layout::take_pending_partial_prop_updates();
+                                    ws.render_tree.as_ref().map(|tree| tree.take_pending_property_updates()).unwrap_or_default();
                                 let had_post_focus_updates =
                                     !post_focus_updates.is_empty();
                                 if had_post_focus_updates {
@@ -6113,8 +6130,6 @@ impl WindowedApp {
                             if ws.needs_rebuild || ws.render_tree.is_none() {
                                 // Reset call counters for stable key generation
                                 reset_call_counters();
-                                // Clear stale Stateful base_render_props updaters
-                                blinc_layout::clear_stateful_base_updaters();
                                 blinc_layout::click_outside::clear_click_outside_handlers();
 
                                 // Reset stable motions so they replay on full rebuild

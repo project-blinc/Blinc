@@ -15,6 +15,7 @@ impl RenderTree {
     /// place, and a row that went is torn down before the scope it was built
     /// under is disposed. Children before and after the rows are not touched.
     pub(crate) fn reconcile_region(&mut self, parent: LayoutNodeId, region_id: u64) {
+        let _tree_scope = self.layout_tree.enter_scope();
         let Some(region) = crate::region::region_of(parent, region_id) else {
             return;
         };
@@ -26,10 +27,10 @@ impl RenderTree {
         // lands in this pass, so the frame never shows the old row and the
         // new one together. Region updates wait for the next drain.
         if evaluation.started {
-            let (regions, writes): (Vec<_>, Vec<_>) =
-                crate::stateful::take_pending_partial_prop_updates()
-                    .into_iter()
-                    .partition(|update| update.region_update.is_some());
+            let (regions, writes): (Vec<_>, Vec<_>) = self
+                .take_pending_property_updates()
+                .into_iter()
+                .partition(|update| update.region_update.is_some());
             crate::stateful::requeue_partial_updates(regions);
             self.apply_partial_property_updates(writes);
         }

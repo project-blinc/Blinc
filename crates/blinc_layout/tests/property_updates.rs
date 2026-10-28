@@ -8,6 +8,7 @@ use blinc_layout::{LayoutNodeId, PartialPropertyUpdate, PropertyId, SideEffects}
 
 fn visual(node: LayoutNodeId, opacity: f32) -> PartialPropertyUpdate {
     PartialPropertyUpdate {
+        tree_scope: 0,
         node_id: node,
         property: PropertyId::Opacity,
         effects: SideEffects::VISUAL,
@@ -22,6 +23,7 @@ fn visual(node: LayoutNodeId, opacity: f32) -> PartialPropertyUpdate {
 
 fn width(node: LayoutNodeId, px: f32) -> PartialPropertyUpdate {
     PartialPropertyUpdate {
+        tree_scope: 0,
         node_id: node,
         property: PropertyId::Width,
         effects: SideEffects::LAYOUT,
@@ -106,6 +108,7 @@ fn a_text_update_replaces_the_text_and_asks_for_layout() {
     let node = tree.layout_tree.children(root)[0];
 
     let effects = tree.apply_partial_property_updates(vec![PartialPropertyUpdate {
+        tree_scope: 0,
         node_id: node,
         property: PropertyId::TextContent,
         effects: SideEffects::TEXT,

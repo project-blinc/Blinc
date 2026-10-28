@@ -488,6 +488,7 @@ impl RenderTree {
         // Update Stateful base_render_props with CSS-applied values
         // =====================================================================
         for (&node_id, render_node) in &self.render_nodes {
+            let _tree_scope = self.layout_tree.enter_scope();
             if crate::stateful::has_stateful_base_updater(node_id) {
                 crate::stateful::update_stateful_base_props(node_id, render_node.props.clone());
             }

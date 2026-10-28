@@ -56,6 +56,9 @@ impl RenderTree {
     /// `project_stable_node_id_design` (memory) for the migration
     /// plan.
     pub(crate) fn build_element<E: ElementBuilder>(&mut self, element: &E) -> LayoutNodeId {
+        let _tree_scope = self.layout_tree.enter_scope();
+        self.element_registry
+            .set_tree_scope(self.layout_tree.scope_id());
         // Before anything can queue: a rebuild queued during this walk
         // belongs to it, one queued against the previous build names a
         // node id this build is about to reuse for something else.

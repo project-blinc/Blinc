@@ -332,13 +332,17 @@ pub(crate) struct Region {
 }
 
 thread_local! {
-    static REGIONS: RefCell<HashMap<LayoutNodeId, Rc<Region>>> = RefCell::new(HashMap::new());
-    static ROW_KEYS: RefCell<HashMap<LayoutNodeId, String>> = RefCell::new(HashMap::new());
+    static REGIONS: RefCell<HashMap<(u64, LayoutNodeId), Rc<Region>>> = RefCell::new(HashMap::new());
+    static ROW_KEYS: RefCell<HashMap<(u64, LayoutNodeId), String>> = RefCell::new(HashMap::new());
 }
 
 /// Record the region a node holds.
 pub(crate) fn register(node: LayoutNodeId, region: Rc<Region>) {
-    REGIONS.with(|regions| regions.borrow_mut().insert(node, region));
+    REGIONS.with(|regions| {
+        regions
+            .borrow_mut()
+            .insert((crate::tree::scope::current(), node), region)
+    });
 }
 
 /// The region a node holds, if it is the one with this id.
@@ -346,7 +350,7 @@ pub(crate) fn region_of(node: LayoutNodeId, id: u64) -> Option<Rc<Region>> {
     REGIONS.with(|regions| {
         regions
             .borrow()
-            .get(&node)
+            .get(&(crate::tree::scope::current(), node))
             .filter(|region| region.id == id)
             .cloned()
     })
@@ -354,18 +358,47 @@ pub(crate) fn region_of(node: LayoutNodeId, id: u64) -> Option<Rc<Region>> {
 
 /// The node is gone: forget its region and its row key.
 pub(crate) fn forget(node: LayoutNodeId) {
-    REGIONS.with(|regions| regions.borrow_mut().remove(&node));
-    ROW_KEYS.with(|keys| keys.borrow_mut().remove(&node));
+    REGIONS.with(|regions| {
+        regions
+            .borrow_mut()
+            .remove(&(crate::tree::scope::current(), node))
+    });
+    ROW_KEYS.with(|keys| {
+        keys.borrow_mut()
+            .remove(&(crate::tree::scope::current(), node))
+    });
 }
 
 /// Name a row's node, so its stable id follows the row, not its position.
 pub(crate) fn set_row_key(node: LayoutNodeId, region: u64, row: RowId) {
     ROW_KEYS.with(|keys| {
-        keys.borrow_mut()
-            .insert(node, format!("row:{region}:{row}"));
+        keys.borrow_mut().insert(
+            (crate::tree::scope::current(), node),
+            format!("row:{region}:{row}"),
+        );
     });
 }
 
 pub(crate) fn row_key(node: LayoutNodeId) -> Option<String> {
-    ROW_KEYS.with(|keys| keys.borrow().get(&node).cloned())
+    ROW_KEYS.with(|keys| {
+        keys.borrow()
+            .get(&(crate::tree::scope::current(), node))
+            .cloned()
+    })
+}
+
+pub(crate) fn forget_tree_scope(scope: u64) {
+    let removed = REGIONS.with(|regions| {
+        let mut regions = regions.borrow_mut();
+        let keys: Vec<_> = regions
+            .keys()
+            .filter(|(owner, _)| *owner == scope)
+            .copied()
+            .collect();
+        keys.into_iter()
+            .filter_map(|key| regions.remove(&key))
+            .collect::<Vec<_>>()
+    });
+    drop(removed);
+    ROW_KEYS.with(|keys| keys.borrow_mut().retain(|(owner, _), _| *owner != scope));
 }

@@ -59,6 +59,8 @@ mod styled_group_tests;
 mod svg_group_tests;
 mod svg_rendering;
 mod tree_rendering;
+#[cfg(test)]
+mod tree_scope_tests;
 
 use mesh_rendering::{dispatch_pending_gpu_passes, dispatch_pending_meshes};
 use tree_rendering::{generate_text_decoration_primitives_by_layer, to_gpu_generic_font};
@@ -375,6 +377,7 @@ pub struct RenderContext {
     /// Whether image fades require another frame, tracked independently of flow shaders.
     has_pending_image_fade: bool,
     captured_images_need_repaint: bool,
+    cached_tree_scope: Option<u64>,
     // Frame counter for periodic cache stats logging
     frame_count: u64,
     // Clear alpha for the current window: one for opaque surfaces, zero for transparent
@@ -681,6 +684,7 @@ impl RenderContext {
             has_active_flows: false,
             has_pending_image_fade: false,
             captured_images_need_repaint: false,
+            cached_tree_scope: None,
             frame_count: 0,
             clear_alpha: 1.0,
             cached_bg_batch: None,

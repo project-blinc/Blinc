@@ -178,6 +178,7 @@ impl RenderTree {
         // This ensures that state changes (hover, press) start from CSS-enhanced
         // base props, preserving CSS overrides like border-radius across state changes.
         for (&node_id, render_node) in &self.render_nodes {
+            let _tree_scope = self.layout_tree.enter_scope();
             if crate::stateful::has_stateful_base_updater(node_id) {
                 crate::stateful::update_stateful_base_props(node_id, render_node.props.clone());
             }
@@ -498,6 +499,7 @@ impl RenderTree {
 
         // Update Stateful base_render_props for subtree nodes with CSS-applied values
         for &node_id in &subtree_nodes {
+            let _tree_scope = self.layout_tree.enter_scope();
             if crate::stateful::has_stateful_base_updater(node_id) {
                 if let Some(render_node) = self.render_nodes.get(&node_id) {
                     crate::stateful::update_stateful_base_props(node_id, render_node.props.clone());

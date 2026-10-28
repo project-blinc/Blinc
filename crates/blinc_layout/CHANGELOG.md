@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Property, text, class and region bindings stay in their owning tree namespace; replacement and drop release its subscriptions and queued work without disturbing another window. Stable node identities and slotmap lookups remain unchanged.
 - Native groups accept layer effects and blends when their descendants and collected-content capabilities can share ordered composition.
 - Image elements and Div image backgrounds can join eligible native opacity groups. Background capture precedes borders and children; consumers without image resolution retain fallback.
 - Eligible SVG nodes can join native opacity groups when the consumer resolves raster images. Capture checks text/SVG capabilities independently and excludes explicit flow passes.
@@ -13,6 +14,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Native Div/Canvas opacity groups capture foreground descendants together with background content and suppress independent texture promotion. Moving native ancestors retain their background before nested captures. Collected content, global overlays, glass, effects and 3D boundaries keep their existing fallback.
 
 ### Changed
+- Queued property and subtree records carry `tree_scope`; zero retains legacy unscoped writes. `RenderTree::with_property_updates` scopes custom producers, and `take_pending_property_updates` drains only that tree's work.
 - Promoted CSS animations and transitions retain completion bookkeeping and write their final properties once. Playing baked sources remain eligible for composite replay.
 - Partial opacity uses an explicit native group for leaves and single-child wrappers, preserving overlapping draws. Other paint passes retain inherited opacity when they do not own the ancestor's commands.
 - Dynamic canvases retain callback output in motion, overlay and explicit composite scratch owners. Their commands, clips and image payloads stay in the same batch, with fresh paint requested instead of independent replay.
