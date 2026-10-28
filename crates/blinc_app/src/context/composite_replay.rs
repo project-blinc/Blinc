@@ -340,7 +340,7 @@ impl RenderContext {
             .clear_target(&layer_tex.view, wgpu::Color::TRANSPARENT);
 
         // Set viewport to offscreen texture size
-        self.renderer.set_viewport_override((tex_w, tex_h));
+        self.renderer.set_viewport_override(layer_tex.size);
 
         // Render offset text glyphs
         if !texts.is_empty() {
@@ -410,7 +410,7 @@ impl RenderContext {
                     let owned = text_clip::prepare_layer_glyphs(
                         text,
                         glyphs,
-                        (tex_w, tex_h),
+                        layer_tex.size,
                         info,
                         scale_factor,
                     );
@@ -469,7 +469,7 @@ impl RenderContext {
         // Blit with perspective transform
         self.renderer.blit_tight_texture_to_target(
             &layer_tex.view,
-            (tex_w, tex_h),
+            layer_tex.size,
             target,
             (lx, ly),
             (lw, lh),

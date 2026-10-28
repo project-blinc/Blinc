@@ -50,11 +50,12 @@ impl RenderContext {
         }
 
         // Direct frames have no CSS cache patch pass; active CSS needs a full walk.
-        let used_fast_paint = try_fast_paint
-            && !self.captured_images_need_repaint
-            && !tree.css_has_active()
-            && self.redraw_canvases(tree, width, height)
-            && self.apply_binding_deltas(tree, scale_factor);
+        let canvas_output =
+            (try_fast_paint && !self.captured_images_need_repaint && !tree.css_has_active())
+                .then(|| self.redraw_canvas_output(tree, width, height))
+                .flatten()
+                .filter(|_| self.apply_binding_deltas(tree, scale_factor));
+        let used_fast_paint = canvas_output.is_some();
 
         // Create a single paint context for all layers with text rendering support
         let mut ctx =
@@ -99,9 +100,13 @@ impl RenderContext {
         }
 
         // Collect mesh output for dispatch after 2D content.
-        let pending_meshes = ctx.take_pending_meshes();
+        let mut pending_meshes = ctx.take_pending_meshes();
         // Dispatch callback GPU passes alongside captured meshes after 2D content.
-        let pending_gpu_passes = ctx.take_pending_gpu_passes();
+        let mut pending_gpu_passes = ctx.take_pending_gpu_passes();
+        if let Some(output) = canvas_output {
+            pending_meshes.extend(output.meshes);
+            pending_gpu_passes.extend(output.gpu_passes);
+        }
 
         // Collect text, SVG, images and flows, reusing compatible cached element lists.
         let collect_start = web_time::Instant::now();

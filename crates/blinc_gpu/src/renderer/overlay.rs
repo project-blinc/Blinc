@@ -553,6 +553,20 @@ impl GpuRenderer {
                         self.draw_overlay_nodes(target, batch, children, origin, samples);
                         continue;
                     }
+                    // Keep primitive-only perspective layers on the native bake path.
+                    if config.transform_3d.is_some()
+                        && let [Node::Run(start, end)] = children.as_slice()
+                        && start.index == end.index
+                    {
+                        let mut native = PrimitiveBatch::new();
+                        native.push_layer_command(LayerCommand::Push {
+                            config: config.clone(),
+                        });
+                        native.merge(translated(batch, *start, *end, origin));
+                        native.push_layer_command(LayerCommand::Pop);
+                        self.render_overlay_with_layer_effects(target, &native);
+                        continue;
+                    }
                     let Some(b) = bounds(children, batch, viewport) else {
                         continue;
                     };

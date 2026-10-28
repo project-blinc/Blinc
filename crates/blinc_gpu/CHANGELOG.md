@@ -5,6 +5,8 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Ordered composition preserves perspective layer geometry and edge filtering when neighboring collected groups become active.
+- Native layer bakes use their allocated texture extent for raster coordinates and source UVs, keeping output independent of larger pooled textures.
 - Image-mask effect uploads match the existing shader's 32-byte uniform footprint, avoiding validation failures when a mask texture is loaded.
 - Batch merging retains background RGBA images and rebases their primitive, path and command cursors.
 - Native shared opacity groups join background and foreground draws at their tree paint position, including nested layers, paths, raw images and clips. Batch drains, merges, foreground projection and borrowed ordered dispatch preserve ownership. Moving captures retain their static paint position and request repaint instead of patching rebased ranges.

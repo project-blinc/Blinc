@@ -52,6 +52,8 @@ mod image_rendering;
 mod mesh_rendering;
 mod overlay_rendering;
 #[cfg(test)]
+mod release_boundary_tests;
+#[cfg(test)]
 mod styled_group_tests;
 #[cfg(test)]
 mod svg_group_tests;

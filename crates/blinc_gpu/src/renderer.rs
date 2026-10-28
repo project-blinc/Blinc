@@ -11023,14 +11023,11 @@ impl GpuRenderer {
         let texture_width = (texture_width.div_ceil(64) * 64).min(self.viewport_size.0);
         let texture_height = (texture_height.div_ceil(64) * 64).min(self.viewport_size.1);
 
-        // This is the actual content size (64px rounded), which may differ from
-        // the texture returned by acquire() due to bucket rounding
-        let content_size = (texture_width, texture_height);
-
-        // Acquire a texture of at least the tight size
-        let layer_texture = self
-            .layer_texture_cache
-            .acquire(&self.device, content_size, false);
+        // Use the allocated extent for raster coordinates and subsequent source UVs.
+        let layer_texture =
+            self.layer_texture_cache
+                .acquire(&self.device, (texture_width, texture_height), false);
+        let content_size = layer_texture.size;
 
         let primitives = if start_idx < end_idx {
             &batch.primitives[start_idx..end_idx]

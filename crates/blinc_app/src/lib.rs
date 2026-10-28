@@ -1,4 +1,5 @@
 #![allow(unused, dead_code, deprecated)]
+#![cfg_attr(test, recursion_limit = "256")]
 //! Blinc Application Framework
 //!
 //! Clean API for building Blinc applications with layout and rendering.

@@ -13,61 +13,59 @@ impl RenderContext {
         width: u32,
         height: u32,
     ) -> bool {
+        self.redraw_canvas_output(tree, width, height)
+            .is_some_and(|output| output.meshes.is_empty() && output.gpu_passes.is_empty())
+    }
+
+    /// Refresh primitive ranges and retain separately dispatched output for this frame.
+    pub(super) fn redraw_canvas_output(
+        &mut self,
+        tree: &RenderTree,
+        width: u32,
+        height: u32,
+    ) -> Option<CanvasOverlay> {
         if tree.had_retained_canvas_painted() {
-            return false;
+            return None;
         }
         use blinc_core::{DrawContext, Rect, Transform, layer::Affine2D};
         use blinc_gpu::GpuPaintContext;
 
         let batch = match self.cached_bg_batch.as_mut() {
             Some(b) => b,
-            None => return false,
+            None => return None,
         };
 
         if batch.has_ordered_draws()
             || batch.has_foreground_content()
             || batch.has_foreground_layers()
         {
-            return false;
+            return None;
         }
         let records_ref = tree.canvas_paint_records();
         if records_ref.is_empty() {
-            return true;
+            return Some(CanvasOverlay::default());
         }
-        // Clone records out of the RefCell so we don't hold the
-        // borrow across the canvas closure invocation (closures can
-        // reach back into the scheduler / state and we don't want
-        // to deadlock the renderer's bookkeeping).
+        // Release the tree borrow before callbacks can access it again.
         let mut sorted: Vec<blinc_layout::renderer::CanvasPaintRecord> =
             records_ref.values().cloned().collect();
         drop(records_ref);
-        sorted.sort_by_key(|r| r.primitive_range.start);
+        sorted.sort_by_key(|r| (r.primitive_range.start, r.visit_seq));
+        let mut output = CanvasOverlay::default();
 
         for record in &sorted {
-            // Scratch context. Width / height match the real frame
-            // so any viewport-dependent calculations inside fill_*
-            // (currently none, but defensively correct) get the
-            // right reference frame.
+            // Replay each callback in its saved coordinate frame.
             let mut scratch = GpuPaintContext::new(width as f32, height as f32);
 
-            // Replay the transform stack. `push_transform` composes
-            // with `Affine2D::IDENTITY` from the fresh stack, so
-            // pushing the saved affine reproduces the exact affine
-            // the walker had at canvas paint time.
             scratch.push_transform(Transform::Affine2D(Affine2D {
                 elements: record.affine,
             }));
             scratch.push_opacity(record.opacity);
             scratch.set_z_layer(record.z_layer);
 
-            let local_clip_rect = if record.clips_content {
+            if record.clips_content {
                 let clip_rect = Rect::new(0.0, 0.0, record.bounds_wh.0, record.bounds_wh.1);
                 scratch.push_clip(blinc_core::layer::ClipShape::rect(clip_rect));
-                Some(clip_rect)
-            } else {
-                None
-            };
-            let _ = local_clip_rect;
+            }
 
             let canvas_bounds = blinc_layout::canvas::CanvasBounds {
                 x: 0.0,
@@ -89,24 +87,26 @@ impl RenderContext {
                 || new_batch.has_foreground_content()
                 || new_batch.has_foreground_layers()
             {
-                return false;
+                return None;
             }
             let new_count = new_batch.primitives.len();
             let old_count = record.primitive_range.end - record.primitive_range.start;
             if new_count != old_count {
                 // Splice would shift every subsequent range — bail.
-                return false;
+                return None;
             }
             // Reject stale ranges after a tree rebuild.
             if record.primitive_range.end > batch.primitives.len() {
-                return false;
+                return None;
             }
             for (i, p) in new_batch.primitives.into_iter().enumerate() {
                 batch.primitives[record.primitive_range.start + i] = p;
             }
+            output.meshes.extend(scratch.take_pending_meshes());
+            output.gpu_passes.extend(scratch.take_pending_gpu_passes());
         }
 
-        true
+        Some(output)
     }
 
     /// Collect independent canvas primitives for callers that do not consume other output
