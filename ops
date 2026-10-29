@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1793309222,"nonce":"I1UNTXUDLTgI3gueu/1jgvTWl/g=","added":["bug","area:layout","area:app"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":2,"timestamp":1793311021,"nonce":"MWD3QouFbO1v359E6iTbWyYltdo=","title":"Image builder opacity is counted as node and content alpha","was":"Parent: e0a7502e3e9d71bb983572df7db0033a67da1c48262e53368ae2399bc22e583a"}]}
