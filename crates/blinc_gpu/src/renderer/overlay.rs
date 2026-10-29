@@ -54,6 +54,7 @@ enum Node {
     Layer(LayerConfig, Vec<Node>),
     Sample(Box<named::Sample>),
     GpuPass(Box<crate::paint::GroupGpuPass>),
+    Meshes(Box<crate::paint::GroupMeshes>),
 }
 
 fn nodes(batch: &PrimitiveBatch) -> Vec<Node> {
@@ -108,6 +109,9 @@ fn nodes(batch: &PrimitiveBatch) -> Vec<Node> {
         run(stack.last_mut().unwrap(), cursor, next);
         cursor = next;
         match &entry.command {
+            LayerCommand::Meshes(scene) => {
+                stack.last_mut().unwrap().push(Node::Meshes(scene.clone()))
+            }
             LayerCommand::GpuPass(pass) => {
                 stack.last_mut().unwrap().push(Node::GpuPass(pass.clone()))
             }
@@ -192,6 +196,10 @@ fn bounds(
     items
         .iter()
         .filter_map(|node| match node {
+            Node::Meshes(scene) => Some(Bounds {
+                min: [0.0; 2],
+                max: [scene.frame_size.0 as f32, scene.frame_size.1 as f32],
+            }),
             Node::GpuPass(pass) => Some(Bounds {
                 min: [0.0; 2],
                 max: [pass.frame_size.0 as f32, pass.frame_size.1 as f32],
@@ -289,6 +297,14 @@ fn common_clip(items: &[Node], batch: &PrimitiveBatch) -> Option<([f32; 4], [f32
     };
     for node in items {
         match node {
+            Node::Meshes(scene) => {
+                let image = &scene.paint;
+                let shaped = image.clip_aux.get(4).is_some_and(|info| info[2] > 0.5);
+                add(has_clip(image.clip_bounds).then_some((
+                    image.clip_bounds,
+                    if shaped { [0.0; 4] } else { image.clip_radius },
+                )));
+            }
             Node::GpuPass(pass) => {
                 let image = &pass.paint;
                 let shaped = image.clip_aux.get(4).is_some_and(|info| info[2] > 0.5);
@@ -485,7 +501,8 @@ impl GpuRenderer {
                     depth = depth.saturating_sub(1);
                     false
                 }
-                LayerCommand::GpuPass(_)
+                LayerCommand::Meshes(_)
+                | LayerCommand::GpuPass(_)
                 | LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }
                 | LayerCommand::DeferredSvg { .. }
@@ -619,6 +636,7 @@ impl GpuRenderer {
         };
         for node in items {
             match node {
+                Node::Meshes(scene) => self.draw_group_meshes(target, scene, origin),
                 Node::GpuPass(pass) => self.draw_group_gpu_pass(target, pass, origin),
                 Node::Sample(sample) => self.draw_named_sample(target, sample, origin, outputs),
                 Node::Image(index) => {
@@ -642,7 +660,7 @@ impl GpuRenderer {
                         && config.blend_mode == BlendMode::Normal
                         && config.transform_3d.is_none()
                         && named_id.is_none()
-                        && !gpu_pass::has_gpu_pass(children)
+                        && !gpu_pass::has_external_gpu_draws(children)
                     {
                         self.draw_overlay_nodes(target, batch, children, origin, samples, outputs);
                         continue;

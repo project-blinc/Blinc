@@ -1564,6 +1564,8 @@ pub struct PathBatch {
 /// to manage offscreen render targets and layer composition.
 #[derive(Clone, Debug)]
 pub enum LayerCommand {
+    /// Consecutive mesh draws rendered as one scene within their native group.
+    Meshes(Box<crate::paint::GroupMeshes>),
     /// A canvas callback executed at this paint position within its native group.
     GpuPass(Box<crate::paint::GroupGpuPass>),
     /// Collected image resolved to its retained texture before dispatch.
@@ -1809,6 +1811,19 @@ impl PrimitiveBatch {
             .any(|entry| matches!(entry.command, LayerCommand::GpuPass(_)))
     }
 
+    /// Callbacks and mesh scenes require ordered execution and fresh scene output.
+    pub fn has_external_gpu_draws(&self) -> bool {
+        self.layer_commands
+            .iter()
+            .chain(&self.foreground_layer_commands)
+            .any(|entry| {
+                matches!(
+                    entry.command,
+                    LayerCommand::GpuPass(_) | LayerCommand::Meshes(_)
+                )
+            })
+    }
+
     /// Whether splitting the background into primitive-only passes would lose content.
     pub fn requires_ordered_rendering(&self) -> bool {
         self.has_layer_effects() || self.has_ordered_draws()
@@ -1821,7 +1836,9 @@ impl PrimitiveBatch {
             || self.layer_commands.iter().any(|entry| {
                 matches!(
                     &entry.command,
-                    LayerCommand::Sample { .. } | LayerCommand::GpuPass(_)
+                    LayerCommand::Sample { .. }
+                        | LayerCommand::Meshes(_)
+                        | LayerCommand::GpuPass(_)
                 )
             })
             || (!self.aux_data.is_empty() && self.paths.vertices.iter().any(|v| v.clip_shape > 0))
@@ -2091,7 +2108,9 @@ impl PrimitiveBatch {
                 .any(|entry| {
                     matches!(
                         entry.command,
-                        LayerCommand::Sample { .. } | LayerCommand::GpuPass(_)
+                        LayerCommand::Sample { .. }
+                            | LayerCommand::Meshes(_)
+                            | LayerCommand::GpuPass(_)
                     )
                 })
     }
@@ -2188,7 +2207,8 @@ impl PrimitiveBatch {
                         }
                     }
                 }
-                LayerCommand::GpuPass(_)
+                LayerCommand::Meshes(_)
+                | LayerCommand::GpuPass(_)
                 | LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }
                 | LayerCommand::DeferredSvg { .. }

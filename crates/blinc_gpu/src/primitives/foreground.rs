@@ -10,7 +10,9 @@ impl PrimitiveBatch {
             || self.foreground_layer_commands.iter().any(|entry| {
                 matches!(
                     entry.command,
-                    LayerCommand::Sample { .. } | LayerCommand::GpuPass(_)
+                    LayerCommand::Sample { .. }
+                        | LayerCommand::GpuPass(_)
+                        | LayerCommand::Meshes(_)
                 )
             })
     }

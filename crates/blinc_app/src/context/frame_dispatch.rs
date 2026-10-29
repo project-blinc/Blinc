@@ -95,7 +95,7 @@ impl RenderContext {
             if has_layer_effects_in_batch {
                 // Render the backdrop, grouped content, images and glass in composition
                 // order.
-                if batch.has_gpu_passes() {
+                if batch.has_external_gpu_draws() {
                     let backdrop = self.backdrop_texture.as_ref().unwrap();
                     self.renderer.render_background_pair(
                         target,

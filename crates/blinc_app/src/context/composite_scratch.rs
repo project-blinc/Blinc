@@ -143,6 +143,29 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
         entry.foreground_path_index_count.hash(h);
         std::mem::discriminant(&entry.command).hash(h);
         match &entry.command {
+            LayerCommand::Meshes(scene) => {
+                image(&scene.paint, h);
+                scene.frame_size.hash(h);
+                scene.meshes.len().hash(h);
+                for pending in &scene.meshes {
+                    (std::sync::Arc::as_ptr(&pending.mesh) as usize).hash(h);
+                    for col in &pending.transform.cols {
+                        floats(col, h);
+                    }
+                    floats(&pending.viewport.unwrap_or([0.0; 4]), h);
+                    floats(
+                        &[
+                            pending.camera.position.x,
+                            pending.camera.position.y,
+                            pending.camera.position.z,
+                            pending.camera.target.x,
+                            pending.camera.target.y,
+                            pending.camera.target.z,
+                        ],
+                        h,
+                    );
+                }
+            }
             LayerCommand::GpuPass(pass) => {
                 image(&pass.paint, h);
                 floats(&pass.pending.viewport.unwrap_or([0.0; 4]), h);

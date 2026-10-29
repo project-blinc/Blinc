@@ -197,7 +197,7 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         preserve: bool,
     ) {
-        if batch.has_gpu_passes() {
+        if batch.has_external_gpu_draws() {
             self.render_background_pair(
                 target,
                 (backdrop, backdrop_size),

@@ -65,6 +65,8 @@ use crate::text::TextRenderingContext;
 mod aux_data;
 mod cross_stream;
 mod gpu_pass;
+mod mesh;
+pub(crate) use mesh::camera_signature;
 mod native_clip;
 mod path_clip;
 mod rgba;
@@ -133,45 +135,24 @@ type ClipStackEntry = (ClipShape, Option<ClipData>, [f32; 4]);
 // Pending 3D Mesh Draw
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// A 3D mesh draw captured inside a canvas callback.
-///
-/// `GpuPaintContext` can't invoke `GpuRenderer::render_mesh_data` directly
-/// from inside `DrawContext::draw_mesh_data` — the paint context is a
-/// batch builder and has no handle to the renderer. So instead the
-/// override records the call (mesh data, model transform, a snapshot of
-/// the active camera + lights) and the outer render loop drains the list
-/// after `take_batch` and dispatches to `renderer.render_mesh_data` with
-/// the frame's real target. See `GpuPaintContext::take_pending_meshes`.
-///
-/// Fields are `pub` so the caller in `blinc_app::context` can read them
-/// without going through accessors. Don't construct these directly —
-/// go through `DrawContext::draw_mesh_data`.
+/// A mesh instance and its captured scene state. Native groups retain compatible
+/// consecutive instances together; the outer render loop drains ungrouped instances.
 #[derive(Clone, Debug)]
 pub struct PendingMesh {
-    /// Mesh geometry + PBR material. `Arc` so the capture is cheap and
-    /// the same mesh can be drawn at multiple transforms without cloning
-    /// the vertex/index buffers each time.
+    /// Shared geometry and PBR material; capture does not copy vertex/index data.
     pub mesh: std::sync::Arc<MeshData>,
     /// Model transform (world-space placement of this instance).
     pub transform: Mat4,
-    /// Snapshot of the active camera at draw time. The outer render
-    /// loop turns this into a view-projection matrix using the frame's
-    /// actual viewport size so aspect stays correct under resizes.
+    /// Camera snapshot; perspective aspect follows the scene viewport at dispatch.
     pub camera: Camera,
-    /// Snapshot of the active lights at draw time. For MVP, only the
-    /// first `Light::Directional` contributes (shadow pass disabled);
-    /// point / spot / ambient lights are ignored until the mesh
-    /// pipeline grows support for them.
+    /// Light snapshot. Dispatch uses directional lights and a shared scene shadow map.
     pub lights: Vec<Light>,
     /// Screen-space viewport rect in physical pixels [x, y, w, h].
     /// When `Some`, the renderer applies `set_viewport` + `set_scissor_rect`
     /// to clip the mesh to this region. When `None`, the mesh renders to
     /// the full frame target.
     pub viewport: Option<[f32; 4]>,
-    /// Pre-generated environment cubemap for IBL reflections. When `Some`,
-    /// the renderer uploads this data to the cubemap texture (if it differs
-    /// from what is currently bound). When `None`, the renderer's default
-    /// neutral gray fallback is used.
+    /// Optional shared environment cubemap uploaded before this instance is drawn.
     pub env_cubemap: Option<std::sync::Arc<CubemapData>>,
 }
 
@@ -187,6 +168,17 @@ pub struct PendingGpuPass {
     pub pass: crate::custom_pass::GpuPass,
     /// Physical `[x, y, width, height]` passed to the callback; None means full frame.
     pub viewport: Option<[f32; 4]>,
+}
+
+/// A mesh scene retained by a native visual group.
+#[derive(Clone, Debug)]
+pub struct GroupMeshes {
+    /// Consecutive instances sharing camera, viewport and paint coverage.
+    pub meshes: Vec<PendingMesh>,
+    /// Coverage, explicit opacity and clips applied to the completed scene.
+    pub paint: crate::primitives::DynamicImage,
+    /// Original physical frame extent used by the scene pipeline.
+    pub frame_size: (u32, u32),
 }
 
 /// Callback state retained by a native visual group.
@@ -347,10 +339,7 @@ pub struct GpuPaintContext<'a> {
     pending_overflow_fade: [f32; 4], // [top, right, bottom, left] in CSS pixels
     /// Fill rule of the next polygon or path clip, taken by `push_clip`.
     pending_clip_fill_rule: FillRule,
-    /// 3D mesh draws captured during this frame. `draw_mesh_data` pushes
-    /// here; the outer render loop drains with `take_pending_meshes`
-    /// after `take_batch` and dispatches each to
-    /// `GpuRenderer::render_mesh_data` against the frame's target.
+    /// Ungrouped mesh instances drained by the outer render loop.
     pending_meshes: Vec<PendingMesh>,
     /// 3D viewport bounds (logical pixels). Set by SceneKit3D before
     /// `draw_mesh_data` so the viewport rect can be computed from the
@@ -362,6 +351,7 @@ pub struct GpuPaintContext<'a> {
     /// Ungrouped canvas callbacks dispatched by the outer render loop.
     pending_gpu_passes: Vec<PendingGpuPass>,
     gpu_pass_scale_factor: f64,
+    last_group_mesh: Option<(AuxBatch, bool, usize, [usize; 8])>,
 }
 
 impl<'a> GpuPaintContext<'a> {
@@ -405,6 +395,7 @@ impl<'a> GpuPaintContext<'a> {
             pending_env: None,
             pending_gpu_passes: Vec::new(),
             gpu_pass_scale_factor: 1.0,
+            last_group_mesh: None,
             dynamic_batch: PrimitiveBatch::new(),
             motion_subtree_depth: 0,
             static_motion_depth: None,
@@ -473,6 +464,7 @@ impl<'a> GpuPaintContext<'a> {
             pending_env: None,
             pending_gpu_passes: Vec::new(),
             gpu_pass_scale_factor: 1.0,
+            last_group_mesh: None,
             dynamic_batch: PrimitiveBatch::new(),
             motion_subtree_depth: 0,
             static_motion_depth: None,
@@ -1820,15 +1812,7 @@ impl<'a> GpuPaintContext<'a> {
         std::mem::take(&mut self.batch)
     }
 
-    /// Take the accumulated 3D mesh draws captured during this frame.
-    ///
-    /// Every call to [`DrawContext::draw_mesh_data`] inside a canvas
-    /// callback pushes one [`PendingMesh`] here. The outer render loop
-    /// drains this list after `take_batch`, computes a
-    /// view-projection matrix from each entry's captured camera against
-    /// the frame's real target size, and dispatches to
-    /// `GpuRenderer::render_mesh_data`. See `blinc_app::context` for
-    /// the dispatch site.
+    /// Drain ungrouped mesh instances. Native group scenes stay in the batch commands.
     pub fn take_pending_meshes(&mut self) -> Vec<PendingMesh> {
         std::mem::take(&mut self.pending_meshes)
     }
@@ -4123,25 +4107,18 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             let br = self.transform_point(blinc_core::Point::new(lw, lh));
             [tl.x, tl.y, (br.x - tl.x).abs(), (br.y - tl.y).abs()]
         });
-        // Keep the bounds live for the rest of this canvas render.
-        // Clearing them after the first draw made single-mesh demos
-        // work but silently broke multi-mesh scenes: subsequent meshes
-        // received `viewport: None`, and their tonemap passes rendered
-        // to the FULL FRAME instead of the canvas rect — each mesh
-        // overwriting the previous output, leaving only the last-drawn
-        // mesh visible. `set_3d_viewport_bounds` is called once per
-        // canvas render, so overwriting here is redundant; next
-        // canvas's bounds will overwrite on their own.
-
-        // No clone — just Arc::clone (pointer bump, not 81.5 MB copy)
-        self.pending_meshes.push(PendingMesh {
+        // The canvas viewport remains active for every mesh in the scene.
+        let pending = PendingMesh {
             mesh,
             transform,
             camera,
             lights: self.lights.clone(),
             viewport,
             env_cubemap: self.pending_env.clone(),
-        });
+        };
+        if !self.capture_group_mesh(pending.clone()) {
+            self.pending_meshes.push(pending);
+        }
     }
 
     fn add_light(&mut self, light: Light) {
@@ -4560,6 +4537,7 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         hook: &dyn blinc_core::draw::GpuPassHook,
         viewport: Option<blinc_core::Rect>,
     ) {
+        self.last_group_mesh = None;
         // Downcast through the canonical wrapper type. Any other
         // `GpuPassHook` impl is treated as an opaque no-op — the only
         // sanctioned construction route is `blinc_gpu::GpuPass::new`.

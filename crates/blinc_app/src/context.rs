@@ -51,6 +51,8 @@ mod grouped_text_tests;
 #[cfg(test)]
 mod image_group_tests;
 mod image_rendering;
+#[cfg(test)]
+mod mesh_group_tests;
 mod mesh_rendering;
 #[cfg(test)]
 mod named_layer_tests;

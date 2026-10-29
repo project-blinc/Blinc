@@ -1,14 +1,17 @@
-//! Apply callback edits through the same image clips as ordinary canvas output.
+//! Apply callback and mesh-scene edits through ordinary canvas image coverage.
 use super::{GpuRenderer, Node};
 use crate::{
-    GpuImageInstance, paint::GroupGpuPass, primitives::RetainedImage, renderer::ImageBlend,
+    GpuImageInstance,
+    paint::{GroupGpuPass, GroupMeshes},
+    primitives::{DynamicImage, RetainedImage},
+    renderer::ImageBlend,
 };
 use std::sync::Arc;
 
-pub(super) fn has_gpu_pass(items: &[Node]) -> bool {
+pub(super) fn has_external_gpu_draws(items: &[Node]) -> bool {
     items.iter().any(|node| match node {
-        Node::GpuPass(_) => true,
-        Node::Layer(_, children) => has_gpu_pass(children),
+        Node::GpuPass(_) | Node::Meshes(_) => true,
+        Node::Layer(_, children) => has_external_gpu_draws(children),
         _ => false,
     })
 }
@@ -40,12 +43,74 @@ impl GpuRenderer {
             }
             None => None,
         };
+        self.edit_group_target(
+            target,
+            &pass.paint,
+            pass.frame_size,
+            origin,
+            |renderer, edit| {
+                let context = crate::custom_pass::RenderPassContext {
+                    device: &renderer.device,
+                    queue: &renderer.queue,
+                    target: edit,
+                    viewport_width: width,
+                    viewport_height: height,
+                    texture_format: renderer.texture_format,
+                    scale_factor: pass.scale_factor,
+                    view_proj: None,
+                    inv_view_proj: None,
+                    camera_pos: None,
+                    viewport,
+                };
+                pass.pending.pass.initialize_and_render(
+                    &renderer.device,
+                    &renderer.queue,
+                    renderer.texture_format,
+                    &context,
+                );
+            },
+        );
+    }
+
+    pub(super) fn draw_group_meshes(
+        &mut self,
+        target: &wgpu::TextureView,
+        scene: &GroupMeshes,
+        origin: [f32; 2],
+    ) {
+        self.edit_group_target(
+            target,
+            &scene.paint,
+            scene.frame_size,
+            origin,
+            |renderer, edit| {
+                renderer.render_pending_meshes(
+                    edit,
+                    scene.frame_size.0,
+                    scene.frame_size.1,
+                    &scene.meshes,
+                );
+            },
+        );
+    }
+
+    fn edit_group_target(
+        &mut self,
+        target: &wgpu::TextureView,
+        paint: &DynamicImage,
+        frame_size: (u32, u32),
+        origin: [f32; 2],
+        edit_draw: impl FnOnce(&mut Self, &wgpu::TextureView),
+    ) {
+        if paint.opacity <= 0.0 || frame_size.0 == 0 || frame_size.1 == 0 {
+            return;
+        }
         let edit = self
             .layer_texture_cache
-            .acquire_exact(&self.device, pass.frame_size, false);
+            .acquire_exact(&self.device, frame_size, false);
         let straight = self
             .layer_texture_cache
-            .acquire_exact(&self.device, pass.frame_size, false);
+            .acquire_exact(&self.device, frame_size, false);
         self.ensure_overlay_alpha();
         self.overlay_alpha.as_ref().unwrap().capture(
             &self.device,
@@ -56,25 +121,7 @@ impl GpuRenderer {
             &edit,
             origin,
         );
-        let context = crate::custom_pass::RenderPassContext {
-            device: &self.device,
-            queue: &self.queue,
-            target: &edit.view,
-            viewport_width: width,
-            viewport_height: height,
-            texture_format: self.texture_format,
-            scale_factor: pass.scale_factor,
-            view_proj: None,
-            inv_view_proj: None,
-            camera_pos: None,
-            viewport,
-        };
-        pass.pending.pass.initialize_and_render(
-            &self.device,
-            &self.queue,
-            self.texture_format,
-            &context,
-        );
+        edit_draw(self, &edit.view);
         self.overlay_alpha.as_ref().unwrap().straighten(
             &self.device,
             &self.queue,
@@ -85,12 +132,12 @@ impl GpuRenderer {
         );
         // Erase by coverage, then add the edited pixels. Transparent clears and
         // fractional opacity replace content without counting its alpha twice.
-        let mut mask = pass.paint.clone();
+        let mut mask = paint.clone();
         mask.data = vec![255; 4];
         self.render_dynamic_image_blend(target, &mask, origin, ImageBlend::Erase);
-        let mut image = pass.paint.clone();
-        image.width = width;
-        image.height = height;
+        let mut image = paint.clone();
+        image.width = frame_size.0;
+        image.height = frame_size.1;
         image.retained = Some(Arc::new(RetainedImage {
             view: straight.view.clone(),
             style: GpuImageInstance::default(),

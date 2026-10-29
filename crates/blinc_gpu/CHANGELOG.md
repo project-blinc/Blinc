@@ -5,6 +5,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Canvas mesh scenes inside native visual groups retain paint order, effects, clips and opacity. Consecutive compatible instances share depth, shadows, transparency sorting and tone mapping; shapes, images and callbacks separate scene runs. Invisible or empty instances no longer consume batch boundaries, and independent camera/viewports render as separate scenes.
 - Canvas GPU callbacks inside native visual groups keep paint order, group effects, clips and opacity. Callback edits preserve loaded content, transparent clears and full-frame physical coordinates. Glass backdrops share the visible background bake so callbacks execute once. Ungrouped callbacks retain their separate dispatch.
 - Native named layers can be sampled in their ordered paint pass, retaining post-effect pixels, source crops, destination transforms/clips and group opacity. Outputs are released after the pass; missing or forward references draw nothing.
 - Ordered composition preserves perspective layer geometry and edge filtering when neighboring collected groups become active.
@@ -15,6 +16,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - Native clear rendering sends nested groups through ordered composition so child groups render into their parent instead of blending independently onto the target.
 
 ### Added
+- `LayerCommand::Meshes` retains grouped scene snapshots; exhaustive host Rust command matches must handle it. `take_pending_meshes` drains only ungrouped instances, and `GpuRenderer::render_pending_meshes` provides shared scene dispatch. GPU primitive/instance layouts and shader sources are unchanged.
 - `LayerCommand::GpuPass` retains grouped callbacks and their physical frame/clip metadata. Host Rust consumers with exhaustive command matches need to handle this variant; GPU primitive and instance layouts are unchanged.
 - `LayerCommand::Sample` carries optional captured image geometry in `paint`; raw command producers can set it to `None`. Sample-only batches select ordered dispatch. Only names referenced by the pass retain their outputs.
 - Native ordered images can retain shared texture views and shader styling, avoiding pixel copies and replay uploads. `DeferredImage` reserves collected content positions; `DynamicImage` gains optional retained state without changing GPU instance layouts.

@@ -41,7 +41,7 @@ fn gpu_pass_group_opacity_and_paint_order() {
     super::opacity_group_tests::pixel(&page, (25, 15), [128, 0, 127, 255]);
 }
 
-fn target(context: &RenderContext, scale: u32) -> (wgpu::Texture, wgpu::TextureView) {
+pub(super) fn target(context: &RenderContext, scale: u32) -> (wgpu::Texture, wgpu::TextureView) {
     let texture = context.device().create_texture(&wgpu::TextureDescriptor {
         label: Some("GPU pass groups"),
         size: wgpu::Extent3d {
@@ -63,7 +63,7 @@ fn target(context: &RenderContext, scale: u32) -> (wgpu::Texture, wgpu::TextureV
     (texture, view)
 }
 
-fn frame(
+pub(super) fn frame(
     context: &mut RenderContext,
     tree: &RenderTree,
     state: &RenderState,

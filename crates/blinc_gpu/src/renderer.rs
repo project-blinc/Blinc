@@ -29,6 +29,7 @@ mod dynamic_image;
 mod foreground;
 mod glass;
 mod image_blend;
+mod mesh_dispatch;
 mod overlay;
 use image_blend::ImageBlend;
 mod text;
@@ -5227,7 +5228,8 @@ impl GpuRenderer {
                             }
                         }
                     }
-                    LayerCommand::GpuPass(_)
+                    LayerCommand::Meshes(_)
+                    | LayerCommand::GpuPass(_)
                     | LayerCommand::Sample { .. }
                     | LayerCommand::DeferredText { .. }
                     | LayerCommand::DeferredSvg { .. }
@@ -5962,7 +5964,8 @@ impl GpuRenderer {
                         }
                     }
                 }
-                LayerCommand::GpuPass(_)
+                LayerCommand::Meshes(_)
+                | LayerCommand::GpuPass(_)
                 | LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }
                 | LayerCommand::DeferredSvg { .. }
@@ -7415,7 +7418,8 @@ impl GpuRenderer {
                         }
                     }
                 }
-                LayerCommand::GpuPass(_)
+                LayerCommand::Meshes(_)
+                | LayerCommand::GpuPass(_)
                 | LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }
                 | LayerCommand::DeferredSvg { .. }
