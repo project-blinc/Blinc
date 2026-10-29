@@ -41,10 +41,14 @@ impl RenderContext {
         target_texture: Option<&wgpu::Texture>,
         try_fast_paint: bool,
     ) -> Result<()> {
-        self.bind_tree_cache(tree, render_state.is_some());
+        if !self.overlay_frame_active {
+            self.bind_tree_cache(tree, render_state.is_some());
+        }
         // Consume the atlas-growth notification; frame preparation binds the current atlas
         // views.
-        let _ = self.text_ctx.take_atlas_grew();
+        if !self.overlay_frame_active {
+            let _ = self.text_ctx.take_atlas_grew();
+        }
 
         // Use the static compositor when the surface texture is available. Inner cache
         // paints pass no texture.
@@ -68,7 +72,7 @@ impl RenderContext {
         // Commit animation and promotion status for both direct and compositor rendering.
         let v2_statuses = tree.compute_animation_status();
         tree.commit_animation_status(&v2_statuses);
-        if !self.in_compositor_inner_call {
+        if !self.in_compositor_inner_call && !self.overlay_frame_active {
             self.refresh_css_cache_ownership(tree);
         }
 
@@ -541,7 +545,7 @@ impl RenderContext {
         }
 
         // Render overlays from RenderState
-        if let Some(state) = render_state {
+        if let Some(state) = render_state.filter(|_| !self.overlay_frame_active) {
             self.render_overlays(state, width, height, target);
         }
 

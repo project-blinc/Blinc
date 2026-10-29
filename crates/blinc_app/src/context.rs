@@ -58,9 +58,12 @@ mod mesh_rendering;
 mod named_layer_tests;
 #[cfg(test)]
 mod overlay_ancestor_tests;
+mod overlay_frame;
 #[cfg(test)]
 mod overlay_group_tests;
 mod overlay_rendering;
+#[cfg(test)]
+mod overlay_tree_tests;
 #[cfg(test)]
 mod release_boundary_tests;
 #[cfg(test)]
@@ -330,6 +333,8 @@ pub struct RenderContext {
     sample_count: u32,
     // Single texture for glass backdrop (rendered to and sampled from)
     backdrop_texture: Option<CachedTexture>,
+    // Independent overlay paints keep their backdrop separate from main-frame replay.
+    overlay_backdrop_texture: Option<CachedTexture>,
     // Cached MSAA texture for anti-aliased rendering
     msaa_texture: Option<CachedTexture>,
     // LRU cache for images (prevents unbounded memory growth)
@@ -403,6 +408,8 @@ pub struct RenderContext {
     /// Suppress dynamic and foreground dispatch while the inner call paints the static
     /// cache.
     in_compositor_inner_call: bool,
+    overlay_frame_active: bool,
+    overlay_invalidates_replay: bool,
     /// Promoted CSS textures keyed by node, paired with their allocated source extents.
     /// Live animation values are applied when blitting.
     css_composited_textures:
@@ -672,6 +679,7 @@ impl RenderContext {
             queue,
             sample_count,
             backdrop_texture: None,
+            overlay_backdrop_texture: None,
             msaa_texture: None,
             image_cache: LruCache::new(NonZeroUsize::new(IMAGE_CACHE_CAPACITY).unwrap()),
             image_load_times: std::collections::HashMap::new(),
@@ -702,6 +710,8 @@ impl RenderContext {
             cached_bg_batch: None,
             cached_dynamic_batch: None,
             in_compositor_inner_call: false,
+            overlay_frame_active: false,
+            overlay_invalidates_replay: false,
             css_composited_textures: std::collections::HashMap::new(),
             css_composited_scratch_hash: std::collections::HashMap::new(),
             motion_subtree_textures: std::collections::HashMap::new(),

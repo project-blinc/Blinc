@@ -231,6 +231,15 @@ impl CustomRenderPass for EditPass {
     }
 }
 
+pub(super) fn clear_pass(color: wgpu::Color) -> (GpuPass, Arc<Mutex<Vec<(u32, u32, f64)>>>) {
+    let frames = Arc::new(Mutex::new(Vec::new()));
+    let pass = GpuPass::new(EditPass {
+        edit: Arc::new(Mutex::new(Edit::Clear(color))),
+        frames: frames.clone(),
+    });
+    (pass, frames)
+}
+
 #[test]
 #[ignore] // Requires GPU
 fn gpu_pass_group_load_clear_path_clip_and_explicit_opacity() {

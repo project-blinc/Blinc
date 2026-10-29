@@ -41,8 +41,17 @@ impl RenderContext {
                 .values()
                 .any(|meta| !meta.dynamic_batch && !meta.primitive_range.is_empty());
         let clear = [0.0, 0.0, 0.0, self.clear_alpha as f64];
+        let load = self.overlay_frame_active;
         let render_background = |renderer: &mut GpuRenderer, batch: &PrimitiveBatch| {
-            if retained_group && batch.requires_ordered_rendering() {
+            if load {
+                if batch.requires_ordered_rendering() {
+                    renderer.render_overlay_msaa(target, batch, 1);
+                } else {
+                    // Unordered paths and images have their own dispatch below.
+                    renderer.update_aux_data_for_batch(batch);
+                    renderer.render_primitives_overlay(target, &batch.primitives);
+                }
+            } else if retained_group && batch.requires_ordered_rendering() {
                 // Retained content can nest groups in the static owner. Replay
                 // them together through the ordered single-sample compositor.
                 renderer.clear_target(
@@ -78,30 +87,34 @@ impl RenderContext {
                 let backdrop_tex = self.backdrop_texture.take().unwrap();
                 self.renderer
                     .clear_target(&backdrop_tex.view, wgpu::Color::TRANSPARENT);
-                self.renderer.clear_target(
-                    target,
-                    wgpu::Color {
-                        r: 0.0,
-                        g: 0.0,
-                        b: 0.0,
-                        a: self.clear_alpha as f64,
-                    },
-                );
+                if !load {
+                    self.renderer.clear_target(
+                        target,
+                        wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: self.clear_alpha as f64,
+                        },
+                    );
+                }
                 self.render_images_ref(&backdrop_tex.view, &bg_images);
-                self.render_images_ref(target, &bg_images);
+                if !load {
+                    self.render_images_ref(target, &bg_images);
+                }
                 self.backdrop_texture = Some(backdrop_tex);
             }
 
-            if has_layer_effects_in_batch {
+            if has_layer_effects_in_batch || load {
                 // Render the backdrop, grouped content, images and glass in composition
                 // order.
-                if batch.has_external_gpu_draws() {
+                if batch.has_external_gpu_draws() || load {
                     let backdrop = self.backdrop_texture.as_ref().unwrap();
                     self.renderer.render_background_pair(
                         target,
                         (&backdrop.view, (backdrop.width, backdrop.height)),
                         batch,
-                        Some(wgpu::Color {
+                        (!load).then_some(wgpu::Color {
                             r: clear[0],
                             g: clear[1],
                             b: clear[2],
@@ -166,7 +179,7 @@ impl RenderContext {
             }
             self.render_images_ref(target, &fg_images);
 
-            if has_layer_effects_in_batch {
+            if has_layer_effects_in_batch || load {
                 self.renderer.update_aux_data_for_batch(batch);
                 self.renderer.render_foreground(target, batch);
             }
@@ -256,11 +269,7 @@ impl RenderContext {
                 // Preserve the shared auxiliary rows for primitive overlays and the
                 // foreground streams drawn after glass.
                 z0_batch.aux_data = batch.aux_data.clone();
-                self.renderer.render_with_clear(
-                    target,
-                    &z0_batch,
-                    [0.0, 0.0, 0.0, self.clear_alpha as f64],
-                );
+                render_background(&mut self.renderer, &z0_batch);
 
                 // Render dynamic images (video frames)
                 if !batch.dynamic_images.is_empty() {

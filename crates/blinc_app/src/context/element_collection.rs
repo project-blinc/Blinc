@@ -43,6 +43,7 @@ impl RenderContext {
             // holding baked PRIM_TEXT UVs into it would sample whatever
             // lands there next. This walk rebuilds them.
             self.renderer.invalidate_static_layer();
+            self.overlay_invalidates_replay |= self.overlay_frame_active;
         }
 
         // Reuse scratch buffers - take them, clear, populate, and return
