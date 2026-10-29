@@ -30,6 +30,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Nested native overlay panels retain collected content and cover enclosing foreground content while preserving outer isolation, inherited effects/clips and live animation ownership across app frame modes.
 - Image builder opacity is applied once in native groups and independent image dispatch. CSS overrides replace the builder value while parent opacity, authored pixel alpha, tint and load fades retain their own factors.
 - Dedicated overlay trees share ordered frame composition while loading existing pixels. Dynamic and collected content, groups and GPU output retain their owners; main replay data and promoted textures survive independent paints. Overlay bakes are released after each call, glass uses a separate reusable backdrop, and atlas reclamation or growth invalidates stale main glyph replay.
 - Inline overlay content retains supported native ancestor motion, opacity, effects, transforms and clips above ordinary foreground, including live zero recovery and snapshot interleaving.

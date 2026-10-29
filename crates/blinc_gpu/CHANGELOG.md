@@ -5,6 +5,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Nested native overlays paint after their late owner's ordinary foreground content in tree order across both streams. Intermediate native layer state follows each nested panel, while the enclosing overlay's opacity/effects remain joint.
 - Inline portals carry supported native ancestor layers into their late dynamic scope, preserving opacity/effects and restoring ordinary sibling ownership afterward.
 - Shared native groups inside overlay subtrees retain their dynamic owner, preserving late foreground stacking instead of moving to the static paint anchor.
 - Canvas mesh scenes inside native visual groups retain paint order, effects, clips and opacity. Consecutive compatible instances share depth, shadows, transparency sorting and tone mapping; shapes, images and callbacks separate scene runs. Invisible or empty instances no longer consume batch boundaries, and independent camera/viewports render as separate scenes.
@@ -18,6 +19,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - Native clear rendering sends nested groups through ordered composition so child groups render into their parent instead of blending independently onto the target.
 
 ### Added
+- Native `cross_stream::Capture` carries `overlay_order: Option<u32>` for overlay ownership ordering; raw Rust struct literals must provide `None` for ordinary groups. GPU primitive/instance and shader layouts are unchanged.
 - `LayerCommand::Meshes` retains grouped scene snapshots; exhaustive host Rust command matches must handle it. `take_pending_meshes` drains only ungrouped instances, and `GpuRenderer::render_pending_meshes` provides shared scene dispatch. GPU primitive/instance layouts and shader sources are unchanged.
 - `LayerCommand::GpuPass` retains grouped callbacks and their physical frame/clip metadata. Host Rust consumers with exhaustive command matches need to handle this variant; GPU primitive and instance layouts are unchanged.
 - `LayerCommand::Sample` carries optional captured image geometry in `paint`; raw command producers can set it to `None`. Sample-only batches select ordered dispatch. Only names referenced by the pass retain their outputs.

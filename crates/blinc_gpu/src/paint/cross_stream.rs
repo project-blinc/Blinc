@@ -81,6 +81,7 @@ impl GpuPaintContext<'_> {
     }
 
     pub(super) fn begin_cross_stream_layer(&mut self, id: u64, config: LayerConfig) -> bool {
+        let overlay_order = self.overlay_root_pending.take();
         self.copy_overlay_ancestors(id);
         if self.active_composite_layer.is_some()
             || self.rejected_cross_stream_groups.contains(&id)
@@ -90,6 +91,7 @@ impl GpuPaintContext<'_> {
             return false;
         }
         self.push_native_layer(config, Some(GroupId::Node(id)));
+        self.layer_stack.last_mut().unwrap().overlay_order = overlay_order;
         true
     }
 
@@ -124,6 +126,7 @@ impl GpuPaintContext<'_> {
             )
         });
         let state = LayerState {
+            overlay_order: None,
             cross_stream_static: retain_static,
             cross_stream,
             config: config.clone(),
@@ -181,6 +184,7 @@ impl GpuPaintContext<'_> {
             batch.cross_stream_groups.captures.push(Capture {
                 id,
                 foreground_owner,
+                overlay_order: state.overlay_order,
                 background: background..batch.layer_commands.len(),
                 foreground: foreground..batch.foreground_layer_commands.len(),
             });

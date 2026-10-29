@@ -9,7 +9,6 @@ impl RenderTree {
             tree: &RenderTree,
             node: LayoutNodeId,
             foreground: bool,
-            inside_portal: bool,
             capabilities: DeferredContent,
             groups: &mut Vec<(LayoutNodeId, DeferredContent)>,
         ) -> (bool, bool, DeferredContent, bool, bool) {
@@ -56,14 +55,7 @@ impl RenderTree {
             let start = groups.len();
             for child in tree.layout_tree.children(node) {
                 let (child_native, child_foreground, child_content, child_canvas, child_portal) =
-                    visit(
-                        tree,
-                        child,
-                        foreground,
-                        inside_portal || props.is_overlay_root,
-                        capabilities,
-                        groups,
-                    );
+                    visit(tree, child, foreground, capabilities, groups);
                 native &= child_native;
                 has_foreground |= child_foreground;
                 has_canvas |= child_canvas;
@@ -72,7 +64,6 @@ impl RenderTree {
                 content.svg |= child_content.svg;
                 content.image |= child_content.image;
             }
-            native &= !(inside_portal && props.is_overlay_root);
             // Unsupported moving or effect owners retain their descendants' fallback pass.
             if !native
                 && (tree.motion_bindings.contains_key(&node)
@@ -119,7 +110,7 @@ impl RenderTree {
         groups.clear();
         if let Some(root) = self.root {
             let mut planned = Vec::new();
-            visit(self, root, false, false, capabilities, &mut planned);
+            visit(self, root, false, capabilities, &mut planned);
             groups.extend(planned);
         }
     }

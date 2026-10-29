@@ -111,6 +111,7 @@ impl Default for TransformState {
 struct LayerState {
     cross_stream_static: bool,
     cross_stream: Option<(crate::primitives::cross_stream::GroupId, usize, usize, bool)>,
+    overlay_order: Option<u32>,
     /// The layer configuration
     config: LayerConfig,
     /// Batch that owns this group's commands and range snapshots.
@@ -245,6 +246,8 @@ pub struct GpuPaintContext<'a> {
     /// outside an overlay keeps its existing pre-dyn-batch
     /// canvas-overlay slot.
     overlay_subtree_depth: u32,
+    overlay_visit_sequence: u32,
+    overlay_root_pending: Option<u32>,
     overlay_layer_scope: Option<overlay::OverlayLayerScope>,
     overlay_ancestor_ids: std::collections::HashMap<
         (u64, crate::primitives::cross_stream::GroupId),
@@ -406,6 +409,8 @@ impl<'a> GpuPaintContext<'a> {
             motion_subtree_depth: 0,
             static_motion_depth: None,
             overlay_subtree_depth: 0,
+            overlay_visit_sequence: 0,
+            overlay_root_pending: None,
             overlay_layer_scope: None,
             overlay_ancestor_ids: std::collections::HashMap::new(),
             composite_layer_batches: std::collections::HashMap::new(),
@@ -477,6 +482,8 @@ impl<'a> GpuPaintContext<'a> {
             motion_subtree_depth: 0,
             static_motion_depth: None,
             overlay_subtree_depth: 0,
+            overlay_visit_sequence: 0,
+            overlay_root_pending: None,
             overlay_layer_scope: None,
             overlay_ancestor_ids: std::collections::HashMap::new(),
             composite_layer_batches: std::collections::HashMap::new(),
@@ -1840,6 +1847,8 @@ impl<'a> GpuPaintContext<'a> {
         self.overlay_ancestor_ids.clear();
         self.cross_stream_static_depth = 0;
         self.overlay_layer_scope = None;
+        self.overlay_visit_sequence = 0;
+        self.overlay_root_pending = None;
         self.static_motion_depth = None;
         self.is_3d = false;
         self.camera = None;

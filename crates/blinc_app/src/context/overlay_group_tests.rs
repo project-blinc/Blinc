@@ -486,22 +486,16 @@ fn overlay_group_gpu_callbacks_and_meshes_keep_late_coverage_and_order() {
 }
 
 #[test]
-fn overlay_group_unsupported_materials_transforms_and_nested_roots_keep_fallback() {
+fn overlay_group_unsupported_materials_and_transforms_keep_fallback() {
     super::opacity_group_tests::init_theme();
-    for boundary in 0..4 {
+    for boundary in 0..3 {
         let mut tree = with_plate(mixed_overlay());
         let owner = tree.query_by_id("overlay").unwrap();
-        if boundary == 3 {
-            tree.update_render_props(tree.query_by_id("image-host").unwrap(), |p| {
-                p.is_overlay_root = true
-            });
-        } else {
-            tree.update_render_props(owner, |p| match boundary {
-                0 => p.material = Some(blinc_layout::Material::Glass(GlassMaterial::new())),
-                1 => p.rotate_y = Some(20.0),
-                _ => p.flow = Some("separate-pass".into()),
-            });
-        }
+        tree.update_render_props(owner, |p| match boundary {
+            0 => p.material = Some(blinc_layout::Material::Glass(GlassMaterial::new())),
+            1 => p.rotate_y = Some(20.0),
+            _ => p.flow = Some("separate-pass".into()),
+        });
         let mut paint = GpuPaintContext::new(160.0, 120.0);
         paint.enable_deferred_text();
         paint.enable_deferred_svg();

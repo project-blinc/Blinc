@@ -3,6 +3,8 @@ use super::{ImagePaintOrder, LayerCommand, PrimitiveBatch};
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
+mod overlay;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum GroupId {
     Node(u64),
@@ -13,6 +15,8 @@ pub enum GroupId {
 pub struct Capture {
     pub id: GroupId,
     pub foreground_owner: bool,
+    /// Visit order within the outermost overlay; ordinary native groups use `None`.
+    pub overlay_order: Option<u32>,
     pub background: Range<usize>,
     pub foreground: Range<usize>,
 }
@@ -36,7 +40,11 @@ struct Cursor {
 enum Node {
     Run(bool, Cursor, Cursor),
     Image(bool, usize),
-    Layer(LayerCommand, Option<(GroupId, bool)>, Vec<Node>),
+    Layer(
+        LayerCommand,
+        Option<(GroupId, bool, Option<u32>)>,
+        Vec<Node>,
+    ),
     Command(LayerCommand),
     Group(GroupId),
 }
@@ -65,7 +73,10 @@ fn parse(batch: &PrimitiveBatch, foreground: bool, captures: &[Capture]) -> Vec<
             } else {
                 &capture.background
             };
-            (span.start, (capture.id, capture.foreground_owner))
+            (
+                span.start,
+                (capture.id, capture.foreground_owner, capture.overlay_order),
+            )
         })
         .collect();
     let end = Cursor {
@@ -148,6 +159,7 @@ fn parse(batch: &PrimitiveBatch, foreground: bool, captures: &[Capture]) -> Vec<
 
 struct Group {
     command: LayerCommand,
+    overlay_order: Option<u32>,
     background: Vec<Node>,
     foreground: Vec<Node>,
 }
@@ -161,10 +173,11 @@ fn collect(
     let mut output = Vec::new();
     for node in nodes {
         match node {
-            Node::Layer(command, Some((id, owner)), children) => {
+            Node::Layer(command, Some((id, owner, overlay_order)), children) => {
                 let children = collect(children, foreground, groups, anchors);
                 let group = groups.entry(id).or_insert_with(|| Group {
                     command,
+                    overlay_order,
                     background: Vec::new(),
                     foreground: Vec::new(),
                 });
@@ -370,18 +383,27 @@ impl PrimitiveBatch {
         let captures = std::mem::take(&mut source.cross_stream_groups.captures);
         let mut groups = HashMap::new();
         let mut anchors = HashSet::new();
-        let background = collect(
+        let mut background = collect(
             parse(&source, false, &captures),
             false,
             &mut groups,
             &mut anchors,
         );
-        let foreground = collect(
+        let mut foreground = collect(
             parse(&source, true, &captures),
             true,
             &mut groups,
             &mut anchors,
         );
+        if groups
+            .values()
+            .filter(|group| group.overlay_order.is_some())
+            .take(2)
+            .count()
+            == 2
+        {
+            overlay::resolve(&mut background, &mut foreground, &mut groups);
+        }
         emit(&background, &mut source, &groups, self, false, &mut text);
         emit(&foreground, &mut source, &groups, self, true, &mut text);
         self.dynamic_images.extend(

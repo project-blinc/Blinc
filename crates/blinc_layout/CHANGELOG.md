@@ -5,8 +5,9 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Supported nested overlay roots retain native and collected-content groups instead of rejecting their enclosing overlay's composition.
 - `Image::opacity` is owned once by `RenderProps`, so CSS and animation can replace it. Built-in `ImageRenderInfo::opacity` now exports neutral content alpha; custom image producers retain their independent intrinsic alpha.
-- Supported native ancestors spanning inline portals retain collected-content groups and avoid independent animation promotion; nested and unsupported portals keep their existing admission guards.
+- Supported native ancestors spanning inline portals retain collected-content groups and avoid independent animation promotion; unsupported portals keep their existing admission guards.
 - Supported inline overlay roots keep collected content and native descendants in a late visual group above ordinary foreground. Portals remain ownership boundaries for ordinary ancestors.
 - Native canvas groups retain their ownership at bound-opacity endpoints so direct writes recover their complete output after a settled zero.
 - Property, text, class and region bindings stay in their owning tree namespace; replacement and drop release its subscriptions and queued work without disturbing another window. Stable node identities and slotmap lookups remain unchanged.

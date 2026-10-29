@@ -12,6 +12,11 @@ pub(super) struct OverlayLayerScope {
 impl GpuPaintContext<'_> {
     /// Enter an inline portal, retaining native ancestors in a separate late scope.
     pub fn push_overlay_subtree(&mut self) {
+        if self.overlay_subtree_depth == 0 {
+            self.overlay_visit_sequence = 0;
+        }
+        self.overlay_root_pending = Some(self.overlay_visit_sequence);
+        self.overlay_visit_sequence = self.overlay_visit_sequence.saturating_add(1);
         if self.overlay_subtree_depth == 0
             && self.active_composite_layer.is_none()
             && !self.layer_stack.is_empty()
@@ -59,6 +64,7 @@ impl GpuPaintContext<'_> {
 
     /// Leave the portal and restore ordinary ancestor command ownership.
     pub fn pop_overlay_subtree(&mut self) {
+        self.overlay_root_pending = None;
         self.overlay_subtree_depth = self.overlay_subtree_depth.saturating_sub(1);
         if self.overlay_subtree_depth == 0
             && let Some(scope) = self.overlay_layer_scope.take()
