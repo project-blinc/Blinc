@@ -5,6 +5,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Shared native groups inside overlay subtrees retain their dynamic owner, preserving late foreground stacking instead of moving to the static paint anchor.
 - Canvas mesh scenes inside native visual groups retain paint order, effects, clips and opacity. Consecutive compatible instances share depth, shadows, transparency sorting and tone mapping; shapes, images and callbacks separate scene runs. Invisible or empty instances no longer consume batch boundaries, and independent camera/viewports render as separate scenes.
 - Canvas GPU callbacks inside native visual groups keep paint order, group effects, clips and opacity. Callback edits preserve loaded content, transparent clears and full-frame physical coordinates. Glass backdrops share the visible background bake so callbacks execute once. Ungrouped callbacks retain their separate dispatch.
 - Native named layers can be sampled in their ordered paint pass, retaining post-effect pixels, source crops, destination transforms/clips and group opacity. Outputs are released after the pass; missing or forward references draw nothing.

@@ -398,7 +398,7 @@ fn effect_group_dpi_and_nested_effects_keep_cropped_clip_frames() {
     );
 }
 #[test]
-fn effect_group_capabilities_and_unsupported_boundaries_keep_fallback() {
+fn effect_group_capabilities_preserve_owner_and_unsupported_fallback() {
     super::opacity_group_tests::init_theme();
     for missing in 0..4 {
         for boundary in 0..5 {
@@ -434,10 +434,15 @@ fn effect_group_capabilities_and_unsupported_boundaries_keep_fallback() {
             }
             tree.render_with_motion(&mut paint, &state);
             let batch = paint.take_batch();
+            let dynamic = paint.take_dynamic_batch();
             let captured = missing == 0 && boundary == 0;
             assert_eq!(!batch.cross_stream_groups.text_nodes.is_empty(), captured);
             assert_eq!(!batch.cross_stream_groups.svg_nodes.is_empty(), captured);
             assert_eq!(!batch.cross_stream_groups.image_nodes.is_empty(), captured);
+            let late = missing == 0 && boundary == 2;
+            assert_eq!(!dynamic.cross_stream_groups.text_nodes.is_empty(), late);
+            assert_eq!(!dynamic.cross_stream_groups.svg_nodes.is_empty(), late);
+            assert_eq!(!dynamic.cross_stream_groups.image_nodes.is_empty(), late);
         }
     }
 }

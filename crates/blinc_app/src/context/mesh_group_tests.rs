@@ -6,7 +6,7 @@ use blinc_core::{
     draw::{Material, MeshData, Vertex},
 };
 
-fn mesh(color: [f32; 3]) -> Arc<MeshData> {
+pub(super) fn mesh(color: [f32; 3]) -> Arc<MeshData> {
     Arc::new(MeshData {
         vertices: Arc::new(vec![
             Vertex::new([-1.0, -1.0, 0.0]),
@@ -165,7 +165,7 @@ fn mesh_group_replay_foreground_effects_dpi_and_opacity_endpoints() {
     }
 }
 
-fn camera() -> Camera {
+pub(super) fn camera() -> Camera {
     Camera::orthographic(Vec3::new(0.0, 0.0, 3.0), Vec3::new(0.0, 0.0, 0.0), 1.5)
 }
 fn raw_frame(context: &mut RenderContext, batch: &PrimitiveBatch) -> image::RgbaImage {

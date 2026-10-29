@@ -30,6 +30,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Inline overlay text, styled text, SVGs, images, canvases and GPU scenes share root opacity/effects and paint order above static foreground content. Snapshot, live binding and CSS updates retain that ownership.
 - Grouped canvas meshes preserve opacity/effects, clip coverage and paint order in snapshot, animated and compositor frames. Mesh scenes share the GPU dispatcher with independent output, and glass backdrops reuse the scene result instead of executing its hooks twice.
 - Grouped canvas GPU passes execute within their visual owners during snapshot, animated and compositor frames. Replay preserves display scale, and callback-containing promoted scratch batches refresh when painted.
 - Stateless tree rendering shares ordered group composition with animated frames, keeping collected text, SVGs, images and foreground content inside supported opacity/effect groups. Snapshot frames release their replay cache, and switching frame modes invalidates cached ownership.

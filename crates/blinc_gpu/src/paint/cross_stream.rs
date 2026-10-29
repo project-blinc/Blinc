@@ -104,8 +104,10 @@ impl GpuPaintContext<'_> {
                 None
             }
         });
-        // A moving shared group keeps its tree paint position in the static owner.
-        let retain_static = shared.is_some() && self.aux_batch() == AuxBatch::Dynamic;
+        // Moving groups keep their static paint anchor; portals retain their late owner.
+        let retain_static = shared.is_some()
+            && self.aux_batch() == AuxBatch::Dynamic
+            && self.overlay_subtree_depth == 0;
         if retain_static {
             self.cross_stream_static_depth += 1;
         }

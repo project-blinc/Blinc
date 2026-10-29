@@ -43,7 +43,6 @@ impl RenderTree {
                         None | Some(blinc_core::Brush::Solid(_) | blinc_core::Brush::Gradient(_))
                     ))
                 && props.layer != RenderLayer::Glass
-                && !props.is_overlay_root
                 && props.flow.is_none()
                 && props.flow_graph.is_none()
                 && props.rotate_x.is_none()
@@ -95,11 +94,20 @@ impl RenderTree {
                     .get(&node)
                     .is_some_and(|b| b.opacity.is_some());
             if native
-                && ((!foreground && has_foreground) || needs_content_group || needs_canvas_group)
+                && (props.is_overlay_root
+                    || (!foreground && has_foreground)
+                    || needs_content_group
+                    || needs_canvas_group)
             {
                 groups.push((node, content));
             }
-            (native, has_foreground, content, has_canvas)
+            // A portal owns its late group; ordinary ancestors cannot capture across it.
+            (
+                native && !props.is_overlay_root,
+                has_foreground,
+                content,
+                has_canvas,
+            )
         }
         let mut groups = self.cross_stream_groups.borrow_mut();
         groups.clear();
