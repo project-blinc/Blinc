@@ -121,6 +121,9 @@ impl GpuPaintContext<'_> {
                 glass.clip_radius = radius;
             }
         }
+        if self.capture_group_glass(glass) {
+            return;
+        }
         if nested {
             self.active_batch_mut().push_nested_glass(glass);
         } else {

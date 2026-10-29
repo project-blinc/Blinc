@@ -59,11 +59,15 @@ impl RenderTree {
         // state) is actually painted. Read by callers via
         // `visible_anim_active()` after this returns to gate the
         // end-of-frame redraw chain.
-        self.plan_cross_stream_groups(super::super::DeferredContent {
-            text: ctx.supports_deferred_text(),
-            svg: ctx.supports_deferred_svg(),
-            image: ctx.supports_deferred_image(),
-        });
+        self.plan_cross_stream_groups(
+            super::super::DeferredContent {
+                glass: false,
+                text: ctx.supports_deferred_text(),
+                svg: ctx.supports_deferred_svg(),
+                image: ctx.supports_deferred_image(),
+            },
+            ctx.supports_glass_layers(),
+        );
         self.visible_anim_active.set(false);
         // Same lifecycle for the canvas-detection flag: cleared at the
         // top of every full paint, set by `render_layer_with_motion`
@@ -192,7 +196,7 @@ impl RenderTree {
             }
 
             // Pass 3: Foreground (primitives go to foreground batch, rendered after glass)
-            if has_foreground {
+            if has_foreground || has_glass {
                 ctx.set_foreground_layer(true);
                 self.render_layer_with_motion(
                     ctx,
@@ -877,6 +881,7 @@ impl RenderTree {
 
         // Determine if this node is a glass element
         let is_glass = matches!(render_node.props.material, Some(Material::Glass(_)));
+        let grouped_glass = cross_stream_group && cross_stream_content.is_some_and(|c| c.glass);
         let children_glass_depth = if is_glass {
             glass_depth + 1
         } else {
@@ -885,7 +890,7 @@ impl RenderTree {
 
         // Determine if this node is a foreground element
         let is_foreground = render_node.props.layer == RenderLayer::Foreground;
-        let children_inside_foreground = inside_foreground || is_foreground;
+        let children_inside_foreground = inside_foreground || is_foreground || grouped_glass;
 
         // Increment z_layer for Stack children for proper interleaved rendering
         // This ensures primitives AND text in each Stack layer render together
@@ -903,18 +908,16 @@ impl RenderTree {
             ctx.set_z_layer(render_node.props.z_index as u32);
         }
 
-        // Determine effective layer:
-        // - Children of glass elements (that aren't glass themselves) render in foreground
-        // - Children of foreground elements also render in foreground
-        // - Glass elements render in glass layer (both top-level and nested)
-        // - Otherwise, use the node's explicit layer setting
-        let effective_layer = if (glass_depth > 0 && !is_glass) || inside_foreground {
-            RenderLayer::Foreground
-        } else if is_glass {
-            RenderLayer::Glass
-        } else {
-            render_node.props.layer
-        };
+        // Glass children and supported glass scopes share the foreground stream.
+        // Other glass materials retain their separate pass.
+        let effective_layer =
+            if grouped_glass || (glass_depth > 0 && !is_glass) || inside_foreground {
+                RenderLayer::Foreground
+            } else if is_glass {
+                RenderLayer::Glass
+            } else {
+                render_node.props.layer
+            };
 
         // Ordinary layers open on their matching pass; native shared layers pair both passes.
         let has_layer_effects = !render_node.props.layer_effects.is_empty();
@@ -940,7 +943,8 @@ impl RenderTree {
                 RenderLayer::Background | RenderLayer::Foreground
             );
         // Retain a moving native ancestor before any of its descendants change owners.
-        let has_opacity_layer = (cross_stream_group && in_motion_subtree)
+        let has_opacity_layer = grouped_glass
+            || (cross_stream_group && in_motion_subtree)
             || keep_motion_group
             || node_motion_opacity < 1.0
             || has_layer_effects
@@ -1004,8 +1008,11 @@ impl RenderTree {
             };
             if cross_stream_group {
                 use slotmap::Key as _;
-                should_push_layer =
-                    ctx.push_cross_stream_layer(node.data().as_ffi(), config.clone());
+                should_push_layer = if grouped_glass {
+                    ctx.push_glass_layer(node.data().as_ffi(), config.clone())
+                } else {
+                    ctx.push_cross_stream_layer(node.data().as_ffi(), config.clone())
+                };
             }
             if !should_push_layer && effective_layer == target_layer {
                 ctx.push_layer(config);
@@ -1593,7 +1600,7 @@ impl RenderTree {
 
             // Restore foreground layer state after border/outline rendering
             if border_in_foreground {
-                ctx.set_foreground_layer(false);
+                ctx.set_foreground_layer(target_layer == RenderLayer::Foreground);
             }
 
             // Handle canvas elements.

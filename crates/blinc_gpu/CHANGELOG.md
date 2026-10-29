@@ -5,6 +5,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Native glass groups retain their panel, clips and child content through opacity/effects and foreground replay. Tight pooled surfaces preserve world-space backdrop coordinates; eligible opaque draws retain the direct glass path.
 - Nested native overlays paint after their late owner's ordinary foreground content in tree order across both streams. Intermediate native layer state follows each nested panel, while the enclosing overlay's opacity/effects remain joint.
 - Inline portals carry supported native ancestor layers into their late dynamic scope, preserving opacity/effects and restoring ordinary sibling ownership afterward.
 - Shared native groups inside overlay subtrees retain their dynamic owner, preserving late foreground stacking instead of moving to the static paint anchor.
@@ -19,6 +20,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - Native clear rendering sends nested groups through ordered composition so child groups render into their parent instead of blending independently onto the target.
 
 ### Added
+- `LayerCommand::Glass`, `GroupGlass`, opt-in paint capture and backdrop-aware ordered/foreground dispatch. Exhaustive host command matches must handle the new variant. Native `GlassUniforms` is now 32 bytes: `clip_in_image` replaces `_padding`, with added `sample_size` and `origin`; all four native glass shaders use the matching frame layout. Primitive/image instance layouts are unchanged.
 - Native `cross_stream::Capture` carries `overlay_order: Option<u32>` for overlay ownership ordering; raw Rust struct literals must provide `None` for ordinary groups. GPU primitive/instance and shader layouts are unchanged.
 - `LayerCommand::Meshes` retains grouped scene snapshots; exhaustive host Rust command matches must handle it. `take_pending_meshes` drains only ungrouped instances, and `GpuRenderer::render_pending_meshes` provides shared scene dispatch. GPU primitive/instance layouts and shader sources are unchanged.
 - `LayerCommand::GpuPass` retains grouped callbacks and their physical frame/clip metadata. Host Rust consumers with exhaustive command matches need to handle this variant; GPU primitive and instance layouts are unchanged.

@@ -9,6 +9,7 @@ All notable changes to `blinc_core` will be documented in this file.
 - `ClipShape::RoundedRect` now carries a `CornerShape` (per-corner superellipse `n`) so clips can follow squircle / scoop / bevel outlines instead of always rounding. Constructors default to the existing `CornerShape::ROUND` so untouched callers behave identically.
 
 ### Added
+- Optional glass-layer hooks let a panel and compatible native content share one visual group; unsupported contexts retain the existing path.
 - Optional deferred image hooks reserve loaded textures or placeholders at native group paint positions.
 - Optional deferred SVG hooks reserve collected raster content at native group paint positions while unsupported contexts retain fallback.
 - Optional deferred text hooks let native group consumers reserve collected text at its paint position while contexts without a resolver keep collection fallback.

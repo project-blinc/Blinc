@@ -143,6 +143,11 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
         entry.foreground_path_index_count.hash(h);
         std::mem::discriminant(&entry.command).hash(h);
         match &entry.command {
+            LayerCommand::Glass(glass) => {
+                bytemuck::bytes_of(&glass.primitive).hash(h);
+                image(&glass.paint, h);
+                glass.frame_size.hash(h);
+            }
             LayerCommand::Meshes(scene) => {
                 image(&scene.paint, h);
                 scene.frame_size.hash(h);

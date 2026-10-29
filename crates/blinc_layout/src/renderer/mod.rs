@@ -606,6 +606,7 @@ struct DeferredContent {
     text: bool,
     svg: bool,
     image: bool,
+    glass: bool,
 }
 
 impl DeferredContent {
@@ -613,6 +614,7 @@ impl DeferredContent {
         (!self.text || ctx.supports_deferred_text())
             && (!self.svg || ctx.supports_deferred_svg())
             && (!self.image || ctx.supports_deferred_image())
+            && (!self.glass || ctx.supports_glass_layers())
     }
     fn any(self) -> bool {
         self.text || self.svg || self.image

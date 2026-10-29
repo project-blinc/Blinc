@@ -14,6 +14,23 @@ impl GpuRenderer {
         backdrop: &wgpu::TextureView,
         primitives: &[GpuGlassPrimitive],
     ) {
+        self.prepare_glass_draw_at(
+            backdrop,
+            primitives,
+            [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            [0.0; 2],
+            false,
+        );
+    }
+
+    pub(super) fn prepare_glass_draw_at(
+        &mut self,
+        backdrop: &wgpu::TextureView,
+        primitives: &[GpuGlassPrimitive],
+        sample_size: [f32; 2],
+        origin: [f32; 2],
+        clip_in_image: bool,
+    ) {
         if self.cached_glass.is_none() {
             self.cached_glass = Some(CachedGlassResources {
                 sampler: self.device.create_sampler(&wgpu::SamplerDescriptor {
@@ -29,7 +46,9 @@ impl GpuRenderer {
         let uniforms = GlassUniforms {
             viewport_size: [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
             time: self.time,
-            _padding: 0.0,
+            clip_in_image: if clip_in_image { 1.0 } else { 0.0 },
+            sample_size,
+            origin,
         };
         self.queue.write_buffer(
             &self.buffers.glass_uniforms,

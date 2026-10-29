@@ -126,6 +126,7 @@ impl GpuPaintContext<'_> {
             )
         });
         let state = LayerState {
+            captures_glass: false,
             overlay_order: None,
             cross_stream_static: retain_static,
             cross_stream,

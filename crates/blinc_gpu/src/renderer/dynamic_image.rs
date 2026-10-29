@@ -118,6 +118,13 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         preserve: bool,
     ) {
+        if batch.layer_commands.is_empty()
+            && batch.dynamic_images.is_empty()
+            && batch.paths.indices.is_empty()
+        {
+            self.render_to_backdrop(target, self.viewport_size, batch, preserve);
+            return;
+        }
         // Compose at screen resolution so nested layer scissors use screen pixels,
         // then sample the straight-alpha bake into the smaller backdrop.
         let viewport = self.viewport_size;
@@ -223,6 +230,6 @@ impl GpuRenderer {
             self.render_glass_frame(target, backdrop, backdrop_size, &glass, true);
         }
         self.update_aux_data_buffer(batch);
-        self.render_foreground(target, batch);
+        self.render_foreground_with_glass(target, backdrop, batch);
     }
 }

@@ -33,8 +33,13 @@ impl RenderContext {
             fg_glyphs,
             fg_decorations_by_layer,
         } = content;
-        let has_glass = batch.glass_count() > 0;
-        let has_layer_effects_in_batch = batch.has_layer_effects();
+        let has_glass = batch.glass_count() > 0
+            || batch.has_grouped_glass()
+            || self
+                .cached_bg_batch
+                .as_ref()
+                .is_some_and(|b| b.has_grouped_glass());
+        let has_layer_effects_in_batch = batch.has_layer_effects() || batch.has_grouped_glass();
         let retained_group = tree.had_retained_canvas_painted()
             || tree
                 .composite_bindings()
@@ -181,7 +186,9 @@ impl RenderContext {
 
             if has_layer_effects_in_batch || load {
                 self.renderer.update_aux_data_for_batch(batch);
-                self.renderer.render_foreground(target, batch);
+                let backdrop = self.backdrop_texture.as_ref().unwrap();
+                self.renderer
+                    .render_foreground_with_glass(target, &backdrop.view, batch);
             }
 
             // Interleaved z-layer rendering for proper text z-ordering in glass path

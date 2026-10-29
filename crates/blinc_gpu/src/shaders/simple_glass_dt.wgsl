@@ -18,7 +18,9 @@ struct VertexOutput {
 struct SimpleGlassUniforms {
     viewport_size: vec2<f32>,
     time: f32,
-    _padding: f32,
+    clip_in_image: f32,
+    sample_size: vec2<f32>,
+    origin: vec2<f32>,
 }
 
 struct SimpleGlassPrimitive {
@@ -108,13 +110,13 @@ fn vs_main(
 
     // Convert to clip space
     let clip_pos = vec2<f32>(
-        (pos.x / uniforms.viewport_size.x) * 2.0 - 1.0,
-        1.0 - (pos.y / uniforms.viewport_size.y) * 2.0
+        ((pos.x - uniforms.origin.x) / uniforms.viewport_size.x) * 2.0 - 1.0,
+        1.0 - ((pos.y - uniforms.origin.y) / uniforms.viewport_size.y) * 2.0
     );
 
     out.position = vec4<f32>(clip_pos, 0.0, 1.0);
     out.uv = pos;
-    out.screen_uv = pos / uniforms.viewport_size;
+    out.screen_uv = pos / uniforms.sample_size;
     out.instance_index = instance_index;
 
     return out;
@@ -165,12 +167,12 @@ fn blur_backdrop(uv: vec2<f32>, radius: f32, clip_bounds: vec4<f32>) -> vec4<f32
         return textureSampleLevel(backdrop_texture, backdrop_sampler, uv, 0.0);
     }
 
-    let texel_size = 1.0 / uniforms.viewport_size;
+    let texel_size = 1.0 / uniforms.sample_size;
     let sigma = radius; // CSS spec: blur radius IS the standard deviation
 
     // Clip bounds in UV space
-    let clip_min = clip_bounds.xy / uniforms.viewport_size;
-    let clip_max = (clip_bounds.xy + clip_bounds.zw) / uniforms.viewport_size;
+    let clip_min = clip_bounds.xy / uniforms.sample_size;
+    let clip_max = (clip_bounds.xy + clip_bounds.zw) / uniforms.sample_size;
     let has_clip = clip_bounds.x > -5000.0;
 
     // Start with center sample (highest weight)
@@ -233,7 +235,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let p = in.uv;
 
     // Calculate clip alpha
-    let clip_alpha = calculate_clip_alpha(p, prim.clip_bounds) * abi_shape_clip_alpha(p, select(0.0, prim.clip_radius.x, prim.clip_radius.w < 0.0));
+    var clip_alpha = 1.0;
+    if uniforms.clip_in_image < 0.5 {
+        clip_alpha = calculate_clip_alpha(p, prim.clip_bounds) * abi_shape_clip_alpha(p, select(0.0, prim.clip_radius.x, prim.clip_radius.w < 0.0));
+    }
     if clip_alpha < 0.001 {
         discard;
     }

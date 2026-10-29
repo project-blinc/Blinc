@@ -333,3 +333,60 @@ fn check_data_texture_loader(src: &str) {
     });
     assert!(returns_primitive, "return the loaded primitive");
 }
+
+#[test]
+fn glass_uniform_layout_keeps_tight_target_and_backdrop_frames_separate() {
+    use blinc_gpu::primitives::GlassUniforms;
+    assert_eq!(std::mem::size_of::<GlassUniforms>(), 32);
+    assert_eq!(std::mem::offset_of!(GlassUniforms, sample_size), 16);
+    assert_eq!(std::mem::offset_of!(GlassUniforms, origin), 24);
+    for (name, source, declaration) in [
+        (
+            "glass",
+            include_str!("../src/shaders/glass.wgsl"),
+            "struct GlassUniforms {",
+        ),
+        (
+            "glass_dt",
+            include_str!("../src/shaders/glass_dt.wgsl"),
+            "struct GlassUniforms {",
+        ),
+        (
+            "simple_glass",
+            include_str!("../src/shaders/simple_glass.wgsl"),
+            "struct SimpleGlassUniforms {",
+        ),
+        (
+            "simple_glass_dt",
+            include_str!("../src/shaders/simple_glass_dt.wgsl"),
+            "struct SimpleGlassUniforms {",
+        ),
+    ] {
+        let definition = wgsl_definition(source, declaration);
+        let module = naga::front::wgsl::parse_str(&definition).unwrap();
+        let members = module
+            .types
+            .iter()
+            .find_map(|(_, ty)| match &ty.inner {
+                TypeInner::Struct { members, span } => Some((members, span)),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(*members.1, 32, "{name}");
+        assert_eq!(
+            members
+                .0
+                .iter()
+                .map(|m| (m.name.as_deref().unwrap(), m.offset))
+                .collect::<Vec<_>>(),
+            vec![
+                ("viewport_size", 0),
+                ("time", 8),
+                ("clip_in_image", 12),
+                ("sample_size", 16),
+                ("origin", 24)
+            ],
+            "{name}"
+        );
+    }
+}

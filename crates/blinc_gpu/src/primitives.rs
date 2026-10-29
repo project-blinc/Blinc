@@ -1149,7 +1149,12 @@ pub struct Uniforms {
 pub struct GlassUniforms {
     pub viewport_size: [f32; 2],
     pub time: f32,
-    pub _padding: f32,
+    /// Nonzero when the retained image applies the captured clip coverage.
+    pub clip_in_image: f32,
+    /// World frame used for backdrop UVs and blur distances.
+    pub sample_size: [f32; 2],
+    /// World coordinate of the target's top-left pixel.
+    pub origin: [f32; 2],
 }
 
 /// Uniform buffer for compositor
@@ -1564,6 +1569,8 @@ pub struct PathBatch {
 /// to manage offscreen render targets and layer composition.
 #[derive(Clone, Debug)]
 pub enum LayerCommand {
+    /// Glass sampled from the frame backdrop within its foreground visual group.
+    Glass(Box<crate::paint::GroupGlass>),
     /// Consecutive mesh draws rendered as one scene within their native group.
     Meshes(Box<crate::paint::GroupMeshes>),
     /// A canvas callback executed at this paint position within its native group.
@@ -1824,6 +1831,14 @@ impl PrimitiveBatch {
             })
     }
 
+    /// Glass commands that need the prepared backdrop during foreground dispatch.
+    pub fn has_grouped_glass(&self) -> bool {
+        self.layer_commands
+            .iter()
+            .chain(&self.foreground_layer_commands)
+            .any(|entry| matches!(entry.command, LayerCommand::Glass(_)))
+    }
+
     /// Whether splitting the background into primitive-only passes would lose content.
     pub fn requires_ordered_rendering(&self) -> bool {
         self.has_layer_effects() || self.has_ordered_draws()
@@ -1836,7 +1851,8 @@ impl PrimitiveBatch {
             || self.layer_commands.iter().any(|entry| {
                 matches!(
                     &entry.command,
-                    LayerCommand::Sample { .. }
+                    LayerCommand::Glass(_)
+                        | LayerCommand::Sample { .. }
                         | LayerCommand::Meshes(_)
                         | LayerCommand::GpuPass(_)
                 )
@@ -2108,7 +2124,8 @@ impl PrimitiveBatch {
                 .any(|entry| {
                     matches!(
                         entry.command,
-                        LayerCommand::Sample { .. }
+                        LayerCommand::Glass(_)
+                            | LayerCommand::Sample { .. }
                             | LayerCommand::Meshes(_)
                             | LayerCommand::GpuPass(_)
                     )
@@ -2207,7 +2224,8 @@ impl PrimitiveBatch {
                         }
                     }
                 }
-                LayerCommand::Meshes(_)
+                LayerCommand::Glass(_)
+                | LayerCommand::Meshes(_)
                 | LayerCommand::GpuPass(_)
                 | LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }

@@ -1779,6 +1779,16 @@ pub trait DrawContext {
         false
     }
 
+    /// Whether a glass panel and its children can share one native visual group.
+    fn supports_glass_layers(&self) -> bool {
+        false
+    }
+
+    /// Begin a foreground glass group. Balance accepted pushes with `pop_layer`.
+    fn push_glass_layer(&mut self, _id: u64, _config: crate::LayerConfig) -> bool {
+        false
+    }
+
     /// Reserve an image node's position for its loaded texture or placeholder.
     fn defer_image(&mut self, _id: u64) -> bool {
         false

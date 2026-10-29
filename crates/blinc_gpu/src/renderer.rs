@@ -5228,7 +5228,8 @@ impl GpuRenderer {
                             }
                         }
                     }
-                    LayerCommand::Meshes(_)
+                    LayerCommand::Glass(_)
+                    | LayerCommand::Meshes(_)
                     | LayerCommand::GpuPass(_)
                     | LayerCommand::Sample { .. }
                     | LayerCommand::DeferredText { .. }
@@ -5964,7 +5965,8 @@ impl GpuRenderer {
                         }
                     }
                 }
-                LayerCommand::Meshes(_)
+                LayerCommand::Glass(_)
+                | LayerCommand::Meshes(_)
                 | LayerCommand::GpuPass(_)
                 | LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }
@@ -6785,6 +6787,25 @@ impl GpuRenderer {
         backdrop: &wgpu::TextureView,
         batch: &PrimitiveBatch,
     ) {
+        self.render_glass_at(
+            target,
+            backdrop,
+            batch,
+            [self.viewport_size.0 as f32, self.viewport_size.1 as f32],
+            [0.0; 2],
+            false,
+        );
+    }
+
+    fn render_glass_at(
+        &mut self,
+        target: &wgpu::TextureView,
+        backdrop: &wgpu::TextureView,
+        batch: &PrimitiveBatch,
+        sample_size: [f32; 2],
+        origin: [f32; 2],
+        clip_in_image: bool,
+    ) {
         if batch.glass_primitives.is_empty() {
             return;
         }
@@ -6815,7 +6836,13 @@ impl GpuRenderer {
         ordered_primitives.extend(liquid_primitives);
 
         self.update_aux_data_buffer(batch);
-        self.prepare_glass_draw(backdrop, &ordered_primitives);
+        self.prepare_glass_draw_at(
+            backdrop,
+            &ordered_primitives,
+            sample_size,
+            origin,
+            clip_in_image,
+        );
         let glass_bind_group = self
             .cached_glass
             .as_ref()
@@ -6882,15 +6909,22 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         has_backdrop_content: bool,
     ) {
-        if batch.has_ordered_draws() {
+        let primitive_background = batch.layer_commands.is_empty()
+            && batch.dynamic_images.is_empty()
+            && batch.paths.indices.is_empty();
+        if batch.has_ordered_draws() && !primitive_background {
             self.render_image_backdrop(backdrop, batch, has_backdrop_content);
             return;
         }
         if batch.primitives.is_empty() {
+            if !has_backdrop_content {
+                self.clear_target(backdrop, wgpu::Color::BLACK);
+            }
             return;
         }
 
         // Use full viewport size for coordinate mapping, even though texture is smaller.
+        self.update_aux_data_buffer(batch);
         // GPU automatically maps NDC space to the texture size, ensuring primitives
         // appear at correct relative positions for glass sampling.
         let main_uniforms = Uniforms {
@@ -6966,7 +7000,7 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         has_backdrop_content: bool,
     ) {
-        if batch.has_ordered_draws() {
+        if batch.has_ordered_draws() || batch.has_grouped_glass() {
             self.render_image_glass_frame(
                 target,
                 backdrop,
@@ -7418,7 +7452,8 @@ impl GpuRenderer {
                         }
                     }
                 }
-                LayerCommand::Meshes(_)
+                LayerCommand::Glass(_)
+                | LayerCommand::Meshes(_)
                 | LayerCommand::GpuPass(_)
                 | LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }

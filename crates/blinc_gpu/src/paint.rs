@@ -64,7 +64,9 @@ use crate::text::TextRenderingContext;
 
 mod aux_data;
 mod cross_stream;
+mod glass;
 mod gpu_pass;
+pub use glass::GroupGlass;
 mod mesh;
 pub(crate) use mesh::camera_signature;
 mod native_clip;
@@ -112,6 +114,7 @@ struct LayerState {
     cross_stream_static: bool,
     cross_stream: Option<(crate::primitives::cross_stream::GroupId, usize, usize, bool)>,
     overlay_order: Option<u32>,
+    captures_glass: bool,
     /// The layer configuration
     config: LayerConfig,
     /// Batch that owns this group's commands and range snapshots.
@@ -299,6 +302,7 @@ pub struct GpuPaintContext<'a> {
     deferred_text: bool,
     deferred_svg: bool,
     deferred_image: bool,
+    glass_layers: bool,
     /// Transform stack
     transform_stack: Vec<Affine2D>,
     /// Opacity stack
@@ -422,6 +426,7 @@ impl<'a> GpuPaintContext<'a> {
             deferred_text: false,
             deferred_svg: false,
             deferred_image: false,
+            glass_layers: false,
         }
     }
 
@@ -495,6 +500,7 @@ impl<'a> GpuPaintContext<'a> {
             deferred_text: false,
             deferred_svg: false,
             deferred_image: false,
+            glass_layers: false,
         }
     }
 
@@ -4487,6 +4493,19 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
 
     fn supports_deferred_image(&self) -> bool {
         self.deferred_image
+    }
+    fn supports_glass_layers(&self) -> bool {
+        self.glass_layers
+    }
+    fn push_glass_layer(&mut self, id: u64, config: LayerConfig) -> bool {
+        if !self.glass_layers
+            || !self.emit_foreground()
+            || !self.begin_cross_stream_layer(id, config)
+        {
+            return false;
+        }
+        self.layer_stack.last_mut().unwrap().captures_glass = true;
+        true
     }
     fn defer_image(&mut self, id: u64) -> bool {
         self.capture_image(id)

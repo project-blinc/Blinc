@@ -40,7 +40,14 @@ impl RenderContext {
         }
         self.rebind_glyph_atlas_for_overlay();
         if let Some(batch) = foreground {
-            self.renderer.render_overlay_msaa(target_view, &batch, 1);
+            if batch.has_grouped_glass() {
+                if let Some(backdrop) = &self.backdrop_texture {
+                    self.renderer
+                        .render_overlay_with_glass(target_view, &backdrop.view, &batch);
+                }
+            } else {
+                self.renderer.render_overlay_msaa(target_view, &batch, 1);
+            }
         }
         // Replay direct and converted foreground text with its own rows
         // after canvas content, matching the separate foreground stream.
