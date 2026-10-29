@@ -842,7 +842,8 @@ impl ElementBuilder for Image {
             source: self.source.clone(),
             object_fit: self.object_fit.to_u8(),
             object_position: [self.object_position.x, self.object_position.y],
-            opacity: self.opacity,
+            // Node opacity is already in RenderProps, where CSS and animation replace it.
+            opacity: 1.0,
             border_radius: self.border_radius,
             tint: self.tint,
             filter: self.filter.to_array(),

@@ -487,7 +487,10 @@ fn image_group_fit_tint_mask_and_intrinsic_opacity_match_reference() {
             let image = &context.cached_bg_batch.as_ref().unwrap().dynamic_images[0];
             let retained = image.retained.as_ref().unwrap();
             assert_eq!(retained.style.tint, [0.5, 0.8, 1.0, 0.6]);
-            assert_eq!(retained.style.params[1], 0.8);
+            assert_eq!(retained.style.params[1], 1.0);
+            assert!(context.cached_bg_batch.as_ref().unwrap().layer_commands.iter().chain(&context.cached_bg_batch.as_ref().unwrap().foreground_layer_commands).any(|entry| {
+                matches!(&entry.command, blinc_gpu::primitives::LayerCommand::Push { config } if config.opacity == 0.8)
+            }));
             assert_eq!(retained.style.mask_info[0], 1.0);
             assert_eq!(retained.style.filter_a[1], 0.3);
             let bounds = image.screen_bounds();

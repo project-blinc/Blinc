@@ -211,7 +211,7 @@ pub struct ImageData {
     pub object_fit: u8,
     /// Object position (x: 0.0-1.0, y: 0.0-1.0)
     pub object_position: [f32; 2],
-    /// Opacity (0.0 - 1.0)
+    /// Intrinsic image alpha, multiplied by the node's `RenderProps::opacity`.
     pub opacity: f32,
     /// Border radius for rounded corners
     pub border_radius: f32,

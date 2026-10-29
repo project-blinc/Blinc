@@ -427,9 +427,7 @@ impl RenderContext {
                         .and_then(|pid| tree.get_render_node(pid))
                         .map(|pn| &pn.props);
 
-                    // Opacity: own CSS opacity * inherited CSS opacity chain * builder * motion
-                    // * composite-layer opacity (so images inside a composite-promoted
-                    // subtree fade in lockstep with the bake's blit).
+                    // Node and inherited opacity compose with independent image-content alpha.
                     let own_css_opacity = render_node.props.opacity;
                     let final_opacity = image_data.opacity
                         * own_css_opacity

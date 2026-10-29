@@ -50,6 +50,8 @@ mod gpu_pass_group_tests;
 mod grouped_text_tests;
 #[cfg(test)]
 mod image_group_tests;
+#[cfg(test)]
+mod image_opacity_tests;
 mod image_rendering;
 #[cfg(test)]
 mod mesh_group_tests;
