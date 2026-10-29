@@ -493,112 +493,20 @@ impl RenderTree {
             }
         });
 
-        // Get motion bindings from RenderTree (for continuous AnimatedValue animations).
-        //
-        // Single HashMap lookup, then field-level queries on the reference.
-        // Previously each of `get_motion_transform/opacity/scale/rotation`
-        // did its own `motion_bindings.get(&node)` — for the ~95% of
-        // nodes without bindings we paid 4 lookups every render pass to
-        // get four `None`s. The `and_then` chains short-circuit at the
-        // outer Option so non-bound nodes never reach the mutex-locked
-        // accessors at all.
+        // Read binding transforms and opacity from one node lookup.
         let motion_bindings_ref = self.motion_bindings.get(&node);
         let binding_transform = motion_bindings_ref.and_then(|b| b.get_transform());
         let binding_opacity = motion_bindings_ref.and_then(|b| b.get_opacity());
 
-        // Snapshot the BG batch length BEFORE this node emits any
-        // primitives. Together with the count we capture after the
-        // child recursion completes (just before transform pops),
-        // this gives the compositor-path fast Phase 4 the
-        // inclusive-exclusive primitive range this binding's subtree
-        // owns.
-        //
-        // Record every painted node with motion bindings — not just
-        // ones currently animating. Reason: an animation can become
-        // active *after* a full paint runs (e.g. `on_ready`-triggered
-        // `set_target`, `query_motion().start()`, timer callbacks).
-        // The cache from that paint has no entry for the bound node,
-        // so the next-frame fast path has nothing to patch and the
-        // animation appears frozen until a full repaint is triggered
-        // by something else (mouse moving, etc.). Recording the
-        // binding's primitive range up front means
-        // `apply_binding_deltas` has a target to write to as soon as
-        // the spring starts moving — no second full paint required.
-        //
-        // Cost is tiny: a `HashMap` entry per motion-bound painted
-        // node (cn_demo has ~13). Bindings whose values match
-        // `last_*` are early-out'd inside `apply_binding_deltas` so
-        // no GPU work happens for them.
-        // Tell the context this subtree is motion-bound so all
-        // primitive emissions route into the dynamic batch instead
-        // of the static cache batch. Paired with a `pop` at the end
-        // of this fn (any return path). The `composite_bg_start`
-        // captured immediately after now indexes into the dynamic
-        // batch, which is exactly what `apply_binding_deltas` and
-        // the per-frame overlay dispatch read.
-        //
-        // CSS-animated subtrees are deliberately NOT routed here.
-        // Earlier (Phase 3a) we routed `Animating(Css)` nodes too,
-        // hoping the per-region re-walk (Phase 3c) would refresh
-        // them each frame from the dynamic batch. But CSS keyframes
-        // commonly animate non-transform properties (height, width,
-        // color) where the text inside the animated subtree has no
-        // `css_affine`, so the text falls through to the regular
-        // `render_text` dispatch into the static cache — while the
-        // parent's bg / border SDF lived in the overlay (dynamic
-        // batch). The overlay drew the parent bg ON TOP of the
-        // cache, covering the text → "text disappears mid-keyframe"
-        // (user report on styling_demo's #layout-height transition
-        // and #layout-anim grow-shrink keyframes). Keeping CSS
-        // content in the static batch keeps the entire subtree
-        // (bg + border + child text + child SVG + …) co-located,
-        // so z-order falls out naturally from walker traversal
-        // order. Phase 3c can come back when we have a way to
-        // route regular text + SVG + image dispatch into the same
-        // overlay alongside the SDF (`motion_batch` / `css_batch`
-        // split or similar).
-        // Route stack_layer subtrees (overlay stack, toast tray, legacy
-        // overlay manager) and motion FSM subtrees to the dynamic batch
-        // alongside motion-binding subtrees.
-        //
-        // The bug this fixes: the SVG dispatch in the static-cache pass
-        // emits ALL static SVGs as one batched draw call AFTER every SDF
-        // primitive in the cache (per-z text dispatch doesn't help — by
-        // then SDF has already committed). When an overlay's bg SDF
-        // lived in the static cache alongside the page's static SVGs,
-        // a sibling button's chevron-down SVG at z=0 would paint ON TOP
-        // of the overlay's z=1 bg primitive that should have occluded
-        // it. Symptom: opening one cn::dropdown_menu showed the chevron
-        // of an adjacent unopened dropdown trigger bleeding through the
-        // open menu's panel.
-        //
-        // Routing the overlay/tray subtree to the dynamic batch makes
-        // its SDF paint in `composite_frame`'s overlay pass — AFTER the
-        // static cache (chevrons and all) is blitted onto the surface —
-        // so the panel correctly occludes whatever's underneath. The
-        // collector (in blinc_app's `collect_elements_recursive`)
-        // already routes text/SVG/image for these subtrees via its
-        // `props.motion.is_some()` + `is_stack_layer` check, so this
-        // change brings the walker into alignment.
-        //
-        // CSS animations are deliberately still left in the static
-        // batch (see history comment further down for the
-        // text-disappears-mid-keyframe regression). `props.motion` here
-        // is set by explicit Motion FSM containers (e.g.
-        // `motion_derived(...)`) when they propagate enter/exit anims to
-        // children — CSS keyframes don't take the same propagation path,
-        // so this change doesn't reactivate that regression.
+        // Motion and portal scopes use dynamic paint unless an ordinary native
+        // group retains them. CSS-only scopes keep their collected content anchor.
         let in_motion_subtree = motion_bindings_ref.is_some()
             || render_node.props.motion.is_some()
             || render_node.props.is_overlay_root;
         if in_motion_subtree {
             ctx.push_motion_subtree();
         }
-        // Track overlay-root subtrees with a separate counter (NOT
-        // the combined motion gate) so canvas inserts inside a
-        // portal/popover/dropdown route into the overlay-canvas
-        // pool. Motion-bound canvases outside an overlay keep their
-        // pre-dyn-batch slot.
+        // Keep portals late while retaining inherited native group state.
         let in_overlay_subtree_node = render_node.props.is_overlay_root;
         if in_overlay_subtree_node {
             ctx.push_overlay_subtree();
@@ -865,11 +773,11 @@ impl RenderTree {
             // Pop the motion-subtree push from above if we set it,
             // so the dynamic batch's emit gate stays balanced even
             // when this early-out fires.
-            if in_motion_subtree {
-                ctx.pop_motion_subtree();
-            }
             if in_overlay_subtree_node {
                 ctx.pop_overlay_subtree();
+            }
+            if in_motion_subtree {
+                ctx.pop_motion_subtree();
             }
             // Same balancing for the composite-layer push.
             if pushed_composite_layer {
@@ -2717,11 +2625,11 @@ impl RenderTree {
         // Balance the motion-subtree push from earlier so the
         // dynamic-batch emit gate returns to depth-0 at this node's
         // exit. Earlier early-return paths handle their own pop.
-        if in_motion_subtree {
-            ctx.pop_motion_subtree();
-        }
         if in_overlay_subtree_node {
             ctx.pop_overlay_subtree();
+        }
+        if in_motion_subtree {
+            ctx.pop_motion_subtree();
         }
         // Balance the composite-layer push (same reasoning — the
         // walker emits this node's primitives into the per-node

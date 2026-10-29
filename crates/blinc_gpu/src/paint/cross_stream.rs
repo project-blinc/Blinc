@@ -81,6 +81,7 @@ impl GpuPaintContext<'_> {
     }
 
     pub(super) fn begin_cross_stream_layer(&mut self, id: u64, config: LayerConfig) -> bool {
+        self.copy_overlay_ancestors(id);
         if self.active_composite_layer.is_some()
             || self.rejected_cross_stream_groups.contains(&id)
             || self.layer_stack.iter().any(|s| s.cross_stream.is_none())

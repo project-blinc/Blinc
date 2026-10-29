@@ -57,6 +57,8 @@ mod mesh_rendering;
 #[cfg(test)]
 mod named_layer_tests;
 #[cfg(test)]
+mod overlay_ancestor_tests;
+#[cfg(test)]
 mod overlay_group_tests;
 mod overlay_rendering;
 #[cfg(test)]

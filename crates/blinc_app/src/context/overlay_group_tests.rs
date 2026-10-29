@@ -2,7 +2,7 @@
 use super::gpu_pass_group_tests::frame;
 use super::*;
 
-const IMAGE: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg+M/wHwAEAQH/cetH5QAAAABJRU5ErkJggg==";
+pub(super) const IMAGE: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg+M/wHwAEAQH/cetH5QAAAABJRU5ErkJggg==";
 
 fn scene() -> RenderTree {
     let mut tree = RenderTree::from_element(
@@ -42,7 +42,7 @@ fn scene() -> RenderTree {
     tree
 }
 
-fn mixed_overlay() -> Div {
+pub(super) fn mixed_overlay() -> Div {
     div().id("overlay").overlay_root().absolute().left(20.0).top(10.0).w(120.0).h(100.0)
         .bg(Color::RED).opacity(0.5)
         .child(div().id("image-host").absolute().left(20.0).top(20.0).w(60.0).h(60.0)
@@ -56,7 +56,7 @@ fn mixed_overlay() -> Div {
             .absolute().w(120.0).h(100.0).foreground())
 }
 
-fn with_plate(overlay: impl blinc_layout::Element + 'static) -> RenderTree {
+pub(super) fn with_plate(overlay: impl blinc_layout::Element + 'static) -> RenderTree {
     let mut tree = RenderTree::from_element(
         &div()
             .id("host")
@@ -77,7 +77,7 @@ fn with_plate(overlay: impl blinc_layout::Element + 'static) -> RenderTree {
     tree
 }
 
-fn blend(color: [f32; 3], opacity: f32, brightness: f32) -> [u8; 4] {
+pub(super) fn blend(color: [f32; 3], opacity: f32, brightness: f32) -> [u8; 4] {
     [
         ((color[0] * brightness * opacity + 1.0 - opacity) * 255.0).round() as u8,
         ((color[1] * brightness * opacity + 1.0 - opacity) * 255.0).round() as u8,
@@ -347,7 +347,7 @@ fn overlay_group_sibling_order_and_owner_replacement_do_not_leave_stale_output()
 }
 
 #[test]
-fn overlay_group_capabilities_and_ordinary_ancestor_boundaries_preserve_fallback() {
+fn overlay_group_capabilities_and_native_ancestors_keep_distinct_owners() {
     super::opacity_group_tests::init_theme();
     for missing in 0..4 {
         for ancestor in 0..4 {
@@ -383,11 +383,10 @@ fn overlay_group_capabilities_and_ordinary_ancestor_boundaries_preserve_fallback
             tree.render_snapshot(&mut paint);
             let bg = paint.take_batch();
             let dynamic = paint.take_dynamic_batch();
-            assert!(
-                !bg.has_cross_stream_groups(),
-                "ordinary ancestors must not capture a portal"
-            );
-            let captured = missing == 0 && ancestor == 0;
+            assert!(bg.cross_stream_groups.text_nodes.is_empty());
+            assert!(bg.cross_stream_groups.svg_nodes.is_empty());
+            assert!(bg.cross_stream_groups.image_nodes.is_empty());
+            let captured = missing == 0;
             assert_eq!(!dynamic.cross_stream_groups.text_nodes.is_empty(), captured);
             assert_eq!(!dynamic.cross_stream_groups.svg_nodes.is_empty(), captured);
             assert_eq!(

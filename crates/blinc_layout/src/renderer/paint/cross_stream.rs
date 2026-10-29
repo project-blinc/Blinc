@@ -9,11 +9,12 @@ impl RenderTree {
             tree: &RenderTree,
             node: LayoutNodeId,
             foreground: bool,
+            inside_portal: bool,
             capabilities: DeferredContent,
             groups: &mut Vec<(LayoutNodeId, DeferredContent)>,
-        ) -> (bool, bool, DeferredContent, bool) {
+        ) -> (bool, bool, DeferredContent, bool, bool) {
             let Some(render) = tree.render_nodes.get(&node) else {
-                return (false, false, DeferredContent::default(), false);
+                return (false, false, DeferredContent::default(), false, false);
             };
             let foreground = foreground || render.props.layer == RenderLayer::Foreground;
             let props = &render.props;
@@ -51,17 +52,27 @@ impl RenderTree {
                 && props.shape_3d.is_none();
             let mut has_foreground = foreground;
             let mut has_canvas = matches!(render.element_type, ElementType::Canvas(_));
+            let mut has_portal = props.is_overlay_root;
             let start = groups.len();
             for child in tree.layout_tree.children(node) {
-                let (child_native, child_foreground, child_content, child_canvas) =
-                    visit(tree, child, foreground, capabilities, groups);
+                let (child_native, child_foreground, child_content, child_canvas, child_portal) =
+                    visit(
+                        tree,
+                        child,
+                        foreground,
+                        inside_portal || props.is_overlay_root,
+                        capabilities,
+                        groups,
+                    );
                 native &= child_native;
                 has_foreground |= child_foreground;
                 has_canvas |= child_canvas;
+                has_portal |= child_portal;
                 content.text |= child_content.text;
                 content.svg |= child_content.svg;
                 content.image |= child_content.image;
             }
+            native &= !(inside_portal && props.is_overlay_root);
             // Unsupported moving or effect owners retain their descendants' fallback pass.
             if !native
                 && (tree.motion_bindings.contains_key(&node)
@@ -94,26 +105,21 @@ impl RenderTree {
                     .get(&node)
                     .is_some_and(|b| b.opacity.is_some());
             if native
-                && (props.is_overlay_root
+                && (has_portal
                     || (!foreground && has_foreground)
                     || needs_content_group
                     || needs_canvas_group)
             {
                 groups.push((node, content));
             }
-            // A portal owns its late group; ordinary ancestors cannot capture across it.
-            (
-                native && !props.is_overlay_root,
-                has_foreground,
-                content,
-                has_canvas,
-            )
+            // Native ancestors retain state; the paint context gives portals a late scope.
+            (native, has_foreground, content, has_canvas, has_portal)
         }
         let mut groups = self.cross_stream_groups.borrow_mut();
         groups.clear();
         if let Some(root) = self.root {
             let mut planned = Vec::new();
-            visit(self, root, false, capabilities, &mut planned);
+            visit(self, root, false, false, capabilities, &mut planned);
             groups.extend(planned);
         }
     }

@@ -68,6 +68,7 @@ mod gpu_pass;
 mod mesh;
 pub(crate) use mesh::camera_signature;
 mod native_clip;
+mod overlay;
 mod path_clip;
 mod rgba;
 use aux_data::{AuxBatch, ClipData, PolygonClipData};
@@ -244,6 +245,11 @@ pub struct GpuPaintContext<'a> {
     /// outside an overlay keeps its existing pre-dyn-batch
     /// canvas-overlay slot.
     overlay_subtree_depth: u32,
+    overlay_layer_scope: Option<overlay::OverlayLayerScope>,
+    overlay_ancestor_ids: std::collections::HashMap<
+        (u64, crate::primitives::cross_stream::GroupId),
+        crate::primitives::cross_stream::GroupId,
+    >,
     /// Per-node scratch batches for composite-promotable CSS-animated
     /// subtrees. When [`Self::push_composite_layer`] sets
     /// `active_composite_layer = Some(node)`, every subsequent emit
@@ -400,6 +406,8 @@ impl<'a> GpuPaintContext<'a> {
             motion_subtree_depth: 0,
             static_motion_depth: None,
             overlay_subtree_depth: 0,
+            overlay_layer_scope: None,
+            overlay_ancestor_ids: std::collections::HashMap::new(),
             composite_layer_batches: std::collections::HashMap::new(),
             active_composite_layer: None,
             composite_layer_clip_base: Vec::new(),
@@ -469,6 +477,8 @@ impl<'a> GpuPaintContext<'a> {
             motion_subtree_depth: 0,
             static_motion_depth: None,
             overlay_subtree_depth: 0,
+            overlay_layer_scope: None,
+            overlay_ancestor_ids: std::collections::HashMap::new(),
             composite_layer_batches: std::collections::HashMap::new(),
             active_composite_layer: None,
             composite_layer_clip_base: Vec::new(),
@@ -514,22 +524,6 @@ impl<'a> GpuPaintContext<'a> {
         self.layer_stack
             .iter()
             .any(|state| state.command_batch == AuxBatch::Static)
-    }
-
-    /// Mark that the walker has entered an `is_overlay_root` subtree
-    /// (portal / popover / dropdown / dialog / toast). Tracked
-    /// independently of `motion_subtree_depth` so the renderer can
-    /// route canvases inside an overlay into a post-dyn-batch
-    /// dispatch — keeping caret canvases above the popover bg/border
-    /// their host input paints.
-    pub fn push_overlay_subtree(&mut self) {
-        self.overlay_subtree_depth = self.overlay_subtree_depth.saturating_add(1);
-    }
-
-    /// Pair with [`Self::push_overlay_subtree`]. Saturating sub so a
-    /// stray pop never underflows.
-    pub fn pop_overlay_subtree(&mut self) {
-        self.overlay_subtree_depth = self.overlay_subtree_depth.saturating_sub(1);
     }
 
     /// Whether the walker is inside a motion-bound subtree. An ancestor
@@ -784,6 +778,7 @@ impl<'a> GpuPaintContext<'a> {
         self.forget_clip_offsets(AuxBatch::Dynamic);
         self.dynamic_batch.resolve_cross_stream_groups();
         self.rejected_cross_stream_groups.clear();
+        self.overlay_ancestor_ids.clear();
         std::mem::take(&mut self.dynamic_batch)
     }
 
@@ -1809,6 +1804,7 @@ impl<'a> GpuPaintContext<'a> {
         self.forget_clip_offsets(AuxBatch::Static);
         self.batch.resolve_cross_stream_groups();
         self.rejected_cross_stream_groups.clear();
+        self.overlay_ancestor_ids.clear();
         std::mem::take(&mut self.batch)
     }
 
@@ -1841,7 +1837,9 @@ impl<'a> GpuPaintContext<'a> {
         self.clip_stack.clear();
         self.layer_stack.clear();
         self.rejected_cross_stream_groups.clear();
+        self.overlay_ancestor_ids.clear();
         self.cross_stream_static_depth = 0;
+        self.overlay_layer_scope = None;
         self.static_motion_depth = None;
         self.is_3d = false;
         self.camera = None;
