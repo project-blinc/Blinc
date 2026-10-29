@@ -86,6 +86,7 @@ impl RenderContext {
         ctx.enable_deferred_text();
         ctx.enable_deferred_svg();
         ctx.enable_deferred_image();
+        ctx.set_gpu_pass_scale_factor(scale_factor as f64);
 
         // A successful patch already contains this frame's geometry.
         if !used_fast_paint {

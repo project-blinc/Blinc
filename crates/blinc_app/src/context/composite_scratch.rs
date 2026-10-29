@@ -143,6 +143,13 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
         entry.foreground_path_index_count.hash(h);
         std::mem::discriminant(&entry.command).hash(h);
         match &entry.command {
+            LayerCommand::GpuPass(pass) => {
+                image(&pass.paint, h);
+                floats(&pass.pending.viewport.unwrap_or([0.0; 4]), h);
+                pass.frame_size.hash(h);
+                pass.scale_factor.to_bits().hash(h);
+                pass.pending.pass.identity().hash(h);
+            }
             LayerCommand::Push { config: c } => config(c, h),
             LayerCommand::Pop => {}
             LayerCommand::DeferredText { id, opacity }

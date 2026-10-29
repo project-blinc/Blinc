@@ -28,7 +28,9 @@ use wgpu::util::DeviceExt;
 mod dynamic_image;
 mod foreground;
 mod glass;
+mod image_blend;
 mod overlay;
+use image_blend::ImageBlend;
 mod text;
 
 use crate::gradient_texture::GradientTextureCache;
@@ -1361,6 +1363,7 @@ pub struct StaticLayer {
 /// Image rendering pipeline (created lazily on first image render)
 struct ImagePipeline {
     pipeline: wgpu::RenderPipeline,
+    replacement: Option<[wgpu::RenderPipeline; 2]>,
     bind_group_layout: wgpu::BindGroupLayout,
     instance_buffer: wgpu::Buffer,
     sampler: wgpu::Sampler,
@@ -5224,7 +5227,8 @@ impl GpuRenderer {
                             }
                         }
                     }
-                    LayerCommand::Sample { .. }
+                    LayerCommand::GpuPass(_)
+                    | LayerCommand::Sample { .. }
                     | LayerCommand::DeferredText { .. }
                     | LayerCommand::DeferredSvg { .. }
                     | LayerCommand::DeferredImage { .. } => {}
@@ -5958,7 +5962,8 @@ impl GpuRenderer {
                         }
                     }
                 }
-                LayerCommand::Sample { .. }
+                LayerCommand::GpuPass(_)
+                | LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }
                 | LayerCommand::DeferredSvg { .. }
                 | LayerCommand::DeferredImage { .. } => {}
@@ -7410,7 +7415,8 @@ impl GpuRenderer {
                         }
                     }
                 }
-                LayerCommand::Sample { .. }
+                LayerCommand::GpuPass(_)
+                | LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }
                 | LayerCommand::DeferredSvg { .. }
                 | LayerCommand::DeferredImage { .. } => {}
@@ -8800,123 +8806,7 @@ impl GpuRenderer {
             },
         };
 
-        let pipeline = self
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("Image Pipeline"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_main"),
-                    buffers: &[wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<GpuImageInstance>() as u64,
-                        step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &[
-                            // dst_rect
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 0,
-                                shader_location: 0,
-                            },
-                            // src_uv
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 16,
-                                shader_location: 1,
-                            },
-                            // tint
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 32,
-                                shader_location: 2,
-                            },
-                            // params (border_radius, opacity, border_width, packed_border_color)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 48,
-                                shader_location: 3,
-                            },
-                            // clip_bounds (x, y, width, height)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 64,
-                                shader_location: 4,
-                            },
-                            // clip_radius (tl, tr, br, bl)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 80,
-                                shader_location: 5,
-                            },
-                            // filter_a (grayscale, invert, sepia, hue_rotate_rad)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 96,
-                                shader_location: 6,
-                            },
-                            // filter_b (brightness, contrast, saturate, unused)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 112,
-                                shader_location: 7,
-                            },
-                            // transform (a, b, c, d) - 2x2 affine matrix
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 128,
-                                shader_location: 8,
-                            },
-                            // clip2_bounds (x, y, width, height) - secondary sharp clip
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 144,
-                                shader_location: 9,
-                            },
-                            // mask_params (gradient geometry)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 160,
-                                shader_location: 10,
-                            },
-                            // mask_info (type, start_alpha, end_alpha, 0)
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 176,
-                                shader_location: 11,
-                            },
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 192,
-                                shader_location: 12,
-                            },
-                        ],
-                    }],
-                    compilation_options: Default::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some("fs_main"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: self.texture_format,
-                        blend: Some(blend_state),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: Default::default(),
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: None,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    unclipped_depth: false,
-                    conservative: false,
-                },
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-                multiview: None,
-                cache: None,
-            });
+        let pipeline = self.create_image_render_pipeline(&shader, &pipeline_layout, blend_state);
 
         // Create instance buffer (max 1000 images per batch)
         let instance_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -8940,6 +8830,7 @@ impl GpuRenderer {
 
         self.image_pipeline = Some(ImagePipeline {
             pipeline,
+            replacement: None,
             bind_group_layout,
             instance_buffer,
             sampler,
@@ -9429,12 +9320,24 @@ impl GpuRenderer {
         instances: &[GpuImageInstance],
         aux: &[[f32; 4]],
     ) {
+        self.render_images_with_aux_blend(target, image_view, instances, aux, ImageBlend::Over);
+    }
+
+    fn render_images_with_aux_blend(
+        &mut self,
+        target: &wgpu::TextureView,
+        image_view: &wgpu::TextureView,
+        instances: &[GpuImageInstance],
+        aux: &[[f32; 4]],
+        blend: ImageBlend,
+    ) {
         if instances.is_empty() {
             return;
         }
-
-        // Ensure pipeline is created
         self.ensure_image_pipeline();
+        if !matches!(blend, ImageBlend::Over) {
+            self.ensure_image_replacement_pipelines();
+        }
         self.update_aux_data_slice(aux);
 
         let image_pipeline = self.image_pipeline.as_ref().unwrap();
@@ -9511,7 +9414,11 @@ impl GpuRenderer {
                 occlusion_query_set: None,
             });
 
-            render_pass.set_pipeline(&image_pipeline.pipeline);
+            render_pass.set_pipeline(match blend {
+                ImageBlend::Over => &image_pipeline.pipeline,
+                ImageBlend::Erase => &image_pipeline.replacement.as_ref().unwrap()[0],
+                ImageBlend::Add => &image_pipeline.replacement.as_ref().unwrap()[1],
+            });
             render_pass.set_bind_group(0, &bind_group, &[]);
             render_pass.set_vertex_buffer(0, image_pipeline.instance_buffer.slice(..));
             if let Some((sx, sy, sw, sh)) = self.pending_scissor {

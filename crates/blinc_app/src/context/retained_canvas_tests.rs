@@ -346,6 +346,16 @@ fn nested_canvas_frames(owner: CanvasOwner) {
             let c = app.context();
             let b = match owner {
                 CanvasOwner::Static => c.cached_bg_batch.as_ref().unwrap(),
+                // Shared moving groups retain their tree paint anchor in the static batch.
+                CanvasOwner::Motion
+                    if c.cached_bg_batch
+                        .as_ref()
+                        .unwrap()
+                        .has_cross_stream_groups() =>
+                {
+                    assert!(c.cached_dynamic_batch.as_ref().unwrap().is_empty());
+                    c.cached_bg_batch.as_ref().unwrap()
+                }
                 CanvasOwner::Motion | CanvasOwner::Overlay => {
                     c.cached_dynamic_batch.as_ref().unwrap()
                 }

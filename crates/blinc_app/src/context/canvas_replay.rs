@@ -52,6 +52,7 @@ impl RenderContext {
         for record in &sorted {
             // Replay each callback in its saved coordinate frame.
             let mut scratch = GpuPaintContext::new(width as f32, height as f32);
+            scratch.set_gpu_pass_scale_factor(tree.scale_factor() as f64);
 
             scratch.push_transform(Transform::Affine2D(Affine2D {
                 elements: record.affine,
@@ -138,7 +139,9 @@ impl RenderContext {
         let records: Vec<blinc_layout::renderer::CanvasPaintRecord> =
             records_ref.values().cloned().collect();
         drop(records_ref);
-        tree.with_property_updates(|| self.collect_canvas_overlay_from(records, width, height))
+        tree.with_property_updates(|| {
+            self.collect_canvas_overlay_from(records, width, height, tree.scale_factor())
+        })
     }
 
     /// Collect canvases belonging to overlay subtrees for dispatch above their hosts.
@@ -152,7 +155,9 @@ impl RenderContext {
         let records: Vec<blinc_layout::renderer::CanvasPaintRecord> =
             records_ref.values().cloned().collect();
         drop(records_ref);
-        tree.with_property_updates(|| self.collect_canvas_overlay_from(records, width, height))
+        tree.with_property_updates(|| {
+            self.collect_canvas_overlay_from(records, width, height, tree.scale_factor())
+        })
     }
 
     /// Replay the supplied canvas records into ordered output batches.
@@ -161,6 +166,7 @@ impl RenderContext {
         mut records: Vec<blinc_layout::renderer::CanvasPaintRecord>,
         width: u32,
         height: u32,
+        scale_factor: f32,
     ) -> CanvasOverlay {
         use blinc_core::{DrawContext, Rect, Transform, layer::Affine2D};
         use blinc_gpu::GpuPaintContext;
@@ -175,6 +181,7 @@ impl RenderContext {
         // Reuse the scratch context across callbacks and attach the text context for canvas
         // glyphs.
         let mut scratch = GpuPaintContext::new(width as f32, height as f32);
+        scratch.set_gpu_pass_scale_factor(scale_factor as f64);
         scratch.set_text_context(&mut self.text_ctx);
         let mut overlay = CanvasOverlay::default();
         let mut batches = Vec::new();
@@ -260,6 +267,7 @@ impl RenderContext {
 
         // Reuse one scratch context; each region restores its ambient stacks.
         let mut scratch = GpuPaintContext::new(width as f32, height as f32);
+        scratch.set_gpu_pass_scale_factor(tree.scale_factor() as f64);
 
         // Replay motion regions in paint order. Canvas and CSS regions have separate
         // dispatch paths; rewalking them here would overwrite their saved affine with an

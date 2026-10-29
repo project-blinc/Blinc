@@ -130,6 +130,7 @@ impl RenderContext {
         // Create a single paint context for all layers with text rendering support
         let mut ctx =
             GpuPaintContext::with_text_context(width as f32, height as f32, &mut self.text_ctx);
+        ctx.set_gpu_pass_scale_factor(scale_factor as f64);
 
         // Render with motion animations applied (all layers to same context)
         tree.render_with_motion(&mut ctx, render_state);

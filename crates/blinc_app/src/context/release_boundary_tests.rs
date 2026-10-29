@@ -110,6 +110,14 @@ impl CustomRenderPass for MarkerPass {
         ctx.queue.submit(Some(encoder.finish()));
     }
 }
+pub(super) fn marker_pass() -> GpuPass {
+    GpuPass::new(MarkerPass {
+        pipeline: None,
+        calls: Arc::new(AtomicUsize::new(0)),
+        viewports: Arc::new(Mutex::new(Vec::new())),
+    })
+}
+
 fn scene(
     kind: Boundary,
     pass: GpuPass,

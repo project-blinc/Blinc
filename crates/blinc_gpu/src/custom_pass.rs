@@ -294,6 +294,11 @@ pub(crate) struct GpuPassInner {
 }
 
 impl GpuPass {
+    /// Identity of this shared callback, for retained paint fingerprints.
+    #[doc(hidden)]
+    pub fn identity(&self) -> usize {
+        std::sync::Arc::as_ptr(&self.inner) as usize
+    }
     /// Wrap a [`CustomRenderPass`] so it can be scheduled via
     /// `DrawContext::run_gpu_pass`. Initialization is deferred to the
     /// first frame that actually dispatches the pass.
@@ -306,9 +311,7 @@ impl GpuPass {
         }
     }
 
-    /// Initialize the underlying pass on first call, then run it.
-    /// Used by the GPU dispatch site after a `take_pending_gpu_passes`
-    /// drain. Not intended for user code.
+    /// Initialize once and execute a captured canvas callback.
     #[doc(hidden)]
     pub fn initialize_and_render(
         &self,

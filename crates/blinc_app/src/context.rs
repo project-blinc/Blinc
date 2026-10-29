@@ -45,6 +45,8 @@ mod debug_rendering;
 #[cfg(test)]
 mod effect_group_tests;
 #[cfg(test)]
+mod gpu_pass_group_tests;
+#[cfg(test)]
 mod grouped_text_tests;
 #[cfg(test)]
 mod image_group_tests;

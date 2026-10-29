@@ -7,10 +7,12 @@ impl PrimitiveBatch {
         !self.foreground_primitives.is_empty()
             || !self.foreground_paths.indices.is_empty()
             || !self.foreground_dynamic_images.is_empty()
-            || self
-                .foreground_layer_commands
-                .iter()
-                .any(|entry| matches!(entry.command, LayerCommand::Sample { .. }))
+            || self.foreground_layer_commands.iter().any(|entry| {
+                matches!(
+                    entry.command,
+                    LayerCommand::Sample { .. } | LayerCommand::GpuPass(_)
+                )
+            })
     }
 
     /// Whether foreground command indices must survive a cache update.

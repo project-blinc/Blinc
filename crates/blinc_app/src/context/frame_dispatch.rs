@@ -95,7 +95,21 @@ impl RenderContext {
             if has_layer_effects_in_batch {
                 // Render the backdrop, grouped content, images and glass in composition
                 // order.
-                {
+                if batch.has_gpu_passes() {
+                    let backdrop = self.backdrop_texture.as_ref().unwrap();
+                    self.renderer.render_background_pair(
+                        target,
+                        (&backdrop.view, (backdrop.width, backdrop.height)),
+                        batch,
+                        Some(wgpu::Color {
+                            r: clear[0],
+                            g: clear[1],
+                            b: clear[2],
+                            a: clear[3],
+                        }),
+                        has_bg_images,
+                    );
+                } else {
                     let backdrop = self.backdrop_texture.as_ref().unwrap();
                     self.renderer.render_to_backdrop(
                         &backdrop.view,
@@ -103,10 +117,8 @@ impl RenderContext {
                         batch,
                         has_bg_images,
                     );
+                    render_background(&mut self.renderer, batch);
                 }
-
-                // Then use render_with_clear which handles layer effects
-                render_background(&mut self.renderer, batch);
 
                 // Render dynamic images (video frames from draw_rgba_pixels)
                 if !batch.dynamic_images.is_empty() {

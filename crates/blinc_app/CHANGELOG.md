@@ -30,6 +30,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Grouped canvas GPU passes execute within their visual owners during snapshot, animated and compositor frames. Replay preserves display scale, and callback-containing promoted scratch batches refresh when painted.
 - Stateless tree rendering shares ordered group composition with animated frames, keeping collected text, SVGs, images and foreground content inside supported opacity/effect groups. Snapshot frames release their replay cache, and switching frame modes invalidates cached ownership.
 - Cached subtree fingerprints include named-sample destination state, so clip, transform and opacity changes refresh their bakes.
 - Window runners drain property writes per tree, including secondary windows. Shared renderer caches and promoted textures refresh when their owning tree changes, and canvas replay preserves its update namespace.

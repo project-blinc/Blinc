@@ -30,6 +30,7 @@ impl RenderContext {
         }
 
         let mut scratch = GpuPaintContext::new(width as f32, height as f32);
+        scratch.set_gpu_pass_scale_factor(tree.scale_factor() as f64);
 
         // DPI scale mirrors what `collect_dynamic_region_primitives`
         // does — ambient affine is physical-pixel-space; logical

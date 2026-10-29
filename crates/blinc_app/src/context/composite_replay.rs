@@ -521,7 +521,8 @@ pub(super) fn update_subtree_bakes(
             // Reuse the texture when intrinsic content is unchanged; live animation
             // is applied by the blit.
             let scratch_hash = RenderContext::hash_composite_scratch(scratch_batch);
-            if css_composited_textures.contains_key(&key)
+            if !scratch_batch.has_gpu_passes()
+                && css_composited_textures.contains_key(&key)
                 && css_composited_scratch_hash.get(&key).copied() == Some(scratch_hash)
             {
                 continue;
@@ -586,7 +587,8 @@ pub(super) fn update_subtree_bakes(
                 continue;
             }
             let scratch_hash = RenderContext::hash_composite_scratch(scratch_batch);
-            if motion_subtree_textures.contains_key(&key)
+            if !scratch_batch.has_gpu_passes()
+                && motion_subtree_textures.contains_key(&key)
                 && motion_subtree_scratch_hash.get(&key).copied() == Some(scratch_hash)
             {
                 continue;

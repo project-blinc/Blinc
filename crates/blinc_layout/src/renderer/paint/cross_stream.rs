@@ -11,9 +11,9 @@ impl RenderTree {
             foreground: bool,
             capabilities: DeferredContent,
             groups: &mut Vec<(LayoutNodeId, DeferredContent)>,
-        ) -> (bool, bool, DeferredContent) {
+        ) -> (bool, bool, DeferredContent, bool) {
             let Some(render) = tree.render_nodes.get(&node) else {
-                return (false, false, DeferredContent::default());
+                return (false, false, DeferredContent::default(), false);
             };
             let foreground = foreground || render.props.layer == RenderLayer::Foreground;
             let props = &render.props;
@@ -51,12 +51,14 @@ impl RenderTree {
                 && props.depth.unwrap_or(0.0) == 0.0
                 && props.shape_3d.is_none();
             let mut has_foreground = foreground;
+            let mut has_canvas = matches!(render.element_type, ElementType::Canvas(_));
             let start = groups.len();
             for child in tree.layout_tree.children(node) {
-                let (child_native, child_foreground, child_content) =
+                let (child_native, child_foreground, child_content, child_canvas) =
                     visit(tree, child, foreground, capabilities, groups);
                 native &= child_native;
                 has_foreground |= child_foreground;
+                has_canvas |= child_canvas;
                 content.text |= child_content.text;
                 content.svg |= child_content.svg;
                 content.image |= child_content.image;
@@ -85,10 +87,19 @@ impl RenderTree {
                         .get(&node)
                         .is_some_and(|b| b.opacity.is_some())
                     || groups.len() > start);
-            if native && ((!foreground && has_foreground) || needs_content_group) {
+            // Keep callback ownership at bound-opacity endpoints, including a
+            // zero frame whose canvas is culled by the walker.
+            let needs_canvas_group = has_canvas
+                && tree
+                    .motion_bindings
+                    .get(&node)
+                    .is_some_and(|b| b.opacity.is_some());
+            if native
+                && ((!foreground && has_foreground) || needs_content_group || needs_canvas_group)
+            {
                 groups.push((node, content));
             }
-            (native, has_foreground, content)
+            (native, has_foreground, content, has_canvas)
         }
         let mut groups = self.cross_stream_groups.borrow_mut();
         groups.clear();

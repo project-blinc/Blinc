@@ -23,11 +23,18 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
     if color.a<=0.0 { return vec4<f32>(0.0); }
     return vec4<f32>(color.rgb/color.a,color.a);
 }
+@fragment fn capture(v: Vertex) -> @location(0) vec4<f32> {
+    let point=vec2<i32>(floor(v.position.xy-params.padding));
+    let size=vec2<i32>(textureDimensions(input));
+    if any(point<vec2<i32>(0)) || any(point>=size) { return vec4<f32>(0.0); }
+    return textureLoad(input,point,0);
+}
 "#;
 
 pub(crate) struct AlphaPass {
     pub(crate) premultiplied: wgpu::RenderPipeline,
     straight: wgpu::RenderPipeline,
+    capture: wgpu::RenderPipeline,
     uniforms: wgpu::Buffer,
 }
 
@@ -79,6 +86,7 @@ impl AlphaPass {
                 Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
             ),
             straight: pipeline("straight", None),
+            capture: pipeline("capture", None),
             uniforms: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Overlay alpha"),
                 contents: bytemuck::cast_slice(&[1.0_f32, 0.0, 0.0, 0.0]),
@@ -96,17 +104,70 @@ impl AlphaPass {
         input: &LayerTexture,
         output: &LayerTexture,
     ) {
+        self.draw(
+            device,
+            queue,
+            layout,
+            sampler,
+            &input.view,
+            output,
+            &self.straight,
+            &self.uniforms,
+        );
+    }
+
+    /// Preserve the group's pixels in the callback's full-frame coordinate system.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn capture(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        layout: &wgpu::BindGroupLayout,
+        sampler: &wgpu::Sampler,
+        input: &wgpu::TextureView,
+        output: &LayerTexture,
+        origin: [f32; 2],
+    ) {
+        let uniforms = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Callback frame origin"),
+            contents: bytemuck::cast_slice(&[1.0_f32, 0.0, origin[0], origin[1]]),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        self.draw(
+            device,
+            queue,
+            layout,
+            sampler,
+            input,
+            output,
+            &self.capture,
+            &uniforms,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        layout: &wgpu::BindGroupLayout,
+        sampler: &wgpu::Sampler,
+        input: &wgpu::TextureView,
+        output: &LayerTexture,
+        pipeline: &wgpu::RenderPipeline,
+        uniforms: &wgpu::Buffer,
+    ) {
         let bindings = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Overlay straight alpha"),
             layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: self.uniforms.as_entire_binding(),
+                    resource: uniforms.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&input.view),
+                    resource: wgpu::BindingResource::TextureView(input),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
@@ -133,7 +194,7 @@ impl AlphaPass {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            pass.set_pipeline(&self.straight);
+            pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &bindings, &[]);
             pass.draw(0..3, 0..1);
         }

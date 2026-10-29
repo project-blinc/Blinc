@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Native canvas groups retain their ownership at bound-opacity endpoints so direct writes recover their complete output after a settled zero.
 - Property, text, class and region bindings stay in their owning tree namespace; replacement and drop release its subscriptions and queued work without disturbing another window. Stable node identities and slotmap lookups remain unchanged.
 - Native groups accept layer effects and blends when their descendants and collected-content capabilities can share ordered composition.
 - Image elements and Div image backgrounds can join eligible native opacity groups. Background capture precedes borders and children; consumers without image resolution retain fallback.

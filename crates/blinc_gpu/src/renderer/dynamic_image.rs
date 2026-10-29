@@ -1,5 +1,5 @@
 //! Raw uploads and retained textures in ordered batches or the explicit image pass.
-use super::{GpuRenderer, PrimitiveBatch};
+use super::{GpuRenderer, ImageBlend, PrimitiveBatch};
 use crate::{GpuImageInstance, primitives::DynamicImage};
 use std::borrow::Cow;
 
@@ -29,6 +29,16 @@ impl GpuRenderer {
         target: &wgpu::TextureView,
         img: &DynamicImage,
         origin: [f32; 2],
+    ) {
+        self.render_dynamic_image_blend(target, img, origin, ImageBlend::Over);
+    }
+
+    pub(super) fn render_dynamic_image_blend(
+        &mut self,
+        target: &wgpu::TextureView,
+        img: &DynamicImage,
+        origin: [f32; 2],
+        blend: ImageBlend,
     ) {
         if img.width == 0
             || img.height == 0
@@ -88,7 +98,7 @@ impl GpuRenderer {
             }
         }
         if let Some(image) = &img.retained {
-            self.render_images_with_aux(target, &image.view, &[instance], &aux);
+            self.render_images_with_aux_blend(target, &image.view, &[instance], &aux, blend);
             return;
         }
         let image = crate::image::GpuImage::from_rgba(
@@ -99,7 +109,7 @@ impl GpuRenderer {
             img.height,
             Some("dynamic image"),
         );
-        self.render_images_with_aux(target, image.view(), &[instance], &aux);
+        self.render_images_with_aux_blend(target, image.view(), &[instance], &aux, blend);
     }
 
     pub(super) fn render_image_backdrop(
@@ -131,6 +141,54 @@ impl GpuRenderer {
         );
         self.layer_texture_cache.release(texture);
     }
+    /// Bake background commands once for the visible target and its glass backdrop.
+    /// Callback execution is shared; foreground and glass remain separate passes.
+    pub fn render_background_pair(
+        &mut self,
+        target: &wgpu::TextureView,
+        backdrop: (&wgpu::TextureView, (u32, u32)),
+        batch: &PrimitiveBatch,
+        clear: Option<wgpu::Color>,
+        preserve_backdrop: bool,
+    ) {
+        let viewport = self.viewport_size;
+        let (texture, _) = self.render_subtree_to_layer_texture(
+            batch,
+            (0.0, 0.0),
+            (viewport.0 as f32, viewport.1 as f32),
+        );
+        self.viewport_size = backdrop.1;
+        if !preserve_backdrop {
+            self.clear_target(backdrop.0, wgpu::Color::BLACK);
+        }
+        self.render_images(
+            backdrop.0,
+            &texture.view,
+            &[GpuImageInstance::new(
+                0.0,
+                0.0,
+                backdrop.1.0 as f32,
+                backdrop.1.1 as f32,
+            )],
+        );
+        self.viewport_size = viewport;
+        if let Some(clear) = clear {
+            self.clear_target(target, clear);
+        }
+        self.render_images(
+            target,
+            &texture.view,
+            &[GpuImageInstance::new(
+                0.0,
+                0.0,
+                viewport.0 as f32,
+                viewport.1 as f32,
+            )],
+        );
+        self.layer_texture_cache.release(texture);
+        self.update_aux_data_buffer(batch);
+    }
+
     pub(super) fn render_image_glass_frame(
         &mut self,
         target: &wgpu::TextureView,
@@ -139,11 +197,21 @@ impl GpuRenderer {
         batch: &PrimitiveBatch,
         preserve: bool,
     ) {
-        self.render_image_backdrop(backdrop, batch, preserve);
-        if !preserve {
-            self.clear_target(target, wgpu::Color::BLACK);
+        if batch.has_gpu_passes() {
+            self.render_background_pair(
+                target,
+                (backdrop, backdrop_size),
+                batch,
+                (!preserve).then_some(wgpu::Color::BLACK),
+                preserve,
+            );
+        } else {
+            self.render_image_backdrop(backdrop, batch, preserve);
+            if !preserve {
+                self.clear_target(target, wgpu::Color::BLACK);
+            }
+            self.render_overlay_msaa(target, batch, 1);
         }
-        self.render_overlay_msaa(target, batch, 1);
         if !batch.glass_primitives.is_empty() || !batch.nested_glass_primitives.is_empty() {
             // Reuse the native glass sequence without replaying the background.
             let mut glass = PrimitiveBatch::new();

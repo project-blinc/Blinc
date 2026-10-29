@@ -64,6 +64,7 @@ use crate::text::TextRenderingContext;
 
 mod aux_data;
 mod cross_stream;
+mod gpu_pass;
 mod native_clip;
 mod path_clip;
 mod rgba;
@@ -178,30 +179,38 @@ pub struct PendingMesh {
 // Pending Custom GPU Pass
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// A user-defined GPU pass captured inside a canvas closure via
-/// [`blinc_core::draw::DrawContext::run_gpu_pass`].
-///
-/// Same lifecycle pattern as [`PendingMesh`]: the paint context can't
-/// dispatch directly (it has no renderer handle), so the override
-/// records the pass + the canvas viewport here and the outer render
-/// loop drains the list after `take_batch` and invokes each pass with
-/// the frame's real device / queue / target.
-///
-/// `pass` carries an `Arc<Mutex<_>>` internally, so cloning + dispatch
-/// don't fight the user's `Fn` canvas closure.
+/// A canvas GPU callback and its physical viewport. Native group commands
+/// retain this record; the outer render loop drains ungrouped callbacks.
 #[derive(Clone)]
 pub struct PendingGpuPass {
-    /// The wrapped pass. Cloning is cheap (Arc bump). The dispatch site
-    /// calls [`crate::GpuPass::initialize_and_render`] which lazy-inits
-    /// on first frame.
+    /// Shared callback, initialized on its first execution.
     pub pass: crate::custom_pass::GpuPass,
-    /// Canvas viewport rect in physical pixels `[x, y, w, h]`. `Some`
-    /// when the pass was scheduled inside a canvas with bounds (the
-    /// typical case via `set_3d_viewport_bounds`); `None` for full-frame
-    /// dispatch. The renderer plumbs this through `RenderPassContext::viewport`
-    /// so the pass can `set_viewport` + `set_scissor_rect` to clip to
-    /// the canvas region.
+    /// Physical `[x, y, width, height]` passed to the callback; None means full frame.
     pub viewport: Option<[f32; 4]>,
+}
+
+/// Callback state retained by a native visual group.
+#[derive(Clone)]
+pub struct GroupGpuPass {
+    /// Callback and its original viewport.
+    pub pending: PendingGpuPass,
+    /// Coverage, explicit opacity and push-time clips for replacing the edited pixels.
+    pub paint: crate::primitives::DynamicImage,
+    /// Physical frame extent exposed to the callback.
+    pub frame_size: (u32, u32),
+    /// Display scale exposed to the callback.
+    pub scale_factor: f64,
+}
+
+impl std::fmt::Debug for GroupGpuPass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GroupGpuPass")
+            .field("viewport", &self.pending.viewport)
+            .field("paint", &self.paint)
+            .field("frame_size", &self.frame_size)
+            .field("scale_factor", &self.scale_factor)
+            .finish_non_exhaustive()
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -350,11 +359,9 @@ pub struct GpuPaintContext<'a> {
     /// Environment cubemap data set by `set_environment_cubemap`. Captured
     /// into each `PendingMesh` so the renderer can upload it.
     pending_env: Option<std::sync::Arc<CubemapData>>,
-    /// User-defined GPU passes scheduled via `run_gpu_pass`. Drained by
-    /// the outer render loop with `take_pending_gpu_passes` and
-    /// dispatched alongside (and using the same lifecycle as) the
-    /// pending-mesh path.
+    /// Ungrouped canvas callbacks dispatched by the outer render loop.
     pending_gpu_passes: Vec<PendingGpuPass>,
+    gpu_pass_scale_factor: f64,
 }
 
 impl<'a> GpuPaintContext<'a> {
@@ -397,6 +404,7 @@ impl<'a> GpuPaintContext<'a> {
             mesh_viewport_bounds: None,
             pending_env: None,
             pending_gpu_passes: Vec::new(),
+            gpu_pass_scale_factor: 1.0,
             dynamic_batch: PrimitiveBatch::new(),
             motion_subtree_depth: 0,
             static_motion_depth: None,
@@ -464,6 +472,7 @@ impl<'a> GpuPaintContext<'a> {
             mesh_viewport_bounds: None,
             pending_env: None,
             pending_gpu_passes: Vec::new(),
+            gpu_pass_scale_factor: 1.0,
             dynamic_batch: PrimitiveBatch::new(),
             motion_subtree_depth: 0,
             static_motion_depth: None,
@@ -1824,14 +1833,7 @@ impl<'a> GpuPaintContext<'a> {
         std::mem::take(&mut self.pending_meshes)
     }
 
-    /// Take the user-defined GPU passes scheduled this frame.
-    ///
-    /// Every call to [`blinc_core::draw::DrawContext::run_gpu_pass`] inside a
-    /// canvas callback pushes one [`PendingGpuPass`] here. The outer
-    /// render loop drains this list after `take_batch` and dispatches
-    /// each via `GpuPass::initialize_and_render` against the frame's
-    /// real device / queue / target. See `blinc_app::context` for the
-    /// dispatch site.
+    /// Drain ungrouped canvas callbacks. Grouped callbacks stay in the batch commands.
     pub fn take_pending_gpu_passes(&mut self) -> Vec<PendingGpuPass> {
         std::mem::take(&mut self.pending_gpu_passes)
     }
@@ -4582,10 +4584,13 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
             }
             None => self.current_clip_aabb(),
         };
-        self.pending_gpu_passes.push(PendingGpuPass {
+        let pending = PendingGpuPass {
             pass: pass.clone(),
             viewport: pixel_viewport,
-        });
+        };
+        if !self.capture_group_gpu_pass(pending.clone(), viewport.is_none()) {
+            self.pending_gpu_passes.push(pending);
+        }
     }
 }
 

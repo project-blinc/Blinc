@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 mod alpha;
+mod gpu_pass;
 mod named;
 pub(super) use alpha::AlphaPass;
 
@@ -52,6 +53,7 @@ enum Node {
     Image(usize),
     Layer(LayerConfig, Vec<Node>),
     Sample(Box<named::Sample>),
+    GpuPass(Box<crate::paint::GroupGpuPass>),
 }
 
 fn nodes(batch: &PrimitiveBatch) -> Vec<Node> {
@@ -106,6 +108,9 @@ fn nodes(batch: &PrimitiveBatch) -> Vec<Node> {
         run(stack.last_mut().unwrap(), cursor, next);
         cursor = next;
         match &entry.command {
+            LayerCommand::GpuPass(pass) => {
+                stack.last_mut().unwrap().push(Node::GpuPass(pass.clone()))
+            }
             LayerCommand::Push { config } => {
                 configs.push(config.clone());
                 stack.push(Vec::new());
@@ -187,6 +192,10 @@ fn bounds(
     items
         .iter()
         .filter_map(|node| match node {
+            Node::GpuPass(pass) => Some(Bounds {
+                min: [0.0; 2],
+                max: [pass.frame_size.0 as f32, pass.frame_size.1 as f32],
+            }),
             Node::Layer(config, children) => {
                 let bounds = if config.id.is_some_and(|id| wanted.contains(&id)) {
                     named::frame(config, viewport)
@@ -280,6 +289,14 @@ fn common_clip(items: &[Node], batch: &PrimitiveBatch) -> Option<([f32; 4], [f32
     };
     for node in items {
         match node {
+            Node::GpuPass(pass) => {
+                let image = &pass.paint;
+                let shaped = image.clip_aux.get(4).is_some_and(|info| info[2] > 0.5);
+                add(has_clip(image.clip_bounds).then_some((
+                    image.clip_bounds,
+                    if shaped { [0.0; 4] } else { image.clip_radius },
+                )));
+            }
             Node::Layer(_, children) => add(common_clip(children, batch)),
             Node::Sample(sample) => {
                 let image = &sample.paint;
@@ -468,7 +485,8 @@ impl GpuRenderer {
                     depth = depth.saturating_sub(1);
                     false
                 }
-                LayerCommand::Sample { .. }
+                LayerCommand::GpuPass(_)
+                | LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }
                 | LayerCommand::DeferredSvg { .. }
                 | LayerCommand::DeferredImage { .. } => false,
@@ -601,6 +619,7 @@ impl GpuRenderer {
         };
         for node in items {
             match node {
+                Node::GpuPass(pass) => self.draw_group_gpu_pass(target, pass, origin),
                 Node::Sample(sample) => self.draw_named_sample(target, sample, origin, outputs),
                 Node::Image(index) => {
                     self.render_dynamic_image_at(target, &batch.dynamic_images[*index], origin)
@@ -623,6 +642,7 @@ impl GpuRenderer {
                         && config.blend_mode == BlendMode::Normal
                         && config.transform_3d.is_none()
                         && named_id.is_none()
+                        && !gpu_pass::has_gpu_pass(children)
                     {
                         self.draw_overlay_nodes(target, batch, children, origin, samples, outputs);
                         continue;

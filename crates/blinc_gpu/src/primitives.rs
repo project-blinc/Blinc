@@ -1564,6 +1564,8 @@ pub struct PathBatch {
 /// to manage offscreen render targets and layer composition.
 #[derive(Clone, Debug)]
 pub enum LayerCommand {
+    /// A canvas callback executed at this paint position within its native group.
+    GpuPass(Box<crate::paint::GroupGpuPass>),
     /// Collected image resolved to its retained texture before dispatch.
     DeferredImage { id: u64, opacity: f32 },
     /// Collected SVG resolved to an ordered raster image before dispatch.
@@ -1799,6 +1801,14 @@ impl PrimitiveBatch {
             .any(|image| image.paint_order.is_some())
     }
 
+    /// Callback state is opaque and must be executed again when its subtree is painted.
+    pub fn has_gpu_passes(&self) -> bool {
+        self.layer_commands
+            .iter()
+            .chain(&self.foreground_layer_commands)
+            .any(|entry| matches!(entry.command, LayerCommand::GpuPass(_)))
+    }
+
     /// Whether splitting the background into primitive-only passes would lose content.
     pub fn requires_ordered_rendering(&self) -> bool {
         self.has_layer_effects() || self.has_ordered_draws()
@@ -1808,10 +1818,12 @@ impl PrimitiveBatch {
     pub fn has_ordered_draws(&self) -> bool {
         self.has_cross_stream_groups()
             || self.has_ordered_images()
-            || self
-                .layer_commands
-                .iter()
-                .any(|entry| matches!(&entry.command, LayerCommand::Sample { .. }))
+            || self.layer_commands.iter().any(|entry| {
+                matches!(
+                    &entry.command,
+                    LayerCommand::Sample { .. } | LayerCommand::GpuPass(_)
+                )
+            })
             || (!self.aux_data.is_empty() && self.paths.vertices.iter().any(|v| v.clip_shape > 0))
     }
 
@@ -2076,7 +2088,12 @@ impl PrimitiveBatch {
                 .layer_commands
                 .iter()
                 .chain(&self.foreground_layer_commands)
-                .any(|entry| matches!(entry.command, LayerCommand::Sample { .. }))
+                .any(|entry| {
+                    matches!(
+                        entry.command,
+                        LayerCommand::Sample { .. } | LayerCommand::GpuPass(_)
+                    )
+                })
     }
 
     /// Check if the batch contains any tessellated path geometry
@@ -2171,7 +2188,8 @@ impl PrimitiveBatch {
                         }
                     }
                 }
-                LayerCommand::Sample { .. }
+                LayerCommand::GpuPass(_)
+                | LayerCommand::Sample { .. }
                 | LayerCommand::DeferredText { .. }
                 | LayerCommand::DeferredSvg { .. }
                 | LayerCommand::DeferredImage { .. } => {}
