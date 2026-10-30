@@ -803,3 +803,22 @@ fn three_value_spacing_shorthand_is_top_horizontal_bottom() {
         .expect("padding");
     assert_eq!((p.top, p.right, p.bottom, p.left), (8.0, 12.0, 4.0, 12.0));
 }
+
+#[test]
+fn an_unsupported_selector_is_reported_not_dropped_silently() {
+    let r = crate::parser::Stylesheet::parse_with_errors(
+        ".a { opacity: 0.5; } .b[data-x=\"1\"] { opacity: 0.2; } .c { opacity: 0.1; }",
+    );
+    assert!(r.stylesheet.get_class("a").is_some());
+    assert!(
+        r.stylesheet.get_class("c").is_some(),
+        "the rule after it survives"
+    );
+    assert!(
+        r.errors
+            .iter()
+            .any(|e| e.message.contains("unsupported selector") && e.message.contains("data-x")),
+        "{:?}",
+        r.errors.iter().map(|e| &e.message).collect::<Vec<_>>()
+    );
+}

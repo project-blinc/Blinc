@@ -278,7 +278,8 @@ pub(crate) fn parse_stylesheet_with_errors<'a>(
 
         // Try to parse a rule (complex selector or simple #id selector)
         // Supports comma-separated selector lists: #a, #b { ... }
-        match css_rule_complex_or_simple(css, errors, &parsed_variables)(trimmed) {
+        let parsed = css_rule_complex_or_simple(css, errors, &parsed_variables)(trimmed);
+        match parsed {
             Ok((rest, parsed_rules)) => {
                 for rule in parsed_rules {
                     match rule {
@@ -298,6 +299,16 @@ pub(crate) fn parse_stylesheet_with_errors<'a>(
                 // pseudo whose parser leaked `(...)` into rule_block's
                 // expected `{`) silently dropped EVERY subsequent rule
                 // in the stylesheet.
+                {
+                    let selector = trimmed.split('{').next().unwrap_or(trimmed).trim();
+                    let (line, column, _) = calculate_position(css, trimmed);
+                    errors.push(ParseError::new(
+                        Severity::Warning,
+                        format!("Rule skipped: unsupported selector `{selector}`"),
+                        line,
+                        column,
+                    ));
+                }
                 if let Some(skip) = skip_failed_rule(trimmed) {
                     // `trimmed` may sit at a different offset than
                     // `remaining` (we trimmed leading whitespace earlier
