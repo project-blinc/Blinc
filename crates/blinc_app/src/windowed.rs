@@ -2134,6 +2134,14 @@ impl WindowedContext {
         }
     }
 
+    /// Add a component's own stylesheet.
+    ///
+    /// Its class rules sit below every application rule, so an app
+    /// stylesheet themes a component without matching its specificity.
+    pub fn add_component_stylesheet(&mut self, sheet: blinc_layout::css_parser::Stylesheet) {
+        self.add_stylesheet(sheet.into_component());
+    }
+
     /// Drop every accumulated stylesheet and reset `rebuild_count` so a
     /// subsequent rebuild looks like the very first one.
     ///

@@ -218,3 +218,57 @@ fn a_base_default_yields_to_the_stylesheet() {
         0.0
     );
 }
+
+/// A component's own stylesheet sits below the app's, whatever the
+/// specificity of either and whichever was added first.
+#[test]
+fn an_app_rule_beats_a_component_rule_of_higher_specificity() {
+    use blinc_layout::css_parser::Stylesheet;
+    use blinc_layout::style_tier::{StyleProp, StyleTier};
+    init();
+    let component = Stylesheet::parse(".a.b { border-radius: 8px; }")
+        .expect("css")
+        .into_component();
+    let app = Stylesheet::parse(".a { background: #ff0000; }").expect("css");
+    let app_radius = Stylesheet::parse(".a { border-radius: 0px; }").expect("css");
+    let host = div()
+        .w(300.0)
+        .h(80.0)
+        .child(div().class("a").class("b").w(100.0).h(40.0));
+
+    for app_first in [true, false] {
+        let mut sheet = Stylesheet::parse("").expect("css");
+        if app_first {
+            sheet.merge(app_radius.clone());
+            sheet.merge(component.clone());
+        } else {
+            sheet.merge(component.clone());
+            sheet.merge(app_radius.clone());
+        }
+        let mut tree = RenderTree::from_element(&host);
+        tree.set_stylesheet(sheet);
+        tree.apply_stylesheet_layout_overrides();
+        tree.apply_stylesheet_base_styles();
+        assert_eq!(radius(&tree), 0.0, "app_first={app_first}");
+    }
+
+    let mut sheet = Stylesheet::parse("").expect("css");
+    sheet.merge(component);
+    sheet.merge(app);
+    let mut tree = RenderTree::from_element(&host);
+    tree.set_stylesheet(sheet);
+    tree.apply_stylesheet_layout_overrides();
+    tree.apply_stylesheet_base_styles();
+    let tiers = tree
+        .get_render_node(subject(&tree))
+        .expect("node")
+        .props
+        .tiers;
+    assert_eq!(
+        radius(&tree),
+        8.0,
+        "the component rule applies when unopposed"
+    );
+    assert!(tiers.has(StyleProp::BorderRadius, StyleTier::Default));
+    assert!(tiers.has(StyleProp::Background, StyleTier::Stylesheet));
+}

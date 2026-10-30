@@ -133,7 +133,7 @@ impl RenderTree {
         let mut added: Vec<usize> = after.into_iter().filter(|i| !before.contains(i)).collect();
         // Lowest specificity first, so the more specific rule is applied last.
         let rules = stylesheet.complex_rules();
-        added.sort_by_key(|i| (Self::selector_specificity(&rules[*i].0), *i));
+        added.sort_by_key(|i| (Self::rule_order(&rules[*i].0, &rules[*i].1), *i));
         let styles: Vec<ElementStyle> = added.into_iter().map(|i| rules[i].1.clone()).collect();
 
         // What the node is without the class's rules, kept so it can be put

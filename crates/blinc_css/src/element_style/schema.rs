@@ -25,6 +25,9 @@ use crate::parser::{CssAnimation, CssTransitionSet};
 /// override the properties that change for that state.
 #[derive(Clone, Default, Debug)]
 pub struct ElementStyle {
+    /// Set when the rule came from a component's own stylesheet, which sits
+    /// below the application's regardless of specificity.
+    pub component: bool,
     // =========================================================================
     // Visual Properties
     // =========================================================================

@@ -235,6 +235,16 @@ impl RenderTree {
         true
     }
 
+    /// Application order for a rule: a component's own rules first, then by
+    /// specificity. The tier outranks specificity, so an application rule
+    /// overrides a component rule however plain its selector.
+    pub(crate) fn rule_order(
+        selector: &ComplexSelector,
+        style: &crate::element_style::ElementStyle,
+    ) -> (bool, (u32, u32, u32)) {
+        (!style.component, Self::selector_specificity(selector))
+    }
+
     /// Calculate CSS specificity for a complex selector as (ids, classes, types).
     /// Used for sorting: lower specificity rules apply first, higher ones override.
     pub(crate) fn selector_specificity(selector: &ComplexSelector) -> (u32, u32, u32) {
@@ -460,7 +470,7 @@ impl RenderTree {
                     .iter()
                     .filter(|(selector, _)| !selector.has_state())
                     .collect();
-            base_rules.sort_by_key(|(selector, _)| Self::selector_specificity(selector));
+            base_rules.sort_by_key(|(selector, style)| Self::rule_order(selector, style));
 
             for (selector, style) in &base_rules {
                 for &node_id in &prev_affected {

@@ -89,7 +89,7 @@ impl RenderTree {
                 .iter()
                 .filter(|(selector, _)| !selector.has_state())
                 .collect();
-            base_rules.sort_by_key(|(selector, _)| Self::selector_specificity(selector));
+            base_rules.sort_by_key(|(selector, style)| Self::rule_order(selector, style));
 
             // Build inverted class index once (single lock acquisition) for O(1) lookups
             let class_to_nodes = self.element_registry.class_to_nodes_index();
@@ -427,7 +427,7 @@ impl RenderTree {
                 .iter()
                 .filter(|(selector, _)| !selector.has_state())
                 .collect();
-            base_rules.sort_by_key(|(selector, _)| Self::selector_specificity(selector));
+            base_rules.sort_by_key(|(selector, style)| Self::rule_order(selector, style));
 
             // Build inverted class index for the subtree nodes
             let class_to_nodes = self.element_registry.class_to_nodes_index();

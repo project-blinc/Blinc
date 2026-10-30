@@ -596,6 +596,19 @@ impl Stylesheet {
         self.index_hover_participants();
     }
 
+    /// Marks every class rule as a component's own, so it sits below the
+    /// application's rules whatever their specificity. Id rules are left as
+    /// they are: they apply after all class rules.
+    pub fn into_component(mut self) -> Self {
+        for style in self.class_styles.values_mut() {
+            style.component = true;
+        }
+        for (_, style) in self.complex_rules.iter_mut() {
+            style.component = true;
+        }
+        self
+    }
+
     /// Load and parse a `.css` file from disk
     #[allow(clippy::result_large_err)]
     pub fn from_file(path: impl AsRef<std::path::Path>) -> Result<Self, ParseError> {

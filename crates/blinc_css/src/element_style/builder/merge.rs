@@ -13,6 +13,7 @@ impl ElementStyle {
     /// Unset properties in `other` will not override.
     pub fn merge(&self, other: &ElementStyle) -> ElementStyle {
         ElementStyle {
+            component: self.component && other.component,
             // Visual
             background: other.background.clone().or_else(|| self.background.clone()),
             corner_radius: other.corner_radius.or(self.corner_radius),
