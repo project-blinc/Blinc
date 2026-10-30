@@ -44,6 +44,7 @@ use blinc_layout::InstanceKey;
 use blinc_layout::motion::{SharedAnimatedValue, motion};
 use blinc_layout::prelude::*;
 use blinc_layout::render_state::get_global_scheduler;
+use blinc_layout::style;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 use std::cell::OnceCell;
@@ -316,10 +317,7 @@ impl AccordionBuilder {
             .flex_col()
             .w_full()
             .flex_shrink()
-            .rounded(radius)
-            .shadow_md()
-            .bg(theme.color(ColorToken::SurfaceElevated))
-            .border(1.5, border_color)
+            .style(&style! { rounded: radius, shadow_md, bg: theme.color(ColorToken::SurfaceElevated), border: (1.5, border_color) })
             .overflow_clip()
             .animate_bounds(
                 blinc_layout::visual_animation::VisualAnimationConfig::height()
@@ -410,7 +408,7 @@ impl AccordionBuilder {
                 .class("cn-accordion-content")
                 .flex_col()
                 .w_full()
-                .bg(theme.color(ColorToken::Surface))
+                .style(&style! { bg: theme.color(ColorToken::Surface) })
                 .border_top(1.0, border_color)
                 .overflow_clip()
                 .animate_bounds(

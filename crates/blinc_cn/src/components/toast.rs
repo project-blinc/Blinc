@@ -70,6 +70,7 @@ use std::sync::Arc;
 use blinc_core::Color;
 use blinc_layout::overlay_state::toast_tray;
 use blinc_layout::prelude::*;
+use blinc_layout::style;
 use blinc_layout::widgets::overlay::Corner;
 use blinc_layout::widgets::toast_tray::{ToastBuilder as TrayBuilder, ToastHandle};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
@@ -338,9 +339,7 @@ fn build_toast_content(
         return custom_fn()
             .class("cn-toast")
             .w(360.0)
-            .bg(bg)
-            .border(1.0, border)
-            .rounded(radius)
+            .style(&style! { bg: bg, border: (1.0, border), rounded: radius })
             .shadow_lg();
     }
 
@@ -349,9 +348,7 @@ fn build_toast_content(
     let mut toast = div()
         .class("cn-toast")
         .w(360.0)
-        .bg(bg)
-        .border(1.0, border)
-        .rounded(radius)
+        .style(&style! { bg: bg, border: (1.0, border), rounded: radius })
         .shadow_lg();
 
     match variant {
@@ -422,7 +419,7 @@ fn build_toast_content(
                 .w(24.0)
                 .h(24.0)
                 .items_center()
-                .rounded(theme.radius(RadiusToken::Sm))
+                .style(&style! { rounded: theme.radius(RadiusToken::Sm) })
                 .cursor_pointer()
                 .on_click(move |_| {
                     toast_handle.dismiss();

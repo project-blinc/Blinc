@@ -39,6 +39,7 @@ use blinc_core::Color;
 use blinc_layout::InstanceKey;
 use blinc_layout::overlay_state::overlay_stack;
 use blinc_layout::prelude::*;
+use blinc_layout::style;
 use blinc_layout::widgets::overlay::EdgeSide;
 use blinc_layout::widgets::overlay_stack::{OverlayBuilder, OverlayHandle};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
@@ -408,8 +409,7 @@ fn build_sheet_content(
     let mut sheet = div()
         .class("cn-sheet")
         .class(side_class)
-        .bg(bg)
-        .border(1.0, border)
+        .style(&style! { bg: bg, border: (1.0, border) })
         .shadow_xl()
         .flex_col()
         .overflow_clip();
@@ -473,7 +473,7 @@ fn build_sheet_content(
                 .w(32.0)
                 .h(32.0)
                 .items_center()
-                .rounded(theme.radius(RadiusToken::Sm))
+                .style(&style! { rounded: theme.radius(RadiusToken::Sm) })
                 .cursor_pointer()
                 .on_click(move |_| {
                     if let Some(ref cb) = on_close_clone {

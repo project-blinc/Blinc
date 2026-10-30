@@ -38,6 +38,7 @@ use std::cell::{OnceCell, RefCell};
 use blinc_core::Color;
 use blinc_layout::element::RenderProps;
 use blinc_layout::prelude::*;
+use blinc_layout::style;
 use blinc_layout::text::Text as TextElement;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
@@ -250,7 +251,7 @@ impl BuiltAvatar {
             .class("cn-avatar")
             .w(size_px)
             .h(size_px)
-            .rounded(radius)
+            .style(&style! { rounded: radius })
             .overflow_clip()
             .flex_row()
             .items_center()
@@ -306,7 +307,7 @@ impl BuiltAvatar {
                 .w(status_size)
                 .h(status_size)
                 .rounded_full()
-                .bg(status_color)
+                .style(&style! { bg: status_color })
                 .absolute()
                 .bottom(status_offset)
                 .right(status_offset);
@@ -698,9 +699,7 @@ impl BuiltAvatarGroup {
                 .class("cn-avatar-group__more")
                 .w(size_px)
                 .h(size_px)
-                .rounded(size_px / 2.0)
-                .bg(theme.color(ColorToken::SurfaceElevated))
-                .border(ring_width, ring_color)
+                .style(&style! { rounded: size_px / 2.0, bg: theme.color(ColorToken::SurfaceElevated), border: (ring_width, ring_color) })
                 .flex_row()
                 .items_center()
                 .justify_center()

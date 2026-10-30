@@ -41,6 +41,7 @@ use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::overlay_state::overlay_stack;
 use blinc_layout::prelude::*;
+use blinc_layout::style;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::hr::hr;
 use blinc_layout::widgets::overlay::AnchorDirection;
@@ -392,7 +393,7 @@ impl MenubarBuilder {
             .items_center()
             .h_fit()
             .px(4.0)
-            .bg(bg)
+            .style(&style! { bg: bg })
             .border_bottom(1.0, border);
 
         // Add each menu trigger
@@ -430,7 +431,7 @@ impl MenubarBuilder {
                     div()
                         .flex_row()
                         .items_center()
-                        .rounded(radius)
+                        .style(&style! { rounded: radius })
                         .px(2.0)
                         .py(1.0)
                         .child(
@@ -444,7 +445,7 @@ impl MenubarBuilder {
                 MenubarTrigger::Custom(custom_fn) => div()
                     .flex_row()
                     .items_center()
-                    .rounded(radius)
+                    .style(&style! { rounded: radius })
                     .child(custom_fn(false)),
             };
 
@@ -801,9 +802,7 @@ fn build_menubar_menu_div(
         .id(menu_id)
         .flex_col()
         .w(width)
-        .bg(bg)
-        .border(1.0, border)
-        .rounded(radius)
+        .style(&style! { bg: bg, border: (1.0, border), rounded: radius })
         .lock_corner_shape()
         .shadow_lg()
         .overflow_clip()
