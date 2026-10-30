@@ -490,7 +490,7 @@ fn opacity_groups_css_preflight_preserves_cache_when_any_group_is_missing_or_sta
             let before = context.cached_bg_batch.as_ref().unwrap();
             let primitives = bytemuck::cast_slice::<GpuPrimitive, u8>(&before.primitives).to_vec();
             let commands = format!("{:?}", before.layer_commands);
-            let metadata = format!("{:?}", &*tree.css_anim_paint_records());
+            let metadata = format!("{:?}", *tree.css_anim_paint_records());
             context.last_css_damage_rects = vec![[1.0; 4]];
             assert!(
                 matches!(context.apply_css_deltas(&tree, 1.0), CssDeltaResult::Bail),
@@ -502,7 +502,7 @@ fn opacity_groups_css_preflight_preserves_cache_when_any_group_is_missing_or_sta
                 primitives
             );
             assert_eq!(format!("{:?}", after.layer_commands), commands);
-            assert_eq!(format!("{:?}", &*tree.css_anim_paint_records()), metadata);
+            assert_eq!(format!("{:?}", *tree.css_anim_paint_records()), metadata);
             assert!(context.last_css_damage_rects.is_empty());
         }
     }
