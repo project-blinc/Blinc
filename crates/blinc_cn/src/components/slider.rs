@@ -45,6 +45,7 @@ use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::motion::motion;
 use blinc_layout::prelude::*;
+use blinc_layout::style;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_macros::BlincComponent;
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
@@ -284,12 +285,11 @@ impl Slider {
                 .class("cn-slider-thumb")
                 .w(thumb_size)
                 .h(thumb_size)
-                .rounded(thumb_size / 2.0);
+                .style(&style! { rounded: thumb_size / 2.0 });
             if disabled {
                 td = td
                     .class("cn-slider-thumb--disabled")
-                    .bg(theme.color(ColorToken::InputBgDisabled))
-                    .border(1.0, thumb_border_disabled);
+                    .style(&style! { bg: theme.color(ColorToken::InputBgDisabled), border: (1.0, thumb_border_disabled) });
             } else {
                 let fill = thumb_fill_override.unwrap_or_else(|| theme.color(ColorToken::Surface));
                 td = td.bg(fill).border(2.0, thumb_border_active);
@@ -353,8 +353,7 @@ impl Slider {
                         .class("cn-slider-halo")
                         .w(halo_size)
                         .h(halo_size)
-                        .rounded(halo_size / 2.0)
-                        .bg(halo_bg),
+                        .style(&style! { rounded: halo_size / 2.0, bg: halo_bg }),
                 ),
             );
 
@@ -377,8 +376,7 @@ impl Slider {
             .class("cn-slider-fill")
             .w(track_width)
             .h(track_height)
-            .rounded(radius)
-            .bg(fill_bg);
+            .style(&style! { rounded: radius, bg: fill_bg });
         let fill_positioned = div().absolute().left(fill_left).top(0.0).child(fill_bar);
         let animated_fill = motion()
             .translate_x(thumb_offset_for_fill_in)
@@ -390,7 +388,7 @@ impl Slider {
             .w(track_width)
             .h(track_height)
             .overflow_clip()
-            .rounded(radius)
+            .style(&style! { rounded: radius })
             .relative()
             .child(animated_fill);
 
@@ -404,8 +402,7 @@ impl Slider {
             .right(0.0)
             .top((thumb_size - track_height) / 2.0)
             .h(track_height)
-            .rounded(radius)
-            .bg(track_bg)
+            .style(&style! { rounded: radius, bg: track_bg })
             .cursor_pointer();
 
         let mut container = div()

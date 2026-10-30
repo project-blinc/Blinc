@@ -43,6 +43,7 @@ use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
 use blinc_layout::motion::SharedAnimatedValue;
 use blinc_layout::prelude::*;
+use blinc_layout::style;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, ThemeState};
 use std::sync::{Arc, Mutex};
@@ -183,8 +184,7 @@ impl Switch {
             .class("cn-switch-track")
             .absolute()
             .inset(0.0)
-            .rounded(radius)
-            .bg(off_bg);
+            .style(&style! { rounded: radius, bg: off_bg });
         if disabled {
             off_layer = off_layer.border(1.0, theme.color(ColorToken::BorderSecondary));
         }
@@ -197,8 +197,7 @@ impl Switch {
             .class("cn-switch-track--on")
             .w(track_width)
             .h(track_height)
-            .rounded(radius)
-            .bg(on_bg);
+            .style(&style! { rounded: radius, bg: on_bg });
 
         let on_layer = div()
             .absolute()
@@ -216,8 +215,7 @@ impl Switch {
             .class("cn-switch-thumb")
             .w(thumb_size)
             .h(thumb_size)
-            .rounded(thumb_size / 2.0)
-            .bg(thumb_color);
+            .style(&style! { rounded: thumb_size / 2.0, bg: thumb_color });
         if !disabled {
             thumb_element = thumb_element.shadow_sm();
         } else {
@@ -231,7 +229,7 @@ impl Switch {
             .class("cn-switch")
             .w(track_width)
             .h(track_height)
-            .rounded(radius)
+            .style(&style! { rounded: radius })
             .cursor_pointer()
             .relative()
             .items_center()

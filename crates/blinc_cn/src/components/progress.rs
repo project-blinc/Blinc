@@ -51,6 +51,7 @@ use blinc_animation::SharedAnimatedValue;
 use blinc_core::Color;
 use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::prelude::*;
+use blinc_layout::style;
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
 /// Progress bar size variants
@@ -178,8 +179,7 @@ impl Progress {
                     .top(0.0)
                     .w(fill_width)
                     .h(height)
-                    .rounded(radius)
-                    .bg(indicator_color)
+                    .style(&style! { rounded: radius, bg: indicator_color })
             }
             Reactive::Bound(state) => {
                 // Render the indicator at FULL track width and drive
@@ -196,8 +196,7 @@ impl Progress {
                     .top(0.0)
                     .w(config.width)
                     .h(height)
-                    .rounded(radius)
-                    .bg(indicator_color)
+                    .style(&style! { rounded: radius, bg: indicator_color })
                     .transform_origin(0.0, 50.0)
                     .bind_transform_from(state.clone(), |v: f32| {
                         let f = (v / 100.0).clamp(0.0, 1.0);
@@ -217,8 +216,7 @@ impl Progress {
                     .top(0.0)
                     .w(config.width)
                     .h(height)
-                    .rounded(radius)
-                    .bg(indicator_color)
+                    .style(&style! { rounded: radius, bg: indicator_color })
                     .transform_origin(0.0, 50.0)
                     .bind_transform_from(computed.clone(), |v: f32| {
                         let f = (v / 100.0).clamp(0.0, 1.0);
@@ -233,8 +231,7 @@ impl Progress {
             .class(size_class)
             .w(config.width)
             .h(height)
-            .rounded(radius)
-            .bg(track_color)
+            .style(&style! { rounded: radius, bg: track_color })
             .overflow_clip()
             .relative()
             .child(indicator);
@@ -479,8 +476,7 @@ impl AnimatedProgress {
         let track = div()
             .w(width)
             .h(height)
-            .rounded(radius)
-            .bg(track_color)
+            .style(&style! { rounded: radius, bg: track_color })
             .overflow_clip()
             .relative()
             .child(positioned_wrapper);
