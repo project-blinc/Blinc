@@ -576,7 +576,11 @@ impl Stylesheet {
     /// styles in `self`. Variables and keyframes are also merged.
     pub fn merge(&mut self, other: Stylesheet) {
         for (key, style) in other.styles {
-            self.styles.insert(key, style);
+            let merged = match self.styles.get(&key) {
+                Some(existing) => existing.merge(&style),
+                None => style,
+            };
+            self.styles.insert(key, merged);
         }
         self.complex_rules.extend(other.complex_rules);
         for (key, value) in other.variables {
@@ -585,8 +589,14 @@ impl Stylesheet {
         for (key, kf) in other.keyframes {
             self.keyframes.insert(key, kf);
         }
+        // A property the later rule leaves unset keeps the earlier rule's
+        // value, as in the cascade, instead of the whole entry being dropped.
         for (key, style) in other.class_styles {
-            self.class_styles.insert(key, style);
+            let merged = match self.class_styles.get(&key) {
+                Some(existing) => existing.merge(&style),
+                None => style,
+            };
+            self.class_styles.insert(key, merged);
         }
         // Re-index now that simple + class + complex stores have the
         // merged content. `other.hover_participants` is dropped — the

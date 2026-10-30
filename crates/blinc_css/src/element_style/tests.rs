@@ -723,3 +723,16 @@ fn layer_block_marks_its_rules_as_a_components() {
         .expect("layered state rule parsed");
     assert!(hover.component);
 }
+
+#[test]
+fn merging_sheets_keeps_properties_the_later_rule_leaves_unset() {
+    let mut sheet = css!(r#"@layer components { .card { opacity: 0.5; border-radius: 8px; } }"#);
+    sheet.merge(css!(r#".card { border-radius: 0px; }"#));
+    let card = sheet.get_class("card").expect("card");
+    assert_eq!(card.opacity, Some(0.5), "the layer's opacity was dropped");
+    assert_eq!(card.corner_radius.map(|r| r.top_left), Some(0.0));
+    assert!(
+        !card.component,
+        "a merged entry with an app rule is the app's"
+    );
+}
