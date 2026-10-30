@@ -5,6 +5,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Retained nested glass samples enclosing prior paint through owned foreground bakes while independent first-level panels keep the prepared frame backdrop. `GroupGlass::nested` records the CPU sampling scope; GPU layouts and shaders are unchanged.
 - Glass inside background isolation samples prior paint from pooled snapshots, including inherited translucent paint, images and GPU output. Background/backdrop dispatch shares the bake; ordinary foreground glass retains its prepared-backdrop path.
 - Native glass groups retain their panel, clips and child content through opacity/effects and foreground replay. Tight pooled surfaces preserve world-space backdrop coordinates; eligible opaque draws retain the direct glass path.
 - Nested native overlays paint after their late owner's ordinary foreground content in tree order across both streams. Intermediate native layer state follows each nested panel, while the enclosing overlay's opacity/effects remain joint.

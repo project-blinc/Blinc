@@ -365,7 +365,7 @@ fn glass_group_capabilities_and_unsupported_owners_keep_admission_guards() {
         let batch = paint.take_batch();
         assert_eq!(
             batch.has_grouped_glass(),
-            boundary == 0 || boundary == 8,
+            boundary == 0 || boundary == 3 || boundary == 8,
             "boundary={boundary}"
         );
         assert!(!paint.take_dynamic_batch().has_grouped_glass());

@@ -144,6 +144,7 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
         std::mem::discriminant(&entry.command).hash(h);
         match &entry.command {
             LayerCommand::Glass(glass) => {
+                glass.nested.hash(h);
                 bytemuck::bytes_of(&glass.primitive).hash(h);
                 image(&glass.paint, h);
                 glass.frame_size.hash(h);

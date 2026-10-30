@@ -558,6 +558,16 @@ impl GpuRenderer {
         origin: (f32, f32),
         size: (f32, f32),
     ) -> (LayerTexture, (u32, u32)) {
+        self.render_composite_subtree_with_backdrop(batch, origin, size, None)
+    }
+
+    fn render_composite_subtree_with_backdrop(
+        &mut self,
+        batch: &PrimitiveBatch,
+        origin: (f32, f32),
+        size: (f32, f32),
+        backdrop: Option<&wgpu::TextureView>,
+    ) -> (LayerTexture, (u32, u32)) {
         let batch = resolved_batch(batch);
         let batch = batch.as_ref();
         let extent = (size.0.ceil().max(1.0) as u32, size.1.ceil().max(1.0) as u32);
@@ -571,6 +581,8 @@ impl GpuRenderer {
         let items = nodes(batch);
         let mut outputs = named::Outputs::new(&items);
         outputs.local_glass_frame = glass_backdrop::frame(&items);
+        outputs.glass_backdrop = backdrop.cloned();
+        outputs.prepared_glass_backdrop = backdrop.cloned();
         self.draw_overlay_nodes(
             &target.view,
             batch,
@@ -635,10 +647,17 @@ impl GpuRenderer {
     ) {
         let batch = resolved_batch(batch);
         let batch = batch.as_ref();
-        if backdrop.is_none() && batch.has_background_glass() {
+        let items = nodes(batch);
+        if (backdrop.is_none() && batch.has_background_glass())
+            || (backdrop.is_some() && glass_backdrop::nested_frame(&items).is_some())
+        {
             let size = self.viewport_size;
-            let (texture, _) =
-                self.render_composite_subtree(batch, (0.0, 0.0), (size.0 as f32, size.1 as f32));
+            let (texture, _) = self.render_composite_subtree_with_backdrop(
+                batch,
+                (0.0, 0.0),
+                (size.0 as f32, size.1 as f32),
+                backdrop,
+            );
             self.render_images(
                 target,
                 &texture.view,
@@ -653,7 +672,6 @@ impl GpuRenderer {
             return;
         }
         self.layer_texture_cache.evict_oversized();
-        let items = nodes(batch);
         let mut outputs = named::Outputs::new(&items);
         outputs.glass_backdrop = backdrop.cloned();
         self.draw_overlay_nodes(target, batch, &items, [0.0; 2], samples, &mut outputs);
@@ -688,7 +706,10 @@ impl GpuRenderer {
         for node in items {
             match node {
                 Node::Glass(glass) => {
-                    if let Some(frame) = outputs.local_glass_frame {
+                    if let Some(frame) = outputs
+                        .local_glass_frame
+                        .filter(|_| outputs.prepared_glass_backdrop.is_none() || glass.nested)
+                    {
                         let backdrop = self.capture_glass_backdrop(
                             target,
                             origin,
@@ -697,7 +718,11 @@ impl GpuRenderer {
                         );
                         self.draw_group_glass(target, &backdrop.view, glass, origin);
                         self.layer_texture_cache.release(backdrop);
-                    } else if let Some(backdrop) = &outputs.glass_backdrop {
+                    } else if let Some(backdrop) = outputs
+                        .prepared_glass_backdrop
+                        .as_ref()
+                        .or(outputs.glass_backdrop.as_ref())
+                    {
                         self.draw_group_glass(target, backdrop, glass, origin);
                     }
                 }

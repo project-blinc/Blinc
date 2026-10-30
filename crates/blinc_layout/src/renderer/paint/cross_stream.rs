@@ -14,7 +14,7 @@ impl RenderTree {
         struct Scope {
             background_group: bool,
             foreground: bool,
-            glass: bool,
+            blocked_glass: bool,
             portal: bool,
         }
         fn visit(
@@ -59,7 +59,7 @@ impl RenderTree {
                     render.element_type,
                     ElementType::Div | ElementType::Canvas(_)
                 ))
-                && (!is_glass || (glass_layers && !scope.glass && !scope.portal))
+                && (!is_glass || (glass_layers && !scope.blocked_glass && !scope.portal))
                 && ((capabilities.image
                     && matches!(render.element_type, ElementType::Div)
                     && matches!(props.background, Some(blinc_core::Brush::Image(_))))
@@ -89,7 +89,7 @@ impl RenderTree {
                         Scope {
                             background_group: scope.background_group || (!foreground && isolates),
                             foreground: foreground || is_glass,
-                            glass: scope.glass || is_glass || !own_native,
+                            blocked_glass: scope.blocked_glass || !own_native,
                             portal: scope.portal || props.is_overlay_root,
                         },
                         capabilities,
@@ -117,11 +117,11 @@ impl RenderTree {
                 && props.outline_width == 0.0;
             // Painted background isolation stays at its background anchor.
             native |= own_native
-                && !is_glass
                 && content.glass
                 && compatible_children
                 && matches!(render.element_type, ElementType::Div)
-                && (foreground
+                && (is_glass
+                    || foreground
                     || transparent_wrapper
                     || isolates
                     || scope.background_group

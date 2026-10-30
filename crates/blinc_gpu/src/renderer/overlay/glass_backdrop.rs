@@ -1,4 +1,4 @@
-//! Snapshot paint before background glass without sampling an active attachment.
+//! Snapshot prior paint without sampling an active attachment.
 use super::{GpuRenderer, LayerTexture, Node};
 use crate::GpuImageInstance;
 
@@ -6,6 +6,14 @@ pub(super) fn frame(nodes: &[Node]) -> Option<(u32, u32)> {
     nodes.iter().find_map(|node| match node {
         Node::Glass(glass) => Some(glass.frame_size),
         Node::Layer(_, children) => frame(children),
+        _ => None,
+    })
+}
+
+pub(super) fn nested_frame(nodes: &[Node]) -> Option<(u32, u32)> {
+    nodes.iter().find_map(|node| match node {
+        Node::Glass(glass) if glass.nested => Some(glass.frame_size),
+        Node::Layer(_, children) => nested_frame(children),
         _ => None,
     })
 }

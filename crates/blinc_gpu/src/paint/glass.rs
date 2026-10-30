@@ -1,4 +1,4 @@
-//! Retain a glass panel in its foreground visual group.
+//! Retain glass and its backdrop scope in native visual groups.
 use super::{GpuGlassPrimitive, GpuPaintContext};
 use crate::primitives::{DynamicImage, LayerCommand};
 use blinc_core::Rect;
@@ -6,18 +6,24 @@ use blinc_core::Rect;
 /// A panel with owned clip coverage and a tight retained-image footprint.
 #[derive(Clone, Debug)]
 pub struct GroupGlass {
+    /// Sample prior paint inside the enclosing glass owner's isolation.
+    pub nested: bool,
     pub primitive: GpuGlassPrimitive,
     pub paint: DynamicImage,
     pub frame_size: (u32, u32),
 }
 
 impl GpuPaintContext<'_> {
-    /// Enable grouped glass when foreground dispatch supplies a prepared backdrop.
+    /// Enable retained glass for backdrop-aware ordered dispatch.
     pub fn enable_glass_layers(&mut self) {
         self.glass_layers = true;
     }
 
-    pub(super) fn capture_group_glass(&mut self, primitive: GpuGlassPrimitive) -> bool {
+    pub(super) fn capture_group_glass(
+        &mut self,
+        primitive: GpuGlassPrimitive,
+        nested: bool,
+    ) -> bool {
         if !self.emit_foreground() || !self.layer_stack.iter().any(|s| s.captures_glass) {
             return false;
         }
@@ -43,6 +49,7 @@ impl GpuPaintContext<'_> {
         let frame_size = (self.viewport.width as u32, self.viewport.height as u32);
         self.active_batch_mut()
             .push_foreground_layer_command(LayerCommand::Glass(Box::new(GroupGlass {
+                nested,
                 primitive,
                 paint,
                 frame_size,

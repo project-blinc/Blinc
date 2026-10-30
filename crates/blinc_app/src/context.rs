@@ -105,6 +105,8 @@ mod glass_background_tests;
 #[cfg(test)]
 mod glass_group_tests;
 #[cfg(test)]
+mod glass_nested_tests;
+#[cfg(test)]
 mod glass_path_clip_tests;
 #[cfg(test)]
 mod layer_text_clip_tests;

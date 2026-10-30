@@ -11,6 +11,8 @@ use std::{
 };
 
 pub(super) struct Outputs {
+    // First-level panels keep this backdrop while nested panels sample prior paint.
+    pub prepared_glass_backdrop: Option<wgpu::TextureView>,
     pub local_glass_frame: Option<(u32, u32)>,
     pub glass_backdrop: Option<wgpu::TextureView>,
     pub wanted: HashSet<LayerId>,
@@ -33,6 +35,7 @@ impl Outputs {
         let mut wanted = HashSet::new();
         visit(items, &mut wanted);
         Self {
+            prepared_glass_backdrop: None,
             local_glass_frame: None,
             glass_backdrop: None,
             wanted,

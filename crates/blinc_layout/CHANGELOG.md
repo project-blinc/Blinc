@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Compatible nested glass panels share native isolation and retain joint ancestor opacity/effects. Layout `ClipPath::Polygon` and `ClipPath::Path` resolve to native owner-aware path clips so translated glass and inherited content keep their clip frame.
 - Supported background ancestors isolate their glass, native paint and collected content together at the background anchor. Ordered backdrop sampling preserves ancestor opacity/effects, sibling order and live CSS opacity endpoints.
 - Compatible painted foreground ancestors and siblings share their glass content's visual group. Painted foreground containers also retain collected content order at opaque endpoints, including material changes beside independent glass panels.
 - Supported first-level glass panels and transparent unary ancestors retain native and collected children in a foreground visual group. Glass-only trees visit foreground children and preserve their routing after glass decoration.

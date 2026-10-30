@@ -465,7 +465,7 @@ fn glass_ancestor_admission_requires_compatible_foreground_content() {
             .any(|c| c.id == GroupId::Node(owner.data().as_ffi()));
         assert_eq!(
             captured,
-            boundary == 0 || boundary == 10,
+            boundary == 0 || boundary == 3 || boundary == 10,
             "boundary={boundary}"
         );
     }

@@ -30,6 +30,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Nested glass panels preserve joint opacity, effects, clips, live updates and cached replay, including collected text/images and GPU output. Sampling uses owned textures without requiring a sampleable destination or replaying GPU callbacks; sampling-scope changes invalidate cached composite bakes.
 - Background glass ancestors retain joint opacity/effects across direct, cached and dedicated overlay frames. Collected images and GPU callbacks join the ordered backdrop, with callbacks executed once and background sibling order preserved through opacity updates.
 - Painted foreground glass ancestors composite native and collected siblings together through opacity/effects, live updates and cached replay. Removing a glass material preserves opaque foreground image order instead of painting the container background over it.
 - Supported glass panels composite their material and collected/native children together through opacity, effects and animation. Direct, cached and dedicated overlay frames retain the prepared backdrop; grouped GPU callbacks execute once and removed backgrounds clear stale glass samples.

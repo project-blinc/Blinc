@@ -633,11 +633,7 @@ impl RenderTree {
         }
     }
 
-    /// Resolve a CSS `ClipPath` into a concrete `ClipShape` given element bounds.
-    ///
-    /// For simple shapes (circle, ellipse, inset, rect, xywh), this produces a
-    /// ClipShape that the existing GPU clip infrastructure handles directly.
-    /// Polygon and path produce a polygon-based ClipShape evaluated in the shader.
+    /// Resolve a CSS clip in its element-local frame.
     pub(crate) fn resolve_clip_path(
         clip_path: &blinc_core::ClipPath,
         bounds: &crate::element::ElementBounds,
@@ -646,6 +642,18 @@ impl RenderTree {
 
         let w = bounds.width;
         let h = bounds.height;
+
+        fn contour(mut vertices: impl ExactSizeIterator<Item = (f32, f32)>) -> Option<ClipShape> {
+            if vertices.len() < 3 {
+                return None;
+            }
+            let (x, y) = vertices.next()?;
+            let mut path = blinc_core::Path::new().move_to(x, y);
+            for (x, y) in vertices {
+                path = path.line_to(x, y);
+            }
+            Some(ClipShape::Path(path.close()))
+        }
 
         match clip_path {
             ClipPath::Circle { radius, center } => {
@@ -722,22 +730,9 @@ impl RenderTree {
                 }
             }
             ClipPath::Polygon { points } => {
-                let resolved: Vec<Point> = points
-                    .iter()
-                    .map(|(px, py)| Point::new(px.resolve(w), py.resolve(h)))
-                    .collect();
-                if resolved.len() < 3 {
-                    return None;
-                }
-                Some(ClipShape::Polygon(resolved))
+                contour(points.iter().map(|(px, py)| (px.resolve(w), py.resolve(h))))
             }
-            ClipPath::Path { vertices } => {
-                if vertices.len() < 3 {
-                    return None;
-                }
-                let points: Vec<Point> = vertices.iter().map(|(x, y)| Point::new(*x, *y)).collect();
-                Some(ClipShape::Polygon(points))
-            }
+            ClipPath::Path { vertices } => contour(vertices.iter().copied()),
         }
     }
 
