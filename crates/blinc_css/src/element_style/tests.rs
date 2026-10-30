@@ -758,3 +758,16 @@ fn color_mix_blends_in_srgb_with_premultiplied_alpha() {
         [255, 0, 0, 20]
     );
 }
+
+#[test]
+fn shadow_tokens_resolve_through_css_variables() {
+    ThemeState::init_default();
+    let vars = ThemeState::get().to_css_variable_map();
+    let sheet = crate::parser::Stylesheet::parse_with_variables(
+        ".x { box-shadow: var(--ui-x-shadow, var(--shadow-md)); }",
+        &vars,
+    )
+    .expect("css");
+    let x = sheet.get_class("x").expect("x");
+    assert!(!x.shadow.is_empty() || !x.inner_shadow.is_empty());
+}

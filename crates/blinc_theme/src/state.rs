@@ -744,6 +744,22 @@ impl ThemeState {
             vars.insert("tracking-wider".into(), em(t.tracking_wider));
         }
 
+        // ===== Shadow tokens =====
+        // A `box-shadow` reads the stack through `theme(...)`, which the CSS
+        // parser resolves against the current theme.
+        for name in [
+            "shadow-sm",
+            "shadow-default",
+            "shadow-md",
+            "shadow-lg",
+            "shadow-xl",
+            "shadow-2xl",
+            "shadow-inner",
+            "shadow-none",
+        ] {
+            vars.insert(name.into(), format!("theme({name})"));
+        }
+
         // ===== Motion tokens =====
         {
             let a = self.animations.read().unwrap();
