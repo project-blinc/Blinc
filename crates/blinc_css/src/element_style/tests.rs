@@ -771,3 +771,10 @@ fn shadow_tokens_resolve_through_css_variables() {
     let x = sheet.get_class("x").expect("x");
     assert!(!x.shadow.is_empty() || !x.inner_shadow.is_empty());
 }
+
+#[test]
+fn transform_none_resets_to_identity() {
+    let sheet = crate::parser::Stylesheet::parse(".x { transform: none; }").expect("css");
+    let t = sheet.get_class("x").and_then(|s| s.transform.clone());
+    assert!(matches!(t, Some(Transform::Affine2D(a)) if a == blinc_core::Affine2D::IDENTITY));
+}

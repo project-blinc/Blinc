@@ -26,6 +26,12 @@ use crate::parser::*;
 pub(crate) fn parse_transform_with_3d(value: &str, style: &mut ElementStyle) -> bool {
     use blinc_core::Affine2D;
 
+    // `none` resets: a later rule or state clearing an earlier transform.
+    if value.trim().eq_ignore_ascii_case("none") {
+        style.transform = Some(Transform::Affine2D(Affine2D::IDENTITY));
+        return true;
+    }
+
     // Split compound transform string into individual function calls.
     // e.g. "rotate(45deg) scale(1.5)" → ["rotate(45deg)", "scale(1.5)"]
     let functions = split_transform_functions(value.trim());
