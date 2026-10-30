@@ -736,3 +736,25 @@ fn merging_sheets_keeps_properties_the_later_rule_leaves_unset() {
         "a merged entry with an app rule is the app's"
     );
 }
+
+#[test]
+fn color_mix_blends_in_srgb_with_premultiplied_alpha() {
+    let rgba = |v: &str| {
+        let sheet =
+            crate::parser::Stylesheet::parse(&format!(".x {{ background: {v}; }}")).expect("css");
+        match sheet.get_class("x").and_then(|s| s.background.clone()) {
+            Some(Brush::Solid(c)) => [c.r, c.g, c.b, c.a].map(|v| (v * 255.0).round() as i32),
+            other => panic!("{v}: {other:?}"),
+        }
+    };
+    assert_eq!(rgba("color-mix(in srgb, red, blue)"), [128, 0, 128, 255]);
+    assert_eq!(rgba("color-mix(in srgb, red 25%, blue)"), [64, 0, 191, 255]);
+    assert_eq!(
+        rgba("color-mix(in srgb, #ff0000 20%, blue 20%)"),
+        [128, 0, 128, 102]
+    );
+    assert_eq!(
+        rgba("color-mix(in srgb, red 8%, transparent)"),
+        [255, 0, 0, 20]
+    );
+}

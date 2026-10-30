@@ -112,8 +112,84 @@ pub(crate) fn parse_color(input: &str) -> Option<Color> {
         return Some(color);
     }
 
+    if let Some(args) = input
+        .strip_prefix("color-mix(")
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        return parse_color_mix(args);
+    }
+
     // Try named color
     parse_named_color(input)
+}
+
+/// Splits `text` at the top-level occurrences of `sep`, ignoring any inside
+/// parentheses.
+fn split_top_level(text: &str, sep: char) -> Vec<&str> {
+    let (mut depth, mut start, mut parts) = (0usize, 0usize, Vec::new());
+    for (i, ch) in text.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            c if c == sep && depth == 0 => {
+                parts.push(text[start..i].trim());
+                start = i + c.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    parts.push(text[start..].trim());
+    parts
+}
+
+/// `color-mix(in srgb, a p%, b q%)`: premultiplied alpha, a missing
+/// percentage the rest of 100, percentages summing under 100 scaling the
+/// alpha. Other colour spaces are not supported.
+fn parse_color_mix(args: &str) -> Option<Color> {
+    let parts = split_top_level(args, ',');
+    if parts.len() != 3 || parts[0] != "in srgb" {
+        return None;
+    }
+    let mut sides = Vec::new();
+    for part in &parts[1..] {
+        let tail = part.rsplit_once(char::is_whitespace);
+        let (color_text, percent) = match tail {
+            Some((head, last)) if last.ends_with('%') && !head.trim().is_empty() => {
+                let p: f64 = last.trim_end_matches('%').parse().ok()?;
+                (head.trim(), Some(p / 100.0))
+            }
+            _ => (*part, None),
+        };
+        sides.push((parse_color(color_text)?, percent));
+    }
+    let (mut p1, mut p2) = (sides[0].1, sides[1].1);
+    match (p1, p2) {
+        (None, None) => (p1, p2) = (Some(0.5), Some(0.5)),
+        (None, Some(b)) => p1 = Some(1.0 - b),
+        (Some(a), None) => p2 = Some(1.0 - a),
+        _ => {}
+    }
+    let (p1, p2) = (p1?, p2?);
+    let sum = p1 + p2;
+    if sum <= 0.0 {
+        return None;
+    }
+    let scale = sum.min(1.0);
+    let (w1, w2) = (p1 / sum, p2 / sum);
+    let (a, b) = (sides[0].0, sides[1].0);
+    let alpha = a.a as f64 * w1 + b.a as f64 * w2;
+    if alpha <= 0.0 {
+        return Some(Color::rgba(0.0, 0.0, 0.0, 0.0));
+    }
+    let mixed = |x: f32, y: f32| {
+        ((x as f64 * a.a as f64 * w1 + y as f64 * b.a as f64 * w2) / alpha).clamp(0.0, 1.0) as f32
+    };
+    Some(Color::rgba(
+        mixed(a.r, b.r),
+        mixed(a.g, b.g),
+        mixed(a.b, b.b),
+        (alpha * scale) as f32,
+    ))
 }
 
 /// Parse hex color: #RGB, #RRGGBB, or #RRGGBBAA
