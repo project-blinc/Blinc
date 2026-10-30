@@ -1,7 +1,7 @@
 # Unified Styling API
 
 Demonstrates all styling approaches in Blinc:
-- `css!` macro: CSS-like syntax with hyphenated property names
+- `css_style!` macro: CSS-like syntax with hyphenated property names
 - `style!` macro: Rust-friendly syntax with underscored names
 - `ElementStyle` builder: Programmatic style construction
 - CSS Parser: Runtime CSS string parsing

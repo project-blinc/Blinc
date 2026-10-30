@@ -373,10 +373,10 @@ div().id("my-element").w(300.0).h(300.0)
 
 ### 3. Style Macros
 
-Reference CSS-defined flows from `css!` or `style!` macros:
+Reference CSS-defined flows from `css_style!` or `style!` macros:
 
 ```rust
-let style = css! {
+let style = css_style! {
     flow: "terrain";
     border-radius: 16px;
 };

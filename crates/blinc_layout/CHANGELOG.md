@@ -4,6 +4,10 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- `css!` now builds a `Stylesheet` of class, id and pseudo-class rules from CSS text. The previous `css!`, which returned one `ElementStyle`, is renamed `css_style!`.
+- `Div::style(&ElementStyle)` records its properties as the element's default tier, below an application stylesheet. `RenderProps::tiers` records which writer set each visual property; nothing reads it yet.
+
 ### Fixed
 - Glass background brushes share material detection, grouping, paint order and tree-derived nesting across painters. Brush shadow/border styling survives resolution, CSS backdrop updates retain authored brushes, and glass configuration changes invalidate visual caches.
 - Compatible nested glass panels share native isolation and retain joint ancestor opacity/effects. Layout `ClipPath::Polygon` and `ClipPath::Path` resolve to native owner-aware path clips so translated glass and inherited content keep their clip frame.

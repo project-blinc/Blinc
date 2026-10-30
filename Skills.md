@@ -334,7 +334,7 @@ Define reusable `@keyframes` for complex, multi-step animations:
 ### Specificity (Low to High)
 
 1. **CSS stylesheet** (`ctx.add_css()`) — lowest priority
-2. **`css!` / `style!` macros** — inline element styles
+2. **`css_style!` / `style!` macros** — inline element styles
 3. **Builder methods** (`.bg()`, `.w()`, etc.) — highest priority, overrides CSS
 
 ### Inline Style Macros
@@ -342,11 +342,11 @@ Define reusable `@keyframes` for complex, multi-step animations:
 Both macros return `ElementStyle`. Apply to elements with `.style()`:
 
 ```rust
-use blinc_layout::css;
+use blinc_layout::css_style;
 use blinc_layout::style;
 
-// css! macro — CSS-like syntax, semicolons, hyphenated properties, Rust values
-let card_style = css! {
+// css_style! macro — CSS-like syntax, semicolons, hyphenated properties, Rust values
+let card_style = css_style! {
     background: Color::rgba(0.2, 0.3, 0.9, 1.0);
     border-radius: 12.0;
     box-shadow: Shadow::new(0.0, 4.0, 8.0, Color::BLACK.with_alpha(0.2));

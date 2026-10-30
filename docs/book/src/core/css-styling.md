@@ -1345,16 +1345,34 @@ for error in &result.errors {
 
 ## Scoped Style Macros
 
-Blinc provides two compile-time macros — `css!` and `style!` — for building `ElementStyle` values directly in Rust. These are ideal for programmatic, scoped styling where you need dynamic values, conditional logic, or simply don't want a global stylesheet.
+Blinc provides three macros for styling in Rust. `css_style!` and `style!` build a single `ElementStyle` value, which is ideal for programmatic, scoped styling where you need dynamic values or conditional logic. `css!` builds a whole `Stylesheet` of class rules, described in the next section.
 
-Both macros produce the same `ElementStyle` type and support all the same properties. The difference is syntax:
+`css_style!` and `style!` produce the same `ElementStyle` type and support all the same properties. The difference is syntax:
 
-| | `css!` | `style!` |
+| | `css_style!` | `style!` |
 |---|---|---|
 | **Naming** | CSS hyphens (`border-radius`) | Rust underscores (`rounded`) |
 | **Separator** | Semicolons | Commas |
 | **Enum values** | Literal keywords (`position: absolute;`) | Rust expressions (`position: StylePosition::Absolute`) |
 | **Best for** | Developers from CSS/web | Rust-native code |
+
+### Stylesheets in Rust: `css!`
+
+`css!` takes CSS text and returns a `Stylesheet`, so one declaration can define several classes, with pseudo-classes, like a `.css` file:
+
+```rust
+let sheet = css!(r#"
+    .card       { background: #1a2b3c; border-radius: 8px; }
+    .card:hover { background: #24384d; }
+    .card-title { font-size: 14px; }
+"#);
+```
+
+The argument is a string literal because CSS is not Rust token syntax: a hex colour such as `#1a2b3c` does not survive the Rust lexer, so use a raw string. A stylesheet that fails to parse panics when it is first built. `css!` is the macro form of `Stylesheet::parse`.
+
+Applying a single `ElementStyle` with `Div::style(&style)` makes it the element's local stylesheet. It is recorded as the element's default tier: an application stylesheet rule overrides it, and a later fluent call such as `.bg()` takes the property over. `Div::set_style` is the element's own write.
+
+> `css!` used to return a single `ElementStyle`. That form is now `css_style!`; the syntax inside the braces is unchanged.
 
 ### Quick Example
 
@@ -1363,7 +1381,7 @@ use blinc_layout::prelude::*;
 use blinc_core::Color;
 
 // CSS-style syntax
-let card = css! {
+let card = css_style! {
     background: Color::WHITE;
     border-radius: 12.0;
     box-shadow: lg;
@@ -1384,7 +1402,7 @@ let card = style! {
 Apply a macro style to a `Div` with `.style()`:
 
 ```rust
-div().style(css! {
+div().style(css_style! {
     background: Color::rgb(0.1, 0.1, 0.15);
     border-radius: 16.0;
     padding: 20.0;
@@ -1394,8 +1412,8 @@ div().style(css! {
 ### Visual Properties
 
 ```rust
-// css! macro
-let s = css! {
+// css_style! macro
+let s = css_style! {
     background: Color::BLUE;
     border-radius: 8.0;
     box-shadow: md;                    // Presets: sm, md, lg, xl, none
@@ -1463,8 +1481,8 @@ let s = style! { transparent }; // 0.0
 ### Text Properties
 
 ```rust
-// css! macro
-let s = css! {
+// css_style! macro
+let s = css_style! {
     color: Color::WHITE;
     font-size: 16.0;
     font-weight: FontWeight::Bold;
@@ -1499,8 +1517,8 @@ let s = style! {
 ### Transforms
 
 ```rust
-// css! macro — function syntax
-let s = css! {
+// css_style! macro — function syntax
+let s = css_style! {
     transform: scale(1.05);
     transform: scale(1.5, 0.8);       // Non-uniform
     transform: translate(10.0, 20.0);
@@ -1510,8 +1528,8 @@ let s = css! {
     transform-origin: (50.0, 50.0);   // Percentages
 };
 
-// css! macro — expression syntax
-let s = css! {
+// css_style! macro — expression syntax
+let s = css_style! {
     transform: my_transform;          // A Transform value
 };
 
@@ -1530,8 +1548,8 @@ let s = style! {
 ### 3D Properties
 
 ```rust
-// css! macro
-let s = css! {
+// css_style! macro
+let s = css_style! {
     rotate-x: 30.0;
     rotate-y: 45.0;
     perspective: 800.0;
@@ -1566,8 +1584,8 @@ let s = style! {
 ### Layout Properties
 
 ```rust
-// css! macro
-let s = css! {
+// css_style! macro
+let s = css_style! {
     width: 300.0;
     height: 200.0;
     min-width: 100.0;
@@ -1619,8 +1637,8 @@ let s = style! {
 ### Position & Inset
 
 ```rust
-// css! macro — keyword values
-let s = css! {
+// css_style! macro — keyword values
+let s = css_style! {
     position: absolute;               // static | relative | absolute | fixed | sticky
     top: 10.0;
     right: 0.0;
@@ -1644,8 +1662,8 @@ let s = style! {
 ### Border & Outline
 
 ```rust
-// css! macro
-let s = css! {
+// css_style! macro
+let s = css_style! {
     border: (2.0, Color::RED);        // Shorthand (width, color)
     border-width: 2.0;
     border-color: Color::RED;
@@ -1670,8 +1688,8 @@ let s = style! {
 ### Materials & Layers
 
 ```rust
-// css! macro — keyword presets
-let s = css! {
+// css_style! macro — keyword presets
+let s = css_style! {
     backdrop-filter: glass;           // glass | metallic | chrome | gold | wood
     render-layer: foreground;         // foreground | background
 };
@@ -1692,8 +1710,8 @@ let s = style! {
 ### Animation & Transition
 
 ```rust
-// css! macro
-let s = css! {
+// css_style! macro
+let s = css_style! {
     animation: my_animation;           // CssAnimation value
     animation-name: "pulse";
     animation-duration: 2000;          // milliseconds
@@ -1717,8 +1735,8 @@ let s = style! {
 ### SVG Properties
 
 ```rust
-// css! macro
-let s = css! {
+// css_style! macro
+let s = css_style! {
     fill: Color::RED;
     stroke: Color::BLUE;
     stroke-width: 2.0;
@@ -1740,8 +1758,8 @@ let s = style! {
 ### Form & Interaction Properties
 
 ```rust
-// css! macro
-let s = css! {
+// css_style! macro
+let s = css_style! {
     caret-color: Color::rgb(0.4, 0.6, 1.0);
     selection-color: Color::BLUE;
     placeholder-color: Color::rgba(1.0, 1.0, 1.0, 0.5);
@@ -1766,8 +1784,8 @@ let s = style! {
 ### Image Properties
 
 ```rust
-// css! macro (0=cover, 1=contain, 2=fill, 3=scale-down, 4=none)
-let s = css! {
+// css_style! macro (0=cover, 1=contain, 2=fill, 3=scale-down, 4=none)
+let s = css_style! {
     object-fit: 1;
     object-position: (0.5, 0.0);     // x, y in 0.0-1.0 range
 };
@@ -1785,14 +1803,14 @@ The macros shine when combined with Rust control flow:
 
 ```rust
 fn card_style(is_selected: bool, scale: f32) -> ElementStyle {
-    let mut s = css! {
+    let mut s = css_style! {
         background: Color::WHITE;
         border-radius: 12.0;
         padding: 16.0;
     };
 
     if is_selected {
-        s = s.merge(&css! {
+        s = s.merge(&css_style! {
             border: (2.0, Color::BLUE);
             box-shadow: lg;
         });
@@ -1827,7 +1845,8 @@ div()
 | Approach | Best For |
 |----------|----------|
 | **Global CSS** (`ctx.add_css()`) | Shared styles, hover/focus states, animations, selectors |
-| **`css!` / `style!` macros** | Scoped styles, dynamic values, conditional logic |
+| **`css_style!` / `style!` macros** | Scoped styles, dynamic values, conditional logic |
+| **`css!` macro** | A local stylesheet of several classes, written in Rust source |
 | **Builder API** (`.w()`, `.bg()`) | One-off overrides, inline on `Div` builders |
 
 The three approaches compose naturally — CSS provides base styles, macros add scoped overrides, and builder methods fine-tune individual elements.
@@ -1843,7 +1862,7 @@ Understanding the CSS pipeline helps debug styling issues.
 Blinc offers three ways to style elements, in increasing specificity:
 
 1. **Global stylesheet** — `ctx.add_css()` + CSS selectors (recommended for most styling)
-2. **Scoped macros** — `css!` / `style!` macros for inline ElementStyle
+2. **Scoped macros** — `css_style!` / `style!` macros for inline ElementStyle
 3. **Builder API** — `.w()`, `.h()`, `.bg()` etc. for direct property setting
 
 All three can be combined. CSS provides base styles; builder methods add dynamic values.
@@ -1892,7 +1911,7 @@ Rules follow CSS specificity, applied in order:
 
 The same property expressed across all three approaches:
 
-| Global CSS | `css!` macro | `style!` macro | Builder API |
+| Global CSS | `css_style!` macro | `style!` macro | Builder API |
 | --- | --- | --- | --- |
 | `background: #3498db;` | `background: Color::hex(0x3498db);` | `bg: Color::hex(0x3498db),` | `.bg(Color::hex(0x3498db))` |
 | `border-radius: 8px;` | `border-radius: 8.0;` | `rounded: 8.0,` | `.rounded(8.0)` |
