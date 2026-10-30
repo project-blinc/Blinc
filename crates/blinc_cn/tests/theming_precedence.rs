@@ -272,3 +272,18 @@ fn an_app_rule_beats_a_component_rule_of_higher_specificity() {
     assert!(tiers.has(StyleProp::BorderRadius, StyleTier::Default));
     assert!(tiers.has(StyleProp::Background, StyleTier::Stylesheet));
 }
+
+/// cn's button states its radius, shadow and border as component defaults.
+#[test]
+fn a_cn_button_radius_is_a_component_default() {
+    use blinc_layout::style_tier::{StyleProp, StyleTier};
+    init();
+    let tree = render(&button(), "");
+    let tiers = tree
+        .get_render_node(subject(&tree))
+        .expect("render node")
+        .props
+        .tiers;
+    assert!(tiers.has(StyleProp::BorderRadius, StyleTier::Default));
+    assert!(!tiers.has(StyleProp::BorderRadius, StyleTier::Owned));
+}

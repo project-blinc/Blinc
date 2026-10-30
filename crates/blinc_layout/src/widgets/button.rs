@@ -314,6 +314,15 @@ impl Button {
         self
     }
 
+    /// Apply an `ElementStyle` to the button's element as its default tier,
+    /// below an application stylesheet and below any fluent call made after
+    /// it. Replayed in call order with the other fluent calls.
+    pub fn style(mut self, style: &crate::element_style::ElementStyle) -> Self {
+        let style = style.clone();
+        self.ops.push(Rc::new(move |d: Div| d.style(&style)));
+        self
+    }
+
     // Button-specific methods
     pub fn bg_color(mut self, color: impl Into<Color>) -> Self {
         self.config.bg_color = color.into();

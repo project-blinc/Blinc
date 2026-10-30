@@ -30,6 +30,7 @@ use blinc_core::Color;
 use blinc_layout::InstanceKey;
 use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::ElementBuilder;
+use blinc_layout::element_style::ElementStyle;
 use blinc_layout::prelude::*;
 use blinc_layout::stateful::ButtonState;
 use blinc_layout::text::Text;
@@ -471,7 +472,7 @@ impl Button {
         // `RadiusTokens` so Universal HID variants etc. each get
         // their own corner-reach. CSS `.cn-button--{size}` rules
         // can still cascade to override per-size.
-        .rounded(theme.radii().get(config.btn_size.radius_token()))
+        .style(&ElementStyle::new().rounded(theme.radii().get(config.btn_size.radius_token())))
         .items_center()
         .justify_center()
         // CSS classes for user overrides
@@ -506,16 +507,16 @@ impl Button {
         // Shadow. The layout button takes it away while disabled, so the
         // inert tonal fill reads as non-interactive.
         if variant != ButtonVariant::Link && variant != ButtonVariant::Ghost {
-            btn = btn.shadow_md();
+            btn = btn.style(&ElementStyle::new().shadow_md());
         }
         if variant == ButtonVariant::Outline {
-            btn = btn.shadow_sm();
+            btn = btn.style(&ElementStyle::new().shadow_sm());
         }
 
         // Border for outline variant. While disabled the layout button swaps
         // in the disabled border above.
         if let Some(border_color) = variant.border(theme) {
-            btn = btn.border(1.0, border_color);
+            btn = btn.style(&ElementStyle::new().border(1.0, border_color));
         }
 
         // Click handler

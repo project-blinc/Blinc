@@ -1292,6 +1292,21 @@ impl Div {
         if let Some(opacity) = style.opacity {
             self.opacity = opacity;
         }
+        if let Some(width) = style.border_width {
+            self.border_width = width;
+        }
+        if let Some(color) = style.border_color {
+            self.border_color = Some(color);
+        }
+        if let Some(width) = style.outline_width {
+            self.outline_width = width;
+        }
+        if let Some(color) = style.outline_color {
+            self.outline_color = Some(color);
+        }
+        if let Some(offset) = style.outline_offset {
+            self.outline_offset = offset;
+        }
 
         // Layout: sizing
         if let Some(w) = style.width {
