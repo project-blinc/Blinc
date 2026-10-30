@@ -308,3 +308,33 @@ fn the_app_beats_cn_styles_whichever_was_added_first() {
     tree.compute_layout(300.0, 80.0);
     assert_eq!(radius(&tree), 0.0, "cn's size rule outranked the app's");
 }
+
+/// cn's typography base now reaches the label: the button's tracking and the
+/// theme's font apply to its text, which the container rule used to miss.
+#[test]
+fn cn_typography_reaches_a_button_label() {
+    use blinc_layout::css_parser::Stylesheet;
+    use blinc_layout::renderer::ElementType;
+    init();
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let cn = Stylesheet::parse_with_variables(blinc_cn::cn_styles::CN_STYLES, &vars).expect("cn");
+    let mut tree = RenderTree::from_element(&button());
+    tree.set_stylesheet(cn);
+    tree.apply_stylesheet_layout_overrides();
+    tree.apply_stylesheet_base_styles();
+    tree.compute_layout(300.0, 80.0);
+    let mut stack = vec![tree.root().expect("root")];
+    let mut label = None;
+    while let Some(id) = stack.pop() {
+        if let Some(ElementType::Text(t)) = tree.get_render_node(id).map(|n| &n.element_type) {
+            label = Some(t.clone());
+            break;
+        }
+        stack.extend(tree.layout_tree.children(id));
+    }
+    let label = label.expect("a label");
+    assert!(
+        label.letter_spacing < 0.0,
+        "tracking-tight did not reach the label"
+    );
+}
