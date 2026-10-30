@@ -793,3 +793,13 @@ fn em_letter_spacing_and_inherit_keywords_parse() {
     );
     assert_eq!(sheet.get_class("y").expect("y").font_size, None);
 }
+
+#[test]
+fn three_value_spacing_shorthand_is_top_horizontal_bottom() {
+    let sheet = crate::parser::Stylesheet::parse(".x { padding: 8px 12px 4px; }").expect("css");
+    let p = sheet
+        .get_class("x")
+        .and_then(|s| s.padding)
+        .expect("padding");
+    assert_eq!((p.top, p.right, p.bottom, p.left), (8.0, 12.0, 4.0, 12.0));
+}

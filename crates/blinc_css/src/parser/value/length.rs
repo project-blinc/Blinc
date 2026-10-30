@@ -252,6 +252,12 @@ pub(crate) fn parse_css_spacing(input: &str) -> Option<SpacingRect> {
             let horiz = parse_css_px(parts[1])?;
             Some(SpacingRect::xy(horiz, vert))
         }
+        3 => {
+            let top = parse_css_px(parts[0])?;
+            let horiz = parse_css_px(parts[1])?;
+            let bottom = parse_css_px(parts[2])?;
+            Some(SpacingRect::new(top, horiz, bottom, horiz))
+        }
         4 => {
             let top = parse_css_px(parts[0])?;
             let right = parse_css_px(parts[1])?;
