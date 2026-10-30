@@ -435,9 +435,12 @@ fn a_bound_label_still_follows_after_disabled_flips() {
         tree.compute_layout(800.0, 200.0);
     };
 
-    let subscribers =
-        || blinc_layout::binding::with_registry(|r| r.subscriber_count(label.signal_id()));
-    let first = subscribers();
+    let subscribers = |tree: &blinc_layout::renderer::RenderTree| {
+        tree.with_property_updates(|| {
+            blinc_layout::binding::with_registry(|r| r.subscriber_count(label.signal_id()))
+        })
+    };
+    let first = subscribers(&tree);
     assert!(first >= 1, "the bound label registered nothing");
 
     for _ in 0..4 {
@@ -450,7 +453,7 @@ fn a_bound_label_still_follows_after_disabled_flips() {
         frame(&mut tree);
     }
     assert_eq!(
-        subscribers(),
+        subscribers(&tree),
         first,
         "flipping disabled changed the label's subscriptions"
     );
