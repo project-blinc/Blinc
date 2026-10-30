@@ -19,6 +19,9 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
     if super::apply_border_side_property(style, name, value).is_some() {
         return;
     }
+    if super::apply_layout_extra(style, name, value).is_some() {
+        return;
+    }
     match name {
         "background" | "background-color" => {
             if let Some(brush) = parse_brush(value) {
@@ -613,26 +616,6 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
                 style.height = Some(dim);
             }
         }
-        "min-width" => {
-            if let Some(px) = parse_css_px(value) {
-                style.min_width = Some(px);
-            }
-        }
-        "min-height" => {
-            if let Some(px) = parse_css_px(value) {
-                style.min_height = Some(px);
-            }
-        }
-        "max-width" => {
-            if let Some(px) = parse_css_px(value) {
-                style.max_width = Some(px);
-            }
-        }
-        "max-height" => {
-            if let Some(px) = parse_css_px(value) {
-                style.max_height = Some(px);
-            }
-        }
         "display" => match value.trim() {
             "flex" => style.display = Some(StyleDisplay::Flex),
             "block" => style.display = Some(StyleDisplay::Block),
@@ -758,59 +741,6 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
                 });
                 p.left = px;
                 style.padding = Some(p);
-            }
-        }
-        "margin" => {
-            if let Some(rect) = parse_css_spacing(value) {
-                style.margin = Some(rect);
-            }
-        }
-        "margin-top" => {
-            if let Some(px) = parse_css_px(value) {
-                let mut m = style.margin.unwrap_or(SpacingRect {
-                    top: 0.0,
-                    right: 0.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                });
-                m.top = px;
-                style.margin = Some(m);
-            }
-        }
-        "margin-right" => {
-            if let Some(px) = parse_css_px(value) {
-                let mut m = style.margin.unwrap_or(SpacingRect {
-                    top: 0.0,
-                    right: 0.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                });
-                m.right = px;
-                style.margin = Some(m);
-            }
-        }
-        "margin-bottom" => {
-            if let Some(px) = parse_css_px(value) {
-                let mut m = style.margin.unwrap_or(SpacingRect {
-                    top: 0.0,
-                    right: 0.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                });
-                m.bottom = px;
-                style.margin = Some(m);
-            }
-        }
-        "margin-left" => {
-            if let Some(px) = parse_css_px(value) {
-                let mut m = style.margin.unwrap_or(SpacingRect {
-                    top: 0.0,
-                    right: 0.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                });
-                m.left = px;
-                style.margin = Some(m);
             }
         }
         "gap" => {

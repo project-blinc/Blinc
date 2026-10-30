@@ -1368,18 +1368,6 @@ impl Div {
                 }
             }
         }
-        if let Some(w) = style.min_width {
-            self.style.min_size.width = LengthPercentageAuto::length(w);
-        }
-        if let Some(h) = style.min_height {
-            self.style.min_size.height = LengthPercentageAuto::length(h);
-        }
-        if let Some(w) = style.max_width {
-            self.style.max_size.width = LengthPercentageAuto::length(w);
-        }
-        if let Some(h) = style.max_height {
-            self.style.max_size.height = LengthPercentageAuto::length(h);
-        }
 
         // Layout: display & flex direction
         if let Some(display) = style.display {
@@ -1476,6 +1464,7 @@ impl Div {
                 height: LengthPercentage::length(gap),
             };
         }
+        crate::renderer::stylesheet::apply_extra_layout(style, &mut self.style);
 
         // Layout: overflow
         if let Some(overflow) = style.overflow {

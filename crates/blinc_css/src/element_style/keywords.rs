@@ -181,3 +181,13 @@ pub enum StyleDimension {
     /// Auto sizing (shrink to content)
     Auto,
 }
+
+impl StyleDimension {
+    /// The length in pixels, if this is one.
+    pub fn length(self) -> Option<f32> {
+        match self {
+            StyleDimension::Length(px) => Some(px),
+            _ => None,
+        }
+    }
+}

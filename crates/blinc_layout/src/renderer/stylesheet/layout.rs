@@ -174,18 +174,6 @@ impl RenderTree {
                     style.flex_shrink = 0.0;
                 }
             }
-            if let Some(w) = es.min_width {
-                style.min_size.width = LengthPercentageAuto::length(w);
-            }
-            if let Some(h) = es.min_height {
-                style.min_size.height = LengthPercentageAuto::length(h);
-            }
-            if let Some(w) = es.max_width {
-                style.max_size.width = LengthPercentageAuto::length(w);
-            }
-            if let Some(h) = es.max_height {
-                style.max_size.height = LengthPercentageAuto::length(h);
-            }
 
             // Display & flex direction
             if let Some(display) = es.display {
@@ -283,6 +271,7 @@ impl RenderTree {
                     height: LengthPercentage::length(gap),
                 };
             }
+            crate::renderer::stylesheet::apply_extra_layout(&es, &mut style);
 
             // Overflow (shorthand sets both axes)
             if let Some(overflow) = es.overflow {
@@ -712,18 +701,6 @@ impl RenderTree {
                     style.flex_shrink = 0.0;
                 }
             }
-            if let Some(w) = es.min_width {
-                style.min_size.width = LengthPercentageAuto::length(w);
-            }
-            if let Some(h) = es.min_height {
-                style.min_size.height = LengthPercentageAuto::length(h);
-            }
-            if let Some(w) = es.max_width {
-                style.max_size.width = LengthPercentageAuto::length(w);
-            }
-            if let Some(h) = es.max_height {
-                style.max_size.height = LengthPercentageAuto::length(h);
-            }
 
             // Display & flex direction
             if let Some(display) = es.display {
@@ -821,6 +798,7 @@ impl RenderTree {
                     height: LengthPercentage::length(gap),
                 };
             }
+            crate::renderer::stylesheet::apply_extra_layout(&es, &mut style);
 
             // Overflow
             if let Some(overflow) = es.overflow {

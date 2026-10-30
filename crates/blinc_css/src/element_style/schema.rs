@@ -156,13 +156,13 @@ pub struct ElementStyle {
     /// Height (pixels, percentage, or auto/fit-content)
     pub height: Option<StyleDimension>,
     /// Minimum width in pixels
-    pub min_width: Option<f32>,
+    pub min_width: Option<StyleDimension>,
     /// Minimum height in pixels
-    pub min_height: Option<f32>,
+    pub min_height: Option<StyleDimension>,
     /// Maximum width in pixels
-    pub max_width: Option<f32>,
+    pub max_width: Option<StyleDimension>,
     /// Maximum height in pixels
-    pub max_height: Option<f32>,
+    pub max_height: Option<StyleDimension>,
 
     /// Display mode (flex, block, none)
     pub display: Option<StyleDisplay>,
@@ -186,6 +186,15 @@ pub struct ElementStyle {
     pub padding: Option<SpacingRect>,
     /// Margin (all sides in pixels)
     pub margin: Option<SpacingRect>,
+    /// Sides of the margin that are `auto` (top, right, bottom, left); their
+    /// pixel value in `margin` is 0.
+    pub margin_auto: [bool; 4],
+    /// Flex basis
+    pub flex_basis: Option<StyleDimension>,
+    /// Gap between rows, overriding `gap` on the vertical axis
+    pub row_gap: Option<f32>,
+    /// Gap between columns, overriding `gap` on the horizontal axis
+    pub column_gap: Option<f32>,
     /// Uniform gap between children in pixels
     pub gap: Option<f32>,
 

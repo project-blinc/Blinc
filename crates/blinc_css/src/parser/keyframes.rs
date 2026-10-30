@@ -385,16 +385,16 @@ impl CssKeyframes {
         if let Some(g) = style.gap {
             props.gap = Some(g);
         }
-        if let Some(v) = style.min_width {
+        if let Some(v) = style.min_width.and_then(|d| d.length()) {
             props.min_width = Some(v);
         }
-        if let Some(v) = style.max_width {
+        if let Some(v) = style.max_width.and_then(|d| d.length()) {
             props.max_width = Some(v);
         }
-        if let Some(v) = style.min_height {
+        if let Some(v) = style.min_height.and_then(|d| d.length()) {
             props.min_height = Some(v);
         }
-        if let Some(v) = style.max_height {
+        if let Some(v) = style.max_height.and_then(|d| d.length()) {
             props.max_height = Some(v);
         }
         if let Some(v) = style.flex_grow {

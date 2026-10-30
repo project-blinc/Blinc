@@ -50,7 +50,7 @@ mod paint;
 mod queries;
 mod registries;
 mod scroll;
-mod stylesheet;
+pub(crate) mod stylesheet;
 mod transfers;
 mod types;
 

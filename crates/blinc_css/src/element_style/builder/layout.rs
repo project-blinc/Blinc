@@ -23,25 +23,25 @@ impl ElementStyle {
 
     /// Set minimum width in pixels
     pub fn min_w(mut self, px: f32) -> Self {
-        self.min_width = Some(px);
+        self.min_width = Some(StyleDimension::Length(px));
         self
     }
 
     /// Set minimum height in pixels
     pub fn min_h(mut self, px: f32) -> Self {
-        self.min_height = Some(px);
+        self.min_height = Some(StyleDimension::Length(px));
         self
     }
 
     /// Set maximum width in pixels
     pub fn max_w(mut self, px: f32) -> Self {
-        self.max_width = Some(px);
+        self.max_width = Some(StyleDimension::Length(px));
         self
     }
 
     /// Set maximum height in pixels
     pub fn max_h(mut self, px: f32) -> Self {
-        self.max_height = Some(px);
+        self.max_height = Some(StyleDimension::Length(px));
         self
     }
 

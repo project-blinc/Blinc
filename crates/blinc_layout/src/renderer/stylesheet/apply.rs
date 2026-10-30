@@ -504,18 +504,6 @@ impl RenderTree {
                 taffy_style.flex_shrink = 0.0;
             }
         }
-        if let Some(v) = es.min_width {
-            taffy_style.min_size.width = LengthPercentageAuto::length(v);
-        }
-        if let Some(v) = es.max_width {
-            taffy_style.max_size.width = LengthPercentageAuto::length(v);
-        }
-        if let Some(v) = es.min_height {
-            taffy_style.min_size.height = LengthPercentageAuto::length(v);
-        }
-        if let Some(v) = es.max_height {
-            taffy_style.max_size.height = LengthPercentageAuto::length(v);
-        }
         if let Some(ref p) = es.padding {
             taffy_style.padding = taffy::geometry::Rect {
                 top: LengthPercentage::length(p.top),
@@ -538,6 +526,7 @@ impl RenderTree {
                 height: LengthPercentage::length(g),
             };
         }
+        apply_extra_layout(es, taffy_style);
         if let Some(v) = es.flex_grow {
             taffy_style.flex_grow = v;
         }
@@ -861,5 +850,59 @@ impl RenderTree {
             blinc_core::ClipLength::Percent(p) => *p,
             blinc_core::ClipLength::Px(px) => *px,
         }
+    }
+}
+
+/// Layout values that are more than a pixel length: percent and `none` for
+/// min and max sizes, `auto` margins, `flex-basis` and per-axis gaps. Runs
+/// after the margin and gap shorthands so it can refine them.
+pub(crate) fn apply_extra_layout(
+    es: &crate::element_style::ElementStyle,
+    style: &mut taffy::Style,
+) {
+    use crate::element_style::StyleDimension as D;
+    use taffy::style::{Dimension, LengthPercentage, LengthPercentageAuto};
+    let size = |d: D| match d {
+        D::Length(px) => Dimension::length(px),
+        D::Percent(p) => Dimension::percent(p),
+        D::Auto => Dimension::auto(),
+    };
+    let limit = |d: D| match d {
+        D::Length(px) => LengthPercentageAuto::length(px),
+        D::Percent(p) => LengthPercentageAuto::percent(p),
+        D::Auto => LengthPercentageAuto::auto(),
+    };
+    if let Some(d) = es.min_width {
+        style.min_size.width = limit(d);
+    }
+    if let Some(d) = es.min_height {
+        style.min_size.height = limit(d);
+    }
+    if let Some(d) = es.max_width {
+        style.max_size.width = limit(d);
+    }
+    if let Some(d) = es.max_height {
+        style.max_size.height = limit(d);
+    }
+    if let Some(d) = es.flex_basis {
+        style.flex_basis = size(d);
+    }
+    if es.margin_auto[0] {
+        style.margin.top = LengthPercentageAuto::auto();
+    }
+    if es.margin_auto[1] {
+        style.margin.right = LengthPercentageAuto::auto();
+    }
+    if es.margin_auto[2] {
+        style.margin.bottom = LengthPercentageAuto::auto();
+    }
+    if es.margin_auto[3] {
+        style.margin.left = LengthPercentageAuto::auto();
+    }
+    if let Some(gap) = es.row_gap {
+        style.gap.height = LengthPercentage::length(gap);
+    }
+    if let Some(gap) = es.column_gap {
+        style.gap.width = LengthPercentage::length(gap);
     }
 }

@@ -85,6 +85,15 @@ impl ElementStyle {
             justify_content: other.justify_content.or(self.justify_content),
             align_self: other.align_self.or(self.align_self),
             padding: other.padding.or(self.padding),
+            margin_auto: [
+                other.margin_auto[0] || self.margin_auto[0],
+                other.margin_auto[1] || self.margin_auto[1],
+                other.margin_auto[2] || self.margin_auto[2],
+                other.margin_auto[3] || self.margin_auto[3],
+            ],
+            flex_basis: other.flex_basis.or(self.flex_basis),
+            row_gap: other.row_gap.or(self.row_gap),
+            column_gap: other.column_gap.or(self.column_gap),
             margin: other.margin.or(self.margin),
             gap: other.gap.or(self.gap),
             overflow: other.overflow.or(self.overflow),
@@ -215,6 +224,10 @@ impl ElementStyle {
             || self.padding.is_some()
             || self.margin.is_some()
             || self.gap.is_some()
+            || self.row_gap.is_some()
+            || self.column_gap.is_some()
+            || self.flex_basis.is_some()
+            || self.margin_auto.iter().any(|a| *a)
             || self.overflow.is_some()
             || self.overflow_x.is_some()
             || self.overflow_y.is_some()

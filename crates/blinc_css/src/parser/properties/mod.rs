@@ -8,7 +8,9 @@
 mod apply;
 mod border_sides;
 mod diagnostic;
+mod layout_extras;
 
 pub(crate) use apply::*;
 pub(crate) use border_sides::apply_border_side_property;
 pub(crate) use diagnostic::*;
+pub(crate) use layout_extras::apply_layout_extra;

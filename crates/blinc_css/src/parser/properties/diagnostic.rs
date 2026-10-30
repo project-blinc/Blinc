@@ -31,6 +31,13 @@ pub(crate) fn apply_property_with_errors(
         return;
     }
 
+    if let Some(parsed) = super::apply_layout_extra(style, name, value) {
+        if !parsed {
+            errors.push(ParseError::invalid_value(name, value, line, column));
+        }
+        return;
+    }
+
     match name {
         "background" | "background-color" => {
             if let Some(brush) = parse_brush(value) {
@@ -751,34 +758,6 @@ pub(crate) fn apply_property_with_errors(
                 errors.push(ParseError::invalid_value(name, value, line, column));
             }
         }
-        "min-width" => {
-            if let Some(px) = parse_css_px(value) {
-                style.min_width = Some(px);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
-        }
-        "min-height" => {
-            if let Some(px) = parse_css_px(value) {
-                style.min_height = Some(px);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
-        }
-        "max-width" => {
-            if let Some(px) = parse_css_px(value) {
-                style.max_width = Some(px);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
-        }
-        "max-height" => {
-            if let Some(px) = parse_css_px(value) {
-                style.max_height = Some(px);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
-        }
         "display" => match value.trim() {
             "flex" => style.display = Some(StyleDisplay::Flex),
             "block" => style.display = Some(StyleDisplay::Block),
@@ -916,69 +895,6 @@ pub(crate) fn apply_property_with_errors(
                 });
                 p.left = px;
                 style.padding = Some(p);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
-        }
-        "margin" => {
-            if let Some(rect) = parse_css_spacing(value) {
-                style.margin = Some(rect);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
-        }
-        "margin-top" => {
-            if let Some(px) = parse_css_px(value) {
-                let mut m = style.margin.unwrap_or(SpacingRect {
-                    top: 0.0,
-                    right: 0.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                });
-                m.top = px;
-                style.margin = Some(m);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
-        }
-        "margin-right" => {
-            if let Some(px) = parse_css_px(value) {
-                let mut m = style.margin.unwrap_or(SpacingRect {
-                    top: 0.0,
-                    right: 0.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                });
-                m.right = px;
-                style.margin = Some(m);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
-        }
-        "margin-bottom" => {
-            if let Some(px) = parse_css_px(value) {
-                let mut m = style.margin.unwrap_or(SpacingRect {
-                    top: 0.0,
-                    right: 0.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                });
-                m.bottom = px;
-                style.margin = Some(m);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
-        }
-        "margin-left" => {
-            if let Some(px) = parse_css_px(value) {
-                let mut m = style.margin.unwrap_or(SpacingRect {
-                    top: 0.0,
-                    right: 0.0,
-                    bottom: 0.0,
-                    left: 0.0,
-                });
-                m.left = px;
-                style.margin = Some(m);
             } else {
                 errors.push(ParseError::invalid_value(name, value, line, column));
             }

@@ -35,3 +35,5 @@ pub mod classes;
 pub mod layout;
 pub mod selectors;
 pub mod state;
+
+pub(crate) use apply::apply_extra_layout;
