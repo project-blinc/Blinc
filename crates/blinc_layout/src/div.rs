@@ -395,6 +395,9 @@ pub struct Div {
     /// menus) use this to keep their chrome circular regardless of
     /// the active theme.
     pub(crate) corner_shape_locked: bool,
+    /// The render props as `style` left them; properties still holding these
+    /// values are component defaults, below the stylesheet.
+    base_defaults: Option<Box<RenderProps>>,
     pub(crate) border_color: Option<Color>,
     pub(crate) border_width: f32,
     pub(crate) border_sides: crate::element::BorderSides,
@@ -539,6 +542,7 @@ impl Div {
             border_radius_explicit: false,
             corner_shape: CornerShape::default(),
             corner_shape_locked: false,
+            base_defaults: None,
             border_color: None,
             border_width: 0.0,
             border_sides: crate::element::BorderSides::default(),
@@ -606,6 +610,7 @@ impl Div {
             border_radius_explicit: false,
             corner_shape: CornerShape::default(),
             corner_shape_locked: false,
+            base_defaults: None,
             border_color: None,
             border_width: 0.0,
             border_sides: crate::element::BorderSides::default(),
@@ -1208,10 +1213,15 @@ impl Div {
     // ElementStyle Application
     // =========================================================================
 
-    /// Apply an ElementStyle to this div
+    /// Apply an ElementStyle to this div as its local stylesheet
     ///
     /// Only properties that are set (Some) in the style will be applied.
     /// This allows for style composition and sharing reusable styles.
+    ///
+    /// The result is the element's default tier: an application stylesheet
+    /// rule overrides it, and a later fluent call on the same property takes
+    /// it over. Apply it before any call-site writes. `set_style` writes the
+    /// element's own tier instead.
     ///
     /// # Example
     ///
@@ -1229,7 +1239,9 @@ impl Div {
     /// div().style(&card_style).child(text("Card 2"))
     /// ```
     pub fn style(mut self, style: &ElementStyle) -> Self {
+        self.base_defaults = None;
         self.set_style(style);
+        self.base_defaults = Some(Box::new(self.render_props()));
         self
     }
 
@@ -1257,6 +1269,7 @@ impl Div {
         }
         if let Some(radius) = style.corner_radius {
             self.border_radius = radius;
+            self.border_radius_explicit = true;
         }
         if let Some(cs) = style.corner_shape {
             self.corner_shape = cs;
@@ -5635,6 +5648,9 @@ impl ElementBuilder for Div {
             ..Default::default()
         };
         props.record_owned_tiers();
+        if let Some(base) = &self.base_defaults {
+            props.demote_unchanged_to_default(base);
+        }
         props
     }
 

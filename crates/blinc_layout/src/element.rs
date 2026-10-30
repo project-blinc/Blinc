@@ -586,6 +586,39 @@ impl RenderProps {
         Self::default()
     }
 
+    /// Re-labels as component defaults the owned properties that still hold
+    /// the value `style` gave them. A property the caller changed afterwards
+    /// stays owned.
+    pub fn demote_unchanged_to_default(&mut self, base: &RenderProps) {
+        use crate::style_tier::{
+            StyleProp as P,
+            StyleTier::{Default as D, Owned},
+        };
+        let same = [
+            (
+                format!("{:?}", self.background) == format!("{:?}", base.background),
+                P::Background,
+            ),
+            (self.border_radius == base.border_radius, P::BorderRadius),
+            (self.corner_shape == base.corner_shape, P::CornerShape),
+            (self.shadow == base.shadow, P::Shadow),
+            (self.inner_shadow == base.inner_shadow, P::InnerShadow),
+            (self.opacity == base.opacity, P::Opacity),
+            (self.layer == base.layer, P::Layer),
+            (self.border_width == base.border_width, P::BorderWidth),
+            (self.border_color == base.border_color, P::BorderColor),
+            (self.outline_width == base.outline_width, P::OutlineWidth),
+            (self.outline_color == base.outline_color, P::OutlineColor),
+            (self.outline_offset == base.outline_offset, P::OutlineOffset),
+        ];
+        for (unchanged, prop) in same {
+            if unchanged && base.tiers.has(prop, Owned) && self.tiers.has(prop, Owned) {
+                self.tiers.clear(prop, Owned);
+                self.tiers.mark(prop, D);
+            }
+        }
+    }
+
     /// Marks the properties this value holds away from their defaults as
     /// written by the element itself.
     pub fn record_owned_tiers(&mut self) {

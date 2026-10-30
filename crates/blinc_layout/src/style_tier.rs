@@ -56,6 +56,8 @@ pub enum StyleProp {
 /// Who wrote a property.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StyleTier {
+    /// A component's own default, set through `Div::style` (`style!`, `css!`).
+    Default,
     /// The element's own fluent call.
     Owned,
     /// A matched stylesheet rule.
@@ -65,6 +67,7 @@ pub enum StyleTier {
 /// Per-property writer record, one bit per property per tier.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PropTiers {
+    default: u64,
     owned: u64,
     stylesheet: u64,
 }
@@ -72,6 +75,7 @@ pub struct PropTiers {
 impl PropTiers {
     fn bits(&mut self, tier: StyleTier) -> &mut u64 {
         match tier {
+            StyleTier::Default => &mut self.default,
             StyleTier::Owned => &mut self.owned,
             StyleTier::Stylesheet => &mut self.stylesheet,
         }
@@ -87,6 +91,7 @@ impl PropTiers {
 
     pub fn has(&self, prop: StyleProp, tier: StyleTier) -> bool {
         let bits = match tier {
+            StyleTier::Default => self.default,
             StyleTier::Owned => self.owned,
             StyleTier::Stylesheet => self.stylesheet,
         };

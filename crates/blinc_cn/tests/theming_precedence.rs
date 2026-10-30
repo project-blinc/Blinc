@@ -176,3 +176,45 @@ fn the_writer_of_each_property_is_recorded() {
     assert!(tiers.has(StyleProp::BorderRadius, StyleTier::Stylesheet));
     assert!(!tiers.has(StyleProp::BorderRadius, StyleTier::Owned));
 }
+
+/// `style` (a `style!` or `css!` value) writes the component tier; a fluent call on the same property
+/// takes it over, and untouched ones stay defaults.
+#[test]
+fn style_marks_the_default_tier_until_a_call_site_takes_over() {
+    use blinc_layout::div::ElementBuilder;
+    use blinc_layout::style_tier::{StyleProp, StyleTier};
+    init();
+    let blue = Color::rgba(0.0, 0.0, 1.0, 1.0);
+    let tiers = |d: &blinc_layout::div::Div| d.render_props().tiers;
+
+    let component = div().style(&blinc_layout::style! { bg: blue, rounded: 8.0 });
+    let t = tiers(&component);
+    assert!(t.has(StyleProp::Background, StyleTier::Default));
+    assert!(t.has(StyleProp::BorderRadius, StyleTier::Default));
+    assert!(!t.has(StyleProp::Background, StyleTier::Owned));
+
+    let used = component.rounded(3.0);
+    let t = tiers(&used);
+    assert!(t.has(StyleProp::Background, StyleTier::Default));
+    assert!(t.has(StyleProp::BorderRadius, StyleTier::Owned));
+    assert!(!t.has(StyleProp::BorderRadius, StyleTier::Default));
+}
+
+/// A component default is still themed by the app stylesheet.
+#[test]
+fn a_base_default_yields_to_the_stylesheet() {
+    init();
+    let blue = Color::rgba(0.0, 0.0, 1.0, 1.0);
+    let host = div().w(300.0).h(80.0).child(
+        div()
+            .class("themed")
+            .w(100.0)
+            .h(40.0)
+            .style(&blinc_layout::style! { bg: blue, rounded: 8.0 }),
+    );
+    assert_eq!(radius(&render(&host, "")), 8.0);
+    assert_eq!(
+        radius(&render(&host, ".themed { border-radius: 0px; }")),
+        0.0
+    );
+}
