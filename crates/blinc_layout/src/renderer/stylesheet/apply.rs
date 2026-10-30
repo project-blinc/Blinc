@@ -29,6 +29,57 @@ use crate::tree::LayoutNodeId;
 use super::super::RenderTree;
 
 impl RenderTree {
+    /// Per-side borders. A side without a declaration keeps what the
+    /// element already draws there, which is the uniform border if it has
+    /// one, so setting `border-top` alone does not drop the other sides.
+    fn apply_border_sides(
+        props: &mut RenderProps,
+        style: &crate::element_style::ElementStyle,
+        tier: StyleTier,
+    ) {
+        use crate::element::BorderSide;
+        let declared = [
+            style.border_top,
+            style.border_right,
+            style.border_bottom,
+            style.border_left,
+        ];
+        if declared.iter().all(Option::is_none) {
+            return;
+        }
+        let uniform = props
+            .border_color
+            .filter(|_| props.border_width > 0.0)
+            .map(|c| BorderSide::new(props.border_width, c));
+        let current = [
+            props.border_sides.top,
+            props.border_sides.right,
+            props.border_sides.bottom,
+            props.border_sides.left,
+        ];
+        let mut resolved = [None; 4];
+        for i in 0..4 {
+            let base = current[i].or(uniform);
+            resolved[i] = match declared[i] {
+                None => base,
+                Some(side) => {
+                    let width = side.width.or(base.map(|b| b.width)).unwrap_or(0.0);
+                    let color = side
+                        .color
+                        .or(base.map(|b| b.color))
+                        .or(props.border_color)
+                        .unwrap_or(blinc_core::Color::TRANSPARENT);
+                    (width > 0.0).then(|| BorderSide::new(width, color))
+                }
+            };
+        }
+        props.border_sides.top = resolved[0];
+        props.border_sides.right = resolved[1];
+        props.border_sides.bottom = resolved[2];
+        props.border_sides.left = resolved[3];
+        props.tiers.mark(StyleProp::BorderSides, tier);
+    }
+
     /// Apply ElementStyle properties to RenderProps
     pub(crate) fn apply_element_style_to_props(
         props: &mut RenderProps,
@@ -264,6 +315,7 @@ impl RenderTree {
             props.tiers.mark(StyleProp::BorderColor, tier);
             props.border_color = Some(bc);
         }
+        Self::apply_border_sides(props, style, tier);
         // Outline
         if let Some(ow) = style.outline_width {
             props.tiers.mark(StyleProp::OutlineWidth, tier);

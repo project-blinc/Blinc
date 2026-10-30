@@ -24,6 +24,13 @@ pub(crate) fn apply_property_with_errors(
 ) {
     let (line, column, _) = calculate_position(original_css, current_input);
 
+    if let Some(parsed) = super::apply_border_side_property(style, name, value) {
+        if !parsed {
+            errors.push(ParseError::invalid_value(name, value, line, column));
+        }
+        return;
+    }
+
     match name {
         "background" | "background-color" => {
             if let Some(brush) = parse_brush(value) {

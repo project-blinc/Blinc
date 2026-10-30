@@ -89,6 +89,10 @@ impl ElementStyle {
             overflow_fade: other.overflow_fade.or(self.overflow_fade),
             border_width: other.border_width.or(self.border_width),
             border_color: other.border_color.or(self.border_color),
+            border_top: merge_side(self.border_top, other.border_top),
+            border_right: merge_side(self.border_right, other.border_right),
+            border_bottom: merge_side(self.border_bottom, other.border_bottom),
+            border_left: merge_side(self.border_left, other.border_left),
             outline_width: other.outline_width.or(self.outline_width),
             outline_color: other.outline_color.or(self.outline_color),
             outline_offset: other.outline_offset.or(self.outline_offset),
@@ -212,6 +216,10 @@ impl ElementStyle {
             || self.overflow_y.is_some()
             || self.border_width.is_some()
             || self.border_color.is_some()
+            || self.border_top.is_some()
+            || self.border_right.is_some()
+            || self.border_bottom.is_some()
+            || self.border_left.is_some()
             || self.position.is_some()
             || self.top.is_some()
             || self.right.is_some()
@@ -223,5 +231,12 @@ impl ElementStyle {
     /// Check if no property is set
     pub fn is_empty(&self) -> bool {
         !self.has_visual_props() && !self.has_layout_props()
+    }
+}
+
+fn merge_side(a: Option<BorderSideStyle>, b: Option<BorderSideStyle>) -> Option<BorderSideStyle> {
+    match (a, b) {
+        (Some(a), Some(b)) => Some(a.merge(b)),
+        (a, b) => b.or(a),
     }
 }

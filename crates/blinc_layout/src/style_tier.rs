@@ -40,6 +40,7 @@ pub enum StyleProp {
     TransformOrigin,
     BorderWidth,
     BorderColor,
+    BorderSides,
     OutlineWidth,
     OutlineColor,
     OutlineOffset,

@@ -637,6 +637,13 @@ impl RenderProps {
             (self.clip_path.is_some(), P::ClipPath),
             (self.border_width > 0.0, P::BorderWidth),
             (self.border_color.is_some(), P::BorderColor),
+            (
+                self.border_sides.top.is_some()
+                    || self.border_sides.right.is_some()
+                    || self.border_sides.bottom.is_some()
+                    || self.border_sides.left.is_some(),
+                P::BorderSides,
+            ),
             (self.outline_width > 0.0, P::OutlineWidth),
             (self.outline_color.is_some(), P::OutlineColor),
             (self.outline_offset != 0.0, P::OutlineOffset),

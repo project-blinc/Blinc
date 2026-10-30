@@ -23,6 +23,13 @@ use crate::parser::{CssAnimation, CssTransitionSet};
 /// All properties are optional - when merging styles, only set properties
 /// will override. This enables state-specific styling where you only
 /// override the properties that change for that state.
+/// One side of a per-side border; an unset field falls back to the uniform border.
+#[derive(Clone, Copy, Default, Debug, PartialEq)]
+pub struct BorderSideStyle {
+    pub width: Option<f32>,
+    pub color: Option<Color>,
+}
+
 #[derive(Clone, Default, Debug)]
 pub struct ElementStyle {
     /// Set when the rule came from a component's own stylesheet, which sits
@@ -175,6 +182,11 @@ pub struct ElementStyle {
     pub border_width: Option<f32>,
     /// Border color
     pub border_color: Option<Color>,
+    /// Per-side borders, each overriding the uniform border on its side.
+    pub border_top: Option<BorderSideStyle>,
+    pub border_right: Option<BorderSideStyle>,
+    pub border_bottom: Option<BorderSideStyle>,
+    pub border_left: Option<BorderSideStyle>,
 
     /// Outline width in pixels
     pub outline_width: Option<f32>,

@@ -6,7 +6,9 @@
 //! `apply_property_with_errors` reports what it rejected.
 
 mod apply;
+mod border_sides;
 mod diagnostic;
 
 pub(crate) use apply::*;
+pub(crate) use border_sides::apply_border_side_property;
 pub(crate) use diagnostic::*;

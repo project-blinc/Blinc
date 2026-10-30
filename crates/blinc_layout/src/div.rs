@@ -1292,6 +1292,33 @@ impl Div {
         if let Some(opacity) = style.opacity {
             self.opacity = opacity;
         }
+        for (declared, slot) in [
+            (style.border_top, 0),
+            (style.border_right, 1),
+            (style.border_bottom, 2),
+            (style.border_left, 3),
+        ] {
+            let Some(side) = declared else { continue };
+            let current = [
+                self.border_sides.top,
+                self.border_sides.right,
+                self.border_sides.bottom,
+                self.border_sides.left,
+            ][slot];
+            let width = side.width.or(current.map(|b| b.width)).unwrap_or(0.0);
+            let color = side
+                .color
+                .or(current.map(|b| b.color))
+                .or(self.border_color)
+                .unwrap_or(Color::TRANSPARENT);
+            let resolved = (width > 0.0).then(|| crate::element::BorderSide::new(width, color));
+            match slot {
+                0 => self.border_sides.top = resolved,
+                1 => self.border_sides.right = resolved,
+                2 => self.border_sides.bottom = resolved,
+                _ => self.border_sides.left = resolved,
+            }
+        }
         if let Some(width) = style.border_width {
             self.border_width = width;
         }

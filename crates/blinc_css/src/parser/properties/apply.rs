@@ -16,6 +16,9 @@ use crate::material::{GlassMaterial, Material, MetallicMaterial, RenderLayer, Wo
 use crate::parser::*;
 
 pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) {
+    if super::apply_border_side_property(style, name, value).is_some() {
+        return;
+    }
     match name {
         "background" | "background-color" => {
             if let Some(brush) = parse_brush(value) {
