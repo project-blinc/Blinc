@@ -17,11 +17,9 @@
 //!   rendered as `Brush::Glass`; the GPU renderer collects those into
 //!   the glass-primitive batch.
 
-use blinc_core::{
-    Brush, ClipShape, Color, CornerRadius, DrawContext, GlassStyle, Rect, Stroke, Transform,
-};
+use blinc_core::{Brush, ClipShape, Color, CornerRadius, DrawContext, Rect, Stroke, Transform};
 
-use crate::element::{Material, RenderLayer};
+use crate::element::RenderLayer;
 use crate::tree::LayoutNodeId;
 
 use super::super::RenderTree;
@@ -118,7 +116,7 @@ impl RenderTree {
 
         let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
         let radius = render_node.props.border_radius;
-        let is_glass = matches!(render_node.props.material, Some(Material::Glass(_)));
+        let is_glass = render_node.props.is_glass();
 
         // Corner shape setup — must run before draw_shadow so shadows
         // match the fill shape. We resolve through the theme's
@@ -151,24 +149,8 @@ impl RenderTree {
             ctx.set_corner_shape(resolved_corner_shape.to_array());
         }
 
-        // Check if this node has a glass material - if so, render as glass with shadow
-        if let Some(Material::Glass(glass)) = &render_node.props.material {
-            // For glass elements, pass shadow through GlassStyle to use GPU glass shadow system
-            let glass_brush = Brush::Glass(GlassStyle {
-                blur: glass.blur,
-                tint: glass.tint,
-                saturation: glass.saturation,
-                brightness: glass.brightness,
-                noise: glass.noise,
-                border_thickness: glass.border_thickness,
-                // GlassStyle currently carries a single shadow; pass the
-                // topmost layer of the stack.
-                shadow: render_node.props.shadow.first().copied(),
-                simple: glass.simple,
-                depth: 0,
-                border_color: render_node.props.border_color,
-            });
-            ctx.fill_rect(rect, radius, glass_brush);
+        if let Some(glass) = render_node.props.glass_style(0) {
+            ctx.fill_rect(rect, radius, Brush::Glass(glass));
         } else {
             // For non-glass elements, draw shadow stack first (renders
             // behind the element). Iterate back-to-front so the outermost

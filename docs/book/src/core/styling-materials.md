@@ -149,13 +149,14 @@ Blinc includes GPU-accelerated material effects for modern, polished UIs.
 Creates a frosted glass effect with background blur:
 
 ```rust
+use blinc_core::Color;
+use blinc_layout::prelude::*;
+
 // Quick glass
-div().glass()
+div().glass();
 
 // Customized glass
-use blinc_core::GlassMaterial;
-
-div().material(Material::Glass(
+div().effect(
     GlassMaterial::new()
         .blur(20.0)           // Blur intensity (0-50)
         .tint(Color::rgba(1.0, 1.0, 1.0, 0.1))
@@ -163,7 +164,7 @@ div().material(Material::Glass(
         .brightness(1.0)      // Brightness adjustment
         .noise(0.03)          // Frosted texture
         .border(0.8)          // Border highlight intensity
-))
+);
 ```
 
 **Glass Presets:**
@@ -176,6 +177,60 @@ GlassMaterial::thick()       // Heavy blur
 GlassMaterial::frosted()     // Frosted window style
 GlassMaterial::card()        // Card-like appearance
 ```
+
+### Grouped and Nested Glass
+
+Use the existing fluent element builders for grouped glass. Compatible native
+panels composite their material and children together before applying the panel's
+opacity and effects. Overlapping children therefore share the panel fade.
+
+```rust
+use blinc_layout::prelude::*;
+
+let panel = div()
+    .w(280.0)
+    .p(16.0)
+    .glass()
+    .opacity(0.8)
+    .child(text("Outer panel"))
+    .child(
+        div()
+            .p(8.0)
+            .effect(GlassMaterial::simple().blur(12.0))
+            .child(text("Nested panel")),
+    );
+```
+
+First-level panels use the prepared frame backdrop. A nested panel samples prior
+paint within its enclosing glass isolation; content painted later is excluded.
+The renderer derives nesting from the element tree. Applications do not set
+`GroupGlass.nested` or construct `GroupGlass` commands.
+
+Glass is also a brush. `.background(GlassStyle)` uses the same element grouping,
+child ownership and automatic nesting as `.effect(GlassMaterial)`. The material
+form lowers to `Brush::Glass` when drawn; `.glass()` is its default shorthand.
+
+```rust
+use blinc_core::GlassStyle;
+use blinc_layout::prelude::*;
+
+let panel = div()
+    .w(280.0)
+    .p(16.0)
+    .background(GlassStyle::new().blur(12.0))
+    .opacity(0.8)
+    .child(text("Glass brush panel"));
+```
+
+The forms can be mixed in one tree. An explicit glass material takes precedence
+over a glass background on the same element. Element shadow and border-color
+settings override those embedded in the brush. Element nesting comes from the
+tree, rather than `GlassStyle.depth`; canvas draws can set that depth themselves.
+
+Grouping requires a drawing context with glass and collected-content support.
+Custom Flow shaders, portal boundaries and 3D owners do not have the same grouped
+glass guarantees. The `wet_glass_demo` uses a custom Flow shader with
+`sample_scene()`, a separate path from this native glass material.
 
 ### Metallic Material
 
@@ -219,7 +274,7 @@ div().gold()        // Gold preset
 Control rendering order with layers:
 
 ```rust
-use blinc_core::RenderLayer;
+use blinc_layout::RenderLayer;
 
 div()
     .layer(RenderLayer::Background)  // Rendered first
@@ -230,19 +285,22 @@ div()
     .child(overlay_content())
 ```
 
-For glass effects, content behind glass should be on `.background()` layer:
+Glass materials select the glass render layer automatically. Put the background
+and panel in the same scene:
 
 ```rust
+use blinc_core::Color;
+use blinc_layout::prelude::*;
+
 stack()
+    .child(div().w(320.0).h(200.0).bg(Color::BLUE))
     .child(
-        div().background()  // Behind glass
-            .child(colorful_background())
-    )
-    .child(
-        div().glass()       // Glass overlay
-            .foreground()   // On top
-            .child(content())
-    )
+        div()
+            .w(280.0)
+            .h(160.0)
+            .glass()
+            .child(text("Glass panel")),
+    );
 ```
 
 ---

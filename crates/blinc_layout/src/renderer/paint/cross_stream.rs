@@ -1,6 +1,6 @@
 //! Identify native groups and their collected-content requirements.
 use super::super::{DeferredContent, ElementType, RenderTree};
-use crate::element::{Material, RenderLayer};
+use crate::element::RenderLayer;
 use crate::tree::LayoutNodeId;
 use std::collections::HashSet;
 
@@ -39,7 +39,7 @@ impl RenderTree {
                 || props.motion.is_some()
                 || tree.motion_bindings.contains_key(&node)
                 || css_opacity.contains(&node);
-            let is_glass = matches!(props.material, Some(Material::Glass(_)));
+            let is_glass = props.is_glass();
             let mut content = DeferredContent {
                 glass: false,
                 background_glass: false,
@@ -60,9 +60,10 @@ impl RenderTree {
                     ElementType::Div | ElementType::Canvas(_)
                 ))
                 && (!is_glass || (glass_layers && !scope.blocked_glass && !scope.portal))
-                && ((capabilities.image
-                    && matches!(render.element_type, ElementType::Div)
-                    && matches!(props.background, Some(blinc_core::Brush::Image(_))))
+                && ((is_glass && matches!(props.background, Some(blinc_core::Brush::Glass(_))))
+                    || (capabilities.image
+                        && matches!(render.element_type, ElementType::Div)
+                        && matches!(props.background, Some(blinc_core::Brush::Image(_))))
                     || matches!(
                         props.background,
                         None | Some(blinc_core::Brush::Solid(_) | blinc_core::Brush::Gradient(_))

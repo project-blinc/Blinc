@@ -10,6 +10,7 @@ mod foreground_layers_tests;
 mod foreground_rgba_tests;
 mod glass_ancestor_tests;
 mod glass_background_tests;
+mod glass_brush_tests;
 mod glass_group_tests;
 mod glass_nested_tests;
 mod glass_path_clip_tests;

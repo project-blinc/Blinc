@@ -3,10 +3,16 @@ use super::{GpuGlassPrimitive, GpuPaintContext};
 use crate::primitives::{DynamicImage, LayerCommand};
 use blinc_core::Rect;
 
-/// A panel with owned clip coverage and a tight retained-image footprint.
+/// A recorded glass draw with owned clips and a tight retained-image footprint.
+///
+/// `GpuPaintContext` creates this command from glass brushes inside an accepted
+/// glass layer. Element builders use `.glass()` or `.effect(GlassMaterial)`;
+/// they do not need to construct this record or set its sampling scope.
 #[derive(Clone, Debug)]
 pub struct GroupGlass {
-    /// Sample prior paint inside the enclosing glass owner's isolation.
+    /// Sample prior paint inside the enclosing glass owner's isolation when true.
+    /// First-level panels use false to retain the prepared frame backdrop.
+    /// This is CPU command metadata, not a GPU instance field.
     pub nested: bool,
     pub primitive: GpuGlassPrimitive,
     pub paint: DynamicImage,

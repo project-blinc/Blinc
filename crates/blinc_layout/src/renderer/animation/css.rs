@@ -1364,7 +1364,21 @@ impl RenderTree {
         let has_backdrop = anim_props.backdrop_blur.is_some()
             || anim_props.backdrop_saturation.is_some()
             || anim_props.backdrop_brightness.is_some();
-        if has_backdrop {
+        if has_backdrop
+            && !matches!(props.material, Some(Material::Glass(_)))
+            && let Some(blinc_core::Brush::Glass(glass)) = &mut props.background
+        {
+            if let Some(blur) = anim_props.backdrop_blur {
+                glass.blur = blur;
+            }
+            if let Some(saturation) = anim_props.backdrop_saturation {
+                glass.saturation = saturation;
+            }
+            if let Some(brightness) = anim_props.backdrop_brightness {
+                glass.brightness = brightness;
+            }
+            props.layer = RenderLayer::Glass;
+        } else if has_backdrop {
             let existing = match &props.material {
                 Some(Material::Glass(g)) => g.clone(),
                 _ => GlassMaterial {
@@ -1656,7 +1670,7 @@ impl RenderTree {
         }
 
         // Backdrop filter (glass material)
-        if let Some(Material::Glass(glass)) = &props.material {
+        if let Some(glass) = props.glass_style(0) {
             kp.backdrop_blur = Some(glass.blur);
             kp.backdrop_saturation = Some(glass.saturation);
             kp.backdrop_brightness = Some(glass.brightness);

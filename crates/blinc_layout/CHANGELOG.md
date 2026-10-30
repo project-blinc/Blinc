@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Glass background brushes share material detection, grouping, paint order and tree-derived nesting across painters. Brush shadow/border styling survives resolution, CSS backdrop updates retain authored brushes, and glass configuration changes invalidate visual caches.
 - Compatible nested glass panels share native isolation and retain joint ancestor opacity/effects. Layout `ClipPath::Polygon` and `ClipPath::Path` resolve to native owner-aware path clips so translated glass and inherited content keep their clip frame.
 - Supported background ancestors isolate their glass, native paint and collected content together at the background anchor. Ordered backdrop sampling preserves ancestor opacity/effects, sibling order and live CSS opacity endpoints.
 - Compatible painted foreground ancestors and siblings share their glass content's visual group. Painted foreground containers also retain collected content order at opaque endpoints, including material changes beside independent glass panels.
@@ -23,6 +24,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - Native Div/Canvas opacity groups capture foreground descendants together with background content and suppress independent texture promotion. Moving native ancestors retain their background before nested captures. Collected content, global overlays, glass, effects and 3D boundaries keep their existing fallback.
 
 ### Changed
+- Document fluent grouped and nested glass usage, shared panel opacity and both glass material and background brush forms.
 - Queued property and subtree records carry `tree_scope`; zero retains legacy unscoped writes. `RenderTree::with_property_updates` scopes custom producers, and `take_pending_property_updates` drains only that tree's work.
 - Promoted CSS animations and transitions retain completion bookkeeping and write their final properties once. Playing baked sources remain eligible for composite replay.
 - Partial opacity uses an explicit native group for leaves and single-child wrappers, preserving overlapping draws. Other paint passes retain inherited opacity when they do not own the ancestor's commands.

@@ -1,12 +1,12 @@
 //! Compose tree layers and collected content with optional entry/exit animation state.
 
 use blinc_core::{
-    BlendMode, Brush, ClipShape, Color, CornerRadius, DrawContext, GlassStyle, Gradient,
-    LayerConfig, LayerEffect, Point, Rect, Shadow, Size, Stroke, Transform,
+    BlendMode, Brush, ClipShape, Color, CornerRadius, DrawContext, Gradient, LayerConfig,
+    LayerEffect, Point, Rect, Shadow, Size, Stroke, Transform,
 };
 
 use crate::canvas::CanvasBounds;
-use crate::element::{Material, RenderLayer};
+use crate::element::RenderLayer;
 use crate::tree::LayoutNodeId;
 
 use super::super::{ElementType, RenderTree};
@@ -151,12 +151,7 @@ impl RenderTree {
             let mut has_glass = false;
             let mut has_foreground = false;
             for (_, node) in self.render_nodes.iter() {
-                if !has_glass
-                    && matches!(
-                        node.props.material,
-                        Some(crate::element::Material::Glass(_))
-                    )
-                {
+                if !has_glass && node.props.is_glass() {
                     has_glass = true;
                 }
                 if !has_foreground && matches!(node.props.layer, RenderLayer::Foreground) {
@@ -881,7 +876,7 @@ impl RenderTree {
         }
 
         // Determine if this node is a glass element
-        let is_glass = matches!(render_node.props.material, Some(Material::Glass(_)));
+        let is_glass = render_node.props.is_glass();
         let glass_group = cross_stream_group && cross_stream_content.is_some_and(|c| c.glass);
         let grouped_glass =
             glass_group && cross_stream_content.is_some_and(|content| !content.background_glass);
@@ -1091,7 +1086,7 @@ impl RenderTree {
         let radius = render_node.props.border_radius;
         if effective_layer == target_layer {
             // Glass elements have shadows handled by the GPU glass system
-            if !matches!(render_node.props.material, Some(Material::Glass(_))) {
+            if !render_node.props.is_glass() {
                 // Iterate the shadow stack back-to-front so the ambient layer
                 // paints first and the tight key-light layer lands on top.
                 for shadow in render_node.props.shadow.iter().rev() {
@@ -1365,21 +1360,8 @@ impl RenderTree {
             let all_same_per_side = per_side_data.as_ref().map(|d| d.2).unwrap_or(false);
             let merge_per_side = has_per_side_border && all_same_per_side && !is_glass;
 
-            if let Some(Material::Glass(glass)) = &render_node.props.material {
-                let glass_brush = Brush::Glass(GlassStyle {
-                    blur: glass.blur,
-                    tint: glass.tint,
-                    saturation: glass.saturation,
-                    brightness: glass.brightness,
-                    noise: glass.noise,
-                    border_thickness: glass.border_thickness,
-                    // GlassStyle still carries a single shadow.
-                    shadow: render_node.props.shadow.first().copied(),
-                    simple: glass.simple,
-                    depth: glass_depth,
-                    border_color: render_node.props.border_color,
-                });
-                ctx.fill_rect(rect, radius, glass_brush);
+            if let Some(glass) = render_node.props.glass_style(glass_depth) {
+                ctx.fill_rect(rect, radius, Brush::Glass(glass));
             } else {
                 // Shadow already drawn before clip was pushed
 

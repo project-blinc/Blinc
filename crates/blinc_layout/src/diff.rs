@@ -876,6 +876,14 @@ fn hash_glass_style(glass: &GlassStyle, hasher: &mut impl Hasher) {
     hash_f32(glass.brightness, hasher);
     hash_f32(glass.noise, hasher);
     hash_f32(glass.border_thickness, hasher);
+    glass.simple.hash(hasher);
+    glass.depth.hash(hasher);
+    if let Some(color) = &glass.border_color {
+        1u8.hash(hasher);
+        hash_color(color, hasher);
+    } else {
+        0u8.hash(hasher);
+    }
     if let Some(s) = &glass.shadow {
         1u8.hash(hasher);
         hash_shadow(s, hasher);
@@ -1046,6 +1054,9 @@ fn hash_material(material: &Material, hasher: &mut impl Hasher) {
             hash_f32(glass.saturation, hasher);
             hash_f32(glass.brightness, hasher);
             hash_f32(glass.noise, hasher);
+            hash_f32(glass.border_thickness, hasher);
+            glass.simple.hash(hasher);
+            hash_option_material_shadow(&glass.shadow, hasher);
         }
         Material::Metallic(metal) => {
             1u8.hash(hasher);
@@ -1256,6 +1267,14 @@ fn color_eq(a: &Color, b: &Color) -> bool {
     f32_eq(a.r, b.r) && f32_eq(a.g, b.g) && f32_eq(a.b, b.b) && f32_eq(a.a, b.a)
 }
 
+fn option_color_eq(a: &Option<Color>, b: &Option<Color>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => color_eq(a, b),
+        (None, None) => true,
+        _ => false,
+    }
+}
+
 fn shadow_eq(a: &Shadow, b: &Shadow) -> bool {
     f32_eq(a.offset_x, b.offset_x)
         && f32_eq(a.offset_y, b.offset_y)
@@ -1297,6 +1316,9 @@ fn brush_eq(a: &Option<Brush>, b: &Option<Brush>) -> bool {
                 && f32_eq(a.brightness, b.brightness)
                 && f32_eq(a.noise, b.noise)
                 && f32_eq(a.border_thickness, b.border_thickness)
+                && a.simple == b.simple
+                && a.depth == b.depth
+                && option_color_eq(&a.border_color, &b.border_color)
                 && match (&a.shadow, &b.shadow) {
                     (None, None) => true,
                     (Some(x), Some(y)) => shadow_eq(x, y),
@@ -1331,6 +1353,9 @@ fn material_eq(a: &Option<Material>, b: &Option<Material>) -> bool {
                 && f32_eq(a.saturation, b.saturation)
                 && f32_eq(a.brightness, b.brightness)
                 && f32_eq(a.noise, b.noise)
+                && f32_eq(a.border_thickness, b.border_thickness)
+                && a.simple == b.simple
+                && material_shadow_eq(&a.shadow, &b.shadow)
         }
         (Some(Material::Metallic(a)), Some(Material::Metallic(b))) => {
             color_eq(&a.color, &b.color)

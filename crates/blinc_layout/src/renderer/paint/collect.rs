@@ -18,7 +18,7 @@
 #[allow(deprecated)]
 use super::super::GlassPanel;
 use super::super::{ElementType, RenderTree, SvgData, TextData};
-use crate::element::{ElementBounds, Material};
+use crate::element::ElementBounds;
 use crate::tree::LayoutNodeId;
 
 impl RenderTree {
@@ -53,12 +53,24 @@ impl RenderTree {
         };
 
         if let Some(render_node) = self.render_nodes.get(&node) {
-            // Check if this node has a glass material
-            if let Some(Material::Glass(glass)) = &render_node.props.material {
+            if let Some(glass) = render_node.props.glass_style(0) {
                 panels.push(GlassPanel {
                     bounds,
                     corner_radius: render_node.props.border_radius,
-                    material: glass.clone(),
+                    material: render_node
+                        .props
+                        .glass_material()
+                        .cloned()
+                        .unwrap_or_else(|| crate::GlassMaterial {
+                            blur: glass.blur,
+                            tint: glass.tint,
+                            saturation: glass.saturation,
+                            brightness: glass.brightness,
+                            noise: glass.noise,
+                            border_thickness: glass.border_thickness,
+                            simple: glass.simple,
+                            shadow: glass.shadow.map(Into::into),
+                        }),
                     node_id: node,
                 });
             }

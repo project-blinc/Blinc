@@ -16,12 +16,12 @@
 //!   and `render_layered` here.
 
 use blinc_core::{
-    BlendMode, Brush, ClipShape, Color, CornerRadius, DrawContext, GlassStyle, LayerConfig,
-    LayerEffect, Point, Rect, Size, Stroke, Transform,
+    BlendMode, Brush, ClipShape, Color, CornerRadius, DrawContext, LayerConfig, LayerEffect, Point,
+    Rect, Size, Stroke, Transform,
 };
 
 use crate::canvas::CanvasBounds;
-use crate::element::{Material, RenderLayer};
+use crate::element::RenderLayer;
 use crate::tree::LayoutNodeId;
 
 use super::super::{ElementType, RenderTree};
@@ -149,7 +149,7 @@ impl RenderTree {
         }
 
         // Determine if this node is a glass element
-        let is_glass = matches!(render_node.props.material, Some(Material::Glass(_)));
+        let is_glass = render_node.props.is_glass();
         let children_glass_depth = if is_glass {
             glass_depth + 1
         } else {
@@ -323,23 +323,8 @@ impl RenderTree {
             let rect = Rect::new(0.0, 0.0, bounds.width, bounds.height);
             let radius = render_node.props.border_radius;
 
-            // Check if this node has a glass material - if so, render as glass with shadow
-            if let Some(Material::Glass(glass)) = &render_node.props.material {
-                // For glass elements, pass shadow through GlassStyle to use GPU glass shadow system
-                let glass_brush = Brush::Glass(GlassStyle {
-                    blur: glass.blur,
-                    tint: glass.tint,
-                    saturation: glass.saturation,
-                    brightness: glass.brightness,
-                    noise: glass.noise,
-                    border_thickness: glass.border_thickness,
-                    // GlassStyle still carries a single shadow.
-                    shadow: render_node.props.shadow.first().copied(),
-                    simple: glass.simple,
-                    depth: glass_depth,
-                    border_color: render_node.props.border_color,
-                });
-                ctx.fill_rect(rect, radius, glass_brush);
+            if let Some(glass) = render_node.props.glass_style(glass_depth) {
+                ctx.fill_rect(rect, radius, Brush::Glass(glass));
             } else {
                 // Draw the shadow stack back-to-front (ambient first, key on top).
                 for shadow in render_node.props.shadow.iter().rev() {

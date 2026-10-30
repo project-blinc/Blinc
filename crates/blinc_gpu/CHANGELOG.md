@@ -22,6 +22,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - Native clear rendering sends nested groups through ordered composition so child groups render into their parent instead of blending independently onto the target.
 
 ### Added
+- Document retained glass commands as renderer-produced CPU metadata, including first-level and nested backdrop scope.
 - `LayerCommand::Glass`, `GroupGlass`, opt-in paint capture and backdrop-aware ordered/foreground dispatch. Exhaustive host command matches must handle the new variant. Native `GlassUniforms` is now 32 bytes: `clip_in_image` replaces `_padding`, with added `sample_size` and `origin`; all four native glass shaders use the matching frame layout. Primitive/image instance layouts are unchanged.
 - Native `cross_stream::Capture` carries `overlay_order: Option<u32>` for overlay ownership ordering; raw Rust struct literals must provide `None` for ordinary groups. GPU primitive/instance and shader layouts are unchanged.
 - `LayerCommand::Meshes` retains grouped scene snapshots; exhaustive host Rust command matches must handle it. `take_pending_meshes` drains only ungrouped instances, and `GpuRenderer::render_pending_meshes` provides shared scene dispatch. GPU primitive/instance layouts and shader sources are unchanged.

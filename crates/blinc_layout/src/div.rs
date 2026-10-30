@@ -3134,7 +3134,10 @@ impl Div {
         self
     }
 
-    /// Set background brush (for gradients)
+    /// Set a background brush, including gradients, images and glass.
+    ///
+    /// A glass brush shares the element grouping and automatic nesting used by
+    /// [`Self::glass`]. Explicit glass materials take precedence over this brush.
     pub fn background(mut self, brush: impl Into<Brush>) -> Self {
         self.background = Some(brush.into());
         self
@@ -3704,7 +3707,27 @@ impl Div {
 
     /// Apply glass material with default settings (shorthand for common case)
     ///
-    /// Creates a frosted glass effect that blurs content behind the element.
+    /// Blurs the backdrop behind this element. Use [`Self::effect`] with a
+    /// [`GlassMaterial`] to customize the material. Compatible native panels
+    /// composite their glass and children together before applying panel opacity.
+    /// Nesting glass children selects their backdrop scope automatically.
+    ///
+    /// ```no_run
+    /// use blinc_layout::prelude::*;
+    ///
+    /// let panel = div()
+    ///     .w(280.0)
+    ///     .p(16.0)
+    ///     .glass()
+    ///     .opacity(0.8)
+    ///     .child(text("Outer panel"))
+    ///     .child(
+    ///         div()
+    ///             .p(8.0)
+    ///             .effect(GlassMaterial::simple().blur(12.0))
+    ///             .child(text("Nested panel")),
+    ///     );
+    /// ```
     pub fn glass(self) -> Self {
         self.material(Material::Glass(GlassMaterial::new()))
     }

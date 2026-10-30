@@ -201,8 +201,6 @@ impl RenderContext {
         nearest_composite_ancestor: Option<blinc_layout::tree::StableNodeId>,
         inherited_text_path: Option<Arc<text_clip::CollectedTextPath>>,
     ) {
-        use blinc_layout::Material;
-
         // Use animated bounds if this node has layout animation, otherwise use layout bounds
         // This ensures children are positioned correctly during layout animation transitions
         let Some(bounds) = tree.get_render_bounds(node, parent_offset) else {
@@ -336,7 +334,7 @@ impl RenderContext {
         // Determine if this node is a glass element
         let is_glass = tree
             .get_render_node(node)
-            .map(|n| matches!(n.props.material, Some(Material::Glass(_))))
+            .map(|n| n.props.is_glass())
             .unwrap_or(false);
 
         // Track if children should be considered inside glass

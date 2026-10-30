@@ -4,7 +4,7 @@
 //!   alpha when `luminance == true`) from a `Vec<GradientStop>` for
 //!   the CSS `mask-image: linear-gradient(...)` flow.
 //! - `has_glass` — reports whether the tree contains any
-//!   `Material::Glass` nodes; lets the platform layer decide whether
+//!   glass material or brush nodes; lets the platform layer decide whether
 //!   to spin up the dual-context layered render path.
 //! - `apply_opacity_to_brush` — `motion_opacity` and similar
 //!   per-frame multipliers fold into solid / blur brushes by adjusting
@@ -13,8 +13,6 @@
 
 use blinc_core::{Brush, Color, CornerRadius, CornerShape, GradientStop};
 use blinc_theme::ShapeTokens;
-
-use crate::element::Material;
 
 use super::super::RenderTree;
 
@@ -39,9 +37,7 @@ impl RenderTree {
 
     /// Check if this tree contains any glass elements
     pub fn has_glass(&self) -> bool {
-        self.render_nodes
-            .values()
-            .any(|node| matches!(node.props.material, Some(Material::Glass(_))))
+        self.render_nodes.values().any(|node| node.props.is_glass())
     }
 
     /// Transform a local-space axis-aligned `(0, 0, width, height)`

@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use blinc_core::{
     BlurQuality, Brush, ClipPath, Color, CornerRadius, CornerShape, DynFloat, DynValue, FlowGraph,
-    LayerEffect, OverflowFade, Rect, Shadow, Transform, ValueContext,
+    GlassStyle, LayerEffect, OverflowFade, Rect, Shadow, Transform, ValueContext,
 };
 use taffy::Layout;
 
@@ -625,9 +625,32 @@ impl RenderProps {
         self
     }
 
-    /// Check if this element has a glass material
+    /// Whether this element paints glass through a material or background brush.
     pub fn is_glass(&self) -> bool {
         matches!(self.material, Some(Material::Glass(_)))
+            || matches!(self.background, Some(Brush::Glass(_)))
+    }
+
+    /// Resolve both glass entry points with element overrides and tree nesting.
+    pub(crate) fn glass_style(&self, depth: u32) -> Option<GlassStyle> {
+        let mut style = match (&self.material, &self.background) {
+            (Some(Material::Glass(glass)), _) => GlassStyle {
+                blur: glass.blur,
+                tint: glass.tint,
+                saturation: glass.saturation,
+                brightness: glass.brightness,
+                noise: glass.noise,
+                border_thickness: glass.border_thickness,
+                simple: glass.simple,
+                ..GlassStyle::default()
+            },
+            (_, Some(Brush::Glass(glass))) => *glass,
+            _ => return None,
+        };
+        style.shadow = self.shadow.first().copied().or(style.shadow);
+        style.border_color = self.border_color.or(style.border_color);
+        style.depth = depth;
+        Some(style)
     }
 
     /// Get the glass material if present
