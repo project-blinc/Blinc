@@ -35,110 +35,29 @@ mod cache_lifecycle;
 mod canvas_replay;
 mod composite_replay;
 mod compositor;
-#[cfg(test)]
-mod cross_stream_tests;
 mod css_cache_lifecycle;
-#[cfg(test)]
-mod css_lifecycle_tests;
 mod css_updates;
 mod debug_rendering;
-#[cfg(test)]
-mod effect_group_tests;
-#[cfg(test)]
-mod gpu_pass_group_tests;
-#[cfg(test)]
-mod grouped_text_tests;
-#[cfg(test)]
-mod image_group_tests;
-#[cfg(test)]
-mod image_opacity_tests;
 mod image_rendering;
-#[cfg(test)]
-mod mesh_group_tests;
 mod mesh_rendering;
-#[cfg(test)]
-mod named_layer_tests;
-#[cfg(test)]
-mod nested_overlay_tests;
-#[cfg(test)]
-mod overlay_ancestor_tests;
 mod overlay_frame;
-#[cfg(test)]
-mod overlay_group_tests;
 mod overlay_rendering;
-#[cfg(test)]
-mod overlay_tree_tests;
-#[cfg(test)]
-mod release_boundary_tests;
-#[cfg(test)]
-mod snapshot_group_tests;
-#[cfg(test)]
-mod styled_group_tests;
-#[cfg(test)]
-mod svg_group_tests;
 mod svg_rendering;
 mod tree_rendering;
-#[cfg(test)]
-mod tree_scope_tests;
 
 use mesh_rendering::{dispatch_pending_gpu_passes, dispatch_pending_meshes};
 use tree_rendering::{generate_text_decoration_primitives_by_layer, to_gpu_generic_font};
 
 mod cached_text;
-#[cfg(test)]
-mod cached_text_clip_tests;
 mod canvas_order;
 mod captured_image;
 mod captured_svg;
 mod captured_text;
-#[cfg(test)]
-mod composite_layers_tests;
 mod composite_scratch;
-#[cfg(test)]
-mod foreground_layers_tests;
-#[cfg(test)]
-mod foreground_rgba_tests;
-#[cfg(test)]
-mod glass_ancestor_tests;
-#[cfg(test)]
-mod glass_background_tests;
-#[cfg(test)]
-mod glass_group_tests;
-#[cfg(test)]
-mod glass_nested_tests;
-#[cfg(test)]
-mod glass_path_clip_tests;
-#[cfg(test)]
-mod layer_text_clip_tests;
-#[cfg(test)]
-mod main_text_clip_tests;
-#[cfg(test)]
-mod motion_layers_tests;
-#[cfg(test)]
-mod motion_text_clip_tests;
-#[cfg(test)]
-mod native_path_clip_tests;
-#[cfg(test)]
-mod opacity_group_tests;
-#[cfg(test)]
-mod overlay_text_clip_tests;
-#[cfg(test)]
-mod path_brush_clip_tests;
-#[cfg(test)]
-mod prepared_glyph_clip_tests;
-#[cfg(test)]
-mod retained_canvas_tests;
-#[cfg(test)]
-mod rgba_affine_tests;
-#[cfg(test)]
-mod rgba_clip_properties_tests;
-#[cfg(test)]
-mod rgba_clip_tests;
-#[cfg(test)]
-mod rgba_order_tests;
-#[cfg(test)]
-mod rgba_path_clip_tests;
 mod text_clip;
+
+#[cfg(test)]
+mod tests;
 
 /// Bound image-cache growth while retaining the visible working set.
 const IMAGE_CACHE_CAPACITY: usize = 256;
