@@ -64,7 +64,7 @@ fn tree_scope_cache_survives_interleaved_window_frames() {
             view_formats: &[],
         });
         let view = target.create_view(&Default::default());
-        let mut reference = None;
+        let mut reference: Option<Vec<u8>> = None;
         for (index, (tree, primary)) in [
             (&first, true),
             (&first, true),
@@ -116,8 +116,8 @@ fn tree_scope_cache_survives_interleaved_window_frames() {
                     assert!(
                         page.as_raw()
                             .iter()
-                            .zip(reference)
-                            .all(|(a, b): (&u8, &u8)| a.abs_diff(*b) <= 2),
+                            .zip(reference.iter())
+                            .all(|(a, b)| a.abs_diff(*b) <= 2),
                         "text cache crossed trees: comp={compositor} frame={index}"
                     );
                 } else {
