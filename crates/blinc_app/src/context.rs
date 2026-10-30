@@ -99,6 +99,8 @@ mod foreground_layers_tests;
 #[cfg(test)]
 mod foreground_rgba_tests;
 #[cfg(test)]
+mod glass_ancestor_tests;
+#[cfg(test)]
 mod glass_group_tests;
 #[cfg(test)]
 mod glass_path_clip_tests;

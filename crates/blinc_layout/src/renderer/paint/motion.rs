@@ -942,8 +942,14 @@ impl RenderTree {
                 effective_layer,
                 RenderLayer::Background | RenderLayer::Foreground
             );
+        // Painted foreground content retains its group at opaque endpoints.
+        let foreground_content_group = cross_stream_group
+            && cross_stream_content.is_some_and(|content| content.any())
+            && effective_layer == RenderLayer::Foreground
+            && render_node.props.background.is_some();
         // Retain a moving native ancestor before any of its descendants change owners.
         let has_opacity_layer = grouped_glass
+            || foreground_content_group
             || (cross_stream_group && in_motion_subtree)
             || keep_motion_group
             || node_motion_opacity < 1.0

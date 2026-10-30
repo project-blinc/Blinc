@@ -50,13 +50,13 @@ fn glass_group_panel_and_image_apply_parent_opacity_once() {
     }
 }
 
-fn state() -> RenderState {
+pub(super) fn state() -> RenderState {
     RenderState::new(Arc::new(Mutex::new(
         blinc_animation::AnimationScheduler::new(),
     )))
 }
 
-fn frame(
+pub(super) fn frame(
     context: &mut RenderContext,
     tree: &RenderTree,
     state: &RenderState,
@@ -80,7 +80,7 @@ fn frame(
     )
 }
 
-fn material(simple: bool) -> GlassMaterial {
+pub(super) fn material(simple: bool) -> GlassMaterial {
     GlassMaterial::new()
         .with_simple(simple)
         .blur(0.0)

@@ -68,6 +68,7 @@ impl RenderTree {
             let mut has_portal = props.is_overlay_root;
             let start = groups.len();
             let children = tree.layout_tree.children(node);
+            let mut compatible_children = true;
             for child in children.iter().copied() {
                 let (child_native, child_foreground, child_content, child_canvas, child_portal) =
                     visit(
@@ -83,6 +84,7 @@ impl RenderTree {
                         groups,
                     );
                 native &= child_native;
+                compatible_children &= child_native || child_content.glass;
                 has_foreground |= child_foreground;
                 has_canvas |= child_canvas;
                 has_portal |= child_portal;
@@ -91,18 +93,21 @@ impl RenderTree {
                 content.image |= child_content.image;
                 content.glass |= child_content.glass;
             }
-            // Transparent unary wrappers can share the panel's foreground owner.
+            // Foreground ancestors retain their paint in the glass scope.
+            // Background wrappers may join when they have no separate paint.
             native |= own_native
                 && !is_glass
                 && content.glass
-                && children.len() == 1
+                && compatible_children
                 && matches!(render.element_type, ElementType::Div)
-                && props.background.is_none()
-                && props.material.is_none()
-                && props.shadow.is_empty()
-                && props.border_width == 0.0
-                && !props.border_sides.has_any()
-                && props.outline_width == 0.0;
+                && (foreground
+                    || (children.len() == 1
+                        && props.background.is_none()
+                        && props.material.is_none()
+                        && props.shadow.is_empty()
+                        && props.border_width == 0.0
+                        && !props.border_sides.has_any()
+                        && props.outline_width == 0.0));
             native &= !(is_glass && has_portal);
             content.glass |= is_glass && native;
             // Unsupported moving or effect owners retain their descendants' fallback pass.
@@ -119,7 +124,8 @@ impl RenderTree {
             }
             content.glass &= native;
             let needs_content_group = content.any()
-                && (props.opacity < 1.0
+                && ((foreground && props.background.is_some())
+                    || props.opacity < 1.0
                     || !props.layer_effects.is_empty()
                     || props
                         .mix_blend_mode
@@ -146,7 +152,7 @@ impl RenderTree {
             {
                 groups.push((node, content));
             }
-            // Glass keeps its own foreground owner; ordinary ancestors remain separate.
+            // Glass scopes retain a foreground anchor.
             (
                 native && !content.glass,
                 has_foreground,

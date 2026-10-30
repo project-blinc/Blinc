@@ -30,6 +30,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - `AnimationThreadMode` enum + `WindowConfig::animation_thread_mode(mode)` builder. Re-exported from `blinc_app::prelude`. See the docs on the enum for the trade-off.
 
 ### Fixed
+- Painted foreground glass ancestors composite native and collected siblings together through opacity/effects, live updates and cached replay. Removing a glass material preserves opaque foreground image order instead of painting the container background over it.
 - Supported glass panels composite their material and collected/native children together through opacity, effects and animation. Direct, cached and dedicated overlay frames retain the prepared backdrop; grouped GPU callbacks execute once and removed backgrounds clear stale glass samples.
 - Nested native overlay panels retain collected content and cover enclosing foreground content while preserving outer isolation, inherited effects/clips and live animation ownership across app frame modes.
 - Image builder opacity is applied once in native groups and independent image dispatch. CSS overrides replace the builder value while parent opacity, authored pixel alpha, tint and load fades retain their own factors.

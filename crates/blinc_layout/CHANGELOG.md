@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Compatible painted foreground ancestors and siblings share their glass content's visual group. Painted foreground containers also retain collected content order at opaque endpoints, including material changes beside independent glass panels.
 - Supported first-level glass panels and transparent unary ancestors retain native and collected children in a foreground visual group. Glass-only trees visit foreground children and preserve their routing after glass decoration.
 - Supported nested overlay roots retain native and collected-content groups instead of rejecting their enclosing overlay's composition.
 - `Image::opacity` is owned once by `RenderProps`, so CSS and animation can replace it. Built-in `ImageRenderInfo::opacity` now exports neutral content alpha; custom image producers retain their independent intrinsic alpha.
