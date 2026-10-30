@@ -180,6 +180,7 @@ impl RenderTree {
                 style.display = match display {
                     StyleDisplay::Flex => Display::Flex,
                     StyleDisplay::Block => Display::Block,
+                    StyleDisplay::Grid => Display::Grid,
                     StyleDisplay::None => Display::None,
                 };
             }
@@ -707,6 +708,7 @@ impl RenderTree {
                 style.display = match display {
                     StyleDisplay::Flex => Display::Flex,
                     StyleDisplay::Block => Display::Block,
+                    StyleDisplay::Grid => Display::Grid,
                     StyleDisplay::None => Display::None,
                 };
             }

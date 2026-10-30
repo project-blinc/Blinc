@@ -22,6 +22,9 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
     if super::apply_layout_extra(style, name, value).is_some() {
         return;
     }
+    if super::apply_grid_property(style, name, value).is_some() {
+        return;
+    }
     match name {
         "background" | "background-color" => {
             if let Some(brush) = parse_brush(value) {
@@ -619,6 +622,7 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
         "display" => match value.trim() {
             "flex" => style.display = Some(StyleDisplay::Flex),
             "block" => style.display = Some(StyleDisplay::Block),
+            "grid" => style.display = Some(StyleDisplay::Grid),
             "none" => style.display = Some(StyleDisplay::None),
             _ => {}
         },

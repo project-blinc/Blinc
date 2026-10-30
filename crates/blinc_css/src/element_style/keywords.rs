@@ -122,6 +122,7 @@ pub enum StyleFlexDirection {
 pub enum StyleDisplay {
     Flex,
     Block,
+    Grid,
     None,
 }
 
@@ -190,4 +191,48 @@ impl StyleDimension {
             _ => None,
         }
     }
+}
+
+/// One end of a grid track's size range.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum StyleTrackBound {
+    Auto,
+    MinContent,
+    MaxContent,
+    Length(f32),
+    Percent(f32),
+    /// A share of the free space (`1fr`).
+    Fr(f32),
+}
+
+/// A grid track: a single size is `min == max`, `minmax(a, b)` has both.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StyleTrack {
+    pub min: StyleTrackBound,
+    pub max: StyleTrackBound,
+}
+
+/// An entry of `grid-template-columns` or `grid-template-rows`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum StyleTrackItem {
+    Single(StyleTrack),
+    /// `repeat(count, tracks...)`
+    Repeat(u16, Vec<StyleTrack>),
+}
+
+/// One end of a `grid-column` or `grid-row` placement.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum StyleGridLine {
+    #[default]
+    Auto,
+    /// A line number; negative counts from the end.
+    Line(i16),
+    Span(u16),
+}
+
+/// `grid-column` or `grid-row`: where an item starts and ends.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct StyleGridPlacement {
+    pub start: StyleGridLine,
+    pub end: StyleGridLine,
 }

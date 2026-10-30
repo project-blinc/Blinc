@@ -92,6 +92,16 @@ impl ElementStyle {
                 other.margin_auto[3] || self.margin_auto[3],
             ],
             flex_basis: other.flex_basis.or(self.flex_basis),
+            grid_template_columns: other
+                .grid_template_columns
+                .clone()
+                .or_else(|| self.grid_template_columns.clone()),
+            grid_template_rows: other
+                .grid_template_rows
+                .clone()
+                .or_else(|| self.grid_template_rows.clone()),
+            grid_column: other.grid_column.or(self.grid_column),
+            grid_row: other.grid_row.or(self.grid_row),
             row_gap: other.row_gap.or(self.row_gap),
             column_gap: other.column_gap.or(self.column_gap),
             margin: other.margin.or(self.margin),
@@ -227,6 +237,10 @@ impl ElementStyle {
             || self.row_gap.is_some()
             || self.column_gap.is_some()
             || self.flex_basis.is_some()
+            || self.grid_template_columns.is_some()
+            || self.grid_template_rows.is_some()
+            || self.grid_column.is_some()
+            || self.grid_row.is_some()
             || self.margin_auto.iter().any(|a| *a)
             || self.overflow.is_some()
             || self.overflow_x.is_some()

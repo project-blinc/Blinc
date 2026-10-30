@@ -38,6 +38,13 @@ pub(crate) fn apply_property_with_errors(
         return;
     }
 
+    if let Some(parsed) = super::apply_grid_property(style, name, value) {
+        if !parsed {
+            errors.push(ParseError::invalid_value(name, value, line, column));
+        }
+        return;
+    }
+
     match name {
         "background" | "background-color" => {
             if let Some(brush) = parse_brush(value) {
@@ -761,6 +768,7 @@ pub(crate) fn apply_property_with_errors(
         "display" => match value.trim() {
             "flex" => style.display = Some(StyleDisplay::Flex),
             "block" => style.display = Some(StyleDisplay::Block),
+            "grid" => style.display = Some(StyleDisplay::Grid),
             "none" => style.display = Some(StyleDisplay::None),
             _ => errors.push(ParseError::invalid_value(name, value, line, column)),
         },

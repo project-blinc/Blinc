@@ -191,6 +191,14 @@ pub struct ElementStyle {
     pub margin_auto: [bool; 4],
     /// Flex basis
     pub flex_basis: Option<StyleDimension>,
+    /// Grid column tracks
+    pub grid_template_columns: Option<Vec<StyleTrackItem>>,
+    /// Grid row tracks
+    pub grid_template_rows: Option<Vec<StyleTrackItem>>,
+    /// Where this item sits among its parent's grid columns
+    pub grid_column: Option<StyleGridPlacement>,
+    /// Where this item sits among its parent's grid rows
+    pub grid_row: Option<StyleGridPlacement>,
     /// Gap between rows, overriding `gap` on the vertical axis
     pub row_gap: Option<f32>,
     /// Gap between columns, overriding `gap` on the horizontal axis
