@@ -778,3 +778,18 @@ fn transform_none_resets_to_identity() {
     let t = sheet.get_class("x").and_then(|s| s.transform.clone());
     assert!(matches!(t, Some(Transform::Affine2D(a)) if a == blinc_core::Affine2D::IDENTITY));
 }
+
+#[test]
+fn em_letter_spacing_and_inherit_keywords_parse() {
+    let sheet = crate::parser::Stylesheet::parse(
+        ".x { font-size: 20px; letter-spacing: -0.05em; color: currentColor; } .y { font-size: inherit; }",
+    )
+    .expect("css");
+    let x = sheet.get_class("x").expect("x");
+    assert_eq!(x.letter_spacing, Some(-1.0));
+    assert_eq!(
+        x.text_color, None,
+        "currentColor leaves the colour inherited"
+    );
+    assert_eq!(sheet.get_class("y").expect("y").font_size, None);
+}

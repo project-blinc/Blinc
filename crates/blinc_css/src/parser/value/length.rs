@@ -322,3 +322,28 @@ pub(crate) fn parse_angle_value(input: &str) -> Option<f32> {
     // Try parsing as plain number (assumed degrees)
     input.parse::<f32>().ok()
 }
+
+/// `inherit`, `currentColor` and `unset` on an inherited property mean what
+/// leaving it unset already does, so they are accepted and write nothing.
+pub(crate) fn is_inherit_keyword(value: &str) -> bool {
+    let v = value.trim();
+    v.eq_ignore_ascii_case("inherit")
+        || v.eq_ignore_ascii_case("currentcolor")
+        || v.eq_ignore_ascii_case("unset")
+}
+
+/// A letter-spacing length. `em` is taken against the rule's own font size
+/// when it was declared before this property, else against 14px, which
+/// differs from the true size by well under a pixel at the tracking values
+/// themes use.
+pub(crate) fn parse_letter_spacing(value: &str, font_size: Option<f32>) -> Option<f32> {
+    let v = value.trim();
+    if let Some(em) = v.strip_suffix("em").filter(|_| !v.ends_with("rem")) {
+        return em
+            .trim()
+            .parse::<f32>()
+            .ok()
+            .map(|e| e * font_size.unwrap_or(14.0));
+    }
+    parse_length_value(v)
+}

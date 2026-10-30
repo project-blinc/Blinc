@@ -39,6 +39,7 @@ pub(crate) fn apply_property_with_errors(
                 errors.push(ParseError::invalid_value(name, value, line, column));
             }
         }
+        "color" if is_inherit_keyword(value) => {}
         "color" => {
             if let Some(c) = parse_color(value) {
                 style.text_color = Some(c);
@@ -46,6 +47,7 @@ pub(crate) fn apply_property_with_errors(
                 errors.push(ParseError::invalid_value(name, value, line, column));
             }
         }
+        "font-size" if is_inherit_keyword(value) => {}
         "font-size" => {
             if let Some(px) = parse_length_value(value) {
                 style.font_size = Some(px);
@@ -91,7 +93,7 @@ pub(crate) fn apply_property_with_errors(
             }
         }
         "letter-spacing" => {
-            if let Some(px) = parse_length_value(value) {
+            if let Some(px) = parse_letter_spacing(value, style.font_size) {
                 style.letter_spacing = Some(px);
             } else {
                 errors.push(ParseError::invalid_value(name, value, line, column));

@@ -25,11 +25,13 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
                 style.background = Some(brush);
             }
         }
+        "color" if is_inherit_keyword(value) => {}
         "color" => {
             if let Some(c) = parse_color(value) {
                 style.text_color = Some(c);
             }
         }
+        "font-size" if is_inherit_keyword(value) => {}
         "font-size" => {
             if let Some(px) = parse_length_value(value) {
                 style.font_size = Some(px);
@@ -55,7 +57,7 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
             style.text_align = parse_text_align(value);
         }
         "letter-spacing" => {
-            if let Some(px) = parse_length_value(value) {
+            if let Some(px) = parse_letter_spacing(value, style.font_size) {
                 style.letter_spacing = Some(px);
             }
         }
