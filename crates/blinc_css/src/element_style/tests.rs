@@ -822,3 +822,13 @@ fn an_unsupported_selector_is_reported_not_dropped_silently() {
         r.errors.iter().map(|e| &e.message).collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn animation_none_names_no_keyframes() {
+    let sheet = crate::parser::Stylesheet::parse(".x { animation: none; }").expect("css");
+    let a = sheet
+        .get_class("x")
+        .and_then(|s| s.animation.clone())
+        .expect("animation");
+    assert!(a.name.is_empty());
+}

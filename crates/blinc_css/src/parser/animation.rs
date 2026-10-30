@@ -197,6 +197,11 @@ impl AnimationFillMode {
 /// - `animation: fade-in 300ms ease-out 0ms infinite`
 /// - `animation: slide-in 0.5s ease-in-out 0s 1 normal forwards`
 pub(crate) fn parse_animation(value: &str) -> Option<CssAnimation> {
+    // `none` names no keyframes, which overrides an animation an earlier
+    // rule set.
+    if value.trim().eq_ignore_ascii_case("none") {
+        return Some(CssAnimation::default());
+    }
     // Use `split_whitespace_respecting_parens` so a `cubic-bezier(a, b,
     // c, d)` (from `var(--ease-state)` resolution) survives as a single
     // token instead of getting chopped on the commas.
