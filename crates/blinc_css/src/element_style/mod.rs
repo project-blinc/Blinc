@@ -34,7 +34,7 @@
 //! - [`keywords`] — the enums for keyword-valued properties.
 //! - [`dynamic`] — properties held as an unevaluated `calc(env(...))`.
 //! - [`filter`] — CSS filter functions.
-//! - `macros` — the `css!`, `style!` and `flow!` macros.
+//! - `macros` — the `css_style!`, `style!`, `css!` and `flow!` macros.
 
 mod builder;
 pub mod dynamic;

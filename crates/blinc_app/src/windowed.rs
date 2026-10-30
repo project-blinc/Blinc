@@ -2198,14 +2198,14 @@ impl WindowedContext {
 
     /// Set a style for an element by ID.
     ///
-    /// This is the Rust-native alternative to `add_css()`. Use with `css!` or `style!`
+    /// This is the Rust-native alternative to `add_css()`. Use with `css_style!` or `style!`
     /// macros to define styles in Rust syntax that are applied automatically to matching
     /// elements — just like CSS stylesheets.
     ///
     /// # Example
     ///
     /// ```ignore
-    /// ctx.set_style("card", css! {
+    /// ctx.set_style("card", css_style! {
     ///     background: Color::BLUE;
     ///     border-radius: 12.0;
     ///     box-shadow: md;

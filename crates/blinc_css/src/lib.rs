@@ -11,7 +11,7 @@
 //! # Layout
 //!
 //! - [`element_style`] — [`ElementStyle`], the resolved style schema every
-//!   visual property lands in, plus the `css!` and `style!` macros.
+//!   visual property lands in, plus the `css_style!`, `style!` and `css!` macros.
 //! - [`parser`] — the CSS subset parser: selectors, at-rules, properties,
 //!   value grammars, and the `@flow` shader DAG.
 //! - [`calc`] — `calc()` expression trees and their evaluation context.

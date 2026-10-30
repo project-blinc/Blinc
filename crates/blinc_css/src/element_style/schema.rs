@@ -1,7 +1,7 @@
 //! The resolved style schema.
 //!
 //! `ElementStyle` is the one place every visual property lands, whatever
-//! set it: a builder call, a `css!` literal, or a parsed stylesheet rule.
+//! set it: a builder call, a `css_style!` literal, or a parsed stylesheet rule.
 //! Every field is optional, so a style records only what it was told and
 //! merges cleanly over another.
 //!

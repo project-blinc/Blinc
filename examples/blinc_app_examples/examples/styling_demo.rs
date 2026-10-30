@@ -1,7 +1,7 @@
 //! Unified Styling API Demo
 //!
 //! Demonstrates all styling approaches in Blinc:
-//! - `css!` macro: CSS-like syntax with hyphenated property names
+//! - `css_style!` macro: CSS-like syntax with hyphenated property names
 //! - `style!` macro: Rust-friendly syntax with underscored names
 //! - `ElementStyle` builder: Programmatic style construction
 //! - CSS Parser: Runtime CSS string parsing
@@ -14,8 +14,8 @@ use blinc_app::prelude::*;
 use blinc_app::windowed::WindowedApp;
 use blinc_app::windowed::WindowedContext;
 use blinc_core::{Color, Shadow, Transform};
-use blinc_layout::css;
 use blinc_layout::css_parser::Stylesheet;
+use blinc_layout::css_style;
 use blinc_layout::element_style::ElementStyle;
 use blinc_layout::style;
 use blinc_layout::widgets::radio_group;
@@ -1301,7 +1301,7 @@ fn header() -> impl ElementBuilder + use<> {
                 .color(text_primary),
         )
         .child(
-            text("Stylesheets | Hover | Animations | css! | style! | 3D SDF | Groups | clip-path")
+            text("Stylesheets | Hover | Animations | css_style! | style! | 3D SDF | Groups | clip-path")
                 .size(14.0)
                 .color(text_secondary),
         )
@@ -3308,7 +3308,7 @@ fn css_animation_section() -> impl ElementBuilder + use<> {
 
 fn css_macro_section() -> impl ElementBuilder + use<> {
     section_container()
-        .child(section_title("css! Macro"))
+        .child(section_title("css_style! Macro"))
         .child(section_description(
             "CSS-like syntax with hyphenated property names and semicolon separators.",
         ))
@@ -3322,8 +3322,10 @@ fn css_macro_section() -> impl ElementBuilder + use<> {
                     div()
                         .flex_col()
                         .gap(8.0)
-                        .child(code_label("css! { background: ...; border-radius: ...; }"))
-                        .child(styled_box_with_element_style(css! {
+                        .child(code_label(
+                            "css_style! { background: ...; border-radius: ...; }",
+                        ))
+                        .child(styled_box_with_element_style(css_style! {
                             background: Color::BLUE;
                             border-radius: 8.0;
                             opacity: 0.9;
@@ -3334,8 +3336,8 @@ fn css_macro_section() -> impl ElementBuilder + use<> {
                     div()
                         .flex_col()
                         .gap(8.0)
-                        .child(code_label("css! { box-shadow: md; }"))
-                        .child(styled_box_with_element_style(css! {
+                        .child(code_label("css_style! { box-shadow: md; }"))
+                        .child(styled_box_with_element_style(css_style! {
                             background: Color::WHITE;
                             border-radius: 12.0;
                             box-shadow: md;
@@ -3346,8 +3348,8 @@ fn css_macro_section() -> impl ElementBuilder + use<> {
                     div()
                         .flex_col()
                         .gap(8.0)
-                        .child(code_label("css! { box-shadow: Shadow::new(...); }"))
-                        .child(styled_box_with_element_style(css! {
+                        .child(code_label("css_style! { box-shadow: Shadow::new(...); }"))
+                        .child(styled_box_with_element_style(css_style! {
                             background: Color::GREEN;
                             border-radius: 8.0;
                             box-shadow: Shadow::new(4.0, 8.0, 12.0, Color::BLACK.with_alpha(0.3));
@@ -3358,8 +3360,8 @@ fn css_macro_section() -> impl ElementBuilder + use<> {
                     div()
                         .flex_col()
                         .gap(8.0)
-                        .child(code_label("css! { backdrop-filter: glass; }"))
-                        .child(styled_box_with_element_style(css! {
+                        .child(code_label("css_style! { backdrop-filter: glass; }"))
+                        .child(styled_box_with_element_style(css_style! {
                             background: Color::WHITE.with_alpha(0.2);
                             border-radius: 16.0;
                             backdrop-filter: glass;
@@ -3754,7 +3756,7 @@ fn corner_radius_section() -> impl ElementBuilder + use<> {
                 // Custom uniform
                 .child(labeled_box(
                     "rounded: 20.0",
-                    css! { background: Color::BLUE; border-radius: 20.0; },
+                    css_style! { background: Color::BLUE; border-radius: 20.0; },
                 )),
         )
 }
@@ -4183,7 +4185,7 @@ fn shadows_section() -> impl ElementBuilder + use<> {
                 // CSS syntax presets
                 .child(labeled_box(
                     "box-shadow: md",
-                    css! { background: Color::WHITE; border-radius: 8.0; box-shadow: md; },
+                    css_style! { background: Color::WHITE; border-radius: 8.0; box-shadow: md; },
                 ))
                 // Custom shadow
                 .child(labeled_box(
@@ -4249,7 +4251,7 @@ fn transforms_section() -> impl ElementBuilder + use<> {
                 // CSS transform syntax
                 .child(labeled_box(
                     "CSS transform",
-                    css! {
+                    css_style! {
                         background: Color::CYAN;
                         border-radius: 8.0;
                         transform: Transform::rotate(0.2);
@@ -4371,7 +4373,7 @@ fn materials_section() -> impl ElementBuilder + use<> {
                 // CSS backdrop-filter syntax
                 .child(labeled_box(
                     "backdrop-filter: glass",
-                    css! {
+                    css_style! {
                         background: Color::WHITE.with_alpha(0.15);
                         border-radius: 16.0;
                         backdrop-filter: glass;
@@ -4397,7 +4399,7 @@ fn transforms_3d_section() -> impl ElementBuilder + use<> {
                 .gap(24.0)
                 .child(labeled_3d_box(
                     "rotate-x: 30",
-                    css! {
+                    css_style! {
                         background: Color::from_hex(0x3b82f6);
                         border-radius: 8.0;
                         rotate-x: 30.0;
@@ -4406,7 +4408,7 @@ fn transforms_3d_section() -> impl ElementBuilder + use<> {
                 ))
                 .child(labeled_3d_box(
                     "rotate-y: 30",
-                    css! {
+                    css_style! {
                         background: Color::from_hex(0x22c55e);
                         border-radius: 8.0;
                         rotate-y: 30.0;
@@ -4602,7 +4604,7 @@ fn translate_z_section() -> impl ElementBuilder + use<> {
                 .gap(24.0)
                 .child(labeled_3d_box(
                     "translate-z: 0",
-                    css! {
+                    css_style! {
                         background: Color::from_hex(0x3b82f6);
                         shape-3d: "box";
                         depth: 80.0;
@@ -4613,7 +4615,7 @@ fn translate_z_section() -> impl ElementBuilder + use<> {
                 ))
                 .child(labeled_3d_box(
                     "translate-z: 100",
-                    css! {
+                    css_style! {
                         background: Color::from_hex(0x3b82f6);
                         shape-3d: "box";
                         depth: 80.0;
@@ -4624,7 +4626,7 @@ fn translate_z_section() -> impl ElementBuilder + use<> {
                 ))
                 .child(labeled_3d_box(
                     "translate-z: 200",
-                    css! {
+                    css_style! {
                         background: Color::from_hex(0x3b82f6);
                         shape-3d: "box";
                         depth: 80.0;
@@ -4635,7 +4637,7 @@ fn translate_z_section() -> impl ElementBuilder + use<> {
                 ))
                 .child(labeled_3d_box(
                     "translate-z: -100",
-                    css! {
+                    css_style! {
                         background: Color::from_hex(0x3b82f6);
                         shape-3d: "box";
                         depth: 80.0;
@@ -5087,7 +5089,7 @@ fn clip_path_animation_section() -> impl ElementBuilder + use<> {
 
 fn api_comparison_section() -> impl ElementBuilder + use<> {
     // Same visual result using all three approaches
-    let from_css = css! {
+    let from_css = css_style! {
         background: Color::from_hex(0x3B82F6);
         border-radius: 12.0;
         box-shadow: md;
@@ -5133,7 +5135,7 @@ fn api_comparison_section() -> impl ElementBuilder + use<> {
                     div()
                         .flex_col()
                         .gap(8.0)
-                        .child(code_label("css! { ... }"))
+                        .child(code_label("css_style! { ... }"))
                         .child(styled_box_with_element_style(from_css)),
                 )
                 .child(

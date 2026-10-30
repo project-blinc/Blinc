@@ -4,7 +4,7 @@ use blinc_core::{Brush, Color, PointerEvents, Shadow, Transform};
 use blinc_theme::ThemeState;
 
 use crate::element_style::*;
-use crate::{css, style};
+use crate::{css, css_style, style};
 
 #[test]
 fn test_style_builder() {
@@ -232,19 +232,19 @@ fn test_style_macro_rounded_corners() {
 }
 
 // =========================================================================
-// css! macro tests - CSS property name compatibility
+// css_style! macro tests - CSS property name compatibility
 // =========================================================================
 
 #[test]
 fn test_css_macro_empty() {
-    let s = css!();
+    let s = css_style!();
     assert!(s.is_empty());
 }
 
 #[test]
 fn test_css_macro_basic() {
     // Uses CSS property names with semicolon separators
-    let s = css! {
+    let s = css_style! {
         background: Color::BLUE;
         border-radius: 8.0;
         opacity: 0.9;
@@ -259,12 +259,12 @@ fn test_css_macro_basic() {
 fn test_css_macro_shadow() {
     ThemeState::init_default();
 
-    let s = css! {
+    let s = css_style! {
         box-shadow: md;
     };
     assert!(!s.shadow.is_empty());
 
-    let s2 = css! {
+    let s2 = css_style! {
         box-shadow: Shadow::new(0.0, 4.0, 8.0, Color::BLACK);
     };
     assert!(!s2.shadow.is_empty());
@@ -272,7 +272,7 @@ fn test_css_macro_shadow() {
 
 #[test]
 fn test_css_macro_transform() {
-    let s = css! {
+    let s = css_style! {
         transform: Transform::scale(1.05, 1.05);
     };
     assert!(s.transform.is_some());
@@ -281,7 +281,7 @@ fn test_css_macro_transform() {
 #[test]
 fn test_css_macro_backdrop_filter() {
     // Blinc extension for materials
-    let s = css! {
+    let s = css_style! {
         backdrop-filter: glass;
     };
     assert!(s.material.is_some());
@@ -293,7 +293,7 @@ fn test_css_macro_combined() {
     ThemeState::init_default();
 
     // Full CSS-like card style
-    let card = css! {
+    let card = css_style! {
         background: Color::WHITE;
         border-radius: 12.0;
         box-shadow: lg;
@@ -308,7 +308,7 @@ fn test_css_macro_combined() {
 
 #[test]
 fn test_css_macro_animation() {
-    let s = css! {
+    let s = css_style! {
         animation-name: "fade-in";
         animation-duration: 300;
     };
@@ -322,7 +322,7 @@ fn test_css_macro_animation() {
 #[test]
 fn test_css_and_style_macros_produce_same_result() {
     // Both macros should produce equivalent ElementStyle for same properties
-    let from_css = css! {
+    let from_css = css_style! {
         background: Color::RED;
         border-radius: 10.0;
         opacity: 0.8;
@@ -347,7 +347,7 @@ fn test_css_and_style_macros_produce_same_result() {
 
 #[test]
 fn test_css_macro_text_properties() {
-    let s = css! {
+    let s = css_style! {
         color: Color::RED;
         font-size: 16.0;
         line-height: 1.5;
@@ -375,7 +375,7 @@ fn test_style_macro_text_properties() {
 
 #[test]
 fn test_css_macro_text_decoration() {
-    let s = css! {
+    let s = css_style! {
         text-decoration: TextDecoration::Underline;
         text-decoration-color: Color::RED;
         text-decoration-thickness: 2.0;
@@ -387,7 +387,7 @@ fn test_css_macro_text_decoration() {
 
 #[test]
 fn test_css_macro_text_overflow() {
-    let s = css! {
+    let s = css_style! {
         text-overflow: ellipsis;
         white-space: nowrap;
     };
@@ -397,7 +397,7 @@ fn test_css_macro_text_overflow() {
 
 #[test]
 fn test_css_macro_position_inset() {
-    let s = css! {
+    let s = css_style! {
         position: absolute;
         top: 10.0;
         right: 20.0;
@@ -432,7 +432,7 @@ fn test_style_macro_position_inset() {
 
 #[test]
 fn test_css_macro_visibility() {
-    let s = css! {
+    let s = css_style! {
         visibility: hidden;
     };
     assert_eq!(s.visibility, Some(StyleVisibility::Hidden));
@@ -440,7 +440,7 @@ fn test_css_macro_visibility() {
 
 #[test]
 fn test_css_macro_overflow_axes() {
-    let s = css! {
+    let s = css_style! {
         overflow-x: scroll;
         overflow-y: hidden;
     };
@@ -450,7 +450,7 @@ fn test_css_macro_overflow_axes() {
 
 #[test]
 fn test_css_macro_outline() {
-    let s = css! {
+    let s = css_style! {
         outline: (2.0, Color::RED);
         outline-offset: 4.0;
     };
@@ -472,7 +472,7 @@ fn test_style_macro_outline() {
 
 #[test]
 fn test_css_macro_form_colors() {
-    let s = css! {
+    let s = css_style! {
         caret-color: Color::RED;
         selection-color: Color::BLUE;
         placeholder-color: Color::rgba(0.5, 0.5, 0.5, 1.0);
@@ -496,7 +496,7 @@ fn test_style_macro_form_colors() {
 
 #[test]
 fn test_css_macro_svg_properties() {
-    let s = css! {
+    let s = css_style! {
         fill: Color::RED;
         stroke: Color::BLUE;
         stroke-width: 2.0;
@@ -526,7 +526,7 @@ fn test_style_macro_svg_properties() {
 
 #[test]
 fn test_css_macro_transform_extras() {
-    let s = css! {
+    let s = css_style! {
         transform-origin: (0.0, 100.0);
     };
     assert_eq!(s.transform_origin, Some([0.0, 100.0]));
@@ -546,7 +546,7 @@ fn test_style_macro_transform_extras() {
 
 #[test]
 fn test_css_macro_scrollbar() {
-    let s = css! {
+    let s = css_style! {
         scrollbar-color: (Color::RED, Color::WHITE);
         scrollbar-width: thin;
     };
@@ -556,7 +556,7 @@ fn test_css_macro_scrollbar() {
 
 #[test]
 fn test_css_macro_image_properties() {
-    let s = css! {
+    let s = css_style! {
         object-fit: 1;
         object-position: (0.5, 0.0);
     };
@@ -580,7 +580,7 @@ fn test_css_macro_filter() {
         grayscale: 1.0,
         ..Default::default()
     };
-    let s = css! {
+    let s = css_style! {
         filter: f;
     };
     assert!(s.filter.is_some());
@@ -602,7 +602,7 @@ fn test_style_macro_filter() {
 
 #[test]
 fn test_css_macro_border_shorthand() {
-    let s = css! {
+    let s = css_style! {
         border: (2.0, Color::RED);
     };
     assert_eq!(s.border_width, Some(2.0));
@@ -611,7 +611,7 @@ fn test_css_macro_border_shorthand() {
 
 #[test]
 fn test_css_macro_display_block() {
-    let s = css! {
+    let s = css_style! {
         display: block;
     };
     assert_eq!(s.display, Some(StyleDisplay::Block));
@@ -619,7 +619,7 @@ fn test_css_macro_display_block() {
 
 #[test]
 fn test_css_macro_pointer_events() {
-    let s = css! {
+    let s = css_style! {
         pointer-events: none;
     };
     assert_eq!(s.pointer_events, Some(PointerEvents::None));
@@ -635,7 +635,7 @@ fn test_style_macro_pointer_events() {
 
 #[test]
 fn test_css_macro_inset() {
-    let s = css! {
+    let s = css_style! {
         inset: 10.0;
     };
     assert_eq!(s.top, Some(10.0));
@@ -646,7 +646,7 @@ fn test_css_macro_inset() {
 
 #[test]
 fn test_css_macro_flex_extras() {
-    let s = css! {
+    let s = css_style! {
         flex-wrap: nowrap;
         align-items: baseline;
         align-self: stretch;
@@ -658,7 +658,7 @@ fn test_css_macro_flex_extras() {
 
 #[test]
 fn test_css_style_parity_text() {
-    let from_css = css! {
+    let from_css = css_style! {
         color: Color::RED;
         font-size: 16.0;
         letter-spacing: 2.0;
@@ -675,7 +675,7 @@ fn test_css_style_parity_text() {
 
 #[test]
 fn test_css_style_parity_position() {
-    let from_css = css! {
+    let from_css = css_style! {
         position: absolute;
         top: 10.0;
         z-index: 5;
@@ -688,4 +688,17 @@ fn test_css_style_parity_position() {
     assert_eq!(from_css.position, from_style.position);
     assert_eq!(from_css.top, from_style.top);
     assert_eq!(from_css.z_index, from_style.z_index);
+}
+
+#[test]
+fn css_macro_builds_a_stylesheet_of_several_classes() {
+    let sheet = css!(
+        r#"
+        .card { background: #1a2b3c; border-radius: 8px; }
+        .card:hover { opacity: 0.5; }
+        .title { font-size: 14px; }
+        "#
+    );
+    assert!(sheet.get_class("card").is_some());
+    assert!(sheet.get_class("title").is_some());
 }

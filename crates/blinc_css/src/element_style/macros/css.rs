@@ -1,4 +1,4 @@
-//! The `css!` macro: an `ElementStyle` written in CSS property names.
+//! The `css_style!` macro: an `ElementStyle` written in CSS property names.
 
 /// CSS-like macro for creating ElementStyle with CSS property names
 ///
@@ -12,7 +12,7 @@
 /// use blinc_core::Color;
 ///
 /// // CSS-style properties (note: use spaces around hyphens)
-/// let card = css! {
+/// let card = css_style! {
 ///     background: Color::WHITE;
 ///     border-radius: 8.0;
 ///     box-shadow: Shadow::new(0.0, 4.0, 8.0, Color::BLACK.with_alpha(0.2));
@@ -20,20 +20,20 @@
 /// };
 ///
 /// // Transform properties
-/// let hover = css! {
+/// let hover = css_style! {
 ///     transform: Transform::scale(1.05, 1.05);
 ///     opacity: 1.0;
 /// };
 ///
 /// // Material effects (Blinc extensions)
-/// let glass_panel = css! {
+/// let glass_panel = css_style! {
 ///     background: Color::WHITE.with_alpha(0.1);
 ///     border-radius: 16.0;
 ///     backdrop-filter: glass;
 /// };
 ///
 /// // Animation
-/// let animated = css! {
+/// let animated = css_style! {
 ///     animation-name: "fade-in";
 ///     animation-duration: 300;
 /// };
@@ -128,7 +128,7 @@
 /// ## Image
 /// - `object-fit`: u8, `object-position`: (x, y)
 #[macro_export]
-macro_rules! css {
+macro_rules! css_style {
     // Empty style
     () => {
         $crate::element_style::ElementStyle::new()
