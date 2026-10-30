@@ -365,6 +365,8 @@ pub struct RenderProps {
     pub sticky_bottom: Option<f32>,
     /// CSS z-index for controlling render order within a layer
     pub z_index: i32,
+    /// Which writers have claimed each visual property. Recorded, not yet consulted.
+    pub tiers: crate::style_tier::PropTiers,
     /// Text foreground color override (when set, overrides TextData.color during rendering)
     pub text_color: Option<[f32; 4]>,
     /// Font size override (when set, overrides TextData.font_size during rendering)
@@ -538,6 +540,7 @@ impl Default for RenderProps {
             filter: None,
             motion_is_exiting: false,
             z_index: 0,
+            tiers: Default::default(),
             text_color: None,
             font_size: None,
             text_shadow: None,
@@ -581,6 +584,46 @@ impl RenderProps {
     /// Create new render properties
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Marks the properties this value holds away from their defaults as
+    /// written by the element itself.
+    pub fn record_owned_tiers(&mut self) {
+        use crate::style_tier::{StyleProp as P, StyleTier::Owned};
+        let d = Self::default();
+        let set = [
+            (self.background.is_some(), P::Background),
+            (self.border_radius_explicit, P::BorderRadius),
+            (self.corner_shape != d.corner_shape, P::CornerShape),
+            (!self.shadow.is_empty(), P::Shadow),
+            (!self.inner_shadow.is_empty(), P::InnerShadow),
+            (self.transform.is_some(), P::Transform),
+            ((self.opacity - d.opacity).abs() > f32::EPSILON, P::Opacity),
+            (self.layer != d.layer, P::Layer),
+            (self.material.is_some(), P::Material),
+            (self.clip_path.is_some(), P::ClipPath),
+            (self.border_width > 0.0, P::BorderWidth),
+            (self.border_color.is_some(), P::BorderColor),
+            (self.outline_width > 0.0, P::OutlineWidth),
+            (self.outline_color.is_some(), P::OutlineColor),
+            (self.outline_offset != 0.0, P::OutlineOffset),
+            (self.transform_origin.is_some(), P::TransformOrigin),
+            (
+                self.rotate_x.is_some() || self.rotate_y.is_some(),
+                P::Rotate3d,
+            ),
+            (self.perspective.is_some(), P::Perspective),
+            (self.shape_3d.is_some(), P::Shape3d),
+            (self.depth.is_some(), P::Depth),
+            (self.translate_z.is_some(), P::Translate3d),
+            (self.op_3d.is_some(), P::Op3d),
+            (self.blend_3d.is_some(), P::Blend3d),
+        ];
+        for (is_set, prop) in set {
+            if is_set {
+                self.tiers.mark(prop, Owned);
+            }
+        }
     }
 
     /// Set background brush

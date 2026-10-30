@@ -154,3 +154,25 @@ fn removing_a_rule_restores_the_components_default() {
         radius(&tree)
     );
 }
+
+/// Each writer is recorded against the property it wrote, so a later pass
+/// can tell a call-site value from a stylesheet one.
+#[test]
+fn the_writer_of_each_property_is_recorded() {
+    use blinc_layout::style_tier::{StyleProp, StyleTier};
+    init();
+    let host = div()
+        .w(300.0)
+        .h(80.0)
+        .child(div().class("themed").w(100.0).h(40.0).bg(Color::RED));
+    let tree = render(&host, ".themed { border-radius: 20px; }");
+    let tiers = tree
+        .get_render_node(subject(&tree))
+        .expect("render node")
+        .props
+        .tiers;
+    assert!(tiers.has(StyleProp::Background, StyleTier::Owned));
+    assert!(!tiers.has(StyleProp::Background, StyleTier::Stylesheet));
+    assert!(tiers.has(StyleProp::BorderRadius, StyleTier::Stylesheet));
+    assert!(!tiers.has(StyleProp::BorderRadius, StyleTier::Owned));
+}

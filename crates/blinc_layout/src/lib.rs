@@ -58,6 +58,7 @@ pub mod stack;
 pub mod state_style_table;
 pub mod stateful;
 pub mod style;
+pub mod style_tier;
 pub mod styled_text;
 pub mod svg;
 pub mod syntax;

@@ -23,6 +23,7 @@
 use blinc_core::{BlurQuality, ClipShape, LayerEffect, Point, Rect, Vec2};
 
 use crate::element::RenderProps;
+use crate::style_tier::{StyleProp, StyleTier};
 use crate::tree::LayoutNodeId;
 
 use super::super::RenderTree;
@@ -34,77 +35,117 @@ impl RenderTree {
         style: &crate::element_style::ElementStyle,
     ) {
         if let Some(ref bg) = style.background {
+            props
+                .tiers
+                .mark(StyleProp::Background, StyleTier::Stylesheet);
             props.background = Some(bg.clone());
         }
         if let Some(ref cr) = style.corner_radius {
+            props
+                .tiers
+                .mark(StyleProp::BorderRadius, StyleTier::Stylesheet);
             props.border_radius = *cr;
             props.border_radius_explicit = true;
         }
         if let Some(cs) = style.corner_shape {
+            props
+                .tiers
+                .mark(StyleProp::CornerShape, StyleTier::Stylesheet);
             props.corner_shape = cs;
         }
         if let Some(fade) = style.overflow_fade {
+            props
+                .tiers
+                .mark(StyleProp::OverflowFade, StyleTier::Stylesheet);
             props.overflow_fade = fade;
         }
         if !style.inner_shadow.is_empty() {
+            props
+                .tiers
+                .mark(StyleProp::InnerShadow, StyleTier::Stylesheet);
             props.inner_shadow = style.inner_shadow.clone();
         }
         if !style.shadow.is_empty() {
+            props.tiers.mark(StyleProp::Shadow, StyleTier::Stylesheet);
             props.shadow = style.shadow.clone();
         }
         if let Some(ref transform) = style.transform {
+            props
+                .tiers
+                .mark(StyleProp::Transform, StyleTier::Stylesheet);
             props.transform = Some(transform.clone());
         }
         if let Some(opacity) = style.opacity {
+            props.tiers.mark(StyleProp::Opacity, StyleTier::Stylesheet);
             props.opacity = opacity;
         }
         if let Some(ref render_layer) = style.render_layer {
+            props.tiers.mark(StyleProp::Layer, StyleTier::Stylesheet);
             props.layer = *render_layer;
         }
         if let Some(ref material) = style.material {
+            props.tiers.mark(StyleProp::Material, StyleTier::Stylesheet);
             props.material = Some(material.clone());
         }
         // 3D transform properties
         if let Some(rx) = style.rotate_x {
+            props.tiers.mark(StyleProp::Rotate3d, StyleTier::Stylesheet);
             props.rotate_x = Some(rx);
         }
         if let Some(ry) = style.rotate_y {
+            props.tiers.mark(StyleProp::Rotate3d, StyleTier::Stylesheet);
             props.rotate_y = Some(ry);
         }
         if let Some(p) = style.perspective {
+            props
+                .tiers
+                .mark(StyleProp::Perspective, StyleTier::Stylesheet);
             props.perspective = Some(p);
         }
         if let Some(ref s) = style.shape_3d {
+            props.tiers.mark(StyleProp::Shape3d, StyleTier::Stylesheet);
             props.shape_3d = Some(crate::css_parser::shape_3d_to_float(s));
         }
         if let Some(d) = style.depth {
+            props.tiers.mark(StyleProp::Depth, StyleTier::Stylesheet);
             props.depth = Some(d);
         }
         if let Some(dir) = style.light_direction {
+            props.tiers.mark(StyleProp::Light3d, StyleTier::Stylesheet);
             props.light_direction = Some(dir);
         }
         if let Some(v) = style.light_intensity {
+            props.tiers.mark(StyleProp::Light3d, StyleTier::Stylesheet);
             props.light_intensity = Some(v);
         }
         if let Some(v) = style.ambient {
+            props.tiers.mark(StyleProp::Light3d, StyleTier::Stylesheet);
             props.ambient = Some(v);
         }
         if let Some(v) = style.specular {
+            props.tiers.mark(StyleProp::Light3d, StyleTier::Stylesheet);
             props.specular = Some(v);
         }
         if let Some(v) = style.translate_z {
+            props
+                .tiers
+                .mark(StyleProp::Translate3d, StyleTier::Stylesheet);
             props.translate_z = Some(v);
         }
         if let Some(ref op) = style.op_3d {
+            props.tiers.mark(StyleProp::Op3d, StyleTier::Stylesheet);
             props.op_3d = Some(crate::css_parser::op_3d_to_float(op));
         }
         if let Some(v) = style.blend_3d {
+            props.tiers.mark(StyleProp::Blend3d, StyleTier::Stylesheet);
             props.blend_3d = Some(v);
         }
         if let Some(ref cp) = style.clip_path {
+            props.tiers.mark(StyleProp::ClipPath, StyleTier::Stylesheet);
             props.clip_path = Some(cp.clone());
         }
         if let Some(filter) = style.filter {
+            props.tiers.mark(StyleProp::Filter, StyleTier::Stylesheet);
             props.filter = Some(filter);
             // Convert blur filter to LayerEffect for GPU processing
             if filter.blur > 0.0 {
@@ -142,6 +183,9 @@ impl RenderTree {
         // Mask image → LayerEffect (URL only; gradients handled per-primitive)
         if let Some(blinc_core::MaskImage::Url(ref url)) = style.mask_image {
             props
+                .tiers
+                .mark(StyleProp::MaskImage, StyleTier::Stylesheet);
+            props
                 .layer_effects
                 .retain(|e| !matches!(e, LayerEffect::MaskImage { .. }));
             props.layer_effects.push(LayerEffect::MaskImage {
@@ -151,78 +195,135 @@ impl RenderTree {
         }
         // Text color
         if let Some(c) = &style.text_color {
+            props
+                .tiers
+                .mark(StyleProp::TextColor, StyleTier::Stylesheet);
             props.text_color = Some([c.r, c.g, c.b, c.a]);
         }
         // Text shadow
         if let Some(ts) = &style.text_shadow {
+            props
+                .tiers
+                .mark(StyleProp::TextShadow, StyleTier::Stylesheet);
             props.text_shadow = Some(*ts);
         }
         // Font size
         if let Some(fs) = style.font_size {
+            props.tiers.mark(StyleProp::FontSize, StyleTier::Stylesheet);
             props.font_size = Some(fs);
         }
         // Font weight
         if let Some(fw) = style.font_weight {
+            props
+                .tiers
+                .mark(StyleProp::FontWeight, StyleTier::Stylesheet);
             props.font_weight = Some(fw);
         }
         // Font style
         if let Some(fs) = style.font_style {
+            props
+                .tiers
+                .mark(StyleProp::FontStyle, StyleTier::Stylesheet);
             props.font_style = Some(fs);
         }
         // Text decoration
         if let Some(td) = style.text_decoration {
+            props
+                .tiers
+                .mark(StyleProp::TextDecoration, StyleTier::Stylesheet);
             props.text_decoration = Some(td);
         }
         // Line height
         if let Some(lh) = style.line_height {
+            props
+                .tiers
+                .mark(StyleProp::LineHeight, StyleTier::Stylesheet);
             props.line_height = Some(lh);
         }
         // Text align
         if let Some(ta) = style.text_align {
+            props
+                .tiers
+                .mark(StyleProp::TextAlign, StyleTier::Stylesheet);
             props.text_align = Some(ta);
         }
         // Letter spacing
         if let Some(ls) = style.letter_spacing {
+            props
+                .tiers
+                .mark(StyleProp::LetterSpacing, StyleTier::Stylesheet);
             props.letter_spacing = Some(ls);
         }
         // SVG properties
         if let Some(fill) = style.fill {
+            props.tiers.mark(StyleProp::Fill, StyleTier::Stylesheet);
             props.fill = Some([fill.r, fill.g, fill.b, fill.a]);
         }
         if let Some(stroke) = style.stroke {
+            props.tiers.mark(StyleProp::Stroke, StyleTier::Stylesheet);
             props.stroke = Some([stroke.r, stroke.g, stroke.b, stroke.a]);
         }
         if let Some(sw) = style.stroke_width {
+            props
+                .tiers
+                .mark(StyleProp::StrokeWidth, StyleTier::Stylesheet);
             props.stroke_width = Some(sw);
         }
         if let Some(ref da) = style.stroke_dasharray {
+            props
+                .tiers
+                .mark(StyleProp::StrokeDasharray, StyleTier::Stylesheet);
             props.stroke_dasharray = Some(da.clone());
         }
         if let Some(offset) = style.stroke_dashoffset {
+            props
+                .tiers
+                .mark(StyleProp::StrokeDashoffset, StyleTier::Stylesheet);
             props.stroke_dashoffset = Some(offset);
         }
         if let Some(ref path_data) = style.svg_path_data {
+            props
+                .tiers
+                .mark(StyleProp::SvgPathData, StyleTier::Stylesheet);
             props.svg_path_data = Some(path_data.clone());
         }
         // Transform origin
         if let Some(to) = style.transform_origin {
+            props
+                .tiers
+                .mark(StyleProp::TransformOrigin, StyleTier::Stylesheet);
             props.transform_origin = Some(to);
         }
         // Border
         if let Some(bw) = style.border_width {
+            props
+                .tiers
+                .mark(StyleProp::BorderWidth, StyleTier::Stylesheet);
             props.border_width = bw;
         }
         if let Some(bc) = style.border_color {
+            props
+                .tiers
+                .mark(StyleProp::BorderColor, StyleTier::Stylesheet);
             props.border_color = Some(bc);
         }
         // Outline
         if let Some(ow) = style.outline_width {
+            props
+                .tiers
+                .mark(StyleProp::OutlineWidth, StyleTier::Stylesheet);
             props.outline_width = ow;
         }
         if let Some(ref oc) = style.outline_color {
+            props
+                .tiers
+                .mark(StyleProp::OutlineColor, StyleTier::Stylesheet);
             props.outline_color = Some(*oc);
         }
         if let Some(offset) = style.outline_offset {
+            props
+                .tiers
+                .mark(StyleProp::OutlineOffset, StyleTier::Stylesheet);
             props.outline_offset = offset;
         }
         // Skew (composed into existing transform as Affine2D)

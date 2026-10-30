@@ -5588,7 +5588,7 @@ impl ElementBuilder for Div {
         let clips_content = !matches!(self.style.overflow.x, Overflow::Visible)
             || !matches!(self.style.overflow.y, Overflow::Visible);
 
-        RenderProps {
+        let mut props = RenderProps {
             background: self.background.clone(),
             border_radius: self.border_radius,
             border_radius_explicit: self.border_radius_explicit,
@@ -5633,7 +5633,9 @@ impl ElementBuilder for Div {
             sticky_top: self.sticky_top,
             z_index: self.z_index,
             ..Default::default()
-        }
+        };
+        props.record_owned_tiers();
+        props
     }
 
     fn children_builders(&self) -> &[Box<dyn ElementBuilder>] {
