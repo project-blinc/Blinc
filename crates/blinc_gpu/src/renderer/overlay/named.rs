@@ -11,6 +11,7 @@ use std::{
 };
 
 pub(super) struct Outputs {
+    pub local_glass_frame: Option<(u32, u32)>,
     pub glass_backdrop: Option<wgpu::TextureView>,
     pub wanted: HashSet<LayerId>,
     pub textures: HashMap<LayerId, Output>,
@@ -32,6 +33,7 @@ impl Outputs {
         let mut wanted = HashSet::new();
         visit(items, &mut wanted);
         Self {
+            local_glass_frame: None,
             glass_backdrop: None,
             wanted,
             textures: HashMap::new(),

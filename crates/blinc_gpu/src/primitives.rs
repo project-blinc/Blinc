@@ -1831,11 +1831,18 @@ impl PrimitiveBatch {
             })
     }
 
-    /// Glass commands that need the prepared backdrop during foreground dispatch.
+    /// Retained glass commands need backdrop-aware ordered dispatch.
     pub fn has_grouped_glass(&self) -> bool {
         self.layer_commands
             .iter()
             .chain(&self.foreground_layer_commands)
+            .any(|entry| matches!(entry.command, LayerCommand::Glass(_)))
+    }
+
+    /// Glass retained at a background isolation anchor needs ordered local sampling.
+    pub fn has_background_glass(&self) -> bool {
+        self.layer_commands
+            .iter()
             .any(|entry| matches!(entry.command, LayerCommand::Glass(_)))
     }
 

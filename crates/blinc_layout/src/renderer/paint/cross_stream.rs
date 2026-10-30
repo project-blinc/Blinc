@@ -2,6 +2,7 @@
 use super::super::{DeferredContent, ElementType, RenderTree};
 use crate::element::{Material, RenderLayer};
 use crate::tree::LayoutNodeId;
+use std::collections::HashSet;
 
 impl RenderTree {
     pub(super) fn plan_cross_stream_groups(
@@ -11,6 +12,7 @@ impl RenderTree {
     ) {
         #[derive(Clone, Copy, Default)]
         struct Scope {
+            background_group: bool,
             foreground: bool,
             glass: bool,
             portal: bool,
@@ -21,6 +23,7 @@ impl RenderTree {
             scope: Scope,
             capabilities: DeferredContent,
             glass_layers: bool,
+            css_opacity: &HashSet<LayoutNodeId>,
             groups: &mut Vec<(LayoutNodeId, DeferredContent)>,
         ) -> (bool, bool, DeferredContent, bool, bool) {
             let Some(render) = tree.render_nodes.get(&node) else {
@@ -28,9 +31,18 @@ impl RenderTree {
             };
             let foreground = scope.foreground || render.props.layer == RenderLayer::Foreground;
             let props = &render.props;
+            let isolates = props.opacity < 1.0
+                || !props.layer_effects.is_empty()
+                || props
+                    .mix_blend_mode
+                    .is_some_and(|m| m != blinc_core::BlendMode::Normal)
+                || props.motion.is_some()
+                || tree.motion_bindings.contains_key(&node)
+                || css_opacity.contains(&node);
             let is_glass = matches!(props.material, Some(Material::Glass(_)));
             let mut content = DeferredContent {
                 glass: false,
+                background_glass: false,
                 text: capabilities.text
                     && matches!(
                         render.element_type,
@@ -75,12 +87,14 @@ impl RenderTree {
                         tree,
                         child,
                         Scope {
+                            background_group: scope.background_group || (!foreground && isolates),
                             foreground: foreground || is_glass,
                             glass: scope.glass || is_glass || !own_native,
                             portal: scope.portal || props.is_overlay_root,
                         },
                         capabilities,
                         glass_layers,
+                        css_opacity,
                         groups,
                     );
                 native &= child_native;
@@ -92,22 +106,26 @@ impl RenderTree {
                 content.svg |= child_content.svg;
                 content.image |= child_content.image;
                 content.glass |= child_content.glass;
+                content.background_glass |= child_content.background_glass;
             }
-            // Foreground ancestors retain their paint in the glass scope.
-            // Background wrappers may join when they have no separate paint.
+            let transparent_wrapper = children.len() == 1
+                && props.background.is_none()
+                && props.material.is_none()
+                && props.shadow.is_empty()
+                && props.border_width == 0.0
+                && !props.border_sides.has_any()
+                && props.outline_width == 0.0;
+            // Painted background isolation stays at its background anchor.
             native |= own_native
                 && !is_glass
                 && content.glass
                 && compatible_children
                 && matches!(render.element_type, ElementType::Div)
                 && (foreground
-                    || (children.len() == 1
-                        && props.background.is_none()
-                        && props.material.is_none()
-                        && props.shadow.is_empty()
-                        && props.border_width == 0.0
-                        && !props.border_sides.has_any()
-                        && props.outline_width == 0.0));
+                    || transparent_wrapper
+                    || isolates
+                    || scope.background_group
+                    || content.background_glass);
             native &= !(is_glass && has_portal);
             content.glass |= is_glass && native;
             // Unsupported moving or effect owners retain their descendants' fallback pass.
@@ -123,6 +141,10 @@ impl RenderTree {
                 groups.truncate(start);
             }
             content.glass &= native;
+            content.background_glass = content.glass
+                && !is_glass
+                && !foreground
+                && (!transparent_wrapper || content.background_glass);
             let needs_content_group = content.any()
                 && ((foreground && props.background.is_some())
                     || props.opacity < 1.0
@@ -152,7 +174,7 @@ impl RenderTree {
             {
                 groups.push((node, content));
             }
-            // Glass scopes retain a foreground anchor.
+            // Compatible ancestors choose the glass scope's final anchor.
             (
                 native && !content.glass,
                 has_foreground,
@@ -161,6 +183,21 @@ impl RenderTree {
                 has_portal,
             )
         }
+        // Keep glass ownership at settled CSS opacity endpoints.
+        let css_opacity = self
+            .css_anim_store
+            .lock()
+            .ok()
+            .map(|store| {
+                store
+                    .animations
+                    .iter()
+                    .chain(&store.transitions)
+                    .filter(|(_, animation)| animation.current_properties.opacity.is_some())
+                    .filter_map(|(stable, _)| self.stable_to_layout.get(stable).copied())
+                    .collect()
+            })
+            .unwrap_or_default();
         let mut groups = self.cross_stream_groups.borrow_mut();
         groups.clear();
         if let Some(root) = self.root {
@@ -171,6 +208,7 @@ impl RenderTree {
                 Scope::default(),
                 capabilities,
                 glass_layers,
+                &css_opacity,
                 &mut planned,
             );
             groups.extend(planned);

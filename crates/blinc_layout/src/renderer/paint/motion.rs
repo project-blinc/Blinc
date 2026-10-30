@@ -62,6 +62,7 @@ impl RenderTree {
         self.plan_cross_stream_groups(
             super::super::DeferredContent {
                 glass: false,
+                background_glass: false,
                 text: ctx.supports_deferred_text(),
                 svg: ctx.supports_deferred_svg(),
                 image: ctx.supports_deferred_image(),
@@ -881,7 +882,9 @@ impl RenderTree {
 
         // Determine if this node is a glass element
         let is_glass = matches!(render_node.props.material, Some(Material::Glass(_)));
-        let grouped_glass = cross_stream_group && cross_stream_content.is_some_and(|c| c.glass);
+        let glass_group = cross_stream_group && cross_stream_content.is_some_and(|c| c.glass);
+        let grouped_glass =
+            glass_group && cross_stream_content.is_some_and(|content| !content.background_glass);
         let children_glass_depth = if is_glass {
             glass_depth + 1
         } else {
@@ -948,7 +951,7 @@ impl RenderTree {
             && effective_layer == RenderLayer::Foreground
             && render_node.props.background.is_some();
         // Retain a moving native ancestor before any of its descendants change owners.
-        let has_opacity_layer = grouped_glass
+        let has_opacity_layer = glass_group
             || foreground_content_group
             || (cross_stream_group && in_motion_subtree)
             || keep_motion_group

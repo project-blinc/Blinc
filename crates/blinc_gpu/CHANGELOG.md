@@ -5,6 +5,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Glass inside background isolation samples prior paint from pooled snapshots, including inherited translucent paint, images and GPU output. Background/backdrop dispatch shares the bake; ordinary foreground glass retains its prepared-backdrop path.
 - Native glass groups retain their panel, clips and child content through opacity/effects and foreground replay. Tight pooled surfaces preserve world-space backdrop coordinates; eligible opaque draws retain the direct glass path.
 - Nested native overlays paint after their late owner's ordinary foreground content in tree order across both streams. Intermediate native layer state follows each nested panel, while the enclosing overlay's opacity/effects remain joint.
 - Inline portals carry supported native ancestor layers into their late dynamic scope, preserving opacity/effects and restoring ordinary sibling ownership afterward.

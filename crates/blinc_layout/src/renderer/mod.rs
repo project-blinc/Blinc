@@ -607,6 +607,7 @@ struct DeferredContent {
     svg: bool,
     image: bool,
     glass: bool,
+    background_glass: bool,
 }
 
 impl DeferredContent {

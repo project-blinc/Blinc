@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 
 mod alpha;
 mod glass;
+mod glass_backdrop;
 mod gpu_pass;
 mod named;
 pub(super) use alpha::AlphaPass;
@@ -569,6 +570,7 @@ impl GpuRenderer {
         self.render_with_clear_simple(&target.view, &PrimitiveBatch::new(), [0.0; 4]);
         let items = nodes(batch);
         let mut outputs = named::Outputs::new(&items);
+        outputs.local_glass_frame = glass_backdrop::frame(&items);
         self.draw_overlay_nodes(
             &target.view,
             batch,
@@ -633,6 +635,23 @@ impl GpuRenderer {
     ) {
         let batch = resolved_batch(batch);
         let batch = batch.as_ref();
+        if backdrop.is_none() && batch.has_background_glass() {
+            let size = self.viewport_size;
+            let (texture, _) =
+                self.render_composite_subtree(batch, (0.0, 0.0), (size.0 as f32, size.1 as f32));
+            self.render_images(
+                target,
+                &texture.view,
+                &[crate::GpuImageInstance::new(
+                    0.0,
+                    0.0,
+                    size.0 as f32,
+                    size.1 as f32,
+                )],
+            );
+            self.layer_texture_cache.release(texture);
+            return;
+        }
         self.layer_texture_cache.evict_oversized();
         let items = nodes(batch);
         let mut outputs = named::Outputs::new(&items);
@@ -669,7 +688,16 @@ impl GpuRenderer {
         for node in items {
             match node {
                 Node::Glass(glass) => {
-                    if let Some(backdrop) = &outputs.glass_backdrop {
+                    if let Some(frame) = outputs.local_glass_frame {
+                        let backdrop = self.capture_glass_backdrop(
+                            target,
+                            origin,
+                            frame,
+                            outputs.glass_backdrop.as_ref(),
+                        );
+                        self.draw_group_glass(target, &backdrop.view, glass, origin);
+                        self.layer_texture_cache.release(backdrop);
+                    } else if let Some(backdrop) = &outputs.glass_backdrop {
                         self.draw_group_glass(target, backdrop, glass, origin);
                     }
                 }
@@ -761,6 +789,20 @@ impl GpuRenderer {
                     if tight.0 > limit || tight.1 > limit {
                         continue;
                     }
+                    let backdrop = outputs
+                        .local_glass_frame
+                        .filter(|_| glass_backdrop::frame(children).is_some())
+                        .map(|frame| {
+                            self.capture_glass_backdrop(
+                                target,
+                                origin,
+                                frame,
+                                outputs.glass_backdrop.as_ref(),
+                            )
+                        });
+                    let previous = backdrop
+                        .as_ref()
+                        .map(|backdrop| outputs.glass_backdrop.replace(backdrop.view.clone()));
                     let texture =
                         self.layer_texture_cache
                             .acquire_exact(&self.device, tight, false);
@@ -768,6 +810,12 @@ impl GpuRenderer {
                     self.viewport_size = texture.size;
                     self.render_with_clear_simple(&texture.view, &PrimitiveBatch::new(), [0.0; 4]);
                     self.draw_overlay_nodes(&texture.view, batch, children, min, samples, outputs);
+                    if let Some(previous) = previous {
+                        outputs.glass_backdrop = previous;
+                    }
+                    if let Some(backdrop) = backdrop {
+                        self.layer_texture_cache.release(backdrop);
+                    }
                     self.viewport_size = size;
                     let straight =
                         self.layer_texture_cache

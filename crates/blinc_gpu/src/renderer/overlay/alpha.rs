@@ -104,12 +104,24 @@ impl AlphaPass {
         input: &LayerTexture,
         output: &LayerTexture,
     ) {
+        self.straighten_view(device, queue, layout, sampler, &input.view, output);
+    }
+
+    pub(crate) fn straighten_view(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        layout: &wgpu::BindGroupLayout,
+        sampler: &wgpu::Sampler,
+        input: &wgpu::TextureView,
+        output: &LayerTexture,
+    ) {
         self.draw(
             device,
             queue,
             layout,
             sampler,
-            &input.view,
+            input,
             output,
             &self.straight,
             &self.uniforms,
