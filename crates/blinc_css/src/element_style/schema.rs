@@ -23,6 +23,24 @@ use crate::parser::{CssAnimation, CssTransitionSet};
 /// All properties are optional - when merging styles, only set properties
 /// will override. This enables state-specific styling where you only
 /// override the properties that change for that state.
+/// The generic fallback of a `font-family` list.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StyleGenericFont {
+    #[default]
+    System,
+    Monospace,
+    Serif,
+    SansSerif,
+}
+
+/// A `font-family` list reduced to what the text pipeline takes: the first
+/// named family and the first generic keyword.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StyleFontFamily {
+    pub name: Option<String>,
+    pub generic: StyleGenericFont,
+}
+
 /// One side of a per-side border; an unset field falls back to the uniform border.
 #[derive(Clone, Copy, Default, Debug, PartialEq)]
 pub struct BorderSideStyle {
@@ -59,6 +77,8 @@ pub struct ElementStyle {
     pub opacity: Option<f32>,
     /// Text foreground color
     pub text_color: Option<blinc_core::Color>,
+    /// Font family
+    pub font_family: Option<StyleFontFamily>,
     /// Font size in pixels
     pub font_size: Option<f32>,
     /// Text shadow (offset, blur, color)

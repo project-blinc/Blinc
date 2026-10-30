@@ -832,3 +832,23 @@ fn animation_none_names_no_keyframes() {
         .expect("animation");
     assert!(a.name.is_empty());
 }
+
+#[test]
+fn font_family_keeps_the_first_name_and_generic() {
+    let sheet = crate::parser::Stylesheet::parse(
+        r#".a { font-family: "Noto Sans", system-ui, sans-serif; } .b { font-family: 'JetBrains Mono', monospace; } .c { font-family: serif; }"#,
+    )
+    .expect("css");
+    let fam = |c: &str| {
+        sheet
+            .get_class(c)
+            .and_then(|s| s.font_family.clone())
+            .expect(c)
+    };
+    assert_eq!(fam("a").name.as_deref(), Some("Noto Sans"));
+    assert_eq!(fam("a").generic, StyleGenericFont::System);
+    assert_eq!(fam("b").name.as_deref(), Some("JetBrains Mono"));
+    assert_eq!(fam("b").generic, StyleGenericFont::Monospace);
+    assert_eq!(fam("c").name, None);
+    assert_eq!(fam("c").generic, StyleGenericFont::Serif);
+}

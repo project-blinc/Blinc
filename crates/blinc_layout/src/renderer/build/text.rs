@@ -127,6 +127,7 @@ impl RenderTree {
         // CSS text-align overrides builder value
         let align = props.text_align.unwrap_or(info.align);
         TextData {
+            explicit_font: info.explicit_font,
             content: info.content,
             font_size: info.font_size,
             color: info.color,

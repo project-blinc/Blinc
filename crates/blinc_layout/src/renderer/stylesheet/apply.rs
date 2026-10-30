@@ -241,6 +241,21 @@ impl RenderTree {
             props.tiers.mark(StyleProp::TextShadow, tier);
             props.text_shadow = Some(*ts);
         }
+        // Font family
+        if let Some(family) = &style.font_family {
+            use crate::element_style::StyleGenericFont as G;
+            let generic = match family.generic {
+                G::System => crate::div::GenericFont::System,
+                G::Monospace => crate::div::GenericFont::Monospace,
+                G::Serif => crate::div::GenericFont::Serif,
+                G::SansSerif => crate::div::GenericFont::SansSerif,
+            };
+            props.font_family = Some(match &family.name {
+                Some(name) => crate::div::FontFamily::named_with_fallback(name.clone(), generic),
+                None => crate::div::FontFamily::generic(generic),
+            });
+            props.tiers.mark(StyleProp::FontFamily, tier);
+        }
         // Font size
         if let Some(fs) = style.font_size {
             props.tiers.mark(StyleProp::FontSize, tier);

@@ -369,6 +369,8 @@ pub struct RenderProps {
     pub tiers: crate::style_tier::PropTiers,
     /// Text foreground color override (when set, overrides TextData.color during rendering)
     pub text_color: Option<[f32; 4]>,
+    /// Font family override from a stylesheet
+    pub font_family: Option<crate::div::FontFamily>,
     /// Font size override (when set, overrides TextData.font_size during rendering)
     pub font_size: Option<f32>,
     /// Text shadow (offset, blur, color)
@@ -542,6 +544,7 @@ impl Default for RenderProps {
             z_index: 0,
             tiers: Default::default(),
             text_color: None,
+            font_family: None,
             font_size: None,
             text_shadow: None,
             font_weight: None,

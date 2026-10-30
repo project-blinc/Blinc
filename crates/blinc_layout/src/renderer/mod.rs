@@ -564,13 +564,25 @@ pub struct CompositeBindingMeta {
 }
 
 /// The font properties a text node is measured and drawn at.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 struct TextLook {
     font_size: f32,
     line_height: f32,
     weight: crate::div::FontWeight,
     italic: bool,
     letter_spacing: f32,
+    family: crate::div::FontFamily,
+}
+
+/// Font properties a text node takes from its nearest ancestors that set
+/// them, as CSS inherits them.
+#[derive(Default)]
+struct InheritedFont {
+    font_size: Option<f32>,
+    line_height: Option<f32>,
+    weight: Option<crate::div::FontWeight>,
+    letter_spacing: Option<f32>,
+    family: Option<crate::div::FontFamily>,
 }
 
 impl TextLook {
@@ -582,21 +594,55 @@ impl TextLook {
             weight: text.weight,
             italic: text.italic,
             letter_spacing: text.letter_spacing,
+            family: text.font_family.clone(),
         }
     }
 
     /// What it should be measured at: the overrides in `props`, over what it
     /// was built with.
-    fn wanted(text: &crate::renderer::TextData, props: &RenderProps) -> Self {
+    fn wanted(
+        text: &crate::renderer::TextData,
+        props: &RenderProps,
+        inherited: &InheritedFont,
+    ) -> Self {
+        use crate::div::font_field as field;
         let built = Self::of(text);
+        // The node's own rule beats the builder's call, which beats what a
+        // container passes down.
+        let inherit = |bit: u8| text.explicit_font & bit == 0;
         Self {
-            font_size: props.font_size.unwrap_or(built.font_size),
-            line_height: props.line_height.unwrap_or(built.line_height),
-            weight: props.font_weight.unwrap_or(built.weight),
+            font_size: props
+                .font_size
+                .or(inherit(field::SIZE)
+                    .then_some(inherited.font_size)
+                    .flatten())
+                .unwrap_or(built.font_size),
+            line_height: props
+                .line_height
+                .or(inherit(field::LINE_HEIGHT)
+                    .then_some(inherited.line_height)
+                    .flatten())
+                .unwrap_or(built.line_height),
+            weight: props
+                .font_weight
+                .or(inherit(field::WEIGHT).then_some(inherited.weight).flatten())
+                .unwrap_or(built.weight),
             italic: props
                 .font_style
                 .map_or(built.italic, |style| style.is_italic()),
-            letter_spacing: props.letter_spacing.unwrap_or(built.letter_spacing),
+            letter_spacing: props
+                .letter_spacing
+                .or(inherit(field::LETTER_SPACING)
+                    .then_some(inherited.letter_spacing)
+                    .flatten())
+                .unwrap_or(built.letter_spacing),
+            family: props
+                .font_family
+                .clone()
+                .or(inherit(field::FAMILY)
+                    .then(|| inherited.family.clone())
+                    .flatten())
+                .unwrap_or(built.family),
         }
     }
 }
@@ -2201,6 +2247,26 @@ impl RenderTree {
         }
     }
 
+    /// The font properties of the nearest ancestors that set them.
+    fn inherited_font(&self, id: LayoutNodeId) -> InheritedFont {
+        let mut found = InheritedFont::default();
+        let mut current = self.element_registry.get_parent(id);
+        while let Some(ancestor) = current {
+            if let Some(node) = self.render_nodes.get(&ancestor) {
+                let p = &node.props;
+                found.font_size = found.font_size.or(p.font_size);
+                found.line_height = found.line_height.or(p.line_height);
+                found.weight = found.weight.or(p.font_weight);
+                found.letter_spacing = found.letter_spacing.or(p.letter_spacing);
+                if found.family.is_none() {
+                    found.family = p.font_family.clone();
+                }
+            }
+            current = self.element_registry.get_parent(ancestor);
+        }
+        found
+    }
+
     /// Bring each text node's measured state in line with the overrides on
     /// its `RenderProps`.
     ///
@@ -2224,7 +2290,8 @@ impl RenderTree {
                 let ElementType::Text(text) = &render_node.element_type else {
                     return None;
                 };
-                let wanted = TextLook::wanted(text, &render_node.props);
+                let inherited = self.inherited_font(id);
+                let wanted = TextLook::wanted(text, &render_node.props, &inherited);
                 (wanted != TextLook::of(text)).then_some((id, wanted))
             })
             .collect();
@@ -2246,8 +2313,8 @@ impl RenderTree {
         };
 
         let mut options = crate::text_measure::TextLayoutOptions::new();
-        options.font_name = text.font_family.name.clone();
-        options.generic_font = text.font_family.generic;
+        options.font_name = look.family.name.clone();
+        options.generic_font = look.family.generic;
         options.font_weight = look.weight.weight();
         options.italic = look.italic;
         options.line_height = look.line_height;
@@ -2260,6 +2327,7 @@ impl RenderTree {
         text.weight = look.weight;
         text.italic = look.italic;
         text.letter_spacing = look.letter_spacing;
+        text.font_family = look.family.clone();
         text.measured_width = metrics.width;
         text.ascender = metrics.ascender;
         text.half_leading = crate::tree::half_leading(&metrics);
@@ -2271,6 +2339,8 @@ impl RenderTree {
             context.font_weight = look.weight.weight();
             context.italic = look.italic;
             context.letter_spacing = look.letter_spacing;
+            context.font_name = look.family.name.clone();
+            context.generic_font = look.family.generic;
         });
         if !measured_by_taffy {
             // Non-wrapping text has no context: it is a fixed-size box.

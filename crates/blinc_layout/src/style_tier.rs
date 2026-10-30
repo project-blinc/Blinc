@@ -24,6 +24,7 @@ pub enum StyleProp {
     MaskImage,
     TextColor,
     TextShadow,
+    FontFamily,
     FontSize,
     FontWeight,
     FontStyle,

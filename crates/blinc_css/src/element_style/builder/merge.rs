@@ -33,6 +33,10 @@ impl ElementStyle {
             render_layer: other.render_layer.or(self.render_layer),
             opacity: other.opacity.or(self.opacity),
             text_color: other.text_color.or(self.text_color),
+            font_family: other
+                .font_family
+                .clone()
+                .or_else(|| self.font_family.clone()),
             font_size: other.font_size.or(self.font_size),
             text_shadow: other.text_shadow.or(self.text_shadow),
             font_weight: other.font_weight.or(self.font_weight),
@@ -216,6 +220,7 @@ impl ElementStyle {
             || self.overflow_y.is_some()
             || self.border_width.is_some()
             || self.border_color.is_some()
+            || self.font_family.is_some()
             || self.border_top.is_some()
             || self.border_right.is_some()
             || self.border_bottom.is_some()

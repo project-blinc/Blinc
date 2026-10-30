@@ -38,6 +38,9 @@ use crate::tree::{LayoutNodeId, LayoutTree};
 pub struct Text {
     /// The text content
     content: String,
+    /// Which font fields were set with a call on this text, so a container's
+    /// font rule does not replace them.
+    explicit_font: u8,
     /// Font size in pixels
     font_size: f32,
     /// Text color
@@ -121,6 +124,7 @@ impl Text {
 
         let mut text = Self {
             content: decoded_content,
+            explicit_font: 0,
             font_size: 14.0,
             color: Color::BLACK,
             explicit_color: false,
@@ -208,6 +212,7 @@ impl Text {
             size.into_reactive(),
             PropertyId::FontSize,
             |text, size| {
+                text.explicit_font |= crate::div::font_field::SIZE;
                 text.font_size = *size;
                 // Update estimated layout size based on font size
                 // This is a rough estimate; actual size depends on text content
@@ -342,6 +347,7 @@ impl Text {
             weight.into_reactive(),
             PropertyId::FontWeight,
             |text, weight| {
+                text.explicit_font |= crate::div::font_field::WEIGHT;
                 text.weight = *weight;
                 text.update_size_estimate();
             },
@@ -462,6 +468,7 @@ impl Text {
     /// Set font family
     pub fn font_family(mut self, family: FontFamily) -> Self {
         self.font_family = family;
+        self.explicit_font |= crate::div::font_field::FAMILY;
         // Re-measure since different fonts have different character widths
         self.update_size_estimate();
         self
@@ -529,7 +536,10 @@ impl Text {
         self.follow(
             spacing.into_reactive(),
             PropertyId::LetterSpacing,
-            |text, spacing| text.letter_spacing = *spacing,
+            |text, spacing| {
+                text.explicit_font |= crate::div::font_field::LETTER_SPACING;
+                text.letter_spacing = *spacing;
+            },
             |props, spacing| props.letter_spacing = Some(spacing),
         )
     }
@@ -710,7 +720,10 @@ impl Text {
         self.follow(
             multiplier.into_reactive(),
             PropertyId::LineHeight,
-            |text, multiplier| text.line_height = *multiplier,
+            |text, multiplier| {
+                text.explicit_font |= crate::div::font_field::LINE_HEIGHT;
+                text.line_height = *multiplier;
+            },
             |props, multiplier| props.line_height = Some(multiplier),
         )
     }
@@ -818,6 +831,7 @@ impl ElementBuilder for Text {
 
     fn text_render_info(&self) -> Option<TextRenderInfo> {
         Some(TextRenderInfo {
+            explicit_font: self.explicit_font,
             content: self.content.clone(),
             font_size: self.font_size,
             color: [self.color.r, self.color.g, self.color.b, self.color.a],

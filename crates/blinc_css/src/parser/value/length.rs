@@ -353,3 +353,50 @@ pub(crate) fn parse_letter_spacing(value: &str, font_size: Option<f32>) -> Optio
     }
     parse_length_value(v)
 }
+
+/// A `font-family` list: the first named family and the first generic
+/// keyword. Quotes around names are dropped.
+pub(crate) fn parse_font_family(value: &str) -> Option<crate::element_style::StyleFontFamily> {
+    use crate::element_style::{StyleFontFamily, StyleGenericFont};
+    let mut family = StyleFontFamily::default();
+    let mut generic_seen = false;
+    let mut any = false;
+    let (mut depth, mut start) = (0usize, 0usize);
+    let mut items = Vec::new();
+    for (i, ch) in value.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                items.push(&value[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    items.push(&value[start..]);
+    for item in items {
+        let item = item.trim().trim_matches(|c| c == '"' || c == '\'').trim();
+        if item.is_empty() {
+            continue;
+        }
+        any = true;
+        let generic = match item.to_ascii_lowercase().as_str() {
+            "monospace" | "ui-monospace" => Some(StyleGenericFont::Monospace),
+            "serif" | "ui-serif" => Some(StyleGenericFont::Serif),
+            "sans-serif" | "ui-sans-serif" => Some(StyleGenericFont::SansSerif),
+            "system-ui" | "-apple-system" | "blinkmacsystemfont" => Some(StyleGenericFont::System),
+            _ => None,
+        };
+        match generic {
+            Some(g) if !generic_seen => {
+                family.generic = g;
+                generic_seen = true;
+            }
+            Some(_) => {}
+            None if family.name.is_none() => family.name = Some(item.to_string()),
+            None => {}
+        }
+    }
+    any.then_some(family)
+}

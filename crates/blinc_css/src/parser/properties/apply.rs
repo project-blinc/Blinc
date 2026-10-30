@@ -31,6 +31,11 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
                 style.text_color = Some(c);
             }
         }
+        "font-family" => {
+            if let Some(family) = parse_font_family(value) {
+                style.font_family = Some(family);
+            }
+        }
         "font-size" if is_inherit_keyword(value) => {}
         "font-size" => {
             if let Some(px) = parse_length_value(value) {

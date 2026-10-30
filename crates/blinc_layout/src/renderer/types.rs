@@ -81,6 +81,8 @@ pub enum ElementType {
 /// Text data for rendering
 #[derive(Clone)]
 pub struct TextData {
+    /// Font fields the builder set itself ([`crate::div::font_field`]).
+    pub explicit_font: u8,
     pub content: String,
     pub font_size: f32,
     pub color: [f32; 4],

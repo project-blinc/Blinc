@@ -47,6 +47,13 @@ pub(crate) fn apply_property_with_errors(
                 errors.push(ParseError::invalid_value(name, value, line, column));
             }
         }
+        "font-family" => {
+            if let Some(family) = parse_font_family(value) {
+                style.font_family = Some(family);
+            } else {
+                errors.push(ParseError::invalid_value(name, value, line, column));
+            }
+        }
         "font-size" if is_inherit_keyword(value) => {}
         "font-size" => {
             if let Some(px) = parse_length_value(value) {

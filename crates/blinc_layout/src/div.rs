@@ -4838,6 +4838,15 @@ pub enum TextVerticalAlign {
     Baseline,
 }
 
+/// Bits for [`TextRenderInfo::explicit_font`].
+pub mod font_field {
+    pub const SIZE: u8 = 1;
+    pub const WEIGHT: u8 = 1 << 1;
+    pub const LINE_HEIGHT: u8 = 1 << 2;
+    pub const LETTER_SPACING: u8 = 1 << 3;
+    pub const FAMILY: u8 = 1 << 4;
+}
+
 /// Generic font category for fallback when a named font isn't available
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GenericFont {
@@ -4924,6 +4933,9 @@ impl FontFamily {
 /// Text render data extracted from element
 #[derive(Clone)]
 pub struct TextRenderInfo {
+    /// Which font fields the builder set itself ([`font_field`]); an
+    /// inherited value from a container never replaces those.
+    pub explicit_font: u8,
     pub content: String,
     pub font_size: f32,
     pub color: [f32; 4],
