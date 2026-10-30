@@ -702,3 +702,24 @@ fn css_macro_builds_a_stylesheet_of_several_classes() {
     assert!(sheet.get_class("card").is_some());
     assert!(sheet.get_class("title").is_some());
 }
+
+#[test]
+fn layer_block_marks_its_rules_as_a_components() {
+    let sheet = css!(
+        r#"
+        @layer components {
+            .card { opacity: 0.5; }
+            .card:hover { opacity: 0.6; }
+        }
+        .page { opacity: 0.9; }
+        "#
+    );
+    let card = sheet.get_class("card").expect("layered rule parsed");
+    assert!(card.component);
+    let page = sheet.get_class("page").expect("unlayered rule parsed");
+    assert!(!page.component);
+    let hover = sheet
+        .get_class_with_state("card", crate::parser::ElementState::Hover)
+        .expect("layered state rule parsed");
+    assert!(hover.component);
+}

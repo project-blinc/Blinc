@@ -20,9 +20,14 @@
 
 /// Default CSS for all blinc_cn components.
 ///
+/// Wrapped in `@layer components`, so every rule sits below the
+/// application's own rules whatever their specificity.
+///
 /// Uses `var(--theme-token)` for all color references.
 /// Each component defines `var(--cn-component-prop, var(--fallback))` for overridability.
-pub const CN_STYLES: &str = r#"
+pub const CN_STYLES: &str = concat!(
+    "@layer components {\n",
+    r#"
 /* ============================================================================
    Typography base — every cn widget inherits the theme's canonical
    sans, body line-height, and dense-HID letter-spacing. CN_STYLES
@@ -1395,4 +1400,6 @@ pub const CN_STYLES: &str = r#"
     color: var(--text-secondary);
     font-size: var(--text-sm);
 }
-"#;
+"#,
+    "\n}\n"
+);

@@ -1374,6 +1374,20 @@ Applying a single `ElementStyle` with `Div::style(&style)` makes it the element'
 
 > `css!` used to return a single `ElementStyle`. That form is now `css_style!`; the syntax inside the braces is unchanged.
 
+### Component layers: `@layer`
+
+Rules inside `@layer components { ... }` are a component's own defaults. They sit below every unlayered rule, whatever the specificity or the order the sheets were added in, so an application stylesheet themes a component without matching its selectors. blinc_cn's `CN_STYLES` is such a layer.
+
+```css
+@layer components {
+    .card       { background: var(--surface); border-radius: 8px; }
+    .card:hover { background: var(--surface-hover); }
+}
+.card { border-radius: 0; }   /* wins */
+```
+
+Only the block form is supported, and it is a single level: `@layer a, b;` ordering statements are skipped. Id rules inside a layer are not layered.
+
 ### Quick Example
 
 ```rust

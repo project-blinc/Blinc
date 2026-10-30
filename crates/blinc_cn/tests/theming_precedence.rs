@@ -287,3 +287,24 @@ fn a_cn_button_radius_is_a_component_default() {
     assert!(tiers.has(StyleProp::BorderRadius, StyleTier::Default));
     assert!(!tiers.has(StyleProp::BorderRadius, StyleTier::Owned));
 }
+
+/// cn's own stylesheet is a layer: an app rule beats it even when the app's
+/// rule was added first, which plain cascade order would have let cn win.
+#[test]
+fn the_app_beats_cn_styles_whichever_was_added_first() {
+    use blinc_layout::css_parser::Stylesheet;
+    init();
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let cn = Stylesheet::parse_with_variables(blinc_cn::cn_styles::CN_STYLES, &vars).expect("cn");
+    let app = Stylesheet::parse(".cn-button { border-radius: 0px; }").expect("css");
+
+    let mut sheet = Stylesheet::parse("").expect("css");
+    sheet.merge(app);
+    sheet.merge(cn);
+    let mut tree = RenderTree::from_element(&button());
+    tree.set_stylesheet(sheet);
+    tree.apply_stylesheet_layout_overrides();
+    tree.apply_stylesheet_base_styles();
+    tree.compute_layout(300.0, 80.0);
+    assert_eq!(radius(&tree), 0.0, "cn's size rule outranked the app's");
+}

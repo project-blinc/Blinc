@@ -221,6 +221,27 @@ pub(crate) fn parse_stylesheet_with_errors<'a>(
             }
         }
 
+        // `@layer name { ... }`: the rules inside are a component's own and
+        // sit below every unlayered rule, whatever their specificity.
+        if trimmed.starts_with("@layer") {
+            if let Some((inner, rest)) = layer_block(trimmed) {
+                if let Ok((_, mut layered)) =
+                    parse_stylesheet_with_errors(inner, errors, &parsed_variables)
+                {
+                    for (_, style) in layered.complex_rules.iter_mut() {
+                        style.component = true;
+                    }
+                    rules.extend(layered.rules);
+                    complex_rules.extend(layered.complex_rules);
+                    parsed_variables.extend(layered.variables);
+                    parsed_keyframes.extend(layered.keyframes);
+                    parsed_flows.extend(layered.flows);
+                }
+                remaining = rest;
+                continue;
+            }
+        }
+
         // Try to parse @keyframes block
         if trimmed.starts_with("@keyframes") {
             match keyframes_block(trimmed, errors, &parsed_variables) {
@@ -311,6 +332,35 @@ pub(crate) fn parse_stylesheet_with_errors<'a>(
             flows: parsed_flows,
         },
     ))
+}
+
+/// Splits `@layer name { body } rest` into `(body, rest)`. A block-less
+/// `@layer a, b;` ordering statement yields an empty body, since layers
+/// here are a single level. `None` if the braces do not balance.
+fn layer_block(input: &str) -> Option<(&str, &str)> {
+    let open = input.find('{');
+    let semi = input.find(';');
+    if let Some(semi) = semi {
+        if open.is_none_or(|open| semi < open) {
+            return Some(("", &input[semi + 1..]));
+        }
+    }
+    let open = open?;
+    let mut depth = 0usize;
+    for (i, ch) in input[open..].char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    let close = open + i;
+                    return Some((&input[open + 1..close], &input[close + 1..]));
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Recovery helper for the stylesheet loop: when a rule fails to
