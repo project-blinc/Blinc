@@ -1,6 +1,6 @@
 # Button
 
-Buttons trigger actions or events.
+Buttons trigger actions.
 
 ## Basic Usage
 
@@ -8,47 +8,45 @@ Buttons trigger actions or events.
 use blinc_cn::prelude::*;
 
 button("Click me")
-    .on_click(|| println!("Clicked!"))
+    .on_click(|_| println!("Clicked!"))
 ```
+
+The label takes a string or a signal, and is patched in place when it changes.
 
 ## Variants
 
-Buttons come in several visual variants:
-
 ```rust
-// Primary (default) - Main actions
+// Primary (default) - main actions
 button("Save").variant(ButtonVariant::Primary)
 
-// Secondary - Alternative actions
+// Secondary - alternative actions
 button("Cancel").variant(ButtonVariant::Secondary)
 
-// Destructive - Dangerous actions
+// Destructive - dangerous actions
 button("Delete").variant(ButtonVariant::Destructive)
 
-// Outline - Bordered style
+// Outline - bordered
 button("Edit").variant(ButtonVariant::Outline)
 
-// Ghost - Minimal style
+// Ghost - minimal
 button("More").variant(ButtonVariant::Ghost)
 
-// Link - Looks like a link
+// Link - looks like a link
 button("Learn more").variant(ButtonVariant::Link)
 ```
 
 ## Sizes
 
 ```rust
-// Small
-button("Small").size(ButtonSize::Sm)
-
-// Default
-button("Default").size(ButtonSize::Default)
-
-// Large
-button("Large").size(ButtonSize::Lg)
+button("Small").size(ButtonSize::Small)
+button("Default").size(ButtonSize::Medium)
+button("Large").size(ButtonSize::Large)
 
 // Icon only (square)
 button("").size(ButtonSize::Icon).icon(icons::SETTINGS)
+
+// A size of your own: width, height
+button("Wide").size(ButtonSize::Custom(160.0, 48.0))
 ```
 
 ## With Icons
@@ -56,73 +54,75 @@ button("").size(ButtonSize::Icon).icon(icons::SETTINGS)
 ```rust
 use blinc_icons::icons;
 
-// Icon before text
-button("Settings")
-    .icon(icons::SETTINGS)
+button("Settings").icon(icons::SETTINGS)
 
-// Icon after text
+// After the label
 button("Next")
-    .icon_right(icons::ARROW_RIGHT)
-
-// Icon only
-button("")
-    .size(ButtonSize::Icon)
-    .icon(icons::PLUS)
+    .icon(icons::ARROW_RIGHT)
+    .icon_position(IconPosition::End)
 ```
 
-## States
+## Disabled
+
+`disabled` takes a bool or a signal, so a button can follow a state:
 
 ```rust
-// Disabled
-button("Disabled")
-    .disabled(true)
-
-// Loading
-button("Saving...")
-    .loading(true)
-
-// Full width
-button("Submit")
-    .full_width(true)
+button("Disabled").disabled(true)
+button("Save").disabled(&is_saving)
 ```
 
-## Event Handling
+A disabled button does not click and takes the disabled look.
+
+## Styling
+
+A button's look is stylesheet. Its fill, text colour, border and shadow, and
+how they change on hover, press and while disabled, are the `.cn-button`
+rules of `CN_STYLES`, with a `transition`, so a button eases between states.
+Each variant and size has a class to hang your own rules on:
+
+| Class | Matches |
+|-------|---------|
+| `.cn-button` | every cn button |
+| `.cn-button--primary`, `--secondary`, `--destructive`, `--outline`, `--ghost`, `--link` | the variant |
+| `.cn-button--sm`, `--md`, `--lg`, `--icon` | the size |
+
+```css
+/* A brand colour for primary buttons, eased on hover. Your rules win over
+   cn's whatever their specificity. */
+.cn-button--primary { background: #6d28d9; }
+.cn-button--primary:hover:not(:disabled) { background: #7c3aed; }
+.cn-button--primary:active:not(:disabled) { background: #5b21b6; }
+
+/* One button of your own */
+.danger { background: #c0392b; transition: background-color 150ms ease; }
+.danger:disabled { background: #555; color: #999; }
+```
 
 ```rust
-button("Submit")
-    .on_click(|| {
-        // Handle click
-        submit_form();
-    })
-    .on_hover(|hovering| {
-        // Handle hover state
-        if hovering {
-            show_tooltip();
-        }
-    })
+button("Delete").class("danger")
 ```
+
+`:hover:not(:disabled)` keeps the rule off a disabled button. `:active`
+matches while the pointer is down on the button or anything inside it, as on
+the web. Text and icons inside take the button's `color`, so a rule that
+changes it changes them too.
+
+`.color(..)` on the builder fixes the text colour in every state; a fluent
+value wins over cn's rules, as an inline style does on the web.
 
 ## Button Groups
 
 ```rust
 div()
     .flex_row()
-    .gap(8.0)
+    .gap(2.0)
     .child(button("Save").variant(ButtonVariant::Primary))
     .child(button("Cancel").variant(ButtonVariant::Outline))
 ```
 
+`gap` takes 4px units, so `gap(2.0)` is 8px.
+
 ## Examples
-
-### Form Submit Button
-
-```rust
-button("Create Account")
-    .variant(ButtonVariant::Primary)
-    .size(ButtonSize::Lg)
-    .full_width(true)
-    .on_click(|| handle_submit())
-```
 
 ### Icon Button
 
@@ -131,46 +131,32 @@ button("")
     .size(ButtonSize::Icon)
     .variant(ButtonVariant::Ghost)
     .icon(icons::X)
-    .on_click(|| close_dialog())
+    .on_click(|_| close_dialog())
 ```
 
-### Loading Button
+### A Button That Follows a Signal
 
 ```rust
-let is_loading = use_state_keyed("button_loading", || false);
+let saving = ctx.use_state_keyed("saving", || false);
 
-button(if is_loading.get() { "Saving..." } else { "Save" })
-    .loading(is_loading.get())
-    .disabled(is_loading.get())
+button("Save")
+    .disabled(&saving)
     .on_click({
-        let is_loading = is_loading.clone();
-        move |_| {
-            is_loading.set(true);
-            save_data().then({
-                let is_loading = is_loading.clone();
-                move || is_loading.set(false)
-            });
-        }
+        let saving = saving.clone();
+        move |_| saving.set(true)
     })
 ```
 
 ## API Reference
 
-### Props
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
+| Method | Type | Default | Description |
+|--------|------|---------|-------------|
 | `variant` | `ButtonVariant` | `Primary` | Visual style |
-| `size` | `ButtonSize` | `Default` | Button size |
-| `disabled` | `bool` | `false` | Disable interaction |
-| `loading` | `bool` | `false` | Show loading state |
-| `full_width` | `bool` | `false` | Expand to full width |
-| `icon` | `&str` | `None` | Icon before text |
-| `icon_right` | `&str` | `None` | Icon after text |
-
-### Events
-
-| Event | Type | Description |
-|-------|------|-------------|
-| `on_click` | `Fn()` | Called when clicked |
-| `on_hover` | `Fn(bool)` | Called on hover change |
+| `size` | `ButtonSize` | `Medium` | `Small`, `Medium`, `Large`, `Icon` or `Custom(w, h)` |
+| `disabled` | `bool` or signal | `false` | Disable interaction |
+| `icon` | `&str` | none | An icon from `blinc_icons::icons` |
+| `icon_position` | `IconPosition` | `Start` | `Start` or `End` |
+| `icon_size` | `f32` | label size + 2 | Icon size in px |
+| `color` | `Color` | by variant | Text colour in every state |
+| `on_click` | `Fn(&EventContext)` | none | Called when clicked |
+| `class`, `id` | `&str` | none | Selectors for your own rules |

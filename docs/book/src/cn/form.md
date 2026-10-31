@@ -85,57 +85,172 @@ textarea()
 
 ## Checkbox
 
+A checkbox reads and writes the `State<bool>` it is given:
+
 ```rust
-checkbox()
-    .checked(is_checked)
-    .on_change(|checked| set_checked(checked))
-    .child(label("Accept terms and conditions"))
+let accepted = ctx.use_state_keyed("accepted", || false);
+
+checkbox(&accepted)
+    .label("Accept terms and conditions")
+    .on_change(|checked| println!("checked: {checked}"))
 ```
 
-### Indeterminate State
+```rust
+checkbox(&accepted).size(CheckboxSize::Large)
+checkbox(&accepted).disabled(true)
+```
+
+### Styling
+
+A checkbox is an element with a `checked` attribute while it is checked and
+`disabled` while it cannot be used. Its fill, border colour, hover, the
+disabled palette and the mark's fade-in are the `.cn-checkbox` rules of
+`CN_STYLES`, with a `transition`. Restyle it with rules of your own:
+
+```css
+.my-checkbox:checked { background: #16a34a; border-color: #16a34a; }
+.my-checkbox:hover:not(:disabled):not(:checked) { border-color: #16a34a; }
+```
 
 ```rust
-checkbox()
-    .checked(some_checked)
-    .indeterminate(some_checked && !all_checked)
-    .on_change(|checked| toggle_all(checked))
-    .child(label("Select all"))
+checkbox(&accepted).class("my-checkbox")
 ```
 
 ## Switch
 
-Toggle switch:
-
 ```rust
-switch_()
-    .checked(is_enabled)
-    .on_change(|enabled| set_enabled(enabled))
+let dark = ctx.use_state_keyed("dark", || false);
+
+switch(&dark)
+    .label("Dark mode")
+    .on_change(|on| println!("dark: {on}"))
 ```
 
-### With Label
+```rust
+switch(&dark).size(SwitchSize::Small)   // Small, Medium, Large
+switch(&dark).disabled(true)
+```
+
+### Styling
+
+The switch is the track, with a thumb inside it. The track has a `checked`
+attribute while on; the thumb slides by a transform and shrinks slightly while
+pressed. All of it is the `.cn-switch` rules of `CN_STYLES`, per size
+(`.cn-switch--sm`, `--md`, `--lg`):
+
+```css
+.my-switch:checked { background: #16a34a; }
+.my-switch:checked:hover:not(:disabled) { background: #15803d; }
+```
 
 ```rust
-div()
-    .flex_row()
-    .items_center()
-    .gap(8.0)
-    .child(switch_().checked(dark_mode).on_change(|v| set_dark_mode(v)))
-    .child(label("Dark mode"))
+switch(&dark).class("my-switch")
 ```
 
 ## Radio Group
 
+A group reads and writes a `State<String>` holding the selected value:
+
 ```rust
-radio_group()
-    .value(selected)
-    .on_change(|value| set_selected(value))
-    .child(
-        div().flex_col().gap(8.0)
-            .child(radio_item("small").child(label("Small")))
-            .child(radio_item("medium").child(label("Medium")))
-            .child(radio_item("large").child(label("Large")))
-    )
+let size = ctx.use_state_keyed("size", || "md".to_string());
+
+radio_group(&size)
+    .label("Size")
+    .option("sm", "Small")
+    .option("md", "Medium")
+    .option("lg", "Large")
+    .on_change(|value| println!("size: {value}"))
 ```
+
+```rust
+radio_group(&size).horizontal()
+radio_group(&size).size(RadioSize::Large)
+radio_group(&size).option_disabled("lg", "Large")   // one option
+radio_group(&size).disabled(true)                    // all of them
+```
+
+### Styling
+
+Each ring has a `checked` attribute while its option is selected and
+`disabled` while it cannot be chosen. The ring's border, the dot's fade-in,
+hover (which also highlights an unselected option) and the disabled fill are
+the `.cn-radio` and `.cn-radio-dot` rules of `CN_STYLES`:
+
+```css
+.my-radio:checked { border-color: #16a34a; }
+.my-radio:checked > .cn-radio-dot { background: #16a34a; }
+```
+
+## Toggle
+
+A button that stays pressed: a formatting toggle in a toolbar, or a filter.
+
+```rust
+let bold = ctx.use_state_keyed("bold", || false);
+
+toggle(&bold)
+    .label("B")
+    .on_change(|on| println!("bold: {on}"))
+```
+
+```rust
+// An icon, with or without a label
+toggle(&bold).icon(to_svg(icons::BOLD, 16.0))
+
+// Outline variant: a hairline in both states
+toggle(&bold).label("B").variant(ToggleVariant::Outline)
+
+// Sizes: Small (32px), Medium (36px), Large (40px)
+toggle(&bold).label("B").size(ToggleSize::Small)
+
+toggle(&bold).label("B").disabled(true)
+```
+
+### Styling
+
+A toggle is one element carrying `data-state="on"` or `"off"` (and a
+`checked` attribute while on), `data-variant`, `data-size` and `disabled`.
+Its look is the `.blinc-toggle` rules of the layout stylesheet, ported from
+ashui's: transparent when off, a faint wash of the text colour when on, a
+lighter wash on hover, and a slight shrink while pressed, all eased by a
+`transition`. Sizes and variants are attribute selectors, so your own rules
+can use them the same way:
+
+```css
+.my-toggle[data-state="on"] { background: #16a34a; color: white; }
+.my-toggle[data-size="lg"] { min-width: 48px; }
+```
+
+```rust
+toggle(&bold).class("my-toggle")
+```
+
+## Toggle Group
+
+A row of toggles where one value is selected, such as text alignment. The
+group reads and writes a `State<String>`:
+
+```rust
+let align = ctx.use_state_keyed("align", || "left".to_string());
+
+toggle_group(&align)
+    .variant(ToggleVariant::Outline)
+    .item(toggle_item("left").label("Left"))
+    .item(toggle_item("center").label("Centre"))
+    .item(toggle_item("right").label("Right"))
+    .on_change(|value| println!("align: {value}"))
+
+// Items take an icon too, with or without a label
+toggle_item("add").icon(to_svg(icons::PLUS, 16.0)).label("Add")
+```
+
+Clicking the selected item leaves it selected; to clear the selection, set the
+state to `""` yourself. `.size(..)`, `.disabled(true)` for the group and
+`toggle_item(..).disabled(true)` for one item work as on a toggle.
+
+Each item is a toggle, so the rules above apply to it. The group sets
+`data-variant` and `data-size` for its items, and its rules (`.blinc-toggle-group`)
+give a 4px gap; `.gap(..)` overrides it.
 
 ## Select
 
