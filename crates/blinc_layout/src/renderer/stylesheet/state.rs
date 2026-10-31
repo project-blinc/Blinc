@@ -367,7 +367,7 @@ impl RenderTree {
             // the layout id to a stable id before asking.
             let stable = self.stable_id(node_id);
             let hovered = stable.is_some_and(|s| router.is_hovered(s));
-            let pressed = stable.is_some_and(|s| router.is_pressed(s));
+            let pressed = stable.is_some_and(|s| router.is_active(s));
             let focused = router.is_focused(node_id);
 
             // Apply state styles
@@ -502,7 +502,7 @@ impl RenderTree {
             // pressed by stable id; resolve the layout id first.
             let pressed_here = self
                 .stable_id(node_id)
-                .map(|s| router.is_pressed(s))
+                .map(|s| router.is_active(s))
                 .unwrap_or(false);
             if pressed_here {
                 if let Some(active) = stylesheet.get_with_state(element_id, ElementState::Active) {

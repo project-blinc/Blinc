@@ -69,9 +69,9 @@ pub mod text_measure;
 #[cfg(feature = "text_measurer")]
 pub mod text_measurer;
 pub mod text_selection;
-pub mod transition;
 pub mod tree;
 pub mod typography;
+pub mod ua_styles;
 pub mod visual_animation;
 pub mod widgets;
 
@@ -339,7 +339,6 @@ pub mod prelude {
     // Ready-to-use widgets (production-ready, work in fluent API without .build())
     pub use crate::widgets::{
         Button,
-        ButtonConfig,
         ButtonVisualState,
         CURSOR_BLINK_INTERVAL_MS,
         Checkbox,

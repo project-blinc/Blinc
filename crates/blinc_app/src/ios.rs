@@ -268,8 +268,8 @@ impl IOSApp {
         {
             let scheduler_handle = animations.lock().unwrap().handle();
             blinc_animation::set_global_scheduler(scheduler_handle);
-            // The scheduler is ticking, so bound colours can ease.
-            blinc_layout::transition::enable();
+            // Default look of the layout widgets, ahead of the theme's own CSS.
+            blinc_layout::ua_styles::install();
         }
 
         // Element registry for query API

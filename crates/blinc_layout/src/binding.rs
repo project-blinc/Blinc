@@ -703,8 +703,6 @@ pub struct PropertyBindingRegistry {
     /// The classes each node has while a source holds. The tree reads this
     /// to know which nodes restyle when a class comes and goes.
     class_toggles: HashMap<LayoutNodeId, Vec<ClassToggleInfo>>,
-    /// Colour properties that ease to a new value instead of jumping.
-    transitions: HashMap<(LayoutNodeId, PropertyId), crate::transition::Transition>,
 }
 
 impl PropertyBindingRegistry {
@@ -715,17 +713,6 @@ impl PropertyBindingRegistry {
             by_node: HashMap::new(),
             derived_by_node: HashMap::new(),
             class_toggles: HashMap::new(),
-            transitions: HashMap::new(),
-        }
-    }
-
-    /// Seeds the colour a bound property shows, when it has a transition.
-    fn seed_transition(&self, node_id: LayoutNodeId, property: PropertyId, read: &ReadFn) {
-        if !self.transitions.contains_key(&(node_id, property)) {
-            return;
-        }
-        if let Some(colour) = read().and_then(|v| v.downcast_ref::<blinc_core::Color>().copied()) {
-            crate::transition::seed(node_id, property, colour);
         }
     }
 
@@ -837,7 +824,6 @@ impl PropertyBindingRegistry {
         read: ReadFn,
         write: WriteFn,
     ) {
-        self.seed_transition(node_id, property, &read);
         self.bindings
             .entry(signal_id)
             .or_default()
@@ -863,7 +849,6 @@ impl PropertyBindingRegistry {
         read: ReadFn,
         write: WriteFn,
     ) {
-        self.seed_transition(node_id, property, &read);
         self.derived_bindings
             .entry(derived_id)
             .or_default()
@@ -981,8 +966,6 @@ impl PropertyBindingRegistry {
     /// `remove_subtree_nodes` so stale subscribers can't fire on the
     /// next signal change after a structural rebuild dropped the node.
     pub fn unregister_node(&mut self, node_id: LayoutNodeId) {
-        self.transitions.retain(|(n, _), _| *n != node_id);
-        crate::transition::forget_node(node_id);
         self.class_toggles.remove(&node_id);
         if let Some(signal_ids) = self.by_node.remove(&node_id) {
             for sig_id in signal_ids {
@@ -1044,7 +1027,7 @@ impl PropertyBindingRegistry {
         let Some(subs) = self.bindings.get(&signal_id) else {
             return;
         };
-        Self::dispatch_subscribers(subs, &self.transitions);
+        Self::dispatch_subscribers(subs);
     }
 
     /// Walk every subscriber waiting on `derived_id` and queue a
@@ -1055,35 +1038,16 @@ impl PropertyBindingRegistry {
         let Some(subs) = self.derived_bindings.get(&derived_id) else {
             return;
         };
-        Self::dispatch_subscribers(subs, &self.transitions);
+        Self::dispatch_subscribers(subs);
     }
 
-    fn dispatch_subscribers(
-        subs: &[Subscriber],
-        transitions: &HashMap<(LayoutNodeId, PropertyId), crate::transition::Transition>,
-    ) {
+    fn dispatch_subscribers(subs: &[Subscriber]) {
         for sub in subs {
             let Some(value) = (sub.read)() else {
                 continue;
             };
             match &sub.write {
                 SubscriberWrite::Render(write) => {
-                    if let (Some(transition), Some(colour)) = (
-                        transitions.get(&(sub.node_id, sub.property)),
-                        value.downcast_ref::<blinc_core::Color>().copied(),
-                    ) {
-                        let w = Arc::clone(write);
-                        let eased = crate::transition::retarget(
-                            sub.node_id,
-                            sub.property,
-                            colour,
-                            *transition,
-                            Arc::new(move |props, c| w(props, &BoundValue::new(c))),
-                        );
-                        if eased {
-                            continue;
-                        }
-                    }
                     let (write, beneath) = (Arc::clone(write), Arc::clone(write));
                     let value = Arc::new(value);
                     let beneath_value = Arc::clone(&value);
@@ -1227,40 +1191,6 @@ pub fn with_registry<R>(f: impl FnOnce(&mut PropertyBindingRegistry) -> R) -> R 
     drop(all);
     drop(removed);
     result
-}
-
-/// Eases `property` on `node_id` to each new bound colour over `transition`.
-pub fn set_transition(
-    node_id: LayoutNodeId,
-    property: PropertyId,
-    transition: crate::transition::Transition,
-) {
-    with_registry(|reg| {
-        reg.transitions.insert((node_id, property), transition);
-        let existing: Vec<ReadFn> = reg
-            .bindings
-            .values()
-            .chain(reg.derived_bindings.values())
-            .flatten()
-            .filter(|s| s.node_id == node_id && s.property == property)
-            .map(|s| Arc::clone(&s.read))
-            .collect();
-        for read in existing {
-            reg.seed_transition(node_id, property, &read);
-        }
-    });
-}
-
-/// A transition to set once the node exists.
-pub struct TransitionPendingBinding {
-    pub property: PropertyId,
-    pub transition: crate::transition::Transition,
-}
-
-impl PendingBinding for TransitionPendingBinding {
-    fn register(&self, node_id: LayoutNodeId) {
-        set_transition(node_id, self.property, self.transition);
-    }
 }
 
 /// Convenience: register a signal-bound subscription using a typed

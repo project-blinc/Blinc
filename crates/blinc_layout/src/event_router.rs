@@ -360,6 +360,21 @@ impl EventRouter {
         self.pressed_target == Some(stable)
     }
 
+    /// The nodes `:active` matches: the pressed one and those that hold it.
+    pub fn active_nodes(&self, tree: &RenderTree) -> std::collections::HashSet<LayoutNodeId> {
+        self.pressed_target
+            .iter()
+            .chain(self.pressed_ancestors.iter())
+            .filter_map(|s| tree.layout_id(*s))
+            .collect()
+    }
+
+    /// Whether `:active` matches the node: it is the pressed element or holds
+    /// it, so a press that lands on a button's label activates the button.
+    pub fn is_active(&self, stable: crate::tree::StableNodeId) -> bool {
+        self.pressed_target == Some(stable) || self.pressed_ancestors.contains(&stable)
+    }
+
     /// Check if a specific node is currently focused
     pub fn is_focused(&self, node_id: LayoutNodeId) -> bool {
         self.focused == Some(node_id)

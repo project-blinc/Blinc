@@ -90,101 +90,149 @@ impl RenderTree {
         } else {
             StyleTier::Stylesheet
         };
-        if let Some(ref bg) = style.background {
+        // A component default gives way to a value the element set itself.
+        let owned = props.tiers;
+        let component = style.component;
+        let skip = |prop: StyleProp| component && owned.has(prop, StyleTier::Owned);
+        if let Some(ref bg) = style.background
+            && !skip(StyleProp::Background)
+        {
             props.tiers.mark(StyleProp::Background, tier);
             props.background = Some(bg.clone());
         }
-        if let Some(ref cr) = style.corner_radius {
+        if let Some(ref cr) = style.corner_radius
+            && !skip(StyleProp::BorderRadius)
+        {
             props.tiers.mark(StyleProp::BorderRadius, tier);
             props.border_radius = *cr;
             props.border_radius_explicit = true;
         }
-        if let Some(cs) = style.corner_shape {
+        if let Some(cs) = style.corner_shape
+            && !skip(StyleProp::CornerShape)
+        {
             props.tiers.mark(StyleProp::CornerShape, tier);
             props.corner_shape = cs;
         }
-        if let Some(fade) = style.overflow_fade {
+        if let Some(fade) = style.overflow_fade
+            && !skip(StyleProp::OverflowFade)
+        {
             props.tiers.mark(StyleProp::OverflowFade, tier);
             props.overflow_fade = fade;
         }
-        if !style.inner_shadow.is_empty() {
+        if !style.inner_shadow.is_empty() && !skip(StyleProp::InnerShadow) {
             props.tiers.mark(StyleProp::InnerShadow, tier);
             props.inner_shadow = style.inner_shadow.clone();
         }
-        if !style.shadow.is_empty() {
+        if !style.shadow.is_empty() && !skip(StyleProp::Shadow) {
             props.tiers.mark(StyleProp::Shadow, tier);
             props.shadow = style.shadow.clone();
         }
-        if let Some(ref transform) = style.transform {
+        if let Some(ref transform) = style.transform
+            && !skip(StyleProp::Transform)
+        {
             props.tiers.mark(StyleProp::Transform, tier);
             props.transform = Some(transform.clone());
         }
-        if let Some(opacity) = style.opacity {
+        if let Some(opacity) = style.opacity
+            && !skip(StyleProp::Opacity)
+        {
             props.tiers.mark(StyleProp::Opacity, tier);
             props.opacity = opacity;
         }
-        if let Some(ref render_layer) = style.render_layer {
+        if let Some(ref render_layer) = style.render_layer
+            && !skip(StyleProp::Layer)
+        {
             props.tiers.mark(StyleProp::Layer, tier);
             props.layer = *render_layer;
         }
-        if let Some(ref material) = style.material {
+        if let Some(ref material) = style.material
+            && !skip(StyleProp::Material)
+        {
             props.tiers.mark(StyleProp::Material, tier);
             props.material = Some(material.clone());
         }
         // 3D transform properties
-        if let Some(rx) = style.rotate_x {
+        if let Some(rx) = style.rotate_x
+            && !skip(StyleProp::Rotate3d)
+        {
             props.tiers.mark(StyleProp::Rotate3d, tier);
             props.rotate_x = Some(rx);
         }
-        if let Some(ry) = style.rotate_y {
+        if let Some(ry) = style.rotate_y
+            && !skip(StyleProp::Rotate3d)
+        {
             props.tiers.mark(StyleProp::Rotate3d, tier);
             props.rotate_y = Some(ry);
         }
-        if let Some(p) = style.perspective {
+        if let Some(p) = style.perspective
+            && !skip(StyleProp::Perspective)
+        {
             props.tiers.mark(StyleProp::Perspective, tier);
             props.perspective = Some(p);
         }
-        if let Some(ref s) = style.shape_3d {
+        if let Some(ref s) = style.shape_3d
+            && !skip(StyleProp::Shape3d)
+        {
             props.tiers.mark(StyleProp::Shape3d, tier);
             props.shape_3d = Some(crate::css_parser::shape_3d_to_float(s));
         }
-        if let Some(d) = style.depth {
+        if let Some(d) = style.depth
+            && !skip(StyleProp::Depth)
+        {
             props.tiers.mark(StyleProp::Depth, tier);
             props.depth = Some(d);
         }
-        if let Some(dir) = style.light_direction {
+        if let Some(dir) = style.light_direction
+            && !skip(StyleProp::Light3d)
+        {
             props.tiers.mark(StyleProp::Light3d, tier);
             props.light_direction = Some(dir);
         }
-        if let Some(v) = style.light_intensity {
+        if let Some(v) = style.light_intensity
+            && !skip(StyleProp::Light3d)
+        {
             props.tiers.mark(StyleProp::Light3d, tier);
             props.light_intensity = Some(v);
         }
-        if let Some(v) = style.ambient {
+        if let Some(v) = style.ambient
+            && !skip(StyleProp::Light3d)
+        {
             props.tiers.mark(StyleProp::Light3d, tier);
             props.ambient = Some(v);
         }
-        if let Some(v) = style.specular {
+        if let Some(v) = style.specular
+            && !skip(StyleProp::Light3d)
+        {
             props.tiers.mark(StyleProp::Light3d, tier);
             props.specular = Some(v);
         }
-        if let Some(v) = style.translate_z {
+        if let Some(v) = style.translate_z
+            && !skip(StyleProp::Translate3d)
+        {
             props.tiers.mark(StyleProp::Translate3d, tier);
             props.translate_z = Some(v);
         }
-        if let Some(ref op) = style.op_3d {
+        if let Some(ref op) = style.op_3d
+            && !skip(StyleProp::Op3d)
+        {
             props.tiers.mark(StyleProp::Op3d, tier);
             props.op_3d = Some(crate::css_parser::op_3d_to_float(op));
         }
-        if let Some(v) = style.blend_3d {
+        if let Some(v) = style.blend_3d
+            && !skip(StyleProp::Blend3d)
+        {
             props.tiers.mark(StyleProp::Blend3d, tier);
             props.blend_3d = Some(v);
         }
-        if let Some(ref cp) = style.clip_path {
+        if let Some(ref cp) = style.clip_path
+            && !skip(StyleProp::ClipPath)
+        {
             props.tiers.mark(StyleProp::ClipPath, tier);
             props.clip_path = Some(cp.clone());
         }
-        if let Some(filter) = style.filter {
+        if let Some(filter) = style.filter
+            && !skip(StyleProp::Filter)
+        {
             props.tiers.mark(StyleProp::Filter, tier);
             props.filter = Some(filter);
             // Convert blur filter to LayerEffect for GPU processing
@@ -221,7 +269,9 @@ impl RenderTree {
             }
         }
         // Mask image → LayerEffect (URL only; gradients handled per-primitive)
-        if let Some(blinc_core::MaskImage::Url(ref url)) = style.mask_image {
+        if let Some(blinc_core::MaskImage::Url(ref url)) = style.mask_image
+            && !skip(StyleProp::MaskImage)
+        {
             props.tiers.mark(StyleProp::MaskImage, tier);
             props
                 .layer_effects
@@ -232,12 +282,16 @@ impl RenderTree {
             });
         }
         // Text color
-        if let Some(c) = &style.text_color {
+        if let Some(c) = &style.text_color
+            && !skip(StyleProp::TextColor)
+        {
             props.tiers.mark(StyleProp::TextColor, tier);
             props.text_color = Some([c.r, c.g, c.b, c.a]);
         }
         // Text shadow
-        if let Some(ts) = &style.text_shadow {
+        if let Some(ts) = &style.text_shadow
+            && !skip(StyleProp::TextShadow)
+        {
             props.tiers.mark(StyleProp::TextShadow, tier);
             props.text_shadow = Some(*ts);
         }
@@ -257,90 +311,128 @@ impl RenderTree {
             props.tiers.mark(StyleProp::FontFamily, tier);
         }
         // Font size
-        if let Some(fs) = style.font_size {
+        if let Some(fs) = style.font_size
+            && !skip(StyleProp::FontSize)
+        {
             props.tiers.mark(StyleProp::FontSize, tier);
             props.font_size = Some(fs);
         }
         // Font weight
-        if let Some(fw) = style.font_weight {
+        if let Some(fw) = style.font_weight
+            && !skip(StyleProp::FontWeight)
+        {
             props.tiers.mark(StyleProp::FontWeight, tier);
             props.font_weight = Some(fw);
         }
         // Font style
-        if let Some(fs) = style.font_style {
+        if let Some(fs) = style.font_style
+            && !skip(StyleProp::FontStyle)
+        {
             props.tiers.mark(StyleProp::FontStyle, tier);
             props.font_style = Some(fs);
         }
         // Text decoration
-        if let Some(td) = style.text_decoration {
+        if let Some(td) = style.text_decoration
+            && !skip(StyleProp::TextDecoration)
+        {
             props.tiers.mark(StyleProp::TextDecoration, tier);
             props.text_decoration = Some(td);
         }
         // Line height
-        if let Some(lh) = style.line_height {
+        if let Some(lh) = style.line_height
+            && !skip(StyleProp::LineHeight)
+        {
             props.tiers.mark(StyleProp::LineHeight, tier);
             props.line_height = Some(lh);
         }
         // Text align
-        if let Some(ta) = style.text_align {
+        if let Some(ta) = style.text_align
+            && !skip(StyleProp::TextAlign)
+        {
             props.tiers.mark(StyleProp::TextAlign, tier);
             props.text_align = Some(ta);
         }
         // Letter spacing
-        if let Some(ls) = style.letter_spacing {
+        if let Some(ls) = style.letter_spacing
+            && !skip(StyleProp::LetterSpacing)
+        {
             props.tiers.mark(StyleProp::LetterSpacing, tier);
             props.letter_spacing = Some(ls);
         }
         // SVG properties
-        if let Some(fill) = style.fill {
+        if let Some(fill) = style.fill
+            && !skip(StyleProp::Fill)
+        {
             props.tiers.mark(StyleProp::Fill, tier);
             props.fill = Some([fill.r, fill.g, fill.b, fill.a]);
         }
-        if let Some(stroke) = style.stroke {
+        if let Some(stroke) = style.stroke
+            && !skip(StyleProp::Stroke)
+        {
             props.tiers.mark(StyleProp::Stroke, tier);
             props.stroke = Some([stroke.r, stroke.g, stroke.b, stroke.a]);
         }
-        if let Some(sw) = style.stroke_width {
+        if let Some(sw) = style.stroke_width
+            && !skip(StyleProp::StrokeWidth)
+        {
             props.tiers.mark(StyleProp::StrokeWidth, tier);
             props.stroke_width = Some(sw);
         }
-        if let Some(ref da) = style.stroke_dasharray {
+        if let Some(ref da) = style.stroke_dasharray
+            && !skip(StyleProp::StrokeDasharray)
+        {
             props.tiers.mark(StyleProp::StrokeDasharray, tier);
             props.stroke_dasharray = Some(da.clone());
         }
-        if let Some(offset) = style.stroke_dashoffset {
+        if let Some(offset) = style.stroke_dashoffset
+            && !skip(StyleProp::StrokeDashoffset)
+        {
             props.tiers.mark(StyleProp::StrokeDashoffset, tier);
             props.stroke_dashoffset = Some(offset);
         }
-        if let Some(ref path_data) = style.svg_path_data {
+        if let Some(ref path_data) = style.svg_path_data
+            && !skip(StyleProp::SvgPathData)
+        {
             props.tiers.mark(StyleProp::SvgPathData, tier);
             props.svg_path_data = Some(path_data.clone());
         }
         // Transform origin
-        if let Some(to) = style.transform_origin {
+        if let Some(to) = style.transform_origin
+            && !skip(StyleProp::TransformOrigin)
+        {
             props.tiers.mark(StyleProp::TransformOrigin, tier);
             props.transform_origin = Some(to);
         }
         // Border
-        if let Some(bw) = style.border_width {
+        if let Some(bw) = style.border_width
+            && !skip(StyleProp::BorderWidth)
+        {
             props.tiers.mark(StyleProp::BorderWidth, tier);
             props.border_width = bw;
         }
-        if let Some(bc) = style.border_color {
+        if let Some(bc) = style.border_color
+            && !skip(StyleProp::BorderColor)
+        {
             props.tiers.mark(StyleProp::BorderColor, tier);
             props.border_color = Some(bc);
         }
         Self::apply_border_sides(props, style, tier);
         // Outline
-        if let Some(ow) = style.outline_width {
+        if let Some(ow) = style.outline_width
+            && !skip(StyleProp::OutlineWidth)
+        {
             props.tiers.mark(StyleProp::OutlineWidth, tier);
             props.outline_width = ow;
         }
-        if let Some(ref oc) = style.outline_color {
+        if let Some(ref oc) = style.outline_color
+            && !skip(StyleProp::OutlineColor)
+        {
             props.tiers.mark(StyleProp::OutlineColor, tier);
             props.outline_color = Some(*oc);
         }
-        if let Some(offset) = style.outline_offset {
+        if let Some(offset) = style.outline_offset
+            && !skip(StyleProp::OutlineOffset)
+        {
             props.tiers.mark(StyleProp::OutlineOffset, tier);
             props.outline_offset = offset;
         }

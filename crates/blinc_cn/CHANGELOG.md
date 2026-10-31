@@ -4,6 +4,9 @@ All notable changes to `blinc_cn` will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- `cn::button`: each variant's fill, text colour, border and shadow, and how they change on hover, press and while disabled, are `CN_STYLES` rules with a CSS `transition`, instead of colours computed in Rust. Rules for a hovered or pressed button leave a disabled one alone (`:not(:disabled)`). A pressed button that is still hovered keeps its hover colour, as on the web.
+
 ### Added
 - **`cn::input_otp`** — themed segmented one-time-code input backed by linked single-character `text_input` slots. Supports auto-advance, empty-slot Backspace rewind, paste distribution across remaining slots, optional numeric-only filtering, masking, disabled state, error styling, and grouped separators. The shared slot behavior lives in `blinc_layout::widgets::input_otp`; cn contributes the themed border/background/focus surface.
 - **`cn::table`** — themed wrapper around `blinc_layout::widgets::table` exposing the shadcn surface: `cn::table()` / `cn::table_header()` / `cn::table_body()` / `cn::table_footer()` / `cn::table_row()` / `cn::table_head(label)` / `cn::table_cell()` / `cn::table_caption(label)`. The layout widget already paints section backgrounds + cell padding + flex-1 cell distribution from theme tokens; cn only adds the surface CSS (1 px outer border at `--border`, `--radius-md`, `:hover` row tint at `--surface-hover`, `:last-child` border-strip so the bottom row sits flush with the rounded edge), the medium-weight muted-foreground header text, and the footer's top-border + medium font-weight. `cn::table_row().selected(true)` toggles the `.cn-table-row--selected` class which paints `--selection`. No sort / filter — that's the eventual `cn::data_grid`.

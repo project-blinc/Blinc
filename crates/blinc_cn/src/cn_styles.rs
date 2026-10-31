@@ -82,31 +82,80 @@ pub const CN_STYLES: &str = concat!(
    Button
    ============================================================================ */
 
-/* Button: visual states (hover, active, disabled) handled by Stateful FSM.
-   Geometry tokens flow from the active theme's RadiusTokens so each
-   variant (Restrained / Hybrid / Expressive) gets its own corner reach.
-   The Rust side already reads `RadiusToken` per size — these rules act
-   as the cascade override surface users can hook into. */
-.cn-button { border-radius: var(--radius-default); }
+/* Button: each variant's fill, text colour, border and shadow, and how they
+   change on hover, press and while disabled, are rules, eased by the
+   transition. Geometry tokens flow from the active theme's RadiusTokens so
+   each variant (Restrained / Hybrid / Expressive) gets its own corner reach. */
+.cn-button {
+    border-radius: var(--radius-default);
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state),
+        box-shadow var(--duration-fast) var(--ease-state),
+        transform var(--duration-faster) var(--ease-state);
+}
 /* Press feedback: a pressed button shrinks a little and eases back. A link
    button is flat, so it dims instead. */
-.cn-button {
-    transition: transform var(--duration-faster) var(--ease-state);
-}
-.cn-button:active {
+.cn-button:active:not(:disabled) {
     transform: scale(0.97, 0.97);
 }
-.cn-button--link:active {
+.cn-button--link:active:not(:disabled) {
     transform: none;
     opacity: 0.8;
 }
-.cn-button--primary { }
-.cn-button--secondary { }
-.cn-button--destructive { }
-.cn-button--outline { }
-.cn-button--ghost { }
-.cn-button--link { }
-.cn-button--disabled { }
+.cn-button--primary {
+    background: var(--primary);
+    color: var(--text-inverse);
+    box-shadow: var(--shadow-md);
+}
+.cn-button--primary:hover:not(:disabled) { background: var(--primary-hover); }
+.cn-button--primary:active:not(:disabled) { background: var(--primary-active); }
+.cn-button--secondary {
+    background: var(--secondary);
+    color: var(--text-inverse);
+    box-shadow: var(--shadow-md);
+}
+.cn-button--secondary:hover:not(:disabled) { background: var(--secondary-hover); }
+.cn-button--secondary:active:not(:disabled) { background: var(--secondary-active); }
+.cn-button--destructive {
+    background: var(--error);
+    color: var(--text-inverse);
+    box-shadow: var(--shadow-md);
+}
+.cn-button--destructive:hover:not(:disabled) { background: color-mix(in srgb, var(--error) 90%, black); }
+.cn-button--destructive:active:not(:disabled) { background: color-mix(in srgb, var(--error) 85%, black); }
+.cn-button--outline {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+}
+.cn-button--ghost {
+    background: transparent;
+    color: var(--text-primary);
+}
+.cn-button--outline:hover:not(:disabled), .cn-button--ghost:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+.cn-button--outline:active:not(:disabled), .cn-button--ghost:active:not(:disabled) {
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+.cn-button--link {
+    background: transparent;
+    color: var(--primary);
+}
+/* Disabled: a filled tonal surface with muted text, a thin outline and no
+   shadow. Opacity dimming on a saturated fill washed out to a pale tint, so
+   the fill is swapped instead. The hover and press rules leave a disabled
+   button alone. */
+.cn-button:disabled {
+    background: var(--input-bg-disabled);
+    color: var(--text-tertiary);
+    border: 1px solid var(--border-secondary);
+    box-shadow: none;
+    transform: none;
+}
 .cn-button--sm { border-radius: var(--radius-sm); }
 .cn-button--md { border-radius: var(--radius-default); }
 .cn-button--lg { border-radius: var(--radius-lg); }

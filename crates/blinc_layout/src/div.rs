@@ -696,26 +696,6 @@ impl Div {
         self
     }
 
-    /// Ease a signal-bound colour to each new value over `duration_ms`
-    /// instead of jumping. Takes effect once a runner has enabled
-    /// transitions; until then the colour changes at once.
-    pub fn transition(
-        mut self,
-        property: crate::property::PropertyId,
-        duration_ms: f32,
-        easing: blinc_animation::Easing,
-    ) -> Self {
-        self.pending_bindings
-            .push(Box::new(crate::binding::TransitionPendingBinding {
-                property,
-                transition: crate::transition::Transition {
-                    duration_ms,
-                    easing,
-                },
-            }));
-        self
-    }
-
     /// Set an attribute that `[name]` and `[name="value"]` selectors match.
     ///
     /// Attributes are stored as `name=value` entries in the class list, so

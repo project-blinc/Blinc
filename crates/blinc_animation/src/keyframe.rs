@@ -737,26 +737,26 @@ impl KeyframeProperties {
             blend_3d: lerp_opt(self.blend_3d, other.blend_3d, t),
             clip_inset: lerp_opt_array4(self.clip_inset, other.clip_inset, t),
             // Color
-            background_color: lerp_opt_array4(self.background_color, other.background_color, t),
-            gradient_start_color: lerp_opt_array4(
+            background_color: lerp_opt_color(self.background_color, other.background_color, t),
+            gradient_start_color: lerp_opt_color(
                 self.gradient_start_color,
                 other.gradient_start_color,
                 t,
             ),
-            gradient_end_color: lerp_opt_array4(
+            gradient_end_color: lerp_opt_color(
                 self.gradient_end_color,
                 other.gradient_end_color,
                 t,
             ),
             gradient_angle: lerp_opt(self.gradient_angle, other.gradient_angle, t),
-            border_color: lerp_opt_array4(self.border_color, other.border_color, t),
-            text_color: lerp_opt_array4(self.text_color, other.text_color, t),
+            border_color: lerp_opt_color(self.border_color, other.border_color, t),
+            text_color: lerp_opt_color(self.text_color, other.text_color, t),
             // Geometric
             corner_radius: lerp_opt_array4(self.corner_radius, other.corner_radius, t),
             corner_shape: lerp_opt_array4(self.corner_shape, other.corner_shape, t),
             border_width: lerp_opt(self.border_width, other.border_width, t),
             outline_width: lerp_opt(self.outline_width, other.outline_width, t),
-            outline_color: lerp_opt_array4(self.outline_color, other.outline_color, t),
+            outline_color: lerp_opt_color(self.outline_color, other.outline_color, t),
             outline_offset: lerp_opt(self.outline_offset, other.outline_offset, t),
             clip_circle_radius: lerp_opt(self.clip_circle_radius, other.clip_circle_radius, t),
             clip_ellipse_radii: lerp_opt_array2(
@@ -767,7 +767,7 @@ impl KeyframeProperties {
             overflow_fade: lerp_opt_array4(self.overflow_fade, other.overflow_fade, t),
             // Shadow
             shadow_params: lerp_opt_array4(self.shadow_params, other.shadow_params, t),
-            shadow_color: lerp_opt_array4(self.shadow_color, other.shadow_color, t),
+            shadow_color: lerp_opt_color(self.shadow_color, other.shadow_color, t),
             shadow_stack: lerp_opt_shadow_stack(
                 self.shadow_stack.as_deref(),
                 other.shadow_stack.as_deref(),
@@ -778,7 +778,7 @@ impl KeyframeProperties {
                 other.text_shadow_params,
                 t,
             ),
-            text_shadow_color: lerp_opt_array4(self.text_shadow_color, other.text_shadow_color, t),
+            text_shadow_color: lerp_opt_color(self.text_shadow_color, other.text_shadow_color, t),
             // 3D lighting
             light_intensity: lerp_opt(self.light_intensity, other.light_intensity, t),
             ambient: lerp_opt(self.ambient, other.ambient, t),
@@ -826,8 +826,8 @@ impl KeyframeProperties {
             // Mask gradient
             mask_gradient: lerp_opt_array8(self.mask_gradient, other.mask_gradient, t),
             // SVG
-            svg_fill: lerp_opt_array4(self.svg_fill, other.svg_fill, t),
-            svg_stroke: lerp_opt_array4(self.svg_stroke, other.svg_stroke, t),
+            svg_fill: lerp_opt_color(self.svg_fill, other.svg_fill, t),
+            svg_stroke: lerp_opt_color(self.svg_stroke, other.svg_stroke, t),
             svg_stroke_width: lerp_opt(self.svg_stroke_width, other.svg_stroke_width, t),
             svg_stroke_dashoffset: lerp_opt(
                 self.svg_stroke_dashoffset,
@@ -926,6 +926,24 @@ fn lerp_path_data(a: &Option<String>, b: &Option<String>, t: f32) -> Option<Stri
         (None, Some(s)) => Some(s.clone()),
         (None, None) => None,
     }
+}
+
+/// Interpolate optional RGBA colours the way CSS does: with alpha
+/// premultiplied, so a fade from transparent does not pass through black. A
+/// missing side is transparent.
+fn lerp_opt_color(a: Option<[f32; 4]>, b: Option<[f32; 4]>, t: f32) -> Option<[f32; 4]> {
+    let (a, b) = match (a, b) {
+        (None, None) => return None,
+        (Some(a), Some(b)) => (a, b),
+        (Some(a), None) => (a, [a[0], a[1], a[2], 0.0]),
+        (None, Some(b)) => ([b[0], b[1], b[2], 0.0], b),
+    };
+    let alpha = a[3] + (b[3] - a[3]) * t;
+    if alpha <= 0.0 {
+        return Some([b[0], b[1], b[2], 0.0]);
+    }
+    let mix = |i: usize| (a[i] * a[3] + (b[i] * b[3] - a[i] * a[3]) * t) / alpha;
+    Some([mix(0), mix(1), mix(2), alpha])
 }
 
 /// Helper to interpolate optional [f32; 4] arrays
@@ -1861,5 +1879,37 @@ mod overlay_tests {
         };
         assert!(!a.overlaps(&b));
         assert!(a.overlaps(&c));
+    }
+}
+
+#[cfg(test)]
+mod colour_lerp_tests {
+    use super::*;
+
+    #[test]
+    fn a_fade_from_transparent_keeps_the_target_hue() {
+        let from = KeyframeProperties {
+            background_color: Some([0.0, 0.0, 0.0, 0.0]),
+            ..Default::default()
+        };
+        let to = KeyframeProperties {
+            background_color: Some([1.0, 0.0, 0.0, 1.0]),
+            ..Default::default()
+        };
+        let mid = from.lerp(&to, 0.5).background_color.unwrap();
+        assert_eq!(mid, [1.0, 0.0, 0.0, 0.5]);
+    }
+
+    #[test]
+    fn two_opaque_colours_mix_plainly() {
+        let a = Some([1.0, 0.0, 0.0, 1.0]);
+        let b = Some([0.0, 0.0, 1.0, 1.0]);
+        assert_eq!(lerp_opt_color(a, b, 0.5), Some([0.5, 0.0, 0.5, 1.0]));
+    }
+
+    #[test]
+    fn an_unset_side_fades_the_alpha_only() {
+        let a = Some([1.0, 0.5, 0.0, 1.0]);
+        assert_eq!(lerp_opt_color(a, None, 0.25), Some([1.0, 0.5, 0.0, 0.75]));
     }
 }

@@ -68,7 +68,7 @@ pub mod toggle;
 pub mod virtual_list;
 
 // Re-export button widget
-pub use button::{Button, ButtonConfig, ButtonVisualState, button, button_with};
+pub use button::{Button, ButtonVisualState, button, button_with};
 
 // Re-export checkbox widget
 pub use checkbox::{Checkbox, CheckboxBuilder, CheckboxConfig, checkbox, checkbox_labeled};

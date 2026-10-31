@@ -206,25 +206,6 @@ impl Text {
         self
     }
 
-    /// Ease a signal-bound colour to each new value instead of jumping; see
-    /// [`crate::div::Div::transition`].
-    pub fn transition(
-        mut self,
-        property: crate::property::PropertyId,
-        duration_ms: f32,
-        easing: blinc_animation::Easing,
-    ) -> Self {
-        self.pending_bindings
-            .push(Box::new(crate::binding::TransitionPendingBinding {
-                property,
-                transition: crate::transition::Transition {
-                    duration_ms,
-                    easing,
-                },
-            }));
-        self
-    }
-
     /// Set an attribute that `[name="value"]` selectors match; see
     /// [`crate::div::Div::attr`].
     pub fn attr(self, name: impl AsRef<str>, value: impl AsRef<str>) -> Self {

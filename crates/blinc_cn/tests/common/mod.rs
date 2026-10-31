@@ -86,6 +86,7 @@ pub fn node_line(tree: &RenderTree, node: LayoutNodeId) -> String {
         ElementType::Text(t) => {
             let drawn = p
                 .text_color
+                .or_else(|| tree.resolved_text_color(node))
                 .unwrap_or([t.color[0], t.color[1], t.color[2], t.color[3]]);
             format!(
                 "text {:?} color {} size {:.1}",
@@ -95,7 +96,10 @@ pub fn node_line(tree: &RenderTree, node: LayoutNodeId) -> String {
             )
         }
         ElementType::Svg(s) => {
-            let drawn = p.svg_tint.or_else(|| s.tint.map(|c| [c.r, c.g, c.b, c.a]));
+            let drawn = p
+                .svg_tint
+                .or_else(|| s.tint.map(|c| [c.r, c.g, c.b, c.a]))
+                .or_else(|| tree.resolved_text_color(node));
             format!("svg tint {}", drawn.map(rgba).unwrap_or_else(|| "-".into()))
         }
         _ => "div".into(),
@@ -165,6 +169,8 @@ pub struct Harness {
     /// Whether an interaction must be absorbed without a subtree rebuild.
     pub in_place: bool,
     pub out: String,
+    /// Whether the tree carries a stylesheet whose state rules the frame applies.
+    styled: bool,
 }
 
 impl Harness {
@@ -179,7 +185,18 @@ impl Harness {
             describe,
             in_place: false,
             out: String::new(),
+            styled: false,
         }
+    }
+
+    /// Style the tree with `sheet`, as a runner does: base rules once, state
+    /// rules after every event.
+    pub fn style_with(&mut self, sheet: blinc_layout::css_parser::Stylesheet) {
+        self.tree.set_stylesheet(sheet);
+        self.tree.apply_stylesheet_layout_overrides();
+        self.tree.apply_stylesheet_base_styles();
+        self.tree.compute_layout(400.0, 200.0);
+        self.styled = true;
     }
 
     /// What the frame loop does after an event.
@@ -189,6 +206,9 @@ impl Harness {
             self.tree.process_pending_subtree_rebuilds();
             let updates = blinc_layout::take_pending_partial_prop_updates();
             self.tree.apply_partial_property_updates(updates);
+        }
+        if self.styled {
+            self.tree.apply_stylesheet_state_styles(&self.router);
         }
         self.tree.compute_layout(400.0, 200.0);
     }

@@ -25,19 +25,25 @@ div().flex_row().gap(2.0).children(
 
 ### Styled Buttons
 
+A button is an element: `:hover`, `:active` and `:disabled` match it, so how
+it looks in each state, and how it eases between them, is a stylesheet.
+`button()` starts from the theme's primary look (the `.blinc-button` rules of
+`blinc_layout::ua_styles::UA_STYLES`); give it a class and write your own
+rules, which win over the default look:
+
 ```rust
-button("Primary")
-    .bg_color(Color::rgba(0.3, 0.5, 0.9, 1.0))
-    .hover_color(Color::rgba(0.4, 0.6, 1.0, 1.0))
-    .pressed_color(Color::rgba(0.2, 0.4, 0.8, 1.0))
-    .text_color(Color::WHITE)
-    .rounded(8.0)
-    .px(4.0)
+button("Delete").class("danger").rounded(8.0).px(4.0)
 ```
 
-The colours default to the theme's primary tokens. `.id(..)` and
-`.class(..)` let a stylesheet style the button, including `:hover`,
-`:active` and `:disabled`.
+```css
+.danger { background: #c0392b; transition: background-color 150ms ease; }
+.danger:hover:not(:disabled) { background: #e74c3c; }
+.danger:active:not(:disabled) { background: #a93226; }
+.danger:disabled { background: #555; color: #999; }
+```
+
+`.id(..)` works the same way. A fluent value such as `.bg_color(..)` fixes
+that property in every state, as an inline style does on the web.
 
 ### A Label That Follows a Signal
 
@@ -59,39 +65,35 @@ button(label)
 
 ### Custom Content Buttons
 
-`button_with` builds the content once and hands it a `ButtonLook`. Bind
-what should follow the button's state to it:
+`button_with` builds the content once. Text and icons inside take the
+button's `color`, so a rule that changes it on `:hover` changes them too:
 
 ```rust
 use blinc_layout::widgets::button_with;
 
-button_with(|look| {
+button_with(|_| {
     div()
         .flex_row()
         .gap(2.0)
         .items_center()
-        .child(svg(SAVE_ICON).size(16.0, 16.0).color(look.text_color()))
-        .child(text("Save").color(look.text_color()))
+        .child(svg(SAVE_ICON).size(16.0, 16.0))
+        .child(text("Save"))
 })
 .on_click(|_| save_file())
 ```
 
-`look.text_color()` is the text colour for the button's current state,
-after stylesheet overrides. `look.interaction()` gives its hovered, pressed
-and focused signals.
+The closure is also given a `ButtonLook`; `look.interaction()` has the
+button's hovered, pressed and focused signals for content that needs them.
 
 ### Disabled Buttons
 
 ```rust
-button("Cannot Click")
-    .disabled(true)
-    .disabled_color(Color::rgba(0.2, 0.2, 0.25, 0.5))
-    .disabled_text_color(Color::rgba(1.0, 1.0, 1.0, 0.4))
-    .flat_when_disabled(true)
+button("Cannot Click").disabled(true)
 ```
 
-A disabled button has its disabled fill and does not click.
-`.disabled_border(width, color)` replaces its border while disabled.
+A disabled button matches `:disabled` and does not click. The default look
+gives it the theme's disabled fill and muted text; restyle it with a
+`:disabled` rule.
 
 ---
 

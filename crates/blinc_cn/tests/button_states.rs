@@ -15,8 +15,13 @@ fn scenario(
     in_place: bool,
     build: impl FnOnce() -> Box<dyn ElementBuilder>,
 ) -> String {
-    set_active_stylesheet(Arc::new(Stylesheet::parse(css).expect("css")));
+    // The button's look is cn's stylesheet, with the scenario's rules after it.
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let all = format!("{}\n{css}", blinc_cn::cn_styles::CN_STYLES);
+    let sheet = Stylesheet::parse_with_variables(&all, &vars).expect("css");
+    set_active_stylesheet(Arc::new(sheet.clone()));
     let mut h = Harness::new(build(), vec![], describe_tree_root);
+    h.style_with(sheet);
     h.in_place = in_place;
     let at = h.center(&[]);
     h.walk(at, (380.0, 190.0));

@@ -701,8 +701,8 @@ impl WebApp {
         {
             let handle = animations.lock().unwrap().handle();
             blinc_animation::set_global_scheduler(handle);
-            // The scheduler is ticking, so bound colours can ease.
-            blinc_layout::transition::enable();
+            // Default look of the layout widgets, ahead of the theme's own CSS.
+            blinc_layout::ua_styles::install();
         }
 
         let ref_dirty_flag: RefDirtyFlag = Arc::new(AtomicBool::new(false));

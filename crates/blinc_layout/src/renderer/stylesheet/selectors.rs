@@ -436,8 +436,7 @@ impl RenderTree {
             .hovered_nodes()
             .filter_map(|s| self.layout_id(s))
             .collect();
-        let pressed_nodes: HashSet<LayoutNodeId> =
-            router.pressed_target(self).into_iter().collect();
+        let pressed_nodes: HashSet<LayoutNodeId> = router.active_nodes(self);
         // Use the router's focused node directly. Previously we walked
         // `element_registry.all_ids()` and checked `router.is_focused()`
         // for each — but that only finds elements with a string `id`.
@@ -721,8 +720,7 @@ impl RenderTree {
             .hovered_nodes()
             .filter_map(|s| self.layout_id(s))
             .collect();
-        let pressed_nodes: HashSet<LayoutNodeId> =
-            router.pressed_target(self).into_iter().collect();
+        let pressed_nodes: HashSet<LayoutNodeId> = router.active_nodes(self);
         let focused_node: Option<LayoutNodeId> = router.focused();
 
         let mut any_applied = false;
@@ -795,8 +793,7 @@ impl RenderTree {
             .hovered_nodes()
             .filter_map(|s| self.layout_id(s))
             .collect();
-        let pressed_nodes: HashSet<LayoutNodeId> =
-            router.pressed_target(self).into_iter().collect();
+        let pressed_nodes: HashSet<LayoutNodeId> = router.active_nodes(self);
         let focused_node: Option<LayoutNodeId> = {
             let mut focused = None;
             for id in self.element_registry.all_ids() {

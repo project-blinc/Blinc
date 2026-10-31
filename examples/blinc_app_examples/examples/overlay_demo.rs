@@ -31,7 +31,29 @@ fn main() -> Result<()> {
     blinc_app::windowed::WindowedApp::run(config, build_ui)
 }
 
+/// Button colours by state, as a stylesheet: the default look comes from the
+/// theme, these classes restyle it.
+const BUTTON_CSS: &str = r#"
+.demo-blue, .demo-green, .demo-red, .demo-ghost, .demo-delete {
+    transition: background-color 150ms ease;
+}
+.demo-blue { background: #4d80ff; }
+.demo-blue:hover { background: #6699ff; }
+.demo-blue:active { background: #4066e6; }
+.demo-green { background: #4db366; }
+.demo-green:hover { background: #66cc80; }
+.demo-green:active { background: #40995a; }
+.demo-red { background: #cc664d; }
+.demo-red:hover { background: #e68066; }
+.demo-red:active { background: #b3593f; }
+.demo-ghost { background: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.7); }
+.demo-ghost:hover { background: rgba(255, 255, 255, 0.2); }
+.demo-delete { background: #e64d4d; }
+.demo-delete:hover { background: #ff6666; }
+"#;
+
 pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
+    ctx.add_css(BUTTON_CSS);
     let overlay_mgr = ctx.overlay_manager();
 
     div()
@@ -62,10 +84,8 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                 .child(
                     button("Open Modal")
                         .key("modal_btn")
+                        .class("demo-blue")
                         .rounded(8.0)
-                        .bg_color(Color::rgba(0.3, 0.5, 1.0, 1.0))
-                        .hover_color(Color::rgba(0.4, 0.6, 1.0, 1.0))
-                        .pressed_color(Color::rgba(0.25, 0.4, 0.9, 1.0))
                         .on_click({
                             let mgr = overlay_mgr.clone();
                             move |_| {
@@ -80,10 +100,8 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                 .child(
                     button("Show Toast")
                         .key("toast_btn")
+                        .class("demo-green")
                         .rounded(8.0)
-                        .bg_color(Color::rgba(0.3, 0.7, 0.4, 1.0))
-                        .hover_color(Color::rgba(0.4, 0.8, 0.5, 1.0))
-                        .pressed_color(Color::rgba(0.25, 0.6, 0.35, 1.0))
                         .on_click({
                             let mgr = overlay_mgr.clone();
                             move |_| {
@@ -99,10 +117,8 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                 .child(
                     button("Open Dialog")
                         .key("dialog_btn")
+                        .class("demo-red")
                         .rounded(8.0)
-                        .bg_color(Color::rgba(0.8, 0.4, 0.3, 1.0))
-                        .hover_color(Color::rgba(0.9, 0.5, 0.4, 1.0))
-                        .pressed_color(Color::rgba(0.7, 0.35, 0.25, 1.0))
                         .on_click({
                             let mgr = overlay_mgr.clone();
                             move |_| {
@@ -194,28 +210,17 @@ fn modal_content(mgr: OverlayManager) -> Div {
                 .flex_row()
                 .gap(5.0)
                 .justify_end()
-                .child(
-                    overlay_button("Cancel")
-                        .bg_color(Color::rgba(1.0, 1.0, 1.0, 0.1))
-                        .hover_color(Color::rgba(1.0, 1.0, 1.0, 0.2))
-                        .text_color(Color::rgba(1.0, 1.0, 1.0, 0.7))
-                        .on_click({
-                            let mgr = mgr.clone();
-                            move |_| mgr.close_top()
-                        }),
-                )
-                .child(
-                    overlay_button("Confirm")
-                        .bg_color(Color::rgba(0.3, 0.7, 0.4, 1.0))
-                        .hover_color(Color::rgba(0.4, 0.8, 0.5, 1.0))
-                        .on_click({
-                            let mgr = mgr.clone();
-                            move |_| {
-                                tracing::info!("Confirmed!");
-                                mgr.close_top();
-                            }
-                        }),
-                ),
+                .child(overlay_button("Cancel").class("demo-ghost").on_click({
+                    let mgr = mgr.clone();
+                    move |_| mgr.close_top()
+                }))
+                .child(overlay_button("Confirm").class("demo-green").on_click({
+                    let mgr = mgr.clone();
+                    move |_| {
+                        tracing::info!("Confirmed!");
+                        mgr.close_top();
+                    }
+                })),
         )
 }
 
@@ -275,27 +280,16 @@ fn dialog_content(mgr: OverlayManager) -> Div {
                 .gap_px(4.0)
                 .justify_between()
                 .content_center()
-                .child(
-                    overlay_button("Cancel")
-                        .bg_color(Color::rgba(1.0, 1.0, 1.0, 0.1))
-                        .hover_color(Color::rgba(1.0, 1.0, 1.0, 0.2))
-                        .text_color(Color::rgba(1.0, 1.0, 1.0, 0.7))
-                        .on_click({
-                            let mgr = mgr.clone();
-                            move |_| mgr.close_top()
-                        }),
-                )
-                .child(
-                    overlay_button("Delete")
-                        .bg_color(Color::rgba(0.9, 0.3, 0.3, 1.0))
-                        .hover_color(Color::rgba(1.0, 0.4, 0.4, 1.0))
-                        .on_click({
-                            let mgr = mgr.clone();
-                            move |_| {
-                                tracing::info!("Deleted!");
-                                mgr.close_top();
-                            }
-                        }),
-                ),
+                .child(overlay_button("Cancel").class("demo-ghost").on_click({
+                    let mgr = mgr.clone();
+                    move |_| mgr.close_top()
+                }))
+                .child(overlay_button("Delete").class("demo-delete").on_click({
+                    let mgr = mgr.clone();
+                    move |_| {
+                        tracing::info!("Deleted!");
+                        mgr.close_top();
+                    }
+                })),
         )
 }

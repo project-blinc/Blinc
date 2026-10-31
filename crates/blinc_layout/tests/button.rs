@@ -1,6 +1,6 @@
-//! The core button restyles from the pointer and the disabled state without
-//! a rebuild, runs its click only while enabled, and hands its content the
-//! colour it resolves.
+//! The core button is restyled by `:hover`, `:active` and `:disabled` rules
+//! without a rebuild, runs its click only while enabled, and hands its
+//! content the colour its state gives it.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -20,7 +20,7 @@ static LOCK: Mutex<()> = Mutex::new(());
 const RED: Color = Color::rgb(1.0, 0.0, 0.0);
 const GREEN: Color = Color::rgb(0.0, 1.0, 0.0);
 const BLUE: Color = Color::rgb(0.0, 0.0, 1.0);
-const GREY: Color = Color::rgb(0.5, 0.5, 0.5);
+const GREY: Color = Color::rgb(128.0 / 255.0, 128.0 / 255.0, 128.0 / 255.0);
 
 fn init() -> std::sync::MutexGuard<'static, ()> {
     static I: std::sync::Once = std::sync::Once::new();
@@ -55,8 +55,16 @@ struct Scene {
 
 impl Scene {
     fn new(widget: impl ElementBuilder + 'static) -> Self {
+        Self::styled("", widget)
+    }
+
+    fn styled(css: &str, widget: impl ElementBuilder + 'static) -> Self {
         let host = div().w(400.0).h(200.0).child(widget);
         let mut tree = RenderTree::from_element(&host);
+        let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+        tree.set_stylesheet(Stylesheet::parse_with_variables(css, &vars).expect("css"));
+        tree.apply_stylesheet_layout_overrides();
+        tree.apply_stylesheet_base_styles();
         tree.compute_layout(400.0, 200.0);
         Self {
             tree,
@@ -75,6 +83,7 @@ impl Scene {
         );
         let updates = blinc_layout::stateful::take_pending_partial_prop_updates();
         self.tree.apply_partial_property_updates(updates);
+        self.tree.apply_stylesheet_state_styles(&self.router);
         self.tree.compute_layout(400.0, 200.0);
     }
 
@@ -137,7 +146,7 @@ impl Scene {
         while let Some(id) = stack.pop() {
             let node = self.tree.get_render_node(id).unwrap();
             if let ElementType::Text(t) = &node.element_type {
-                return node.props.text_color.unwrap_or(t.color);
+                return self.tree.resolved_text_color(id).unwrap_or(t.color);
             }
             stack.extend(self.tree.layout_tree.children(id).into_iter().rev());
         }
@@ -145,18 +154,21 @@ impl Scene {
     }
 }
 
-fn colours() -> blinc_layout::widgets::Button {
-    button("Go")
-        .bg_color(RED)
-        .hover_color(GREEN)
-        .pressed_color(BLUE)
-        .disabled_color(GREY)
+const LOOK: &str = r#"
+.b { background: #ff0000; }
+.b:hover { background: #00ff00; }
+.b:active { background: #0000ff; }
+.b:disabled, .b:disabled:hover, .b:disabled:active { background: #808080; }
+"#;
+
+fn looks() -> blinc_layout::widgets::Button {
+    button("Go").class("b")
 }
 
 #[test]
 fn the_fill_follows_hover_and_press() {
     let _g = init();
-    let mut s = Scene::new(colours());
+    let mut s = Scene::styled(LOOK, looks());
     assert_eq!(s.fill(), RED);
     s.hover();
     assert_eq!(s.fill(), GREEN);
@@ -171,7 +183,7 @@ fn the_fill_follows_hover_and_press() {
 #[test]
 fn a_disabled_button_keeps_its_disabled_fill() {
     let _g = init();
-    let mut s = Scene::new(colours().disabled(true));
+    let mut s = Scene::styled(LOOK, looks().disabled(true));
     assert_eq!(s.fill(), GREY);
     s.hover();
     s.press();
@@ -182,7 +194,7 @@ fn a_disabled_button_keeps_its_disabled_fill() {
 fn a_signal_disables_and_enables_in_place() {
     let _g = init();
     let disabled = flag(false);
-    let mut s = Scene::new(colours().disabled(&disabled));
+    let mut s = Scene::styled(LOOK, looks().disabled(&disabled));
     s.hover();
     assert_eq!(s.fill(), GREEN);
 
@@ -201,7 +213,7 @@ fn a_click_runs_only_while_enabled() {
     let clicks = Arc::new(AtomicUsize::new(0));
     let disabled = flag(false);
     let counter = Arc::clone(&clicks);
-    let mut s = Scene::new(colours().disabled(&disabled).on_click(move |_| {
+    let mut s = Scene::new(button("Go").disabled(&disabled).on_click(move |_| {
         counter.fetch_add(1, Ordering::SeqCst);
     }));
 
@@ -224,73 +236,53 @@ fn a_click_runs_only_while_enabled() {
 }
 
 #[test]
-fn content_gets_the_colour_the_button_resolves_for_its_state() {
+fn content_takes_the_colour_the_button_gives_it_in_each_state() {
     let _g = init();
-    set_active_stylesheet(Arc::new(
-        Stylesheet::parse(".b:hover { color: #00ff00 } .b:active { color: #0000ff }").unwrap(),
-    ));
-    let mut s =
-        Scene::new(button_with(|look| div().child(text("Go").color(look.text_color()))).class("b"));
-    let idle = s.label_colour();
+    let mut s = Scene::styled(
+        ".b { color: #ff0000 } .b:hover { color: #00ff00 } .b:active { color: #0000ff }",
+        button_with(|_| div().child(text("Go"))).class("b"),
+    );
+    assert_eq!(s.label_colour(), [1.0, 0.0, 0.0, 1.0]);
     s.hover();
     assert_eq!(s.label_colour(), [0.0, 1.0, 0.0, 1.0]);
     s.press();
     assert_eq!(s.label_colour(), [0.0, 0.0, 1.0, 1.0]);
+    s.release();
     s.leave();
     assert_eq!(
         s.label_colour(),
-        idle,
+        [1.0, 0.0, 0.0, 1.0],
         "a hover colour must not outlast the hover"
     );
 }
 
 /// Two buttons side by side, the first hovered; their fills afterwards.
-fn hover_the_first_of_two(first_key: &str, second_key: &str) -> (Color, Color) {
-    let make = |key: &str| colours().key(key).w(100.0).h(40.0);
+#[test]
+fn hovering_one_button_leaves_the_other_alone() {
+    let _g = init();
+    let make = |key: &str| looks().key(key).w(100.0).h(40.0);
     let host = div()
         .w(400.0)
         .h(200.0)
         .flex_row()
-        .child(make(first_key))
-        .child(make(second_key));
+        .child(make("sep-a"))
+        .child(make("sep-b"));
     let mut tree = RenderTree::from_element(&host);
+    tree.set_stylesheet(Stylesheet::parse(LOOK).expect("css"));
+    tree.apply_stylesheet_layout_overrides();
+    tree.apply_stylesheet_base_styles();
     tree.compute_layout(400.0, 200.0);
     let kids = tree.layout_tree.children(tree.root().unwrap());
     let mut router = EventRouter::new();
     let b = tree.get_absolute_bounds(kids[0]).unwrap();
-    let at = (b.x + 10.0, b.y + 10.0);
-    let events = router.on_mouse_move(&tree, at.0, at.1);
-    for (n, e) in events {
-        tree.dispatch_event(n, e, at.0, at.1);
-    }
-    let updates = blinc_layout::stateful::take_pending_partial_prop_updates();
-    tree.apply_partial_property_updates(updates);
+    let _ = router.on_mouse_move(&tree, b.x + 10.0, b.y + 10.0);
+    tree.apply_stylesheet_state_styles(&router);
 
     let fill = |n: LayoutNodeId| match &tree.get_render_node(n).unwrap().props.background {
         Some(Brush::Solid(c)) => *c,
         other => panic!("{other:?}"),
     };
-    (fill(kids[0]), fill(kids[1]))
-}
-
-#[test]
-fn buttons_with_different_keys_keep_separate_pointer_state() {
-    let _g = init();
-    assert_eq!(
-        hover_the_first_of_two("sep-a", "sep-b"),
-        (GREEN, RED),
-        "hovering one button restyled the other"
-    );
-}
-
-#[test]
-fn buttons_with_one_key_share_pointer_state() {
-    let _g = init();
-    assert_eq!(
-        hover_the_first_of_two("same", "same"),
-        (GREEN, GREEN),
-        "the key does not name the pointer state"
-    );
+    assert_eq!((fill(kids[0]), fill(kids[1])), (GREEN, RED));
 }
 
 /// A disabled button matches `:disabled` rules, and stops when enabled.
@@ -298,12 +290,10 @@ fn buttons_with_one_key_share_pointer_state() {
 fn a_disabled_button_matches_a_disabled_rule_and_stops_when_enabled() {
     let _g = init();
     let off = flag(true);
-    set_active_stylesheet(Arc::new(Stylesheet::parse("").expect("css")));
-    let mut s = Scene::new(button("Go").class("b").disabled(&off));
-    s.tree
-        .set_stylesheet(Stylesheet::parse(".b:disabled { opacity: 0.4; }").expect("css"));
-    s.tree.apply_stylesheet_layout_overrides();
-    s.tree.apply_stylesheet_base_styles();
+    let mut s = Scene::styled(
+        ".b:disabled { opacity: 0.4; }",
+        button("Go").class("b").disabled(&off),
+    );
     let opacity = |s: &Scene| s.tree.get_render_node(s.button()).unwrap().props.opacity;
     assert_eq!(opacity(&s), 0.4);
 
@@ -312,20 +302,36 @@ fn a_disabled_button_matches_a_disabled_rule_and_stops_when_enabled() {
     assert_eq!(opacity(&s), 1.0);
 }
 
-/// With transitions on, a hover eases the fill instead of jumping, and the
-/// ticks end on the hover colour.
+/// The default look: the theme's primary fill, its hover and disabled fills.
 #[test]
-fn a_hover_eases_the_fill_when_transitions_are_on() {
+fn the_default_look_comes_from_the_ua_sheet() {
+    use blinc_theme::{ColorToken, ThemeState};
     let _g = init();
-    blinc_layout::transition::with_transitions_enabled(|| {
-        let mut s = Scene::new(button("Go").bg_color(BLUE).hover_color(GREEN));
-        assert_eq!(s.fill(), BLUE);
+    let theme = ThemeState::get();
+    let near = |got: Color, want: Color| {
+        let d = (got.r - want.r).abs() + (got.g - want.g).abs() + (got.b - want.b).abs();
+        assert!(d < 0.02, "{got:?} is not {want:?}");
+    };
+    let mut s = Scene::styled(blinc_layout::ua_styles::UA_STYLES, button("Go"));
+    near(s.fill(), theme.color(ColorToken::Primary));
+    s.hover();
+    near(s.fill(), theme.color(ColorToken::PrimaryHover));
 
-        s.hover();
-        assert_eq!(s.fill(), BLUE, "the hover colour landed at once");
+    let mut off = Scene::styled(
+        blinc_layout::ua_styles::UA_STYLES,
+        button("Go").disabled(true),
+    );
+    off.hover();
+    near(off.fill(), theme.color(ColorToken::InputBgDisabled));
+}
 
-        blinc_layout::transition::tick(10_000.0);
-        s.frame();
-        assert_eq!(s.fill(), GREEN, "the ticks did not reach the hover colour");
-    });
+/// A fluent fill is not overridden by the default look.
+#[test]
+fn a_fluent_fill_wins_over_the_default_look() {
+    let _g = init();
+    let s = Scene::styled(
+        blinc_layout::ua_styles::UA_STYLES,
+        button("Go").bg_color(BLUE),
+    );
+    assert_eq!(s.fill(), BLUE);
 }
