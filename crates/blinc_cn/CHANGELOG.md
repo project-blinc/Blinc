@@ -5,6 +5,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- `cn::input`, `cn::textarea`, the OTP slots and `cn::number_input` carry `box-shadow: var(--shadow-sm)`, as the select, combobox and outline button already did, and none while disabled; a disabled number input also takes the disabled fill.
 - `cn::number_input` follows ashui's number input: one bordered group (`.cn-number-input-group`) with a borderless field and two steps whose fill, divider and icon colour are `CN_STYLES` rules. A step tints on hover and press, and is `disabled` (dimmed, inert) where a step would change nothing. The pointer-signal colour code is gone.
 - Shadows, motion and shape come from theme tokens in the rules: the select, combobox and dropdown triggers take `box-shadow: var(--shadow-sm)` (and `none` while disabled) from `CN_STYLES` instead of `.shadow_sm()` in Rust; the input, textarea and OTP focus-ring transitions use `--duration-fast` and `--ease-state` instead of literal times. `.cn-slider-thumb` now has `var(--shadow-sm)` (none while disabled), as ashui's slider thumb does; it was flat.
 - `cn::combobox`: the trigger's border on hover, while open and while disabled is `.cn-combobox-trigger` rules (`data-state="open"`, `disabled`) with a `transition`, instead of a colour computed from pointer signals in Rust; a disabled combobox now shows the disabled palette. The search field takes its fill and border from `.cn-combobox-search` rules; the `.hover_*` and `.focused_*` colour setters it called are gone.

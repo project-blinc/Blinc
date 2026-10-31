@@ -137,3 +137,45 @@ fn triggers_carry_the_small_shadow_until_disabled() {
         );
     }
 }
+
+#[test]
+fn form_fields_carry_the_small_shadow_until_disabled() {
+    let Some(mut ui) = session() else { return };
+    let text = blinc_layout::widgets::text_input::text_input_data();
+    let area = blinc_layout::widgets::text_area::text_area_state();
+    let n = State::new(signal::<f64>(3.0), global_graph(), global_dirty_flag());
+    let (t2, a2, n2) = (text.clone(), area.clone(), n.clone());
+    ui.mount(move |_| {
+        div()
+            .w(320.0)
+            .h(300.0)
+            .flex_col()
+            .gap(2.0)
+            .child(blinc_cn::input(&t2))
+            .child(blinc_cn::textarea(&a2))
+            .child(blinc_cn::number_input(&n2))
+    });
+    ui.leave().settle();
+    for class in [".cn-input", ".cn-textarea", ".cn-number-input-group"] {
+        assert!(shadows(&ui, class) > 0, "`{class}` is flat");
+    }
+
+    ui.mount(move |_| {
+        div()
+            .w(320.0)
+            .h(300.0)
+            .flex_col()
+            .gap(2.0)
+            .child(blinc_cn::input(&text).disabled(true))
+            .child(blinc_cn::textarea(&area).disabled(true))
+            .child(blinc_cn::number_input(&n).disabled(true))
+    });
+    ui.leave().settle();
+    for class in [".cn-input", ".cn-textarea", ".cn-number-input-group"] {
+        assert_eq!(
+            shadows(&ui, class),
+            0,
+            "a disabled `{class}` kept its shadow"
+        );
+    }
+}

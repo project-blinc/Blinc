@@ -383,6 +383,7 @@ pub const CN_STYLES: &str = concat!(
    ============================================================================ */
 
 .cn-input {
+    box-shadow: var(--shadow-sm);
     background: var(--cn-input-bg, var(--input-bg));
     border-color: var(--border);
     border-radius: var(--radius-default);
@@ -409,6 +410,11 @@ pub const CN_STYLES: &str = concat!(
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
 }
+.cn-input:disabled,
+.cn-textarea:disabled,
+.cn-input-otp-slot:disabled {
+    box-shadow: none;
+}
 .cn-input.cn-input--error:not(:disabled),
 .cn-input.cn-input--error:hover:not(:disabled),
 .cn-input.cn-input--error:focus:not(:disabled) {
@@ -434,6 +440,7 @@ pub const CN_STYLES: &str = concat!(
    its `.blinc-input` rules. */
 
 .cn-input-otp-slot {
+    box-shadow: var(--shadow-sm);
     background: var(--cn-input-bg, var(--input-bg));
     border-color: var(--border);
     border-radius: var(--radius-md);
@@ -479,6 +486,7 @@ pub const CN_STYLES: &str = concat!(
    ============================================================================ */
 
 .cn-textarea {
+    box-shadow: var(--shadow-sm);
     background: var(--cn-textarea-bg, var(--input-bg));
     border-color: var(--border);
     border-radius: var(--radius-default);
@@ -519,8 +527,13 @@ pub const CN_STYLES: &str = concat!(
    piece. The steps are transparent and tint on hover and press; the field is
    borderless and clear (set in Rust, so the input rules give way to it). */
 .cn-number-input-group {
+    box-shadow: var(--shadow-sm);
     background: var(--input-bg);
     border-color: var(--border);
+}
+.cn-number-input-group:disabled {
+    background: var(--input-bg-disabled);
+    box-shadow: none;
 }
 .cn-number-input-step {
     background: transparent;

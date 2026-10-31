@@ -210,6 +210,7 @@ impl NumberInput {
             .border_width(1.0)
             .overflow_clip()
             .class("cn-number-input-group")
+            .when(config.disabled, |g| g.attr("disabled", ""))
             .child(stepper(&config, -1.0, height))
             .child(field)
             .child(stepper(&config, 1.0, height));
