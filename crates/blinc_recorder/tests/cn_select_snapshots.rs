@@ -3,7 +3,7 @@
 //! hovered, pressed, open and disabled. Their fills and borders are rules, so
 //! each state is checked against the token or tint its rule names.
 
-use blinc_cn::{dropdown_menu, select};
+use blinc_cn::{combobox, dropdown_menu, select};
 use blinc_core::Color;
 use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
 use blinc_layout::div::div;
@@ -127,4 +127,64 @@ fn the_dropdown_trigger_tints_on_hover_and_press() {
     ui.press(".cn-dropdown-trigger").settle();
     let (fill, _) = props(&ui, ".cn-dropdown-trigger");
     assert!((alpha(fill) - 0.10).abs() < 0.02, "press tint: {fill:?}");
+}
+
+fn mount_combobox(ui: &mut Headless, disabled: bool) {
+    let value = State::new(
+        signal::<String>(String::new()),
+        global_graph(),
+        global_dirty_flag(),
+    );
+    ui.mount(move |_| {
+        div().w(W as f32).h(H as f32).p(4.0).child(
+            combobox(&value)
+                .option("a", "Apple")
+                .option("b", "Banana")
+                .placeholder("Fruit")
+                .w(180.0)
+                .disabled(disabled),
+        )
+    });
+    ui.leave().settle();
+}
+
+#[test]
+fn the_combobox_trigger_follows_its_rules() {
+    let Some(mut ui) = session() else { return };
+    let theme = ThemeState::get();
+    mount_combobox(&mut ui, false);
+    let (fill, border) = props(&ui, ".cn-combobox-trigger");
+    assert!(same(fill, theme.color(ColorToken::Surface)));
+    assert!(same(border, theme.color(ColorToken::Border)));
+    ui.assert_snapshot("cn_combobox_idle");
+
+    ui.hover(".cn-combobox-trigger").settle();
+    let (_, border) = props(&ui, ".cn-combobox-trigger");
+    assert!(same(border, theme.color(ColorToken::BorderHover)));
+
+    ui.click(".cn-combobox-trigger").settle();
+    assert!(
+        ui.find(".cn-combobox-content").is_some(),
+        "the list did not open"
+    );
+    let (_, border) = props(&ui, ".cn-combobox-trigger");
+    assert!(
+        same(border, theme.color(ColorToken::BorderFocus)),
+        "an open combobox did not take the focus border: {border:?} (hover {:?}, focus {:?}, idle {:?})",
+        theme.color(ColorToken::BorderHover),
+        theme.color(ColorToken::BorderFocus),
+        theme.color(ColorToken::Border)
+    );
+}
+
+#[test]
+fn a_disabled_combobox_does_not_respond() {
+    let Some(mut ui) = session() else { return };
+    let theme = ThemeState::get();
+    mount_combobox(&mut ui, true);
+    let (fill, border) = props(&ui, ".cn-combobox-trigger");
+    assert!(same(fill, theme.color(ColorToken::InputBgDisabled)));
+    assert!(same(border, theme.color(ColorToken::BorderSecondary)));
+    ui.hover(".cn-combobox-trigger").settle();
+    assert_eq!(props(&ui, ".cn-combobox-trigger"), (fill, border));
 }

@@ -212,11 +212,10 @@ impl Combobox {
 
         let dropdown_width = config.width.unwrap_or(200.0);
 
-        // The combobox is built once. The trigger's text, colour and border
-        // follow the value, the search and the pointer; the list is built
+        // The combobox is built once. The trigger's text and colour follow the
+        // value and the search, and its border is `.cn-combobox-trigger` rules
+        // over `:hover`, `:disabled` and `data-state="open"`; the list is built
         // while it is open, and its rows follow the search.
-        let interaction = Interaction::keyed(&format!("{}_btn", instance_key));
-        let hovered = interaction.hovered().signal();
         let (value, open, query) = (
             config.value_state.signal(),
             open_state.signal(),
@@ -253,16 +252,6 @@ impl Combobox {
                 text_tertiary
             }
         });
-        let trigger_border = computed(move |g: &ReactiveGraph| {
-            if g.get(open).unwrap_or(false) {
-                border_focus
-            } else if g.get(hovered).unwrap_or(false) {
-                border_hover
-            } else {
-                border
-            }
-        });
-
         // Chevron SVG (down arrow)
         let chevron_svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
 
@@ -273,16 +262,15 @@ impl Combobox {
         let search_query_trigger = search_query_state.clone();
         let trigger = div()
             .class("cn-combobox-trigger")
+            .attr_when("data-state", "open", &open_state)
+            .when(disabled, |t| t.attr("disabled", ""))
             .flex_row()
             .w_full()
             .items_center()
             .h(height)
             .p_px(padding)
-            .bg(bg)
             .border_width(1.0)
-            .border_color(&trigger_border)
             .rounded(radius)
-            .track(&interaction)
             .child(
                 div().flex_1().overflow_clip().child(
                     Text::bound(display_text.into_reactive())

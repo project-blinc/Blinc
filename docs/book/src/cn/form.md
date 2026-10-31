@@ -303,20 +303,32 @@ the disabled palette. Restyle it with rules of your own:
 
 ## Combobox
 
-Searchable select with autocomplete:
+Searchable select, bound to a `State<String>` holding the selected value:
 
 ```rust
-combobox()
-    .value(selected)
-    .on_change(|value| set_selected(value))
-    .child(combobox_trigger()
-        .child(combobox_input().placeholder("Search...")))
-    .child(combobox_content()
-        .child(combobox_empty().child(text("No results found")))
-        .child(combobox_item("react").child(text("React")))
-        .child(combobox_item("vue").child(text("Vue")))
-        .child(combobox_item("svelte").child(text("Svelte"))))
+let framework = ctx.use_state_keyed("framework", || String::new());
+
+cn::combobox(&framework)
+    .option("react", "React")
+    .option("vue", "Vue")
+    .option_disabled("angular", "Angular")
+    .placeholder("Select a framework...")
+    .size(ComboboxSize::Medium)
+    .w(240.0)
+    .allow_custom(false)
+    .on_change(|value| println!("selected: {value}"))
 ```
+
+Typing in the list's search field filters the options.
+
+### Styling
+
+The trigger is one element with the class `cn-combobox-trigger`. It has a
+`disabled` attribute while disabled and `data-state="open"` while its list is
+showing, so its border is rules, eased by a `transition`: darker on `:hover`,
+the focus border while open, and the disabled palette. The search field is a
+text input with the class `cn-combobox-search`. Restyle either with rules of
+your own.
 
 ## Slider
 

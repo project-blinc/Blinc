@@ -1363,11 +1363,23 @@ pub const CN_STYLES: &str = concat!(
 }
 
 .cn-combobox-trigger {
-    /* Match select-trigger: bg / border / color are Rust-owned so the
-       state-aware disabled fill isn't clobbered by CSS. */
+    background: var(--surface);
+    border-color: var(--border);
     border-radius: var(--radius-default);
     cursor: pointer;
-    transition: border-color var(--duration-fast) var(--ease-state);
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state);
+}
+.cn-combobox-trigger:hover:not(:disabled) { border-color: var(--border-hover); }
+/* Open wins over hover; the hover variant is listed because rules with a
+   pointer pseudo-class apply after plain ones. */
+.cn-combobox-trigger[data-state="open"]:not(:disabled),
+.cn-combobox-trigger[data-state="open"]:hover:not(:disabled) { border-color: var(--border-focus); }
+.cn-combobox-trigger:disabled {
+    background: var(--input-bg-disabled);
+    border-color: var(--border-secondary);
+    cursor: not-allowed;
 }
 .cn-combobox-content {
     /* Shared overlay-menu chrome with select / dropdown / context.
