@@ -5,6 +5,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- `cn::switch` is an element with a `checked` attribute: its track fill (off, on, hover, disabled), the thumb's slide and its press shrink are `CN_STYLES` rules with a `transition`, per size (`.cn-switch--sm|md|lg`). The spring and the Rust colour setters (`on_color`, `off_color`, `thumb_color`, `spring`) are removed; restyle with rules, such as `.my-switch:checked { background: #16a34a }`. The thumb stays inside the track while it slides.
 - `cn::button`: each variant's fill, text colour, border and shadow, and how they change on hover, press and while disabled, are `CN_STYLES` rules with a CSS `transition`, instead of colours computed in Rust. Rules for a hovered or pressed button leave a disabled one alone (`:not(:disabled)`). A pressed button that is still hovered keeps its hover colour, as on the web.
 
 ### Added

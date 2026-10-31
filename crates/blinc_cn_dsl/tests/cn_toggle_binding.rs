@@ -258,23 +258,26 @@ fn setting_the_signal_moves_the_checkbox() {
 // `Play.busy`. An FSM transition moves both; clicking one reportedly
 // does not move the other. These pin which direction breaks.
 //
-// Every test here uses its OWN signal name. The signal registry is
-// keyed by name and process-wide, and the switch's spring key derives
-// from the signal id, so a shared name lets one test read another's
-// spring — which is exactly how the first run of these read 0.0 for a
-// switch that had in fact moved.
+// Every test here uses its OWN signal name: the signal registry is keyed
+// by name and process-wide.
 
-/// The switch's persisted thumb spring — the observable for "did the
-/// switch follow". Non-creating: if the switch never built one this is
-/// `None` and the test fails rather than measuring a spring it minted.
-fn thumb_target(signal_name: &str) -> f32 {
-    let (raw, _) = blinc_runtime::signal::lookup(signal_name).expect("signal declared");
-    let key = format!("cn-switch:{raw}:thumb");
-    blinc_layout::stateful::try_persisted_animated_value(&key)
-        .expect("the switch must persist a thumb spring")
-        .lock()
-        .unwrap()
-        .target()
+/// Whether the switch in the tree is on: the `checked` attribute its rules
+/// match. The observable for "did the switch follow".
+fn switch_is_on(tree: &blinc_layout::renderer::RenderTree) -> bool {
+    let nodes = tree.element_registry().class_to_nodes_index();
+    let switch = nodes
+        .get("cn-switch")
+        .and_then(|n| n.first().copied())
+        .expect("the tree has a switch");
+    tree.element_registry().has_class(switch, "checked=")
+}
+
+/// Land what a signal write queued, as a frame does.
+fn frame(tree: &mut blinc_layout::renderer::RenderTree) {
+    tree.process_pending_subtree_rebuilds();
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    tree.apply_partial_property_updates(updates);
+    tree.compute_layout(400.0, 200.0);
 }
 
 /// Every element in the tree carrying a click handler, in source order.
@@ -330,6 +333,11 @@ fn build_pair(
         .h(200.0)
         .child_box(dsl.view_widget());
     let mut tree = blinc_layout::renderer::RenderTree::from_element(&host);
+    // A signal-driven class registers once the tree has a stylesheet.
+    tree.set_stylesheet(
+        blinc_layout::css_parser::Stylesheet::parse(".x { opacity: 1 }").expect("css"),
+    );
+    tree.apply_all_stylesheet_styles();
     tree.compute_layout(400.0, 200.0);
     tree.process_pending_subtree_rebuilds();
     tree.compute_layout(400.0, 200.0);
@@ -343,15 +351,12 @@ fn a_direct_signal_write_moves_the_switch() {
     let dsl = dsl();
     let (_host, mut tree) = build_pair(&dsl, "pair_direct");
 
-    let before = thumb_target("pair_direct");
+    assert!(!switch_is_on(&tree));
     dsl.set_signal_bool("pair_direct", true);
-    tree.process_pending_subtree_rebuilds();
-    tree.compute_layout(400.0, 200.0);
-
-    let after = thumb_target("pair_direct");
-    assert_ne!(
-        before, after,
-        "a direct signal write must move the switch's thumb target"
+    frame(&mut tree);
+    assert!(
+        switch_is_on(&tree),
+        "a direct signal write must switch the switch on"
     );
 }
 
@@ -362,7 +367,7 @@ fn clicking_the_checkbox_moves_the_switch() {
     let dsl = dsl();
     let (host, mut tree) = build_pair(&dsl, "pair_checkbox");
 
-    let before = thumb_target("pair_checkbox");
+    assert!(!switch_is_on(&tree));
     let targets = clickables(&host);
     // Last clickable is the checkbox; the switch comes first in source.
     click(targets.last().expect("a clickable toggle"));
@@ -371,13 +376,10 @@ fn clicking_the_checkbox_moves_the_switch() {
         Some(true),
         "the click must reach the shared signal at all"
     );
-    tree.process_pending_subtree_rebuilds();
-    tree.compute_layout(400.0, 200.0);
-
-    let after = thumb_target("pair_checkbox");
-    assert_ne!(
-        before, after,
-        "clicking the checkbox must move the switch's thumb target"
+    frame(&mut tree);
+    assert!(
+        switch_is_on(&tree),
+        "clicking the checkbox must switch the switch on"
     );
 }
 

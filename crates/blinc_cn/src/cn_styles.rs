@@ -558,22 +558,40 @@ pub const CN_STYLES: &str = concat!(
    Switch
    ============================================================================ */
 
+/* The track is the element; its fill follows hover, `checked` and disabled,
+   and the thumb slides by a transform per size (track - thumb - 4px). */
 .cn-switch {
+    background: var(--border-secondary);
     border-radius: var(--radius-full);
     cursor: pointer;
-    transition: background var(--duration-normal) var(--ease-state);
+    transition: background-color var(--duration-normal) var(--ease-state);
 }
-.cn-switch-track {
-    background: var(--cn-switch-off-bg, var(--border));
-    border-radius: var(--radius-full);
-}
-.cn-switch-track--on {
-    background: var(--cn-switch-on-bg, var(--primary));
+.cn-switch:hover:not(:disabled) { background: var(--border-hover); }
+.cn-switch:checked { background: var(--primary); }
+.cn-switch:checked:hover:not(:disabled) { background: var(--primary-hover); }
+/* A disabled track takes the disabled-button palette, with a thin outline so
+   it keeps a silhouette. */
+.cn-switch:disabled {
+    background: var(--input-bg-disabled);
+    border: 1px solid var(--border-secondary);
 }
 .cn-switch-thumb {
-    background: var(--cn-switch-thumb, var(--text-inverse));
+    background: var(--text-inverse);
     border-radius: var(--radius-full);
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--duration-normal) var(--ease-state);
 }
+.cn-switch:disabled > .cn-switch-thumb {
+    box-shadow: none;
+    border: 1px solid var(--border-secondary);
+}
+.cn-switch--sm:checked > .cn-switch-thumb { transform: translateX(14px); }
+.cn-switch--md:checked > .cn-switch-thumb { transform: translateX(20px); }
+.cn-switch--lg:checked > .cn-switch-thumb { transform: translateX(24px); }
+.cn-switch:active:not(:disabled) > .cn-switch-thumb { transform: scale(0.9); }
+.cn-switch--sm:checked:active:not(:disabled) > .cn-switch-thumb { transform: translateX(14px) scale(0.9); }
+.cn-switch--md:checked:active:not(:disabled) > .cn-switch-thumb { transform: translateX(20px) scale(0.9); }
+.cn-switch--lg:checked:active:not(:disabled) > .cn-switch-thumb { transform: translateX(24px) scale(0.9); }
 .cn-switch--disabled {
     opacity: 0.5;
     cursor: not-allowed;

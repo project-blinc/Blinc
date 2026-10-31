@@ -1,6 +1,14 @@
 //! Switch component for boolean toggle
 //!
-//! A themed toggle switch with smooth animated thumb movement.
+//! A themed toggle switch. It is an element with a `checked` attribute while it
+//! is on, so how it looks off, on, hovered, pressed and disabled, and how it
+//! eases between them, is the `.cn-switch` rules of `CN_STYLES`. Restyle it
+//! with rules of your own:
+//!
+//! ```css
+//! .my-switch:checked { background: #16a34a; }
+//! ```
+//!
 //! Uses `State<bool>` from context for reactive state management.
 //!
 //! # Example
@@ -12,7 +20,6 @@
 //!     // Create switch state from context
 //!     let enabled = ctx.use_state_for("notifications", false);
 //!
-//!     // Smooth animation enabled by default when scheduler is provided
 //!     cn::switch(&enabled)
 //!         .label("Enable notifications")
 //!         .on_change(|is_on| println!("Switch: {}", is_on))
@@ -23,30 +30,19 @@
 //! cn::switch(&dark_mode)
 //!     .size(SwitchSize::Small)
 //!
-//! // Custom colors
-//! cn::switch(&enabled)
-//!     .on_color(Color::GREEN)
-//!     .off_color(Color::GRAY)
-//!
 //! // Disabled state
 //! cn::switch(&enabled)
 //!     .disabled(true)
-//!
-//! // Custom spring config for different feel
-//! cn::switch(&enabled)
-//!     .spring(SpringConfig::wobbly())
 //! ```
 
-use blinc_animation::{AnimatedValue, SchedulerHandle, SpringConfig, get_scheduler};
-use blinc_core::{Color, State, Transform};
+use blinc_core::State;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
-use blinc_layout::motion::SharedAnimatedValue;
 use blinc_layout::prelude::*;
 use blinc_layout::style;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, ThemeState};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 /// Switch size variants
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -79,6 +75,15 @@ impl SwitchSize {
         }
     }
 
+    /// The class that carries this size's thumb travel in `CN_STYLES`.
+    fn css_class(&self) -> &'static str {
+        match self {
+            SwitchSize::Small => "cn-switch--sm",
+            SwitchSize::Medium => "cn-switch--md",
+            SwitchSize::Large => "cn-switch--lg",
+        }
+    }
+
     /// Get the thumb diameter for this size
     fn thumb_size(&self) -> f32 {
         match self {
@@ -91,7 +96,7 @@ impl SwitchSize {
 
 /// Switch component
 ///
-/// A toggle switch with smooth spring animation.
+/// A toggle switch whose thumb slides between its ends.
 /// Uses `State<bool>` from context for reactive state management.
 pub struct Switch {
     /// The fully-built inner element (Div containing switch and optional label)
@@ -101,7 +106,6 @@ pub struct Switch {
 impl Switch {
     /// Create a new switch with state and animation scheduler from context
     ///
-    /// The switch uses spring animation for smooth thumb movement.
     ///
     /// # Example
     /// ```ignore
@@ -119,158 +123,43 @@ impl Switch {
         let track_height = config.size.track_height();
         let thumb_size = config.size.thumb_size();
         let padding = 2.0; // Padding from track edge
-        let thumb_travel = track_width - thumb_size - (padding * 2.0);
         let radius = track_height / 2.0; // Fully rounded track
-
-        // Aim the springs at wherever the state now is, rather than
-        // assuming they are already there. A click sets these too, but
-        // only the click path did -- so a switch driven from elsewhere
-        // (another control writing the same signal, an FSM transition)
-        // rebuilt with no target set and simply appeared at the other
-        // end. `set_target` is a no-op when the spring is already
-        // settled there, so the mount case still doesn't animate.
-        {
-            let on_now = config.on_state.get();
-            config
-                .thumb_anim
-                .lock()
-                .unwrap()
-                .set_target(if on_now { thumb_travel } else { 0.0 });
-            config
-                .color_anim
-                .lock()
-                .unwrap()
-                .set_target(if on_now { 1.0 } else { 0.0 });
-        }
-
-        // Get colors
-        let on_bg = config
-            .on_color
-            .unwrap_or_else(|| theme.color(ColorToken::Primary));
-        // BorderSecondary is a solid pale gray (matches the HID `uni-switch`
-        // reference). `Border` is alpha-based (~10% in light mode) and would
-        // be nearly invisible against the canvas — and disappear entirely
-        // once `--disabled` stacks opacity on top.
-        //
-        // When disabled, switch to `InputBgDisabled` so the track matches
-        // the disabled-button / disabled-select palette. Same tone the user
-        // confirmed reads correctly across the disabled surface family.
-        let off_bg = config.off_color.unwrap_or_else(|| {
-            if config.disabled {
-                theme.color(ColorToken::InputBgDisabled)
-            } else {
-                theme.color(ColorToken::BorderSecondary)
-            }
-        });
-        let thumb_color = config
-            .thumb_color
-            .unwrap_or_else(|| theme.color(ColorToken::TextInverse));
-
         let disabled = config.disabled;
-        let on_change = config.on_change.clone();
-        let on_state = config.on_state.clone();
-        let on_state_for_click = config.on_state.clone();
-        let thumb_anim = config.thumb_anim.clone();
-        let thumb_anim_for_click = config.thumb_anim.clone();
-        let color_anim = config.color_anim.clone();
-        let color_anim_for_click = config.color_anim.clone();
 
-        // Build background layers outside of on_state so motion bindings are properly registered
-        // Off layer is always visible as the base. When disabled, a thin
-        // BorderSecondary outline gives the whole track a defined silhouette
-        // — matches the disabled-button treatment so the whole disabled
-        // surface family reads consistently.
-        let mut off_layer = div()
-            .class("cn-switch-track")
-            .absolute()
-            .inset(0.0)
-            .style(&style! { rounded: radius, bg: off_bg });
-        if disabled {
-            off_layer = off_layer.border(1.0, theme.color(ColorToken::BorderSecondary));
-        }
-
-        // On layer with animated opacity
-        // The motion container must be absolutely positioned and sized to cover the track
-        // (motion's child being absolute would make motion collapse to 0x0)
-        let on_track_div = div()
-            .class("cn-switch-track")
-            .class("cn-switch-track--on")
-            .w(track_width)
-            .h(track_height)
-            .style(&style! { rounded: radius, bg: on_bg });
-
-        let on_layer = div()
-            .absolute()
-            .inset(0.0)
-            .child(motion().opacity(color_anim).child(on_track_div));
-
-        // Thumb with animated position. A subtle shadow gives the white
-        // thumb definition against the pale track — matches the HID
-        // `uni-switch__thumb` reference and is the main visual cue that
-        // distinguishes an interactive (off / on) switch from a disabled
-        // one. Disabled drops the shadow but adds a thin BorderSecondary
-        // outline so the knob still has a clear silhouette (matches the
-        // disabled-button treatment).
-        let mut thumb_element = div()
+        // The thumb sits at the track's start; `:checked` rules move it. Its
+        // size and the track's are layout, set here; every colour, the
+        // shadow and the travel are rules.
+        let thumb = div()
             .class("cn-switch-thumb")
             .w(thumb_size)
             .h(thumb_size)
-            .style(&style! { rounded: thumb_size / 2.0, bg: thumb_color });
-        if !disabled {
-            thumb_element = thumb_element.shadow_sm();
-        } else {
-            thumb_element = thumb_element.border(1.0, theme.color(ColorToken::BorderSecondary));
-        }
+            .style(&style! { rounded: thumb_size / 2.0 });
 
-        let animated_thumb = motion().translate_x(thumb_anim).child(thumb_element);
-
-        // Main switch container
         let mut switch = div()
             .class("cn-switch")
+            .class(config.size.css_class())
             .w(track_width)
             .h(track_height)
             .style(&style! { rounded: radius })
             .cursor_pointer()
-            .relative()
             .items_center()
             .padding_x(blinc_layout::units::px(padding))
-            // Background layers
-            .child(off_layer)
-            .child(on_layer)
-            // Animated thumb
-            .child(animated_thumb)
+            .child(thumb)
             // `:checked` rules follow the switch in place.
-            .attr_when("checked", "", &on_state);
+            .attr_when("checked", "", &config.on_state);
 
         if disabled {
-            // No opacity dim — the off-state colors are already correct
-            // for a disabled appearance. The lost thumb shadow above is
-            // what differentiates disabled from interactive-off.
             switch = switch.class("cn-switch--disabled").attr("disabled", "");
         }
 
-        // Add click handler to toggle the state
+        let on_state_for_click = config.on_state.clone();
+        let on_change = config.on_change.clone();
         switch = switch.on_click(move |_| {
             if disabled {
                 return;
             }
-
-            let current = on_state_for_click.get();
-            let new_value = !current;
+            let new_value = !on_state_for_click.get();
             on_state_for_click.set(new_value);
-
-            // Update animated value targets for smooth thumb movement and color fade
-            let thumb_target = if new_value { thumb_travel } else { 0.0 };
-            let color_target = if new_value { 1.0 } else { 0.0 };
-            thumb_anim_for_click
-                .lock()
-                .unwrap()
-                .set_target(thumb_target);
-            color_anim_for_click
-                .lock()
-                .unwrap()
-                .set_target(color_target);
-
             if let Some(ref callback) = on_change {
                 callback(new_value);
             }
@@ -285,9 +174,7 @@ impl Switch {
             };
 
             // The label toggles too, matching a checkbox and radio and
-            // what a pointer cursor on this row already promises. The
-            // row carried `cursor_pointer` without a handler, so the
-            // cursor said clickable and only the track was.
+            // what a pointer cursor on this row already promises.
             let state_for_label = config.on_state.clone();
             let on_change_for_label = config.on_change.clone();
 
@@ -366,97 +253,16 @@ struct SwitchConfig {
     size: SwitchSize,
     label: Option<String>,
     disabled: bool,
-    on_color: Option<Color>,
-    off_color: Option<Color>,
-    thumb_color: Option<Color>,
-    thumb_anim: SharedAnimatedValue,
-    /// Animated value for color transition (0.0 = off, 1.0 = on)
-    color_anim: SharedAnimatedValue,
-    spring_config: SpringConfig,
     on_change: Option<Arc<dyn Fn(bool) + Send + Sync>>,
-}
-
-/// Bound signals already wired to a retarget effect, by raw id.
-///
-/// Keyed the same way the springs are, so the pair is registered once
-/// however many times the switch is constructed. An effect per build
-/// would accumulate, and the switch is rebuilt whenever an enclosing
-/// `Stateful` refreshes.
-static RETARGETED: Mutex<Option<std::collections::HashSet<u64>>> = Mutex::new(None);
-
-/// Move the thumb and colour springs whenever the bound state changes.
-///
-/// Thin wrapper over the shared binding primitive: every animated
-/// widget taking a `State<bool>` needs this, so the mechanism lives in
-/// `reactive_props` and each widget names its own targets.
-///
-/// `thumb_travel` comes from whichever switch registered first. Two
-/// switches of DIFFERENT sizes bound to one signal would share the
-/// larger's travel — but they already share a spring, which is keyed on
-/// the signal alone, so this adds no case that was not already wrong.
-fn retarget_on_write(
-    on_state: &State<bool>,
-    thumb_anim: &SharedAnimatedValue,
-    color_anim: &SharedAnimatedValue,
-    thumb_travel: f32,
-) {
-    crate::reactive_props::bind_bool_targets(
-        crate::reactive_props::bool_binding::SWITCH,
-        on_state,
-        vec![
-            crate::reactive_props::BoolTarget::to(thumb_anim, thumb_travel),
-            crate::reactive_props::BoolTarget::to(color_anim, 1.0),
-        ],
-    );
 }
 
 impl SwitchConfig {
     fn new(on_state: State<bool>) -> Self {
-        let size = SwitchSize::default();
-        let padding = 2.0;
-        let thumb_travel = size.track_width() - size.thumb_size() - (padding * 2.0);
-        let is_on = on_state.get();
-        let initial_x = if is_on { thumb_travel } else { 0.0 };
-        let initial_color_t = if is_on { 1.0 } else { 0.0 };
-
-        let spring_config = SpringConfig::snappy();
-        // Keyed on the bound state, so the springs survive a rebuild.
-        //
-        // A bound `checked` takes the deps() rebuild path -- the value
-        // gates the whole style branch -- so every toggle reconstructs
-        // the switch. Fresh springs built at `initial_x` would already
-        // be at their destination, and the thumb would jump: once
-        // because the in-flight spring from the click was discarded,
-        // and again when something else writes the signal and no click
-        // handler ran at all.
-        //
-        // `initial_*` applies on first build only; after that the live
-        // value is returned wherever it is, and `set_target` below
-        // animates from there.
-        let anim_key = on_state.signal_id().to_raw();
-        let thumb_anim = blinc_layout::stateful::persisted_animated_value(
-            &format!("cn-switch:{anim_key}:thumb"),
-            initial_x,
-            spring_config,
-        );
-        let color_anim = blinc_layout::stateful::persisted_animated_value(
-            &format!("cn-switch:{anim_key}:color"),
-            initial_color_t,
-            spring_config,
-        );
-        retarget_on_write(&on_state, &thumb_anim, &color_anim, thumb_travel);
-
         Self {
             on_state,
-            size,
+            size: SwitchSize::default(),
             label: None,
             disabled: false,
-            on_color: None,
-            off_color: None,
-            thumb_color: None,
-            thumb_anim,
-            color_anim,
-            spring_config,
             on_change: None,
         }
     }
@@ -500,39 +306,6 @@ impl SwitchBuilder {
     /// Set disabled state
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.config.disabled = disabled;
-        self
-    }
-
-    /// Set the track color when on
-    pub fn on_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.on_color = Some(color.into());
-        self
-    }
-
-    /// Set the track color when off
-    pub fn off_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.off_color = Some(color.into());
-        self
-    }
-
-    /// Set the thumb color
-    pub fn thumb_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.thumb_color = Some(color.into());
-        self
-    }
-
-    /// Set custom spring configuration for thumb animation
-    ///
-    /// By default, the switch uses `SpringConfig::snappy()`.
-    /// Use this to customize the animation feel.
-    ///
-    /// # Example
-    /// ```ignore
-    /// cn::switch(&enabled, ctx.animation_handle())
-    ///     .spring(SpringConfig::wobbly())
-    /// ```
-    pub fn spring(mut self, config: SpringConfig) -> Self {
-        self.config.spring_config = config;
         self
     }
 
@@ -583,7 +356,6 @@ impl ElementBuilder for SwitchBuilder {
 ///
 /// The switch uses reactive `State<bool>` for its on/off status.
 /// State changes automatically trigger visual updates via signals.
-/// Smooth spring animation is enabled by default.
 ///
 /// # Example
 ///
