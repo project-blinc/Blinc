@@ -40,10 +40,16 @@ fn scenario(
     in_place: bool,
     build: impl FnOnce(&blinc_core::reactive::State<String>) -> Box<dyn ElementBuilder>,
 ) -> String {
-    set_active_stylesheet(Arc::new(Stylesheet::parse(css).expect("css")));
+    // The layout widget's look is the layout stylesheet, with the scenario's
+    // rules after it.
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let all = format!("{}\n{css}", blinc_layout::ua_styles::UA_STYLES);
+    let sheet = Stylesheet::parse_with_variables(&all, &vars).expect("css");
+    set_active_stylesheet(Arc::new(sheet.clone()));
     let selected = string_state("a");
     let widget = build(&selected);
     let mut h = Harness::new(widget, vec![selected.signal_id()], describe_radio);
+    h.style_with(sheet);
     h.in_place = in_place;
     // Option b: the ring of the second row.
     let at = h.center(&[1, 0]);

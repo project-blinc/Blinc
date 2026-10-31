@@ -398,15 +398,17 @@ fn clicking_the_switch_writes_the_shared_signal() {
     );
 }
 
-/// How many toggles the tree actually exposes, so the index-based picks
-/// above are not quietly clicking the same widget twice.
+/// How many click targets the tree exposes, so the picks above (the first is
+/// the switch, the last the checkbox's box) are not quietly clicking the same
+/// widget twice. The switch has one; the checkbox has two, its box and the
+/// row holding the box and its label, which toggles too.
 #[test]
-fn the_pair_exposes_two_toggles() {
+fn the_pair_exposes_its_click_targets() {
     let dsl = dsl();
     let (host, _tree) = build_pair(&dsl, "pair_count");
     assert_eq!(
         clickables(&host).len(),
-        2,
-        "one clickable per toggle; if this changes the picks above are wrong"
+        3,
+        "the switch, and the checkbox's row and box; if this changes the picks above are wrong"
     );
 }

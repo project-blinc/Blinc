@@ -1,10 +1,13 @@
 //! Ready-to-use Checkbox widget
 //!
-//! A checkbox with built-in toggle, hover states, and CSS styling support.
-//! Its look is bound to the checked `State<bool>` it is given and to the
-//! pointer signals of an [`Interaction`], so a toggle or a hover restyles it
-//! in place.
-//! Follows the lazy `OnceCell` initialization pattern from `blinc_cn`.
+//! A checkbox is an element with a `checked` attribute while it is checked and
+//! `disabled` while it cannot be used, so how it looks in each state, and how it
+//! eases between them, is the `.blinc-checkbox` rules of
+//! [`crate::ua_styles::UA_STYLES`]. Restyle it with rules of your own:
+//!
+//! ```css
+//! .my-checkbox:checked { background: #16a34a; border-color: #16a34a; }
+//! ```
 //!
 //! # Example
 //!
@@ -19,24 +22,26 @@
 
 use std::sync::Arc;
 
-use blinc_core::reactive::{ReactiveGraph, computed};
-use blinc_core::{Color, State};
+use blinc_core::State;
 use blinc_theme::{ColorToken, ThemeState};
 
-use crate::css_parser::{ElementState, Stylesheet, active_stylesheet};
-use crate::div::{ElementBuilder, div};
+use crate::div::{Div, ElementBuilder, div};
 use crate::element::RenderProps;
-use crate::element_style::ElementStyle;
-use crate::interaction::Interaction;
-use crate::key::InstanceKey;
 use crate::svg::svg;
 use crate::text::text;
 use crate::tree::{LayoutNodeId, LayoutTree};
 
+/// The class whose rules in [`crate::ua_styles::UA_STYLES`] give a checkbox
+/// its default look.
+pub const DEFAULT_CLASS: &str = "blinc-checkbox";
+
+/// The mark: ashui's check, a bold round-capped stroke on a 24x24 grid that
+/// spans about two thirds of the mark's size, drawn in the box's `color`.
+const CHECKMARK_SVG: &str = r#"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>"#;
+
 /// Checkbox configuration
-///
-/// Color fields are `Option<Color>` — when `None`, theme defaults are resolved
-/// fresh inside the `on_state` callback so the widget reacts to theme changes.
 #[derive(Clone)]
 pub struct CheckboxConfig {
     /// Reactive checked state signal
@@ -47,30 +52,22 @@ pub struct CheckboxConfig {
     pub label: Option<String>,
     /// Box size
     pub size: f32,
-    /// Gap between box and label
-    pub gap: f32,
-    /// Unchecked background color (None = transparent)
-    pub unchecked_bg: Option<Color>,
-    /// Checked background color (None = theme Primary)
-    pub checked_bg: Option<Color>,
-    /// Hover tint amount
-    pub hover_tint: f32,
-    /// Check mark color (None = theme TextInverse)
-    pub check_color: Option<Color>,
-    /// Label color (None = theme TextPrimary)
-    pub label_color: Option<Color>,
-    /// Label font size
-    pub label_font_size: f32,
-    /// Corner radius
-    pub corner_radius: f32,
-    /// Border color (None = theme BorderSecondary)
-    pub border_color: Option<Color>,
+    /// The mark's size; the box's inner area (its size less the border) when not set.
+    pub mark_size: Option<f32>,
+    /// Gap between box and label, in 4px units; the theme's `space_1` when not set.
+    pub gap: Option<f32>,
+    /// Label font size (None = the theme's `text_sm`)
+    pub label_font_size: Option<f32>,
+    /// Corner radius (None = the theme's `RadiusToken::Sm`)
+    pub corner_radius: Option<f32>,
     /// Border width
     pub border_width: f32,
-    /// Disabled opacity
-    pub disabled_opacity: f32,
     /// CSS element ID for stylesheet matching
     pub css_element_id: Option<String>,
+    /// CSS class names for the box
+    pub css_classes: Vec<Arc<str>>,
+    /// A class the box has while it is checked.
+    pub checked_class: Option<Arc<str>>,
     /// Change handler
     pub on_change: Option<Arc<dyn Fn(bool) + Send + Sync>>,
 }
@@ -82,306 +79,119 @@ impl CheckboxConfig {
             disabled: false,
             label: None,
             size: 20.0,
-            gap: 8.0,
-            unchecked_bg: None,
-            checked_bg: None,
-            hover_tint: 0.1,
-            check_color: None,
-            label_color: None,
-            label_font_size: 14.0,
-            corner_radius: 4.0,
-            border_color: None,
+            mark_size: None,
+            gap: None,
+            label_font_size: None,
+            corner_radius: None,
             border_width: 2.0,
-            disabled_opacity: 0.5,
             css_element_id: None,
+            css_classes: Vec::new(),
+            checked_class: None,
             on_change: None,
         }
     }
 }
 
-/// Resolved checkbox colors — theme defaults filled in for any `None` config values
-struct ResolvedColors {
-    unchecked_bg: Color,
-    checked_bg: Color,
-    check_color: Color,
-    label_color: Color,
-    border_color: Color,
-}
-
-impl ResolvedColors {
-    fn from_config(config: &CheckboxConfig, theme: &ThemeState) -> Self {
-        Self {
-            unchecked_bg: config.unchecked_bg.unwrap_or(Color::TRANSPARENT),
-            checked_bg: config
-                .checked_bg
-                .unwrap_or_else(|| theme.color(ColorToken::Primary)),
-            check_color: config
-                .check_color
-                .unwrap_or_else(|| theme.color(ColorToken::TextInverse)),
-            label_color: config
-                .label_color
-                .unwrap_or_else(|| theme.color(ColorToken::TextPrimary)),
-            border_color: config
-                .border_color
-                .unwrap_or_else(|| theme.color(ColorToken::BorderSecondary)),
-        }
-    }
-}
-
-/// Helper to lighten a color
-fn lighten(color: Color, amount: f32) -> Color {
-    Color::rgba(
-        (color.r + amount).min(1.0),
-        (color.g + amount).min(1.0),
-        (color.b + amount).min(1.0),
-        color.a,
-    )
-}
-
-/// Apply CSS stylesheet overrides to resolved colors and config
-fn apply_css_overrides_checkbox(
-    colors: &mut ResolvedColors,
-    cfg: &mut CheckboxConfig,
-    stylesheet: &Stylesheet,
-    element_id: &str,
-    is_checked: bool,
-    is_hovered: bool,
-    is_disabled: bool,
-) {
-    // 1. Base style
-    if let Some(base) = stylesheet.get(element_id) {
-        apply_style_to_checkbox(colors, cfg, base, is_checked);
-    }
-    // 2. :checked (if checked)
-    if is_checked {
-        if let Some(s) = stylesheet.get_with_state(element_id, ElementState::Checked) {
-            apply_style_to_checkbox(colors, cfg, s, is_checked);
-        }
-    }
-    // 3. :hover (layered after :checked)
-    if is_hovered {
-        if let Some(s) = stylesheet.get_with_state(element_id, ElementState::Hover) {
-            apply_style_to_checkbox(colors, cfg, s, is_checked);
-        }
-    }
-    // 4. :disabled (highest priority)
-    if is_disabled {
-        if let Some(s) = stylesheet.get_with_state(element_id, ElementState::Disabled) {
-            apply_style_to_checkbox(colors, cfg, s, is_checked);
-        }
-    }
-}
-
-/// Apply an ElementStyle to resolved colors and config
-fn apply_style_to_checkbox(
-    colors: &mut ResolvedColors,
-    cfg: &mut CheckboxConfig,
-    style: &ElementStyle,
-    is_checked: bool,
-) {
-    if let Some(blinc_core::Brush::Solid(color)) = style.background {
-        if is_checked {
-            colors.checked_bg = color;
-        } else {
-            colors.unchecked_bg = color;
-        }
-    }
-    if let Some(color) = style.border_color {
-        colors.border_color = color;
-    }
-    if let Some(w) = style.border_width {
-        cfg.border_width = w;
-    }
-    if let Some(cr) = style.corner_radius {
-        cfg.corner_radius = cr.top_left;
-    }
-    if let Some(opacity) = style.opacity {
-        cfg.disabled_opacity = opacity;
-    }
-    if let Some(color) = style.accent_color {
-        colors.check_color = color;
-    }
-    if let Some(color) = style.text_color {
-        colors.label_color = color;
-    }
-    if let Some(size) = style.font_size {
-        cfg.label_font_size = size;
-    }
-}
-
-/// The fully-built checkbox component (Div containing stateful checkbox + optional label)
+/// A built checkbox: the box, and a row holding it and its label.
 pub struct Checkbox {
-    inner: crate::div::Div,
-}
-
-/// What a checkbox draws in one state: the part the state can change.
-#[derive(Clone)]
-struct Look {
-    bg: Color,
-    border_color: Color,
-    check_color: Color,
-    /// Config after stylesheet overrides, for the parts fixed at build.
-    cfg: CheckboxConfig,
-}
-
-impl Look {
-    fn resolve(config: &CheckboxConfig, is_checked: bool, is_hovered: bool) -> Self {
-        let is_disabled = config.disabled;
-
-        // Query theme fresh each time for reactive theme support
-        let theme = ThemeState::get();
-        let mut colors = ResolvedColors::from_config(config, theme);
-        let mut cfg = config.clone();
-
-        // Apply CSS overrides if element has an ID
-        if let Some(ref element_id) = config.css_element_id {
-            if let Some(stylesheet) = active_stylesheet() {
-                apply_css_overrides_checkbox(
-                    &mut colors,
-                    &mut cfg,
-                    &stylesheet,
-                    element_id,
-                    is_checked,
-                    is_hovered,
-                    is_disabled,
-                );
-            }
-        }
-
-        let bg = if is_checked {
-            if is_hovered && !is_disabled {
-                lighten(colors.checked_bg, cfg.hover_tint)
-            } else {
-                colors.checked_bg
-            }
-        } else if is_hovered && !is_disabled {
-            lighten(colors.unchecked_bg, cfg.hover_tint)
-        } else {
-            colors.unchecked_bg
-        };
-
-        Self {
-            bg,
-            border_color: colors.border_color,
-            check_color: colors.check_color,
-            cfg,
-        }
-    }
+    inner: Div,
 }
 
 impl Checkbox {
-    /// Build from a full configuration
-    fn with_config(instance_key: &InstanceKey, config: CheckboxConfig) -> Self {
-        let checked_state = config.checked.clone();
+    fn with_config(config: CheckboxConfig) -> Self {
+        let theme = ThemeState::get();
         let checked_for_click = config.checked.clone();
         let on_change = config.on_change.clone();
         let disabled = config.disabled;
+        let mark_size = config
+            .mark_size
+            .unwrap_or(config.size - 2.0 * config.border_width);
+        let radius = config
+            .corner_radius
+            .unwrap_or_else(|| theme.radius(blinc_theme::RadiusToken::Sm));
 
-        // Derive a unique key from the instance key
-        let key = instance_key.get().to_string();
-        let interaction = Interaction::keyed(&key);
-
-        let label_text = config.label.clone();
-        let gap = config.gap;
-
-        // The part fixed at build: sizes and shapes cannot follow a state
-        // without a layout, so they are resolved once, as the box stands.
-        let first = Look::resolve(&config, checked_state.get(), false);
-        let cfg = &first.cfg;
-        let icon_size = cfg.size * 0.7;
-
-        // What a state changes is bound: each is a computed over the checked
-        // signal and the element's hover, so a change patches the node
-        // instead of rebuilding it.
-        let (checked, hovered) = (checked_state.signal(), interaction.hovered().signal());
-        let follow = |pick: fn(&Look) -> Color| {
-            let config = config.clone();
-            computed(move |g: &ReactiveGraph| {
-                pick(&Look::resolve(
-                    &config,
-                    g.get(checked).unwrap_or(false),
-                    g.get(hovered).unwrap_or(false),
-                ))
-            })
-        };
-        let bg = follow(|l| l.bg);
-        let border_color = follow(|l| l.border_color);
-        let check_color = follow(|l| l.check_color);
-
-        // The mark is always there and shown while checked, so toggling
-        // changes what is visible and nothing is rebuilt.
-        let checkmark_svg = format!(
-            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{icon_size}" height="{icon_size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>"#
-        );
         let mut checkbox = div()
-            .w(cfg.size)
-            .h(cfg.size)
-            .bg(&bg)
-            .rounded(cfg.corner_radius)
-            .border_width(cfg.border_width)
-            .border_color(&border_color)
+            .class(DEFAULT_CLASS)
+            .attr_when("checked", "", &config.checked)
+            .w(config.size)
+            .h(config.size)
+            // Pin the box to its size: a narrow flex row (a settings list)
+            // would otherwise let the layout squeeze it while the label keeps
+            // its natural width.
+            .flex_shrink_0()
+            .rounded(radius)
+            .cursor_pointer()
             .items_center()
             .justify_center()
-            .track(&interaction)
+            // The width varies per size, so it is set here; the fill, the
+            // border colour, hover and the mark are rules.
+            .border_width(config.border_width)
+            // The mark is always there and shown while checked.
             .child(
                 div()
-                    .w(icon_size)
-                    .h(icon_size)
-                    .visible(&checked_state)
-                    .child(
-                        svg(&checkmark_svg)
-                            .size(icon_size, icon_size)
-                            .color(&check_color)
-                            .internal(),
-                    ),
+                    .class("blinc-checkbox-mark")
+                    .w(mark_size)
+                    .h(mark_size)
+                    .child(svg(CHECKMARK_SVG).size(mark_size, mark_size)),
             );
+        for class in &config.css_classes {
+            checkbox = checkbox.class(class);
+        }
+        if let Some(class) = &config.checked_class {
+            checkbox = checkbox.class_when(class.as_ref(), &config.checked);
+        }
+        if let Some(id) = &config.css_element_id {
+            checkbox = checkbox.id(id);
+        }
         if disabled {
-            checkbox = checkbox.opacity(cfg.disabled_opacity);
+            checkbox = checkbox.attr("disabled", "");
         }
 
-        // Add click handler — toggles the reactive signal
         let checkbox = checkbox.on_click(move |_| {
             if disabled {
                 return;
             }
-            let current = checked_for_click.get();
-            checked_for_click.set(!current);
-
+            let next = !checked_for_click.get();
+            checked_for_click.set(next);
             if let Some(ref handler) = on_change {
-                handler(!current);
+                handler(next);
             }
         });
 
-        // Wrap in container with label support
-        let inner = if let Some(ref label) = label_text {
-            let theme = ThemeState::get();
+        let inner = if let Some(ref label) = config.label {
             let label_color = if disabled {
                 theme.color(ColorToken::TextTertiary)
             } else {
                 theme.color(ColorToken::TextPrimary)
             };
-
+            let state = config.checked.clone();
+            let on_change = config.on_change.clone();
+            // The label toggles too, as the box does.
             div()
                 .flex_row()
-                .gap(gap)
+                .gap(config.gap.unwrap_or(theme.spacing().space_1))
                 .items_center()
                 .cursor_pointer()
                 .child(checkbox)
-                .child(text(label).size(14.0).color(label_color))
+                .child(
+                    text(label)
+                        .size(config.label_font_size.unwrap_or(theme.typography().text_sm))
+                        .color(label_color),
+                )
+                .on_click(move |_| {
+                    if disabled {
+                        return;
+                    }
+                    let next = !state.get();
+                    state.set(next);
+                    if let Some(ref handler) = on_change {
+                        handler(next);
+                    }
+                })
         } else {
-            div()
-                .flex_row()
-                .gap(gap)
-                .items_center()
-                .cursor_pointer()
-                .child(checkbox)
+            // A single box in a row, so it lays out as a unit.
+            div().child(checkbox)
         };
-
-        // `:checked` and `:disabled` rules match the container.
-        let mut inner = inner.attr_when("checked", "", checked_state.clone());
-        if disabled {
-            inner = inner.attr("disabled", "");
-        }
 
         Self { inner }
     }
@@ -427,9 +237,8 @@ impl ElementBuilder for Checkbox {
 
 /// Builder for creating Checkbox components with fluent API.
 /// Config is accumulated via builder methods; the actual Checkbox is built lazily
-/// via `OnceCell::get_or_init()` on first access (build/render_props/children).
+/// on first access (build/render_props/children).
 pub struct CheckboxBuilder {
-    key: InstanceKey,
     config: CheckboxConfig,
     /// Cached built Checkbox — built lazily on first access
     built: std::cell::OnceCell<Checkbox>,
@@ -437,10 +246,8 @@ pub struct CheckboxBuilder {
 
 impl CheckboxBuilder {
     /// Create a new checkbox builder with reactive checked state
-    #[track_caller]
     pub fn new(checked: &State<bool>) -> Self {
         Self {
-            key: InstanceKey::new("checkbox"),
             config: CheckboxConfig::new(checked.clone()),
             built: std::cell::OnceCell::new(),
         }
@@ -448,13 +255,26 @@ impl CheckboxBuilder {
 
     /// Get or build the inner Checkbox
     fn get_or_build(&self) -> &Checkbox {
-        self.built
-            .get_or_init(|| Checkbox::with_config(&self.key, self.config.clone()))
+        crate::build_once::build_once(&self.built, || Checkbox::with_config(self.config.clone()))
     }
 
     /// Set the CSS element ID for stylesheet matching
     pub fn id(mut self, id: &str) -> Self {
         self.config.css_element_id = Some(id.to_string());
+        self
+    }
+
+    /// Add a class to the box, for your own rules.
+    pub fn class(mut self, name: impl AsRef<str>) -> Self {
+        self.config
+            .css_classes
+            .push(blinc_core::intern::intern(name.as_ref()));
+        self
+    }
+
+    /// A class the box has while it is checked.
+    pub fn checked_class(mut self, name: impl AsRef<str>) -> Self {
+        self.config.checked_class = Some(blinc_core::intern::intern(name.as_ref()));
         self
     }
 
@@ -470,45 +290,27 @@ impl CheckboxBuilder {
         self
     }
 
-    /// Set checked background color
-    pub fn checked_bg(mut self, color: impl Into<Color>) -> Self {
-        self.config.checked_bg = Some(color.into());
+    /// Set the mark's size.
+    pub fn mark_size(mut self, size: f32) -> Self {
+        self.config.mark_size = Some(size);
         self
     }
 
-    /// Set unchecked background color
-    pub fn unchecked_bg(mut self, color: impl Into<Color>) -> Self {
-        self.config.unchecked_bg = Some(color.into());
-        self
-    }
-
-    /// Set check mark color
-    pub fn check_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.check_color = Some(color.into());
-        self
-    }
-
-    /// Set label color
-    pub fn label_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.label_color = Some(color.into());
+    /// Gap between the box and its label, in 4px units.
+    pub fn gap(mut self, gap: f32) -> Self {
+        self.config.gap = Some(gap);
         self
     }
 
     /// Set label font size
     pub fn label_font_size(mut self, size: f32) -> Self {
-        self.config.label_font_size = size;
+        self.config.label_font_size = Some(size);
         self
     }
 
     /// Set corner radius
     pub fn rounded(mut self, radius: f32) -> Self {
-        self.config.corner_radius = radius;
-        self
-    }
-
-    /// Set border color
-    pub fn border_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.border_color = Some(color.into());
+        self.config.corner_radius = Some(radius);
         self
     }
 
@@ -574,10 +376,9 @@ impl ElementBuilder for CheckboxBuilder {
 
 /// Create a checkbox with reactive checked state
 ///
-/// The checkbox restyles in place from the `State<bool>` and its pointer
-/// signals; it does not rebuild when either changes.
-///
-/// Use `.id("name")` to enable CSS styling via `:hover`, `:checked`, `:disabled`.
+/// The checkbox follows the `State<bool>` in place: its `checked` attribute
+/// comes and goes with it, and the stylesheet's `:checked`, `:hover` and
+/// `:disabled` rules do the rest.
 ///
 /// # Example
 ///
@@ -587,13 +388,11 @@ impl ElementBuilder for CheckboxBuilder {
 ///     .label("Remember me")
 ///     .on_change(|checked| println!("Checked: {}", checked))
 /// ```
-#[track_caller]
 pub fn checkbox(checked: &State<bool>) -> CheckboxBuilder {
     CheckboxBuilder::new(checked)
 }
 
 /// Create a checkbox with label and reactive state
-#[track_caller]
 pub fn checkbox_labeled(checked: &State<bool>, label: impl Into<String>) -> CheckboxBuilder {
     CheckboxBuilder::new(checked).label(label)
 }

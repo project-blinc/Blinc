@@ -37,15 +37,11 @@ use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
 use blinc_layout::prelude::*;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
-use blinc_theme::{ColorToken, ThemeState};
+use blinc_layout::widgets::checkbox as layout_checkbox;
+use blinc_theme::ThemeState;
 use std::sync::Arc;
 
 use blinc_layout::InstanceKey;
-
-/// SVG checkmark path - simple checkmark that fits in a 16x16 viewBox
-const CHECKMARK_SVG: &str = r#"<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M3 8L6.5 11.5L13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>"#;
 
 /// Checkbox size variants
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -78,9 +74,9 @@ impl CheckboxSize {
 
     fn checkmark_size(&self) -> f32 {
         match self {
-            CheckboxSize::Small => 10.0,
-            CheckboxSize::Medium => 12.0,
-            CheckboxSize::Large => 16.0,
+            CheckboxSize::Small => 11.0,
+            CheckboxSize::Medium => 14.0,
+            CheckboxSize::Large => 18.0,
         }
     }
 }
@@ -90,8 +86,8 @@ impl CheckboxSize {
 /// A toggle checkbox with hover and press feedback.
 /// Uses `State<bool>` from context for reactive state management.
 pub struct Checkbox {
-    /// The fully-built inner element (Div containing checkbox and optional label)
-    inner: Div,
+    /// The layout checkbox, with cn's classes, sizes and radius on it.
+    inner: layout_checkbox::CheckboxBuilder,
 }
 
 impl Checkbox {
@@ -113,119 +109,44 @@ impl Checkbox {
     /// Create from a full configuration
     fn with_config(_instance_key: &str, config: CheckboxConfig) -> Self {
         let theme = ThemeState::get();
-        let box_size = config.size.size();
-        let border_width = config.size.border_width();
-        let checkmark_size = config.size.checkmark_size();
         let radius = match config.size {
             CheckboxSize::Small => theme.radius(blinc_theme::RadiusToken::Sm) * 0.75,
             _ => theme.radius(blinc_theme::RadiusToken::Sm),
         };
 
-        let disabled = config.disabled;
-        let on_change = config.on_change.clone();
-        let checked_state = config.checked_state.clone();
-        let checked_state_for_click = config.checked_state.clone();
-
-        let mut checkbox = div()
+        // The look is the layout checkbox's `.blinc-checkbox` rules; cn adds
+        // its classes, which `CN_STYLES` hangs its own hooks on, and its size
+        // ladder.
+        let mut inner = layout_checkbox::checkbox(&config.checked_state)
             .class("cn-checkbox")
             // Added and taken away with the state, so the stylesheet's
-            // `.cn-checkbox--checked` and `:checked` rules follow it in place.
-            .class_when("cn-checkbox--checked", &checked_state)
-            .attr_when("checked", "", &checked_state)
-            .w(box_size)
-            .h(box_size)
-            // Pin box to its explicit dimensions — without this a
-            // narrow flex-row parent (e.g. a settings list) would let
-            // taffy compress the checkbox while the label keeps its
-            // natural width.
-            .flex_shrink_0()
+            // `.cn-checkbox--checked` rules follow it in place.
+            .checked_class("cn-checkbox--checked")
+            .checkbox_size(config.size.size())
+            .mark_size(config.size.checkmark_size())
+            .border_width(config.size.border_width())
             .rounded(radius)
-            .cursor_pointer()
-            .items_center()
-            .justify_center()
-            // Width varies per size, so it is set here; the fill, the
-            // border colour, the hover and the mark are rules.
-            .border_width(border_width)
-            // The mark is always there and shown while checked.
-            .child(
-                div()
-                    .class("cn-checkbox-mark")
-                    .w(checkmark_size)
-                    .h(checkmark_size)
-                    .child(svg(CHECKMARK_SVG).size(checkmark_size, checkmark_size)),
-            );
-
-        if disabled {
-            // No opacity dim — the InputBgDisabled / BorderSecondary
-            // palette above already conveys the inert state without
-            // washing out the silhouette.
-            checkbox = checkbox.class("cn-checkbox--disabled").attr("disabled", "");
+            .disabled(config.disabled);
+        if config.disabled {
+            inner = inner.class("cn-checkbox--disabled");
         }
-
-        // Add click handler to toggle the state (only if not disabled)
-        checkbox = checkbox.on_click(move |_| {
-            if disabled {
-                return;
-            }
-
-            let current = checked_state_for_click.get();
-            let new_value = !current;
-            checked_state_for_click.set(new_value);
-
-            if let Some(ref callback) = on_change {
-                callback(new_value);
-            }
-        });
-
-        // If there's a label, wrap in a row with clickable container
-        let inner = if let Some(ref label_text) = config.label {
-            let label_color = if disabled {
-                theme.color(ColorToken::TextTertiary)
-            } else {
-                theme.color(ColorToken::TextPrimary)
-            };
-
-            // Clone state for the container click handler
-            let checked_state_for_label = config.checked_state.clone();
-            let on_change_for_label = config.on_change.clone();
-
-            div()
-                .flex_row()
-                .gap(theme.spacing().space_1)
-                .items_center()
-                .cursor_pointer()
-                .child(checkbox)
-                .child(
-                    text(label_text)
-                        .size(theme.typography().text_sm)
-                        .color(label_color),
-                )
-                .on_click(move |_| {
-                    if disabled {
-                        return;
-                    }
-                    let current = checked_state_for_label.get();
-                    let new_value = !current;
-                    checked_state_for_label.set(new_value);
-                    if let Some(ref callback) = on_change_for_label {
-                        callback(new_value);
-                    }
-                })
-        } else {
-            // Wrap single checkbox in a div for consistent behavior
-            div().child(checkbox)
-        };
+        if let Some(label) = config.label {
+            inner = inner.label(label);
+        }
+        if let Some(on_change) = config.on_change {
+            inner = inner.on_change(move |checked| on_change(checked));
+        }
 
         Self { inner }
     }
 
-    /// Add a CSS class for selector matching
+    /// Add a CSS class to the box, for selector matching
     pub fn class(mut self, name: impl AsRef<str>) -> Self {
         self.inner = self.inner.class(name);
         self
     }
 
-    /// Set the element ID for CSS selector matching
+    /// Set the element ID of the box for CSS selector matching
     pub fn id(mut self, id: &str) -> Self {
         self.inner = self.inner.id(id);
         self
@@ -249,8 +170,20 @@ impl ElementBuilder for Checkbox {
         self.inner.element_type_id()
     }
 
+    fn semantic_type_name(&self) -> Option<&'static str> {
+        self.inner.semantic_type_name()
+    }
+
     fn layout_style(&self) -> Option<&taffy::Style> {
         self.inner.layout_style()
+    }
+
+    fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
+        self.inner.event_handlers()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        self.inner.element_id()
     }
 
     fn element_classes(&self) -> &[std::sync::Arc<str>] {
@@ -411,8 +344,16 @@ mod tests {
 
     #[test]
     fn test_checkbox_checkmark_sizes() {
-        assert_eq!(CheckboxSize::Small.checkmark_size(), 10.0);
-        assert_eq!(CheckboxSize::Medium.checkmark_size(), 12.0);
-        assert_eq!(CheckboxSize::Large.checkmark_size(), 16.0);
+        // The box's inner area: its size less the border on each side.
+        for size in [
+            CheckboxSize::Small,
+            CheckboxSize::Medium,
+            CheckboxSize::Large,
+        ] {
+            assert_eq!(
+                size.checkmark_size(),
+                size.size() - 2.0 * size.border_width()
+            );
+        }
     }
 }

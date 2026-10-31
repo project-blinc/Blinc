@@ -12,10 +12,14 @@ use common::*;
 
 const RULE: &str = ".cn-checkbox--checked { background: #123456; border-color: #654321 }";
 
-/// cn's stylesheet with `rules` after it, as an app adds its own.
+/// The layout and cn stylesheets with `rules` after them, as an app adds its own.
 fn sheet(rules: &str) -> Stylesheet {
     let vars = blinc_theme::ThemeState::get().to_css_variable_map();
-    let all = format!("{}\n{rules}", blinc_cn::cn_styles::CN_STYLES);
+    let all = format!(
+        "{}\n{}\n{rules}",
+        blinc_layout::ua_styles::UA_STYLES,
+        blinc_cn::cn_styles::CN_STYLES
+    );
     Stylesheet::parse_with_variables(&all, &vars).expect("css")
 }
 

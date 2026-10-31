@@ -23,6 +23,74 @@ pub const UA_STYLES: &str = concat!(
     color: var(--text-tertiary);
 }
 
+/* The box is the element; fill, border colour, hover and the mark follow its
+   `checked` and `disabled` attributes. Border width is set in Rust because it
+   varies with the size. */
+.blinc-checkbox {
+    background: var(--input-bg);
+    border-color: var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-inverse);
+    cursor: pointer;
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state),
+        transform var(--duration-fast) var(--ease-state);
+}
+.blinc-checkbox:hover:not(:disabled):not(:checked) { border-color: var(--border-hover); }
+.blinc-checkbox:hover:not(:disabled) { transform: scale(1.05); }
+.blinc-checkbox:checked {
+    background: var(--primary);
+    border-color: var(--primary);
+}
+/* A disabled box takes the disabled palette shared with the button, select
+   and switch. */
+.blinc-checkbox:disabled {
+    background: var(--input-bg-disabled);
+    border-color: var(--border-secondary);
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.blinc-checkbox-mark {
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-state);
+}
+.blinc-checkbox:checked > .blinc-checkbox-mark { opacity: 1; }
+
+/* The ring is the element; its border colour, the dot and the disabled fill
+   follow its `checked` and `disabled` attributes. Border width is set in Rust
+   because it varies with the size. */
+.blinc-radio {
+    background: transparent;
+    border-color: var(--border-secondary);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition:
+        border-color var(--duration-fast) var(--ease-state),
+        transform var(--duration-fastest) var(--ease-state);
+}
+.blinc-radio:hover:not(:disabled) {
+    border-color: var(--primary);
+    transform: scale(1.05, 1.05);
+}
+.blinc-radio:checked { border-color: var(--primary); }
+.blinc-radio:disabled {
+    background: var(--input-bg-disabled);
+    border-color: var(--border-secondary);
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.blinc-radio-dot {
+    background: var(--primary);
+    border-radius: var(--radius-full);
+    opacity: 0;
+    transition:
+        opacity var(--duration-fast) var(--ease-state),
+        transform var(--duration-fastest) var(--ease-state);
+}
+.blinc-radio:checked > .blinc-radio-dot { opacity: 1; }
+.blinc-radio:active:not(:disabled) .blinc-radio-dot { transform: scale(0.8, 0.8); }
+
 /* A button that stays pressed: clear when off, a faint wash of the text
    colour when on; the outline variant keeps a hairline either way. Sizes and
    variants are attributes, so one set of rules serves a toggle, and the items

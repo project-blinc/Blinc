@@ -31,10 +31,16 @@ fn scenario(
     in_place: bool,
     build: impl FnOnce(&blinc_core::reactive::State<bool>) -> Box<dyn ElementBuilder>,
 ) -> String {
-    set_active_stylesheet(Arc::new(Stylesheet::parse(css).expect("css")));
+    // The layout widget's look is the layout stylesheet, with the scenario's
+    // rules after it.
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let all = format!("{}\n{css}", blinc_layout::ua_styles::UA_STYLES);
+    let sheet = Stylesheet::parse_with_variables(&all, &vars).expect("css");
+    set_active_stylesheet(Arc::new(sheet.clone()));
     let checked = bool_state(false);
     let widget = build(&checked);
     let mut h = Harness::new(widget, vec![checked.signal_id()], describe_checkbox);
+    h.style_with(sheet);
     h.in_place = in_place;
     let at = h.center(&[0]);
     h.walk(at, (300.0, 180.0));
@@ -48,8 +54,12 @@ fn cn_scenario(
     build: impl FnOnce(&blinc_core::reactive::State<bool>) -> Box<dyn ElementBuilder>,
 ) -> String {
     let vars = blinc_theme::ThemeState::get().to_css_variable_map();
-    let sheet =
-        Stylesheet::parse_with_variables(blinc_cn::cn_styles::CN_STYLES, &vars).expect("css");
+    let all = format!(
+        "{}\n{}",
+        blinc_layout::ua_styles::UA_STYLES,
+        blinc_cn::cn_styles::CN_STYLES
+    );
+    let sheet = Stylesheet::parse_with_variables(&all, &vars).expect("css");
     set_active_stylesheet(Arc::new(sheet.clone()));
     let checked = bool_state(false);
     let widget = build(&checked);

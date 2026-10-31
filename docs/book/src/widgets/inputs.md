@@ -116,29 +116,77 @@ is the source of truth: set it from elsewhere and the box follows.
 ### Labeled Checkbox
 
 ```rust
-checkbox(&remember)
-    .label("Remember me")
-    .label_color(Color::WHITE)
+checkbox(&remember).label("Remember me")
 ```
 
 `checkbox_labeled(&remember, "Remember me")` is the same.
 
 ### Styled Checkbox
 
+A checkbox is an element with a `checked` attribute while it is checked and
+`disabled` while it cannot be used. Its fill, border colour, hover, the
+disabled palette and the mark's fade-in are the `.blinc-checkbox` rules of
+`blinc_layout::ua_styles::UA_STYLES`, with a `transition`. Restyle it with
+rules of your own; they win over the defaults:
+
+```css
+.my-checkbox:checked { background: #16a34a; border-color: #16a34a; }
+.my-checkbox:hover:not(:disabled):not(:checked) { border-color: #16a34a; }
+```
+
 ```rust
 checkbox(&remember)
-    .check_color(Color::WHITE)
-    .checked_bg(Color::rgba(0.4, 0.6, 1.0, 1.0))
-    .unchecked_bg(Color::rgba(0.2, 0.2, 0.25, 1.0))
+    .class("my-checkbox")   // on the box
+    .checkbox_size(20.0)    // sizes are layout, so they stay in Rust
+    .border_width(2.0)
     .rounded(4.0)
-    .checkbox_size(20.0)
 ```
+
+`.mark_size(..)`, `.gap(..)` and `.label_font_size(..)` size the parts; colours
+come from rules, so there are no colour setters.
 
 ### Initially Checked
 
 ```rust
 let remember = use_state_keyed("remember_me", || true); // Start checked
 ```
+
+---
+
+## Radio Groups
+
+```rust
+use blinc_layout::widgets::radio_group;
+
+let theme = use_state_keyed("theme", || "light".to_string());
+
+radio_group(&theme)
+    .label("Theme")
+    .horizontal()
+    .option("light", "Light")
+    .option("dark", "Dark")
+    .option_disabled("auto", "Auto")
+    .on_change(|value| println!("Selected: {value}"))
+```
+
+The group reads and writes a `State<String>` holding the selected value.
+
+### Styled Radio Group
+
+Each ring has a `checked` attribute while its option is selected and
+`disabled` while it cannot be chosen. The ring's border, the dot's fade-in,
+hover (which also highlights an unselected option) and the disabled fill are
+the `.blinc-radio` and `.blinc-radio-dot` rules of
+`blinc_layout::ua_styles::UA_STYLES`, with a `transition`. Restyle them with
+rules of your own:
+
+```css
+.blinc-radio:checked { border-color: #16a34a; }
+.blinc-radio:checked > .blinc-radio-dot { background: #16a34a; }
+```
+
+Sizes are layout, so they stay in Rust (`.gap(..)` and the group's label);
+colours come from rules, so there are no colour setters.
 
 ---
 
@@ -398,8 +446,8 @@ fn login_form(ctx: &WindowedContext) -> impl ElementBuilder {
 
 | Widget | State | Source |
 |--------|-------|--------|
-| Button | Hovered, pressed, focused, disabled | Signals from `Interaction`; `.disabled(..)` |
-| Checkbox | Checked, hovered | The `State<bool>` it is given; pointer signals |
+| Button | Hovered, pressed, disabled | `:hover`, `:active` and `:disabled` rules; `.disabled(..)` |
+| Checkbox | Checked, hovered, disabled | `checked` and `disabled` attributes from the `State<bool>` it is given; `:hover` rules |
 | TextInput | `TextFieldState`: Idle, Hovered, Focused, FocusedHovered, Disabled | Its own state handle |
 | TextArea | `TextFieldState` | Same as TextInput |
 
