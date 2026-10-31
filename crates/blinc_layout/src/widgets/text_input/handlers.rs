@@ -491,7 +491,17 @@ impl TextInput {
                             return;
                         }
                         27 => {
-                            should_blur = true;
+                            // Escape clears a search field, as on the web; an
+                            // empty one, or any other field, loses focus.
+                            if d.input_type == InputType::Search && !d.value.is_empty() {
+                                d.value.clear();
+                                d.cursor = 0;
+                                d.selection_start = None;
+                                d.scroll_offset_x = 0.0;
+                                value_changed = true;
+                            } else {
+                                should_blur = true;
+                            }
                         }
                         _ if mod_key => {
                             match ctx.key_code {

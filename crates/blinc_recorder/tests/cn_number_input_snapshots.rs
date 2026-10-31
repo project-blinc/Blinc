@@ -111,3 +111,55 @@ fn the_field_is_clear_and_borderless() {
     ui.click(".cn-number-input-field").settle();
     assert!(fill(&ui, ".cn-number-input-field").map_or(0.0, |c| c.a) < 0.01);
 }
+
+fn mount_disabled(ui: &mut Headless, start: f64) -> State<f64> {
+    let state = State::new(signal::<f64>(start), global_graph(), global_dirty_flag());
+    let bound = state.clone();
+    ui.mount(move |_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .items_center()
+            .justify_center()
+            .child(number_input(&bound).min(0.0).max(10.0).disabled(true))
+    });
+    ui.leave().settle();
+    state
+}
+
+#[test]
+fn the_wheel_steps_the_value_like_ashuis() {
+    let Some(mut ui) = session() else { return };
+    let state = mount(&mut ui, 5.0, 0.0, 10.0);
+    ui.hover(".cn-number-input-field").settle();
+
+    // One line, up: one step up.
+    ui.scroll(0.0, 40.0).settle();
+    assert_eq!(state.get(), 6.0);
+    // Trackpad deltas accumulate until a whole step.
+    ui.scroll(0.0, 15.0).scroll(0.0, 15.0).settle();
+    assert_eq!(state.get(), 6.0, "a partial step changed the value");
+    ui.scroll(0.0, 15.0).settle();
+    assert_eq!(state.get(), 7.0);
+    // Down steps down; reversing drops the remainder of the other direction.
+    ui.scroll(0.0, 20.0).scroll(0.0, -40.0).settle();
+    assert_eq!(state.get(), 6.0);
+    // Horizontal gestures do nothing.
+    ui.scroll(80.0, 10.0).settle();
+    assert_eq!(state.get(), 6.0);
+    // The bounds hold.
+    for _ in 0..12 {
+        ui.scroll(0.0, 40.0);
+    }
+    ui.settle();
+    assert_eq!(state.get(), 10.0);
+}
+
+#[test]
+fn a_disabled_number_input_ignores_the_wheel() {
+    let Some(mut ui) = session() else { return };
+    let state = mount_disabled(&mut ui, 5.0);
+    ui.hover(".cn-number-input-field").settle();
+    ui.scroll(0.0, 80.0).settle();
+    assert_eq!(state.get(), 5.0);
+}

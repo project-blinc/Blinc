@@ -116,7 +116,7 @@ cn::number_input(&qty)
     .on_change(|value| println!("qty: {value}"))
 ```
 
-Typing, the arrow keys and the buttons all clamp to `min` and `max`. The
+Typing, the arrow keys, the buttons and the mouse wheel all clamp to `min` and `max`. One wheel line is one step and wheel up increases the value; trackpad movement accumulates into steps, and a disabled input ignores the wheel. The
 width follows the bounds, not the value, so typing never resizes it.
 
 The group is one bordered element (`.cn-number-input-group`) with a borderless

@@ -3,7 +3,7 @@
 //! hovered, pressed, open and disabled. Their fills and borders are rules, so
 //! each state is checked against the token or tint its rule names.
 
-use blinc_cn::{combobox, dropdown_menu, select};
+use blinc_cn::{combobox, dropdown_menu, popover, select};
 use blinc_core::Color;
 use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
 use blinc_layout::div::div;
@@ -187,4 +187,51 @@ fn a_disabled_combobox_does_not_respond() {
     assert!(same(border, theme.color(ColorToken::BorderSecondary)));
     ui.hover(".cn-combobox-trigger").settle();
     assert_eq!(props(&ui, ".cn-combobox-trigger"), (fill, border));
+}
+
+fn open_overlays() -> usize {
+    // Not counting one that is still playing its exit.
+    blinc_layout::overlay_state::overlay_stack()
+        .lock()
+        .unwrap()
+        .iter_bottom_up()
+        .filter(|e| !e.exiting)
+        .count()
+}
+
+#[test]
+fn clicking_the_dropdown_trigger_again_closes_the_menu() {
+    let Some(mut ui) = session() else { return };
+    ui.mount(move |_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .p(4.0)
+            .child(dropdown_menu("Actions").item("Edit", || {}))
+    });
+    ui.leave().settle();
+    let before = open_overlays();
+    ui.click(".cn-dropdown-trigger").settle();
+    assert_eq!(open_overlays(), before + 1, "the first click did not open");
+    ui.click(".cn-dropdown-trigger").settle();
+    assert_eq!(open_overlays(), before, "the second click reopened it");
+    ui.click(".cn-dropdown-trigger").settle();
+    assert_eq!(open_overlays(), before + 1, "it would not open again");
+}
+
+#[test]
+fn clicking_the_popover_trigger_again_closes_it() {
+    let Some(mut ui) = session() else { return };
+    ui.mount(move |_| {
+        div().w(W as f32).h(H as f32).p(4.0).child(
+            popover(|_open| div().class("pop-trigger").w(80.0).h(24.0))
+                .content(|| div().w(60.0).h(40.0)),
+        )
+    });
+    ui.leave().settle();
+    let before = open_overlays();
+    ui.click(".pop-trigger").settle();
+    assert_eq!(open_overlays(), before + 1, "the first click did not open");
+    ui.click(".pop-trigger").settle();
+    assert_eq!(open_overlays(), before, "the second click reopened it");
 }

@@ -201,6 +201,7 @@ impl NumberInput {
         show_state_in_field(&config, &data);
 
         let field = number_field(&config, &data, field_w, height);
+        let wheel_remainder = Arc::new(std::sync::Mutex::new(0.0f32));
         let group = div()
             .w(total_w)
             .h(height)
@@ -211,12 +212,60 @@ impl NumberInput {
             .overflow_clip()
             .class("cn-number-input-group")
             .when(config.disabled, |g| g.attr("disabled", ""))
+            .on_scroll(wheel_stepper(&config, Arc::clone(&wheel_remainder)))
+            .on_hover_leave(move |_| *wheel_remainder.lock().unwrap() = 0.0)
             .child(stepper(&config, -1.0, height))
             .child(field)
             .child(stepper(&config, 1.0, height));
 
         Self {
             inner: div().h_fit().w_fit().child(group),
+        }
+    }
+}
+
+/// One wheel line is this many layout units, as the runners normalise it.
+const WHEEL_STEP_UNITS: f32 = 40.0;
+
+/// Wheel stepping, as ashui's: vertical scrolling over the control steps the
+/// value by its step, wheel up increasing it. Trackpad deltas accumulate in
+/// `remainder` until a whole step, and reversing the direction or leaving the
+/// control clears what is left. A disabled control, or a mostly horizontal
+/// gesture, does nothing.
+fn wheel_stepper(
+    config: &Config,
+    remainder: Arc<std::sync::Mutex<f32>>,
+) -> impl Fn(&blinc_layout::event_handler::EventContext) + Send + Sync + 'static {
+    let (state, on_change) = (config.state.clone(), config.on_change.clone());
+    let (min, max, step, disabled) = (config.min, config.max, config.step, config.disabled);
+    move |ctx| {
+        let mut left = remainder.lock().unwrap();
+        let (dx, dy) = (ctx.scroll_delta_x, ctx.scroll_delta_y);
+        if disabled {
+            *left = 0.0;
+            return;
+        }
+        if dy == 0.0 || dx.abs() > dy.abs() {
+            return;
+        }
+        if *left * dy < 0.0 {
+            *left = 0.0;
+        }
+        *left += dy;
+        let steps = (*left / WHEEL_STEP_UNITS).trunc();
+        *left -= steps * WHEEL_STEP_UNITS;
+        if steps == 0.0 {
+            return;
+        }
+        let current = state.get();
+        let next = clamp(current + steps as f64 * step, min, max);
+        if (next - current).abs() < f64::EPSILON {
+            return;
+        }
+        // The field picks the value up through `show_state_in_field`.
+        state.set(next);
+        if let Some(ref cb) = on_change {
+            cb(next);
         }
     }
 }

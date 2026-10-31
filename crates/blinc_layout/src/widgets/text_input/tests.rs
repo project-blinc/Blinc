@@ -238,3 +238,46 @@ fn a_placeholder_rule_does_not_colour_the_field_itself() {
     let cfg = css_config(css, None, &["field"]);
     assert_eq!(cfg.text_color, TextInputConfig::default().text_color);
 }
+
+fn escape_in(input_type: InputType, value: &str) -> SharedTextInputData {
+    ensure_theme_initialized();
+    blur_all_text_inputs();
+    let data = text_input_data();
+    {
+        let mut d = data.lock().unwrap();
+        d.input_type = input_type;
+        d.value = value.to_string();
+        d.cursor = d.value.chars().count();
+    }
+    let input = text_input(&data);
+    let mut tree = crate::renderer::RenderTree::from_element(&input);
+    tree.compute_layout(300.0, 60.0);
+    let root = tree.root().unwrap();
+    // Focused through a click, as a user does.
+    let click = EventContext::new(event_types::POINTER_DOWN, root)
+        .with_bounds(200.0, 36.0)
+        .with_mouse_pos(10.0, 10.0);
+    let handlers = ElementBuilder::event_handlers(&input).unwrap();
+    handlers.dispatch(&click);
+    let esc = EventContext::new(event_types::KEY_DOWN, root).with_key_code(27);
+    handlers.dispatch(&esc);
+    data
+}
+
+#[test]
+fn escape_clears_a_search_field() {
+    let data = escape_in(InputType::Search, "rust");
+    let d = data.lock().unwrap();
+    assert_eq!(d.value, "");
+    assert!(d.visual.is_focused(), "clearing a search also blurred it");
+}
+
+#[test]
+fn escape_blurs_an_empty_search_and_other_fields() {
+    let empty = escape_in(InputType::Search, "");
+    assert!(!empty.lock().unwrap().visual.is_focused());
+    let text = escape_in(InputType::Text, "rust");
+    let d = text.lock().unwrap();
+    assert_eq!(d.value, "rust", "Escape cleared a plain text field");
+    assert!(!d.visual.is_focused());
+}

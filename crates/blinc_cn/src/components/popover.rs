@@ -223,7 +223,13 @@ impl PopoverBuilder {
         // The trigger is built once; what it shows is swapped for the open
         // or closed form its builder makes, in place.
         let closed_trigger = trigger_builder.clone();
+        let trigger_id = self
+            .user_id
+            .clone()
+            .unwrap_or_else(|| format!("cn-popover-trigger-{}", self.key.get()));
+        let trigger_id_for_click = trigger_id.clone();
         let trigger = div()
+            .id(&trigger_id)
             .w_fit()
             .cursor_pointer()
             .show_or(
@@ -268,6 +274,7 @@ impl PopoverBuilder {
                     content_fn,
                     stored_close_state,
                     stored_close_handle,
+                    trigger_id_for_click.clone(),
                 );
 
                 overlay_handle_for_show.set(Some(handle.raw()));
@@ -277,9 +284,6 @@ impl PopoverBuilder {
         let mut inner = trigger;
         for c in &self.classes {
             inner = inner.class(c);
-        }
-        if let Some(ref id) = self.user_id {
-            inner = inner.id(id);
         }
         Popover { inner }
     }
@@ -357,6 +361,7 @@ fn build_popover_overlay(
     content_fn: ContentBuilderFn,
     open_state: State<bool>,
     overlay_handle_state: State<Option<u64>>,
+    trigger_id: String,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
     let bg = theme.color(ColorToken::SurfaceElevated);
@@ -438,9 +443,15 @@ fn build_popover_overlay(
     // mounted on the next frame's tree walk. The registry doesn't depend on
     // the tree being ready — it just stores the key→id mapping until the
     // next mouse-down fires fire_click_outside().
-    click_outside::register_click_outside(&click_outside_key, &popover_id, move || {
-        handle.close();
-    });
+    // The trigger counts as inside, so pressing it is not a dismissal: the
+    // click that follows closes the popover itself instead of reopening it.
+    click_outside::register_click_outside_multi(
+        &click_outside_key,
+        &[popover_id, trigger_id],
+        move || {
+            handle.close();
+        },
+    );
 
     handle
 }

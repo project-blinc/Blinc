@@ -553,11 +553,15 @@ impl Headless {
 
     /// Scroll under the pointer.
     pub fn scroll(&mut self, delta_x: f32, delta_y: f32) -> &mut Self {
-        let events = match self.tree.as_ref() {
-            Some(tree) => self.ctx.event_router.on_scroll(tree, delta_x, delta_y),
-            None => return self,
-        };
-        self.deliver(events);
+        // As the windowed runner does: the scrollable under the pointer, or
+        // the handler nearest it, gets the delta.
+        let (x, y) = self.pointer;
+        if let Some(tree) = self.tree.as_mut() {
+            if let Some(hit) = self.ctx.event_router.hit_test(tree, x, y) {
+                tree.dispatch_scroll_chain(hit.node, &hit.ancestors, x, y, delta_x, delta_y);
+            }
+        }
+        self.frame(0);
         self
     }
 

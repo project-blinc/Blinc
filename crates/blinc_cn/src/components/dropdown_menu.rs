@@ -363,6 +363,7 @@ impl DropdownMenuBuilder {
         };
 
         let trigger = div()
+            .id(&trigger_element_id(&menu_key))
             .w_fit()
             .cursor_pointer()
             .child(trigger_content)
@@ -475,7 +476,7 @@ fn spawn_dropdown_menu(
     min_width: f32,
     handle_state: State<Option<u64>>,
     open_state: State<bool>,
-    _key: String,
+    key: String,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
     let bg = theme.color(ColorToken::Surface);
@@ -504,7 +505,9 @@ fn spawn_dropdown_menu(
         .use_state_keyed(&format!("dropdown_menu_chain_{}", next_handle_id), || {
             Vec::<String>::new()
         });
-    id_chain.set(vec![menu_id.clone()]);
+    // The trigger counts as inside, so pressing it is not a dismissal: the
+    // click that follows closes the menu itself instead of reopening it.
+    id_chain.set(vec![menu_id.clone(), trigger_element_id(&key)]);
 
     let click_outside_key_for_close = click_outside_key.clone();
     let click_outside_key_for_content = click_outside_key.clone();
@@ -555,11 +558,16 @@ fn spawn_dropdown_menu(
         "peek_next_handle_id was stale — concurrent push?"
     );
 
-    click_outside::register_click_outside(&click_outside_key, &menu_id, move || {
+    click_outside::register_click_outside_multi(&click_outside_key, &id_chain.get(), move || {
         menu_handle.close();
     });
 
     handle
+}
+
+/// The element id of a menu's trigger, which its click-outside treats as inside.
+fn trigger_element_id(key: &str) -> String {
+    format!("cn-dropdown-trigger-{key}")
 }
 
 /// Push a submenu to the right of a parent item. Item clicks on leaves close

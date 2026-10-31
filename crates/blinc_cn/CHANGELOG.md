@@ -4,6 +4,12 @@ All notable changes to `blinc_cn` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Clicking the trigger of an open `cn::dropdown_menu` or `cn::popover` closes it. The press counted as a click outside, which closed the menu, and the click that followed reopened it; the trigger is now inside the click-outside set.
+
+### Added
+- `cn::number_input` steps with the wheel, as ashui's does: one wheel line (40 units) is one step, wheel up increasing; trackpad deltas accumulate to a whole step; reversing direction or leaving the control clears the remainder; horizontal gestures and a disabled control are ignored.
+
 ### Changed
 - `cn::input`, `cn::textarea`, the OTP slots and `cn::number_input` carry `box-shadow: var(--shadow-sm)`, as the select, combobox and outline button already did, and none while disabled; a disabled number input also takes the disabled fill.
 - `cn::number_input` follows ashui's number input: one bordered group (`.cn-number-input-group`) with a borderless field and two steps whose fill, divider and icon colour are `CN_STYLES` rules. A step tints on hover and press, and is `disabled` (dimmed, inert) where a step would change nothing. The pointer-signal colour code is gone.
