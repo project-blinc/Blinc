@@ -1,40 +1,22 @@
 //! Testing infrastructure for Blinc applications.
 //!
-//! This module provides:
-//! - `HeadlessContext` - Run UI without a window for testing
-//! - `TestRunner` - Test harness for running headless tests
-//! - `CapturedFrame` - Framebuffer capture for screenshots and visual testing
-//! - Element assertions for verifying UI state
-//!
-//! # Example
-//!
-//! ```ignore
-//! use blinc_recorder::testing::{HeadlessContext, TestRunner, TestConfig};
-//!
-//! #[test]
-//! fn test_button_click() {
-//!     let runner = TestRunner::new(TestConfig::default());
-//!
-//!     runner.run(|ctx| {
-//!         ctx.render(|| {
-//!             div().id("container").child(
-//!                 button().id("submit").text("Submit")
-//!             )
-//!         });
-//!
-//!         ctx.assert_element("submit").exists().is_visible();
-//!         ctx.click("submit");
-//!         ctx.render_frame();
-//!     });
-//! }
-//! ```
+//! - [`CapturedFrame`], [`compare_frames`], [`ScreenshotExporter`]: frames
+//!   and how they compare.
+//! - [`Headless`] (feature `headless`): a real UI built, driven and painted
+//!   offscreen through the renderer a window uses, with the pointer and the
+//!   clock under the test's control.
+//! - [`Golden`] (feature `headless`): reference images recorded per machine and platform.
 
 mod framebuffer;
+#[cfg(feature = "headless")]
+mod golden;
+#[cfg(feature = "headless")]
 mod headless;
-mod runner;
 
 pub use framebuffer::{
     CapturedFrame, FrameSequence, RegressionResult, ScreenshotExporter, compare_frames,
 };
-pub use headless::{HeadlessConfig, HeadlessContext};
-pub use runner::{TestConfig, TestRunner};
+#[cfg(feature = "headless")]
+pub use golden::{Difference, Golden, diff_image, difference, load_png};
+#[cfg(feature = "headless")]
+pub use headless::Headless;

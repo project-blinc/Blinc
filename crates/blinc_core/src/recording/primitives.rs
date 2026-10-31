@@ -72,8 +72,8 @@ impl From<(f32, f32)> for Point {
     }
 }
 
-impl From<blinc_core::Point> for Point {
-    fn from(p: blinc_core::Point) -> Self {
+impl From<crate::Point> for Point {
+    fn from(p: crate::Point) -> Self {
         Self { x: p.x, y: p.y }
     }
 }
@@ -111,8 +111,8 @@ impl Rect {
     }
 }
 
-impl From<blinc_core::Rect> for Rect {
-    fn from(r: blinc_core::Rect) -> Self {
+impl From<crate::Rect> for Rect {
+    fn from(r: crate::Rect) -> Self {
         Self {
             x: r.x(),
             y: r.y(),

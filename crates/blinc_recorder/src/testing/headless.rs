@@ -1,206 +1,694 @@
-//! Headless rendering context for testing.
+//! Build, drive and capture a UI with no window.
 //!
-//! Provides a way to render Blinc UI without a window, useful for:
-//! - Unit testing UI components
-//! - Integration testing
-//! - Visual regression testing
-//! - CI/CD pipelines
+//! [`Headless`] runs the same frame as the runners (stylesheet, state rules,
+//! stateful and CSS animation, layout, paint) on an offscreen texture, with
+//! the pointer and the clock under the caller's control. Use it to look at a
+//! component in a given state, or to step a transition, without a display.
+//!
+//! ```ignore
+//! let mut ui = Headless::new(320, 120)?;
+//! ui.mount(|_| cn::button("Save"));
+//! ui.hover(".cn-button");
+//! ui.settle();
+//! ui.assert_snapshot("button_hover");
+//! ```
+//!
+//! Goldens live in `.blinc/snapshots/<crate>/<os>/` at the workspace root and
+//! are not tracked. A missing
+//! golden fails; `BLINC_SNAPSHOT=bless` writes it. A platform with no goldens
+//! skips, and `BLINC_SNAPSHOT=off` skips everywhere.
 
-/// Configuration for headless rendering.
-#[derive(Clone, Debug)]
-pub struct HeadlessConfig {
-    /// Width of the render target in pixels.
-    pub width: u32,
-    /// Height of the render target in pixels.
-    pub height: u32,
-    /// Scale factor for HiDPI rendering.
-    pub scale_factor: f64,
-    /// Whether to enable MSAA.
-    pub msaa_samples: u32,
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
+
+use blinc_animation::AnimationScheduler;
+use blinc_layout::div::Div;
+use blinc_layout::event_router::MouseButton;
+use blinc_layout::render_state::{CssAnimationStore, RenderState};
+use blinc_layout::renderer::RenderTree;
+use blinc_layout::tree::LayoutNodeId;
+use blinc_layout::widgets::OverlayManagerExt;
+use blinc_layout::{ElementBuilder, UpdateResult};
+use blinc_theme::{ColorScheme, ColorToken, ThemeBundle, ThemeState};
+
+use blinc_app::windowed::WindowedContext;
+use blinc_app::{BlincApp, Result};
+
+use super::framebuffer::CapturedFrame;
+use super::golden::Golden;
+use crate::{
+    EventSimulator, RecordingConfig, RecordingExport, SharedRecordingSession, SimulatedInput,
+    install_hooks, install_recorder, uninstall_hooks,
+};
+
+/// Milliseconds one frame advances the clock by.
+const FRAME_MS: u32 = 16;
+
+/// The most [`Headless::settle`] will advance.
+const SETTLE_LIMIT_MS: u32 = 10_000;
+
+/// One scheduler for the process: the animation globals are set once.
+fn shared_scheduler() -> Arc<Mutex<AnimationScheduler>> {
+    static SCHEDULER: OnceLock<Arc<Mutex<AnimationScheduler>>> = OnceLock::new();
+    SCHEDULER
+        .get_or_init(|| {
+            let scheduler = AnimationScheduler::new();
+            if !blinc_animation::is_scheduler_initialized() {
+                let handle = scheduler.handle();
+                blinc_animation::set_global_scheduler(handle.clone());
+                blinc_layout::render_state::set_global_scheduler(handle);
+            }
+            Arc::new(Mutex::new(scheduler))
+        })
+        .clone()
 }
 
-impl Default for HeadlessConfig {
-    fn default() -> Self {
-        Self {
-            width: 800,
-            height: 600,
-            scale_factor: 1.0,
-            msaa_samples: 1,
-        }
+/// The user's closure, with its element type erased.
+trait Mounted: 'static {
+    fn build(
+        &mut self,
+        ctx: &mut WindowedContext,
+        registry: Arc<blinc_layout::selector::ElementRegistry>,
+    ) -> RenderTree;
+    fn update(&mut self, ctx: &mut WindowedContext, tree: &mut RenderTree) -> UpdateResult;
+}
+
+impl<F, E> Mounted for F
+where
+    F: FnMut(&mut WindowedContext) -> E + 'static,
+    E: ElementBuilder + 'static,
+{
+    fn build(
+        &mut self,
+        ctx: &mut WindowedContext,
+        registry: Arc<blinc_layout::selector::ElementRegistry>,
+    ) -> RenderTree {
+        let composed = compose_with_overlays(self(ctx), ctx);
+        RenderTree::from_element_with_registry(&composed, registry)
+    }
+
+    fn update(&mut self, ctx: &mut WindowedContext, tree: &mut RenderTree) -> UpdateResult {
+        let composed = compose_with_overlays(self(ctx), ctx);
+        tree.incremental_update(&composed)
     }
 }
 
-impl HeadlessConfig {
-    /// Create a new config with specified dimensions.
-    pub fn new(width: u32, height: u32) -> Self {
-        Self {
+/// The user's UI with the overlay surfaces beside it, as a window has them.
+fn compose_with_overlays<E: ElementBuilder + 'static>(
+    user_ui: E,
+    ctx: &mut WindowedContext,
+) -> Div {
+    use blinc_layout::overlay_state::{overlay_stack, toast_tray};
+
+    let overlay_layer = ctx.overlay_manager().build_overlay_layer();
+    let stack_layer = match overlay_stack().lock() {
+        Ok(mut s) => {
+            s.set_viewport_with_scale(ctx.width, ctx.height, ctx.scale_factor as f32);
+            s.build_overlay_layer()
+        }
+        Err(_) => Div::new(),
+    };
+    let viewport = (ctx.width, ctx.height);
+    let tray_layer = toast_tray()
+        .lock()
+        .ok()
+        .map(|t| t.build_tray_layer(viewport))
+        .unwrap_or_default();
+    // The surface shows the theme's background, as a window does.
+    Div::new()
+        .w(ctx.width)
+        .h(ctx.height)
+        .bg(ThemeState::get().color(ColorToken::Background))
+        .relative()
+        .child(user_ui)
+        .child(overlay_layer)
+        .child(stack_layer)
+        .child(tray_layer)
+}
+
+/// A UI built, driven and painted offscreen.
+pub struct Headless {
+    app: BlincApp,
+    ctx: WindowedContext,
+    render_state: RenderState,
+    css_anim_store: Arc<Mutex<CssAnimationStore>>,
+    mounted: Option<Box<dyn Mounted>>,
+    tree: Option<RenderTree>,
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    width: u32,
+    height: u32,
+    now_ms: u64,
+    needs_rebuild: bool,
+    pointer: (f32, f32),
+    frames: u64,
+    recording: Option<Arc<SharedRecordingSession>>,
+}
+
+impl Headless {
+    /// An offscreen surface of `width` x `height` logical pixels. Fails when
+    /// there is no GPU adapter.
+    pub fn new(width: u32, height: u32) -> Result<Self> {
+        let app = BlincApp::new()?;
+        blinc_layout::init_text_measurer();
+
+        let mut ctx = WindowedContext::headless(width as f32, height as f32);
+        ctx.animations = shared_scheduler();
+        if !blinc_core::BlincContextState::is_initialized() {
+            blinc_core::BlincContextState::init(
+                blinc_core::reactive::global_graph(),
+                Arc::new(Mutex::new(blinc_core::context_state::HookState::new())),
+                ctx.dirty_flag().clone(),
+            );
+        }
+        if !blinc_layout::overlay_state::OverlayContext::is_initialized() {
+            blinc_layout::overlay_state::OverlayContext::init(ctx.overlay_manager().clone());
+        }
+
+        let texture = app.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("blinc headless surface"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: app.texture_format(),
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut render_state = RenderState::new(Arc::clone(&ctx.animations));
+        render_state.set_viewport(0.0, 0.0, width as f32, height as f32);
+
+        Ok(Self {
+            app,
+            ctx,
+            render_state,
+            css_anim_store: Arc::new(Mutex::new(CssAnimationStore::new())),
+            mounted: None,
+            tree: None,
+            texture,
+            view,
             width,
             height,
-            ..Default::default()
+            now_ms: 0,
+            needs_rebuild: false,
+            pointer: (-1.0, -1.0),
+            frames: 0,
+            recording: None,
+        })
+    }
+
+    /// Whether this machine can render offscreen. Tests use it to skip.
+    pub fn available() -> bool {
+        BlincApp::new().is_ok()
+    }
+
+    /// Use `bundle` in `scheme`, with the CSS it carries. Call before
+    /// [`Self::mount`].
+    pub fn theme(&mut self, bundle: ThemeBundle, scheme: ColorScheme) -> &mut Self {
+        ThemeState::init(bundle, scheme);
+        self
+    }
+
+    /// Add a stylesheet after the theme's, as `add_css` does in a window.
+    pub fn css(&mut self, css: &str) -> &mut Self {
+        self.ctx.add_css(css);
+        self.needs_rebuild = true;
+        self
+    }
+
+    /// The window context the UI is built with.
+    pub fn context(&mut self) -> &mut WindowedContext {
+        &mut self.ctx
+    }
+
+    /// The tree as last built, for assertions on render props and layout.
+    pub fn tree(&self) -> &RenderTree {
+        self.tree.as_ref().expect("nothing is mounted")
+    }
+
+    /// Build `ui` and show it. `ui` runs again whenever a state it reads
+    /// changes, as in a window.
+    pub fn mount<E, F>(&mut self, ui: F) -> &mut Self
+    where
+        F: FnMut(&mut WindowedContext) -> E + 'static,
+        E: ElementBuilder + 'static,
+    {
+        self.mounted = Some(Box::new(ui));
+        self.tree = None;
+        self.needs_rebuild = true;
+        self.frame(0);
+        self
+    }
+
+    // ---- the frame -----------------------------------------------------
+
+    /// Run one frame, advancing the clock by `dt_ms`.
+    pub fn frame(&mut self, dt_ms: u32) {
+        self.now_ms += dt_ms as u64;
+        self.frames += 1;
+        let dt = dt_ms as f32;
+        self.ctx.animations.lock().unwrap().tick_by(dt / 1000.0);
+
+        self.drain_queued_css();
+        self.rebuild_if_needed();
+        self.apply_queued_updates();
+
+        self.render_state.process_global_motion_exit_cancels();
+        self.render_state.process_global_motion_exit_starts();
+        self.render_state.process_global_motion_starts();
+        let _ = self.render_state.tick(self.now_ms);
+
+        if let Some(tree) = self.tree.as_mut() {
+            let store = tree.css_anim_store();
+            store.lock().unwrap().tick(dt);
+            tree.tick_flip_animations(dt);
+        }
+        self.render_state.sync_shared_motion_states();
+        let _ = ThemeState::get().tick();
+
+        if blinc_layout::has_animating_statefuls() {
+            blinc_layout::check_stateful_animations();
+        }
+        self.apply_queued_updates();
+
+        blinc_layout::widgets::process_pending_input_focus();
+        blinc_layout::widgets::process_pending_area_focus();
+        let text_focus = blinc_layout::widgets::text_input::focused_text_input_node_id()
+            .or_else(blinc_layout::widgets::text_input::focused_text_area_node_id);
+        if text_focus != self.ctx.event_router.focused() {
+            self.ctx.event_router.set_focus(text_focus);
+        }
+
+        let (w, h) = (self.ctx.width, self.ctx.height);
+        if let Some(tree) = self.tree.as_mut() {
+            if tree.stylesheet().is_some()
+                && tree.apply_stylesheet_state_styles(&self.ctx.event_router)
+            {
+                tree.compute_layout(w, h);
+                tree.update_flip_bounds();
+            }
+            tree.apply_all_css_animation_props();
+            tree.apply_all_css_transition_props();
+            tree.apply_flip_animation_props();
+            if tree.apply_animated_layout_props() {
+                tree.compute_layout(w, h);
+                tree.update_flip_bounds();
+            }
+            tree.remove_completed_transitions();
+            blinc_layout::recorder_bridge::record_frame(
+                tree,
+                &self.ctx.event_router,
+                (self.width, self.height),
+            );
         }
     }
 
-    /// Set the scale factor.
-    pub fn with_scale_factor(mut self, scale: f64) -> Self {
-        self.scale_factor = scale;
+    /// Advance the clock by `ms`, a frame at a time.
+    pub fn advance(&mut self, ms: u32) -> &mut Self {
+        let mut left = ms;
+        while left > 0 {
+            let step = left.min(FRAME_MS);
+            self.frame(step);
+            left -= step;
+        }
         self
     }
 
-    /// Enable MSAA with specified sample count.
-    pub fn with_msaa(mut self, samples: u32) -> Self {
-        self.msaa_samples = samples;
+    /// Advance until nothing is animating or easing.
+    pub fn settle(&mut self) -> &mut Self {
+        self.frame(0);
+        let mut spent = 0;
+        while self.busy() && spent < SETTLE_LIMIT_MS {
+            self.frame(FRAME_MS);
+            spent += FRAME_MS;
+        }
         self
     }
-}
 
-/// A headless rendering context for testing.
-///
-/// This provides a minimal environment for rendering Blinc UI
-/// without requiring a window or display.
-pub struct HeadlessContext {
-    config: HeadlessConfig,
-    frame_count: u64,
-    // GPU resources will be added when wgpu feature is enabled
-    // device: Arc<wgpu::Device>,
-    // queue: Arc<wgpu::Queue>,
-    // render_texture: wgpu::Texture,
-}
+    fn busy(&self) -> bool {
+        let Some(tree) = self.tree.as_ref() else {
+            return false;
+        };
+        let store = tree.css_anim_store();
+        let store = store.lock().unwrap();
+        store.has_active_animations()
+            || store.has_active_transitions()
+            || self.ctx.animations.lock().unwrap().has_active_animations()
+    }
 
-impl HeadlessContext {
-    /// Create a new headless context with the given configuration.
+    fn drain_queued_css(&mut self) {
+        let queued = blinc_core::BlincContextState::get().drain_stylesheets();
+        if !queued.is_empty() {
+            for css in queued {
+                self.ctx.add_css(&css);
+            }
+            self.needs_rebuild = true;
+        }
+    }
+
+    fn rebuild_if_needed(&mut self) {
+        if let Some(tree) = self.tree.as_ref() {
+            if tree.needs_rebuild() {
+                self.needs_rebuild = true;
+            }
+        }
+        if blinc_layout::widgets::take_needs_rebuild() {
+            self.needs_rebuild = true;
+        }
+        if self
+            .ctx
+            .dirty_flag()
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            self.needs_rebuild = true;
+        }
+        if blinc_layout::widgets::take_needs_css_reparse() {
+            self.ctx.reparse_css();
+        }
+        if !self.needs_rebuild {
+            return;
+        }
+        self.needs_rebuild = false;
+        let Some(mounted) = self.mounted.as_mut() else {
+            return;
+        };
+
+        blinc_layout::reset_call_counters();
+        blinc_layout::clear_stateful_base_updaters();
+        blinc_layout::click_outside::clear_click_outside_handlers();
+
+        let (w, h) = (self.ctx.width, self.ctx.height);
+        if let Some(tree) = self.tree.as_mut() {
+            match mounted.update(&mut self.ctx, tree) {
+                UpdateResult::NoChanges | UpdateResult::VisualOnly => {}
+                UpdateResult::LayoutChanged | UpdateResult::ChildrenChanged => {
+                    tree.apply_stylesheet_base_styles();
+                    tree.apply_stylesheet_layout_overrides();
+                    tree.compute_layout(w, h);
+                    tree.apply_flip_transitions();
+                    tree.update_flip_bounds();
+                    if let Some(sheet) = &self.ctx.stylesheet {
+                        self.ctx.pointer_query.register_from_stylesheet(sheet);
+                    }
+                    tree.initialize_motion_animations(&mut self.render_state);
+                    self.render_state.end_stable_motion_frame();
+                    self.render_state.process_global_motion_replays();
+                    tree.start_all_css_animations();
+                }
+            }
+            tree.clear_dirty();
+        } else {
+            let registry = Arc::clone(self.ctx.element_registry());
+            let mut tree = mounted.build(&mut self.ctx, registry);
+            tree.set_animations(&self.ctx.animations);
+            tree.set_scale_factor(self.ctx.scale_factor as f32);
+            tree.set_css_anim_store(Arc::clone(&self.css_anim_store));
+            if let Some(sheet) = &self.ctx.stylesheet {
+                tree.set_stylesheet_arc(sheet.clone());
+            }
+            tree.apply_all_stylesheet_styles();
+            if let Some(sheet) = &self.ctx.stylesheet {
+                self.ctx.pointer_query.register_from_stylesheet(sheet);
+            }
+            tree.compute_layout(w, h);
+            tree.update_flip_bounds();
+            tree.initialize_motion_animations(&mut self.render_state);
+            self.render_state.end_stable_motion_frame();
+            self.render_state.process_global_motion_replays();
+            tree.start_all_css_animations();
+            self.ctx.rebuild_count = self.ctx.rebuild_count.saturating_add(1);
+            self.tree = Some(tree);
+        }
+    }
+
+    /// Land what widgets and signals queued: property writes, subtree
+    /// rebuilds, and the layout they call for.
+    fn apply_queued_updates(&mut self) {
+        let (w, h) = (self.ctx.width, self.ctx.height);
+        let Some(tree) = self.tree.as_mut() else {
+            return;
+        };
+        for _ in 0..3 {
+            let updates = tree.take_pending_property_updates();
+            let mut needs_layout = tree.apply_partial_property_updates(updates).needs_layout;
+            let rebuilt = tree.process_pending_subtree_rebuilds();
+            needs_layout |= rebuilt;
+            if rebuilt {
+                self.app
+                    .invalidate_render_cache_tagged("headless_subtree_rebuild");
+                tree.apply_stylesheet_layout_overrides();
+            }
+            if needs_layout {
+                tree.compute_layout(w, h);
+                tree.apply_flip_transitions();
+                tree.update_flip_bounds();
+                tree.initialize_motion_animations(&mut self.render_state);
+                self.render_state.end_stable_motion_frame();
+                self.render_state.process_global_motion_replays();
+                tree.start_all_css_animations();
+            }
+            if !needs_layout && !rebuilt && !blinc_layout::has_pending_partial_prop_updates() {
+                break;
+            }
+        }
+    }
+
+    // ---- input ---------------------------------------------------------
+
+    fn deliver(&mut self, events: Vec<(LayoutNodeId, u32)>) {
+        let (x, y) = self.pointer;
+        if let Some(tree) = self.tree.as_mut() {
+            for (node, event) in events {
+                let (bx, by, bw, bh) = self
+                    .ctx
+                    .event_router
+                    .get_node_bounds(node)
+                    .unwrap_or((0.0, 0.0, 0.0, 0.0));
+                tree.dispatch_event_with_local(node, event, x, y, x - bx, y - by, bx, by, bw, bh);
+            }
+        }
+        self.frame(0);
+    }
+
+    /// Move the pointer to `(x, y)`.
+    pub fn move_to(&mut self, x: f32, y: f32) -> &mut Self {
+        self.pointer = (x, y);
+        let events = match self.tree.as_ref() {
+            Some(tree) => self.ctx.event_router.on_mouse_move(tree, x, y),
+            None => return self,
+        };
+        self.deliver(events);
+        self
+    }
+
+    /// Press the left button at the pointer.
+    pub fn mouse_down(&mut self) -> &mut Self {
+        let (x, y) = self.pointer;
+        let events = match self.tree.as_ref() {
+            Some(tree) => self
+                .ctx
+                .event_router
+                .on_mouse_down(tree, x, y, MouseButton::Left),
+            None => return self,
+        };
+        self.deliver(events);
+        self
+    }
+
+    /// Release the left button at the pointer.
+    pub fn mouse_up(&mut self) -> &mut Self {
+        let (x, y) = self.pointer;
+        let events = match self.tree.as_ref() {
+            Some(tree) => self
+                .ctx
+                .event_router
+                .on_mouse_up(tree, x, y, MouseButton::Left),
+            None => return self,
+        };
+        self.deliver(events);
+        self
+    }
+
+    /// Move to the first element matching `selector`'s centre.
+    pub fn hover(&mut self, selector: &str) -> &mut Self {
+        let (x, y) = self.centre(selector);
+        self.move_to(x, y)
+    }
+
+    /// Hover `selector` and hold the left button down.
+    pub fn press(&mut self, selector: &str) -> &mut Self {
+        self.hover(selector);
+        self.mouse_down()
+    }
+
+    /// Release where the pointer is.
+    pub fn release(&mut self) -> &mut Self {
+        self.mouse_up()
+    }
+
+    /// Click the first element matching `selector`.
+    pub fn click(&mut self, selector: &str) -> &mut Self {
+        self.press(selector);
+        self.mouse_up()
+    }
+
+    /// Move the pointer off everything.
+    pub fn leave(&mut self) -> &mut Self {
+        self.move_to(-10.0, -10.0)
+    }
+
+    /// Scroll under the pointer.
+    pub fn scroll(&mut self, delta_x: f32, delta_y: f32) -> &mut Self {
+        let events = match self.tree.as_ref() {
+            Some(tree) => self.ctx.event_router.on_scroll(tree, delta_x, delta_y),
+            None => return self,
+        };
+        self.deliver(events);
+        self
+    }
+
+    // ---- recording and replay ------------------------------------------
+
+    /// Start recording what the UI is given and how it looks, in the form the
+    /// debugger opens. Pair with [`Self::stop_recording`].
+    pub fn start_recording(&mut self) -> &mut Self {
+        let session = Arc::new(SharedRecordingSession::new(RecordingConfig::debug()));
+        install_recorder(Arc::clone(&session));
+        install_hooks();
+        session.start();
+        self.recording = Some(session);
+        self
+    }
+
+    /// Stop recording and hand back the session.
+    pub fn stop_recording(&mut self) -> Option<RecordingExport> {
+        let session = self.recording.take()?;
+        session.stop();
+        uninstall_hooks();
+        Some(session.export())
+    }
+
+    /// Feed a recorded session's input to the UI in order, advancing the
+    /// clock by the time between events, and leave it settled.
+    pub fn replay(&mut self, export: &RecordingExport) -> &mut Self {
+        use crate::RecordedEvent as Event;
+
+        let mut simulator = EventSimulator::new();
+        let mut last = export.events.first().map(|e| e.timestamp.as_micros());
+        for recorded in &export.events {
+            let at = recorded.timestamp.as_micros();
+            if let Some(before) = last {
+                // A pause in a recording is not worth waiting out in full.
+                let gap_ms = (at.saturating_sub(before) / 1000).min(500) as u32;
+                self.advance(gap_ms);
+            }
+            last = Some(at);
+            match simulator.process_event(&recorded.event) {
+                SimulatedInput::MouseMove { position, .. } => {
+                    self.move_to(position.x, position.y);
+                }
+                SimulatedInput::MouseDown { position, .. } => {
+                    self.move_to(position.x, position.y);
+                    self.mouse_down();
+                }
+                SimulatedInput::MouseUp { position, .. } => {
+                    self.move_to(position.x, position.y);
+                    self.mouse_up();
+                }
+                SimulatedInput::Scroll {
+                    position,
+                    delta_x,
+                    delta_y,
+                    ..
+                } => {
+                    self.move_to(position.x, position.y);
+                    self.scroll(delta_x, delta_y);
+                }
+                // A click is its own down and up, already recorded.
+                _ if matches!(recorded.event, Event::Click(_)) => {}
+                _ => {}
+            }
+        }
+        self.settle()
+    }
+
+    // ---- lookup --------------------------------------------------------
+
+    /// The first node matching `selector`: `#id` or `.class`, in tree order.
+    pub fn find(&self, selector: &str) -> Option<LayoutNodeId> {
+        let tree = self.tree.as_ref()?;
+        if let Some(id) = selector.strip_prefix('#') {
+            return tree.query_by_id(id);
+        }
+        let class = selector.strip_prefix('.')?;
+        let nodes = tree.element_registry().class_to_nodes_index();
+        let matching = nodes.get(class)?;
+        let root = tree.root()?;
+        let mut stack = vec![root];
+        while let Some(node) = stack.pop() {
+            if matching.contains(&node) {
+                return Some(node);
+            }
+            stack.extend(tree.layout_tree.children(node).into_iter().rev());
+        }
+        None
+    }
+
+    /// The centre of the first node matching `selector`.
     ///
-    /// This initializes wgpu in headless mode without requiring a surface.
-    pub fn new(config: HeadlessConfig) -> Self {
-        Self {
-            config,
-            frame_count: 0,
+    /// Panics when nothing matches: a test that names a missing element is
+    /// wrong, not skipped.
+    pub fn centre(&self, selector: &str) -> (f32, f32) {
+        let node = self
+            .find(selector)
+            .unwrap_or_else(|| panic!("nothing matches `{selector}`"));
+        let b = self
+            .tree()
+            .get_absolute_bounds(node)
+            .unwrap_or_else(|| panic!("`{selector}` has no bounds"));
+        (b.x + b.width / 2.0, b.y + b.height / 2.0)
+    }
+
+    // ---- capture -------------------------------------------------------
+
+    /// Paint the current frame and read it back.
+    pub fn snapshot(&mut self) -> Result<CapturedFrame> {
+        self.frame(0);
+        let tree = self.tree.as_ref().expect("nothing is mounted");
+        self.app.render_tree_with_motion_opt(
+            tree,
+            &self.render_state,
+            &self.view,
+            Some(&self.texture),
+            self.width,
+            self.height,
+            false,
+        )?;
+        let rgba = self
+            .app
+            .read_texture_to_rgba8(&self.texture, self.width, self.height)?;
+        Ok(CapturedFrame::new(rgba, self.width, self.height).with_frame_number(self.frames))
+    }
+
+    /// Compare the current frame with the golden `name` of the crate under
+    /// test. See the module docs for blessing and skipping.
+    pub fn assert_snapshot(&mut self, name: &str) {
+        let golden = Golden::in_crate();
+        if golden.skipped() {
+            eprintln!(
+                "snapshot `{name}` skipped: no goldens for this platform (BLINC_SNAPSHOT=bless records them)"
+            );
+            return;
         }
-    }
-
-    /// Get the current configuration.
-    pub fn config(&self) -> &HeadlessConfig {
-        &self.config
-    }
-
-    /// Get the width in logical pixels.
-    pub fn width(&self) -> f32 {
-        self.config.width as f32 / self.config.scale_factor as f32
-    }
-
-    /// Get the height in logical pixels.
-    pub fn height(&self) -> f32 {
-        self.config.height as f32 / self.config.scale_factor as f32
-    }
-
-    /// Get the physical width in pixels.
-    pub fn physical_width(&self) -> u32 {
-        self.config.width
-    }
-
-    /// Get the physical height in pixels.
-    pub fn physical_height(&self) -> u32 {
-        self.config.height
-    }
-
-    /// Get the scale factor.
-    pub fn scale_factor(&self) -> f64 {
-        self.config.scale_factor
-    }
-
-    /// Get the number of frames rendered.
-    pub fn frame_count(&self) -> u64 {
-        self.frame_count
-    }
-
-    /// Resize the render target.
-    pub fn resize(&mut self, width: u32, height: u32) {
-        self.config.width = width;
-        self.config.height = height;
-        // TODO: Recreate render texture
-    }
-
-    /// Advance to the next frame.
-    pub fn next_frame(&mut self) {
-        self.frame_count += 1;
-    }
-}
-
-/// Builder for HeadlessContext with fluent API.
-pub struct HeadlessContextBuilder {
-    config: HeadlessConfig,
-}
-
-impl HeadlessContextBuilder {
-    /// Create a new builder with default configuration.
-    pub fn new() -> Self {
-        Self {
-            config: HeadlessConfig::default(),
-        }
-    }
-
-    /// Set the dimensions.
-    pub fn size(mut self, width: u32, height: u32) -> Self {
-        self.config.width = width;
-        self.config.height = height;
-        self
-    }
-
-    /// Set the scale factor.
-    pub fn scale_factor(mut self, scale: f64) -> Self {
-        self.config.scale_factor = scale;
-        self
-    }
-
-    /// Enable MSAA.
-    pub fn msaa(mut self, samples: u32) -> Self {
-        self.config.msaa_samples = samples;
-        self
-    }
-
-    /// Build the headless context.
-    pub fn build(self) -> HeadlessContext {
-        HeadlessContext::new(self.config)
-    }
-}
-
-impl Default for HeadlessContextBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_headless_config_defaults() {
-        let config = HeadlessConfig::default();
-        assert_eq!(config.width, 800);
-        assert_eq!(config.height, 600);
-        assert_eq!(config.scale_factor, 1.0);
-    }
-
-    #[test]
-    fn test_headless_context_dimensions() {
-        let ctx = HeadlessContext::new(HeadlessConfig::new(1920, 1080).with_scale_factor(2.0));
-
-        assert_eq!(ctx.physical_width(), 1920);
-        assert_eq!(ctx.physical_height(), 1080);
-        assert_eq!(ctx.width(), 960.0);
-        assert_eq!(ctx.height(), 540.0);
-    }
-
-    #[test]
-    fn test_headless_context_builder() {
-        let ctx = HeadlessContextBuilder::new()
-            .size(1024, 768)
-            .scale_factor(1.5)
-            .msaa(4)
-            .build();
-
-        assert_eq!(ctx.physical_width(), 1024);
-        assert_eq!(ctx.physical_height(), 768);
-        assert_eq!(ctx.scale_factor(), 1.5);
+        let image = self.snapshot().expect("snapshot");
+        golden.check(name, &image);
     }
 }

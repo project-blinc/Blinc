@@ -98,16 +98,39 @@ player.step();
 
 ## Visual Testing
 
+With the `headless` feature, `Headless` builds a real UI offscreen, with no
+window, through the renderer a window uses. You drive the pointer and the
+clock, and read back frames:
+
 ```rust
-use blinc_recorder::{TestRunner, ScreenshotExporter};
+use blinc_recorder::Headless;
 
-// Capture screenshot
-let frame = app.render(&ui);
-ScreenshotExporter::save_png(&frame, "screenshot.png")?;
+let mut ui = Headless::new(240, 100)?;
+ui.theme(HybridTheme::bundle().with_css(CN_STYLES), ColorScheme::Dark);
+ui.mount(|_| div().w(240.0).h(100.0).child(cn::button("Save")));
 
-// Compare with baseline
-let runner = TestRunner::new("tests/visual");
-runner.compare("test_name", &frame)?;
+ui.hover(".cn-button").settle();   // move the pointer, let transitions finish
+ui.assert_snapshot("button_hover");
+
+ui.advance(64);                    // or step the clock by hand
+let frame = ui.snapshot()?;        // a `CapturedFrame`
+```
+
+Goldens are PNGs in `.blinc/snapshots/<crate>/<os>/` at the workspace root
+(`BLINC_SNAPSHOT_DIR` moves it). `.blinc/` is not tracked: each machine
+records its own with `BLINC_SNAPSHOT=bless`. A missing golden fails and the
+actual and diff images are written to `failed/` beside them. A platform with
+no goldens skips, and `BLINC_SNAPSHOT=off` skips everywhere.
+
+A headless run records like a live one. The session is the format the
+debugger opens, and it replays to the same frame:
+
+```rust
+ui.start_recording();
+ui.click(".cn-button").settle();
+let export = ui.stop_recording().unwrap();   // events and tree snapshots
+
+other.replay(&export);                       // reproduces the input
 ```
 
 ## Debug Server
@@ -125,6 +148,7 @@ let server = DebugServer::start(8080)?;
 ## Optional Features
 
 - `png` - Enable PNG screenshot export
+- `headless` - `Headless`, `Golden`: offscreen builds, input, frames and goldens
 
 ## Architecture
 
@@ -134,7 +158,7 @@ blinc_recorder
 ├── events.rs         # Event types and recording
 ├── snapshot.rs       # Tree snapshot capture
 ├── replay/           # Replay infrastructure
-├── testing/          # Visual testing utilities
+├── testing/          # Frames, goldens and the offscreen `Headless` driver
 └── server.rs         # Debug server
 ```
 

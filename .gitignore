@@ -81,6 +81,9 @@ coverage/
 docs/plan/
 
 test_output/
+
+# Per-machine artifacts: snapshot goldens (BLINC_SNAPSHOT=bless), failed frames.
+.blinc/
 test_references/
 vendor/
 

@@ -51,9 +51,10 @@ pub use session::{
     SharedRecordingSession,
 };
 pub use testing::{
-    CapturedFrame, FrameSequence, HeadlessConfig, HeadlessContext, RegressionResult,
-    ScreenshotExporter, TestConfig, TestRunner, compare_frames,
+    CapturedFrame, FrameSequence, RegressionResult, ScreenshotExporter, compare_frames,
 };
+#[cfg(feature = "headless")]
+pub use testing::{Golden, Headless};
 
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -161,23 +162,18 @@ pub fn install_hooks() {
 
     // Only install hooks if BlincContextState is initialized
     if let Some(ctx) = BlincContextState::try_get() {
-        // Event callback: convert type-erased event to RecordedEvent and record
-        let event_callback: blinc_core::RecorderEventCallback =
-            Arc::new(|event_any: blinc_core::RecordedEventAny| {
-                if let Some(event) = event_any.downcast_ref::<RecordedEvent>() {
-                    record_event(event.clone());
-                }
-            });
-        ctx.set_recorder_event_callback(event_callback);
-
-        // Snapshot callback: convert type-erased snapshot to TreeSnapshot and record
-        let snapshot_callback: blinc_core::RecorderSnapshotCallback =
-            Arc::new(|snapshot_any: blinc_core::TreeSnapshotAny| {
-                if let Some(snapshot) = snapshot_any.downcast_ref::<TreeSnapshot>() {
-                    record_snapshot(snapshot.clone());
-                }
-            });
-        ctx.set_recorder_snapshot_callback(snapshot_callback);
+        // The callbacks hold the session itself, so they record from any
+        // thread, not only the one that installed the recorder.
+        let Some(session) = get_recorder() else {
+            return;
+        };
+        let events = Arc::clone(&session);
+        ctx.set_recorder_event_callback(Arc::new(move |event: RecordedEvent| {
+            events.record_event(event);
+        }));
+        ctx.set_recorder_snapshot_callback(Arc::new(move |snapshot: TreeSnapshot| {
+            session.record_snapshot(snapshot);
+        }));
 
         // Update callback: log element updates with their category
         let update_callback: blinc_core::RecorderUpdateCallback =
