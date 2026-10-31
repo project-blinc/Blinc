@@ -1,4 +1,5 @@
-//! Where does a bound Badge's label get its colour, and when?
+//! Where does a bound Badge's label get its colour, and when? From its
+//! `.cn-badge--*` class, as a static label does.
 use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
 use blinc_layout::binding::Reactive;
 use blinc_layout::div::div;
@@ -114,17 +115,16 @@ fn bound_and_static_labels_resolve_the_same_colour() {
 
     assert!(want.is_some(), "sanity: the static chip resolves a colour");
 
-    // A bound label carries the variant's THEME colour, set in Rust
-    // rather than inherited, so it is right on the first frame whether
-    // or not a stylesheet pass has run over the rebuilt subtree. It
-    // therefore does NOT follow a CSS override of the class -- the
-    // trade-off documented on `Badge::reactive_label`.
-    let secondary = blinc_theme::ThemeState::get().color(blinc_theme::ColorToken::TextSecondary);
-    let expected = [secondary.r, secondary.g, secondary.b, secondary.a];
+    // A bound label inherits its colour from the class, as a static one does,
+    // so it follows a CSS override of that class: here, red.
     assert_eq!(
-        first,
-        Some(expected),
-        "a bound chip must carry the variant's colour on the FIRST frame"
+        want,
+        Some([1.0, 0.0, 0.0, 1.0]),
+        "the override reaches the static label"
+    );
+    assert_eq!(
+        first, want,
+        "a bound chip must carry the class's colour on the FIRST frame"
     );
     assert_eq!(second, first, "and must keep it across a rebuild");
 }

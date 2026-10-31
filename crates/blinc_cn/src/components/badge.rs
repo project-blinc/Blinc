@@ -43,7 +43,6 @@ use std::ops::{Deref, DerefMut};
 
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
 use blinc_layout::prelude::*;
-use blinc_theme::ColorToken;
 use blinc_theme::ThemeState;
 
 pub use super::button::IconPosition;
@@ -97,22 +96,6 @@ impl BadgeVariant {
             BadgeVariant::Warning => "warning",
             BadgeVariant::Destructive => "destructive",
         }
-    }
-}
-
-/// The theme colour `.cn-badge--{style}-{variant}` sets as `color`.
-///
-/// Mirrors the stylesheet: change one and change the other, or a bound
-/// label drifts from a static one.
-fn label_color_token(style: BadgeStyle, variant: BadgeVariant) -> ColorToken {
-    match (style, variant) {
-        (BadgeStyle::Solid, _) => ColorToken::TextInverse,
-        (_, BadgeVariant::Default) => ColorToken::Primary,
-        (BadgeStyle::Soft, BadgeVariant::Secondary) => ColorToken::TextSecondary,
-        (BadgeStyle::Outline, BadgeVariant::Secondary) => ColorToken::TextPrimary,
-        (_, BadgeVariant::Success) => ColorToken::Success,
-        (_, BadgeVariant::Warning) => ColorToken::Warning,
-        (_, BadgeVariant::Destructive) => ColorToken::Error,
     }
 }
 
@@ -200,18 +183,12 @@ impl Badge {
             return Self::rebuild(current(&label), variant, style, None, icon_position);
         }
 
-        // The chip's background, border and radius come from
-        // `.cn-badge--{style}-{variant}` on the outer node. The label's
-        // colour is the variant's token, set rather than inherited, as
-        // cn::Button's label is: a CSS override of that class's `color`
-        // does not reach a bound label.
+        // The chip's background, border, radius and the label's colour all come
+        // from `.cn-badge--{style}-{variant}`: the bound label inherits its
+        // `color` as a static one does, so there is nothing to mirror here.
         let src = clone_reactive(&label);
         let variant_class = format!("cn-badge--{}-{}", style.css_suffix(), variant.css_suffix());
-        let fg = ThemeState::get().color(label_color_token(style, variant));
-        // Same helper every other reactive text prop uses, so the
-        // wrapper's sizing and the "set your own colour" rule live in
-        // one place.
-        let label_slot = crate::reactive_props::reactive_text(&src, move |t| t.medium().color(fg));
+        let label_slot = crate::reactive_props::reactive_text(&src, |t| t.medium());
         Self {
             inner: div()
                 .class("cn-badge")

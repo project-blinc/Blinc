@@ -63,8 +63,12 @@ fn cn_scenario(
     build: impl FnOnce(&blinc_core::reactive::State<String>) -> Box<dyn ElementBuilder>,
 ) -> String {
     let vars = blinc_theme::ThemeState::get().to_css_variable_map();
-    let sheet =
-        Stylesheet::parse_with_variables(blinc_cn::cn_styles::CN_STYLES, &vars).expect("css");
+    let all = format!(
+        "{}\n{}",
+        blinc_layout::ua_styles::UA_STYLES,
+        blinc_cn::cn_styles::CN_STYLES
+    );
+    let sheet = Stylesheet::parse_with_variables(&all, &vars).expect("css");
     set_active_stylesheet(Arc::new(sheet.clone()));
     let selected = string_state("a");
     let widget = build(&selected);

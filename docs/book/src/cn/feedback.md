@@ -46,32 +46,58 @@ Small labels for status or counts:
 badge("New")
 badge("3").variant(BadgeVariant::Secondary)
 badge("Error").variant(BadgeVariant::Destructive)
-badge("Beta").variant(BadgeVariant::Outline)
+badge("Beta").style(BadgeStyle::Outline)
 ```
 
-### Badge Variants
+### Variants and styles
+
+A badge has a **variant**, its semantic colour, and a **style**, how that
+colour is applied:
 
 ```rust
-// Default - primary color
-badge("Default")
+// Variants: Default (primary), Secondary (muted), Success, Warning, Destructive
+badge("Done").variant(BadgeVariant::Success)
 
-// Secondary - muted color
-badge("Secondary").variant(BadgeVariant::Secondary)
-
-// Destructive - error/warning
-badge("Destructive").variant(BadgeVariant::Destructive)
-
-// Outline - bordered
-badge("Outline").variant(BadgeVariant::Outline)
+// Styles: Soft (default, a tinted fill and a same-hue border and text),
+// Solid (filled, inverse text), Outline (transparent with a coloured border)
+badge("Done").variant(BadgeVariant::Success).style(BadgeStyle::Solid)
+badge("Done").variant(BadgeVariant::Success).style(BadgeStyle::Outline)
 ```
 
 ### With Icon
 
 ```rust
-badge("")
-    .variant(BadgeVariant::Outline)
-    .child(icon(icons::CHECK).size(12.0))
-    .child(text("Verified"))
+badge("Verified")
+    .icon(icon(icons::CHECK).size(12.0))
+    .icon_position(IconPosition::Start)
+```
+
+Call `.icon(..)` last in the chain: the other builder methods rebuild the
+badge and drop an icon added before them.
+
+### A Bound Label
+
+`reactive_label` follows a signal in place, and takes the same colours as a
+static label:
+
+```rust
+badge("").reactive_label(blinc_layout::binding::Reactive::Bound(count_text))
+```
+
+### Styling
+
+A badge's fill, border, radius and text colour are the
+`.cn-badge--{style}-{variant}` rules of `CN_STYLES`, for example
+`.cn-badge--soft-success` or `.cn-badge--outline-default`. The label inherits
+its `color` from the rule, so a rule of your own changes it, bound or not:
+
+```css
+.cn-badge--soft-success { background: #052e16; border-color: #16a34a; color: #4ade80; }
+.my-badge { border-radius: 4px; }
+```
+
+```rust
+badge("Done").variant(BadgeVariant::Success).class("my-badge")
 ```
 
 ## Progress

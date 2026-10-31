@@ -596,50 +596,12 @@ pub const CN_STYLES: &str = concat!(
    Radio
    ============================================================================ */
 
-/* The ring is the element; its border colour, the dot and the disabled fill
-   follow its `checked` and `disabled` attributes. Border width is set in Rust
-   because it varies per size. */
-.cn-radio {
-    background: transparent;
-    border-color: var(--cn-radio-border, var(--border-secondary));
-    border-radius: var(--radius-full);
-    cursor: pointer;
-    transition:
-        border-color var(--duration-fast) var(--ease-state),
-        transform var(--duration-fastest) var(--ease-state);
-}
-/* `:not(:disabled)` gates both the accent border and the scale on the option
-   being reachable: a disabled dial must not light up or grow under the
-   pointer. */
-.cn-radio:hover:not(:disabled) {
-    border-color: var(--cn-radio-hover-border, var(--primary));
-    transform: scale(1.05, 1.05);
-}
+/* The look is the layout radio's `.blinc-radio` rules. These are cn's hooks on
+   top of them: the custom properties a theme can set. */
+.cn-radio { border-color: var(--cn-radio-border, var(--border-secondary)); }
+.cn-radio:hover:not(:disabled) { border-color: var(--cn-radio-hover-border, var(--primary)); }
 .cn-radio:checked { border-color: var(--cn-radio-selected, var(--primary)); }
-/* A disabled ring takes the disabled-surface palette shared with the button,
-   select, checkbox and switch. */
-.cn-radio:disabled {
-    background: var(--input-bg-disabled);
-    border-color: var(--border-secondary);
-}
-.cn-radio-dot {
-    background: var(--cn-radio-dot, var(--primary));
-    border-radius: var(--radius-full);
-    opacity: 0;
-    transition:
-        opacity var(--duration-fast) var(--ease-state),
-        transform var(--duration-fastest) var(--ease-state);
-}
-.cn-radio:checked > .cn-radio-dot { opacity: 1; }
-/* Press feedback. The widget used to do this from an FSM, which meant a
-   rebuild per pointer transition; here it costs nothing. */
-.cn-radio:active:not(:disabled) .cn-radio-dot {
-    transform: scale(0.8, 0.8);
-}
-.cn-radio--disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
+.cn-radio-dot { background: var(--cn-radio-dot, var(--primary)); }
 
 /* ============================================================================
    Tabs

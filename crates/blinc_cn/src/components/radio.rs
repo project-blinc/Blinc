@@ -2,8 +2,8 @@
 //!
 //! A themed radio button group. Each button is an element with a `checked`
 //! attribute while it is selected and `disabled` while it cannot be chosen, so
-//! its look in each state, and how it eases between them, is the `.cn-radio`
-//! rules of `CN_STYLES`. Restyle it with rules of your own:
+//! its look in each state, and how it eases between them, is the `.blinc-radio`
+//! rules of the layout stylesheet, with `.cn-radio` as cn's hooks on them. Restyle it with rules of your own:
 //!
 //! ```css
 //! .my-radio:checked { border-color: #16a34a; }
@@ -213,7 +213,7 @@ fn build_radio_button(
         theme.color(ColorToken::TextPrimary)
     };
 
-    // Hover, press, selection and disabled belong to CSS (`.cn-radio:hover`,
+    // Hover, press, selection and disabled belong to CSS (`.blinc-radio:hover`,
     // `:active`, `:checked`, `:disabled`), so nothing here follows the
     // pointer; the selection only moves the `checked` attribute, in place.
     let selected = selected_state.signal();
@@ -223,6 +223,7 @@ fn build_radio_button(
     // The ring is the element; the dot is always there and shown while
     // checked. Sizes and the border width vary per size, so they are set here.
     let mut circle = div()
+        .class("blinc-radio")
         .class("cn-radio")
         // Added and taken away with the selection, so the stylesheet's
         // `.cn-radio--selected` rules follow it in place.
@@ -236,6 +237,7 @@ fn build_radio_button(
         .justify_center()
         .child(
             div()
+                .class("blinc-radio-dot")
                 .class("cn-radio-dot")
                 .w(inner_size)
                 .h(inner_size)
