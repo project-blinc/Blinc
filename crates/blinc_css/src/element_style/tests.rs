@@ -807,7 +807,7 @@ fn three_value_spacing_shorthand_is_top_horizontal_bottom() {
 #[test]
 fn an_unsupported_selector_is_reported_not_dropped_silently() {
     let r = crate::parser::Stylesheet::parse_with_errors(
-        ".a { opacity: 0.5; } .b[data-x=\"1\"] { opacity: 0.2; } .c { opacity: 0.1; }",
+        ".a { opacity: 0.5; } .b[data-x { opacity: 0.2; } .c { opacity: 0.1; }",
     );
     assert!(r.stylesheet.get_class("a").is_some());
     assert!(
@@ -851,4 +851,19 @@ fn font_family_keeps_the_first_name_and_generic() {
     assert_eq!(fam("b").generic, StyleGenericFont::Monospace);
     assert_eq!(fam("c").name, None);
     assert_eq!(fam("c").generic, StyleGenericFont::Serif);
+}
+
+#[test]
+fn border_radius_takes_one_to_four_corner_values() {
+    let sheet = crate::parser::Stylesheet::parse(
+        ".a { border-radius: 0 0 24px 24px; } .b { border-radius: 4px 8px; } .c { border-radius: 4px 8px 12px; }",
+    )
+    .expect("css");
+    let r = |c: &str| {
+        let r = sheet.get_class(c).and_then(|s| s.corner_radius).expect(c);
+        (r.top_left, r.top_right, r.bottom_right, r.bottom_left)
+    };
+    assert_eq!(r("a"), (0.0, 0.0, 24.0, 24.0));
+    assert_eq!(r("b"), (4.0, 8.0, 4.0, 8.0));
+    assert_eq!(r("c"), (4.0, 8.0, 12.0, 8.0));
 }

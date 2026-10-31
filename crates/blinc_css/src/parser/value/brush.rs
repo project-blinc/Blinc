@@ -74,6 +74,29 @@ pub(crate) fn parse_radius(value: &str) -> Option<CornerRadius> {
         return Some(radius);
     }
 
+    // Two to four values name the corners: top-left, top-right,
+    // bottom-right, bottom-left, repeated as CSS does for the missing ones.
+    let words = crate::parser::util::split_whitespace_respecting_parens(value);
+    if (2..=4).contains(&words.len()) {
+        let corners = words
+            .iter()
+            .map(|w| {
+                parse_css_length(w).map(|l| match l {
+                    Length::Pct(v) if v > 0.0 => 9999.0,
+                    Length::Pct(_) => 0.0,
+                    other => other.to_px(),
+                })
+            })
+            .collect::<Option<Vec<f32>>>()?;
+        let [tl, tr, br, bl] = match corners.as_slice() {
+            [a, b] => [*a, *b, *a, *b],
+            [a, b, c] => [*a, *b, *c, *b],
+            [a, b, c, d] => [*a, *b, *c, *d],
+            _ => return None,
+        };
+        return Some(CornerRadius::new(tl, tr, br, bl));
+    }
+
     // Handle percentage values for border-radius.
     // CSS border-radius percentages are relative to the element's dimensions,
     // which we can't resolve at parse time. Use 9999px as a large sentinel —
