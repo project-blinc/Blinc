@@ -2,7 +2,6 @@
 //! selecting patch what it shows in place, with no subtree rebuilt, and its
 //! caret shows while it is focused and follows the cursor.
 
-use blinc_core::Color;
 use blinc_core::events::event_types;
 use blinc_layout::LayoutNodeId;
 use blinc_layout::event_handler::EventContext;
@@ -114,27 +113,6 @@ impl Scene {
             .collect()
     }
 
-    fn fill(&self) -> Option<Color> {
-        match &self
-            .tree
-            .get_render_node(self.root())
-            .unwrap()
-            .props
-            .background
-        {
-            Some(blinc_core::Brush::Solid(c)) => Some(*c),
-            _ => None,
-        }
-    }
-
-    fn border(&self) -> Option<Color> {
-        self.tree
-            .get_render_node(self.root())
-            .unwrap()
-            .props
-            .border_color
-    }
-
     fn caret(&self) -> LayoutNodeId {
         self.nodes()
             .into_iter()
@@ -214,26 +192,6 @@ fn an_empty_field_shows_its_placeholder() {
     s.click();
     s.type_text("hi");
     assert_eq!(s.rows(), ["hi"]);
-}
-
-#[test]
-fn focus_and_hover_restyle_the_box_in_place() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let mut s = scene(text_area_state());
-    let (rest_fill, rest_border) = (s.fill(), s.border());
-    let ctx = EventContext::new(event_types::POINTER_ENTER, s.root());
-    s.dispatch(ctx);
-    assert_ne!(s.fill(), rest_fill, "hovering did not change the fill");
-    let ctx = EventContext::new(event_types::POINTER_LEAVE, s.root());
-    s.dispatch(ctx);
-    assert_eq!(s.fill(), rest_fill);
-
-    s.click();
-    assert_ne!(
-        s.border(),
-        rest_border,
-        "focusing did not change the border"
-    );
 }
 
 #[test]

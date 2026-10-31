@@ -1,40 +1,7 @@
-//! What the text area shows, bound to its state: the box's look, one row
-//! per visual line, and the caret.
+//! What the text area shows, bound to its state: one row per visual line, and
+//! the caret.
 
 use super::*;
-
-/// How the field's box looks in its state.
-#[derive(Clone)]
-pub(super) struct BoxLook {
-    bg: Color,
-    border: Color,
-    border_width: f32,
-    radius: f32,
-    /// Width, colour and offset.
-    outline: (f32, Color, f32),
-}
-
-pub(super) fn box_look(base: &TextAreaConfig, d: &TextAreaState) -> BoxLook {
-    let (cfg, outline) = resolved_config(base, d);
-    let (bg, border) = match d.visual {
-        TextFieldState::Focused | TextFieldState::FocusedHovered => {
-            (cfg.focused_bg_color, cfg.focused_border_color)
-        }
-        TextFieldState::Hovered => (cfg.hover_bg_color, cfg.hover_border_color),
-        TextFieldState::Disabled => (
-            Color::rgba(0.12, 0.12, 0.15, 0.5),
-            Color::rgba(0.25, 0.25, 0.3, 0.5),
-        ),
-        TextFieldState::Idle => (cfg.bg_color, cfg.border_color),
-    };
-    BoxLook {
-        bg,
-        border,
-        border_width: cfg.border_width,
-        radius: cfg.corner_radius,
-        outline: outline.unwrap_or((0.0, Color::TRANSPARENT, 0.0)),
-    }
-}
 
 /// The text a visual line shows: its own text, or the placeholder on the
 /// first line of an empty field.
@@ -105,85 +72,34 @@ pub(super) fn selection_span(d: &TextAreaState, row: usize) -> (f32, f32) {
     (x0, x1 - x0 + sliver)
 }
 
-/// The field as built: the box's look bound to its state, around the content.
+/// The field as built, around the content. The box is the element: it carries
+/// `disabled` as an attribute bound to the state's revision, and the
+/// `.blinc-input` rules do the rest.
 pub(super) fn assemble(mut outer: Div, state: &SharedTextAreaState, base: &TextAreaConfig) -> Div {
-    use crate::binding::TypedPendingBinding;
-    use crate::property::PropertyId;
     use blinc_core::reactive::{ReactiveGraph, computed, signal};
 
     let revision = {
         let mut d = state.lock().unwrap();
         // Laid out for the state the field starts in.
-        let (cfg, _) = resolved_config(base, &d);
+        let cfg = resolved_config(base, &d);
         take_metrics(&mut d, &cfg);
         d.compute_visual_lines();
         *d.revision.get_or_insert_with(|| signal(0u64))
     };
 
-    let look = {
-        let (state, base) = (Arc::clone(state), base.clone());
+    let disabled = {
+        let state = Arc::clone(state);
         computed(move |g: &ReactiveGraph| {
             g.get(revision);
-            box_look(&base, &state.lock().unwrap())
+            state.lock().unwrap().disabled
         })
     };
-    // Read once, so the look is subscribed to the revision.
-    let first = look
-        .try_get()
-        .unwrap_or_else(|| box_look(base, &state.lock().unwrap()));
+    let cfg = resolved_config(base, &state.lock().unwrap());
     outer = outer
-        .bg(first.bg)
-        .border(first.border_width, first.border)
-        .rounded(first.radius)
-        .outline_width(first.outline.0)
-        .outline_color(first.outline.1)
-        .outline_offset(first.outline.2);
-    outer
-        .pending_bindings
-        .push(Box::new(TypedPendingBinding::from_computed(
-            look.clone(),
-            PropertyId::Background,
-            |props, look: BoxLook| props.background = Some(blinc_core::Brush::Solid(look.bg)),
-        )));
-    outer
-        .pending_bindings
-        .push(Box::new(TypedPendingBinding::from_computed(
-            look.clone(),
-            PropertyId::BorderColor,
-            |props, look: BoxLook| props.border_color = Some(look.border),
-        )));
-    outer
-        .pending_bindings
-        .push(Box::new(TypedPendingBinding::from_computed(
-            look.clone(),
-            PropertyId::CornerRadius,
-            |props, look: BoxLook| {
-                props.border_radius = blinc_core::CornerRadius::uniform(look.radius)
-            },
-        )));
-    outer
-        .pending_bindings
-        .push(Box::new(TypedPendingBinding::from_computed(
-            look,
-            PropertyId::Outline,
-            |props, look: BoxLook| {
-                props.outline_width = look.outline.0;
-                props.outline_color = Some(look.outline.1);
-                props.outline_offset = look.outline.2;
-            },
-        )));
-    // A border width a state's rule changes moves the content, so it is
-    // bound as layout.
-    let border_width = {
-        let (state, base) = (Arc::clone(state), base.clone());
-        computed(move |g: &ReactiveGraph| {
-            g.get(revision);
-            box_look(&base, &state.lock().unwrap()).border_width
-        })
-    };
-    outer = outer.border_width(&border_width);
+        .attr_when("disabled", "", &disabled)
+        .border_width(cfg.border_width)
+        .rounded(cfg.corner_radius);
 
-    let (cfg, _) = resolved_config(base, &state.lock().unwrap());
     outer.child(content(state, &cfg, base, revision))
 }
 
@@ -205,7 +121,7 @@ pub(super) fn content(
         computed(move |g: &ReactiveGraph| {
             g.get(revision);
             let d = state.lock().unwrap();
-            let (cfg, _) = resolved_config(&base, &d);
+            let cfg = resolved_config(&base, &d);
             if d.is_empty() {
                 cfg.placeholder_color
             } else if d.disabled {

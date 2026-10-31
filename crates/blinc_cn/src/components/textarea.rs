@@ -191,7 +191,10 @@ impl Textarea {
         }
 
         // Add CSS class directly to the TextArea widget (it supports .class())
-        let ta = ta.class("cn-textarea");
+        let mut ta = ta.class("cn-textarea");
+        if config.error.is_some() {
+            ta = ta.class("cn-textarea--error");
+        }
 
         // If no label, description, or error, wrap in a minimal container
         let inner =

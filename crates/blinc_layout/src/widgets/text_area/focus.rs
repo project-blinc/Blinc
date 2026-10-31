@@ -64,7 +64,7 @@ pub(crate) fn notify_text_area(state: &SharedTextAreaState) {
     let revision = match state.lock() {
         Ok(mut d) => {
             if let Some(base) = &base {
-                let (cfg, _) = resolved_config(base, &d);
+                let cfg = resolved_config(base, &d);
                 take_metrics(&mut d, &cfg);
             }
             if d.laid_out != Some(d.layout_key()) {
@@ -94,31 +94,20 @@ pub(super) fn take_metrics(d: &mut TextAreaState, cfg: &TextAreaConfig) {
     d.wrap_enabled = cfg.wrap;
 }
 
-/// The config with the stylesheet's rules for the field's state applied,
-/// and the outline those rules give it.
-pub(super) fn resolved_config(
-    base: &TextAreaConfig,
-    d: &TextAreaState,
-) -> (TextAreaConfig, Option<(f32, Color, f32)>) {
+/// The config with the stylesheet's rules for the field's state applied.
+pub(super) fn resolved_config(base: &TextAreaConfig, d: &TextAreaState) -> TextAreaConfig {
     let mut cfg = base.clone();
     if d.css_element_id.is_none() && d.css_classes.is_empty() {
-        return (cfg, None);
+        return cfg;
     }
-    let Some(stylesheet) = active_stylesheet() else {
-        return (cfg, None);
-    };
-    apply_css_overrides_textarea(
-        &mut cfg,
-        &stylesheet,
-        d.css_element_id.as_deref(),
-        &d.css_classes,
-        &d.visual,
-    );
-    let outline = extract_outline_from_textarea_stylesheet(
-        &stylesheet,
-        d.css_element_id.as_deref(),
-        &d.css_classes,
-        &d.visual,
-    );
-    (cfg, outline)
+    if let Some(stylesheet) = active_stylesheet() {
+        apply_css_overrides_textarea(
+            &mut cfg,
+            &stylesheet,
+            d.css_element_id.as_deref(),
+            &d.css_classes,
+            &d.visual,
+        );
+    }
+    cfg
 }

@@ -479,37 +479,39 @@ pub const CN_STYLES: &str = concat!(
    ============================================================================ */
 
 .cn-textarea {
-    /* See `.cn-input` for the rationale on omitting `border:` here. */
     background: var(--cn-textarea-bg, var(--input-bg));
+    border-color: var(--border);
     border-radius: var(--radius-default);
     color: var(--text-primary);
     outline: 2px solid transparent;
     outline-offset: 1px;
-    transition: outline-color 160ms ease, outline-offset 160ms ease;
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state),
+        outline-color 160ms ease,
+        outline-offset 160ms ease;
 }
-.cn-textarea:hover {
-    border-color: var(--border-hover);
-    background: var(--input-bg-hover);
-}
-.cn-textarea:focus {
+/* The border and fill per state are the layout input's `.blinc-input`
+   rules, which these sit beside at the same specificity. */
+.cn-textarea:focus:not(:disabled) {
     /* HID focus ring — see `.cn-input:focus` for rationale. */
-    border-color: var(--border-focus);
-    background: var(--input-bg-focus);
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
 }
-.cn-textarea--error {
+.cn-textarea.cn-textarea--error:not(:disabled),
+.cn-textarea.cn-textarea--error:hover:not(:disabled),
+.cn-textarea.cn-textarea--error:focus:not(:disabled) {
     border-color: var(--border-error);
 }
-.cn-textarea--error:focus {
-    border-color: var(--border-error);
+.cn-textarea.cn-textarea--error:focus:not(:disabled) {
     outline: 2px solid var(--focus-ring-error);
 }
-.cn-textarea--success {
+.cn-textarea.cn-textarea--success:not(:disabled),
+.cn-textarea.cn-textarea--success:hover:not(:disabled),
+.cn-textarea.cn-textarea--success:focus:not(:disabled) {
     border-color: var(--success);
 }
-.cn-textarea--success:focus {
-    border-color: var(--success);
+.cn-textarea.cn-textarea--success:focus:not(:disabled) {
     outline: 2px solid var(--focus-ring-success);
 }
 

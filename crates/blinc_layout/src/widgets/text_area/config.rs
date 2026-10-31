@@ -25,18 +25,6 @@ pub struct TextAreaConfig {
     pub text_color: Color,
     /// Placeholder text color
     pub placeholder_color: Color,
-    /// Background color
-    pub bg_color: Color,
-    /// Hovered background color
-    pub hover_bg_color: Color,
-    /// Focused background color
-    pub focused_bg_color: Color,
-    /// Border color
-    pub border_color: Color,
-    /// Hovered border color
-    pub hover_border_color: Color,
-    /// Focused border color
-    pub focused_border_color: Color,
     /// Border width
     pub border_width: f32,
     /// Corner radius
@@ -86,12 +74,6 @@ impl Default for TextAreaConfig {
             char_width_ratio: 0.6,
             text_color: theme.color(ColorToken::TextPrimary),
             placeholder_color: theme.color(ColorToken::TextTertiary),
-            bg_color: theme.color(ColorToken::InputBg),
-            hover_bg_color: theme.color(ColorToken::InputBgHover),
-            focused_bg_color: theme.color(ColorToken::InputBgFocus),
-            border_color: theme.color(ColorToken::BorderSecondary),
-            hover_border_color: theme.color(ColorToken::BorderHover),
-            focused_border_color: theme.color(ColorToken::BorderFocus),
             border_width: 1.5,
             corner_radius: 8.0,
             padding_x: 12.0,

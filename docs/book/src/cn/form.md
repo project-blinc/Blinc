@@ -81,15 +81,24 @@ cn::input_otp(&code, 6)
 
 ## Textarea
 
-Multi-line text input:
+Multi-line text input, bound to a `SharedTextAreaState`:
 
 ```rust
-textarea()
+use blinc_layout::widgets::text_area::text_area_state;
+
+let description = text_area_state();
+
+cn::textarea(&description)
+    .label("Description")
     .placeholder("Enter description...")
     .rows(4)
-    .value(description)
-    .on_change(|value| set_description(value))
+    .on_change(|value| println!("description: {value}"))
 ```
+
+`.error("msg")` shows the message and turns the border red; `.disabled(true)`
+dims the field. It is styled like [Input](#input): one element with the class
+`cn-textarea`, whose border and fill per state are `:hover`, `:focus`,
+`.cn-textarea--error` and `:disabled` rules, eased by a `transition`.
 
 ## Checkbox
 

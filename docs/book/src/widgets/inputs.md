@@ -459,8 +459,8 @@ fn login_form(ctx: &WindowedContext) -> impl ElementBuilder {
 |--------|-------|--------|
 | Button | Hovered, pressed, disabled | `:hover`, `:active` and `:disabled` rules; `.disabled(..)` |
 | Checkbox | Checked, hovered, disabled | `checked` and `disabled` attributes from the `State<bool>` it is given; `:hover` rules |
-| TextInput | `TextFieldState`: Idle, Hovered, Focused, FocusedHovered, Disabled | Its own state handle |
-| TextArea | `TextFieldState` | Same as TextInput |
+| TextInput | Hovered, focused, invalid, disabled | `:hover`, `:focus`, `data-invalid` and `:disabled` rules; its own data supplies the attributes |
+| TextArea | Hovered, focused, disabled | Same rules as TextInput (`.blinc-input`) |
 
 ---
 
