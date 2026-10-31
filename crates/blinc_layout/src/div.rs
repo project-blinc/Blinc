@@ -696,6 +696,30 @@ impl Div {
         self
     }
 
+    /// Set an attribute that `[name]` and `[name="value"]` selectors match.
+    ///
+    /// Attributes are stored as `name=value` entries in the class list, so
+    /// every wrapper that forwards the element's classes forwards them too.
+    pub fn attr(self, name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        self.class(format!("{}={}", name.as_ref(), value.as_ref()))
+    }
+
+    /// `attr("data-name", value)`.
+    pub fn data(self, name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        self.attr(format!("data-{}", name.as_ref()), value)
+    }
+
+    /// Set the attribute while `condition` holds; it comes and goes in place
+    /// like [`Div::class_when`].
+    pub fn attr_when(
+        self,
+        name: impl AsRef<str>,
+        value: impl AsRef<str>,
+        condition: impl crate::binding::IntoReactive<bool>,
+    ) -> Self {
+        self.class_when(format!("{}={}", name.as_ref(), value.as_ref()), condition)
+    }
+
     /// Give the element `name` as a class while `condition` holds.
     ///
     /// With a `State<bool>` or a `Computed<bool>` the class comes and goes in

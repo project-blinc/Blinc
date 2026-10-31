@@ -116,6 +116,45 @@ pub enum StructuralPseudo {
     OnlyOfType,
 }
 
+/// How an attribute selector compares its value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AttrOp {
+    /// `[a]`: the attribute is present
+    Exists,
+    /// `[a=v]`
+    Equals,
+    /// `[a~=v]`: one of the whitespace-separated words
+    Includes,
+    /// `[a|=v]`: `v` or `v-` followed by anything
+    DashMatch,
+    /// `[a^=v]`
+    Prefix,
+    /// `[a$=v]`
+    Suffix,
+    /// `[a*=v]`
+    Substring,
+}
+
+impl AttrOp {
+    /// Whether an attribute holding `actual` satisfies `self` against `wanted`.
+    pub fn matches(self, actual: &str, wanted: &str) -> bool {
+        match self {
+            AttrOp::Exists => true,
+            AttrOp::Equals => actual == wanted,
+            AttrOp::Includes => actual.split_whitespace().any(|w| w == wanted),
+            AttrOp::DashMatch => {
+                actual == wanted
+                    || actual
+                        .strip_prefix(wanted)
+                        .is_some_and(|rest| rest.starts_with('-'))
+            }
+            AttrOp::Prefix => !wanted.is_empty() && actual.starts_with(wanted),
+            AttrOp::Suffix => !wanted.is_empty() && actual.ends_with(wanted),
+            AttrOp::Substring => !wanted.is_empty() && actual.contains(wanted),
+        }
+    }
+}
+
 /// A single part of a compound selector
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SelectorPart {
@@ -127,6 +166,13 @@ pub enum SelectorPart {
     Class(String),
     /// * universal selector (matches any element)
     Universal,
+    /// `[name]`, `[name=value]` and the other attribute forms. An element's
+    /// attributes are the `name=value` entries in its class list.
+    Attribute {
+        name: String,
+        op: AttrOp,
+        value: String,
+    },
     /// :hover, :active, :focus, :disabled
     State(ElementState),
     /// :first-child, :last-child, :nth-child(n), :only-child, :empty, :root

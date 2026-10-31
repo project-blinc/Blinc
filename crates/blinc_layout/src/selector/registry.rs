@@ -222,6 +222,17 @@ impl ElementRegistry {
             .and_then(|map| map.get(&node_id).cloned())
     }
 
+    /// The value of an attribute. An element's attributes are the
+    /// `name=value` entries in its class list, so they travel through every
+    /// builder that forwards its classes and change through the same calls.
+    pub fn attribute(&self, node_id: LayoutNodeId, name: &str) -> Option<String> {
+        let map = self.classes.read().ok()?;
+        map.get(&node_id)?.iter().find_map(|entry| {
+            let (key, value) = entry.split_once('=')?;
+            (key == name).then(|| value.to_string())
+        })
+    }
+
     pub fn has_class(&self, node_id: LayoutNodeId, class: &str) -> bool {
         self.classes
             .read()

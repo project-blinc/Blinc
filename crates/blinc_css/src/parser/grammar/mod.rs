@@ -530,6 +530,7 @@ pub(crate) fn try_as_simple_selector(compound: &CompoundSelector) -> Option<Stri
             | SelectorPart::Class(_)
             | SelectorPart::PseudoClass(_)
             | SelectorPart::Universal
+            | SelectorPart::Attribute { .. }
             | SelectorPart::Not(_)
             | SelectorPart::Is(_)
             | SelectorPart::Has(_) => return None,

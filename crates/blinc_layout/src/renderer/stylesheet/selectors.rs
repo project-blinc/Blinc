@@ -88,6 +88,14 @@ impl RenderTree {
                         return false;
                     }
                 }
+                SelectorPart::Attribute { name, op, value } => {
+                    let Some(actual) = self.element_registry.attribute(node_id, name) else {
+                        return false;
+                    };
+                    if !op.matches(&actual, value) {
+                        return false;
+                    }
+                }
                 SelectorPart::State(state) => {
                     let matches = match state {
                         ElementState::Hover => hovered,
@@ -258,6 +266,7 @@ impl RenderTree {
                     | SelectorPart::PseudoClass(_)
                     | SelectorPart::Not(_)
                     | SelectorPart::Is(_)
+                    | SelectorPart::Attribute { .. }
                     | SelectorPart::Has(_) => classes += 1,
                     SelectorPart::Type(_) => types += 1,
                     SelectorPart::Universal | SelectorPart::PseudoElement(_) => {}

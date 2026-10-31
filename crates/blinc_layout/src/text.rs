@@ -206,6 +206,12 @@ impl Text {
         self
     }
 
+    /// Set an attribute that `[name="value"]` selectors match; see
+    /// [`crate::div::Div::attr`].
+    pub fn attr(self, name: impl AsRef<str>, value: impl AsRef<str>) -> Self {
+        self.class(format!("{}={}", name.as_ref(), value.as_ref()))
+    }
+
     /// Set the font size, or follow a signal or computed.
     pub fn size(self, size: impl IntoReactive<f32>) -> Self {
         self.follow(

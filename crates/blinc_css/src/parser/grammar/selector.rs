@@ -198,6 +198,66 @@ pub(crate) fn parse_compound_selector(input: &str) -> ParseResult<CompoundSelect
             let (rest, class) = identifier::<VerboseError<&str>>(rest)?;
             parts.push(SelectorPart::Class(class.to_string()));
             remaining = rest;
+        } else if remaining.starts_with('[') {
+            // Attribute selector: [name], [name=value], [name^="value"], ...
+            let Some(close) = attribute_close(remaining) else {
+                return Err(nom::Err::Error(VerboseError {
+                    errors: vec![(
+                        remaining,
+                        nom::error::VerboseErrorKind::Context("attribute"),
+                    )],
+                }));
+            };
+            let inner = remaining[1..close].trim();
+            let name_end = inner
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+                .unwrap_or(inner.len());
+            let name = inner[..name_end].to_string();
+            let rest = inner[name_end..].trim_start();
+            let (op, value) = if rest.is_empty() {
+                (AttrOp::Exists, String::new())
+            } else {
+                let (op, after) = if let Some(r) = rest.strip_prefix("~=") {
+                    (AttrOp::Includes, r)
+                } else if let Some(r) = rest.strip_prefix("|=") {
+                    (AttrOp::DashMatch, r)
+                } else if let Some(r) = rest.strip_prefix("^=") {
+                    (AttrOp::Prefix, r)
+                } else if let Some(r) = rest.strip_prefix("$=") {
+                    (AttrOp::Suffix, r)
+                } else if let Some(r) = rest.strip_prefix("*=") {
+                    (AttrOp::Substring, r)
+                } else if let Some(r) = rest.strip_prefix('=') {
+                    (AttrOp::Equals, r)
+                } else {
+                    return Err(nom::Err::Error(VerboseError {
+                        errors: vec![(
+                            remaining,
+                            nom::error::VerboseErrorKind::Context("attribute"),
+                        )],
+                    }));
+                };
+                // A trailing ` i` / ` s` case flag is accepted and ignored.
+                let after = after.trim();
+                let value = after
+                    .rsplit_once(char::is_whitespace)
+                    .filter(|(_, flag)| matches!(*flag, "i" | "s" | "I" | "S"))
+                    .map_or(after, |(v, _)| v.trim());
+                (
+                    op,
+                    value.trim_matches(|c| c == '"' || c == '\'').to_string(),
+                )
+            };
+            if name.is_empty() {
+                return Err(nom::Err::Error(VerboseError {
+                    errors: vec![(
+                        remaining,
+                        nom::error::VerboseErrorKind::Context("attribute"),
+                    )],
+                }));
+            }
+            parts.push(SelectorPart::Attribute { name, op, value });
+            remaining = &remaining[close + 1..];
         } else if remaining.starts_with('*') {
             // Universal selector
             remaining = &remaining[1..];
@@ -423,4 +483,20 @@ pub(crate) fn parse_compound_selector(input: &str) -> ParseResult<CompoundSelect
     }
 
     Ok((remaining, CompoundSelector { parts }))
+}
+
+/// Index of the `]` closing the attribute selector that opens `input`,
+/// skipping any inside quotes.
+fn attribute_close(input: &str) -> Option<usize> {
+    let mut quote: Option<char> = None;
+    for (i, ch) in input.char_indices().skip(1) {
+        match (quote, ch) {
+            (Some(q), c) if c == q => quote = None,
+            (Some(_), _) => {}
+            (None, '"') | (None, '\'') => quote = Some(ch),
+            (None, ']') => return Some(i),
+            _ => {}
+        }
+    }
+    None
 }
