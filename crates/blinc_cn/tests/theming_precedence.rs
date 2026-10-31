@@ -338,3 +338,48 @@ fn cn_typography_reaches_a_button_label() {
         "tracking-tight did not reach the label"
     );
 }
+
+/// cn's stylesheet shrinks a pressed button, as ashui's does, and a release
+/// puts it back.
+#[test]
+fn a_pressed_cn_button_shrinks_and_a_release_restores_it() {
+    use blinc_layout::css_parser::Stylesheet;
+    use blinc_layout::event_router::{EventRouter, MouseButton};
+    init();
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let cn = Stylesheet::parse_with_variables(blinc_cn::cn_styles::CN_STYLES, &vars).expect("cn");
+    blinc_layout::css_parser::set_active_stylesheet(std::sync::Arc::new(cn.clone()));
+    let host = div().w(300.0).h(80.0).child(blinc_cn::button("Go"));
+    let mut tree = RenderTree::from_element(&host);
+    tree.set_stylesheet(cn);
+    tree.apply_stylesheet_layout_overrides();
+    tree.apply_stylesheet_base_styles();
+    tree.compute_layout(300.0, 80.0);
+    let node = subject(&tree);
+    let b = tree.get_absolute_bounds(node).expect("bounds");
+    let at = (b.x + b.width / 2.0, b.y + b.height / 2.0);
+    let scale = |tree: &RenderTree| match &tree.get_render_node(node).unwrap().props.transform {
+        Some(blinc_core::Transform::Affine2D(a)) => Some(a.elements[0]),
+        _ => None,
+    };
+    assert_eq!(scale(&tree), None);
+
+    let mut router = EventRouter::new();
+    let down = router.on_mouse_down(&tree, at.0, at.1, MouseButton::Left);
+    for (n, e) in down {
+        tree.dispatch_event(n, e, at.0, at.1);
+    }
+    tree.apply_stylesheet_state_styles(&router);
+    let pressed = scale(&tree).expect("a transform while pressed");
+    assert!((pressed - 0.97).abs() < 0.01, "scale {pressed}");
+
+    let up = router.on_mouse_up(&tree, at.0, at.1, MouseButton::Left);
+    for (n, e) in up {
+        tree.dispatch_event(n, e, at.0, at.1);
+    }
+    tree.apply_stylesheet_state_styles(&router);
+    assert!(
+        scale(&tree).is_none_or(|s| (s - 1.0).abs() < 0.01),
+        "the press outlasted the release"
+    );
+}

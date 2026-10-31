@@ -88,6 +88,18 @@ pub const CN_STYLES: &str = concat!(
    The Rust side already reads `RadiusToken` per size — these rules act
    as the cascade override surface users can hook into. */
 .cn-button { border-radius: var(--radius-default); }
+/* Press feedback: a pressed button shrinks a little and eases back. A link
+   button is flat, so it dims instead. */
+.cn-button {
+    transition: transform var(--duration-faster) var(--ease-state);
+}
+.cn-button:active {
+    transform: scale(0.97, 0.97);
+}
+.cn-button--link:active {
+    transform: none;
+    opacity: 0.8;
+}
 .cn-button--primary { }
 .cn-button--secondary { }
 .cn-button--destructive { }
