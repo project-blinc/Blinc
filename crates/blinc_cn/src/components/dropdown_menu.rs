@@ -99,6 +99,9 @@ pub enum DropdownAlign {
 /// Trigger builder function type
 type TriggerBuilderFn = Arc<dyn Fn(bool) -> Div + Send + Sync>;
 
+/// What activating a menu row does.
+type ItemAction = Arc<dyn Fn() + Send + Sync>;
+
 /// Builder for dropdown menu component
 pub struct DropdownMenuBuilder {
     /// Trigger label (simple mode)
@@ -325,16 +328,9 @@ impl DropdownMenuBuilder {
             let closed = builder.clone();
             div().show_or(&open_state, move || builder(true), move || closed(false))
         } else if let Some(label) = trigger_label {
-            let open = open_state.signal();
-            let chevron_angle = computed(move |g: &ReactiveGraph| {
-                if g.get(open).unwrap_or(false) {
-                    180.0
-                } else {
-                    0.0
-                }
-            });
             div()
                 .class("cn-dropdown-trigger")
+                .attr_when("data-state", "open", &open_state)
                 .gap(8.0)
                 .flex_row()
                 .items_center()
@@ -352,7 +348,7 @@ impl DropdownMenuBuilder {
                         .pointer_events_none(),
                 )
                 .child(
-                    div().rotate_deg(&chevron_angle).child(
+                    div().class("cn-chevron").child(
                         svg(CHEVRON_DOWN_SVG)
                             .size(16.0, 16.0)
                             .color(theme.color(ColorToken::TextSecondary)),
@@ -363,7 +359,7 @@ impl DropdownMenuBuilder {
         };
 
         let trigger = div()
-            .id(&trigger_element_id(&menu_key))
+            .id(trigger_element_id(&menu_key))
             .w_fit()
             .cursor_pointer()
             .child(trigger_content)
@@ -693,6 +689,16 @@ fn build_dropdown_menu_div(
     let child_submenu_state: State<Option<u64>> = BlincContextState::get()
         .use_state_keyed(&format!("dropdown_child_sub_{}", self_id), || None);
 
+    // The row the arrow keys are on. The menu starts with none, as ashui's does
+    // when it is opened by a press.
+    let active: State<Option<usize>> =
+        BlincContextState::get().use_state_keyed(&format!("dropdown_active_{}", self_id), || None);
+    active.set(None);
+    let active_signal = active.signal();
+    // The rows a key can land on, in order: their index, and what activating
+    // one does (nothing for a row that opens a submenu).
+    let mut navigable: Vec<(usize, Option<ItemAction>)> = Vec::new();
+
     let mut menu = div()
         .class("cn-dropdown-menu")
         .id(self_id)
@@ -790,8 +796,21 @@ fn build_dropdown_menu_div(
                 None
             };
 
+            if !item_disabled {
+                navigable.push((
+                    idx,
+                    if has_submenu {
+                        None
+                    } else {
+                        item_on_click.clone()
+                    },
+                ));
+            }
+            let is_active =
+                computed(move |g: &ReactiveGraph| g.get(active_signal).flatten() == Some(idx));
             let mut row_content = div()
                 .class("cn-dropdown-item")
+                .class_when("cn-dropdown-item--active", is_active)
                 .w_full()
                 .h_fit()
                 .py(padding / 4.0)
@@ -874,7 +893,37 @@ fn build_dropdown_menu_div(
         }
     }
 
-    menu
+    // Arrows, Home and End move through the enabled rows, wrapping, and Enter
+    // or Space activates the one they are on. Keys are broadcast to the whole
+    // tree, so a menu with a submenu open leaves them to the submenu.
+    let child_submenu_for_keys = child_submenu_state.clone();
+    menu.on_key_down(move |ctx| {
+        let count = navigable.len();
+        if count == 0 || child_submenu_for_keys.get().is_some() {
+            return;
+        }
+        let at = active
+            .get()
+            .and_then(|row| navigable.iter().position(|(idx, _)| *idx == row));
+        let go = |to: usize| active.set(Some(navigable[to].0));
+        match ctx.key_code {
+            40 => go(at.map_or(0, |a| (a + 1) % count)),
+            38 => go(at.map_or(count - 1, |a| (a + count - 1) % count)),
+            36 => go(0),
+            35 => go(count - 1),
+            13 | 32 => {
+                if let Some(a) = at {
+                    if let Some(on_click) = navigable[a].1.clone() {
+                        // As a click does: close first, so a dialog the
+                        // callback opens is not closed with the menu.
+                        root_handle.close();
+                        on_click();
+                    }
+                }
+            }
+            _ => {}
+        }
+    })
 }
 
 /// The built dropdown menu component
@@ -997,5 +1046,126 @@ mod tests {
             180.0,
         );
         assert_eq!(x, 0.0); // 100 + 80 - 180 = 0 (clamped)
+    }
+
+    fn init_context() {
+        static I: std::sync::Once = std::sync::Once::new();
+        I.call_once(|| {
+            ThemeState::init_default();
+            if !BlincContextState::is_initialized() {
+                BlincContextState::init(
+                    blinc_core::reactive::global_graph(),
+                    Arc::new(std::sync::Mutex::new(
+                        blinc_core::context_state::HookState::new(),
+                    )),
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                );
+            }
+        });
+    }
+
+    /// A menu of A, a separator, a disabled B and C, with the keys sent to it.
+    #[allow(clippy::type_complexity)]
+    fn keyed_menu() -> (
+        blinc_layout::renderer::RenderTree,
+        State<Option<usize>>,
+        Arc<std::sync::Mutex<Vec<&'static str>>>,
+    ) {
+        init_context();
+        let fired = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let record = |name: &'static str| {
+            let fired = Arc::clone(&fired);
+            move || fired.lock().unwrap().push(name)
+        };
+        let items = vec![
+            ContextMenuItem::new("A").on_click(record("A")),
+            ContextMenuItem::separator(),
+            ContextMenuItem::new("B").on_click(record("B")).disabled(),
+            ContextMenuItem::new("C").on_click(record("C")),
+        ];
+        let chain: State<Vec<String>> =
+            BlincContextState::get().use_state_keyed("keyed_menu_chain", Vec::<String>::new);
+        let theme = ThemeState::get();
+        let c = theme.color(ColorToken::TextPrimary);
+        let menu = build_dropdown_menu_div(
+            &items,
+            160.0,
+            OverlayHandle::from_raw(u64::MAX),
+            "keyed-menu",
+            "keyed-menu-key",
+            &chain,
+            c,
+            c,
+            c,
+            c,
+            c,
+            4.0,
+            14.0,
+            12.0,
+        );
+        let tree = blinc_layout::renderer::RenderTree::from_element(&menu);
+        let active = BlincContextState::get()
+            .use_state_keyed("dropdown_active_keyed-menu", || None::<usize>);
+        (tree, active, fired)
+    }
+
+    fn press(tree: &mut blinc_layout::renderer::RenderTree, key_code: u32) {
+        tree.broadcast_key_event(
+            blinc_core::events::event_types::KEY_DOWN,
+            key_code,
+            false,
+            false,
+            false,
+            false,
+        );
+    }
+
+    #[test]
+    fn arrows_walk_the_enabled_rows_and_wrap() {
+        let (mut tree, active, _) = keyed_menu();
+        assert_eq!(
+            active.get(),
+            None,
+            "a menu opened by a press starts on no row"
+        );
+        // Down from nothing is the first row; the separator and the disabled
+        // row are skipped; past the last it wraps.
+        press(&mut tree, 40);
+        assert_eq!(active.get(), Some(0));
+        press(&mut tree, 40);
+        assert_eq!(active.get(), Some(3));
+        press(&mut tree, 40);
+        assert_eq!(active.get(), Some(0));
+        // Up from the first wraps to the last.
+        press(&mut tree, 38);
+        assert_eq!(active.get(), Some(3));
+        press(&mut tree, 36);
+        assert_eq!(active.get(), Some(0), "Home");
+        press(&mut tree, 35);
+        assert_eq!(active.get(), Some(3), "End");
+    }
+
+    #[test]
+    fn up_from_nothing_is_the_last_row() {
+        let (mut tree, active, _) = keyed_menu();
+        press(&mut tree, 38);
+        assert_eq!(active.get(), Some(3));
+    }
+
+    #[test]
+    fn enter_and_space_activate_the_active_row_only() {
+        let (mut tree, active, fired) = keyed_menu();
+        press(&mut tree, 13);
+        assert!(
+            fired.lock().unwrap().is_empty(),
+            "Enter fired with no active row"
+        );
+        press(&mut tree, 40);
+        press(&mut tree, 13);
+        assert_eq!(*fired.lock().unwrap(), vec!["A"]);
+        press(&mut tree, 40);
+        assert_eq!(active.get(), Some(3));
+        press(&mut tree, 32);
+        assert_eq!(*fired.lock().unwrap(), vec!["A", "C"]);
     }
 }

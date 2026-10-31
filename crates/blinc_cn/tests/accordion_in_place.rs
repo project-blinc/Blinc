@@ -66,14 +66,6 @@ impl Scene {
             .unwrap_or_else(|| self.height(content))
     }
 
-    fn chevron_turn(&self, trigger: LayoutNodeId) -> String {
-        let chevron = self.tree.layout_tree.children(trigger)[1];
-        format!(
-            "{:?}",
-            self.tree.get_render_node(chevron).unwrap().props.transform
-        )
-    }
-
     fn frame(&mut self) {
         assert!(
             !blinc_layout::stateful::has_pending_subtree_rebuilds(),
@@ -114,18 +106,12 @@ fn opening_a_section_expands_it_in_place() {
         let mut s = scene();
         let (trigger, content) = (s.triggers()[0], s.contents()[0]);
         assert!(s.height(content) < 2.0, "a closed section has height");
-        let closed_turn = s.chevron_turn(trigger);
 
         s.click(trigger);
         assert!(
             s.height(content) >= 60.0,
             "the open section is {} tall",
             s.height(content)
-        );
-        assert_ne!(
-            s.chevron_turn(trigger),
-            closed_turn,
-            "the chevron did not turn"
         );
 
         s.settle();

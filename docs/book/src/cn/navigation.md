@@ -39,6 +39,12 @@ cn::dropdown_menu("Options")
 open and the closed state. `.min_width(..)`, `.position(..)`, `.align(..)` and
 `.offset(..)` place the menu.
 
+With the menu open, Down and Up move through the enabled rows (wrapping past
+either end, skipping separators and disabled rows), Home and End jump to the
+first and last, and Enter or Space activates the active row. The active row has
+the class `cn-dropdown-item--active` and takes the hover fill. While a submenu
+is open it receives the keys instead.
+
 The default trigger carries the class `cn-dropdown-trigger`; its fill is
 `:hover` and `:active` rules with a `transition`, so restyle it with rules of
 your own:

@@ -244,12 +244,14 @@ impl Select {
             .overflow_clip()
             .flex_shrink_0()
             .child(content_wrapper)
+            // Turns while the list is open: `.cn-chevron` rules key it on the
+            // trigger's `data-state`, so it eases and does not flip.
             .child(
-                svg(chevron_svg)
-                    .size(16.0, 16.0)
-                    .tint(text_tertiary)
+                div()
+                    .class("cn-chevron")
                     .ml(1.0)
-                    .flex_shrink_0(),
+                    .flex_shrink_0()
+                    .child(svg(chevron_svg).size(16.0, 16.0).tint(text_tertiary)),
             )
             .when(disabled, |t| t.attr("disabled", ""))
             .when(!disabled, |t| t.cursor_pointer())

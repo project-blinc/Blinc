@@ -599,7 +599,12 @@ pub const CN_STYLES: &str = concat!(
     cursor: pointer;
     transition: background-color var(--duration-normal) var(--ease-state);
 }
-.cn-switch:hover:not(:disabled) { background: var(--border-hover); }
+/* A wash of the text colour over the idle track, so hovering moves it the same
+   way in either scheme (`--border-hover` is translucent and reads darker than
+   this solid track on a dark theme). */
+.cn-switch:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--text-primary) 10%, var(--border-secondary));
+}
 .cn-switch:checked { background: var(--primary); }
 .cn-switch:checked:hover:not(:disabled) { background: var(--primary-hover); }
 /* A disabled track takes the disabled-button palette, with a thin outline so
@@ -704,6 +709,18 @@ pub const CN_STYLES: &str = concat!(
 /* ============================================================================
    Select
    ============================================================================ */
+
+/* The caret of a trigger turns half a turn while its list is open, eased by a
+   transition so it spins rather than flips (ashui's chevrons do the same). */
+.cn-chevron {
+    transition: transform var(--duration-normal) var(--ease-state);
+}
+.cn-select-trigger[data-state="open"] > .cn-chevron,
+.cn-combobox-trigger[data-state="open"] > .cn-chevron,
+.cn-dropdown-trigger[data-state="open"] > .cn-chevron,
+.cn-accordion-trigger[data-state="open"] > .cn-chevron {
+    transform: rotate(180deg);
+}
 
 .cn-select-trigger {
     background: transparent;
@@ -1168,7 +1185,8 @@ pub const CN_STYLES: &str = concat!(
 }
 /* `--accent-subtle` — parent panel sits at `--surface-elevated`,
    so hovering to the same tier would be invisible. */
-.cn-dropdown-item:hover {
+.cn-dropdown-item:hover,
+.cn-dropdown-item--active {
     background: var(--accent-subtle);
 }
 .cn-dropdown-item--disabled {

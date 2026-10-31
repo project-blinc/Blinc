@@ -7,18 +7,22 @@ use blinc_cn::{combobox, dropdown_menu, popover, select};
 use blinc_core::Color;
 use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
 use blinc_layout::div::div;
-use blinc_recorder::Headless;
+use blinc_recorder::{Golden, Headless};
 use blinc_theme::{ColorScheme, ColorToken, HybridTheme, ThemeState};
 
 const W: u32 = 260;
 const H: u32 = 120;
 
 fn session() -> Option<Headless> {
+    session_sized(W, H)
+}
+
+fn session_sized(w: u32, h: u32) -> Option<Headless> {
     if !Headless::available() {
         eprintln!("no GPU adapter: skipped");
         return None;
     }
-    let mut ui = Headless::new(W, H).ok()?;
+    let mut ui = Headless::new(w, h).ok()?;
     ui.theme(
         HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
         ColorScheme::Dark,
@@ -189,6 +193,41 @@ fn a_disabled_combobox_does_not_respond() {
     assert_eq!(props(&ui, ".cn-combobox-trigger"), (fill, border));
 }
 
+#[test]
+fn a_long_combobox_list_stays_inside_its_popup() {
+    let Some(mut ui) = session_sized(W, 420) else {
+        return;
+    };
+    let value = State::new(
+        signal::<String>(String::new()),
+        global_graph(),
+        global_dirty_flag(),
+    );
+    ui.mount(move |_| {
+        let mut c = combobox(&value).placeholder("Framework").w(180.0);
+        for i in 0..10 {
+            c = c.option(format!("v{i}"), format!("Option {i}"));
+        }
+        div().w(W as f32).h(420.0).p(4.0).child(c)
+    });
+    ui.leave().settle();
+    ui.click(".cn-combobox-trigger").settle();
+    assert!(ui.find(".cn-combobox-content").is_some(), "the list opened");
+    // The search field is focused and its caret blinks on the wall clock.
+    let frame = ui.snapshot().expect("snapshot");
+    Golden::in_crate()
+        .tolerance(24)
+        .check("cn_combobox_long_list", &frame);
+
+    // Scrolled, the rows stay below the search field.
+    ui.move_to(60.0, 200.0);
+    ui.scroll(0.0, -60.0).settle();
+    let frame = ui.snapshot().expect("snapshot");
+    Golden::in_crate()
+        .tolerance(24)
+        .check("cn_combobox_long_list_scrolled", &frame);
+}
+
 fn open_overlays() -> usize {
     // Not counting one that is still playing its exit.
     blinc_layout::overlay_state::overlay_stack()
@@ -234,4 +273,132 @@ fn clicking_the_popover_trigger_again_closes_it() {
     assert_eq!(open_overlays(), before + 1, "the first click did not open");
     ui.click(".pop-trigger").settle();
     assert_eq!(open_overlays(), before, "the second click reopened it");
+}
+
+/// The rotation, in degrees, painted on the first `.cn-chevron` under `parent`.
+fn chevron_degrees(ui: &Headless, parent: &str) -> f32 {
+    let node = ui.find(parent).expect("the trigger");
+    let chevron = ui
+        .tree()
+        .layout_tree
+        .children(node)
+        .into_iter()
+        .find(|c| {
+            ui.tree()
+                .get_render_node(*c)
+                .is_some_and(|n| n.props.transform.is_some())
+                || ui
+                    .tree()
+                    .element_registry()
+                    .class_to_nodes_index()
+                    .get("cn-chevron")
+                    .is_some_and(|set| set.contains(c))
+        })
+        .expect("a caret");
+    match ui
+        .tree()
+        .get_render_node(chevron)
+        .and_then(|n| n.props.transform.clone())
+    {
+        Some(blinc_core::Transform::Affine2D(a)) => {
+            a.elements[1].atan2(a.elements[0]).to_degrees().abs()
+        }
+        _ => 0.0,
+    }
+}
+
+/// Opening a trigger turns its caret through the angles in between, a frame at
+/// a time, and closing turns it back the same way.
+fn assert_caret_spins(ui: &mut Headless, trigger: &str) {
+    assert!(chevron_degrees(ui, trigger) < 1.0, "caret starts upright");
+    ui.click(trigger);
+    let mut seen = Vec::new();
+    for _ in 0..30 {
+        ui.advance(16);
+        seen.push(chevron_degrees(ui, trigger));
+    }
+    assert!(
+        seen.iter().any(|d| *d > 10.0 && *d < 170.0),
+        "the caret flipped without easing: {seen:?}"
+    );
+    assert!(
+        (seen[seen.len() - 1] - 180.0).abs() < 1.0,
+        "the caret did not end inverted: {seen:?}"
+    );
+}
+
+#[test]
+fn the_select_caret_spins_open() {
+    let Some(mut ui) = session_sized(W, 240) else {
+        return;
+    };
+    let value = State::new(
+        signal::<String>(String::new()),
+        global_graph(),
+        global_dirty_flag(),
+    );
+    ui.mount(move |_| {
+        div().w(W as f32).h(240.0).p(4.0).child(
+            select(&value)
+                .option("a", "Apple")
+                .placeholder("Fruit")
+                .w(180.0),
+        )
+    });
+    ui.leave().settle();
+    assert_caret_spins(&mut ui, ".cn-select-trigger");
+}
+
+#[test]
+fn the_combobox_caret_spins_open() {
+    let Some(mut ui) = session_sized(W, 240) else {
+        return;
+    };
+    let value = State::new(
+        signal::<String>(String::new()),
+        global_graph(),
+        global_dirty_flag(),
+    );
+    ui.mount(move |_| {
+        div().w(W as f32).h(240.0).p(4.0).child(
+            combobox(&value)
+                .option("a", "Apple")
+                .placeholder("Fruit")
+                .w(180.0),
+        )
+    });
+    ui.leave().settle();
+    assert_caret_spins(&mut ui, ".cn-combobox-trigger");
+}
+
+#[test]
+fn the_accordion_caret_spins_open() {
+    let Some(mut ui) = session_sized(W, 240) else {
+        return;
+    };
+    ui.mount(move |_| {
+        div()
+            .w(W as f32)
+            .h(240.0)
+            .p(4.0)
+            .child(blinc_cn::accordion().item("one", "One", || div().h(20.0)))
+    });
+    ui.leave().settle();
+    assert_caret_spins(&mut ui, ".cn-accordion-trigger");
+}
+
+#[test]
+fn the_dropdown_caret_spins_open() {
+    let Some(mut ui) = session_sized(W, 240) else {
+        return;
+    };
+    ui.mount(move |_| {
+        div()
+            .w(W as f32)
+            .h(240.0)
+            .p(4.0)
+            .child(dropdown_menu("Actions").item("Edit", || {}))
+    });
+    ui.leave().settle();
+    assert_caret_spins(&mut ui, ".cn-dropdown-trigger");
 }

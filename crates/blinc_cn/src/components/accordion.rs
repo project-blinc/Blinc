@@ -341,17 +341,11 @@ impl AccordionBuilder {
             let key_for_click = item_key.clone();
 
             let open = is_open.signal();
-            let chevron_angle = computed(move |g: &ReactiveGraph| {
-                if g.get(open).unwrap_or(false) {
-                    180.0
-                } else {
-                    0.0
-                }
-            });
             let closed = computed(move |g: &ReactiveGraph| !g.get(open).unwrap_or(false));
 
             let trigger = div()
                 .class("cn-accordion-trigger")
+                .attr_when("data-state", "open", &is_open)
                 .flex_row()
                 .w_full()
                 // Builder padding fallback MUST match the
@@ -372,7 +366,7 @@ impl AccordionBuilder {
                 )
                 .child(
                     div()
-                        .rotate_deg(&chevron_angle)
+                        .class("cn-chevron")
                         .child(svg(CHEVRON_DOWN_SVG).size(16.0, 16.0).color(text_secondary)),
                 )
                 .on_click(move |_| {

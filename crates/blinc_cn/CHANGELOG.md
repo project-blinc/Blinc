@@ -5,9 +5,13 @@ All notable changes to `blinc_cn` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Turning a `cn::switch` off no longer snaps: the thumb keeps its place while the switch is held and eases back on release, and the track fades from its on colour to its off colour instead of jumping. Hovering an off track lightens it (a wash of the text colour over the idle fill), where it used to darken.
+- The combobox's option rows clip to the popup, so a long list no longer paints below it or over the search field while scrolled.
 - Clicking the trigger of an open `cn::dropdown_menu` or `cn::popover` closes it. The press counted as a click outside, which closed the menu, and the click that followed reopened it; the trigger is now inside the click-outside set.
 
 ### Added
+- `cn::dropdown_menu` is keyboard-driven, as ashui's: Down and Up move through the enabled rows (wrapping, skipping separators and disabled rows), Home and End jump to the first and last, Enter and Space activate the active row. The active row is the `.cn-dropdown-item--active` class and takes the hover fill. An open submenu receives the keys instead.
+- The carets of `cn::select`, `cn::combobox`, the default `cn::dropdown_menu` trigger and `cn::accordion` turn half a turn when opened, eased by a `transition` on `.cn-chevron` keyed on the trigger's `data-state="open"`, as ashui's chevrons do.
 - `cn::number_input` steps with the wheel, as ashui's does: one wheel line (40 units) is one step, wheel up increasing; trackpad deltas accumulate to a whole step; reversing direction or leaving the control clears the remainder; horizontal gestures and a disabled control are ignored.
 
 ### Changed

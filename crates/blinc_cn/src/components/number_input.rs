@@ -415,7 +415,7 @@ fn stepper(config: &Config, delta: f64, height: f32) -> Div {
 
     let state = config.state.clone();
     let on_change = config.on_change.clone();
-    let cell = div()
+    div()
         .w(height)
         .h(height)
         .flex_row()
@@ -443,8 +443,7 @@ fn stepper(config: &Config, delta: f64, height: f32) -> Div {
             if let Some(ref cb) = on_change {
                 cb(next);
             }
-        });
-    cell
+        })
 }
 
 /// Mirror of `layout_number_input::format_value` — kept in sync via

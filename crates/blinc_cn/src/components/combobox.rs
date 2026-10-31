@@ -280,12 +280,14 @@ impl Combobox {
                 ),
             )
             .flex_shrink_0()
+            // Turns while the list is open: `.cn-chevron` rules key it on the
+            // trigger's `data-state`, so it eases and does not flip.
             .child(
-                svg(chevron_svg)
-                    .size(16.0, 16.0)
-                    .tint(text_tertiary)
+                div()
+                    .class("cn-chevron")
                     .ml(1.0)
-                    .flex_shrink_0(),
+                    .flex_shrink_0()
+                    .child(svg(chevron_svg).size(16.0, 16.0).tint(text_tertiary)),
             )
             .cursor_pointer()
             .on_click(move |_ctx| {
