@@ -330,7 +330,13 @@ text_area(&state)
     .class("notes")
 ```
 
+Placeholder and selection colours are the standard pseudo-elements,
+`.notes::placeholder { color: .. }` and `.notes::selection { background: .. }`,
+on a class or an id; `caret-color` sets the caret.
+
 ```css
+.notes::placeholder { color: #8888aa; }
+.notes::selection { background: #3355aa; }
 .notes { background: #1e1e2a; color: #ffffff; caret-color: #6699ff; }
 .notes:hover { background: #24243a; }
 .notes:focus { border-color: #6699ff; }

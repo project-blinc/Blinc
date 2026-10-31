@@ -325,6 +325,12 @@ impl Stylesheet {
         self.styles.get(&key)
     }
 
+    /// Get a class's pseudo-element style (`.class::placeholder`,
+    /// `.class::selection`); `name` is the pseudo-element without the colons.
+    pub fn get_class_pseudo_element(&self, class: &str, name: &str) -> Option<&ElementStyle> {
+        self.class_styles.get(&format!("{}::{}", class, name))
+    }
+
     /// Whether the stylesheet contains any rule keyed on a pointer state
     /// (`:hover` or `:active`).
     ///
@@ -562,6 +568,14 @@ impl Stylesheet {
                         (class_part, state_part)
                     {
                         let key = format!("{}:{}", class_name, state);
+                        self.class_styles.insert(key, style.clone());
+                    } else if let (
+                        SelectorPart::Class(class_name),
+                        SelectorPart::PseudoElement(name),
+                    ) = (class_part, state_part)
+                    {
+                        // `.class::placeholder`, `.class::selection`
+                        let key = format!("{}::{}", class_name, name);
                         self.class_styles.insert(key, style.clone());
                     }
                 }

@@ -53,16 +53,16 @@ pub(super) fn apply_css_overrides_textarea(
                 apply_style_to_textarea_config(cfg, focus_style, visual);
             }
         }
+    }
 
-        // 3. Apply ::placeholder style (ID-only)
-        if let Some(placeholder_style) = stylesheet.get_placeholder_style(element_id) {
-            if let Some(color) = placeholder_style.text_color {
-                cfg.placeholder_color = color;
-            }
-            if let Some(color) = placeholder_style.placeholder_color {
-                cfg.placeholder_color = color;
-            }
-        }
+    // 3. `::placeholder` and `::selection`.
+    let (placeholder, selection) =
+        crate::widgets::text_input::pseudo_element_colours(stylesheet, element_id, css_classes);
+    if let Some(color) = placeholder {
+        cfg.placeholder_color = color;
+    }
+    if let Some(color) = selection {
+        cfg.selection_color = color;
     }
 }
 

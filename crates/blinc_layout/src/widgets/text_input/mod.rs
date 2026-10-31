@@ -18,6 +18,7 @@
 mod config;
 mod content;
 mod css;
+pub(crate) use css::pseudo_element_colours;
 mod data;
 mod edit;
 mod focus;

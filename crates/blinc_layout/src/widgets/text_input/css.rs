@@ -62,17 +62,56 @@ pub(super) fn apply_css_overrides(
                 apply_style_to_config(cfg, focus_style, visual);
             }
         }
+    }
 
-        // 3. Apply ::placeholder style (ID-only)
-        if let Some(placeholder_style) = stylesheet.get_placeholder_style(element_id) {
-            if let Some(color) = placeholder_style.text_color {
-                cfg.placeholder_color = color;
-            }
-            if let Some(color) = placeholder_style.placeholder_color {
-                cfg.placeholder_color = color;
-            }
+    // 3. `::placeholder` and `::selection`.
+    let (placeholder, selection) = pseudo_element_colours(stylesheet, element_id, css_classes);
+    if let Some(color) = placeholder {
+        cfg.placeholder_color = color;
+    }
+    if let Some(color) = selection {
+        cfg.selection_color = color;
+    }
+}
+
+/// The placeholder and selection colours the stylesheet's `::placeholder` and
+/// `::selection` rules give a field: `.class::placeholder { color }` and
+/// `.class::selection { background }`, then `#id::...`, which wins.
+pub(crate) fn pseudo_element_colours(
+    stylesheet: &Stylesheet,
+    element_id: Option<&str>,
+    css_classes: &[std::sync::Arc<str>],
+) -> (Option<Color>, Option<Color>) {
+    let (mut placeholder, mut selection) = (None, None);
+    let mut take_placeholder = |style: &crate::element_style::ElementStyle| {
+        if let Some(color) = style.placeholder_color.or(style.text_color) {
+            placeholder = Some(color);
+        }
+    };
+    for class in css_classes {
+        if let Some(style) = stylesheet.get_class_pseudo_element(class, "placeholder") {
+            take_placeholder(style);
         }
     }
+    if let Some(style) = element_id.and_then(|id| stylesheet.get_placeholder_style(id)) {
+        take_placeholder(style);
+    }
+    let mut take_selection = |style: &crate::element_style::ElementStyle| {
+        if let Some(color) = style.selection_color {
+            selection = Some(color);
+        } else if let Some(blinc_core::Brush::Solid(color)) = style.background {
+            selection = Some(color);
+        }
+    };
+    for class in css_classes {
+        if let Some(style) = stylesheet.get_class_pseudo_element(class, "selection") {
+            take_selection(style);
+        }
+    }
+    if let Some(style) = element_id.and_then(|id| stylesheet.get(&format!("{id}::selection"))) {
+        take_selection(style);
+    }
+    (placeholder, selection)
 }
 
 /// Apply an ElementStyle to a TextInputConfig (CSS properties override config values)

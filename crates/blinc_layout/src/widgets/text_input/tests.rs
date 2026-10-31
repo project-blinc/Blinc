@@ -191,3 +191,50 @@ fn focusing_another_input_blurs_previous_stateful_visual_state() {
 
     assert!(!first.lock().unwrap().visual.is_focused());
 }
+
+fn css_config(css: &str, id: Option<&str>, classes: &[&str]) -> TextInputConfig {
+    ensure_theme_initialized();
+    let sheet = Stylesheet::parse(css).expect("css");
+    let classes: Vec<std::sync::Arc<str>> = classes
+        .iter()
+        .map(|c| blinc_core::intern::intern(c))
+        .collect();
+    let mut cfg = TextInputConfig::default();
+    css::apply_css_overrides(&mut cfg, &sheet, id, &classes, &TextFieldState::Idle);
+    cfg
+}
+
+#[test]
+fn class_rules_colour_the_placeholder_the_selection_and_the_caret() {
+    let css = r#"
+        .field { caret-color: #00ff00; }
+        .field::placeholder { color: #ff0000; }
+        .field::selection { background: #0000ff; }
+    "#;
+    let cfg = css_config(css, None, &["field"]);
+    assert_eq!(cfg.placeholder_color, Color::rgb(1.0, 0.0, 0.0));
+    assert_eq!(cfg.selection_color, Color::rgb(0.0, 0.0, 1.0));
+    assert_eq!(cfg.cursor_color, Color::rgb(0.0, 1.0, 0.0));
+
+    let other = css_config(css, None, &["other"]);
+    let default = TextInputConfig::default();
+    assert_eq!(other.placeholder_color, default.placeholder_color);
+    assert_eq!(other.selection_color, default.selection_color);
+}
+
+#[test]
+fn an_id_placeholder_rule_beats_a_class_rule() {
+    let css = r#"
+        .field::placeholder { color: #ff0000; }
+        #email::placeholder { color: #00ff00; }
+    "#;
+    let cfg = css_config(css, Some("email"), &["field"]);
+    assert_eq!(cfg.placeholder_color, Color::rgb(0.0, 1.0, 0.0));
+}
+
+#[test]
+fn a_placeholder_rule_does_not_colour_the_field_itself() {
+    let css = ".field::placeholder { color: #ff0000; }";
+    let cfg = css_config(css, None, &["field"]);
+    assert_eq!(cfg.text_color, TextInputConfig::default().text_color);
+}
