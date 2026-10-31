@@ -668,15 +668,29 @@ pub const CN_STYLES: &str = concat!(
    ============================================================================ */
 
 .cn-select-trigger {
-    /* `background`, `border`, and `color` are Rust-owned (state-aware:
-       open / disabled / placeholder). Leaving CSS values here would
-       overwrite the disabled `InputBgDisabled` fill with `--surface`
-       (white) — the exact regression that hid the disabled trigger bg.
-       Keep only the radius + cursor + transition; users still cascade
-       via more specific rules if they need to override. */
+    background: transparent;
+    border-color: var(--border);
     border-radius: var(--radius-default);
     cursor: pointer;
-    transition: border-color var(--duration-fast) var(--ease-state);
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state);
+}
+/* Hover and press tint as the outline button's do; the border darkens while
+   the list is open. */
+.cn-select-trigger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+.cn-select-trigger:active:not(:disabled) {
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+.cn-select-trigger[data-state="open"]:not(:disabled) {
+    border-color: var(--border-hover);
+}
+.cn-select-trigger:disabled {
+    background: var(--input-bg-disabled);
+    border-color: var(--border-secondary);
+    cursor: not-allowed;
 }
 
 .cn-select-content {
@@ -1334,6 +1348,19 @@ pub const CN_STYLES: &str = concat!(
 /* ============================================================================
    Combobox
    ============================================================================ */
+
+/* The dropdown menu's default trigger: filled as the outline button is,
+   tinted on hover and press. */
+.cn-dropdown-trigger {
+    background: transparent;
+    transition: background-color var(--duration-fast) var(--ease-state);
+}
+.cn-dropdown-trigger:hover {
+    background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+.cn-dropdown-trigger:active {
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
 
 .cn-combobox-trigger {
     /* Match select-trigger: bg / border / color are Rust-owned so the

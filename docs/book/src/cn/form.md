@@ -271,35 +271,34 @@ give a 4px gap; `.gap(..)` overrides it.
 
 ## Select
 
-Dropdown selection:
+Dropdown selection, bound to a `State<String>` holding the selected value:
 
 ```rust
-select()
-    .value(selected)
-    .on_change(|value| set_selected(value))
-    .child(select_trigger()
-        .child(select_value().placeholder("Select option...")))
-    .child(select_content()
-        .child(select_item("opt1").child(text("Option 1")))
-        .child(select_item("opt2").child(text("Option 2")))
-        .child(select_item("opt3").child(text("Option 3"))))
+let fruit = ctx.use_state_keyed("fruit", || String::new());
+
+cn::select(&fruit)
+    .label("Fruit")
+    .option("apple", "Apple")
+    .option("banana", "Banana")
+    .option_disabled("durian", "Durian")
+    .placeholder("Select a fruit...")
+    .size(SelectSize::Medium)
+    .w(240.0)
+    .on_change(|value| println!("selected: {value}"))
 ```
 
-### Grouped Options
+`.disabled(true)` makes the whole select inert.
 
-```rust
-select()
-    .child(select_trigger().child(select_value()))
-    .child(select_content()
-        .child(select_group()
-            .child(select_label("Fruits"))
-            .child(select_item("apple").child(text("Apple")))
-            .child(select_item("banana").child(text("Banana"))))
-        .child(select_separator())
-        .child(select_group()
-            .child(select_label("Vegetables"))
-            .child(select_item("carrot").child(text("Carrot")))
-            .child(select_item("broccoli").child(text("Broccoli")))))
+### Styling
+
+The trigger is one element with the class `cn-select-trigger`. It has a
+`disabled` attribute while disabled and `data-state="open"` while its list is
+showing, so its fill and border are rules, eased by a `transition`: a faint
+tint on `:hover`, a stronger one on `:active`, a darker border while open, and
+the disabled palette. Restyle it with rules of your own:
+
+```css
+.cn-select-trigger[data-state="open"] { border-color: #16a34a; }
 ```
 
 ## Combobox

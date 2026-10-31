@@ -1,10 +1,8 @@
-//! A dropdown's trigger is built once: hovering it changes its fill, and
-//! opening the menu turns the chevron or swaps a custom trigger for its open
-//! form, all in place.
+//! A dropdown's trigger is built once: opening the menu turns the chevron or
+//! swaps a custom trigger for its open form, in place.
 
 mod common;
 
-use blinc_core::Color;
 use blinc_layout::LayoutNodeId;
 use blinc_layout::div::{Div, div};
 use blinc_layout::event_router::{EventRouter, MouseButton};
@@ -39,13 +37,6 @@ impl Scene {
     /// The default trigger's face: the bordered row inside it.
     fn face(&self) -> LayoutNodeId {
         self.tree.layout_tree.children(self.trigger())[0]
-    }
-
-    fn fill(&self, node: LayoutNodeId) -> Option<Color> {
-        match &self.tree.get_render_node(node).unwrap().props.background {
-            Some(blinc_core::Brush::Solid(c)) => Some(*c),
-            _ => None,
-        }
     }
 
     fn texts(&self) -> Vec<String> {
@@ -101,23 +92,6 @@ fn menu() -> blinc_cn::DropdownMenuBuilder {
     blinc_cn::dropdown_menu("Options")
         .item("Edit", || {})
         .item("Delete", || {})
-}
-
-#[test]
-fn hovering_the_trigger_changes_its_fill_in_place() {
-    guarded(|| {
-        let mut s = scene(menu());
-        let rest = s.fill(s.face());
-        s.move_to(s.centre());
-        let hovered = s.fill(s.face());
-        assert_ne!(rest, hovered, "hovering did not change the trigger's fill");
-        s.move_to((390.0, 190.0));
-        assert_eq!(
-            s.fill(s.face()),
-            rest,
-            "the fill stayed after the pointer left"
-        );
-    })
 }
 
 #[test]

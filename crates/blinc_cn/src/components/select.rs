@@ -183,39 +183,10 @@ impl Select {
 
         let dropdown_width = config.width.unwrap_or(200.0);
 
-        // The select is built once. Its fill and border follow the pointer
-        // and whether it is open; the shown value is rebuilt when the value
-        // changes, and the list is built while it is open.
-        let interaction = Interaction::keyed(&format!("{}_btn", instance_key));
-        let (hovered, pressed) = (
-            interaction.hovered().signal(),
-            interaction.pressed().signal(),
-        );
-        let open = open_state.signal();
-        let btn_variant = ButtonVariant::Outline;
-        let trigger_bg = computed(move |g: &ReactiveGraph| {
-            let theme = ThemeState::get();
-            if disabled {
-                return theme.color(ColorToken::InputBgDisabled);
-            }
-            let state = if g.get(pressed).unwrap_or(false) {
-                ButtonState::Pressed
-            } else if g.get(hovered).unwrap_or(false) {
-                ButtonState::Hovered
-            } else {
-                ButtonState::Idle
-            };
-            btn_variant.background(theme, state)
-        });
-        let trigger_border = computed(move |g: &ReactiveGraph| {
-            if disabled {
-                ThemeState::get().color(ColorToken::BorderSecondary)
-            } else if g.get(open).unwrap_or(false) {
-                border_hover
-            } else {
-                border
-            }
-        });
+        // The select is built once. Its fill and border are `.cn-select-trigger`
+        // rules over `:hover`, `:active`, `:disabled` and `data-state="open"`;
+        // the shown value is rebuilt when the value changes, and the list is
+        // built while it is open.
 
         // Chevron SVG (down arrow)
         let chevron_svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
@@ -267,16 +238,14 @@ impl Select {
             .justify_between()
             .h(height)
             .p_px(padding)
-            .bg(&trigger_bg)
+            .attr_when("data-state", "open", &open_state)
             .border_width(1.0)
-            .border_color(&trigger_border)
             .rounded(radius)
             .overflow_clip()
             .flex_shrink_0()
             // No shadow when disabled — matches the flat,
             // non-interactive look the cn::button disabled state uses.
             .when(!disabled, |t| t.shadow_sm())
-            .track(&interaction)
             .child(content_wrapper)
             .child(
                 svg(chevron_svg)
@@ -285,6 +254,7 @@ impl Select {
                     .ml(1.0)
                     .flex_shrink_0(),
             )
+            .when(disabled, |t| t.attr("disabled", ""))
             .when(!disabled, |t| t.cursor_pointer())
             .when(disabled, |t| t.cursor_not_allowed())
             .on_click(move |_ctx| {

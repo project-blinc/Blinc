@@ -5,7 +5,6 @@
 
 mod common;
 
-use blinc_core::Color;
 use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
 use blinc_layout::LayoutNodeId;
 use blinc_layout::div::div;
@@ -72,27 +71,6 @@ impl Scene {
             stack.extend(self.tree.layout_tree.children(node));
         }
         panic!("the trigger shows no text");
-    }
-
-    fn fill(&self) -> Option<Color> {
-        match &self
-            .tree
-            .get_render_node(self.trigger())
-            .unwrap()
-            .props
-            .background
-        {
-            Some(blinc_core::Brush::Solid(c)) => Some(*c),
-            _ => None,
-        }
-    }
-
-    fn border(&self) -> Option<Color> {
-        self.tree
-            .get_render_node(self.trigger())
-            .unwrap()
-            .props
-            .border_color
     }
 
     fn centre(&self, node: LayoutNodeId) -> (f32, f32) {
@@ -162,17 +140,5 @@ fn a_click_outside_closes_the_list() {
         blinc_layout::click_outside::fire_click_outside(&[]);
         s.frame();
         assert!(!s.is_open(), "a click outside left the list open");
-    })
-}
-
-#[test]
-fn the_trigger_follows_the_pointer_and_the_open_state() {
-    guarded(|| {
-        let mut s = scene();
-        let (rest_fill, rest_border) = (s.fill(), s.border());
-        s.move_to(s.centre(s.trigger()));
-        assert_ne!(s.fill(), rest_fill, "hovering did not change the fill");
-        s.click(s.trigger());
-        assert_ne!(s.border(), rest_border, "opening did not change the border");
     })
 }

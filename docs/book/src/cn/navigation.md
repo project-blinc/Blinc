@@ -27,45 +27,24 @@ tabs()
 ## Dropdown Menu
 
 ```rust
-dropdown_menu()
-    .child(dropdown_menu_trigger()
-        .child(button("Options").icon_right(icons::CHEVRON_DOWN)))
-    .child(dropdown_menu_content()
-        .child(dropdown_menu_label("Actions"))
-        .child(dropdown_menu_item("edit")
-            .child(icon(icons::EDIT))
-            .child(text("Edit"))
-            .on_click(|| edit_item()))
-        .child(dropdown_menu_item("duplicate")
-            .child(icon(icons::COPY))
-            .child(text("Duplicate")))
-        .child(dropdown_menu_separator())
-        .child(dropdown_menu_item("delete")
-            .child(icon(icons::TRASH))
-            .child(text("Delete"))
-            .variant(MenuItemVariant::Destructive)))
+cn::dropdown_menu("Options")
+    .item("Edit", || edit_item())
+    .item_with_shortcut("Save", "Cmd+S", || save())
+    .item_disabled("Archive")
+    .separator()
+    .item("Delete", || delete_item())
 ```
 
-### With Keyboard Shortcuts
+`dropdown_menu_custom(|open| ..)` takes a trigger of your own, built for the
+open and the closed state. `.min_width(..)`, `.position(..)`, `.align(..)` and
+`.offset(..)` place the menu.
 
-```rust
-dropdown_menu_item("save")
-    .child(icon(icons::SAVE))
-    .child(text("Save"))
-    .child(dropdown_menu_shortcut("⌘S"))
-```
+The default trigger carries the class `cn-dropdown-trigger`; its fill is
+`:hover` and `:active` rules with a `transition`, so restyle it with rules of
+your own:
 
-### Submenu
-
-```rust
-dropdown_menu_content()
-    .child(dropdown_menu_item("new").child(text("New")))
-    .child(dropdown_menu_sub()
-        .child(dropdown_menu_sub_trigger()
-            .child(text("Share")))
-        .child(dropdown_menu_sub_content()
-            .child(dropdown_menu_item("email").child(text("Email")))
-            .child(dropdown_menu_item("link").child(text("Copy Link")))))
+```css
+.cn-dropdown-trigger:hover { background: #1e1e2a; }
 ```
 
 ## Context Menu

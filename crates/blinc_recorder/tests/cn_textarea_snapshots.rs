@@ -8,6 +8,7 @@ use blinc_core::Color;
 use blinc_layout::div::div;
 use blinc_layout::widgets::text_area::text_area_state;
 use blinc_recorder::Headless;
+use blinc_recorder::testing::Golden;
 use blinc_theme::{ColorScheme, ColorToken, HybridTheme, ThemeState};
 
 const W: u32 = 260;
@@ -88,7 +89,12 @@ fn idle_hover_and_focus_follow_their_rules() {
         border(&ui)
     );
     assert!(close(fill(&ui), theme.color(ColorToken::InputBgFocus)));
-    ui.assert_snapshot("cn_textarea_focus");
+    // The caret blinks on the wall clock, so a focused frame differs a little
+    // from run to run.
+    let frame = ui.snapshot().expect("snapshot");
+    Golden::in_crate()
+        .tolerance(24)
+        .check("cn_textarea_focus", &frame);
 }
 
 #[test]

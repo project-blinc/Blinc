@@ -310,8 +310,6 @@ impl DropdownMenuBuilder {
         let trigger_label = self.trigger_label.clone();
         let trigger_builder = self.trigger_builder.clone();
 
-        let btn_variant = ButtonVariant::Outline;
-        let button_key = self.key.derive("button");
         // Get the key string for use in closures (InstanceKey is not Sync)
         let menu_key = self.key.get().to_string();
 
@@ -320,25 +318,9 @@ impl DropdownMenuBuilder {
         let overlay_handle_for_trigger = overlay_handle_state.clone();
         let items_for_show = items.clone();
 
-        // The trigger is built once. Its fill follows the pointer, its
-        // chevron turns while the menu is open, and a custom trigger is
-        // swapped for the open or closed one it builds.
-        let interaction = Interaction::keyed(&button_key);
-        let (hovered, pressed) = (
-            interaction.hovered().signal(),
-            interaction.pressed().signal(),
-        );
-        let bg = computed(move |g: &ReactiveGraph| {
-            let state = if g.get(pressed).unwrap_or(false) {
-                ButtonState::Pressed
-            } else if g.get(hovered).unwrap_or(false) {
-                ButtonState::Hovered
-            } else {
-                ButtonState::Idle
-            };
-            btn_variant.background(ThemeState::get(), state)
-        });
-
+        // The trigger is built once. Its fill is the `.cn-dropdown-trigger`
+        // rules, its chevron turns while the menu is open, and a custom
+        // trigger is swapped for the open or closed one it builds.
         let trigger_content: Div = if let Some(builder) = trigger_builder {
             let closed = builder.clone();
             div().show_or(&open_state, move || builder(true), move || closed(false))
@@ -352,6 +334,7 @@ impl DropdownMenuBuilder {
                 }
             });
             div()
+                .class("cn-dropdown-trigger")
                 .gap(8.0)
                 .flex_row()
                 .items_center()
@@ -361,7 +344,6 @@ impl DropdownMenuBuilder {
                 .rounded(theme.radius(RadiusToken::Md))
                 .shadow_sm()
                 .border(1.0, theme.color(ColorToken::Border))
-                .bg(&bg)
                 .child(
                     text(&label)
                         .size(theme.typography().text_sm)
@@ -383,9 +365,7 @@ impl DropdownMenuBuilder {
 
         let trigger = div()
             .w_fit()
-            .bg(btn_variant.background(theme, ButtonState::Idle))
             .cursor_pointer()
-            .track(&interaction)
             .child(trigger_content)
             .on_click(move |ctx| {
                 let bounds = ElementBounds {
