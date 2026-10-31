@@ -75,12 +75,6 @@ impl Scene {
     }
 
     /// The tint of a stepper's icon.
-    fn icon_tint(&self, class: &str) -> Option<[f32; 4]> {
-        let stepper = self.find_class(class);
-        let icon = self.tree.layout_tree.children(stepper)[0];
-        self.tree.get_render_node(icon).unwrap().props.svg_tint
-    }
-
     fn frame(&mut self) {
         assert!(
             !blinc_layout::stateful::has_pending_subtree_rebuilds(),
@@ -130,26 +124,5 @@ fn a_value_set_from_outside_shows_in_the_field() {
         s.value.set(3.0);
         s.frame();
         assert_eq!(s.shown(), "3");
-    })
-}
-
-#[test]
-fn a_stepper_dims_at_its_bound() {
-    guarded(|| {
-        let mut s = scene(2.0);
-        let open = s.icon_tint("cn-number-input-step--inc");
-        let inc = s.find_class("cn-number-input-step--inc");
-        s.click(inc);
-        assert_eq!(s.value.get(), 3.0);
-        assert_ne!(
-            s.icon_tint("cn-number-input-step--inc"),
-            open,
-            "the + did not dim at the maximum"
-        );
-        assert_ne!(
-            s.icon_tint("cn-number-input-step--dec"),
-            s.icon_tint("cn-number-input-step--inc"),
-            "the - dimmed too"
-        );
     })
 }

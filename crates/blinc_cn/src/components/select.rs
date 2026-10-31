@@ -243,9 +243,6 @@ impl Select {
             .rounded(radius)
             .overflow_clip()
             .flex_shrink_0()
-            // No shadow when disabled — matches the flat,
-            // non-interactive look the cn::button disabled state uses.
-            .when(!disabled, |t| t.shadow_sm())
             .child(content_wrapper)
             .child(
                 svg(chevron_svg)

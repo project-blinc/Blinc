@@ -259,6 +259,7 @@ impl TextInput {
     }
 
     pub fn border_width(mut self, width: f32) -> Self {
+        self.config.lock().unwrap().border_width = width;
         self.inner = std::cell::RefCell::new(self.inner.take().border_width(width));
         self
     }

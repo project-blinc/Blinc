@@ -396,8 +396,8 @@ pub const CN_STYLES: &str = concat!(
     transition:
         background-color var(--duration-fast) var(--ease-state),
         border-color var(--duration-fast) var(--ease-state),
-        outline-color 160ms ease,
-        outline-offset 160ms ease;
+        outline-color var(--duration-fast) var(--ease-state),
+        outline-offset var(--duration-fast) var(--ease-out);
 }
 /* The border and fill per state are the layout input's `.blinc-input`
    rules, which these sit beside at the same specificity. */
@@ -443,8 +443,8 @@ pub const CN_STYLES: &str = concat!(
     transition:
         background-color var(--duration-fast) var(--ease-state),
         border-color var(--duration-fast) var(--ease-state),
-        outline-color 160ms ease,
-        outline-offset 160ms ease;
+        outline-color var(--duration-fast) var(--ease-state),
+        outline-offset var(--duration-fast) var(--ease-out);
 }
 .cn-input-otp-slot:focus:not(:disabled) {
     /* HID focus ring — see `.cn-input:focus` for rationale. */
@@ -488,8 +488,8 @@ pub const CN_STYLES: &str = concat!(
     transition:
         background-color var(--duration-fast) var(--ease-state),
         border-color var(--duration-fast) var(--ease-state),
-        outline-color 160ms ease,
-        outline-offset 160ms ease;
+        outline-color var(--duration-fast) var(--ease-state),
+        outline-offset var(--duration-fast) var(--ease-out);
 }
 /* The border and fill per state are the layout input's `.blinc-input`
    rules, which these sit beside at the same specificity. */
@@ -514,6 +514,31 @@ pub const CN_STYLES: &str = concat!(
 .cn-textarea.cn-textarea--success:focus:not(:disabled) {
     outline: 2px solid var(--focus-ring-success);
 }
+
+/* Number input, after ashui's: a number between a - and a +, one bordered
+   piece. The steps are transparent and tint on hover and press; the field is
+   borderless and clear (set in Rust, so the input rules give way to it). */
+.cn-number-input-group {
+    background: var(--input-bg);
+    border-color: var(--border);
+}
+.cn-number-input-step {
+    background: transparent;
+    color: var(--text-secondary);
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        color var(--duration-fast) var(--ease-state);
+}
+.cn-number-input-step--dec { border-right: 1px solid var(--border); }
+.cn-number-input-step--inc { border-left: 1px solid var(--border); }
+.cn-number-input-step:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+    color: var(--text-primary);
+}
+.cn-number-input-step:active:not(:disabled) {
+    background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+.cn-number-input-step:disabled { color: var(--text-tertiary); }
 
 /* ============================================================================
    Label
@@ -669,6 +694,7 @@ pub const CN_STYLES: &str = concat!(
 
 .cn-select-trigger {
     background: transparent;
+    box-shadow: var(--shadow-sm);
     border-color: var(--border);
     border-radius: var(--radius-default);
     cursor: pointer;
@@ -688,6 +714,7 @@ pub const CN_STYLES: &str = concat!(
     border-color: var(--border-hover);
 }
 .cn-select-trigger:disabled {
+    box-shadow: none;
     background: var(--input-bg-disabled);
     border-color: var(--border-secondary);
     cursor: not-allowed;
@@ -770,6 +797,7 @@ pub const CN_STYLES: &str = concat!(
        disabled) come from Rust. CSS keeps just the always-true chrome
        (full rounded corners, pointer cursor). */
     border-radius: var(--radius-full);
+    box-shadow: var(--shadow-sm);
     cursor: pointer;
 }
 /* Disabled thumb tone — matches the disabled-button / disabled-input
@@ -779,6 +807,7 @@ pub const CN_STYLES: &str = concat!(
    whole control reads as inert (same approach `cn::switch` takes:
    muted track + thumb chrome that doesn't change opacity). */
 .cn-slider-thumb--disabled {
+    box-shadow: none;
     background: var(--input-bg-disabled);
     border-color: var(--border-secondary);
     border-width: 1px;
@@ -1353,6 +1382,7 @@ pub const CN_STYLES: &str = concat!(
    tinted on hover and press. */
 .cn-dropdown-trigger {
     background: transparent;
+    box-shadow: var(--shadow-sm);
     transition: background-color var(--duration-fast) var(--ease-state);
 }
 .cn-dropdown-trigger:hover {
@@ -1364,6 +1394,7 @@ pub const CN_STYLES: &str = concat!(
 
 .cn-combobox-trigger {
     background: var(--surface);
+    box-shadow: var(--shadow-sm);
     border-color: var(--border);
     border-radius: var(--radius-default);
     cursor: pointer;
@@ -1377,6 +1408,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-combobox-trigger[data-state="open"]:not(:disabled),
 .cn-combobox-trigger[data-state="open"]:hover:not(:disabled) { border-color: var(--border-focus); }
 .cn-combobox-trigger:disabled {
+    box-shadow: none;
     background: var(--input-bg-disabled);
     border-color: var(--border-secondary);
     cursor: not-allowed;

@@ -342,7 +342,6 @@ impl DropdownMenuBuilder {
                 .px(4.0)
                 .py(2.0)
                 .rounded(theme.radius(RadiusToken::Md))
-                .shadow_sm()
                 .border(1.0, theme.color(ColorToken::Border))
                 .child(
                     text(&label)

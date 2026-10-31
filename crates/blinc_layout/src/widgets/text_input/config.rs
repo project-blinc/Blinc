@@ -38,7 +38,7 @@ impl Default for TextInputConfig {
             placeholder_color: theme.color(ColorToken::TextTertiary),
             cursor_color: theme.color(ColorToken::Accent),
             selection_color: theme.color(ColorToken::Selection),
-            corner_radius: 8.0,
+            corner_radius: theme.radius(blinc_theme::RadiusToken::Lg),
             border_width: 1.5,
             padding_x: 12.0,
             placeholder: String::new(),

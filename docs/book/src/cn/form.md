@@ -100,6 +100,31 @@ dims the field. It is styled like [Input](#input): one element with the class
 `cn-textarea`, whose border and fill per state are `:hover`, `:focus`,
 `.cn-textarea--error` and `:disabled` rules, eased by a `transition`.
 
+## Number Input
+
+A number between a − and a +, bound to a `State<f64>`:
+
+```rust
+let qty = ctx.use_state_keyed("qty", || 1.0);
+
+cn::number_input(&qty)
+    .min(0.0)
+    .max(99.0)
+    .step(1.0)
+    .precision(0)
+    .size(InputSize::Medium)
+    .on_change(|value| println!("qty: {value}"))
+```
+
+Typing, the arrow keys and the buttons all clamp to `min` and `max`. The
+width follows the bounds, not the value, so typing never resizes it.
+
+The group is one bordered element (`.cn-number-input-group`) with a borderless
+field and two steps (`.cn-number-input-step--dec` and `--inc`). A step tints on
+`:hover` and `:active`, and is `disabled`, so dimmed and inert, where a step
+would change nothing. These are rules with a `transition`; restyle them with
+rules of your own.
+
 ## Checkbox
 
 A checkbox reads and writes the `State<bool>` it is given:

@@ -75,7 +75,7 @@ impl Default for TextAreaConfig {
             text_color: theme.color(ColorToken::TextPrimary),
             placeholder_color: theme.color(ColorToken::TextTertiary),
             border_width: 1.5,
-            corner_radius: 8.0,
+            corner_radius: theme.radius(blinc_theme::RadiusToken::Lg),
             padding_x: 12.0,
             padding_y: 10.0,
             cursor_color: theme.color(ColorToken::Accent),

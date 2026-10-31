@@ -22,14 +22,13 @@ use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_icons::{icons, to_svg};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::ElementBuilder;
-use blinc_layout::interaction::Interaction;
 use blinc_layout::prelude::*;
 use blinc_layout::svg::svg;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::text_input::{
     InputType, SharedTextInputData, refresh_text_input, text_input, text_input_data,
 };
-use blinc_theme::{ColorToken, RadiusToken, ThemeState};
+use blinc_theme::{RadiusToken, ThemeState};
 use std::sync::Arc;
 
 use crate::components::input::InputSize;
@@ -175,8 +174,6 @@ impl NumberInput {
         let height = config.size.height(theme);
         let font_size = config.size.font_size(&typography);
         let radius = theme.radius(RadiusToken::Default);
-        let border_color = theme.color(ColorToken::BorderSecondary);
-
         // Steppers are square at the row height.
         let button_w = height;
 
@@ -210,22 +207,12 @@ impl NumberInput {
             .flex_row()
             .items_center()
             .rounded(radius)
-            .border(1.0, border_color)
+            .border_width(1.0)
             .overflow_clip()
             .class("cn-number-input-group")
-            .child(stepper(
-                &config,
-                &instance_key.derive("step-dec"),
-                -1.0,
-                height,
-            ))
+            .child(stepper(&config, -1.0, height))
             .child(field)
-            .child(stepper(
-                &config,
-                &instance_key.derive("step-inc"),
-                1.0,
-                height,
-            ));
+            .child(stepper(&config, 1.0, height));
 
         Self {
             inner: div().h_fit().w_fit().child(group),
@@ -286,6 +273,8 @@ fn number_field(
         .w(width)
         .h(height)
         .rounded(0.0)
+        .border_width(0.0)
+        .idle_bg_color(blinc_core::Color::TRANSPARENT)
         .class("cn-number-input-field")
         .disabled(config.disabled);
 
@@ -352,51 +341,21 @@ fn number_field(
     field
 }
 
-/// A `+` or `−` button: steps the state by `delta` steps. Its fill follows
-/// the pointer, and its icon dims where a step would change nothing.
-fn stepper(config: &Config, key: &str, delta: f64, height: f32) -> Div {
+/// A `+` or `−` button: steps the state by `delta` steps. Its fill and icon
+/// colour are `.cn-number-input-step` rules; it is `disabled` while the input
+/// is, and where a step would change nothing.
+fn stepper(config: &Config, delta: f64, height: f32) -> Div {
     let theme = ThemeState::get();
     let typography = theme.typography();
     let font_size = config.size.font_size(&typography);
-    let border_color = theme.color(ColorToken::BorderSecondary);
-    let (bg, bg_hover, bg_pressed) = (
-        theme.color(ColorToken::InputBg),
-        theme.color(ColorToken::InputBgHover),
-        theme.color(ColorToken::InputBgFocus),
-    );
-    let (text_primary, text_tertiary) = (
-        theme.color(ColorToken::TextPrimary),
-        theme.color(ColorToken::TextTertiary),
-    );
     let (min, max, step, disabled) = (config.min, config.max, config.step, config.disabled);
     let is_dec = delta < 0.0;
 
-    let interaction = Interaction::keyed(key);
-    let (hovered, pressed) = (
-        interaction.hovered().signal(),
-        interaction.pressed().signal(),
-    );
-    let fill = computed(move |g: &ReactiveGraph| {
-        if disabled {
-            bg
-        } else if g.get(pressed).unwrap_or(false) {
-            bg_pressed
-        } else if g.get(hovered).unwrap_or(false) {
-            bg_hover
-        } else {
-            bg
-        }
-    });
     let value = config.state.signal();
-    let fg = computed(move |g: &ReactiveGraph| {
-        let at_bound = g
-            .get(value)
-            .is_some_and(|v| clamp(v + delta * step, min, max) == v);
-        if disabled || at_bound {
-            text_tertiary
-        } else {
-            text_primary
-        }
+    let at_bound = computed(move |g: &ReactiveGraph| {
+        disabled
+            || g.get(value)
+                .is_some_and(|v| clamp(v + delta * step, min, max) == v)
     });
 
     // SVG icons rather than glyphs: a glyph renders in whatever face and
@@ -412,15 +371,15 @@ fn stepper(config: &Config, key: &str, delta: f64, height: f32) -> Div {
         .flex_row()
         .items_center()
         .justify_center()
-        .bg(&fill)
         .cursor_pointer()
-        .track(&interaction)
+        .class("cn-number-input-step")
         .class(if is_dec {
             "cn-number-input-step--dec"
         } else {
             "cn-number-input-step--inc"
         })
-        .child(svg(&icon).size(icon_size, icon_size).color(&fg).internal())
+        .attr_when("disabled", "", &at_bound)
+        .child(svg(&icon).size(icon_size, icon_size).internal())
         .on_click(move |_| {
             if disabled {
                 return;
@@ -435,11 +394,7 @@ fn stepper(config: &Config, key: &str, delta: f64, height: f32) -> Div {
                 cb(next);
             }
         });
-    if is_dec {
-        cell.border_right(1.0, border_color)
-    } else {
-        cell.border_left(1.0, border_color)
-    }
+    cell
 }
 
 /// Mirror of `layout_number_input::format_value` — kept in sync via
