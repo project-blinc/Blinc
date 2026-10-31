@@ -319,3 +319,77 @@ fn transform_origin_keywords_name_their_own_axis() {
         assert_eq!(got, *expected, "transform-origin: {value}");
     }
 }
+
+fn transitions_of(css: &str) -> CssTransitionSet {
+    let result = Stylesheet::parse_with_errors(css);
+    assert!(!result.has_errors(), "{:?}", result.errors);
+    result
+        .stylesheet
+        .get("t")
+        .unwrap()
+        .transition
+        .clone()
+        .expect("a transition")
+}
+
+#[test]
+fn a_transition_with_no_property_covers_all() {
+    let set = transitions_of("#t { transition: 200ms ease-out; }");
+    assert_eq!(set.transitions.len(), 1);
+    assert_eq!(set.transitions[0].property, "all");
+    assert!(set.get("background").is_some());
+}
+
+#[test]
+fn transition_longhands_take_lists_in_any_order() {
+    let set = transitions_of(
+        "#t { transition-duration: 100ms, 300ms; transition-property: color, opacity; \
+         transition-timing-function: linear; transition-delay: 0s, 50ms; }",
+    );
+    let color = set.get("color").unwrap();
+    let opacity = set.get("opacity").unwrap();
+    assert_eq!((color.duration_ms, color.delay_ms), (100, 0));
+    assert_eq!((opacity.duration_ms, opacity.delay_ms), (300, 50));
+    assert_eq!(opacity.timing, AnimationTiming::Linear);
+    assert!(set.get("width").is_none());
+}
+
+#[test]
+fn a_shorter_longhand_list_repeats_to_fit_the_properties() {
+    let set = transitions_of(
+        "#t { transition-property: color, opacity, width; transition-duration: 1s, 2s; }",
+    );
+    let ms = |p: &str| set.get(p).unwrap().duration_ms;
+    assert_eq!(
+        (ms("color"), ms("opacity"), ms("width")),
+        (1000, 2000, 1000)
+    );
+}
+
+#[test]
+fn transition_property_none_turns_transitions_off() {
+    let set = transitions_of("#t { transition: color 1s; transition-property: none; }");
+    assert!(set.get("color").is_none());
+}
+
+#[test]
+fn per_side_and_colour_names_cover_the_property_they_animate() {
+    let set = transitions_of(
+        "#t { transition: background-color 100ms, border-top-color 200ms, \
+         padding-left 300ms, translate 400ms, inset 500ms; }",
+    );
+    let ms = |p: &str| set.get(p).map(|t| t.duration_ms);
+    assert_eq!(ms("background"), Some(100));
+    assert_eq!(ms("border-color"), Some(200));
+    assert_eq!(ms("padding"), Some(300));
+    assert_eq!(ms("transform"), Some(400));
+    assert_eq!(ms("left"), Some(500));
+    assert_eq!(ms("opacity"), None);
+}
+
+#[test]
+fn the_last_entry_naming_a_property_governs_it() {
+    let set = transitions_of("#t { transition: all 100ms, opacity 900ms; }");
+    assert_eq!(set.get("opacity").unwrap().duration_ms, 900);
+    assert_eq!(set.get("color").unwrap().duration_ms, 100);
+}

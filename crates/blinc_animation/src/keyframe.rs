@@ -300,6 +300,104 @@ pub struct KeyframeProperties {
     pub svg_path_data: Option<String>,
 }
 
+/// Field-wise operations over every property. Listing the fields in a
+/// destructuring pattern makes a field added to the struct a compile error
+/// here until it is listed.
+macro_rules! keyframe_fields {
+    ($($f:ident),* $(,)?) => {
+        impl KeyframeProperties {
+            /// Set every field that `other` sets, leaving the rest.
+            pub fn overlay(&mut self, other: &Self) {
+                let Self { $($f),* } = other;
+                $( if $f.is_some() { self.$f = $f.clone(); } )*
+            }
+
+            /// Whether both sets give a value to some same field.
+            pub fn overlaps(&self, other: &Self) -> bool {
+                let Self { $($f),* } = other;
+                false $( || (self.$f.is_some() && $f.is_some()) )*
+            }
+        }
+    };
+}
+
+keyframe_fields!(
+    opacity,
+    scale_x,
+    scale_y,
+    translate_x,
+    translate_y,
+    rotate,
+    rotate_x,
+    rotate_y,
+    perspective,
+    depth,
+    translate_z,
+    blend_3d,
+    clip_inset,
+    background_color,
+    gradient_start_color,
+    gradient_end_color,
+    gradient_angle,
+    border_color,
+    text_color,
+    corner_radius,
+    corner_shape,
+    border_width,
+    outline_width,
+    outline_color,
+    outline_offset,
+    clip_circle_radius,
+    clip_ellipse_radii,
+    overflow_fade,
+    shadow_params,
+    shadow_color,
+    shadow_stack,
+    text_shadow_params,
+    text_shadow_color,
+    light_intensity,
+    ambient,
+    specular,
+    light_direction,
+    filter_grayscale,
+    filter_invert,
+    filter_sepia,
+    filter_brightness,
+    filter_contrast,
+    filter_saturate,
+    filter_hue_rotate,
+    filter_blur,
+    backdrop_blur,
+    backdrop_saturation,
+    backdrop_brightness,
+    width,
+    height,
+    min_width,
+    max_width,
+    min_height,
+    max_height,
+    padding,
+    margin,
+    gap,
+    flex_grow,
+    flex_shrink,
+    inset_top,
+    inset_right,
+    inset_bottom,
+    inset_left,
+    font_size,
+    skew_x,
+    skew_y,
+    transform_origin,
+    z_index,
+    mask_gradient,
+    svg_fill,
+    svg_stroke,
+    svg_stroke_width,
+    svg_stroke_dashoffset,
+    svg_path_data,
+);
+
 impl KeyframeProperties {
     /// Whether any property tracked here demands native-vsync smoothness
     /// to look right.
@@ -1722,5 +1820,46 @@ mod composite_promotable_tests {
         // nodes.
         let p = KeyframeProperties::default();
         assert!(!p.is_composite_promotable());
+    }
+}
+
+#[cfg(test)]
+mod overlay_tests {
+    use super::*;
+
+    #[test]
+    fn overlay_takes_what_the_other_sets_and_keeps_the_rest() {
+        let mut base = KeyframeProperties {
+            opacity: Some(0.5),
+            width: Some(10.0),
+            ..Default::default()
+        };
+        let top = KeyframeProperties {
+            opacity: Some(1.0),
+            background_color: Some([1.0, 0.0, 0.0, 1.0]),
+            ..Default::default()
+        };
+        base.overlay(&top);
+        assert_eq!(base.opacity, Some(1.0));
+        assert_eq!(base.width, Some(10.0));
+        assert_eq!(base.background_color, Some([1.0, 0.0, 0.0, 1.0]));
+    }
+
+    #[test]
+    fn overlaps_is_true_only_for_a_field_both_set() {
+        let a = KeyframeProperties {
+            opacity: Some(0.5),
+            ..Default::default()
+        };
+        let b = KeyframeProperties {
+            width: Some(1.0),
+            ..Default::default()
+        };
+        let c = KeyframeProperties {
+            opacity: Some(0.1),
+            ..Default::default()
+        };
+        assert!(!a.overlaps(&b));
+        assert!(a.overlaps(&c));
     }
 }

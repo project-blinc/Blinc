@@ -300,6 +300,10 @@ pub struct ActiveMotion {
 pub struct ActiveCssAnimation {
     /// The running animation with all keyframes
     pub animation: blinc_animation::MultiKeyframeAnimation,
+    /// Further animations that run alongside `animation` over other
+    /// properties: a transition whose properties have different durations
+    /// or easings runs one per timing.
+    pub lanes: Vec<blinc_animation::MultiKeyframeAnimation>,
     /// Whether the animation is currently playing
     pub is_playing: bool,
     /// Current interpolated properties (cached each tick)
@@ -308,14 +312,49 @@ pub struct ActiveCssAnimation {
 
 impl ActiveCssAnimation {
     /// Create a new active CSS animation
-    pub fn new(mut animation: blinc_animation::MultiKeyframeAnimation) -> Self {
-        animation.start();
-        let current = animation.current_properties();
-        Self {
+    pub fn new(animation: blinc_animation::MultiKeyframeAnimation) -> Self {
+        Self::with_lanes(vec![animation])
+    }
+
+    /// Start several animations over disjoint properties as one entry.
+    /// `animations` must not be empty.
+    pub fn with_lanes(animations: Vec<blinc_animation::MultiKeyframeAnimation>) -> Self {
+        let mut animations = animations.into_iter().map(|mut a| {
+            a.start();
+            a
+        });
+        let animation = animations.next().expect("an animation");
+        let mut this = Self {
             animation,
+            lanes: animations.collect(),
             is_playing: true,
-            current_properties: current,
+            current_properties: Default::default(),
+        };
+        this.current_properties = this.sample();
+        this
+    }
+
+    fn all(&self) -> impl Iterator<Item = &blinc_animation::MultiKeyframeAnimation> {
+        std::iter::once(&self.animation).chain(self.lanes.iter())
+    }
+
+    fn sample(&self) -> blinc_animation::KeyframeProperties {
+        let mut props = self.animation.current_properties();
+        for lane in &self.lanes {
+            props.overlay(&lane.current_properties());
         }
+        props
+    }
+
+    /// The values the animation ends on, over every lane.
+    pub fn target(&self) -> blinc_animation::KeyframeProperties {
+        let mut props = blinc_animation::KeyframeProperties::default();
+        for lane in self.all() {
+            if let Some(last) = lane.last_keyframe() {
+                props.overlay(&last.properties);
+            }
+        }
+        props
     }
 
     /// Tick the animation and update current properties
@@ -324,8 +363,11 @@ impl ActiveCssAnimation {
     pub fn tick(&mut self, dt_ms: f32) -> bool {
         if self.is_playing {
             self.animation.tick(dt_ms);
-            self.current_properties = self.animation.current_properties();
-            if !self.animation.is_playing() {
+            for lane in &mut self.lanes {
+                lane.tick(dt_ms);
+            }
+            self.current_properties = self.sample();
+            if !self.all().any(|lane| lane.is_playing()) {
                 self.is_playing = false;
             }
         }

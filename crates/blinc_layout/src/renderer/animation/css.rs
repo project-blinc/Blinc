@@ -768,13 +768,10 @@ impl RenderTree {
         // Lock the shared store for the duration of this method
         let mut store = self.css_anim_store.lock().unwrap();
 
-        // Build "from" properties: only include fields that differ AND have a transition spec
-        let mut from = KeyframeProperties::default();
-        let mut to = KeyframeProperties::default();
-        let mut has_any = false;
-        let mut duration_ms: u32 = 300;
-        let mut delay_ms: u32 = 0;
-        let mut easing = blinc_animation::Easing::EaseInOut;
+        // Changed properties grouped by the timing that governs them: each
+        // group becomes one animation, so every property keeps its own
+        // duration, delay and easing.
+        let mut groups: Vec<TransitionGroup> = Vec::new();
 
         // Helper macro: check if a property changed and is covered by transition
         macro_rules! check_transition {
@@ -791,12 +788,9 @@ impl RenderTree {
                         } else {
                             before.$field.clone()
                         };
-                        from.$field = from_val;
-                        to.$field = after.$field.clone();
-                        duration_ms = t.duration_ms;
-                        delay_ms = t.delay_ms;
-                        easing = t.timing.to_easing();
-                        has_any = true;
+                        let group = TransitionGroup::of(&mut groups, t);
+                        group.from.$field = from_val;
+                        group.to.$field = after.$field.clone();
                     }
                 }
             };
@@ -814,12 +808,9 @@ impl RenderTree {
                         } else {
                             Some(before.$field.unwrap_or($def))
                         };
-                        from.$field = from_val;
-                        to.$field = Some(after.$field.unwrap_or($def));
-                        duration_ms = t.duration_ms;
-                        delay_ms = t.delay_ms;
-                        easing = t.timing.to_easing();
-                        has_any = true;
+                        let group = TransitionGroup::of(&mut groups, t);
+                        group.from.$field = from_val;
+                        group.to.$field = Some(after.$field.unwrap_or($def));
                     }
                 }
             };
@@ -906,26 +897,51 @@ impl RenderTree {
         check_transition!(svg_stroke_width, "stroke-width");
         check_transition!(svg_stroke_dashoffset, "stroke-dashoffset");
 
-        if has_any && duration_ms > 0 {
-            // If a transition already exists heading to the same target, let it continue
-            // rather than restarting with a fresh duration each frame
-            if let Some(existing) = store.transitions.get(&stable_id) {
-                if let Some(last_kf) = existing.animation.last_keyframe() {
-                    if last_kf.properties == to {
-                        return; // Same target — let existing transition finish
-                    }
-                }
-            }
-            let anim = MultiKeyframeAnimation::new(duration_ms)
-                .keyframe(0.0, from, easing)
-                .keyframe(1.0, to, easing)
-                .delay(delay_ms)
-                .fill_mode(FillMode::Forwards);
-            store.transitions.insert(
-                stable_id,
-                crate::render_state::ActiveCssAnimation::new(anim),
-            );
+        // A zero duration is a change that lands at once.
+        groups.retain(|g| g.timing_duration > 0);
+        if groups.is_empty() {
+            return;
         }
+        let mut target = KeyframeProperties::default();
+        for group in &groups {
+            target.overlay(&group.to);
+        }
+
+        // A transition already heading to this target carries on rather than
+        // restarting with a fresh duration each frame.
+        if let Some(existing) = store.transitions.get(&stable_id) {
+            if existing.target() == target {
+                return;
+            }
+        }
+
+        let mut lanes: Vec<MultiKeyframeAnimation> = groups
+            .into_iter()
+            .map(|g| {
+                let easing = g.timing.to_easing();
+                MultiKeyframeAnimation::new(g.timing_duration)
+                    .keyframe(0.0, g.from, easing)
+                    .keyframe(1.0, g.to, easing)
+                    .delay(g.timing_delay)
+                    .fill_mode(FillMode::Forwards)
+            })
+            .collect();
+
+        // A property already easing that this change leaves alone keeps going.
+        if let Some(existing) = store.transitions.remove(&stable_id) {
+            let carried = std::iter::once(existing.animation)
+                .chain(existing.lanes)
+                .filter(|lane| lane.is_playing())
+                .filter(|lane| {
+                    lane.last_keyframe()
+                        .is_some_and(|last| !last.properties.overlaps(&target))
+                });
+            lanes.extend(carried);
+        }
+        store.transitions.insert(
+            stable_id,
+            crate::render_state::ActiveCssAnimation::with_lanes(lanes),
+        );
     }
 
     /// Write the playing CSS transitions' current values onto their nodes,
@@ -1728,5 +1744,36 @@ impl RenderTree {
         }
 
         kp
+    }
+}
+
+/// The properties of one change that share a duration, delay and easing.
+struct TransitionGroup {
+    timing_duration: u32,
+    timing_delay: u32,
+    timing: blinc_css::parser::AnimationTiming,
+    from: blinc_animation::KeyframeProperties,
+    to: blinc_animation::KeyframeProperties,
+}
+
+impl TransitionGroup {
+    /// The group for the timing `spec` gives, made if there is none yet.
+    fn of<'a>(groups: &'a mut Vec<Self>, spec: &crate::css_parser::CssTransition) -> &'a mut Self {
+        let at = groups.iter().position(|g| {
+            g.timing_duration == spec.duration_ms
+                && g.timing_delay == spec.delay_ms
+                && g.timing == spec.timing
+        });
+        let at = at.unwrap_or_else(|| {
+            groups.push(Self {
+                timing_duration: spec.duration_ms,
+                timing_delay: spec.delay_ms,
+                timing: spec.timing,
+                from: Default::default(),
+                to: Default::default(),
+            });
+            groups.len() - 1
+        });
+        &mut groups[at]
     }
 }

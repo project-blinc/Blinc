@@ -23,14 +23,156 @@ pub struct CssTransition {
 #[derive(Clone, Debug, Default)]
 pub struct CssTransitionSet {
     pub transitions: Vec<CssTransition>,
+    /// The four longhand lists `transitions` is zipped from, so the longhands
+    /// can arrive in any order and in any number; `None` is the initial value.
+    lists: TransitionLists,
+}
+
+#[derive(Clone, Debug, Default)]
+struct TransitionLists {
+    properties: Option<Vec<String>>,
+    durations: Option<Vec<u32>>,
+    timings: Option<Vec<AnimationTiming>>,
+    delays: Option<Vec<u32>>,
+}
+
+/// Which `transition-*` longhand a value belongs to.
+#[derive(Clone, Copy)]
+pub(crate) enum TransitionLonghand {
+    Property,
+    Duration,
+    TimingFunction,
+    Delay,
 }
 
 impl CssTransitionSet {
-    /// Find transition spec for a given property name (also matches "all")
+    pub(crate) fn from_entries(transitions: Vec<CssTransition>) -> Self {
+        let lists = TransitionLists {
+            properties: Some(transitions.iter().map(|t| t.property.clone()).collect()),
+            durations: Some(transitions.iter().map(|t| t.duration_ms).collect()),
+            timings: Some(transitions.iter().map(|t| t.timing).collect()),
+            delays: Some(transitions.iter().map(|t| t.delay_ms).collect()),
+        };
+        Self { transitions, lists }
+    }
+
+    /// Set one longhand to a comma-separated list and re-zip the entries.
+    /// The property list sets how many there are; the others repeat to fit.
+    pub(crate) fn set_longhand(&mut self, which: TransitionLonghand, value: &str) -> bool {
+        let items: Vec<String> = split_commas_respecting_parens(value)
+            .into_iter()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if items.is_empty() {
+            return false;
+        }
+        match which {
+            TransitionLonghand::Property => {
+                self.lists.properties = Some(items.iter().map(|s| s.to_lowercase()).collect());
+            }
+            TransitionLonghand::Duration => {
+                let times: Option<Vec<u32>> = items.iter().map(|s| parse_time_value(s)).collect();
+                match times {
+                    Some(t) => self.lists.durations = Some(t),
+                    None => return false,
+                }
+            }
+            TransitionLonghand::TimingFunction => {
+                let timings: Option<Vec<AnimationTiming>> =
+                    items.iter().map(|s| AnimationTiming::from_str(s)).collect();
+                match timings {
+                    Some(t) => self.lists.timings = Some(t),
+                    None => return false,
+                }
+            }
+            TransitionLonghand::Delay => {
+                let times: Option<Vec<u32>> = items.iter().map(|s| parse_time_value(s)).collect();
+                match times {
+                    Some(t) => self.lists.delays = Some(t),
+                    None => return false,
+                }
+            }
+        }
+        self.rezip();
+        true
+    }
+
+    fn rezip(&mut self) {
+        let lists = &self.lists;
+        let properties = lists
+            .properties
+            .clone()
+            .unwrap_or_else(|| vec!["all".into()]);
+        self.transitions = if properties.len() == 1 && properties[0] == "none" {
+            Vec::new()
+        } else {
+            let at = |i: usize, n: usize| i % n.max(1);
+            properties
+                .iter()
+                .enumerate()
+                .map(|(i, property)| CssTransition {
+                    property: property.clone(),
+                    duration_ms: lists
+                        .durations
+                        .as_deref()
+                        .and_then(|d| d.get(at(i, d.len())))
+                        .copied()
+                        .unwrap_or(0),
+                    timing: lists
+                        .timings
+                        .as_deref()
+                        .and_then(|t| t.get(at(i, t.len())))
+                        .copied()
+                        .unwrap_or_default(),
+                    delay_ms: lists
+                        .delays
+                        .as_deref()
+                        .and_then(|d| d.get(at(i, d.len())))
+                        .copied()
+                        .unwrap_or(0),
+                })
+                .collect()
+        };
+    }
+
+    /// The entry that governs `property`: the last one naming it, directly or
+    /// through `all` or a shorthand or per-side name that covers it.
     pub fn get(&self, property: &str) -> Option<&CssTransition> {
         self.transitions
             .iter()
-            .find(|t| t.property == "all" || t.property == property)
+            .rev()
+            .find(|t| t.property == "all" || covers(&t.property, property))
+    }
+}
+
+/// Whether a transition named `spec` governs the property `prop`, which is
+/// the name the engine animates it under.
+fn covers(spec: &str, prop: &str) -> bool {
+    if spec == prop {
+        return true;
+    }
+    match spec {
+        "background-color" | "background-image" => prop == "background",
+        "border" => matches!(prop, "border-color" | "border-width"),
+        "border-top-color" | "border-right-color" | "border-bottom-color" | "border-left-color" => {
+            prop == "border-color"
+        }
+        "border-top-width" | "border-right-width" | "border-bottom-width" | "border-left-width" => {
+            prop == "border-width"
+        }
+        "border-top-left-radius"
+        | "border-top-right-radius"
+        | "border-bottom-right-radius"
+        | "border-bottom-left-radius" => prop == "border-radius",
+        "outline" => prop.starts_with("outline-"),
+        "padding-top" | "padding-right" | "padding-bottom" | "padding-left" => prop == "padding",
+        "margin-top" | "margin-right" | "margin-bottom" | "margin-left" => prop == "margin",
+        "row-gap" | "column-gap" => prop == "gap",
+        "inset" => matches!(prop, "top" | "right" | "bottom" | "left"),
+        "translate" | "scale" | "rotate" => prop == "transform",
+        "flex" => matches!(prop, "flex-grow" | "flex-shrink"),
+        _ => false,
     }
 }
 
@@ -325,7 +467,7 @@ pub(crate) fn parse_transition(value: &str) -> Option<CssTransitionSet> {
         return None;
     }
 
-    Some(CssTransitionSet { transitions })
+    Some(CssTransitionSet::from_entries(transitions))
 }
 
 /// Parse a single transition: `property duration [timing] [delay]`
@@ -365,12 +507,13 @@ pub(crate) fn parse_single_transition(value: &str) -> Option<CssTransition> {
 
         // Otherwise treat as property name
         if property.is_empty() {
-            property = part.to_string();
+            property = part.to_lowercase();
         }
     }
 
+    // No property named means all of them.
     if property.is_empty() {
-        return None;
+        property = "all".to_string();
     }
 
     Some(CssTransition {

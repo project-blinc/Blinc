@@ -499,67 +499,19 @@ pub(crate) fn apply_property(style: &mut ElementStyle, name: &str, value: &str) 
                 style.transition = Some(transitions);
             }
         }
-        "transition-property" => {
-            let mut ts = style.transition.take().unwrap_or_else(|| CssTransitionSet {
-                transitions: vec![CssTransition {
-                    property: String::new(),
-                    duration_ms: 0,
-                    timing: AnimationTiming::Ease,
-                    delay_ms: 0,
-                }],
-            });
-            if let Some(t) = ts.transitions.first_mut() {
-                t.property = value.trim().to_string();
-            }
+        "transition-property"
+        | "transition-duration"
+        | "transition-timing-function"
+        | "transition-delay" => {
+            let which = match name {
+                "transition-property" => TransitionLonghand::Property,
+                "transition-duration" => TransitionLonghand::Duration,
+                "transition-timing-function" => TransitionLonghand::TimingFunction,
+                _ => TransitionLonghand::Delay,
+            };
+            let mut ts = style.transition.take().unwrap_or_default();
+            ts.set_longhand(which, value);
             style.transition = Some(ts);
-        }
-        "transition-duration" => {
-            if let Some(ms) = parse_time_value(value) {
-                let mut ts = style.transition.take().unwrap_or_else(|| CssTransitionSet {
-                    transitions: vec![CssTransition {
-                        property: "all".to_string(),
-                        duration_ms: 0,
-                        timing: AnimationTiming::Ease,
-                        delay_ms: 0,
-                    }],
-                });
-                if let Some(t) = ts.transitions.first_mut() {
-                    t.duration_ms = ms;
-                }
-                style.transition = Some(ts);
-            }
-        }
-        "transition-timing-function" => {
-            if let Some(timing) = AnimationTiming::from_str(value.trim()) {
-                let mut ts = style.transition.take().unwrap_or_else(|| CssTransitionSet {
-                    transitions: vec![CssTransition {
-                        property: "all".to_string(),
-                        duration_ms: 0,
-                        timing: AnimationTiming::Ease,
-                        delay_ms: 0,
-                    }],
-                });
-                if let Some(t) = ts.transitions.first_mut() {
-                    t.timing = timing;
-                }
-                style.transition = Some(ts);
-            }
-        }
-        "transition-delay" => {
-            if let Some(ms) = parse_time_value(value) {
-                let mut ts = style.transition.take().unwrap_or_else(|| CssTransitionSet {
-                    transitions: vec![CssTransition {
-                        property: "all".to_string(),
-                        duration_ms: 0,
-                        timing: AnimationTiming::Ease,
-                        delay_ms: 0,
-                    }],
-                });
-                if let Some(t) = ts.transitions.first_mut() {
-                    t.delay_ms = ms;
-                }
-                style.transition = Some(ts);
-            }
         }
         "filter" => {
             if let Some(filter) = parse_css_filter(value) {

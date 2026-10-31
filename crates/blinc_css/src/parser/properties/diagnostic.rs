@@ -630,73 +630,21 @@ pub(crate) fn apply_property_with_errors(
                 errors.push(ParseError::invalid_value(name, value, line, column));
             }
         }
-        "transition-property" => {
-            let mut ts = style.transition.take().unwrap_or_else(|| CssTransitionSet {
-                transitions: vec![CssTransition {
-                    property: String::new(),
-                    duration_ms: 0,
-                    timing: AnimationTiming::Ease,
-                    delay_ms: 0,
-                }],
-            });
-            if let Some(t) = ts.transitions.first_mut() {
-                t.property = value.trim().to_string();
+        "transition-property"
+        | "transition-duration"
+        | "transition-timing-function"
+        | "transition-delay" => {
+            let which = match name {
+                "transition-property" => TransitionLonghand::Property,
+                "transition-duration" => TransitionLonghand::Duration,
+                "transition-timing-function" => TransitionLonghand::TimingFunction,
+                _ => TransitionLonghand::Delay,
+            };
+            let mut ts = style.transition.take().unwrap_or_default();
+            if !ts.set_longhand(which, value) {
+                errors.push(ParseError::invalid_value(name, value, line, column));
             }
             style.transition = Some(ts);
-        }
-        "transition-duration" => {
-            if let Some(ms) = parse_time_value(value) {
-                let mut ts = style.transition.take().unwrap_or_else(|| CssTransitionSet {
-                    transitions: vec![CssTransition {
-                        property: "all".to_string(),
-                        duration_ms: 0,
-                        timing: AnimationTiming::Ease,
-                        delay_ms: 0,
-                    }],
-                });
-                if let Some(t) = ts.transitions.first_mut() {
-                    t.duration_ms = ms;
-                }
-                style.transition = Some(ts);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
-        }
-        "transition-timing-function" => {
-            if let Some(timing) = AnimationTiming::from_str(value.trim()) {
-                let mut ts = style.transition.take().unwrap_or_else(|| CssTransitionSet {
-                    transitions: vec![CssTransition {
-                        property: "all".to_string(),
-                        duration_ms: 0,
-                        timing: AnimationTiming::Ease,
-                        delay_ms: 0,
-                    }],
-                });
-                if let Some(t) = ts.transitions.first_mut() {
-                    t.timing = timing;
-                }
-                style.transition = Some(ts);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
-        }
-        "transition-delay" => {
-            if let Some(ms) = parse_time_value(value) {
-                let mut ts = style.transition.take().unwrap_or_else(|| CssTransitionSet {
-                    transitions: vec![CssTransition {
-                        property: "all".to_string(),
-                        duration_ms: 0,
-                        timing: AnimationTiming::Ease,
-                        delay_ms: 0,
-                    }],
-                });
-                if let Some(t) = ts.transitions.first_mut() {
-                    t.delay_ms = ms;
-                }
-                style.transition = Some(ts);
-            } else {
-                errors.push(ParseError::invalid_value(name, value, line, column));
-            }
         }
         "filter" => {
             if let Some(filter) = parse_css_filter(value) {

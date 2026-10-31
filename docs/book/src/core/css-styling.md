@@ -534,12 +534,20 @@ transition: transform 0.3s ease, opacity 0.3s ease, box-shadow 0.25s ease;
 /* All properties */
 transition: all 0.3s ease;
 
-/* Individual properties */
-transition-property: transform;
-transition-duration: 300ms;
+/* Individual properties; each takes a comma list and they can come in any order */
+transition-property: transform, opacity;
+transition-duration: 300ms, 150ms;
 transition-timing-function: ease-in-out;
 transition-delay: 100ms;
 ```
+
+Behaves as it does on the web:
+
+- With no property named, `transition: 200ms` means `all`.
+- Each property runs over its own duration, delay and timing function.
+- The last entry that names a property governs it, so `all 100ms, opacity 400ms` gives `opacity` 400ms.
+- A shorthand or per-side name covers what it animates: `background-color`, `border-top-color`, `padding-left`, `translate`, `inset`, `outline`.
+- A transition that is running keeps going when a different property changes.
 
 ### Animatable Properties
 
