@@ -676,6 +676,13 @@ impl GpuPrimitive {
     pub fn from_glyph(glyph: &GpuGlyph) -> Self {
         // Use type_info[1] to store is_color flag (1 = color emoji, 0 = grayscale)
         let is_color_flag = if glyph.flags[0] > 0.5 { 1u32 } else { 0u32 };
+        // A path clip names itself in `flags[1]`; otherwise a glyph is
+        // clipped by its rect unless that is the unbounded default.
+        let clip_type = if glyph.flags[1] > 0.0 || glyph.clip_bounds[2] < 50000.0 {
+            ClipType::Rect
+        } else {
+            ClipType::None
+        };
         Self {
             bounds: glyph.bounds,
             corner_radius: [0.0; 4],
@@ -703,11 +710,7 @@ impl GpuPrimitive {
             type_info: [
                 PrimitiveType::Text as u32,
                 is_color_flag,
-                if glyph.flags[1] > 0.0 {
-                    ClipType::Rect as u32
-                } else {
-                    ClipType::None as u32
-                },
+                clip_type as u32,
                 0,
             ],
             side_color_top: [0.0; 4],
