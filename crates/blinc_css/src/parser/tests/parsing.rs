@@ -130,6 +130,20 @@ fn test_parse_transform_translate_y() {
 }
 
 #[test]
+fn a_transform_list_applies_right_to_left() {
+    use blinc_core::Transform;
+    // The translation is the full 20px: the scale applies to the element
+    // before it is moved, not to the move.
+    let css = "#test { transform: translateX(20px) scale(0.9); }";
+    let stylesheet = Stylesheet::parse(css).unwrap();
+    let style = stylesheet.get("test").unwrap();
+    let Some(Transform::Affine2D(a)) = &style.transform else {
+        panic!("no 2D transform");
+    };
+    assert_eq!(a.elements, [0.9, 0.0, 0.0, 0.9, 20.0, 0.0]);
+}
+
+#[test]
 fn test_parse_comments() {
     let css = r#"
         /* This is a comment */

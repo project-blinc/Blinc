@@ -164,30 +164,28 @@ impl RenderTree {
             if has_transform {
                 use blinc_core::{Affine2D, Transform};
 
-                // Build transform by composing: scale -> rotate -> translate
+                // translate * rotate * scale: the translation is taken as it
+                // is, and the scale and rotation apply about the element.
                 let mut affine = Affine2D::IDENTITY;
 
-                // Apply scale
-                if let (Some(sx), Some(sy)) = (anim_props.scale_x, anim_props.scale_y) {
-                    affine = affine.then(&Affine2D::scale(sx, sy));
-                } else if let Some(sx) = anim_props.scale_x {
-                    affine = affine.then(&Affine2D::scale(sx, 1.0));
-                } else if let Some(sy) = anim_props.scale_y {
-                    affine = affine.then(&Affine2D::scale(1.0, sy));
-                }
-
-                // Apply rotation (in degrees)
-                if let Some(rotate) = anim_props.rotate {
-                    affine = affine.then(&Affine2D::rotation(rotate.to_radians()));
-                }
-
-                // Apply translation
                 if let (Some(tx), Some(ty)) = (anim_props.translate_x, anim_props.translate_y) {
                     affine = affine.then(&Affine2D::translation(tx, ty));
                 } else if let Some(tx) = anim_props.translate_x {
                     affine = affine.then(&Affine2D::translation(tx, 0.0));
                 } else if let Some(ty) = anim_props.translate_y {
                     affine = affine.then(&Affine2D::translation(0.0, ty));
+                }
+
+                if let Some(rotate) = anim_props.rotate {
+                    affine = affine.then(&Affine2D::rotation(rotate.to_radians()));
+                }
+
+                if let (Some(sx), Some(sy)) = (anim_props.scale_x, anim_props.scale_y) {
+                    affine = affine.then(&Affine2D::scale(sx, sy));
+                } else if let Some(sx) = anim_props.scale_x {
+                    affine = affine.then(&Affine2D::scale(sx, 1.0));
+                } else if let Some(sy) = anim_props.scale_y {
+                    affine = affine.then(&Affine2D::scale(1.0, sy));
                 }
 
                 props.transform = Some(Transform::Affine2D(affine));
@@ -903,6 +901,38 @@ impl RenderTree {
         check_transition!(z_index, "z-index");
         check_transition!(skew_x, "transform", default 0.0);
         check_transition!(skew_y, "transform", default 0.0);
+
+        // The transform is composed from every component when it is written,
+        // so one that changes brings the others along with their values:
+        // easing only the scale of a translated element would drop the
+        // translation.
+        if let Some(t) = transition_set.get("transform") {
+            let changed = before.translate_x != after.translate_x
+                || before.translate_y != after.translate_y
+                || before.scale_x != after.scale_x
+                || before.scale_y != after.scale_y
+                || before.rotate != after.rotate
+                || before.skew_x != after.skew_x
+                || before.skew_y != after.skew_y;
+            if changed {
+                macro_rules! carry_component {
+                    ($field:ident, $def:expr) => {
+                        let group = TransitionGroup::of(&mut groups, t);
+                        if group.to.$field.is_none() {
+                            group.from.$field = Some(before.$field.unwrap_or($def));
+                            group.to.$field = Some(after.$field.unwrap_or($def));
+                        }
+                    };
+                }
+                carry_component!(translate_x, 0.0);
+                carry_component!(translate_y, 0.0);
+                carry_component!(scale_x, 1.0);
+                carry_component!(scale_y, 1.0);
+                carry_component!(rotate, 0.0);
+                carry_component!(skew_x, 0.0);
+                carry_component!(skew_y, 0.0);
+            }
+        }
         check_transition!(transform_origin, "transform-origin");
 
         // Mask gradient
@@ -1031,27 +1061,9 @@ impl RenderTree {
         if has_transform {
             use blinc_core::{Affine2D, Transform};
 
+            // translate * rotate * skew * scale: the translation is taken as
+            // it is, and the rest apply about the element.
             let mut affine = Affine2D::IDENTITY;
-
-            if let (Some(sx), Some(sy)) = (anim_props.scale_x, anim_props.scale_y) {
-                affine = affine.then(&Affine2D::scale(sx, sy));
-            } else if let Some(sx) = anim_props.scale_x {
-                affine = affine.then(&Affine2D::scale(sx, 1.0));
-            } else if let Some(sy) = anim_props.scale_y {
-                affine = affine.then(&Affine2D::scale(1.0, sy));
-            }
-
-            if let Some(rotate) = anim_props.rotate {
-                affine = affine.then(&Affine2D::rotation(rotate.to_radians()));
-            }
-
-            // Skew
-            if let Some(skx) = anim_props.skew_x {
-                affine = affine.then(&Affine2D::skew_x(skx.to_radians()));
-            }
-            if let Some(sky) = anim_props.skew_y {
-                affine = affine.then(&Affine2D::skew_y(sky.to_radians()));
-            }
 
             if let (Some(tx), Some(ty)) = (anim_props.translate_x, anim_props.translate_y) {
                 affine = affine.then(&Affine2D::translation(tx, ty));
@@ -1059,6 +1071,25 @@ impl RenderTree {
                 affine = affine.then(&Affine2D::translation(tx, 0.0));
             } else if let Some(ty) = anim_props.translate_y {
                 affine = affine.then(&Affine2D::translation(0.0, ty));
+            }
+
+            if let Some(rotate) = anim_props.rotate {
+                affine = affine.then(&Affine2D::rotation(rotate.to_radians()));
+            }
+
+            if let Some(skx) = anim_props.skew_x {
+                affine = affine.then(&Affine2D::skew_x(skx.to_radians()));
+            }
+            if let Some(sky) = anim_props.skew_y {
+                affine = affine.then(&Affine2D::skew_y(sky.to_radians()));
+            }
+
+            if let (Some(sx), Some(sy)) = (anim_props.scale_x, anim_props.scale_y) {
+                affine = affine.then(&Affine2D::scale(sx, sy));
+            } else if let Some(sx) = anim_props.scale_x {
+                affine = affine.then(&Affine2D::scale(sx, 1.0));
+            } else if let Some(sy) = anim_props.scale_y {
+                affine = affine.then(&Affine2D::scale(1.0, sy));
             }
 
             props.transform = Some(Transform::Affine2D(affine));

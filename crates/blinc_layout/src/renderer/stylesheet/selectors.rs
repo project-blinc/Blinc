@@ -625,53 +625,99 @@ impl RenderTree {
             }
         }
 
+        // A node that holds a pointer state through the frame may still change
+        // look: another rule now applies (`:checked:hover` giving way to
+        // `:hover` when the element is unchecked under a resting pointer).
+        // What it looked like before the reset is compared with what it is
+        // now, once, so only a real change starts a transition.
+        for &node_id in &prev_affected {
+            if !self.complex_state_affected.contains(&node_id) {
+                continue;
+            }
+            let Some(transition_set) = self.complex_transition_for(
+                node_id,
+                &stylesheet,
+                &hovered_nodes,
+                &pressed_nodes,
+                focused_node,
+            ) else {
+                continue;
+            };
+            if let Some(before_kp) = pre_reset_snapshots.get(&node_id) {
+                if let Some(after_kp) = self.snapshot_keyframe_properties(node_id) {
+                    self.detect_and_start_transitions(
+                        node_id,
+                        before_kp,
+                        &after_kp,
+                        &transition_set,
+                    );
+                }
+            }
+        }
+
         // Detect reverse transitions for nodes that WERE state-affected but
         // are no longer matched (e.g. mouse left a :hover element).  These nodes
         // were reset to base above but the transition detection inside the main
         // loop only runs for *matching* rules, so we handle the leave case here.
         for &node_id in &prev_affected {
             if self.complex_state_affected.contains(&node_id) {
-                continue; // still matched — already handled above
+                continue; // still matched — handled above
             }
-            // Look up transition set for this node
-            let transition_set = {
-                let by_id = self
-                    .element_registry
-                    .get_id(node_id)
-                    .and_then(|eid| stylesheet.get(&eid).and_then(|s| s.transition.clone()));
-                by_id.or_else(|| {
-                    complex_rules.iter().find_map(|(sel, sty)| {
-                        if !sel.has_state()
-                            && self.complex_selector_matches(
-                                sel,
-                                node_id,
-                                &hovered_nodes,
-                                &pressed_nodes,
-                                focused_node,
-                            )
-                        {
-                            sty.transition.clone()
-                        } else {
-                            None
-                        }
-                    })
-                })
+            let Some(transition_set) = self.complex_transition_for(
+                node_id,
+                &stylesheet,
+                &hovered_nodes,
+                &pressed_nodes,
+                focused_node,
+            ) else {
+                continue;
             };
-            if let Some(transition_set) = transition_set {
-                if let Some(before_kp) = pre_reset_snapshots.get(&node_id) {
-                    if let Some(after_kp) = self.snapshot_keyframe_properties(node_id) {
-                        self.detect_and_start_transitions(
-                            node_id,
-                            before_kp,
-                            &after_kp,
-                            &transition_set,
-                        );
-                    }
+            if let Some(before_kp) = pre_reset_snapshots.get(&node_id) {
+                if let Some(after_kp) = self.snapshot_keyframe_properties(node_id) {
+                    self.detect_and_start_transitions(
+                        node_id,
+                        before_kp,
+                        &after_kp,
+                        &transition_set,
+                    );
                 }
             }
         }
 
         any_applied
+    }
+
+    /// The `transition` a node has: its id rule's, else that of a base complex
+    /// rule that matches it.
+    fn complex_transition_for(
+        &self,
+        node_id: LayoutNodeId,
+        stylesheet: &crate::css_parser::Stylesheet,
+        hovered_nodes: &HashSet<LayoutNodeId>,
+        pressed_nodes: &HashSet<LayoutNodeId>,
+        focused_node: Option<LayoutNodeId>,
+    ) -> Option<crate::css_parser::CssTransitionSet> {
+        let by_id = self
+            .element_registry
+            .get_id(node_id)
+            .and_then(|eid| stylesheet.get(&eid).and_then(|s| s.transition.clone()));
+        by_id.or_else(|| {
+            stylesheet.complex_rules().iter().find_map(|(sel, sty)| {
+                if !sel.has_state()
+                    && self.complex_selector_matches(
+                        sel,
+                        node_id,
+                        hovered_nodes,
+                        pressed_nodes,
+                        focused_node,
+                    )
+                {
+                    sty.transition.clone()
+                } else {
+                    None
+                }
+            })
+        })
     }
 
     /// Restricted variant of [`Self::apply_complex_selector_styles`]

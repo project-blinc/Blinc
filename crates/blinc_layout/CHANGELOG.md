@@ -4,6 +4,10 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- A CSS transition of a transform now carries every component of it when any one changes. Easing only the scale of a translated element (a pressed checked switch thumb) used to rebuild the transform from the scale alone and drop the translation. A transform written from transition values is composed translate, rotate, skew, scale, so the translation is no longer scaled.
+- An element that keeps a pointer state across a restyle now eases to its new look. Unchecking a hovered switch changes the rule that applies from `:checked:hover` to `:hover`; that was applied without a transition, so the fill snapped.
+
 ### Added
 - Escape clears a search `TextInput` that has text, as on the web; an empty one, and every other field, still loses focus on Escape.
 - `.class::placeholder { color }` and `.class::selection { background }` colour the placeholder and the selection of a `TextInput` or `TextArea`, as `#id::placeholder` already did; an id rule wins over a class rule. `Stylesheet::get_class_pseudo_element` reads them.
