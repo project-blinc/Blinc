@@ -244,6 +244,9 @@ impl Headless {
     {
         self.mounted = Some(Box::new(ui));
         self.tree = None;
+        // What a previous UI had in flight must not land on this one's nodes,
+        // which can share their stable ids.
+        self.css_anim_store = Arc::new(Mutex::new(CssAnimationStore::new()));
         self.needs_rebuild = true;
         self.frame(0);
         self

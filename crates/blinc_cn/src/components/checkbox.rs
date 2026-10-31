@@ -1,7 +1,13 @@
 //! Checkbox component for boolean selection
 //!
-//! A themed checkbox component with checked, unchecked, and hover states.
-//! Uses motion animations for smooth state transitions.
+//! A themed checkbox. It is an element with a `checked` attribute while it is
+//! checked and `disabled` while it is not usable, so how it looks in each
+//! state, and how it eases between them, is the `.cn-checkbox` rules of
+//! `CN_STYLES`. Restyle it with rules of your own:
+//!
+//! ```css
+//! .my-checkbox:checked { background: #16a34a; border-color: #16a34a; }
+//! ```
 //!
 //! # Example
 //!
@@ -24,15 +30,9 @@
 //! // Disabled
 //! cn::checkbox(&checked)
 //!     .disabled(true)
-//!
-//! // Custom colors
-//! cn::checkbox(&checked)
-//!     .checked_color(Color::GREEN)
-//!     .border_color(Color::GRAY)
 //! ```
 
-use blinc_core::reactive::{ReactiveGraph, computed};
-use blinc_core::{Color, State};
+use blinc_core::State;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
 use blinc_layout::prelude::*;
@@ -40,7 +40,7 @@ use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, ThemeState};
 use std::sync::Arc;
 
-use blinc_layout::{InstanceKey, Interaction};
+use blinc_layout::InstanceKey;
 
 /// SVG checkmark path - simple checkmark that fits in a 16x16 viewBox
 const CHECKMARK_SVG: &str = r#"<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -111,7 +111,7 @@ impl Checkbox {
     }
 
     /// Create from a full configuration
-    fn with_config(instance_key: &str, config: CheckboxConfig) -> Self {
+    fn with_config(_instance_key: &str, config: CheckboxConfig) -> Self {
         let theme = ThemeState::get();
         let box_size = config.size.size();
         let border_width = config.size.border_width();
@@ -121,69 +121,15 @@ impl Checkbox {
             _ => theme.radius(blinc_theme::RadiusToken::Sm),
         };
 
-        // Get colors — used as builder defaults, CSS can override via classes
-        let checked_bg = config
-            .checked_color
-            .unwrap_or_else(|| theme.color(ColorToken::Primary));
-        let unchecked_bg = config
-            .unchecked_bg
-            .unwrap_or_else(|| theme.color(ColorToken::InputBg));
-        let border = config
-            .border_color
-            .unwrap_or_else(|| theme.color(ColorToken::Border));
-        let hover_border = config
-            .hover_border_color
-            .unwrap_or_else(|| theme.color(ColorToken::BorderHover));
-        let check_mark_color = config
-            .check_color
-            .unwrap_or_else(|| theme.color(ColorToken::TextInverse));
-
         let disabled = config.disabled;
         let on_change = config.on_change.clone();
         let checked_state = config.checked_state.clone();
         let checked_state_for_click = config.checked_state.clone();
 
-        // What a state changes is bound: each is a computed over the checked
-        // signal and the box's hover, so a change patches the node instead of
-        // rebuilding it. Disabled uses the shared disabled-surface palette
-        // (InputBgDisabled / BorderSecondary), which matches button / select
-        // / switch so all inert controls read as the same UI tier.
-        let interaction = Interaction::keyed(&format!("{instance_key}:box"));
-        let (checked, hovered) = (checked_state.signal(), interaction.hovered().signal());
-        let disabled_bg = theme.color(ColorToken::InputBgDisabled);
-        let disabled_border = theme.color(ColorToken::BorderSecondary);
-
-        let bg = computed(move |g: &ReactiveGraph| {
-            if disabled {
-                disabled_bg
-            } else if g.get(checked).unwrap_or(false) {
-                checked_bg
-            } else {
-                unchecked_bg
-            }
-        });
-        let current_border = computed(move |g: &ReactiveGraph| {
-            if disabled {
-                disabled_border
-            } else if g.get(hovered).unwrap_or(false) {
-                hover_border
-            } else {
-                border
-            }
-        });
-        let scale = computed(move |g: &ReactiveGraph| {
-            let by = if g.get(hovered).unwrap_or(false) && !disabled {
-                1.05
-            } else {
-                1.0
-            };
-            blinc_core::Transform::scale(by, by)
-        });
-
         let mut checkbox = div()
             .class("cn-checkbox")
             // Added and taken away with the state, so the stylesheet's
-            // `.cn-checkbox--checked` rules follow it in place.
+            // `.cn-checkbox--checked` and `:checked` rules follow it in place.
             .class_when("cn-checkbox--checked", &checked_state)
             .attr_when("checked", "", &checked_state)
             .w(box_size)
@@ -197,29 +143,23 @@ impl Checkbox {
             .cursor_pointer()
             .items_center()
             .justify_center()
-            .bg(&bg)
+            // Width varies per size, so it is set here; the fill, the
+            // border colour, the hover and the mark are rules.
             .border_width(border_width)
-            .border_color(&current_border)
-            .transform(&scale)
-            .track(&interaction)
             // The mark is always there and shown while checked.
             .child(
                 div()
+                    .class("cn-checkbox-mark")
                     .w(checkmark_size)
                     .h(checkmark_size)
-                    .visible(&checked_state)
-                    .child(
-                        svg(CHECKMARK_SVG)
-                            .size(checkmark_size, checkmark_size)
-                            .tint(check_mark_color),
-                    ),
+                    .child(svg(CHECKMARK_SVG).size(checkmark_size, checkmark_size)),
             );
 
         if disabled {
             // No opacity dim — the InputBgDisabled / BorderSecondary
             // palette above already conveys the inert state without
             // washing out the silhouette.
-            checkbox = checkbox.class("cn-checkbox--disabled");
+            checkbox = checkbox.class("cn-checkbox--disabled").attr("disabled", "");
         }
 
         // Add click handler to toggle the state (only if not disabled)
@@ -325,11 +265,6 @@ struct CheckboxConfig {
     size: CheckboxSize,
     label: Option<String>,
     disabled: bool,
-    checked_color: Option<Color>,
-    unchecked_bg: Option<Color>,
-    border_color: Option<Color>,
-    hover_border_color: Option<Color>,
-    check_color: Option<Color>,
     on_change: Option<Arc<dyn Fn(bool) + Send + Sync>>,
 }
 
@@ -340,11 +275,6 @@ impl CheckboxConfig {
             size: CheckboxSize::default(),
             label: None,
             disabled: false,
-            checked_color: None,
-            unchecked_bg: None,
-            border_color: None,
-            hover_border_color: None,
-            check_color: None,
             on_change: None,
         }
     }
@@ -400,36 +330,6 @@ impl CheckboxBuilder {
     /// Set disabled state
     pub fn disabled(mut self, disabled: bool) -> Self {
         self.config.disabled = disabled;
-        self
-    }
-
-    /// Set the background color when checked
-    pub fn checked_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.checked_color = Some(color.into());
-        self
-    }
-
-    /// Set the background color when unchecked
-    pub fn unchecked_bg(mut self, color: impl Into<Color>) -> Self {
-        self.config.unchecked_bg = Some(color.into());
-        self
-    }
-
-    /// Set the border color
-    pub fn border_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.border_color = Some(color.into());
-        self
-    }
-
-    /// Set the hover border color
-    pub fn hover_border_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.hover_border_color = Some(color.into());
-        self
-    }
-
-    /// Set the checkmark color
-    pub fn check_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.check_color = Some(color.into());
         self
     }
 

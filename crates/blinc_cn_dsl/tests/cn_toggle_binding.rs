@@ -198,26 +198,20 @@ fn toggles_bind_two_ways_to_an_fsm_context_field() {
 
 /// The other direction: setting the bound signal must move the widget.
 ///
-/// `cn::checkbox` shows its checkmark while the state it was given is
-/// checked, and that is only true of a write to the signal the DSL wrote --
-/// which is exactly what a LITERAL fallback breaks. The mark is always
-/// there and hidden while unchecked, so what moves is the count of nodes
-/// that are shown.
+/// `cn::checkbox` is checked while the state it was given is, and that is only
+/// true of a write to the signal the DSL wrote -- which is exactly what a
+/// LITERAL fallback breaks. Checked is the `checked` attribute its rules match.
 #[test]
 fn setting_the_signal_moves_the_checkbox() {
     use blinc_layout::renderer::RenderTree;
 
-    fn shown_nodes(tree: &RenderTree) -> usize {
-        let mut n = 0;
-        let mut stack = vec![tree.root().unwrap()];
-        while let Some(id) = stack.pop() {
-            if tree.layout_tree.is_display_none(id) {
-                continue;
-            }
-            n += 1;
-            stack.extend(tree.layout_tree.children(id));
-        }
-        n
+    fn checkbox_is_checked(tree: &RenderTree) -> bool {
+        let nodes = tree.element_registry().class_to_nodes_index();
+        let node = nodes
+            .get("cn-checkbox")
+            .and_then(|n| n.first().copied())
+            .expect("the tree has a checkbox");
+        tree.element_registry().has_class(node, "checked=")
     }
 
     let dsl = dsl();
@@ -236,19 +230,23 @@ fn setting_the_signal_moves_the_checkbox() {
         .h(200.0)
         .child_box(dsl.view_widget());
     let mut tree = RenderTree::from_element(&host);
+    // A signal-driven class registers once the tree has a stylesheet.
+    tree.set_stylesheet(
+        blinc_layout::css_parser::Stylesheet::parse(".x { opacity: 1 }").expect("css"),
+    );
+    tree.apply_all_stylesheet_styles();
     tree.compute_layout(400.0, 200.0);
-    let unchecked = shown_nodes(&tree);
+    assert!(!checkbox_is_checked(&tree));
 
     dsl.set_signal_bool("cb_lit", true);
     tree.process_pending_subtree_rebuilds();
     let updates = blinc_layout::take_pending_partial_prop_updates();
     tree.apply_partial_property_updates(updates);
     tree.compute_layout(400.0, 200.0);
-    let checked = shown_nodes(&tree);
 
     assert!(
-        checked > unchecked,
-        "ticking the signal must show the checkmark ({unchecked} -> {checked} shown nodes)"
+        checkbox_is_checked(&tree),
+        "ticking the signal must check the checkbox"
     );
 }
 

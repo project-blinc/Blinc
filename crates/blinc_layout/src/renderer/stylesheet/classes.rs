@@ -19,6 +19,10 @@ use crate::tree::LayoutNodeId;
 
 use super::super::RenderTree;
 
+/// Where a rule sits in the cascade: its tier, then its specificity, then its
+/// place in the stylesheet.
+type Order = (bool, (u32, u32, u32), usize);
+
 /// The classes of one node that follow a signal.
 #[derive(Default)]
 pub(crate) struct DynamicClasses {
@@ -26,20 +30,24 @@ pub(crate) struct DynamicClasses {
     wanted: HashSet<Arc<str>>,
     /// The ones whose rules are applied, in the order they were, with the
     /// rules each added.
-    applied: Vec<(Arc<str>, Vec<ElementStyle>)>,
+    applied: Vec<(Arc<str>, Vec<(Order, ElementStyle)>)>,
     /// Rules this node gained because an ancestor gained a class, by the
     /// ancestor and the class.
-    inherited: Vec<((LayoutNodeId, Arc<str>), Vec<ElementStyle>)>,
+    inherited: Vec<((LayoutNodeId, Arc<str>), Vec<(Order, ElementStyle)>)>,
 }
 
 impl DynamicClasses {
-    /// Every rule applied for a class, in order, then those an ancestor's
-    /// class brought.
+    /// Every rule applied for a class, and those an ancestor's class brought,
+    /// in cascade order whichever class came first.
     pub(crate) fn layers(&self) -> impl Iterator<Item = &ElementStyle> {
-        self.applied
+        let mut all: Vec<&(Order, ElementStyle)> = self
+            .applied
             .iter()
             .flat_map(|(_, styles)| styles.iter())
             .chain(self.inherited.iter().flat_map(|(_, styles)| styles.iter()))
+            .collect();
+        all.sort_by_key(|(order, _)| *order);
+        all.into_iter().map(|(_, style)| style)
     }
 }
 
@@ -171,20 +179,25 @@ impl RenderTree {
         let rules = stylesheet.complex_rules();
         for (descendant, before) in descendants.into_iter().zip(before) {
             let after = self.matching_base_rules(descendant, stylesheet);
-            let mut added: Vec<usize> = after.into_iter().filter(|i| !before.contains(i)).collect();
+            let added: Vec<usize> = after.into_iter().filter(|i| !before.contains(i)).collect();
             if added.is_empty() {
                 continue;
             }
-            added.sort_by_key(|i| (Self::rule_order(&rules[*i].0, &rules[*i].1), *i));
-            let styles: Vec<ElementStyle> = added.into_iter().map(|i| rules[i].1.clone()).collect();
+            let styles: Vec<(Order, ElementStyle)> = added
+                .into_iter()
+                .map(|i| {
+                    let tier = Self::rule_order(&rules[i].0, &rules[i].1);
+                    ((tier.0, tier.1, i), rules[i].1.clone())
+                })
+                .collect();
             self.eased(descendant, stylesheet, ease, |tree| {
                 tree.keep_snapshots(descendant);
-                tree.apply_layers(descendant, styles.iter());
                 tree.dynamic_classes
                     .entry(descendant)
                     .or_default()
                     .inherited
                     .push(((node, Arc::clone(&class)), styles));
+                tree.refold_node(descendant);
             });
         }
     }
@@ -278,31 +291,28 @@ impl RenderTree {
         self.set_registered_classes(node, classes);
 
         let after = self.matching_base_rules(node, stylesheet);
-        let mut added: Vec<usize> = after.into_iter().filter(|i| !before.contains(i)).collect();
-        // Lowest specificity first, so the more specific rule is applied last.
+        let added: Vec<usize> = after.into_iter().filter(|i| !before.contains(i)).collect();
         let rules = stylesheet.complex_rules();
-        added.sort_by_key(|i| (Self::rule_order(&rules[*i].0, &rules[*i].1), *i));
-        let styles: Vec<ElementStyle> = added.into_iter().map(|i| rules[i].1.clone()).collect();
+        let styles: Vec<(Order, ElementStyle)> = added
+            .into_iter()
+            .map(|i| {
+                let tier = Self::rule_order(&rules[i].0, &rules[i].1);
+                ((tier.0, tier.1, i), rules[i].1.clone())
+            })
+            .collect();
 
         // What the node is without the class's rules, kept so it can be put
         // back. It is kept already when a state rule has applied to the node.
-        if !self.base_styles.contains_key(&node) {
-            if let Some(render_node) = self.render_nodes.get(&node) {
-                self.base_styles.insert(node, render_node.props.clone());
-            }
-        }
-        if !self.base_taffy_styles.contains_key(&node) {
-            if let Some(style) = self.layout_tree.get_style(node) {
-                self.base_taffy_styles.insert(node, style);
-            }
-        }
+        self.keep_snapshots(node);
 
-        self.apply_layers(node, styles.iter());
         self.dynamic_classes
             .entry(node)
             .or_default()
             .applied
             .push((class, styles));
+        // Folded with the node's other layers, so the cascade orders them
+        // and not the order the classes arrived in.
+        self.refold_node(node);
     }
 
     fn remove_class_layer(&mut self, node: LayoutNodeId, class: &Arc<str>) {
@@ -346,28 +356,6 @@ impl RenderTree {
                 Self::apply_element_style_to_taffy(&mut style, layer);
             }
             self.layout_tree.set_style(node, style);
-        }
-    }
-
-    /// Apply layers to the node as it is.
-    fn apply_layers<'a>(
-        &mut self,
-        node: LayoutNodeId,
-        layers: impl Iterator<Item = &'a ElementStyle>,
-    ) {
-        let layers: Vec<&ElementStyle> = layers.collect();
-        if let Some(render_node) = self.render_nodes.get_mut(&node) {
-            for style in &layers {
-                Self::apply_element_style_to_props(&mut render_node.props, style);
-            }
-        }
-        if layers.iter().any(|l| l.has_layout_props()) {
-            if let Some(mut style) = self.layout_tree.get_style(node) {
-                for layer in layers.iter().filter(|l| l.has_layout_props()) {
-                    Self::apply_element_style_to_taffy(&mut style, layer);
-                }
-                self.layout_tree.set_style(node, style);
-            }
         }
     }
 

@@ -12,6 +12,13 @@ use common::*;
 
 const RULE: &str = ".cn-checkbox--checked { background: #123456; border-color: #654321 }";
 
+/// cn's stylesheet with `rules` after it, as an app adds its own.
+fn sheet(rules: &str) -> Stylesheet {
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let all = format!("{}\n{rules}", blinc_cn::cn_styles::CN_STYLES);
+    Stylesheet::parse_with_variables(&all, &vars).expect("css")
+}
+
 fn solid(tree: &RenderTree, node: LayoutNodeId) -> [f32; 3] {
     match &tree.get_render_node(node).unwrap().props.background {
         Some(blinc_core::Brush::Solid(c)) => [c.r, c.g, c.b],
@@ -22,7 +29,7 @@ fn solid(tree: &RenderTree, node: LayoutNodeId) -> [f32; 3] {
 fn build(checked: &blinc_core::reactive::State<bool>) -> (RenderTree, LayoutNodeId) {
     let host = div().w(400.0).h(200.0).child(blinc_cn::checkbox(checked));
     let mut tree = RenderTree::from_element(&host);
-    tree.set_stylesheet(Stylesheet::parse(RULE).expect("css"));
+    tree.set_stylesheet(sheet(RULE));
     tree.apply_stylesheet_layout_overrides();
     tree.apply_stylesheet_base_styles();
     tree.compute_layout(400.0, 200.0);
@@ -119,9 +126,7 @@ fn the_checked_attribute_follows_the_state_for_a_checked_rule() {
         let checked = bool_state(false);
         let host = div().w(400.0).h(200.0).child(blinc_cn::checkbox(&checked));
         let mut tree = RenderTree::from_element(&host);
-        tree.set_stylesheet(
-            Stylesheet::parse(".cn-checkbox:checked { background: #123456; }").expect("css"),
-        );
+        tree.set_stylesheet(sheet(".cn-checkbox:checked { background: #123456; }"));
         tree.apply_stylesheet_layout_overrides();
         tree.apply_stylesheet_base_styles();
         tree.compute_layout(400.0, 200.0);

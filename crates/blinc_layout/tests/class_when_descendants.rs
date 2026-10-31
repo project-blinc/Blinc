@@ -252,3 +252,59 @@ fn a_class_that_holds_at_mount_does_not_ease_in() {
     assert_eq!(s.red(s.child), 1.0);
     assert!(!s.tree.css_has_active(), "the mount started a transition");
 }
+
+/// Two classes that follow signals, with a component rule on one and an
+/// application rule on the other: the application's wins whichever class came
+/// first.
+#[test]
+fn class_layers_apply_in_cascade_order_not_arrival_order() {
+    for first_a in [true, false] {
+        let a = flag(false);
+        let b = flag(false);
+        let guard = LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = blinc_layout::stateful::take_pending_partial_prop_updates();
+        with_registry(|_| {});
+        let ui = div().w(200.0).h(100.0).child(
+            div()
+                .class("box")
+                .w(50.0)
+                .h(50.0)
+                .bg(Color::rgb(0.0, 1.0, 0.0))
+                .class_when("a", &a)
+                .class_when("b", &b),
+        );
+        let mut tree = RenderTree::from_element(&ui);
+        tree.set_stylesheet(
+            Stylesheet::parse(
+                "@layer components { .a { background: #ff0000 } }\n.b { background: #0000ff }",
+            )
+            .expect("css"),
+        );
+        tree.apply_all_stylesheet_styles();
+        let node = tree.layout_tree.children(tree.root().unwrap())[0];
+        let apply = |tree: &mut RenderTree| {
+            let updates = blinc_layout::stateful::take_pending_partial_prop_updates();
+            tree.apply_partial_property_updates(updates);
+        };
+        if first_a {
+            a.set(true);
+            apply(&mut tree);
+            b.set(true);
+            apply(&mut tree);
+        } else {
+            b.set(true);
+            apply(&mut tree);
+            a.set(true);
+            apply(&mut tree);
+        }
+        let blue = match &tree.get_render_node(node).unwrap().props.background {
+            Some(Brush::Solid(c)) => c.b,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(blue, 1.0, "the application rule lost (a first: {first_a})");
+        for n in [tree.root().unwrap(), node] {
+            blinc_layout::binding::unregister_node(n);
+        }
+        drop(guard);
+    }
+}

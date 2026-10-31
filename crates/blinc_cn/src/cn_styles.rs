@@ -532,23 +532,37 @@ pub const CN_STYLES: &str = concat!(
    Checkbox
    ============================================================================ */
 
+/* The box is the element; fill, border colour, hover and the mark follow its
+   `checked` and `disabled` attributes. Border width is set in Rust because it
+   varies per size (1.5px / 2px / 2px). */
 .cn-checkbox {
-    /* Border width is Rust-owned because it varies per size
-       (1.5px / 2px / 2px). Border color + bg are state-driven by the
-       Stateful builder, but we still set `transition:` here so any user
-       cascade override animates rather than snaps. */
+    background: var(--input-bg);
+    border-color: var(--border);
     border-radius: var(--radius-sm);
+    color: var(--text-inverse);
     cursor: pointer;
     transition:
-        background var(--duration-fast) var(--ease-state),
-        border-color var(--duration-fast) var(--ease-state);
+        background-color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state),
+        transform var(--duration-fast) var(--ease-state);
 }
-/* Hover scale is Rust-driven via the Stateful FSM — duplicating it here
-   compounded with the Rust transform. State colors handled in Rust too. */
-.cn-checkbox--checked {
+.cn-checkbox:hover:not(:disabled):not(:checked) { border-color: var(--border-hover); }
+.cn-checkbox:hover:not(:disabled) { transform: scale(1.05); }
+.cn-checkbox:checked {
     background: var(--cn-checkbox-checked-bg, var(--primary));
     border-color: var(--cn-checkbox-checked-border, var(--primary));
 }
+/* A disabled box takes the disabled palette shared with the button, select
+   and switch. */
+.cn-checkbox:disabled {
+    background: var(--input-bg-disabled);
+    border-color: var(--border-secondary);
+}
+.cn-checkbox-mark {
+    opacity: 0;
+    transition: opacity var(--duration-fast) var(--ease-state);
+}
+.cn-checkbox:checked > .cn-checkbox-mark { opacity: 1; }
 .cn-checkbox--disabled {
     opacity: 0.5;
     cursor: not-allowed;

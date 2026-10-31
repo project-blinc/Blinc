@@ -41,6 +41,26 @@ fn scenario(
     format!("######## {name}\n{}", h.out)
 }
 
+/// A cn widget under cn's stylesheet, which its looks are made of.
+fn cn_scenario(
+    name: &str,
+    in_place: bool,
+    build: impl FnOnce(&blinc_core::reactive::State<bool>) -> Box<dyn ElementBuilder>,
+) -> String {
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let sheet =
+        Stylesheet::parse_with_variables(blinc_cn::cn_styles::CN_STYLES, &vars).expect("css");
+    set_active_stylesheet(Arc::new(sheet.clone()));
+    let checked = bool_state(false);
+    let widget = build(&checked);
+    let mut h = Harness::new(widget, vec![checked.signal_id()], describe_checkbox);
+    h.style_with(sheet);
+    h.in_place = in_place;
+    let at = h.center(&[0]);
+    h.walk(at, (300.0, 180.0));
+    format!("######## {name}\n{}", h.out)
+}
+
 #[test]
 fn a_checkbox_looks_the_same_in_every_state() {
     init();
@@ -65,7 +85,7 @@ fn a_checkbox_looks_the_same_in_every_state() {
             true,
             |c| Box::new(blinc_layout::widgets::checkbox(c).id("cb").label("Accept")),
         );
-        out += &scenario("cn", "", true, |c| {
+        out += &cn_scenario("cn", true, |c| {
             Box::new(blinc_cn::checkbox(c).label("Accept"))
         });
         out
