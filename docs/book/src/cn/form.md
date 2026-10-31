@@ -4,48 +4,56 @@ Components for building forms: inputs, checkboxes, selects, and more.
 
 ## Input
 
-Text input field:
+Text input field, bound to a `SharedTextInputData`:
 
 ```rust
 use blinc_cn::prelude::*;
+use blinc_layout::widgets::text_input::text_input_data;
 
-input()
+let name = text_input_data();
+
+cn::input(&name)
+    .label("Name")
     .placeholder("Enter your name...")
-    .value(name)
-    .on_change(|value| set_name(value))
+    .on_change(|value| println!("name: {value}"))
 ```
 
 ### Input Types
 
 ```rust
-// Text (default)
-input().placeholder("Name")
+use blinc_layout::widgets::text_input::InputType;
 
-// Email
-input().input_type("email").placeholder("Email")
-
-// Password
-input().input_type("password").placeholder("Password")
-
-// Number
-input().input_type("number").placeholder("Age")
-
-// Search
-input().input_type("search").placeholder("Search...")
+cn::input(&email).input_type(InputType::Email).placeholder("Email")
+cn::input(&password).password().placeholder("Password")
+cn::input(&age).input_type(InputType::Number).placeholder("Age")
+cn::input(&query).input_type(InputType::Search).placeholder("Search...")
 ```
 
 ### Input States
 
 ```rust
 // Disabled
-input().disabled(true)
+cn::input(&name).disabled(true)
 
-// Read-only
-input().readonly(true)
-
-// With error
-input().error(true)
+// With an error message; the border turns red, also while hovered or focused
+cn::input(&name).error("Name is required")
 ```
+
+### Styling
+
+The field is one element with the class `cn-input`. Its border and fill while
+hovered, focused, invalid or disabled are rules, eased by a CSS `transition`:
+`:hover`, `:focus`, `.cn-input--error` (added by `.error(..)`; a value that
+fails validation also sets a `data-invalid` attribute) and `:disabled`.
+Restyle it with rules of your own:
+
+```css
+.my-field:focus { border-color: #16a34a; outline-color: #16a34a; }
+```
+
+`idle_border_color(..)` and `idle_bg_color(..)` set the idle values as inline
+style, which the component rules do not replace. The `hover_*`, `focused_*`,
+`error_*` and grouped colour setters are removed; use rules.
 
 ## OTP Input
 

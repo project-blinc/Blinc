@@ -1,4 +1,5 @@
-//! The stylesheet's rules for a text input, per visual state.
+//! The stylesheet's rules that reach a text input's content: its text, caret,
+//! selection and size. The box is styled by the ordinary cascade.
 
 use super::*;
 
@@ -80,34 +81,6 @@ pub(super) fn apply_style_to_config(
     style: &crate::element_style::ElementStyle,
     visual: &TextFieldState,
 ) {
-    // Background → applies to current state's bg color
-    if let Some(ref bg) = style.background {
-        let color = match bg {
-            blinc_core::Brush::Solid(c) => *c,
-            _ => return, // Gradients not supported for input bg
-        };
-        match visual {
-            TextFieldState::Idle => cfg.bg_color = color,
-            TextFieldState::Hovered => cfg.hover_bg_color = color,
-            TextFieldState::Focused | TextFieldState::FocusedHovered => {
-                cfg.focused_bg_color = color;
-            }
-            TextFieldState::Disabled => {} // Disabled bg is hardcoded
-        }
-    }
-
-    // Border color
-    if let Some(color) = style.border_color {
-        match visual {
-            TextFieldState::Idle => cfg.border_color = color,
-            TextFieldState::Hovered => cfg.hover_border_color = color,
-            TextFieldState::Focused | TextFieldState::FocusedHovered => {
-                cfg.focused_border_color = color;
-            }
-            TextFieldState::Disabled => {}
-        }
-    }
-
     // Border width
     if let Some(w) = style.border_width {
         cfg.border_width = w;
@@ -144,104 +117,15 @@ pub(super) fn apply_style_to_config(
     }
 }
 
-/// Extract outline properties from stylesheet for the current state.
-/// Returns (width, color, offset) if any outline is specified.
-///
-/// Walks class selectors first (lowest priority) and then `#id`
-/// selectors (overrides), matching the precedence rules
-/// `apply_css_overrides` uses for the rest of the input's style.
-/// Without the class branch, rules like `.cn-input:focus { outline:
-/// 2px solid var(--border-focus); }` from the cn stylesheet would
-/// silently no-op because cn::input attaches via class, not id.
-pub(super) fn extract_outline_from_stylesheet(
-    stylesheet: &Stylesheet,
-    element_id: Option<&str>,
-    css_classes: &[std::sync::Arc<str>],
-    visual: &TextFieldState,
-) -> Option<(f32, Color, f32)> {
-    let mut width = None;
-    let mut color = None;
-    let mut offset = None;
-
-    let state = match visual {
-        TextFieldState::Hovered | TextFieldState::FocusedHovered => Some(ElementState::Hover),
-        TextFieldState::Focused => Some(ElementState::Focus),
-        TextFieldState::Disabled => Some(ElementState::Disabled),
-        TextFieldState::Idle => None,
-    };
-
-    let mut absorb = |s: &crate::element_style::ElementStyle| {
-        if let Some(w) = s.outline_width {
-            width = Some(w);
-        }
-        if let Some(c) = s.outline_color {
-            color = Some(c);
-        }
-        if let Some(o) = s.outline_offset {
-            offset = Some(o);
-        }
-    };
-
-    // 1. Class-based styles (lowest priority — overridden by ID).
-    // FocusedHovered order: base → :hover → :focus, so the focus ring
-    // wins over hover (same rationale as apply_css_overrides above).
-    for class in css_classes {
-        if let Some(base) = stylesheet.get_class(class) {
-            absorb(base);
-        }
-        if let Some(s) = state {
-            if let Some(state_style) = stylesheet.get_class_with_state(class, s) {
-                absorb(state_style);
-            }
-        }
-        if matches!(visual, TextFieldState::FocusedHovered) {
-            if let Some(s) = stylesheet.get_class_with_state(class, ElementState::Focus) {
-                absorb(s);
-            }
-        }
-    }
-
-    // 2. ID-based styles (overrides class)
-    if let Some(element_id) = element_id {
-        if let Some(base) = stylesheet.get(element_id) {
-            absorb(base);
-        }
-        if let Some(s) = state {
-            if let Some(state_style) = stylesheet.get_with_state(element_id, s) {
-                absorb(state_style);
-            }
-        }
-        if matches!(visual, TextFieldState::FocusedHovered) {
-            if let Some(focus_style) = stylesheet.get_with_state(element_id, ElementState::Focus) {
-                absorb(focus_style);
-            }
-        }
-    }
-
-    // Only return if at least width is specified
-    width.map(|w| {
-        (
-            w,
-            color.unwrap_or(Color::rgba(0.23, 0.51, 0.97, 0.5)),
-            offset.unwrap_or(0.0),
-        )
-    })
-}
-
 // =============================================================================
 // TextInputConfig - visual configuration
 // =============================================================================
 
-/// The config with the stylesheet's rules for the field's state applied, and
-/// the outline those rules give it.
-pub(super) fn resolved_config(
-    cfg: &TextInputConfig,
-    d: &TextInputData,
-) -> (TextInputConfig, Option<(f32, Color, f32)>) {
+/// The config with the stylesheet's rules for the field's state applied.
+pub(super) fn resolved_config(cfg: &TextInputConfig, d: &TextInputData) -> TextInputConfig {
     let mut cfg = cfg.clone();
-    let has_css_target = d.css_element_id.is_some() || !d.css_classes.is_empty();
-    let outline = if has_css_target {
-        active_stylesheet().and_then(|stylesheet| {
+    if d.css_element_id.is_some() || !d.css_classes.is_empty() {
+        if let Some(stylesheet) = active_stylesheet() {
             apply_css_overrides(
                 &mut cfg,
                 &stylesheet,
@@ -249,15 +133,7 @@ pub(super) fn resolved_config(
                 &d.css_classes,
                 &d.visual,
             );
-            extract_outline_from_stylesheet(
-                &stylesheet,
-                d.css_element_id.as_deref(),
-                &d.css_classes,
-                &d.visual,
-            )
-        })
-    } else {
-        None
-    };
-    (cfg, outline)
+        }
+    }
+    cfg
 }

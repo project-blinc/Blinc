@@ -214,11 +214,22 @@ fn my_ui(ctx: &WindowedContext) -> impl ElementBuilder {
 text_input(&state)
     .w(300.0)
     .rounded(8.0)
-    .idle_bg_color(Color::rgba(0.15, 0.15, 0.2, 1.0))
     .text_color(Color::WHITE)
     .placeholder_color(Color::rgba(0.5, 0.5, 0.6, 1.0))
-    .focused_border_color(Color::rgba(0.4, 0.6, 1.0, 1.0))
+    .class("my-field")
 ```
+
+```css
+.my-field { background: #262633; }
+.my-field:focus { border-color: #6699ff; }
+```
+
+A text input is one element with the class `blinc-input`. It has `disabled`
+while it cannot be edited and `data-invalid` while its value fails validation,
+so its look in each state, and how it eases between them, is the
+`.blinc-input` rules of the default stylesheet. `idle_bg_color` and
+`idle_border_color` set the idle values as inline style, which the default
+rules do not replace.
 
 ### Reading Input Value
 

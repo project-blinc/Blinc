@@ -154,6 +154,33 @@ pub const UA_STYLES: &str = concat!(
     align-items: center;
     gap: 4px;
 }
+
+/* The field is the element: hover and focus come from the pointer and the
+   router's focus, `disabled` and `data-invalid` are attributes the widget
+   keeps in step with its data. An invalid value keeps its error border while
+   hovered or focused. */
+.blinc-input {
+    background: var(--input-bg);
+    border-color: var(--border-secondary);
+    cursor: text;
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state);
+}
+.blinc-input:hover:not(:disabled) {
+    background: var(--input-bg-hover);
+    border-color: var(--border-hover);
+}
+.blinc-input:focus:not(:disabled) {
+    background: var(--input-bg-focus);
+    border-color: var(--border-focus);
+}
+.blinc-input[data-invalid]:not(:disabled) { border-color: var(--border-error); }
+.blinc-input:disabled {
+    background: var(--input-bg-disabled);
+    border-color: var(--border-secondary);
+    cursor: not-allowed;
+}
 "#,
     "}\n"
 );

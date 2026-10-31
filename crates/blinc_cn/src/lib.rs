@@ -168,7 +168,7 @@ pub mod prelude {
         HoverCard, HoverCardAlign, HoverCardBuilder, HoverCardSide, hover_card,
     };
     pub use crate::components::icon::{Icon, IconBuilder, IconSize, icon};
-    pub use crate::components::input::{Input, InputBgColors, InputBorderColors, InputSize, input};
+    pub use crate::components::input::{Input, InputSize, input};
     pub use crate::components::input_otp::{InputOtp, InputOtpBuilder, input_otp};
     pub use crate::components::kbd::{Kbd, KbdBuilder, KbdSize, kbd};
     pub use crate::components::label::{Label, LabelBuilder, LabelSize, label};

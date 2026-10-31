@@ -127,9 +127,6 @@ fn keyboard_section(ctx: &WindowedContext) -> Div {
         text_input_state_with_placeholder("Tap to focus and type…")
     });
 
-    let input_bg = Color::rgba(0.20, 0.20, 0.27, 1.0);
-    let input_focus_bg = Color::rgba(0.24, 0.24, 0.32, 1.0);
-
     section_card("Keyboard Input Test")
         .child(
             text("Tap the field — type with your keyboard.")
@@ -142,12 +139,7 @@ fn keyboard_section(ctx: &WindowedContext) -> Div {
                 text_input(&input_state.get())
                     .w_full()
                     .text_color(Color::WHITE)
-                    .placeholder_color(Color::rgba(0.55, 0.55, 0.62, 1.0))
-                    .idle_bg_color(input_bg)
-                    .hover_bg_color(input_bg)
-                    .focused_bg_color(input_focus_bg)
-                    .border_color(Color::rgba(0.32, 0.32, 0.40, 1.0))
-                    .focused_border_color(Color::rgba(0.45, 0.55, 0.95, 1.0)),
+                    .placeholder_color(Color::rgba(0.55, 0.55, 0.62, 1.0)),
             ),
         )
 }

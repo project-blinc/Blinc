@@ -3,43 +3,6 @@
 
 use super::*;
 
-/// How the field's box looks in its state.
-#[derive(Clone)]
-pub(super) struct BoxLook {
-    bg: Color,
-    border: Color,
-    border_width: f32,
-    radius: f32,
-    outline: (f32, Color, f32),
-}
-
-pub(super) fn box_look(cfg: &TextInputConfig, d: &TextInputData) -> BoxLook {
-    let (cfg, outline) = resolved_config(cfg, d);
-    let (bg, border) = match d.visual {
-        TextFieldState::Idle => (cfg.bg_color, cfg.border_color),
-        TextFieldState::Hovered => (cfg.hover_bg_color, cfg.hover_border_color),
-        TextFieldState::Focused | TextFieldState::FocusedHovered => {
-            (cfg.focused_bg_color, cfg.focused_border_color)
-        }
-        TextFieldState::Disabled => (
-            Color::rgba(0.12, 0.12, 0.15, 0.5),
-            Color::rgba(0.25, 0.25, 0.3, 0.5),
-        ),
-    };
-    let border = if !d.is_valid && !d.value.is_empty() {
-        cfg.error_border_color
-    } else {
-        border
-    };
-    BoxLook {
-        bg,
-        border,
-        border_width: cfg.border_width,
-        radius: cfg.corner_radius,
-        outline: outline.unwrap_or((0.0, Color::TRANSPARENT, 0.0)),
-    }
-}
-
 /// The text a field shows: its value (masked if it is a password) or its
 /// placeholder.
 pub(super) fn shown_text(d: &TextInputData, cfg: &TextInputConfig) -> String {
@@ -94,12 +57,11 @@ pub(super) fn caret_x(d: &mut TextInputData, cfg: &TextInputConfig) -> f32 {
     before - d.scroll_offset_x
 }
 
-/// Add the field's content to `outer` and bind the box's look, once. Every
-/// bound value reads the data's revision first, so a handler's bump brings
-/// them all up to date.
+/// Add the field's content to `outer`, once. The box is the element: it
+/// carries `disabled` and `data-invalid` as attributes bound to the data's
+/// revision, and the `.blinc-input` rules do the rest. Every bound value reads
+/// the revision first, so a handler's bump brings them all up to date.
 pub(super) fn assemble(mut outer: Div, data: &SharedTextInputData, base: &TextInputConfig) -> Div {
-    use crate::binding::TypedPendingBinding;
-    use crate::property::PropertyId;
     use blinc_core::reactive::{ReactiveGraph, computed, signal};
 
     let revision = {
@@ -108,71 +70,28 @@ pub(super) fn assemble(mut outer: Div, data: &SharedTextInputData, base: &TextIn
     };
     // What the field is built with: the config as the stylesheet has it for
     // the state the field starts in.
-    let (cfg, _) = resolved_config(base, &data.lock().unwrap());
+    let cfg = resolved_config(base, &data.lock().unwrap());
 
-    // The box.
-    let look = {
-        let (data, base) = (Arc::clone(data), base.clone());
+    let invalid = {
+        let data = Arc::clone(data);
         computed(move |g: &ReactiveGraph| {
             g.get(revision);
-            box_look(&base, &data.lock().unwrap())
+            let d = data.lock().unwrap();
+            !d.is_valid && !d.value.is_empty()
         })
     };
-    // Read once, so the look is subscribed to the revision.
-    let first = look
-        .try_get()
-        .unwrap_or_else(|| box_look(base, &data.lock().unwrap()));
+    let disabled = {
+        let data = Arc::clone(data);
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            data.lock().unwrap().disabled
+        })
+    };
     outer = outer
-        .bg(first.bg)
-        .border(first.border_width, first.border)
-        .rounded(first.radius)
-        .outline_width(first.outline.0)
-        .outline_color(first.outline.1)
-        .outline_offset(first.outline.2);
-    outer
-        .pending_bindings
-        .push(Box::new(TypedPendingBinding::from_computed(
-            look.clone(),
-            PropertyId::Background,
-            |props, look: BoxLook| props.background = Some(blinc_core::Brush::Solid(look.bg)),
-        )));
-    outer
-        .pending_bindings
-        .push(Box::new(TypedPendingBinding::from_computed(
-            look.clone(),
-            PropertyId::BorderColor,
-            |props, look: BoxLook| props.border_color = Some(look.border),
-        )));
-    outer
-        .pending_bindings
-        .push(Box::new(TypedPendingBinding::from_computed(
-            look.clone(),
-            PropertyId::CornerRadius,
-            |props, look: BoxLook| {
-                props.border_radius = blinc_core::CornerRadius::uniform(look.radius)
-            },
-        )));
-    outer
-        .pending_bindings
-        .push(Box::new(TypedPendingBinding::from_computed(
-            look.clone(),
-            PropertyId::Outline,
-            |props, look: BoxLook| {
-                props.outline_width = look.outline.0;
-                props.outline_color = Some(look.outline.1);
-                props.outline_offset = look.outline.2;
-            },
-        )));
-    // A border width a state's rule changes moves the content, so it is
-    // bound as layout.
-    let border_width = {
-        let (data, base) = (Arc::clone(data), base.clone());
-        computed(move |g: &ReactiveGraph| {
-            g.get(revision);
-            box_look(&base, &data.lock().unwrap()).border_width
-        })
-    };
-    outer = outer.border_width(&border_width);
+        .attr_when("data-invalid", "", &invalid)
+        .attr_when("disabled", "", &disabled)
+        .border_width(cfg.border_width)
+        .rounded(cfg.corner_radius);
 
     outer.child(content(data, &cfg, base, revision))
 }
@@ -204,7 +123,7 @@ pub(super) fn content(
         computed(move |g: &ReactiveGraph| {
             g.get(revision);
             let d = data.lock().unwrap();
-            let (cfg, _) = resolved_config(&base, &d);
+            let cfg = resolved_config(&base, &d);
             if d.value.is_empty() {
                 cfg.placeholder_color
             } else if d.disabled {
@@ -252,7 +171,7 @@ pub(super) fn content(
             computed(move |g: &ReactiveGraph| {
                 g.get(revision);
                 let mut d = data.lock().unwrap();
-                let (cfg, _) = resolved_config(&base, &d);
+                let cfg = resolved_config(&base, &d);
                 d.ensure_cursor_visible(&cfg);
                 blinc_core::Transform::translate(-d.scroll_offset_x, 0.0)
             })
@@ -289,7 +208,7 @@ pub(super) fn content(
             computed(move |g: &ReactiveGraph| {
                 g.get(revision);
                 let mut d = data.lock().unwrap();
-                let (cfg, _) = resolved_config(&base, &d);
+                let cfg = resolved_config(&base, &d);
                 blinc_core::Transform::translate(caret_x(&mut d, &cfg), 0.0)
             })
         };

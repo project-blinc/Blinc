@@ -383,15 +383,8 @@ pub const CN_STYLES: &str = concat!(
    ============================================================================ */
 
 .cn-input {
-    /* No `border:` here — the layout TextInput already sets idle /
-       hover / focused border colours via setters in cn::input
-       (mirroring combobox's search input, which works). Adding a base
-       `border:` rule here parses a `border-color` that
-       apply_complex_selector_styles writes into render_props every
-       frame, clobbering the focused colour the setter chose. The
-       `:focus` rule below still applies the focus colour because
-       state-rules are applied after base rules in the same pass. */
     background: var(--cn-input-bg, var(--input-bg));
+    border-color: var(--border);
     border-radius: var(--radius-default);
     color: var(--text-primary);
     /* Idle ring: same width, transparent, gap of 1 px so the focus
@@ -400,34 +393,36 @@ pub const CN_STYLES: &str = concat!(
        and the ring pops in. */
     outline: 2px solid transparent;
     outline-offset: 1px;
-    transition: outline-color 160ms ease, outline-offset 160ms ease;
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state),
+        outline-color 160ms ease,
+        outline-offset 160ms ease;
 }
-.cn-input:hover {
-    border-color: var(--border-hover);
-    background: var(--input-bg-hover);
-}
-.cn-input:focus {
-    /* HID focus affordance: brighten the border AND draw a 2px outer
-       ring offset 2px out from the input edge. The outline uses a
-       fainter `--focus-ring` (alpha-tinted variant token) so the
-       crisp border edge stays distinguishable from the soft halo. */
-    border-color: var(--border-focus);
-    background: var(--input-bg-focus);
+/* The border and fill per state are the layout input's `.blinc-input`
+   rules, which these sit beside at the same specificity. */
+.cn-input:focus:not(:disabled) {
+    /* HID focus affordance: the border brightens AND a 2px outer ring is
+       drawn 2px out from the input edge. The ring uses the fainter
+       `--focus-ring` (alpha-tinted variant token) so the crisp border edge
+       stays distinguishable from the soft halo. */
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
 }
-.cn-input--error {
+.cn-input.cn-input--error:not(:disabled),
+.cn-input.cn-input--error:hover:not(:disabled),
+.cn-input.cn-input--error:focus:not(:disabled) {
     border-color: var(--border-error);
 }
-.cn-input--error:focus {
-    border-color: var(--border-error);
+.cn-input.cn-input--error:focus:not(:disabled) {
     outline: 2px solid var(--focus-ring-error);
 }
-.cn-input--success {
+.cn-input.cn-input--success:not(:disabled),
+.cn-input.cn-input--success:hover:not(:disabled),
+.cn-input.cn-input--success:focus:not(:disabled) {
     border-color: var(--success);
 }
-.cn-input--success:focus {
-    border-color: var(--success);
+.cn-input.cn-input--success:focus:not(:disabled) {
     outline: 2px solid var(--focus-ring-success);
 }
 
@@ -435,33 +430,45 @@ pub const CN_STYLES: &str = concat!(
 .cn-input--md { font-size: var(--text-sm); }
 .cn-input--lg { font-size: var(--text-lg); }
 
-/* Input OTP. Border color is owned by Rust-side state setters. */
+/* Input OTP. The slot is a layout input; the border and fill per state are
+   its `.blinc-input` rules. */
 
 .cn-input-otp-slot {
     background: var(--cn-input-bg, var(--input-bg));
+    border-color: var(--border);
     border-radius: var(--radius-md);
     color: var(--text-primary);
     outline: 2px solid transparent;
     outline-offset: 1px;
-    transition: outline-color 160ms ease, outline-offset 160ms ease;
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state),
+        outline-color 160ms ease,
+        outline-offset 160ms ease;
 }
-.cn-input-otp-slot:hover {
-    border-color: var(--border-hover);
-    background: var(--input-bg-hover);
-}
-.cn-input-otp-slot:focus {
+.cn-input-otp-slot:focus:not(:disabled) {
     /* HID focus ring — see `.cn-input:focus` for rationale. */
-    border-color: var(--border-focus);
-    background: var(--input-bg-focus);
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
 }
-.cn-input-otp-slot--error {
+.cn-input-otp-slot.cn-input-otp-slot--error:not(:disabled),
+.cn-input-otp-slot.cn-input-otp-slot--error:hover:not(:disabled),
+.cn-input-otp-slot.cn-input-otp-slot--error:focus:not(:disabled) {
     border-color: var(--border-error);
 }
-.cn-input-otp-slot--error:focus {
-    border-color: var(--border-error);
+.cn-input-otp-slot.cn-input-otp-slot--error:focus:not(:disabled) {
     outline: 2px solid var(--focus-ring-error);
+}
+/* The combobox's search field sits on the dropdown's surface and shows the
+   focus border while hovered as well as focused. */
+.cn-combobox-search {
+    background: var(--surface);
+    border-color: var(--border);
+}
+.cn-combobox-search:hover:not(:disabled),
+.cn-combobox-search:focus:not(:disabled) {
+    background: var(--surface);
+    border-color: var(--border-focus);
 }
 .cn-input-otp--disabled {
     opacity: 0.5;

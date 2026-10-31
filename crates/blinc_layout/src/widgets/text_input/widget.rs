@@ -2,6 +2,10 @@
 
 use super::*;
 
+/// The class whose rules in [`crate::ua_styles::UA_STYLES`] give a text input
+/// its default look.
+pub const DEFAULT_CLASS: &str = "blinc-input";
+
 /// A single-line text field.
 ///
 /// Built once. Its handlers edit the shared [`TextInputData`] and bump its
@@ -42,7 +46,8 @@ impl TextInput {
             d.revision
                 .get_or_insert_with(|| blinc_core::reactive::signal(0u64));
         }
-        let mut inner = Self::create_inner_with_handlers(Arc::clone(&data), Arc::clone(&config));
+        let mut inner = Self::create_inner_with_handlers(Arc::clone(&data), Arc::clone(&config))
+            .class(DEFAULT_CLASS);
 
         // HTML input behaviour in flex layouts: stretch to the parent's
         // width by default, and `min_w(0)` so the field can shrink below its
@@ -295,70 +300,22 @@ impl TextInput {
         self
     }
 
-    // ========== Border Color Configuration ==========
+    // ========== Box Colours ==========
+    //
+    // How the box looks while hovered, focused, invalid or disabled is the
+    // `.blinc-input` rules (`:hover`, `:focus`, `[data-invalid]`, `:disabled`);
+    // restyle it with rules of your own. These two set the idle values the way
+    // inline style does, so a rule of the component layer does not replace them.
 
-    /// Set the idle border color (when not hovered or focused)
-    pub fn idle_border_color(self, color: Color) -> Self {
-        self.config.lock().unwrap().border_color = color;
+    /// Set the idle border color.
+    pub fn idle_border_color(mut self, color: Color) -> Self {
+        self.inner = std::cell::RefCell::new(self.inner.take().border_color(color));
         self
     }
 
-    /// Set the hover border color
-    pub fn hover_border_color(self, color: Color) -> Self {
-        self.config.lock().unwrap().hover_border_color = color;
-        self
-    }
-
-    /// Set the focused border color
-    pub fn focused_border_color(self, color: Color) -> Self {
-        self.config.lock().unwrap().focused_border_color = color;
-        self
-    }
-
-    /// Set the error border color (shown when is_valid is false)
-    pub fn error_border_color(self, color: Color) -> Self {
-        self.config.lock().unwrap().error_border_color = color;
-        self
-    }
-
-    /// Set all border colors at once for consistent theming
-    pub fn border_colors(self, idle: Color, hover: Color, focused: Color, error: Color) -> Self {
-        let mut cfg = self.config.lock().unwrap();
-        cfg.border_color = idle;
-        cfg.hover_border_color = hover;
-        cfg.focused_border_color = focused;
-        cfg.error_border_color = error;
-        drop(cfg);
-        self
-    }
-
-    // ========== Background Color Configuration ==========
-
-    /// Set the idle background color
-    pub fn idle_bg_color(self, color: Color) -> Self {
-        self.config.lock().unwrap().bg_color = color;
-        self
-    }
-
-    /// Set the hover background color
-    pub fn hover_bg_color(self, color: Color) -> Self {
-        self.config.lock().unwrap().hover_bg_color = color;
-        self
-    }
-
-    /// Set the focused background color
-    pub fn focused_bg_color(self, color: Color) -> Self {
-        self.config.lock().unwrap().focused_bg_color = color;
-        self
-    }
-
-    /// Set all background colors at once
-    pub fn bg_colors(self, idle: Color, hover: Color, focused: Color) -> Self {
-        let mut cfg = self.config.lock().unwrap();
-        cfg.bg_color = idle;
-        cfg.hover_bg_color = hover;
-        cfg.focused_bg_color = focused;
-        drop(cfg);
+    /// Set the idle background color.
+    pub fn idle_bg_color(mut self, color: Color) -> Self {
+        self.inner = std::cell::RefCell::new(self.inner.take().bg(color));
         self
     }
 

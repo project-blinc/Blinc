@@ -29,12 +29,8 @@
 //!     .label("Username")
 //!     .error("Username is required")
 //!
-//! // Custom border colors
-//! cn::input(&custom)
-//!     .focused_border_color(Color::BLUE)
-//!     .error_border_color(Color::RED)
-//!
-//! // Custom background and text colors
+//! // Custom idle colors, as inline style. Hover, focus and error looks are
+//! // `.cn-input` rules: restyle them with rules of your own.
 //! cn::input(&dark)
 //!     .idle_bg_color(Color::rgba(0.1, 0.1, 0.1, 1.0))
 //!     .text_color(Color::WHITE)
@@ -53,30 +49,6 @@ use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState, TypographyT
 use std::ops::{Deref, DerefMut};
 
 use super::label::{LabelSize, label};
-
-/// Border color configuration for different input states
-#[derive(Clone, Debug, Default)]
-pub struct InputBorderColors {
-    /// Border color when idle (not hovered or focused)
-    pub idle: Option<Color>,
-    /// Border color when hovered
-    pub hover: Option<Color>,
-    /// Border color when focused
-    pub focused: Option<Color>,
-    /// Border color when in error state
-    pub error: Option<Color>,
-}
-
-/// Background color configuration for different input states
-#[derive(Clone, Debug, Default)]
-pub struct InputBgColors {
-    /// Background color when idle
-    pub idle: Option<Color>,
-    /// Background color when hovered
-    pub hover: Option<Color>,
-    /// Background color when focused
-    pub focused: Option<Color>,
-}
 
 /// Input size variants
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -149,7 +121,10 @@ impl Input {
         };
 
         // Add CSS classes directly to the TextInput (it supports .class())
-        let text_input = text_input.class("cn-input").class(size_class);
+        let mut text_input = text_input.class("cn-input").class(size_class);
+        if config.error.is_some() {
+            text_input = text_input.class("cn-input--error");
+        }
 
         // If no label, description, or error, return the input directly in a minimal container
         if config.label.is_none() && config.description.is_none() && config.error.is_none() {
@@ -212,13 +187,6 @@ impl Input {
         typography: &TypographyTokens,
     ) -> TextInput {
         // Get default theme colors for fallbacks
-        let default_border = theme.color(ColorToken::Border);
-        let default_border_hover = theme.color(ColorToken::BorderHover);
-        let default_border_focus = theme.color(ColorToken::BorderFocus);
-        let default_border_error = theme.color(ColorToken::BorderError);
-        let default_bg = theme.color(ColorToken::InputBg);
-        let default_bg_hover = theme.color(ColorToken::InputBgHover);
-        let default_bg_focus = theme.color(ColorToken::InputBgFocus);
         let default_text = theme.color(ColorToken::TextPrimary);
         let default_placeholder = theme.color(ColorToken::TextTertiary);
         let default_cursor = theme.color(ColorToken::Primary);
@@ -240,19 +208,14 @@ impl Input {
             .disabled(config.disabled)
             .masked(config.password);
 
-        // Apply border colors (user overrides or theme defaults)
-        input = input.idle_border_color(config.border_colors.idle.unwrap_or(default_border));
-        input =
-            input.hover_border_color(config.border_colors.hover.unwrap_or(default_border_hover));
-        input = input
-            .focused_border_color(config.border_colors.focused.unwrap_or(default_border_focus));
-        input =
-            input.error_border_color(config.border_colors.error.unwrap_or(default_border_error));
-
-        // Apply background colors
-        input = input.idle_bg_color(config.bg_colors.idle.unwrap_or(default_bg));
-        input = input.hover_bg_color(config.bg_colors.hover.unwrap_or(default_bg_hover));
-        input = input.focused_bg_color(config.bg_colors.focused.unwrap_or(default_bg_focus));
+        // The box's look is the `.cn-input` rules; only an idle colour the
+        // caller set is applied, as inline style.
+        if let Some(color) = config.border_color {
+            input = input.idle_border_color(color);
+        }
+        if let Some(color) = config.bg_color {
+            input = input.idle_bg_color(color);
+        }
 
         // Apply text colors
         input = input.text_color(config.text_color.unwrap_or(default_text));
@@ -372,8 +335,8 @@ struct InputConfig {
     password: bool,
     width: Option<f32>,
     full_width: bool,
-    border_colors: InputBorderColors,
-    bg_colors: InputBgColors,
+    border_color: Option<Color>,
+    bg_color: Option<Color>,
     text_color: Option<Color>,
     placeholder_color: Option<Color>,
     cursor_color: Option<Color>,
@@ -399,8 +362,8 @@ impl Default for InputConfig {
             password: false,
             width: None,
             full_width: true,
-            border_colors: InputBorderColors::default(),
-            bg_colors: InputBgColors::default(),
+            border_color: None,
+            bg_color: None,
             text_color: None,
             placeholder_color: None,
             cursor_color: None,
@@ -518,81 +481,18 @@ impl InputBuilder {
         self
     }
 
-    // ========== Border Color Customization ==========
+    // ========== Box Colour Customization ==========
 
-    /// Set the idle border color (when not hovered or focused)
+    /// Set the idle border color, as inline style. How the border looks while
+    /// hovered, focused or in error is the `.cn-input` rules.
     pub fn idle_border_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.border_colors.idle = Some(color.into());
+        self.config.border_color = Some(color.into());
         self
     }
 
-    /// Set the hover border color
-    pub fn hover_border_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.border_colors.hover = Some(color.into());
-        self
-    }
-
-    /// Set the focused border color
-    pub fn focused_border_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.border_colors.focused = Some(color.into());
-        self
-    }
-
-    /// Set the error border color
-    pub fn error_border_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.border_colors.error = Some(color.into());
-        self
-    }
-
-    /// Set all border colors at once
-    pub fn border_colors(
-        mut self,
-        idle: impl Into<Color>,
-        hover: impl Into<Color>,
-        focused: impl Into<Color>,
-        error: impl Into<Color>,
-    ) -> Self {
-        self.config.border_colors = InputBorderColors {
-            idle: Some(idle.into()),
-            hover: Some(hover.into()),
-            focused: Some(focused.into()),
-            error: Some(error.into()),
-        };
-        self
-    }
-
-    // ========== Background Color Customization ==========
-
-    /// Set the idle background color
+    /// Set the idle background color, as inline style.
     pub fn idle_bg_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.bg_colors.idle = Some(color.into());
-        self
-    }
-
-    /// Set the hover background color
-    pub fn hover_bg_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.bg_colors.hover = Some(color.into());
-        self
-    }
-
-    /// Set the focused background color
-    pub fn focused_bg_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.bg_colors.focused = Some(color.into());
-        self
-    }
-
-    /// Set all background colors at once
-    pub fn bg_colors(
-        mut self,
-        idle: impl Into<Color>,
-        hover: impl Into<Color>,
-        focused: impl Into<Color>,
-    ) -> Self {
-        self.config.bg_colors = InputBgColors {
-            idle: Some(idle.into()),
-            hover: Some(hover.into()),
-            focused: Some(focused.into()),
-        };
+        self.config.bg_color = Some(color.into());
         self
     }
 

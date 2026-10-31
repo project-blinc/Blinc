@@ -23,6 +23,9 @@ use super::super::RenderTree;
 /// place in the stylesheet.
 type Order = (bool, (u32, u32, u32), usize);
 
+/// The rules a class brought, each with where it sits in the cascade.
+type Rules = Vec<(Order, ElementStyle)>;
+
 /// The classes of one node that follow a signal.
 #[derive(Default)]
 pub(crate) struct DynamicClasses {
@@ -30,10 +33,10 @@ pub(crate) struct DynamicClasses {
     wanted: HashSet<Arc<str>>,
     /// The ones whose rules are applied, in the order they were, with the
     /// rules each added.
-    applied: Vec<(Arc<str>, Vec<(Order, ElementStyle)>)>,
+    applied: Vec<(Arc<str>, Rules)>,
     /// Rules this node gained because an ancestor gained a class, by the
     /// ancestor and the class.
-    inherited: Vec<((LayoutNodeId, Arc<str>), Vec<(Order, ElementStyle)>)>,
+    inherited: Vec<((LayoutNodeId, Arc<str>), Rules)>,
 }
 
 impl DynamicClasses {

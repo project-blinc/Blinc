@@ -1,4 +1,7 @@
-//! How a text input is sized and coloured.
+//! How a text input is sized and what its text is coloured.
+//!
+//! The box (fill, border, ring) is the `.blinc-input` rules of
+//! [`crate::ua_styles::UA_STYLES`].
 
 use super::*;
 
@@ -10,13 +13,6 @@ pub struct TextInputConfig {
     pub font_size: f32,
     pub text_color: Color,
     pub placeholder_color: Color,
-    pub bg_color: Color,
-    pub hover_bg_color: Color,
-    pub focused_bg_color: Color,
-    pub border_color: Color,
-    pub hover_border_color: Color,
-    pub focused_border_color: Color,
-    pub error_border_color: Color,
     pub cursor_color: Color,
     pub selection_color: Color,
     pub corner_radius: f32,
@@ -40,13 +36,6 @@ impl Default for TextInputConfig {
             font_size: 16.0,
             text_color: theme.color(ColorToken::TextPrimary),
             placeholder_color: theme.color(ColorToken::TextTertiary),
-            bg_color: theme.color(ColorToken::InputBg),
-            hover_bg_color: theme.color(ColorToken::InputBgHover),
-            focused_bg_color: theme.color(ColorToken::InputBgFocus),
-            border_color: theme.color(ColorToken::BorderSecondary),
-            hover_border_color: theme.color(ColorToken::BorderHover),
-            focused_border_color: theme.color(ColorToken::BorderFocus),
-            error_border_color: theme.color(ColorToken::BorderError),
             cursor_color: theme.color(ColorToken::Accent),
             selection_color: theme.color(ColorToken::Selection),
             corner_radius: 8.0,

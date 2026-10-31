@@ -88,7 +88,7 @@ pub use dropdown_menu::{
 };
 pub use hover_card::{HoverCard, HoverCardAlign, HoverCardBuilder, HoverCardSide, hover_card};
 pub use icon::{Icon, IconBuilder, IconSize, icon};
-pub use input::{Input, InputBgColors, InputBorderColors, InputSize, input};
+pub use input::{Input, InputSize, input};
 pub use input_otp::{InputOtp, InputOtpBuilder, input_otp};
 pub use kbd::{Kbd, KbdBuilder, KbdSize, kbd};
 pub use label::{Label, LabelBuilder, LabelSize, label};

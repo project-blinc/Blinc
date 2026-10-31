@@ -134,13 +134,6 @@ impl InputOtp {
         let font_size = config.size.font_size(&typography);
         let radius = theme.radius(RadiusToken::Md);
 
-        let border_idle = theme.color(ColorToken::Border);
-        let border_hover = theme.color(ColorToken::BorderHover);
-        let border_focus = theme.color(ColorToken::BorderFocus);
-        let border_error = theme.color(ColorToken::BorderError);
-        let bg = theme.color(ColorToken::InputBg);
-        let bg_hover = theme.color(ColorToken::InputBgHover);
-        let bg_focus = theme.color(ColorToken::InputBgFocus);
         let text_primary = theme.color(ColorToken::TextPrimary);
         let text_tertiary = theme.color(ColorToken::TextTertiary);
 
@@ -193,17 +186,6 @@ impl InputOtp {
                 .w(height)
                 .text_size(font_size)
                 .rounded(radius)
-                .idle_border_color(border_idle)
-                .hover_border_color(border_hover)
-                .focused_border_color(if config.error {
-                    border_error
-                } else {
-                    border_focus
-                })
-                .error_border_color(border_error)
-                .idle_bg_color(bg)
-                .hover_bg_color(bg_hover)
-                .focused_bg_color(bg_focus)
                 .text_color(text_primary)
                 .class("cn-input-otp-slot");
             if config.error {

@@ -2,7 +2,6 @@
 //! selecting patch what it shows in place, with no subtree rebuilt, and its
 //! caret shows while it is focused.
 
-use blinc_core::Color;
 use blinc_core::events::event_types;
 use blinc_layout::LayoutNodeId;
 use blinc_layout::event_handler::EventContext;
@@ -16,10 +15,6 @@ use std::sync::Mutex;
 /// process-wide.
 static LOCK: Mutex<()> = Mutex::new(());
 
-const IDLE: Color = Color::rgba(0.1, 0.1, 0.1, 1.0);
-const HOVER: Color = Color::rgba(0.2, 0.2, 0.2, 1.0);
-const FOCUSED_BORDER: Color = Color::rgba(0.0, 0.5, 1.0, 1.0);
-
 struct Scene {
     tree: RenderTree,
     input: blinc_layout::widgets::text_input::TextInput,
@@ -32,11 +27,7 @@ fn scene(width: f32) -> Scene {
     let _ = blinc_layout::stateful::take_pending_partial_prop_updates();
     let _ = blinc_layout::stateful::take_pending_subtree_rebuilds();
     let data = text_input_data();
-    let input = text_input(&data)
-        .w(width)
-        .idle_bg_color(IDLE)
-        .hover_bg_color(HOVER)
-        .focused_border_color(FOCUSED_BORDER);
+    let input = text_input(&data).w(width);
     let mut tree = RenderTree::from_element(&input);
     tree.compute_layout(400.0, 100.0);
     Scene { tree, input, data }
@@ -97,27 +88,6 @@ impl Scene {
 
     fn shown(&self) -> String {
         self.runs().concat()
-    }
-
-    fn fill(&self) -> Option<Color> {
-        match &self
-            .tree
-            .get_render_node(self.root())
-            .unwrap()
-            .props
-            .background
-        {
-            Some(blinc_core::Brush::Solid(c)) => Some(*c),
-            _ => None,
-        }
-    }
-
-    fn border(&self) -> Option<Color> {
-        self.tree
-            .get_render_node(self.root())
-            .unwrap()
-            .props
-            .border_color
     }
 
     /// The rectangles the caret paints this frame.
@@ -183,26 +153,6 @@ fn typing_patches_the_shown_text_in_place() {
     s.type_text("hello");
     assert_eq!(s.data.lock().unwrap().value, "hello");
     assert_eq!(s.shown(), "hello");
-}
-
-#[test]
-fn focus_and_hover_restyle_the_box_in_place() {
-    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let mut s = scene(300.0);
-    assert_eq!(s.fill(), Some(IDLE));
-    let ctx = EventContext::new(event_types::POINTER_ENTER, s.root());
-    s.dispatch(ctx);
-    assert_eq!(s.fill(), Some(HOVER), "hovering did not change the fill");
-    let ctx = EventContext::new(event_types::POINTER_LEAVE, s.root());
-    s.dispatch(ctx);
-    assert_eq!(s.fill(), Some(IDLE));
-
-    s.click();
-    assert_eq!(
-        s.border(),
-        Some(FOCUSED_BORDER),
-        "focusing did not change the border"
-    );
 }
 
 #[test]
