@@ -377,6 +377,12 @@ impl Checkbox {
                 .child(checkbox)
         };
 
+        // `:checked` and `:disabled` rules match the container.
+        let mut inner = inner.attr_when("checked", "", checked_state.clone());
+        if disabled {
+            inner = inner.attr("disabled", "");
+        }
+
         Self { inner }
     }
 }

@@ -361,6 +361,7 @@ impl Look {
 impl Toggle {
     fn with_config(instance_key: &InstanceKey, config: ToggleConfig) -> Self {
         let on_state_for_click = config.on.clone();
+        let on_state_for_attr = config.on.clone();
         let on_change = config.on_change.clone();
         let disabled = config.disabled;
         let rules = Arc::new(Rules {
@@ -465,6 +466,12 @@ impl Toggle {
             .gap(theme.spacing_value(SpacingToken::Space2))
             .cursor_pointer()
             .child(body);
+
+        // `:checked` and `:disabled` rules match the container.
+        let mut inner = inner.attr_when("checked", "", on_state_for_attr);
+        if disabled {
+            inner = inner.attr("disabled", "");
+        }
 
         Self { inner }
     }

@@ -185,6 +185,7 @@ impl Checkbox {
             // Added and taken away with the state, so the stylesheet's
             // `.cn-checkbox--checked` rules follow it in place.
             .class_when("cn-checkbox--checked", &checked_state)
+            .attr_when("checked", "", &checked_state)
             .w(box_size)
             .h(box_size)
             // Pin box to its explicit dimensions — without this a

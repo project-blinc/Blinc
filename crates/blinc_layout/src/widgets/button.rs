@@ -420,7 +420,12 @@ impl Button {
     }
 
     fn make(&self) -> Div {
-        let chassis = self.ops.iter().fold(div(), |d, op| op(d));
+        // `:disabled` rules match while the button is disabled.
+        let chassis = self.ops.iter().fold(div(), |d, op| op(d)).attr_when(
+            "disabled",
+            "",
+            clone_reactive(&self.disabled),
+        );
         let interaction = Interaction::keyed(self.key.get());
         let disabled = Disabled::from(&self.disabled);
         let own = chassis.render_props();

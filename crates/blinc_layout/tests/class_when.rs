@@ -339,3 +339,37 @@ fn a_class_that_takes_an_element_out_of_flow_and_back() {
     s.frame();
     assert_eq!(top(&s, s.other), 50.0, "the first box did not come back");
 }
+
+#[test]
+fn a_checked_attribute_toggled_in_place_restyles_a_checked_rule() {
+    let on = flag(false);
+    let mut s = scene(
+        Some(".t:checked { background: #ff0000; width: 150px }"),
+        |d| d.attr_when("checked", "", &on),
+    );
+    assert_eq!(s.fill(s.node), BLUE);
+
+    on.set(true);
+    s.frame();
+    assert_eq!(s.fill(s.node), RED);
+    assert_eq!(s.width(s.node), 150.0);
+    assert_eq!(s.fill(s.other), BLUE);
+
+    on.set(false);
+    s.frame();
+    assert_eq!(s.fill(s.node), BLUE);
+    assert_eq!(s.width(s.node), 100.0);
+}
+
+#[test]
+fn a_disabled_attribute_toggled_in_place_restyles_a_disabled_rule() {
+    let off = flag(true);
+    let mut s = scene(Some(".t:disabled { opacity: 0.4 }"), |d| {
+        d.attr_when("disabled", "", &off)
+    });
+    assert_eq!(s.opacity(s.node), 0.4);
+
+    off.set(false);
+    s.frame();
+    assert_eq!(s.opacity(s.node), 1.0);
+}

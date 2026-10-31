@@ -109,3 +109,36 @@ fn a_checkbox_that_starts_checked_gets_the_rules_and_loses_them() {
         );
     });
 }
+
+/// The same state is a `:checked` attribute, which is how ashui's
+/// stylesheet writes it.
+#[test]
+fn the_checked_attribute_follows_the_state_for_a_checked_rule() {
+    init();
+    guarded(|| {
+        let checked = bool_state(false);
+        let host = div().w(400.0).h(200.0).child(blinc_cn::checkbox(&checked));
+        let mut tree = RenderTree::from_element(&host);
+        tree.set_stylesheet(
+            Stylesheet::parse(".cn-checkbox:checked { background: #123456; }").expect("css"),
+        );
+        tree.apply_stylesheet_layout_overrides();
+        tree.apply_stylesheet_base_styles();
+        tree.compute_layout(400.0, 200.0);
+        let wrapper = tree.layout_tree.children(tree.root().unwrap())[0];
+        let node = tree.layout_tree.children(wrapper)[0];
+        let marked =
+            |tree: &RenderTree| tree.element_registry().attribute(node, "checked").is_some();
+        assert!(!marked(&tree));
+
+        checked.set(true);
+        frame(&mut tree);
+        assert!(marked(&tree));
+        let fill = solid(&tree, node);
+        assert!((fill[0] - 0x12 as f32 / 255.0).abs() < 0.01, "{fill:?}");
+
+        checked.set(false);
+        frame(&mut tree);
+        assert!(!marked(&tree));
+    });
+}

@@ -83,3 +83,44 @@ fn an_unsupported_form_still_skips_the_rule_with_a_warning() {
         Stylesheet::parse_with_errors(".x[ { background: #ff0000; } .y { background: #0000ff; }");
     assert!(r.stylesheet.get_class("y").is_some());
 }
+
+#[test]
+fn checked_and_disabled_match_the_attributes_of_the_same_name() {
+    let css = ".x:checked { background: #ff0000; } .x:disabled { background: #0000ff; }";
+    assert_eq!(bg(&host_with(div().attr("checked", "")), css), red());
+    assert_eq!(
+        bg(&host_with(div().attr("disabled", "")), css),
+        Some(Color::rgb(0.0, 0.0, 1.0))
+    );
+    assert_eq!(bg(&host_with(div()), css), None);
+}
+
+#[test]
+fn a_descendant_rule_on_a_checked_parent_reaches_its_child() {
+    let host = div().w(100.0).h(100.0).child(
+        div()
+            .class("sw")
+            .attr("checked", "")
+            .w(50.0)
+            .h(20.0)
+            .child(div().class("thumb").w(10.0).h(10.0)),
+    );
+    let mut tree = RenderTree::from_element(&host);
+    tree.set_stylesheet(
+        Stylesheet::parse(".sw:checked > .thumb { background: #ff0000; }").expect("css"),
+    );
+    tree.apply_stylesheet_layout_overrides();
+    tree.apply_stylesheet_base_styles();
+    let sw = tree.layout_tree.children(tree.root().expect("root"))[0];
+    let thumb = tree.layout_tree.children(sw)[0];
+    match tree
+        .get_render_node(thumb)
+        .unwrap()
+        .props
+        .background
+        .as_ref()
+    {
+        Some(blinc_core::Brush::Solid(c)) => assert_eq!(*c, Color::rgb(1.0, 0.0, 0.0)),
+        other => panic!("{other:?}"),
+    }
+}

@@ -292,3 +292,22 @@ fn buttons_with_one_key_share_pointer_state() {
         "the key does not name the pointer state"
     );
 }
+
+/// A disabled button matches `:disabled` rules, and stops when enabled.
+#[test]
+fn a_disabled_button_matches_a_disabled_rule_and_stops_when_enabled() {
+    let _g = init();
+    let off = flag(true);
+    set_active_stylesheet(Arc::new(Stylesheet::parse("").expect("css")));
+    let mut s = Scene::new(button("Go").class("b").disabled(&off));
+    s.tree
+        .set_stylesheet(Stylesheet::parse(".b:disabled { opacity: 0.4; }").expect("css"));
+    s.tree.apply_stylesheet_layout_overrides();
+    s.tree.apply_stylesheet_base_styles();
+    let opacity = |s: &Scene| s.tree.get_render_node(s.button()).unwrap().props.opacity;
+    assert_eq!(opacity(&s), 0.4);
+
+    off.set(false);
+    s.frame();
+    assert_eq!(opacity(&s), 1.0);
+}

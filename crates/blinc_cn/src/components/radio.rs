@@ -258,6 +258,7 @@ fn build_radio_button(
         // Added and taken away with the selection, so the stylesheet's
         // `.cn-radio--selected` rules follow it in place.
         .class_when("cn-radio--selected", &is_selected)
+        .attr_when("checked", "", &is_selected)
         .w(outer_size)
         .h(outer_size)
         .rounded(outer_size / 2.0)

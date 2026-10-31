@@ -23,6 +23,15 @@ pub enum ElementState {
 }
 
 impl ElementState {
+    /// Whether the state follows the pointer or focus and is applied as the
+    /// user interacts. `:disabled` and `:checked` describe the element
+    /// itself instead: they match the `disabled` and `checked` attributes,
+    /// so a rule using them is an ordinary rule, restyled when the attribute
+    /// changes.
+    pub fn is_pointer_driven(self) -> bool {
+        !matches!(self, ElementState::Disabled | ElementState::Checked)
+    }
+
     /// Parse a state from a pseudo-class string
     pub fn parse_state(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
@@ -214,9 +223,10 @@ pub struct CompoundSelector {
 impl CompoundSelector {
     /// Check if this compound selector contains any state pseudo-class
     pub fn has_state(&self) -> bool {
-        self.parts
-            .iter()
-            .any(|p| matches!(p, SelectorPart::State(_)))
+        self.parts.iter().any(|p| match p {
+            SelectorPart::State(state) => state.is_pointer_driven(),
+            _ => false,
+        })
     }
 
     /// Get the state pseudo-class if present

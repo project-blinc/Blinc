@@ -101,8 +101,16 @@ impl RenderTree {
                         ElementState::Hover => hovered,
                         ElementState::Active => pressed,
                         ElementState::Focus => focused,
-                        ElementState::Disabled => false, // TODO: track disabled state
-                        ElementState::Checked => false, // checked state managed by widget callbacks
+                        // Properties of the element, set as the `disabled` and
+                        // `checked` attributes.
+                        ElementState::Disabled => self
+                            .element_registry
+                            .attribute(node_id, "disabled")
+                            .is_some(),
+                        ElementState::Checked => self
+                            .element_registry
+                            .attribute(node_id, "checked")
+                            .is_some(),
                     };
                     if !matches {
                         return false;

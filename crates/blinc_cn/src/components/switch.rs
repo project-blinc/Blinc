@@ -238,13 +238,15 @@ impl Switch {
             .child(off_layer)
             .child(on_layer)
             // Animated thumb
-            .child(animated_thumb);
+            .child(animated_thumb)
+            // `:checked` rules follow the switch in place.
+            .attr_when("checked", "", &on_state);
 
         if disabled {
             // No opacity dim — the off-state colors are already correct
             // for a disabled appearance. The lost thumb shadow above is
             // what differentiates disabled from interactive-off.
-            switch = switch.class("cn-switch--disabled");
+            switch = switch.class("cn-switch--disabled").attr("disabled", "");
         }
 
         // Add click handler to toggle the state
