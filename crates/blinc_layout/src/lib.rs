@@ -69,6 +69,7 @@ pub mod text_measure;
 #[cfg(feature = "text_measurer")]
 pub mod text_measurer;
 pub mod text_selection;
+pub mod transition;
 pub mod tree;
 pub mod typography;
 pub mod visual_animation;

@@ -37,6 +37,7 @@ use crate::div::{Div, ElementBuilder, div};
 use crate::element::RenderProps;
 use crate::interaction::Interaction;
 use crate::key::InstanceKey;
+use crate::property::PropertyId;
 use crate::stateful::ButtonState;
 use crate::text::Text;
 use crate::tree::{LayoutNodeId, LayoutTree};
@@ -458,7 +459,18 @@ impl Button {
         let bg = follow_look(&source, |l| l.bg);
         let text_color = follow_look(&source, |l| l.text_color);
 
-        let mut body = chassis.bg(&bg).track(&interaction);
+        // Colours ease between states at the theme's state duration.
+        let (ease_ms, ease) = {
+            let motion = ThemeState::get().animations();
+            (
+                motion.duration_fast as f32,
+                motion.ease_state.to_animation_easing(),
+            )
+        };
+        let mut body = chassis
+            .bg(&bg)
+            .transition(PropertyId::Background, ease_ms, ease)
+            .track(&interaction);
 
         // The border and the shadow can change with the state, so they follow
         // it. A button with no border in any state gets none.
@@ -467,7 +479,8 @@ impl Button {
                 .border_width(follow_look(&source, |l| l.border_width))
                 .border_color(follow_look(&source, |l| {
                     l.border_color.unwrap_or(Color::TRANSPARENT)
-                }));
+                }))
+                .transition(PropertyId::BorderColor, ease_ms, ease);
         }
         if flat {
             body = body.shadows(follow_look(&source, move |l| {
@@ -489,7 +502,8 @@ impl Button {
             body = body.child(
                 Text::bound(clone_reactive(label))
                     .size(first.text_size)
-                    .color(&text_color),
+                    .color(&text_color)
+                    .transition(PropertyId::Color, ease_ms, ease),
             );
         }
 

@@ -701,6 +701,8 @@ impl WebApp {
         {
             let handle = animations.lock().unwrap().handle();
             blinc_animation::set_global_scheduler(handle);
+            // The scheduler is ticking, so bound colours can ease.
+            blinc_layout::transition::enable();
         }
 
         let ref_dirty_flag: RefDirtyFlag = Arc::new(AtomicBool::new(false));

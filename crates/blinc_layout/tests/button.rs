@@ -311,3 +311,21 @@ fn a_disabled_button_matches_a_disabled_rule_and_stops_when_enabled() {
     s.frame();
     assert_eq!(opacity(&s), 1.0);
 }
+
+/// With transitions on, a hover eases the fill instead of jumping, and the
+/// ticks end on the hover colour.
+#[test]
+fn a_hover_eases_the_fill_when_transitions_are_on() {
+    let _g = init();
+    blinc_layout::transition::with_transitions_enabled(|| {
+        let mut s = Scene::new(button("Go").bg_color(BLUE).hover_color(GREEN));
+        assert_eq!(s.fill(), BLUE);
+
+        s.hover();
+        assert_eq!(s.fill(), BLUE, "the hover colour landed at once");
+
+        blinc_layout::transition::tick(10_000.0);
+        s.frame();
+        assert_eq!(s.fill(), GREEN, "the ticks did not reach the hover colour");
+    });
+}
