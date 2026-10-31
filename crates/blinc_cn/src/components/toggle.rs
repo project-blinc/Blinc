@@ -30,7 +30,7 @@ use blinc_core::State;
 use blinc_layout::div::ElementBuilder;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::toggle as layout_toggle;
-use blinc_theme::{ThemeState, TypographyTokens};
+use blinc_theme::TypographyTokens;
 use std::sync::Arc;
 
 /// Toggle visual variants (matches shadcn/ui Toggle).
@@ -54,8 +54,12 @@ impl ToggleVariant {
         }
     }
 
-    fn bordered_off(self) -> bool {
-        matches!(self, ToggleVariant::Outline)
+    /// The `data-variant` the toggle's rules select on.
+    pub(crate) fn data_value(self) -> &'static str {
+        match self {
+            ToggleVariant::Default => "default",
+            ToggleVariant::Outline => "outline",
+        }
     }
 }
 
@@ -119,6 +123,15 @@ impl ToggleSize {
         }
     }
 
+    /// The `data-size` the toggle's rules select on.
+    pub(crate) fn data_value(self) -> &'static str {
+        match self {
+            ToggleSize::Small => "sm",
+            ToggleSize::Medium => "md",
+            ToggleSize::Large => "lg",
+        }
+    }
+
     fn css_class(self) -> &'static str {
         match self {
             ToggleSize::Small => "cn-toggle--sm",
@@ -148,18 +161,15 @@ pub struct Toggle {
 
 impl Toggle {
     fn from_config(config: ToggleConfig) -> Self {
-        let theme = ThemeState::get();
-        let typography = theme.typography();
-
+        // The look is the `.blinc-toggle` rules; the variant and size select
+        // among them as attributes, as ashui's stylesheet does.
         let mut inner = layout_toggle::toggle(&config.state)
             .class("cn-toggle")
             .class(config.variant.css_class())
             .class(config.size.css_class())
-            .height(config.size.height())
-            .padding_x(config.size.padding_x())
+            .variant(config.variant.data_value())
+            .size(config.size.data_value())
             .icon_size(config.size.icon_size())
-            .label_font_size(config.size.font_size(&typography))
-            .bordered_off(config.variant.bordered_off())
             .disabled(config.disabled);
 
         if let Some(label) = config.label {

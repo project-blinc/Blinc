@@ -8,6 +8,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - `@layer name { ... }` in stylesheets: its class rules sit below every unlayered rule regardless of specificity. `CN_STYLES` is wrapped in one, so an app stylesheet themes cn components whichever was added first.
 
 ### Changed
+- `Toggle` is one element carrying `data-state`, `checked`, `data-variant`, `data-size` and `disabled`; its look is the `.blinc-toggle` rules of `ua_styles::UA_STYLES`. `height`, `padding_x`, `label_font_size`, `rounded`, `border_width`, `bordered_off`, `off_bg`, `on_bg`, `off_fg`, `on_fg` and `border_color` are removed; use `variant`, `size` and rules.
 - `Button` takes its looks from selectors. `:hover`, `:active` and `:disabled` rules, with CSS `transition`, restyle it; `button()` starts from the `.blinc-button` rules of `ua_styles::UA_STYLES`, which the runners register. `hover_color`, `pressed_color`, `disabled_color`, `disabled_text_color`, `disabled_border`, `flat_when_disabled`, `ButtonConfig` and `ButtonLook::text_color` are removed; write rules instead. `bg_color` and `text_color` stay as fixed values.
 - A rule in the `components` layer gives way to a value the element set with a fluent call.
 - `:active` matches the pressed element and its ancestors, as on the web.

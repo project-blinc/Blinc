@@ -2,9 +2,10 @@
 //! selection state. Mirrors shadcn/ui's `<ToggleGroup>` for the
 //! `type="single"` case (radio-style — one value at a time).
 //!
-//! Compositional: each item is built once, its fill bound to whether
-//! `group_state` holds the item's value and to the item's hover and press.
-//! Same theme-token defaults as `cn::toggle`.
+//! Compositional: each item is an element with `data-state` on while
+//! `group_state` holds its value, so its look is the `.blinc-toggle` rules of
+//! `blinc_layout::ua_styles`, the same as `cn::toggle`; the group sets
+//! `data-variant` and `data-size` for its items.
 //!
 //! # Example
 //!
@@ -92,7 +93,8 @@ struct ToggleGroupConfig {
     variant: ToggleVariant,
     size: ToggleSize,
     disabled: bool,
-    gap: f32,
+    /// Set by `.gap(..)`; the group's rules give 4px otherwise.
+    gap: Option<f32>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
 }
 
@@ -105,9 +107,14 @@ impl ToggleGroup {
     fn with_config(instance_key: &InstanceKey, config: ToggleGroupConfig) -> Self {
         let mut row = div()
             .class("cn-toggle-group")
+            .class("blinc-toggle-group")
+            .attr("data-variant", config.variant.data_value())
+            .attr("data-size", config.size.data_value())
             .flex_row()
-            .gap(config.gap)
             .items_center();
+        if let Some(gap) = config.gap {
+            row = row.gap(gap);
+        }
 
         for item in &config.items {
             row = row.child(build_item(instance_key, &config, item));
@@ -118,7 +125,7 @@ impl ToggleGroup {
 }
 
 fn build_item(
-    instance_key: &InstanceKey,
+    _instance_key: &InstanceKey,
     config: &ToggleGroupConfig,
     item: &ToggleItem,
 ) -> impl ElementBuilder + 'static {
@@ -129,94 +136,40 @@ fn build_item(
     let item_label = item.label.clone();
     let item_icon = item.icon.clone();
     let item_disabled = item.disabled || config.disabled;
-    let variant = config.variant;
-    let size = config.size;
     let on_change = config.on_change.clone();
-
-    let height = size.height();
-    let padding_x = size.padding_x();
-    let icon_size = size.icon_size();
-    let font_size_token = size.font_size(&ThemeState::get().typography());
-
-    let key = instance_key.derive(&item.value);
+    let icon_size = config.size.icon_size();
     let _ = item.aria_label.clone(); // future a11y plumb
 
-    let theme = ThemeState::get();
-    // Match `cn::toggle`'s per-size radius — Small uses `radius_sm`, Medium /
-    // Large use `radius_default`, so a Small icon item is rounded like a
-    // matching Small standalone toggle (which picks up `radius_sm` via the
-    // `.cn-toggle--sm` CSS rule).
-    let radius = theme.radius(size.radius_token());
-    let surface = theme.color(ColorToken::Background);
-    let text_primary = theme.color(ColorToken::TextPrimary);
-
-    let on_bg = mix(surface, text_primary, 0.10);
-    let off_bg = Color::TRANSPARENT;
-    let border_color = theme.color(ColorToken::BorderSecondary);
-    let fg = text_primary;
-
-    // The fill follows the group's value and the item's hover and press, so
-    // a change patches the node instead of rebuilding it.
-    let interaction = Interaction::keyed(&key);
-    let (group, hovered, pressed) = (
-        group_state.signal(),
-        interaction.hovered().signal(),
-        interaction.pressed().signal(),
-    );
-    let bg = computed(move |g: &ReactiveGraph| {
-        let is_on = g.get(group).unwrap_or_default() == item_value;
-        let is_hovered = g.get(hovered).unwrap_or(false);
-        let is_pressed = g.get(pressed).unwrap_or(false);
-        if is_on {
-            if is_pressed && !item_disabled {
-                mix(on_bg, text_primary, 0.08)
-            } else if is_hovered && !item_disabled {
-                mix(on_bg, text_primary, 0.04)
-            } else {
-                on_bg
-            }
-        } else if is_pressed && !item_disabled {
-            mix(off_bg, text_primary, 0.10)
-        } else if is_hovered && !item_disabled {
-            mix(off_bg, text_primary, 0.05)
-        } else {
-            off_bg
-        }
-    });
+    // On while the group holds this item's value; the rules do the rest.
+    let group = group_state.signal();
+    let is_on = {
+        let value = item_value.clone();
+        computed(move |g: &ReactiveGraph| g.get(group).unwrap_or_default() == value)
+    };
+    let is_off = {
+        let value = item_value;
+        computed(move |g: &ReactiveGraph| g.get(group).unwrap_or_default() != value)
+    };
 
     let mut body = div()
-        .h(height)
-        .padding_x(units::px(padding_x))
-        .flex_row()
-        .items_center()
-        .justify_center()
-        .gap(6.0)
-        .bg(&bg)
-        .rounded(radius)
-        .cursor_pointer()
-        .track(&interaction);
-
-    if matches!(variant, ToggleVariant::Outline) {
-        body = body.border(1.0, border_color);
+        .class("blinc-toggle")
+        .class("cn-toggle")
+        .attr_when("data-state", "on", &is_on)
+        .attr_when("data-state", "off", &is_off)
+        .attr_when("checked", "", &is_on)
+        .cursor_pointer();
+    if item_disabled {
+        body = body.attr("disabled", "");
     }
 
     if let Some(ref icon_svg) = item_icon {
-        body = body.child(
-            svg(icon_svg)
-                .size(icon_size, icon_size)
-                .color(fg)
-                .internal(),
-        );
+        body = body.child(svg(icon_svg).size(icon_size, icon_size).internal());
     }
     if let Some(ref label_text) = item_label {
-        body = body.child(text(label_text).size(font_size_token).color(fg));
+        body = body.child(text(label_text));
     }
-    if item_disabled {
-        body = body.opacity(0.5);
-    }
-    let mut item_el = body;
 
-    item_el = item_el.on_click(move |_| {
+    body.on_click(move |_| {
         if item_disabled {
             return;
         }
@@ -230,26 +183,7 @@ fn build_item(
                 cb(&item_value_for_click);
             }
         }
-    });
-
-    item_el
-}
-
-/// Porter-Duff "over" with the source alpha scaled by `amount`.
-/// See `blinc_layout::widgets::toggle::mix` for the rationale — same
-/// logic, kept inline here to avoid a public re-export of a 10-line
-/// helper.
-fn mix(bottom: Color, top: Color, amount: f32) -> Color {
-    let src_a = amount.clamp(0.0, 1.0) * top.a;
-    let bg_a = bottom.a;
-    let out_a = src_a + bg_a * (1.0 - src_a);
-    if out_a < 1.0e-6 {
-        return Color::rgba(0.0, 0.0, 0.0, 0.0);
-    }
-    let r = (top.r * src_a + bottom.r * bg_a * (1.0 - src_a)) / out_a;
-    let g = (top.g * src_a + bottom.g * bg_a * (1.0 - src_a)) / out_a;
-    let b = (top.b * src_a + bottom.b * bg_a * (1.0 - src_a)) / out_a;
-    Color::rgba(r, g, b, out_a)
+    })
 }
 
 impl ElementBuilder for ToggleGroup {
@@ -308,7 +242,7 @@ impl ToggleGroupBuilder {
                 variant: ToggleVariant::default(),
                 size: ToggleSize::default(),
                 disabled: false,
-                gap: 4.0,
+                gap: None,
                 on_change: None,
             },
             built: std::cell::OnceCell::new(),
@@ -366,7 +300,7 @@ impl ToggleGroupBuilder {
     }
 
     pub fn gap(mut self, gap: f32) -> Self {
-        self.config.gap = gap;
+        self.config.gap = Some(gap);
         self
     }
 

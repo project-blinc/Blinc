@@ -615,22 +615,10 @@ pub const CN_STYLES: &str = concat!(
    Toggle (binary on/off button — shadcn `<Toggle>`)
    ============================================================================ */
 
-/* Layout widget already paints bg / border / fg from theme tokens.
-   The cn rules here just add the variant + size hooks and the hover /
-   active state-rule wiring users can extend via `.cn-toggle:hover` /
-   `.cn-toggle--pressed` overrides. Don't redeclare bg/border here —
-   the layout widget's setters would get clobbered. */
-.cn-toggle {
-    border-radius: var(--radius-default);
-    cursor: pointer;
-    transition:
-        background var(--duration-fast) var(--ease-state),
-        border-color var(--duration-fast) var(--ease-state),
-        color var(--duration-fast) var(--ease-state);
-}
-.cn-toggle--sm { border-radius: var(--radius-sm); }
-.cn-toggle--md { border-radius: var(--radius-default); }
-.cn-toggle--lg { border-radius: var(--radius-default); }
+/* The look is the layout toggle's `.blinc-toggle` rules (fill by state, the
+   outline variant, the size ladder), selected by `data-state`, `data-variant`
+   and `data-size`. `.cn-toggle` and its variant and size classes are hooks for
+   an app's own rules. */
 
 /* ============================================================================
    Radio
