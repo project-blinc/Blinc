@@ -333,7 +333,7 @@ option 0 ring: div | fill - | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00
 option 0 dot: div | fill 0.490,0.659,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
 option 0 label: text "Alpha" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
 option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
-option 1 ring: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 1 ring: div | fill - | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
 option 1 dot: none
 option 1 label: text "Beta" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
 option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
@@ -346,7 +346,7 @@ option 0 ring: div | fill - | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00
 option 0 dot: div | fill 0.490,0.659,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
 option 0 label: text "Alpha" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
 option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
-option 1 ring: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 1 ring: div | fill - | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
 option 1 dot: none
 option 1 label: text "Beta" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
 option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
@@ -359,7 +359,7 @@ option 0 ring: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00
 option 0 dot: none
 option 0 label: text "Alpha" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
 option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
-option 1 ring: div | fill - | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 1 ring: div | fill - | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
 option 1 dot: div | fill 0.490,0.659,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
 option 1 label: text "Beta" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
 option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
@@ -385,7 +385,7 @@ option 0 ring: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00
 option 0 dot: none
 option 0 label: text "Alpha" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
 option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
-option 1 ring: div | fill - | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 1 ring: div | fill - | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
 option 1 dot: div | fill 0.490,0.659,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
 option 1 label: text "Beta" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
 option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
@@ -398,8 +398,8 @@ option 0 ring: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00
 option 0 dot: none
 option 0 label: text "Alpha" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
 option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
-option 1 ring: div | fill - | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
-option 1 dot: div | fill 0.490,0.659,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
+option 1 ring: div | fill - | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
+option 1 dot: div | fill 0.490,0.659,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale Affine2D(Affine2D { elements: [0.8, 0.0, 0.0, 0.8, 0.0, 0.0] }) | 8.0x8.0
 option 1 label: text "Beta" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
 option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
 option 2 ring: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
@@ -411,7 +411,7 @@ option 0 ring: div | fill - | border 0.227,0.251,0.333,1.000 w2.0 | opacity 1.00
 option 0 dot: none
 option 0 label: text "Alpha" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 39.0x16.0
 option 1 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0
-option 1 ring: div | fill - | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale - | 18.0x18.0
+option 1 ring: div | fill - | border 0.490,0.659,1.000,1.000 w2.0 | opacity 1.00 | radius 9.0 | scale Affine2D(Affine2D { elements: [1.05, 0.0, 0.0, 1.05, 0.0, 0.0] }) | 18.0x18.0
 option 1 dot: div | fill 0.490,0.659,1.000,1.000 | border - | opacity 1.00 | radius 4.0 | scale - | 8.0x8.0
 option 1 label: text "Beta" color 0.925,0.933,0.957,1.000 size 14.0 | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 31.0x16.0
 option 2 row: div | fill - | border - | opacity 1.00 | radius 0.0 | scale - | 73.0x18.0

@@ -636,34 +636,44 @@ pub const CN_STYLES: &str = concat!(
    Radio
    ============================================================================ */
 
+/* The ring is the element; its border colour, the dot and the disabled fill
+   follow its `checked` and `disabled` attributes. Border width is set in Rust
+   because it varies per size. */
 .cn-radio {
-    border: 2px solid var(--cn-radio-border, var(--border-secondary));
+    background: transparent;
+    border-color: var(--cn-radio-border, var(--border-secondary));
     border-radius: var(--radius-full);
     cursor: pointer;
     transition:
         border-color var(--duration-fast) var(--ease-state),
         transform var(--duration-fastest) var(--ease-state);
 }
-/* `:not(--disabled)` matches what the widget itself does: it gates both
-   the accent border and the scale on the option being reachable. Without
-   it a disabled dial lit up and grew under the pointer, and the scale
-   arrived as a state style on an already-built node rather than at build
-   time, which smeared. */
-.cn-radio:hover:not(.cn-radio--disabled) {
+/* `:not(:disabled)` gates both the accent border and the scale on the option
+   being reachable: a disabled dial must not light up or grow under the
+   pointer. */
+.cn-radio:hover:not(:disabled) {
     border-color: var(--cn-radio-hover-border, var(--primary));
     transform: scale(1.05, 1.05);
 }
-.cn-radio--selected {
-    border-color: var(--cn-radio-selected, var(--primary));
+.cn-radio:checked { border-color: var(--cn-radio-selected, var(--primary)); }
+/* A disabled ring takes the disabled-surface palette shared with the button,
+   select, checkbox and switch. */
+.cn-radio:disabled {
+    background: var(--input-bg-disabled);
+    border-color: var(--border-secondary);
 }
 .cn-radio-dot {
     background: var(--cn-radio-dot, var(--primary));
     border-radius: var(--radius-full);
-    transition: transform var(--duration-fastest) var(--ease-state);
+    opacity: 0;
+    transition:
+        opacity var(--duration-fast) var(--ease-state),
+        transform var(--duration-fastest) var(--ease-state);
 }
+.cn-radio:checked > .cn-radio-dot { opacity: 1; }
 /* Press feedback. The widget used to do this from an FSM, which meant a
    rebuild per pointer transition; here it costs nothing. */
-.cn-radio:active:not(.cn-radio--disabled) .cn-radio-dot {
+.cn-radio:active:not(:disabled) .cn-radio-dot {
     transform: scale(0.8, 0.8);
 }
 .cn-radio--disabled {

@@ -17,11 +17,13 @@ fn describe_radio(tree: &RenderTree, group: LayoutNodeId, out: &mut String) {
         let parts = tree.layout_tree.children(row);
         let _ = writeln!(out, "option {i} row: {}", node_line(tree, row));
         let _ = writeln!(out, "option {i} ring: {}", node_line(tree, parts[0]));
-        let dot = tree
-            .layout_tree
-            .children(parts[0])
-            .into_iter()
-            .find(|d| !tree.layout_tree.is_display_none(*d));
+        let dot = tree.layout_tree.children(parts[0]).into_iter().find(|d| {
+            // Hidden by display, or faded out by a rule.
+            !tree.layout_tree.is_display_none(*d)
+                && tree
+                    .get_render_node(*d)
+                    .is_some_and(|n| n.props.opacity > 0.0)
+        });
         let _ = writeln!(
             out,
             "option {i} dot: {}",
@@ -44,6 +46,25 @@ fn scenario(
     let mut h = Harness::new(widget, vec![selected.signal_id()], describe_radio);
     h.in_place = in_place;
     // Option b: the ring of the second row.
+    let at = h.center(&[1, 0]);
+    h.walk(at, (300.0, 180.0));
+    format!("######## {name}\n{}", h.out)
+}
+
+/// A cn widget under cn's stylesheet, which its looks are made of.
+fn cn_scenario(
+    name: &str,
+    build: impl FnOnce(&blinc_core::reactive::State<String>) -> Box<dyn ElementBuilder>,
+) -> String {
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let sheet =
+        Stylesheet::parse_with_variables(blinc_cn::cn_styles::CN_STYLES, &vars).expect("css");
+    set_active_stylesheet(Arc::new(sheet.clone()));
+    let selected = string_state("a");
+    let widget = build(&selected);
+    let mut h = Harness::new(widget, vec![selected.signal_id()], describe_radio);
+    h.style_with(sheet);
+    h.in_place = true;
     let at = h.center(&[1, 0]);
     h.walk(at, (300.0, 180.0));
     format!("######## {name}\n{}", h.out)
@@ -84,7 +105,7 @@ fn a_radio_group_looks_the_same_in_every_state() {
                 )
             },
         );
-        out += &scenario("cn", "", true, |s| {
+        out += &cn_scenario("cn", |s| {
             Box::new(
                 blinc_cn::radio_group(s)
                     .option("a", "Alpha")

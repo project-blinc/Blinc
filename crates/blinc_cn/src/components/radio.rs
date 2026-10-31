@@ -1,6 +1,13 @@
 //! Radio Group component for single-selection from multiple options
 //!
-//! A themed radio button group with smooth selection transitions.
+//! A themed radio button group. Each button is an element with a `checked`
+//! attribute while it is selected and `disabled` while it cannot be chosen, so
+//! its look in each state, and how it eases between them, is the `.cn-radio`
+//! rules of `CN_STYLES`. Restyle it with rules of your own:
+//!
+//! ```css
+//! .my-radio:checked { border-color: #16a34a; }
+//! ```
 //! Uses `State<String>` from context for reactive state management.
 //!
 //! # Example
@@ -39,13 +46,11 @@
 //!     .option("b", "Option B")
 //! ```
 
+use blinc_core::State;
 use blinc_core::reactive::{ReactiveGraph, computed};
-use blinc_core::{Color, State};
 use blinc_layout::InstanceKey;
-use blinc_layout::css_parser::{ElementState, Stylesheet, active_stylesheet};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
-use blinc_layout::element_style::ElementStyle;
 use blinc_layout::prelude::*;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_theme::{ColorToken, SpacingToken, ThemeState};
@@ -194,17 +199,6 @@ fn build_radio_button(
     let inner_size = config.size.inner_size();
     let border_width = config.size.border_width();
 
-    // Get colors
-    let selected_color = config
-        .selected_color
-        .unwrap_or_else(|| theme.color(ColorToken::Primary));
-    let border = config
-        .border_color
-        .unwrap_or_else(|| theme.color(ColorToken::BorderSecondary));
-    let hover_border = config
-        .hover_border_color
-        .unwrap_or_else(|| theme.color(ColorToken::Primary));
-
     let option_value = option.value.clone();
     let option_disabled = option.disabled || config.disabled;
     let option_label = option.label.clone();
@@ -219,40 +213,15 @@ fn build_radio_button(
         theme.color(ColorToken::TextPrimary)
     };
 
-    // Hover and press belong to CSS (`.cn-radio:hover` / `:active`), so
-    // nothing here follows the pointer. What the selected value changes is
-    // bound: each part is a computed over it, so a change patches the nodes
-    // instead of rebuilding the option.
-    let ctx = Arc::new(RadioContext {
-        option_value,
-        option_disabled,
-        css_id: button_css_id.clone(),
-        selected_color,
-        border,
-        hover_border,
-        label_color,
-        disabled_border: theme.color(ColorToken::BorderSecondary),
-        disabled_bg: theme.color(ColorToken::InputBgDisabled),
-    });
+    // Hover, press, selection and disabled belong to CSS (`.cn-radio:hover`,
+    // `:active`, `:checked`, `:disabled`), so nothing here follows the
+    // pointer; the selection only moves the `checked` attribute, in place.
     let selected = selected_state.signal();
-    let is_selected = {
-        let ctx = Arc::clone(&ctx);
-        computed(move |g: &ReactiveGraph| g.get(selected).unwrap_or_default() == ctx.option_value)
-    };
-    macro_rules! follow {
-        ($pick:expr) => {{
-            let ctx = Arc::clone(&ctx);
-            computed(move |g: &ReactiveGraph| {
-                let look = Look::resolve(
-                    &ctx,
-                    g.get(selected).unwrap_or_default() == ctx.option_value,
-                );
-                $pick(&look)
-            })
-        }};
-    }
+    let is_selected =
+        computed(move |g: &ReactiveGraph| g.get(selected).unwrap_or_default() == option_value);
 
-    // Build the radio button circle — CSS handles scale and the rest via classes
+    // The ring is the element; the dot is always there and shown while
+    // checked. Sizes and the border width vary per size, so they are set here.
     let mut circle = div()
         .class("cn-radio")
         // Added and taken away with the selection, so the stylesheet's
@@ -263,41 +232,27 @@ fn build_radio_button(
         .h(outer_size)
         .rounded(outer_size / 2.0)
         .border_width(border_width)
-        .border_color(follow!(|l: &Look| l.border_color))
-        // The tonal disabled fill, unless a rule gives it another.
-        .bg(follow!(|l: &Look| l.background))
         .items_center()
         .justify_center()
-        // The dot is always there and shown while selected.
         .child(
             div()
                 .class("cn-radio-dot")
                 .w(inner_size)
                 .h(inner_size)
-                .rounded(inner_size / 2.0)
-                .bg(follow!(|l: &Look| l.dot_color))
-                .visible(&is_selected),
+                .rounded(inner_size / 2.0),
         );
 
     if option_disabled {
-        circle = circle.class("cn-radio--disabled");
+        circle = circle.class("cn-radio--disabled").attr("disabled", "");
     }
 
-    // Build with label. Opacity only departs from 1.0 where a CSS rule sets
-    // one: the tonal disabled palette carries the inert state itself without
-    // dimming.
     let mut radio = div()
         .flex_row()
         .gap_px(theme.spacing_value(SpacingToken::Space4))
         .items_center()
         .cursor_pointer()
-        .opacity(follow!(|l: &Look| l.opacity))
         .child(circle)
-        .child(
-            text(&option_label)
-                .size(14.0)
-                .color(follow!(|l: &Look| l.label_color)),
-        );
+        .child(text(&option_label).size(14.0).color(label_color));
 
     // Set CSS element ID for element registry matching
     if let Some(ref css_id) = button_css_id {
@@ -320,146 +275,6 @@ fn build_radio_button(
     })
 }
 
-/// What a radio button resolves its look from, apart from its selection.
-struct RadioContext {
-    option_value: String,
-    option_disabled: bool,
-    css_id: Option<String>,
-    selected_color: Color,
-    border: Color,
-    hover_border: Color,
-    label_color: Color,
-    disabled_border: Color,
-    disabled_bg: Color,
-}
-
-/// What a radio button draws for one value of its selection.
-struct Look {
-    border_color: Color,
-    background: Color,
-    dot_color: Color,
-    label_color: Color,
-    opacity: f32,
-}
-
-impl Look {
-    fn resolve(ctx: &RadioContext, is_selected: bool) -> Self {
-        // Start with builder-configured colors for CSS override resolution
-        let mut overrides = RadioStyleOverrides {
-            selected_color: ctx.selected_color,
-            border_color: ctx.border,
-            hover_border_color: ctx.hover_border,
-            label_color: ctx.label_color,
-            opacity: None,
-            background: None,
-        };
-
-        // Apply CSS overrides if we have an element ID
-        if let Some(ref css_id) = ctx.css_id {
-            if let Some(stylesheet) = active_stylesheet() {
-                apply_css_overrides_radio(
-                    &stylesheet,
-                    css_id,
-                    is_selected,
-                    ctx.option_disabled,
-                    &mut overrides,
-                );
-            }
-        }
-
-        // Border color based on state. Disabled wins over selected so
-        // the radio joins the shared disabled-surface palette
-        // (BorderSecondary outline, same as button / select / checkbox).
-        let border_color = if ctx.option_disabled {
-            ctx.disabled_border
-        } else if is_selected {
-            overrides.selected_color
-        } else {
-            overrides.border_color
-        };
-
-        // The disabled fill; a user-provided `overrides.background` wins.
-        let background = overrides.background.unwrap_or(if ctx.option_disabled {
-            ctx.disabled_bg
-        } else {
-            Color::TRANSPARENT
-        });
-
-        Self {
-            border_color,
-            background,
-            dot_color: overrides.selected_color,
-            label_color: overrides.label_color,
-            opacity: overrides.opacity.unwrap_or(1.0),
-        }
-    }
-}
-
-/// Mutable radio button style overrides, populated by CSS cascade
-struct RadioStyleOverrides {
-    selected_color: Color,
-    border_color: Color,
-    hover_border_color: Color,
-    label_color: Color,
-    opacity: Option<f32>,
-    background: Option<Color>,
-}
-
-impl RadioStyleOverrides {
-    /// Apply a single ElementStyle layer
-    fn apply(&mut self, style: &ElementStyle) {
-        if let Some(color) = style.accent_color {
-            self.selected_color = color;
-        }
-        if let Some(color) = style.border_color {
-            self.border_color = color;
-            // border_color also overrides hover_border_color
-            self.hover_border_color = color;
-        }
-        if let Some(color) = style.text_color {
-            self.label_color = color;
-        }
-        if let Some(o) = style.opacity {
-            self.opacity = Some(o);
-        }
-        if let Some(blinc_core::Brush::Solid(color)) = style.background {
-            self.background = Some(color);
-        }
-    }
-}
-
-/// Apply CSS style overrides to radio button visual properties
-///
-/// Cascading order: base → :checked → :disabled (highest priority).
-///
-/// `:hover` is absent on purpose. The stylesheet applies it directly to
-/// the element, so resolving it here too would mean rebuilding on every
-/// pointer enter and leave.
-fn apply_css_overrides_radio(
-    stylesheet: &Stylesheet,
-    element_id: &str,
-    is_selected: bool,
-    is_disabled: bool,
-    overrides: &mut RadioStyleOverrides,
-) {
-    // 1. Base style
-    if let Some(base) = stylesheet.get(element_id) {
-        overrides.apply(base);
-    }
-    // 2. :checked (if selected)
-    if is_selected {
-        if let Some(s) = stylesheet.get_with_state(element_id, ElementState::Checked) {
-            overrides.apply(s);
-        }
-    }
-    // 3. :disabled (highest priority)
-    if is_disabled {
-        if let Some(s) = stylesheet.get_with_state(element_id, ElementState::Disabled) {
-            overrides.apply(s);
-        }
-    }
-}
-
 /// Internal configuration for building a RadioGroup
 #[derive(Clone)]
 #[allow(clippy::type_complexity)]
@@ -471,9 +286,6 @@ struct RadioGroupConfig {
     label: Option<String>,
     disabled: bool,
     gap: Option<f32>,
-    selected_color: Option<Color>,
-    border_color: Option<Color>,
-    hover_border_color: Option<Color>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
     css_group_id: Option<String>,
     /// Distinguishes this group's per-option state from another
@@ -497,9 +309,6 @@ impl RadioGroupConfig {
             label: None,
             disabled: false,
             gap: None,
-            selected_color: None,
-            border_color: None,
-            hover_border_color: None,
             on_change: None,
             css_group_id: None,
             classes: Vec::new(),
@@ -620,24 +429,6 @@ impl RadioGroupBuilder {
     /// Set the gap between options
     pub fn gap(mut self, gap: f32) -> Self {
         self.config.gap = Some(gap);
-        self
-    }
-
-    /// Set the selected indicator color
-    pub fn selected_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.selected_color = Some(color.into());
-        self
-    }
-
-    /// Set the border color
-    pub fn border_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.border_color = Some(color.into());
-        self
-    }
-
-    /// Set the hover border color
-    pub fn hover_border_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.hover_border_color = Some(color.into());
         self
     }
 
