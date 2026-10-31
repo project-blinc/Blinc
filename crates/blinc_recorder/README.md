@@ -121,6 +121,8 @@ Goldens are PNGs in `.blinc/snapshots/<crate>/<os>/` at the workspace root
 records its own with `BLINC_SNAPSHOT=bless`. A missing golden fails and the
 actual and diff images are written to `failed/` beside them. A platform with
 no goldens skips, and `BLINC_SNAPSHOT=off` skips everywhere.
+`BLINC_SNAPSHOT=report` logs every difference without failing, to review a
+change across many frames at once.
 
 A headless run records like a live one. The session is the format the
 debugger opens, and it replays to the same frame:

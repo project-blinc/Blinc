@@ -289,6 +289,18 @@ impl RenderTree {
         props.is_composite_promotable() && !self.subtree_draws_outside_layer(node)
     }
 
+    /// [`Self::css_layer_bakeable`] for a transition. A transition's node
+    /// holds its final transform, which a baked layer would carry along with
+    /// the animated one the blit applies, so a transition that moves or
+    /// scales its node is painted with the animation applied instead.
+    pub(crate) fn css_transition_bakeable(
+        &self,
+        node: LayoutNodeId,
+        props: &blinc_animation::KeyframeProperties,
+    ) -> bool {
+        !props.animates_transform() && self.css_layer_bakeable(node, props)
+    }
+
     fn subtree_draws_outside_layer(&self, node: LayoutNodeId) -> bool {
         use crate::renderer::ElementType;
         let mut stack = vec![node];
@@ -405,7 +417,7 @@ impl RenderTree {
             if Self::keyframe_props_affect_layout(&trans.current_properties) {
                 return false;
             }
-            if !self.css_layer_bakeable(layout, &trans.current_properties) {
+            if !self.css_transition_bakeable(layout, &trans.current_properties) {
                 return false;
             }
         }
@@ -580,7 +592,12 @@ impl RenderTree {
                 continue;
             };
             still_playing.insert(stable_id);
-            if self.css_layer_bakeable(node_id, &props) {
+            let bakeable = if transitions {
+                self.css_transition_bakeable(node_id, &props)
+            } else {
+                self.css_layer_bakeable(node_id, &props)
+            };
+            if bakeable {
                 continue;
             }
             if let Some(render_node) = self.render_nodes.get_mut(&node_id) {

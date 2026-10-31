@@ -171,7 +171,9 @@ impl Golden {
     }
 
     /// Compare `frame` with the golden `name`, or write it when
-    /// `BLINC_SNAPSHOT=bless`. A missing golden fails.
+    /// `BLINC_SNAPSHOT=bless`. A missing golden fails. With
+    /// `BLINC_SNAPSHOT=report` a difference is logged and its images written,
+    /// and the test goes on, to see every change in one run.
     pub fn check(&self, name: &str, frame: &CapturedFrame) {
         let path = self.path(name);
         if std::env::var("BLINC_SNAPSHOT").is_ok_and(|v| v == "bless") {
@@ -195,6 +197,20 @@ impl Golden {
         Self::save(frame, &actual);
         if !diff.size_mismatch {
             Self::save(&diff_image(frame, &want, self.tolerance), &diff_path);
+        }
+        if std::env::var("BLINC_SNAPSHOT").is_ok_and(|v| v == "report") {
+            eprintln!(
+                "SNAPSHOT `{name}`: {} of {} pixels differ (largest channel difference {}){}",
+                diff.differing,
+                diff.total,
+                diff.max_channel,
+                if diff.size_mismatch {
+                    ", size changed"
+                } else {
+                    ""
+                },
+            );
+            return;
         }
         panic!(
             "`{name}` no longer looks as recorded: {} of {} pixels differ by more than {} (largest channel difference {}){}\nactual: {}\ndiff:   {}\ngolden: {}",

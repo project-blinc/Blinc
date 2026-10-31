@@ -11,6 +11,8 @@ All notable changes to `blinc_layout` will be documented in this file.
 - `Button` takes its looks from selectors. `:hover`, `:active` and `:disabled` rules, with CSS `transition`, restyle it; `button()` starts from the `.blinc-button` rules of `ua_styles::UA_STYLES`, which the runners register. `hover_color`, `pressed_color`, `disabled_color`, `disabled_text_color`, `disabled_border`, `flat_when_disabled`, `ButtonConfig` and `ButtonLook::text_color` are removed; write rules instead. `bg_color` and `text_color` stay as fixed values.
 - A rule in the `components` layer gives way to a value the element set with a fluent call.
 - `:active` matches the pressed element and its ancestors, as on the web.
+- A class or attribute that follows a signal restyles the node's descendants too (`.switch:checked > .thumb`), and eases through `transition` when it changes; what a node is built with does not ease. The full style pass applies such a class at mount, as `apply_stylesheet_base_styles` does.
+- A transition that moves or scales its node is painted with the animation applied, not baked into a layer: the baked layer carried the final offset and the animated one together.
 - `css!` now builds a `Stylesheet` of class, id and pseudo-class rules from CSS text. The previous `css!`, which returned one `ElementStyle`, is renamed `css_style!`.
 - `Div::style(&ElementStyle)` records its properties as the element's default tier, below an application stylesheet. `RenderProps::tiers` records which writer set each visual property; nothing reads it yet.
 

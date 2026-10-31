@@ -458,6 +458,15 @@ impl KeyframeProperties {
             || self.clip_ellipse_radii.is_some()
     }
 
+    /// Whether any 2D transform component (translate, scale, rotate) is set.
+    pub fn animates_transform(&self) -> bool {
+        self.translate_x.is_some()
+            || self.translate_y.is_some()
+            || self.scale_x.is_some()
+            || self.scale_y.is_some()
+            || self.rotate.is_some()
+    }
+
     /// Whether every property tracked here can be implemented by
     /// transforming + alpha-blending a pre-rasterized texture, with
     /// no per-frame re-rasterization required.

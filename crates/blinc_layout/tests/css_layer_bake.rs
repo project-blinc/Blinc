@@ -144,7 +144,13 @@ fn css_lifecycle_baked_sources_write_final_values_once() {
         if transition {
             let store = tree.css_anim_store();
             let mut store = store.lock().unwrap();
-            let animation = store.animations.remove(&stable).unwrap();
+            let mut animation = store.animations.remove(&stable).unwrap();
+            // A transition that moves or scales its node is not baked, so
+            // the one moved here only fades.
+            let props = &mut animation.current_properties;
+            (props.scale_x, props.scale_y) = (None, None);
+            (props.translate_x, props.translate_y) = (None, None);
+            props.rotate = None;
             store.transitions.insert(stable, animation);
         }
         tree.apply_all_css_animation_props();
@@ -173,4 +179,56 @@ fn css_lifecycle_baked_sources_write_final_values_once() {
         tree.apply_all_css_transition_props();
         assert_eq!(tree.get_render_node(panel).unwrap().props.opacity, 0.3);
     }
+}
+
+/// A transition keeps the value it is heading to in the node itself, so a
+/// baked layer would carry that and the animated one together: a transition
+/// that moves or scales its node is painted with the animation applied, and a
+/// fade, which the bake handles on its own, is still baked.
+fn transition_scene(css: &str) -> (RenderTree, blinc_layout::LayoutNodeId) {
+    use blinc_layout::event_router::EventRouter;
+    let ui = div()
+        .w(400.0)
+        .h(300.0)
+        .child(div().class("thumb").w(20.0).h(20.0).bg(Color::WHITE));
+    let mut tree = RenderTree::from_element(&ui);
+    tree.set_stylesheet(Stylesheet::parse(css).expect("css"));
+    tree.apply_stylesheet_layout_overrides();
+    tree.apply_stylesheet_base_styles();
+    tree.compute_layout(400.0, 300.0);
+    let thumb = tree.layout_tree.children(tree.root().unwrap())[0];
+    let mut router = EventRouter::new();
+    let _ = router.on_mouse_move(&tree, 10.0, 10.0);
+    tree.apply_stylesheet_state_styles(&router);
+    tree.css_anim_store().lock().unwrap().tick(50.0);
+    tree.apply_all_css_transition_props();
+    let animations = std::sync::Arc::new(std::sync::Mutex::new(
+        blinc_animation::AnimationScheduler::new(),
+    ));
+    let rs = blinc_layout::render_state::RenderState::new(animations);
+    let mut ctx = blinc_core::RecordingContext::new(blinc_core::Size::new(400.0, 300.0));
+    tree.render_with_motion(&mut ctx, &rs);
+    tree.compute_animation_status();
+    (tree, thumb)
+}
+
+#[test]
+fn a_transition_that_moves_its_node_is_not_baked() {
+    let (tree, thumb) = transition_scene(
+        ".thumb { transition: transform 200ms linear }\n.thumb:hover { transform: translateX(20px) }",
+    );
+    assert!(tree.css_has_active(), "the transition did not start");
+    assert!(
+        !tree.composite_promotion().contains(&thumb),
+        "the node was baked with its final offset and then moved again"
+    );
+}
+
+#[test]
+fn a_transition_that_fades_its_node_is_still_baked() {
+    let (tree, thumb) = transition_scene(
+        ".thumb { transition: opacity 200ms linear }\n.thumb:hover { opacity: 0.2 }",
+    );
+    assert!(tree.css_has_active(), "the transition did not start");
+    assert!(tree.composite_promotion().contains(&thumb));
 }

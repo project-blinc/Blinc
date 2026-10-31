@@ -1807,7 +1807,7 @@ impl RenderTree {
                 if let Some(layout) = self.stable_to_layout.get(stable).copied() {
                     candidates.insert(layout);
                     css_animating.insert(layout);
-                    if self.css_layer_bakeable(layout, &trans.current_properties) {
+                    if self.css_transition_bakeable(layout, &trans.current_properties) {
                         composite_promotion.insert(layout);
                     }
                 }

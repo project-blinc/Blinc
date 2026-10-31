@@ -16,7 +16,8 @@
 //! Goldens live in `.blinc/snapshots/<crate>/<os>/` at the workspace root and
 //! are not tracked. A missing
 //! golden fails; `BLINC_SNAPSHOT=bless` writes it. A platform with no goldens
-//! skips, and `BLINC_SNAPSHOT=off` skips everywhere.
+//! skips, and `BLINC_SNAPSHOT=off` skips everywhere. `BLINC_SNAPSHOT=report`
+//! logs every difference without failing.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};

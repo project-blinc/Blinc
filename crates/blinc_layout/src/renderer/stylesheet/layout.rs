@@ -872,6 +872,9 @@ impl RenderTree {
 
         // Auto-create scroll physics for any nodes with overflow: scroll
         self.auto_create_css_scroll_physics();
+
+        // Classes that follow a signal take the rules they match now.
+        self.sync_dynamic_classes();
     }
 
     /// Auto-create scroll physics for nodes with `overflow: scroll` set via CSS.

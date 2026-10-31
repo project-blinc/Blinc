@@ -5,9 +5,11 @@
 //! snapshot the state passes also keep), so taking the class away puts the
 //! node back by dropping the layer and applying what is left on the snapshot.
 //!
-//! Only the rules whose subject is the node itself are re-evaluated. A rule
-//! about another element that depends on this class (a descendant or sibling
-//! selector) waits for the next full style pass.
+//! The rules re-evaluated are those of the node and of its descendants, so
+//! `.switch:checked > .thumb` follows the switch. A rule that depends on the
+//! class from a sibling selector, or through `:not`, waits for the next full
+//! style pass. A node whose rules give it a `transition` eases to what the
+//! change gives it, as it does for `:hover`.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -25,12 +27,19 @@ pub(crate) struct DynamicClasses {
     /// The ones whose rules are applied, in the order they were, with the
     /// rules each added.
     applied: Vec<(Arc<str>, Vec<ElementStyle>)>,
+    /// Rules this node gained because an ancestor gained a class, by the
+    /// ancestor and the class.
+    inherited: Vec<((LayoutNodeId, Arc<str>), Vec<ElementStyle>)>,
 }
 
 impl DynamicClasses {
-    /// Every rule applied for a class, in order.
+    /// Every rule applied for a class, in order, then those an ancestor's
+    /// class brought.
     pub(crate) fn layers(&self) -> impl Iterator<Item = &ElementStyle> {
-        self.applied.iter().flat_map(|(_, styles)| styles.iter())
+        self.applied
+            .iter()
+            .flat_map(|(_, styles)| styles.iter())
+            .chain(self.inherited.iter().flat_map(|(_, styles)| styles.iter()))
     }
 }
 
@@ -54,7 +63,7 @@ impl RenderTree {
                     entry.wanted.remove(&info.class);
                 }
             }
-            self.reconcile_dynamic_classes(node);
+            self.reconcile_dynamic_classes(node, false);
         }
     }
 
@@ -66,10 +75,12 @@ impl RenderTree {
         } else {
             entry.wanted.remove(&class);
         }
-        self.reconcile_dynamic_classes(node);
+        self.reconcile_dynamic_classes(node, true);
     }
 
-    fn reconcile_dynamic_classes(&mut self, node: LayoutNodeId) {
+    /// `ease` is whether this is a change a viewer sees (a signal moved), as
+    /// against the state a node is built in.
+    fn reconcile_dynamic_classes(&mut self, node: LayoutNodeId, ease: bool) {
         let Some(stylesheet) = self.stylesheet.clone() else {
             return;
         };
@@ -80,11 +91,148 @@ impl RenderTree {
         let to_remove: Vec<Arc<str>> = applied.difference(&entry.wanted).cloned().collect();
         let to_add: Vec<Arc<str>> = entry.wanted.difference(&applied).cloned().collect();
 
-        for class in &to_remove {
-            self.remove_class_layer(node, class);
+        for class in to_remove {
+            self.remove_class_everywhere(node, &class, &stylesheet, ease);
         }
         for class in to_add {
-            self.add_class_layer(node, class, &stylesheet);
+            self.add_class_everywhere(node, class, &stylesheet, ease);
+        }
+    }
+
+    /// The node's descendants, nearest first.
+    fn descendants_of(&self, node: LayoutNodeId) -> Vec<LayoutNodeId> {
+        let mut out = Vec::new();
+        let mut queue = std::collections::VecDeque::from(self.layout_tree.children(node));
+        while let Some(next) = queue.pop_front() {
+            out.push(next);
+            queue.extend(self.layout_tree.children(next));
+        }
+        out
+    }
+
+    /// The `transition` the rules matching a node now give it, if any.
+    fn matching_transition(
+        &self,
+        node: LayoutNodeId,
+        stylesheet: &crate::css_parser::Stylesheet,
+    ) -> Option<crate::css_parser::CssTransitionSet> {
+        let rules = stylesheet.complex_rules();
+        self.matching_base_rules(node, stylesheet)
+            .into_iter()
+            .filter(|i| rules[*i].1.transition.is_some())
+            .max_by_key(|i| (Self::rule_order(&rules[*i].0, &rules[*i].1), *i))
+            .and_then(|i| rules[i].1.transition.clone())
+    }
+
+    /// Run `change` on a node, and start the transitions its `transition`
+    /// asks for between what it was and what it is.
+    fn eased(
+        &mut self,
+        node: LayoutNodeId,
+        stylesheet: &crate::css_parser::Stylesheet,
+        ease: bool,
+        change: impl FnOnce(&mut Self),
+    ) {
+        let spec = ease
+            .then(|| self.matching_transition(node, stylesheet))
+            .flatten();
+        let before = spec
+            .as_ref()
+            .and_then(|_| self.snapshot_before_keyframe_properties(node));
+        change(self);
+        if let (Some(before), Some(spec)) = (before, spec) {
+            if let Some(after) = self.snapshot_keyframe_properties(node) {
+                self.detect_and_start_transitions(node, &before, &after, &spec);
+            }
+        }
+    }
+
+    fn add_class_everywhere(
+        &mut self,
+        node: LayoutNodeId,
+        class: Arc<str>,
+        stylesheet: &crate::css_parser::Stylesheet,
+        ease: bool,
+    ) {
+        let descendants = self.descendants_of(node);
+        let before: Vec<Vec<usize>> = descendants
+            .iter()
+            .map(|d| self.matching_base_rules(*d, stylesheet))
+            .collect();
+
+        let own = node;
+        let class_for_node = Arc::clone(&class);
+        self.eased(own, stylesheet, ease, |tree| {
+            tree.add_class_layer(own, class_for_node, stylesheet)
+        });
+
+        // The classes registered on the node have changed, so the rules its
+        // descendants match may have.
+        let rules = stylesheet.complex_rules();
+        for (descendant, before) in descendants.into_iter().zip(before) {
+            let after = self.matching_base_rules(descendant, stylesheet);
+            let mut added: Vec<usize> = after.into_iter().filter(|i| !before.contains(i)).collect();
+            if added.is_empty() {
+                continue;
+            }
+            added.sort_by_key(|i| (Self::rule_order(&rules[*i].0, &rules[*i].1), *i));
+            let styles: Vec<ElementStyle> = added.into_iter().map(|i| rules[i].1.clone()).collect();
+            self.eased(descendant, stylesheet, ease, |tree| {
+                tree.keep_snapshots(descendant);
+                tree.apply_layers(descendant, styles.iter());
+                tree.dynamic_classes
+                    .entry(descendant)
+                    .or_default()
+                    .inherited
+                    .push(((node, Arc::clone(&class)), styles));
+            });
+        }
+    }
+
+    fn remove_class_everywhere(
+        &mut self,
+        node: LayoutNodeId,
+        class: &Arc<str>,
+        stylesheet: &crate::css_parser::Stylesheet,
+        ease: bool,
+    ) {
+        let key = (node, Arc::clone(class));
+        let descendants: Vec<LayoutNodeId> = self
+            .descendants_of(node)
+            .into_iter()
+            .filter(|d| {
+                self.dynamic_classes
+                    .get(d)
+                    .is_some_and(|e| e.inherited.iter().any(|(k, _)| *k == key))
+            })
+            .collect();
+
+        let own = node;
+        let class_for_node = Arc::clone(class);
+        self.eased(own, stylesheet, ease, |tree| {
+            tree.remove_class_layer(own, &class_for_node)
+        });
+        for descendant in descendants {
+            self.eased(descendant, stylesheet, ease, |tree| {
+                if let Some(entry) = tree.dynamic_classes.get_mut(&descendant) {
+                    entry.inherited.retain(|(k, _)| *k != key);
+                }
+                tree.refold_node(descendant);
+            });
+        }
+    }
+
+    /// What the node is without any class's rules, kept so it can be put back.
+    fn keep_snapshots(&mut self, node: LayoutNodeId) {
+        if !self.base_styles.contains_key(&node) {
+            if let Some(render_node) = self.render_nodes.get(&node) {
+                self.base_styles.insert(node, render_node.props.clone());
+            }
+        }
+        if !self.base_taffy_styles.contains_key(&node) {
+            if let Some(style) = self.layout_tree.get_style(node) {
+                self.base_taffy_styles.insert(node, style);
+            }
         }
     }
 
