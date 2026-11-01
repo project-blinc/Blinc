@@ -43,7 +43,7 @@ fn mount(
             .items_center()
             .justify_center()
             .child(
-                radio_group(&bound)
+                radio_group(bound.signal())
                     .size(size)
                     .disabled(disabled)
                     .option("a", "First")

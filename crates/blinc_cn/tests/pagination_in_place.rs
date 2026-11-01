@@ -4,7 +4,7 @@
 
 mod common;
 
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::{Signal, signal};
 use blinc_layout::LayoutNodeId;
 use blinc_layout::css_parser::Stylesheet;
 use blinc_layout::div::div;
@@ -19,13 +19,13 @@ const RULES: &str = ".cn-pagination-btn--active { background: #123456 } \
 struct Scene {
     tree: RenderTree,
     router: EventRouter,
-    page: State<usize>,
+    page: Signal<usize>,
 }
 
 fn scene() -> Scene {
     init();
-    let page = State::new(signal(1usize), global_graph(), global_dirty_flag());
-    let pager = blinc_cn::pagination(20, page.clone()).visible_pages(5);
+    let page = signal(1usize);
+    let pager = blinc_cn::pagination(20, page).visible_pages(5);
     let host = div().w(600.0).h(100.0).child(pager);
     let mut tree = RenderTree::from_element(&host);
     tree.set_stylesheet(Stylesheet::parse(RULES).expect("css"));

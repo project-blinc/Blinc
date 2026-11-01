@@ -44,7 +44,7 @@ fn runner(selected: &blinc_core::reactive::State<String>) -> Runner {
     rs.set_shared_motion_states(shared);
 
     let host = div().w(400.0).h(300.0).child(
-        tabs(selected)
+        tabs(selected.signal())
             .transition(TabsTransition::Fade)
             .tab("a", "Alpha", || div().w(100.0).h(40.0).child(text("alpha")))
             .tab("b", "Beta", || div().w(100.0).h(40.0).child(text("beta"))),

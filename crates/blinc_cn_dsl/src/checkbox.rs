@@ -44,7 +44,7 @@ impl CnCheckbox {
             _ => blinc_cn::CheckboxSize::Medium,
         };
         let state = bool_state(&self.checked);
-        let mut s = blinc_cn::checkbox(&state).size(size);
+        let mut s = blinc_cn::checkbox(state.signal()).size(size);
         if !self.label.is_empty() {
             s = s.label(self.label.clone());
         }

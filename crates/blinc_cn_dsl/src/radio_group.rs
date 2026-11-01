@@ -87,7 +87,7 @@ impl CnRadioGroup {
             .map(|o| o.option_value())
             .collect();
 
-        let mut b = blinc_cn::radio_group(&state)
+        let mut b = blinc_cn::radio_group(state.signal())
             .key(self.group_key(&options))
             .size(self.size())
             .layout(self.layout());

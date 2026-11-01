@@ -4,7 +4,7 @@
 
 mod common;
 
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::{Signal, signal};
 use blinc_layout::LayoutNodeId;
 use blinc_layout::div::div;
 use blinc_layout::event_router::{EventRouter, MouseButton};
@@ -14,13 +14,13 @@ use common::*;
 struct Scene {
     tree: RenderTree,
     router: EventRouter,
-    value: State<f64>,
+    value: Signal<f64>,
 }
 
 fn scene(initial: f64) -> Scene {
     init();
-    let value = State::new(signal(initial), global_graph(), global_dirty_flag());
-    let input = blinc_cn::number_input(&value)
+    let value = signal(initial);
+    let input = blinc_cn::number_input(value)
         .min(0.0)
         .max(3.0)
         .step(1.0)

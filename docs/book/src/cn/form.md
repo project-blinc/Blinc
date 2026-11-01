@@ -62,9 +62,9 @@ Segmented one-time-code input:
 ```rust
 use blinc_cn::prelude::*;
 
-let code = ctx.use_state_keyed("verification_code", || String::new());
+let code = ctx.use_signal(String::new());
 
-cn::input_otp(&code, 6)
+cn::input_otp(code, 6)
     .numeric_only(true)
     .on_complete(|code| println!("complete code: {code}"))
 ```
@@ -72,11 +72,11 @@ cn::input_otp(&code, 6)
 ### OTP Options
 
 ```rust
-cn::input_otp(&code, 6)
+cn::input_otp(code, 6)
     .numeric_only(true)
     .masked(false)
     .group_every(3)
-    .error(has_error)
+    .error(has_error)        // a bool, Signal or Computed
 ```
 
 ## Textarea
@@ -102,12 +102,12 @@ dims the field. It is styled like [Input](#input): one element with the class
 
 ## Number Input
 
-A number between a − and a +, bound to a `State<f64>`:
+A number between a − and a +, bound to a `Signal<f64>`:
 
 ```rust
-let qty = ctx.use_state_keyed("qty", || 1.0);
+let qty = ctx.use_signal(1.0);
 
-cn::number_input(&qty)
+cn::number_input(qty)
     .min(0.0)
     .max(99.0)
     .step(1.0)
@@ -127,20 +127,22 @@ rules of your own.
 
 ## Checkbox
 
-A checkbox reads and writes the `State<bool>` it is given:
+A checkbox reads and writes the `Signal<bool>` it is given:
 
 ```rust
-let accepted = ctx.use_state_keyed("accepted", || false);
+let accepted = ctx.use_signal(false);
 
-checkbox(&accepted)
+checkbox(accepted)
     .label("Accept terms and conditions")
     .on_change(|checked| println!("checked: {checked}"))
 ```
 
 ```rust
-checkbox(&accepted).size(CheckboxSize::Large)
-checkbox(&accepted).disabled(true)
+checkbox(accepted).size(CheckboxSize::Large)
+checkbox(accepted).disabled(locked)   // a bool, Signal or Computed
 ```
+
+The label takes a string, Signal or Computed too.
 
 ### Styling
 
@@ -155,22 +157,22 @@ disabled palette and the mark's fade-in are the `.cn-checkbox` rules of
 ```
 
 ```rust
-checkbox(&accepted).class("my-checkbox")
+checkbox(accepted).class("my-checkbox")
 ```
 
 ## Switch
 
 ```rust
-let dark = ctx.use_state_keyed("dark", || false);
+let dark = ctx.use_signal(false);
 
-switch(&dark)
+switch(dark)
     .label("Dark mode")
     .on_change(|on| println!("dark: {on}"))
 ```
 
 ```rust
-switch(&dark).size(SwitchSize::Small)   // Small, Medium, Large
-switch(&dark).disabled(true)
+switch(dark).size(SwitchSize::Small)   // Small, Medium, Large
+switch(dark).disabled(locked)          // a bool, Signal or Computed
 ```
 
 ### Styling
@@ -186,17 +188,17 @@ pressed. All of it is the `.cn-switch` rules of `CN_STYLES`, per size
 ```
 
 ```rust
-switch(&dark).class("my-switch")
+switch(dark).class("my-switch")
 ```
 
 ## Radio Group
 
-A group reads and writes a `State<String>` holding the selected value:
+A group reads and writes a `Signal<String>` holding the selected value:
 
 ```rust
-let size = ctx.use_state_keyed("size", || "md".to_string());
+let size = ctx.use_signal("md".to_string());
 
-radio_group(&size)
+radio_group(size)
     .label("Size")
     .option("sm", "Small")
     .option("md", "Medium")
@@ -205,10 +207,10 @@ radio_group(&size)
 ```
 
 ```rust
-radio_group(&size).horizontal()
-radio_group(&size).size(RadioSize::Large)
-radio_group(&size).option_disabled("lg", "Large")   // one option
-radio_group(&size).disabled(true)                    // all of them
+radio_group(size).horizontal()
+radio_group(size).size(RadioSize::Large)
+radio_group(size).option_disabled("lg", "Large")   // one option
+radio_group(size).disabled(locked)                  // all of them; a bool, Signal or Computed
 ```
 
 ### Styling
@@ -228,24 +230,24 @@ the `.cn-radio` and `.cn-radio-dot` rules of `CN_STYLES`:
 A button that stays pressed: a formatting toggle in a toolbar, or a filter.
 
 ```rust
-let bold = ctx.use_state_keyed("bold", || false);
+let bold = ctx.use_signal(false);
 
-toggle(&bold)
+toggle(bold)
     .label("B")
     .on_change(|on| println!("bold: {on}"))
 ```
 
 ```rust
 // An icon, with or without a label
-toggle(&bold).icon(to_svg(icons::BOLD, 16.0))
+toggle(bold).icon(to_svg(icons::BOLD, 16.0))
 
 // Outline variant: a hairline in both states
-toggle(&bold).label("B").variant(ToggleVariant::Outline)
+toggle(bold).label("B").variant(ToggleVariant::Outline)
 
 // Sizes: Small (32px), Medium (36px), Large (40px)
-toggle(&bold).label("B").size(ToggleSize::Small)
+toggle(bold).label("B").size(ToggleSize::Small)
 
-toggle(&bold).label("B").disabled(true)
+toggle(bold).label("B").disabled(locked)   // a bool, Signal or Computed
 ```
 
 ### Styling
@@ -264,18 +266,18 @@ can use them the same way:
 ```
 
 ```rust
-toggle(&bold).class("my-toggle")
+toggle(bold).class("my-toggle")
 ```
 
 ## Toggle Group
 
 A row of toggles where one value is selected, such as text alignment. The
-group reads and writes a `State<String>`:
+group reads and writes a `Signal<String>`:
 
 ```rust
-let align = ctx.use_state_keyed("align", || "left".to_string());
+let align = ctx.use_signal("left".to_string());
 
-toggle_group(&align)
+toggle_group(align)
     .variant(ToggleVariant::Outline)
     .item(toggle_item("left").label("Left"))
     .item(toggle_item("center").label("Centre"))
@@ -287,7 +289,7 @@ toggle_item("add").icon(to_svg(icons::PLUS, 16.0)).label("Add")
 ```
 
 Clicking the selected item leaves it selected; to clear the selection, set the
-state to `""` yourself. `.size(..)`, `.disabled(true)` for the group and
+signal to `""` yourself. `.size(..)`, `.disabled(..)` for the group (a bool, Signal or Computed) and
 `toggle_item(..).disabled(true)` for one item work as on a toggle.
 
 Each item is a toggle, so the rules above apply to it. The group sets
@@ -296,12 +298,12 @@ give a 4px gap; `.gap(..)` overrides it.
 
 ## Select
 
-Dropdown selection, bound to a `State<String>` holding the selected value:
+Dropdown selection, bound to a `Signal<String>` holding the selected value:
 
 ```rust
-let fruit = ctx.use_state_keyed("fruit", || String::new());
+let fruit = ctx.use_signal(String::new());
 
-cn::select(&fruit)
+cn::select(fruit)
     .label("Fruit")
     .option("apple", "Apple")
     .option("banana", "Banana")
@@ -312,7 +314,7 @@ cn::select(&fruit)
     .on_change(|value| println!("selected: {value}"))
 ```
 
-`.disabled(true)` makes the whole select inert.
+`.disabled(..)` makes the whole select inert; it takes a bool, Signal or Computed.
 
 ### Styling
 
@@ -328,12 +330,12 @@ the disabled palette. Restyle it with rules of your own:
 
 ## Combobox
 
-Searchable select, bound to a `State<String>` holding the selected value:
+Searchable select, bound to a `Signal<String>` holding the selected value:
 
 ```rust
-let framework = ctx.use_state_keyed("framework", || String::new());
+let framework = ctx.use_signal(String::new());
 
-cn::combobox(&framework)
+cn::combobox(framework)
     .option("react", "React")
     .option("vue", "Vue")
     .option_disabled("angular", "Angular")
@@ -357,13 +359,12 @@ your own.
 
 ## Slider
 
-A number picked along a track. The slider still takes a `State<f32>` or
-`State<f64>`:
+A number picked along a track, bound to a `Signal<f32>` or `Signal<f64>`:
 
 ```rust
-let volume = ctx.use_state_keyed("volume", || 50.0);
+let volume = ctx.use_signal(50.0);
 
-cn::slider(&volume)
+cn::slider(volume)
     .min(0.0)
     .max(100.0)
     .step(1.0)
@@ -452,12 +453,11 @@ use blinc_layout::widgets::text_input::{InputType, text_input_data};
 
 let name = text_input_data();
 let email = text_input_data();
-let country = ctx.use_state_keyed("country", || String::new());
-let accepted = ctx.use_state_keyed("accepted", || false);
+let country = ctx.use_signal(String::new());
+let accepted = ctx.use_signal(false);
 
 // Submit stays disabled until the terms are accepted.
-let agreed = accepted.signal();
-let blocked = computed(move |g| !g.get(agreed).unwrap_or(false));
+let blocked = computed(move |g| !g.get(accepted).unwrap_or(false));
 
 div()
     .flex_col()
@@ -471,14 +471,14 @@ div()
             .placeholder("ada@example.com"),
     )
     .child(
-        cn::select(&country)
+        cn::select(country)
             .label("Country")
             .placeholder("Select a country...")
             .option("us", "United States")
             .option("uk", "United Kingdom")
             .option("ca", "Canada"),
     )
-    .child(cn::checkbox(&accepted).label("I accept the terms and conditions"))
+    .child(cn::checkbox(accepted).label("I accept the terms and conditions"))
     .child(cn::button("Submit").disabled(blocked).on_click(|_| submit()))
 ```
 

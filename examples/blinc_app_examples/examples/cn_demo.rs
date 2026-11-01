@@ -720,10 +720,10 @@ fn form_inputs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
     let bio_state = blinc_layout::widgets::text_area::text_area_state();
 
     // Number input states for the new cn::number_input row.
-    let qty = ctx.use_state_keyed("number_qty", || 1.0);
-    let temperature = ctx.use_state_keyed("number_temp", || 22.5);
+    let qty = ctx.use_signal(1.0);
+    let temperature = ctx.use_signal(22.5);
 
-    let otp_code = ctx.use_state_keyed("otp_code", String::new);
+    let otp_code = ctx.use_signal(String::new());
 
     section_container()
         .child(section_title("Form Inputs"))
@@ -792,7 +792,7 @@ fn form_inputs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                         .gap_px(4.0)
                                         .child(cn::label("Quantity"))
                                         .child(
-                                            cn::number_input(&qty)
+                                            cn::number_input(qty)
                                                 .min(0.0)
                                                 .max(99.0)
                                                 .step(1.0)
@@ -805,7 +805,7 @@ fn form_inputs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                         .gap_px(4.0)
                                         .child(cn::label("Temperature °C"))
                                         .child(
-                                            cn::number_input(&temperature)
+                                            cn::number_input(temperature)
                                                 .min(-50.0)
                                                 .max(60.0)
                                                 .step(0.5)
@@ -822,7 +822,7 @@ fn form_inputs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                         .gap_px(4.0)
                         .child(cn::label("Verification code"))
                         .child(
-                            cn::input_otp(&otp_code, 6)
+                            cn::input_otp(otp_code, 6)
                                 .numeric_only(true)
                                 .on_complete(|code| println!("otp complete: {code}")),
                         ),
@@ -835,13 +835,13 @@ fn form_inputs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
 // ============================================================================
 
 fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
-    let checkbox1 = ctx.use_state_keyed("checkbox1", || false);
-    let checkbox2 = ctx.use_state_keyed("checkbox2", || true);
-    let checkbox3 = ctx.use_state_keyed("checkbox3", || false);
+    let checkbox1 = ctx.use_signal(false);
+    let checkbox2 = ctx.use_signal(true);
+    let checkbox3 = ctx.use_signal(false);
 
-    let switch1 = ctx.use_state_keyed("switch1", || false);
-    let switch2 = ctx.use_state_keyed("switch2", || true);
-    let switch3 = ctx.use_state_keyed("switch3", || false);
+    let switch1 = ctx.use_signal(false);
+    let switch2 = ctx.use_signal(true);
+    let switch3 = ctx.use_signal(false);
 
     // Toggle widget states. Each toggle gets its own keyed state so the
     // visual differences across variants / sizes can be observed
@@ -849,24 +849,23 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
     // `large_toggle`, making it look like Small ≠ Medium / Large
     // visually because they were actually pointing at different state
     // values.
-    let bold_on = ctx.use_state_keyed("toggle_bold", || true);
-    let italic_on = ctx.use_state_keyed("toggle_italic", || false);
-    let underline_on = ctx.use_state_keyed("toggle_underline", || false);
-    let outline_off = ctx.use_state_keyed("toggle_outline_off", || false);
-    let outline_on = ctx.use_state_keyed("toggle_outline_on", || true);
-    let small_toggle = ctx.use_state_keyed("toggle_small", || false);
-    let medium_toggle = ctx.use_state_keyed("toggle_medium", || true);
-    let large_toggle = ctx.use_state_keyed("toggle_large", || false);
-    let disabled_on = ctx.use_state_keyed("toggle_disabled_on", || true);
-    let disabled_off = ctx.use_state_keyed("toggle_disabled_off", || false);
+    let bold_on = ctx.use_signal(true);
+    let italic_on = ctx.use_signal(false);
+    let underline_on = ctx.use_signal(false);
+    let outline_off = ctx.use_signal(false);
+    let outline_on = ctx.use_signal(true);
+    let small_toggle = ctx.use_signal(false);
+    let medium_toggle = ctx.use_signal(true);
+    let large_toggle = ctx.use_signal(false);
+    let disabled_on = ctx.use_signal(true);
+    let disabled_off = ctx.use_signal(false);
 
     // Toggle group: single-select text-alignment picker. The shared
-    // `State<String>` carries the current choice; each item flips it.
-    let text_align = ctx.use_state_keyed("toggle_group_align", || "left".to_string());
+    // `Signal<String>` carries the current choice; each item flips it.
+    let text_align = ctx.use_signal("left".to_string());
     // Same group, Outline variant — same state, second instance to
     // exercise the variant + shared-state pattern.
-    let text_align_outline =
-        ctx.use_state_keyed("toggle_group_align_outline", || "center".to_string());
+    let text_align_outline = ctx.use_signal("center".to_string());
 
     // Canonical Lucide icons re-exported through `blinc_cn::prelude`
     // (`icons` + `to_svg`). The helper wraps each path in a proper
@@ -894,18 +893,18 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                 div()
                     .flex_col()
                     .gap(12.0)
-                    .child(cn::checkbox(&checkbox1).label("Accept terms"))
-                    .child(cn::checkbox(&checkbox2).label("Checked by default"))
-                    .child(cn::checkbox(&checkbox3).label("Disabled").disabled(true)),
+                    .child(cn::checkbox(checkbox1).label("Accept terms"))
+                    .child(cn::checkbox(checkbox2).label("Checked by default"))
+                    .child(cn::checkbox(checkbox3).label("Disabled").disabled(true)),
             )
             // Switches
             .child(
                 div()
                     .flex_col()
                     .gap(12.0)
-                    .child(cn::switch(&switch1).label("Notifications"))
-                    .child(cn::switch(&switch2).label("Dark mode"))
-                    .child(cn::switch(&switch3).label("Disabled").disabled(true)),
+                    .child(cn::switch(switch1).label("Notifications"))
+                    .child(cn::switch(switch2).label("Dark mode"))
+                    .child(cn::switch(switch3).label("Disabled").disabled(true)),
             )
             // Toggle component: icon-only toolbar + variant / size matrix.
             .child(
@@ -925,17 +924,17 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                     .flex_row()
                                     .gap(4.0)
                                     .child(
-                                        cn::toggle(&bold_on)
+                                        cn::toggle(bold_on)
                                             .icon(&icon_bold)
                                             .aria_label("Toggle bold"),
                                     )
                                     .child(
-                                        cn::toggle(&italic_on)
+                                        cn::toggle(italic_on)
                                             .icon(&icon_italic)
                                             .aria_label("Toggle italic"),
                                     )
                                     .child(
-                                        cn::toggle(&underline_on)
+                                        cn::toggle(underline_on)
                                             .icon(&icon_underline)
                                             .aria_label("Toggle underline"),
                                     ),
@@ -952,15 +951,15 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                 div()
                                     .flex_row()
                                     .gap(8.0)
-                                    .child(cn::toggle(&small_toggle).label("Default"))
-                                    .child(cn::toggle(&medium_toggle).label("Default"))
+                                    .child(cn::toggle(small_toggle).label("Default"))
+                                    .child(cn::toggle(medium_toggle).label("Default"))
                                     .child(
-                                        cn::toggle(&outline_off)
+                                        cn::toggle(outline_off)
                                             .variant(cn::ToggleVariant::Outline)
                                             .label("Outline"),
                                     )
                                     .child(
-                                        cn::toggle(&outline_on)
+                                        cn::toggle(outline_on)
                                             .variant(cn::ToggleVariant::Outline)
                                             .label("Outline"),
                                     ),
@@ -979,13 +978,13 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                     .gap(8.0)
                                     .items_center()
                                     .child(
-                                        cn::toggle(&small_toggle)
+                                        cn::toggle(small_toggle)
                                             .size(cn::ToggleSize::Small)
                                             .label("Small"),
                                     )
-                                    .child(cn::toggle(&medium_toggle).label("Medium"))
+                                    .child(cn::toggle(medium_toggle).label("Medium"))
                                     .child(
-                                        cn::toggle(&large_toggle)
+                                        cn::toggle(large_toggle)
                                             .size(cn::ToggleSize::Large)
                                             .label("Large"),
                                     ),
@@ -1002,12 +1001,12 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                     .flex_row()
                                     .gap(8.0)
                                     .child(
-                                        cn::toggle(&disabled_on)
+                                        cn::toggle(disabled_on)
                                             .label("On (disabled)")
                                             .disabled(true),
                                     )
                                     .child(
-                                        cn::toggle(&disabled_off)
+                                        cn::toggle(disabled_off)
                                             .variant(cn::ToggleVariant::Outline)
                                             .label("Off (disabled)")
                                             .disabled(true),
@@ -1023,7 +1022,7 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             .gap(4.0)
                             .child(row_caption("Group (single-select)"))
                             .child(
-                                cn::toggle_group(&text_align)
+                                cn::toggle_group(text_align)
                                     .size(cn::ToggleSize::Small)
                                     .item(cn::toggle_item("left").icon(&icon_align_left))
                                     .item(cn::toggle_item("center").icon(&icon_align_center))
@@ -1031,7 +1030,7 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                     .item(cn::toggle_item("justify").icon(&icon_align_justify)),
                             )
                             .child(
-                                cn::toggle_group(&text_align_outline)
+                                cn::toggle_group(text_align_outline)
                                     .variant(cn::ToggleVariant::Outline)
                                     .size(cn::ToggleSize::Small)
                                     .item(cn::toggle_item("left").icon(&icon_align_left))
@@ -1049,9 +1048,9 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
 // ============================================================================
 
 fn slider_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
-    let volume = ctx.use_state_keyed("volume", || 0.5);
-    let brightness = ctx.use_state_keyed("brightness", || 75.0);
-    let disabled_slider = ctx.use_state_keyed("disabled_slider", || 0.3);
+    let volume = ctx.use_signal(0.5);
+    let brightness = ctx.use_signal(75.0);
+    let disabled_slider = ctx.use_signal(0.3);
 
     section_container().child(section_title("Sliders")).child(
         div()
@@ -1063,11 +1062,11 @@ fn slider_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                 div()
                     .h_fit()
                     .w(300.0)
-                    .child(cn::slider(&volume).label("Volume").show_value()),
+                    .child(cn::slider(volume).label("Volume").show_value()),
             )
             .child(
                 div().h_fit().w(300.0).child(
-                    cn::slider(&brightness)
+                    cn::slider(brightness)
                         .label("Brightness")
                         .min(0.0)
                         .max(100.0)
@@ -1076,11 +1075,10 @@ fn slider_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                 ),
             )
             .child(
-                div().h_fit().w(300.0).child(
-                    cn::slider(&disabled_slider)
-                        .label("Disabled")
-                        .disabled(true),
-                ),
+                div()
+                    .h_fit()
+                    .w(300.0)
+                    .child(cn::slider(disabled_slider).label("Disabled").disabled(true)),
             ),
     )
 }
@@ -1155,8 +1153,8 @@ fn gauges_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
 // ============================================================================
 
 fn radio_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
-    let size_choice = ctx.use_state_keyed("size_choice", || "medium".to_string());
-    let color_choice = ctx.use_state_keyed("color_choice", || "blue".to_string());
+    let size_choice = ctx.use_signal("medium".to_string());
+    let color_choice = ctx.use_signal("blue".to_string());
 
     section_container()
         .child(section_title("Radio Groups"))
@@ -1167,7 +1165,7 @@ fn radio_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                 .gap(48.0)
                 // Vertical layout
                 .child(
-                    cn::radio_group(&size_choice)
+                    cn::radio_group(size_choice)
                         .label("Select Size")
                         .option("small", "Small")
                         .option("medium", "Medium")
@@ -1175,7 +1173,7 @@ fn radio_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                 )
                 // Horizontal layout
                 .child(
-                    cn::radio_group(&color_choice)
+                    cn::radio_group(color_choice)
                         .label("Select Color")
                         .horizontal()
                         .option("red", "Red")
@@ -1190,9 +1188,9 @@ fn radio_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
 // ============================================================================
 
 fn select_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
-    let fruit = ctx.use_state_keyed("fruit_select", || "".to_string());
-    let size = ctx.use_state_keyed("size_select", || "medium".to_string());
-    let disabled_select = ctx.use_state_keyed("disabled_select", || "option1".to_string());
+    let fruit = ctx.use_signal(String::new());
+    let size = ctx.use_signal("medium".to_string());
+    let disabled_select = ctx.use_signal("option1".to_string());
 
     section_container().child(section_title("Select")).child(
         div()
@@ -1203,7 +1201,7 @@ fn select_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             .gap(4.0)
             // Basic select with placeholder
             .child(
-                cn::select(&fruit)
+                cn::select(fruit)
                     .label("Favorite Fruit")
                     .placeholder("Choose a fruit...")
                     .option("apple", "Apple")
@@ -1215,7 +1213,7 @@ fn select_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             )
             // Select with pre-selected value
             .child(
-                cn::select(&size)
+                cn::select(size)
                     .label("Size")
                     .option("small", "Small")
                     .option("medium", "Medium")
@@ -1224,7 +1222,7 @@ fn select_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             )
             // Disabled select
             .child(
-                cn::select(&disabled_select)
+                cn::select(disabled_select)
                     .label("Disabled")
                     .option("option1", "Option 1")
                     .option("option2", "Option 2")
@@ -1238,9 +1236,9 @@ fn select_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
 // ============================================================================
 
 fn combobox_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
-    let country = ctx.use_state_keyed("country_combobox", || "".to_string());
-    let framework = ctx.use_state_keyed("framework_combobox", || "".to_string());
-    let custom_value = ctx.use_state_keyed("custom_combobox", || "".to_string());
+    let country = ctx.use_signal(String::new());
+    let framework = ctx.use_signal(String::new());
+    let custom_value = ctx.use_signal(String::new());
 
     section_container().child(section_title("Combobox")).child(
         div()
@@ -1252,7 +1250,7 @@ fn combobox_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             .w_full()
             // Basic searchable combobox
             .child(
-                cn::combobox(&country)
+                cn::combobox(country)
                     .label("Country")
                     .placeholder("Search countries...")
                     .option("us", "United States")
@@ -1267,7 +1265,7 @@ fn combobox_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             )
             // Combobox with more options
             .child(
-                cn::combobox(&framework)
+                cn::combobox(framework)
                     .label("Framework")
                     .placeholder("Search frameworks...")
                     .option("react", "React")
@@ -1281,7 +1279,7 @@ fn combobox_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             )
             // Combobox with custom values allowed
             .child(
-                cn::combobox(&custom_value)
+                cn::combobox(custom_value)
                     .label("Custom Allowed")
                     .placeholder("Type anything...")
                     .option("preset1", "Preset Option 1")
@@ -2066,7 +2064,7 @@ fn progress_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
 
 fn tabs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
     // Simple tabs state
-    let simple_tab = ctx.use_state_keyed("simple_tab", || "tab1".to_string());
+    let simple_tab = ctx.use_signal("tab1".to_string());
 
     section_container().child(section_title("Tabs")).child(
         div()
@@ -2081,7 +2079,7 @@ fn tabs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                     .gap(8.0)
                     .child(cn::label("Simple Tabs"))
                     .child(
-                        cn::tabs(&simple_tab)
+                        cn::tabs(simple_tab)
                             .transition(TabsTransition::SlideRight)
                             .tab("tab1", "Account", || {
                                 div()
@@ -2141,9 +2139,8 @@ fn tabs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             .gap(8.0)
                             .child(cn::label("Small Tabs"))
                             .child({
-                                let small_tab =
-                                    ctx.use_state_keyed("small_tab", || "a".to_string());
-                                cn::tabs(&small_tab)
+                                let small_tab = ctx.use_signal("a".to_string());
+                                cn::tabs(small_tab)
                                     .size(cn::TabsSize::Small)
                                     .tab("a", "First", div)
                                     .tab("b", "Second", div)
@@ -2155,9 +2152,8 @@ fn tabs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             .gap(8.0)
                             .child(cn::label("Large Tabs"))
                             .child({
-                                let large_tab =
-                                    ctx.use_state_keyed("large_tab", || "x".to_string());
-                                cn::tabs(&large_tab)
+                                let large_tab = ctx.use_signal("x".to_string());
+                                cn::tabs(large_tab)
                                     .size(cn::TabsSize::Large)
                                     .tab("x", "Overview", div)
                                     .tab("y", "Details", div)
@@ -2283,9 +2279,9 @@ fn pagination_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
     let text_secondary = theme.color(ColorToken::TextSecondary);
 
     // State for each pagination demo
-    let page1 = ctx.use_state_keyed("pagination_page1", || 1usize);
-    let page2 = ctx.use_state_keyed("pagination_page2", || 5usize);
-    let page3 = ctx.use_state_keyed("pagination_page3", || 1usize);
+    let page1 = ctx.use_signal(1usize);
+    let page2 = ctx.use_signal(5usize);
+    let page3 = ctx.use_signal(1usize);
 
     section_container()
         .child(section_title("Pagination"))
@@ -2304,7 +2300,7 @@ fn pagination_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                 .color(text_secondary),
                         )
                         .child(
-                            cn::pagination(10, page1.clone())
+                            cn::pagination(10, page1)
                                 .on_page_change(|page| tracing::info!("Page changed to: {}", page)),
                         ),
                 )
@@ -2319,7 +2315,7 @@ fn pagination_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                 .color(text_secondary),
                         )
                         .child(
-                            cn::pagination(50, page2.clone())
+                            cn::pagination(50, page2)
                                 .visible_pages(7)
                                 .show_first_last(true)
                                 .on_page_change(|page| tracing::info!("Page changed to: {}", page)),
@@ -2342,14 +2338,14 @@ fn pagination_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                         .flex_col()
                                         .gap(4.0)
                                         .child(text("Small").size(t_xs()).color(text_secondary))
-                                        .child(cn::pagination(5, page3.clone()).small()),
+                                        .child(cn::pagination(5, page3).small()),
                                 )
                                 .child(
                                     div()
                                         .flex_col()
                                         .gap(4.0)
                                         .child(text("Large").size(t_xs()).color(text_secondary))
-                                        .child(cn::pagination(5, page3.clone()).large()),
+                                        .child(cn::pagination(5, page3).large()),
                                 ),
                         ),
                 ),
@@ -2434,7 +2430,7 @@ fn sidebar_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
     let border = theme.color(ColorToken::Border);
 
     // State for sidebar collapse
-    let sidebar_collapsed = ctx.use_state_keyed("sidebar_collapsed", || false);
+    let sidebar_collapsed = ctx.use_signal(false);
 
     // Icon SVGs
     let home_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>"#;
@@ -2460,7 +2456,7 @@ fn sidebar_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                     .rounded(r_default())
                     .overflow_clip()
                     .child(
-                        cn::sidebar(&sidebar_collapsed)
+                        cn::sidebar(sidebar_collapsed)
                             .item_active("Dashboard", home_icon, || {
                                 tracing::info!("Dashboard clicked")
                             })

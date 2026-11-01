@@ -12,21 +12,22 @@
 //! use blinc_cn::prelude::*;
 //!
 //! fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-//!     let bold_on = ctx.use_state_keyed("bold", || false);
-//!     cn::toggle(&bold_on)
+//!     let bold_on = ctx.use_signal(false);
+//!     cn::toggle(bold_on)
 //!         .label("B")
 //!         .aria_label("Toggle bold")
 //!         .on_change(|on| println!("bold: {on}"))
 //! }
 //!
 //! // Outline variant (bordered when off)
-//! cn::toggle(&bold_on).variant(ToggleVariant::Outline)
+//! cn::toggle(bold_on).variant(ToggleVariant::Outline)
 //!
 //! // Compact size
-//! cn::toggle(&bold_on).size(ToggleSize::Small)
+//! cn::toggle(bold_on).size(ToggleSize::Small)
 //! ```
 
-use blinc_core::State;
+use blinc_core::reactive::Signal;
+use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::ElementBuilder;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 use blinc_layout::widgets::toggle as layout_toggle;
@@ -142,14 +143,15 @@ impl ToggleSize {
 }
 
 /// Internal config for [`cn::toggle`](toggle).
+#[derive(Clone)]
 struct ToggleConfig {
-    state: State<bool>,
+    on: Signal<bool>,
     variant: ToggleVariant,
     size: ToggleSize,
-    label: Option<String>,
+    label: Option<Reactive<String>>,
     icon: Option<String>,
     aria_label: Option<String>,
-    disabled: bool,
+    disabled: Reactive<bool>,
     on_change: Option<Arc<dyn Fn(bool) + Send + Sync>>,
     css_element_id: Option<String>,
 }
@@ -163,7 +165,7 @@ impl Toggle {
     fn from_config(config: ToggleConfig) -> Self {
         // The look is the `.blinc-toggle` rules; the variant and size select
         // among them as attributes, as ashui's stylesheet does.
-        let mut inner = layout_toggle::toggle(&config.state)
+        let mut inner = layout_toggle::toggle(config.on)
             .class("cn-toggle")
             .class(config.variant.css_class())
             .class(config.size.css_class())
@@ -240,17 +242,18 @@ pub struct ToggleBuilder {
 }
 
 impl ToggleBuilder {
+    /// A toggle that reads and writes `on`.
     #[track_caller]
-    pub fn new(state: &State<bool>) -> Self {
+    pub fn new(on: Signal<bool>) -> Self {
         Self {
             config: ToggleConfig {
-                state: state.clone(),
+                on,
                 variant: ToggleVariant::default(),
                 size: ToggleSize::default(),
                 label: None,
                 icon: None,
                 aria_label: None,
-                disabled: false,
+                disabled: Reactive::Const(false),
                 on_change: None,
                 css_element_id: None,
             },
@@ -260,22 +263,8 @@ impl ToggleBuilder {
 
     fn get_or_build(&self) -> &Toggle {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            Toggle::from_config(self.clone_config())
+            Toggle::from_config(self.config.clone())
         })
-    }
-
-    fn clone_config(&self) -> ToggleConfig {
-        ToggleConfig {
-            state: self.config.state.clone(),
-            variant: self.config.variant,
-            size: self.config.size,
-            label: self.config.label.clone(),
-            icon: self.config.icon.clone(),
-            aria_label: self.config.aria_label.clone(),
-            disabled: self.config.disabled,
-            on_change: self.config.on_change.clone(),
-            css_element_id: self.config.css_element_id.clone(),
-        }
     }
 
     pub fn variant(mut self, variant: ToggleVariant) -> Self {
@@ -288,8 +277,9 @@ impl ToggleBuilder {
         self
     }
 
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.config.label = Some(label.into());
+    /// The label: a string, Signal or Computed.
+    pub fn label(mut self, label: impl IntoReactive<String>) -> Self {
+        self.config.label = Some(label.into_reactive());
         self
     }
 
@@ -305,8 +295,9 @@ impl ToggleBuilder {
         self
     }
 
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether it is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 
@@ -362,8 +353,8 @@ impl ElementBuilder for ToggleBuilder {
     }
 }
 
-/// Create a cn-styled toggle bound to a reactive [`State<bool>`].
+/// A cn toggle that reads and writes `on`, following it in place.
 #[track_caller]
-pub fn toggle(state: &State<bool>) -> ToggleBuilder {
-    ToggleBuilder::new(state)
+pub fn toggle(on: Signal<bool>) -> ToggleBuilder {
+    ToggleBuilder::new(on)
 }

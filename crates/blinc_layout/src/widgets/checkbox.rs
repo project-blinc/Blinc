@@ -12,9 +12,9 @@
 //! # Example
 //!
 //! ```ignore
-//! let checked = ctx.use_state_keyed("my_checkbox", || false);
+//! let checked = ctx.use_signal(false);
 //! div().child(
-//!     checkbox(&checked)
+//!     checkbox(checked)
 //!         .label("Remember me")
 //!         .on_change(|checked| println!("Checked: {}", checked))
 //! )
@@ -22,13 +22,14 @@
 
 use std::sync::Arc;
 
-use blinc_core::State;
-use blinc_theme::{ColorToken, ThemeState};
+use blinc_core::reactive::Signal;
+use blinc_theme::ThemeState;
 
+use crate::binding::{IntoReactive, Reactive};
 use crate::div::{Div, ElementBuilder, div};
 use crate::element::RenderProps;
 use crate::svg::svg;
-use crate::text::text;
+use crate::text::Text;
 use crate::tree::{LayoutNodeId, LayoutTree};
 
 /// The class whose rules in [`crate::ua_styles::UA_STYLES`] give a checkbox
@@ -44,12 +45,12 @@ const CHECKMARK_SVG: &str = r#"<svg viewBox="0 0 24 24" fill="none" xmlns="http:
 /// Checkbox configuration
 #[derive(Clone)]
 pub struct CheckboxConfig {
-    /// Reactive checked state signal
-    checked: State<bool>,
-    /// Whether disabled
-    pub disabled: bool,
-    /// Label text (optional)
-    pub label: Option<String>,
+    /// Whether it is checked.
+    checked: Signal<bool>,
+    /// Whether it is disabled; bound in place.
+    disabled: Reactive<bool>,
+    /// Label text; bound in place.
+    label: Option<Reactive<String>>,
     /// Box size
     pub size: f32,
     /// The mark's size; the box's inner area (its size less the border) when not set.
@@ -73,10 +74,10 @@ pub struct CheckboxConfig {
 }
 
 impl CheckboxConfig {
-    fn new(checked: State<bool>) -> Self {
+    fn new(checked: Signal<bool>) -> Self {
         Self {
             checked,
-            disabled: false,
+            disabled: Reactive::Const(false),
             label: None,
             size: 20.0,
             mark_size: None,
@@ -100,9 +101,7 @@ pub struct Checkbox {
 impl Checkbox {
     fn with_config(config: CheckboxConfig) -> Self {
         let theme = ThemeState::get();
-        let checked_for_click = config.checked.clone();
-        let on_change = config.on_change.clone();
-        let disabled = config.disabled;
+        let checked = config.checked;
         let mark_size = config
             .mark_size
             .unwrap_or(config.size - 2.0 * config.border_width);
@@ -112,7 +111,8 @@ impl Checkbox {
 
         let mut checkbox = div()
             .class(DEFAULT_CLASS)
-            .attr_when("checked", "", &config.checked)
+            .attr_when("checked", "", checked)
+            .attr_when("disabled", "", config.disabled.clone())
             .w(config.size)
             .h(config.size)
             // Pin the box to its size: a narrow flex row (a settings list)
@@ -138,57 +138,49 @@ impl Checkbox {
             checkbox = checkbox.class(class);
         }
         if let Some(class) = &config.checked_class {
-            checkbox = checkbox.class_when(class.as_ref(), &config.checked);
+            checkbox = checkbox.class_when(class.as_ref(), checked);
         }
         if let Some(id) = &config.css_element_id {
             checkbox = checkbox.id(id);
         }
-        if disabled {
-            checkbox = checkbox.attr("disabled", "");
-        }
 
-        let checkbox = checkbox.on_click(move |_| {
-            if disabled {
-                return;
-            }
-            let next = !checked_for_click.get();
-            checked_for_click.set(next);
-            if let Some(ref handler) = on_change {
-                handler(next);
-            }
-        });
-
-        let inner = if let Some(ref label) = config.label {
-            let label_color = if disabled {
-                theme.color(ColorToken::TextTertiary)
-            } else {
-                theme.color(ColorToken::TextPrimary)
-            };
-            let state = config.checked.clone();
+        // Both the box and its label toggle; the bound `disabled` is read when
+        // the click arrives.
+        let toggle = {
+            let disabled = config.disabled.clone();
             let on_change = config.on_change.clone();
-            // The label toggles too, as the box does.
+            move || {
+                if disabled.now().unwrap_or(false) {
+                    return;
+                }
+                let next = !checked.try_get().unwrap_or(false);
+                checked.set(next);
+                if let Some(ref handler) = on_change {
+                    handler(next);
+                }
+            }
+        };
+
+        let inner = if let Some(label) = config.label {
+            let row_toggle = toggle.clone();
+            let checkbox = checkbox.on_click(move |_| toggle());
+            // The row carries `disabled` too, so the label's colour is a rule.
             div()
+                .class("blinc-checkbox-row")
+                .attr_when("disabled", "", config.disabled)
                 .flex_row()
                 .gap(config.gap.unwrap_or(theme.spacing().space_1))
                 .items_center()
                 .cursor_pointer()
                 .child(checkbox)
                 .child(
-                    text(label)
-                        .size(config.label_font_size.unwrap_or(theme.typography().text_sm))
-                        .color(label_color),
+                    Text::bound(label)
+                        .class("blinc-checkbox-label")
+                        .size(config.label_font_size.unwrap_or(theme.typography().text_sm)),
                 )
-                .on_click(move |_| {
-                    if disabled {
-                        return;
-                    }
-                    let next = !state.get();
-                    state.set(next);
-                    if let Some(ref handler) = on_change {
-                        handler(next);
-                    }
-                })
+                .on_click(move |_| row_toggle())
         } else {
+            let checkbox = checkbox.on_click(move |_| toggle());
             // A single box in a row, so it lays out as a unit.
             div().child(checkbox)
         };
@@ -245,10 +237,10 @@ pub struct CheckboxBuilder {
 }
 
 impl CheckboxBuilder {
-    /// Create a new checkbox builder with reactive checked state
-    pub fn new(checked: &State<bool>) -> Self {
+    /// A checkbox that reads and writes `checked`.
+    pub fn new(checked: Signal<bool>) -> Self {
         Self {
-            config: CheckboxConfig::new(checked.clone()),
+            config: CheckboxConfig::new(checked),
             built: std::cell::OnceCell::new(),
         }
     }
@@ -278,9 +270,9 @@ impl CheckboxBuilder {
         self
     }
 
-    /// Set label
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.config.label = Some(label.into());
+    /// The label beside the box: a string, Signal or Computed.
+    pub fn label(mut self, label: impl IntoReactive<String>) -> Self {
+        self.config.label = Some(label.into_reactive());
         self
     }
 
@@ -320,9 +312,9 @@ impl CheckboxBuilder {
         self
     }
 
-    /// Set disabled state
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether it is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 
@@ -374,25 +366,28 @@ impl ElementBuilder for CheckboxBuilder {
     }
 }
 
-/// Create a checkbox with reactive checked state
+/// A checkbox that reads and writes `checked`.
 ///
-/// The checkbox follows the `State<bool>` in place: its `checked` attribute
-/// comes and goes with it, and the stylesheet's `:checked`, `:hover` and
+/// The checkbox follows the signal in place: its `checked` attribute comes
+/// and goes with it, and the stylesheet's `:checked`, `:hover` and
 /// `:disabled` rules do the rest.
 ///
 /// # Example
 ///
 /// ```ignore
-/// let checked = ctx.use_state_keyed("remember_me", || false);
-/// checkbox(&checked)
+/// let checked = ctx.use_signal(false);
+/// checkbox(checked)
 ///     .label("Remember me")
 ///     .on_change(|checked| println!("Checked: {}", checked))
 /// ```
-pub fn checkbox(checked: &State<bool>) -> CheckboxBuilder {
+pub fn checkbox(checked: Signal<bool>) -> CheckboxBuilder {
     CheckboxBuilder::new(checked)
 }
 
-/// Create a checkbox with label and reactive state
-pub fn checkbox_labeled(checked: &State<bool>, label: impl Into<String>) -> CheckboxBuilder {
+/// A checkbox with a label.
+pub fn checkbox_labeled(
+    checked: Signal<bool>,
+    label: impl IntoReactive<String>,
+) -> CheckboxBuilder {
     CheckboxBuilder::new(checked).label(label)
 }

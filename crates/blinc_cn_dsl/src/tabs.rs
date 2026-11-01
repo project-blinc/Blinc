@@ -89,7 +89,7 @@ impl CnTabs {
             .map(|t| t.tab_value())
             .collect();
 
-        let mut b = blinc_cn::TabsBuilder::with_key(self.tabs_key(&values), &state)
+        let mut b = blinc_cn::TabsBuilder::with_key(self.tabs_key(&values), state.signal())
             .size(self.size())
             .transition(self.transition());
         // The first tab is what shows when the bound value names none of

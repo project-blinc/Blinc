@@ -3,7 +3,8 @@
 
 use std::sync::Arc;
 
-use blinc_core::State;
+use blinc_core::reactive::Signal;
+use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::ElementBuilder;
 use blinc_layout::prelude::*;
 use blinc_layout::widgets::input_otp::{show_value_in_slots, wire_otp_slot};
@@ -13,13 +14,14 @@ use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 use crate::components::input::InputSize;
 
 #[allow(clippy::type_complexity)]
+#[derive(Clone)]
 struct Config {
-    value: State<String>,
+    value: Signal<String>,
     length: usize,
     numeric_only: bool,
     masked: bool,
-    disabled: bool,
-    error: bool,
+    disabled: Reactive<bool>,
+    error: Reactive<bool>,
     size: InputSize,
     /// Insert a `•` separator every N slots. `None` disables grouping.
     group_every: Option<usize>,
@@ -37,15 +39,16 @@ pub struct InputOtp {
 }
 
 impl InputOtpBuilder {
-    pub fn new(value: &State<String>, length: usize) -> Self {
+    /// An OTP input with `length` slots that reads and writes `value`.
+    pub fn new(value: Signal<String>, length: usize) -> Self {
         Self {
             config: Config {
-                value: value.clone(),
+                value,
                 length,
                 numeric_only: false,
                 masked: false,
-                disabled: false,
-                error: false,
+                disabled: Reactive::Const(false),
+                error: Reactive::Const(false),
                 size: InputSize::Medium,
                 group_every: Some(3),
                 on_change: None,
@@ -57,23 +60,8 @@ impl InputOtpBuilder {
 
     fn get_or_build(&self) -> &InputOtp {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            InputOtp::from_config(self.clone_config())
+            InputOtp::from_config(self.config.clone())
         })
-    }
-
-    fn clone_config(&self) -> Config {
-        Config {
-            value: self.config.value.clone(),
-            length: self.config.length,
-            numeric_only: self.config.numeric_only,
-            masked: self.config.masked,
-            disabled: self.config.disabled,
-            error: self.config.error,
-            size: self.config.size,
-            group_every: self.config.group_every,
-            on_change: self.config.on_change.clone(),
-            on_complete: self.config.on_complete.clone(),
-        }
     }
 
     pub fn numeric_only(mut self, numeric_only: bool) -> Self {
@@ -86,14 +74,16 @@ impl InputOtpBuilder {
         self
     }
 
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether every slot is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 
-    /// Show the error border/ring on every slot (invalid code, etc.).
-    pub fn error(mut self, error: bool) -> Self {
-        self.config.error = error;
+    /// Show the error border on every slot (an invalid code) while `error`
+    /// holds: a bool, Signal or Computed.
+    pub fn error(mut self, error: impl IntoReactive<bool>) -> Self {
+        self.config.error = error.into_reactive();
         self
     }
 
@@ -141,7 +131,7 @@ impl InputOtp {
         let numeric_only = config.numeric_only;
 
         // Preserve prefilled bound values on first paint.
-        let initial = config.value.get();
+        let initial = config.value.try_get().unwrap_or_default();
         let mut initial_chars = initial.chars();
         let slots: Vec<_> = (0..length)
             .map(|_| {
@@ -157,7 +147,6 @@ impl InputOtp {
                         InputType::Text
                     };
                     d.masked = config.masked;
-                    d.disabled = config.disabled;
                     d.constraints.max_length = Some(1);
                 }
                 data
@@ -165,14 +154,15 @@ impl InputOtp {
             .collect();
         let slots = Arc::new(slots);
 
-        show_value_in_slots(&slots, &config.value);
+        show_value_in_slots(&slots, config.value);
 
-        let mut row = div().flex_row().items_center().class("cn-input-otp");
-        if config.disabled {
-            row = row.class("cn-input-otp--disabled");
-        }
+        let mut row = div()
+            .flex_row()
+            .items_center()
+            .class("cn-input-otp")
+            .class_when("cn-input-otp--disabled", config.disabled.clone());
         for i in 0..length {
-            let mut field = text_input(&slots[i])
+            let field = text_input(&slots[i])
                 .input_type(if numeric_only {
                     InputType::Integer
                 } else {
@@ -181,22 +171,20 @@ impl InputOtp {
                 .text_align(blinc_core::TextAlign::Center)
                 .max_length(1)
                 .masked(config.masked)
-                .disabled(config.disabled)
+                .disabled(config.disabled.clone())
                 .h(height)
                 .w(height)
                 .text_size(font_size)
                 .rounded(radius)
                 .text_color(text_primary)
-                .class("cn-input-otp-slot");
-            if config.error {
-                field = field.class("cn-input-otp-slot--error");
-            }
+                .class("cn-input-otp-slot")
+                .class_when("cn-input-otp-slot--error", config.error.clone());
             row = row.child(wire_otp_slot(
                 field,
                 i,
                 &slots,
                 numeric_only,
-                &config.value,
+                config.value,
                 config.on_change.clone(),
                 config.on_complete.clone(),
             ));
@@ -302,7 +290,7 @@ impl ElementBuilder for InputOtpBuilder {
 }
 
 /// Create a cn-styled one-time-passcode input with `length` slots,
-/// bound to a reactive [`State<String>`] holding the joined value.
-pub fn input_otp(value: &State<String>, length: usize) -> InputOtpBuilder {
+/// bound to a [`Signal<String>`] holding the joined value.
+pub fn input_otp(value: Signal<String>, length: usize) -> InputOtpBuilder {
     InputOtpBuilder::new(value, length)
 }

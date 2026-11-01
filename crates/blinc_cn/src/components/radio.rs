@@ -8,7 +8,8 @@
 //! ```css
 //! .my-radio:checked { border-color: #16a34a; }
 //! ```
-//! Uses `State<String>` from context for reactive state management.
+//! It reads and writes a `Signal<String>`; `label` and `disabled` are bound
+//! in place.
 //!
 //! # Example
 //!
@@ -16,10 +17,9 @@
 //! use blinc_cn::prelude::*;
 //!
 //! fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-//!     // Create radio state from context
-//!     let selected = ctx.use_state_for("color", "red".to_string());
+//!     let selected = ctx.use_signal("red".to_string());
 //!
-//!     cn::radio_group(&selected)
+//!     cn::radio_group(selected)
 //!         .option("red", "Red")
 //!         .option("green", "Green")
 //!         .option("blue", "Blue")
@@ -27,33 +27,33 @@
 //! }
 //!
 //! // Horizontal layout
-//! cn::radio_group(&selected)
+//! cn::radio_group(selected)
 //!     .horizontal()
 //!     .option("yes", "Yes")
 //!     .option("no", "No")
 //!
 //! // With label
-//! cn::radio_group(&size)
+//! cn::radio_group(size)
 //!     .label("Select size")
 //!     .option("sm", "Small")
 //!     .option("md", "Medium")
 //!     .option("lg", "Large")
 //!
-//! // Disabled
-//! cn::radio_group(&selected)
-//!     .disabled(true)
+//! // Disabled while `locked` holds
+//! cn::radio_group(selected)
+//!     .disabled(locked)
 //!     .option("a", "Option A")
 //!     .option("b", "Option B")
 //! ```
 
-use blinc_core::State;
-use blinc_core::reactive::{ReactiveGraph, computed};
+use blinc_core::reactive::{ReactiveGraph, Signal, computed};
 use blinc_layout::InstanceKey;
+use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
 use blinc_layout::prelude::*;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
-use blinc_theme::{ColorToken, SpacingToken, ThemeState};
+use blinc_theme::{SpacingToken, ThemeState};
 use std::sync::Arc;
 
 use super::label::{LabelSize, label};
@@ -117,25 +117,17 @@ struct RadioOption {
 /// Radio Group component
 ///
 /// A group of radio buttons where only one can be selected at a time.
-/// Uses `State<String>` from context for reactive state management.
+/// It reads and writes a `Signal<String>`.
 pub struct RadioGroup {
     /// The fully-built inner element (Div containing radio buttons and optional label)
     inner: Div,
 }
 
 impl RadioGroup {
-    /// Create a new radio group with state from context
-    ///
-    /// # Example
-    /// ```ignore
-    /// let selected = ctx.use_state_for("choice", "option1".to_string());
-    /// cn::radio_group(&selected)
-    ///     .option("option1", "First Option")
-    ///     .option("option2", "Second Option")
-    /// ```
+    /// A radio group that reads and writes `selected`.
     #[track_caller]
-    pub fn new(selected: &State<String>) -> Self {
-        Self::with_config(RadioGroupConfig::new(selected.clone()))
+    pub fn new(selected: Signal<String>) -> Self {
+        Self::with_config(RadioGroupConfig::new(selected))
     }
 
     /// Create from a full configuration
@@ -162,12 +154,11 @@ impl RadioGroup {
         }
 
         // If there's a label, wrap everything
-        let mut inner = if let Some(ref label_text) = config.label {
+        let mut inner = if let Some(label_text) = config.label.clone() {
             let spacing = theme.spacing_value(SpacingToken::Space2);
-            let mut lbl = label(label_text).size(LabelSize::Medium);
-            if config.disabled {
-                lbl = lbl.disabled(true);
-            }
+            let lbl = label(label_text)
+                .size(LabelSize::Medium)
+                .disabled(config.disabled.clone());
 
             div()
                 .flex_col()
@@ -200,35 +191,34 @@ fn build_radio_button(
     let border_width = config.size.border_width();
 
     let option_value = option.value.clone();
-    let option_disabled = option.disabled || config.disabled;
     let option_label = option.label.clone();
-    let selected_state = config.selected.clone();
-    let selected_state_for_click = config.selected.clone();
+    let selected = config.selected;
     let on_change = config.on_change.clone();
     let value_for_click = option.value.clone();
-
-    let label_color = if option_disabled {
-        theme.color(ColorToken::TextTertiary)
+    // An option is disabled on its own, or with the group.
+    let disabled = if option.disabled {
+        Reactive::Const(true)
     } else {
-        theme.color(ColorToken::TextPrimary)
+        config.disabled.clone()
     };
 
     // Hover, press, selection and disabled belong to CSS (`.blinc-radio:hover`,
     // `:active`, `:checked`, `:disabled`), so nothing here follows the
     // pointer; the selection only moves the `checked` attribute, in place.
-    let selected = selected_state.signal();
     let is_selected =
         computed(move |g: &ReactiveGraph| g.get(selected).unwrap_or_default() == option_value);
 
     // The ring is the element; the dot is always there and shown while
     // checked. Sizes and the border width vary per size, so they are set here.
-    let mut circle = div()
+    let circle = div()
         .class("blinc-radio")
         .class("cn-radio")
         // Added and taken away with the selection, so the stylesheet's
         // `.cn-radio--selected` rules follow it in place.
         .class_when("cn-radio--selected", &is_selected)
         .attr_when("checked", "", &is_selected)
+        .class_when("cn-radio--disabled", disabled.clone())
+        .attr_when("disabled", "", disabled.clone())
         .w(outer_size)
         .h(outer_size)
         .rounded(outer_size / 2.0)
@@ -244,17 +234,16 @@ fn build_radio_button(
                 .rounded(inner_size / 2.0),
         );
 
-    if option_disabled {
-        circle = circle.class("cn-radio--disabled").attr("disabled", "");
-    }
-
+    // The row carries `disabled` too, so the label's colour is a rule.
     let mut radio = div()
+        .class("blinc-radio-row")
+        .attr_when("disabled", "", disabled.clone())
         .flex_row()
         .gap_px(theme.spacing_value(SpacingToken::Space4))
         .items_center()
         .cursor_pointer()
         .child(circle)
-        .child(text(&option_label).size(14.0).color(label_color));
+        .child(text(&option_label).class("blinc-radio-label").size(14.0));
 
     // Set CSS element ID for element registry matching
     if let Some(ref css_id) = button_css_id {
@@ -263,13 +252,11 @@ fn build_radio_button(
 
     // Click handler
     radio.on_click(move |_| {
-        if option_disabled {
+        if disabled.now().unwrap_or(false) {
             return;
         }
-
-        let current = selected_state_for_click.get();
-        if current != value_for_click {
-            selected_state_for_click.set(value_for_click.clone());
+        if selected.try_get().as_deref() != Some(value_for_click.as_str()) {
+            selected.set(value_for_click.clone());
             if let Some(ref callback) = on_change {
                 callback(&value_for_click);
             }
@@ -281,12 +268,12 @@ fn build_radio_button(
 #[derive(Clone)]
 #[allow(clippy::type_complexity)]
 struct RadioGroupConfig {
-    selected: State<String>,
+    selected: Signal<String>,
     options: Vec<RadioOption>,
     size: RadioSize,
     layout: RadioLayout,
-    label: Option<String>,
-    disabled: bool,
+    label: Option<Reactive<String>>,
+    disabled: Reactive<bool>,
     gap: Option<f32>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
     css_group_id: Option<String>,
@@ -301,7 +288,7 @@ struct RadioGroupConfig {
 
 impl RadioGroupConfig {
     #[track_caller]
-    fn new(selected: State<String>) -> Self {
+    fn new(selected: Signal<String>) -> Self {
         Self {
             selected,
             instance_key: InstanceKey::new("radio-group"),
@@ -309,7 +296,7 @@ impl RadioGroupConfig {
             size: RadioSize::default(),
             layout: RadioLayout::default(),
             label: None,
-            disabled: false,
+            disabled: Reactive::Const(false),
             gap: None,
             on_change: None,
             css_group_id: None,
@@ -326,11 +313,11 @@ pub struct RadioGroupBuilder {
 }
 
 impl RadioGroupBuilder {
-    /// Create a new radio group builder with state from context
+    /// A radio group that reads and writes `selected`.
     #[track_caller]
-    pub fn new(selected: &State<String>) -> Self {
+    pub fn new(selected: Signal<String>) -> Self {
         Self {
-            config: RadioGroupConfig::new(selected.clone()),
+            config: RadioGroupConfig::new(selected),
             built: std::cell::OnceCell::new(),
         }
     }
@@ -416,15 +403,15 @@ impl RadioGroupBuilder {
         self
     }
 
-    /// Add a label above the radio group
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.config.label = Some(label.into());
+    /// A label above the group: a string, Signal or Computed.
+    pub fn label(mut self, label: impl IntoReactive<String>) -> Self {
+        self.config.label = Some(label.into_reactive());
         self
     }
 
-    /// Disable all options
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether every option is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 
@@ -495,21 +482,21 @@ impl ElementBuilder for RadioGroupBuilder {
     }
 }
 
-/// Create a radio group with state from context
+/// A radio group that reads and writes `selected`, following it in place.
 ///
 /// # Example
 ///
 /// ```ignore
 /// use blinc_cn::prelude::*;
 ///
-/// let choice = ctx.use_state_for("choice", "a".to_string());
-/// cn::radio_group(&choice)
+/// let choice = ctx.use_signal("a".to_string());
+/// cn::radio_group(choice)
 ///     .label("Pick one")
 ///     .option("a", "Option A")
 ///     .option("b", "Option B")
 ///     .option("c", "Option C")
 /// ```
-pub fn radio_group(selected: &State<String>) -> RadioGroupBuilder {
+pub fn radio_group(selected: Signal<String>) -> RadioGroupBuilder {
     RadioGroupBuilder::new(selected)
 }
 

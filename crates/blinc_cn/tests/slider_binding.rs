@@ -5,7 +5,7 @@
 //! kept in step. Writing it moves the thumb without rebuilding the
 //! track: the spring is retargeted, and the value label is subscribed on
 //! its own.
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::{global_graph, signal};
 use blinc_layout::div::div;
 use blinc_layout::renderer::RenderTree;
 use std::sync::Arc;
@@ -69,9 +69,9 @@ fn aiming_at(id: blinc_core::reactive::SignalId) -> f32 {
 #[test]
 fn a_write_from_elsewhere_moves_the_thumb() {
     init();
-    let value = State::new(signal::<f64>(0.0), global_graph(), global_dirty_flag());
-    build(&value);
-    let id = value.signal_id();
+    let value = signal::<f64>(0.0);
+    build(value);
+    let id = value.id();
     assert_eq!(aiming_at(id), 0.0, "starts at the floor");
 
     // Nothing rebuilds here. This is the write a number input makes.
@@ -89,9 +89,9 @@ fn a_write_from_elsewhere_moves_the_thumb() {
 #[test]
 fn either_precision_drives_the_thumb() {
     init();
-    let value = State::new(signal::<f32>(0.0), global_graph(), global_dirty_flag());
-    build(&value);
-    let id = value.signal_id();
+    let value = signal::<f32>(0.0);
+    build(value);
+    let id = value.id();
 
     value.set(50.0);
 
@@ -109,11 +109,11 @@ fn either_precision_drives_the_thumb() {
 #[test]
 fn the_spring_survives_a_rebuild() {
     init();
-    let value = State::new(signal::<f64>(20.0), global_graph(), global_dirty_flag());
-    build(&value);
-    let first = thumb(value.signal_id());
-    build(&value);
-    let second = thumb(value.signal_id());
+    let value = signal::<f64>(20.0);
+    build(value);
+    let first = thumb(value.id());
+    build(value);
+    let second = thumb(value.id());
     assert!(
         Arc::ptr_eq(&first, &second),
         "the same spring, not a fresh one per build"
@@ -121,7 +121,7 @@ fn the_spring_survives_a_rebuild() {
 
     value.set(60.0);
     let expected = 0.6 * TRAVEL;
-    let actual = aiming_at(value.signal_id());
+    let actual = aiming_at(value.id());
     assert!(
         (actual - expected).abs() < 1.0,
         "and it still follows writes after a rebuild: {actual} vs {expected}"
@@ -151,9 +151,9 @@ fn the_shown_value_follows_the_state_in_place() {
     let _ = blinc_layout::stateful::take_pending_subtree_rebuilds();
     let _ = blinc_layout::take_pending_partial_prop_updates();
 
-    let value = State::new(signal::<f32>(35.0), global_graph(), global_dirty_flag());
+    let value = signal::<f32>(35.0);
     let host = div().w(400.0).h(80.0).child(
-        blinc_cn::slider(value.clone())
+        blinc_cn::slider(value)
             .min(0.0)
             .max(100.0)
             .w(WIDTH)
@@ -169,7 +169,7 @@ fn the_shown_value_follows_the_state_in_place() {
     );
 
     value.set(80.0);
-    blinc_layout::stateful::check_stateful_deps(&[value.signal_id()]);
+    blinc_layout::stateful::check_stateful_deps(&[value.id()]);
     assert!(
         blinc_layout::stateful::take_pending_subtree_rebuilds().is_empty(),
         "writing the value queued a subtree rebuild"

@@ -7,8 +7,9 @@
 
 use std::sync::Arc;
 
-use blinc_core::State;
+use blinc_core::reactive::Signal;
 
+use crate::binding::{IntoReactive, Reactive};
 use crate::div::{Div, ElementBuilder, ElementTypeId, div};
 use crate::element::RenderProps;
 use crate::tree::{LayoutNodeId, LayoutTree};
@@ -17,11 +18,11 @@ use crate::widgets::text_input::{
     text_input, text_input_data,
 };
 
-/// Reactive OTP configuration bound to a [`State<String>`] holding the
-/// joined value (e.g. `"12"` while typing a 6-digit code).
+/// OTP configuration bound to a [`Signal<String>`] holding the joined
+/// value (e.g. `"12"` while typing a 6-digit code).
 #[derive(Clone)]
 pub struct InputOtpConfig {
-    value: State<String>,
+    value: Signal<String>,
     /// Number of slots. Fixed for the widget's lifetime.
     pub length: usize,
     /// When `true`, non-digit characters are filtered out of both
@@ -55,7 +56,7 @@ fn first_empty_slot(slots: &[SharedTextInputData]) -> usize {
 
 /// Re-sync slots from the bound value.
 ///
-/// The bound [`State<String>`] is the source of truth, including while a
+/// The bound [`Signal<String>`] is the source of truth, including while a
 /// slot is focused.
 #[doc(hidden)]
 pub fn sync_slots_from_value(slots: &[SharedTextInputData], value: &str) {
@@ -79,8 +80,8 @@ pub fn sync_slots_from_value(slots: &[SharedTextInputData], value: &str) {
 
 /// Keep the slots showing the bound value, whoever writes it.
 #[doc(hidden)]
-pub fn show_value_in_slots(slots: &Arc<Vec<SharedTextInputData>>, value: &State<String>) {
-    let signal = value.signal();
+pub fn show_value_in_slots(slots: &Arc<Vec<SharedTextInputData>>, value: Signal<String>) {
+    let signal = value;
     let slots = Arc::clone(slots);
     blinc_core::reactive::effect(move |graph| {
         // Through the passed graph: the first run holds the global one.
@@ -99,7 +100,7 @@ pub fn wire_otp_slot(
     index: usize,
     slots: &Arc<Vec<SharedTextInputData>>,
     numeric_only: bool,
-    value: &State<String>,
+    value: Signal<String>,
     on_change: Option<crate::widgets::TextCallback>,
     on_complete: Option<crate::widgets::TextCallback>,
 ) -> TextInput {
@@ -130,7 +131,7 @@ pub fn wire_otp_slot(
 
     {
         let slots = slots.clone();
-        let value_state = value.clone();
+        let value_state = value;
         let on_change = on_change.clone();
         let on_complete = on_complete.clone();
         field = field.on_change(move |text| {
@@ -146,7 +147,7 @@ pub fn wire_otp_slot(
                 }
             }
             let joined = joined_value(&slots);
-            let previous = value_state.get();
+            let previous = value_state.try_get().unwrap_or_default();
             let value_changed = joined != previous;
             if value_changed {
                 // Only fire on_complete on the incomplete-to-complete transition.
@@ -171,7 +172,7 @@ pub fn wire_otp_slot(
 
     if index > 0 {
         let slots = slots.clone();
-        let value_state = value.clone();
+        let value_state = value;
         let on_change = on_change.clone();
         field = field.on_backspace_empty(move || {
             if let Ok(mut prev) = slots[index - 1].lock() {
@@ -181,7 +182,7 @@ pub fn wire_otp_slot(
             }
             focus_text_input_deferred(&slots[index - 1]);
             let joined = joined_value(&slots);
-            if joined != value_state.get() {
+            if joined != value_state.try_get().unwrap_or_default() {
                 value_state.set(joined.clone());
                 sync_slots_from_value(&slots, &joined);
                 if let Some(ref cb) = on_change {
@@ -193,7 +194,7 @@ pub fn wire_otp_slot(
 
     {
         let slots = slots.clone();
-        let value_state = value.clone();
+        let value_state = value;
         let on_change = on_change.clone();
         let on_complete = on_complete.clone();
         field = field.on_paste_override(move |clip| {
@@ -214,7 +215,7 @@ pub fn wire_otp_slot(
                 }
             }
             let joined = joined_value(&slots);
-            let previous = value_state.get();
+            let previous = value_state.try_get().unwrap_or_default();
             if joined != previous {
                 let was_complete = previous.chars().count() == length;
                 value_state.set(joined.clone());
@@ -246,7 +247,7 @@ pub struct InputOtp {
 pub struct InputOtpBuilder {
     config: InputOtpConfig,
     masked: bool,
-    disabled: bool,
+    disabled: Reactive<bool>,
     gap: f32,
     css_element_id: Option<String>,
     css_classes: Vec<String>,
@@ -254,17 +255,18 @@ pub struct InputOtpBuilder {
 }
 
 impl InputOtpBuilder {
-    pub fn new(value: &State<String>, length: usize) -> Self {
+    /// An OTP input with `length` slots that reads and writes `value`.
+    pub fn new(value: Signal<String>, length: usize) -> Self {
         Self {
             config: InputOtpConfig {
-                value: value.clone(),
+                value,
                 length,
                 numeric_only: false,
                 on_change: None,
                 on_complete: None,
             },
             masked: false,
-            disabled: false,
+            disabled: Reactive::Const(false),
             gap: 8.0,
             css_element_id: None,
             css_classes: Vec::new(),
@@ -284,8 +286,9 @@ impl InputOtpBuilder {
         self
     }
 
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.disabled = disabled;
+    /// Whether every slot is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.disabled = disabled.into_reactive();
         self
     }
 
@@ -335,7 +338,7 @@ impl InputOtp {
         let numeric_only = b.config.numeric_only;
 
         // Preserve prefilled bound values on first paint.
-        let initial = b.config.value.get();
+        let initial = b.config.value.try_get().unwrap_or_default();
         let mut initial_chars = initial.chars();
         let slots: Vec<SharedTextInputData> = (0..length)
             .map(|_| {
@@ -351,7 +354,6 @@ impl InputOtp {
                         InputType::Text
                     };
                     d.masked = b.masked;
-                    d.disabled = b.disabled;
                     d.constraints.max_length = Some(1);
                 }
                 data
@@ -359,7 +361,7 @@ impl InputOtp {
             .collect();
         let slots = Arc::new(slots);
 
-        show_value_in_slots(&slots, &b.config.value);
+        show_value_in_slots(&slots, b.config.value);
 
         let mut row = div().flex_row().items_center().gap(b.gap);
         for i in 0..length {
@@ -372,14 +374,14 @@ impl InputOtp {
                 .text_align(blinc_core::TextAlign::Center)
                 .max_length(1)
                 .masked(b.masked)
-                .disabled(b.disabled)
+                .disabled(b.disabled.clone())
                 .class("cn-input-otp-slot");
             row = row.child(wire_otp_slot(
                 field,
                 i,
                 &slots,
                 numeric_only,
-                &b.config.value,
+                b.config.value,
                 b.config.on_change.clone(),
                 b.config.on_complete.clone(),
             ));
@@ -474,23 +476,22 @@ impl ElementBuilder for InputOtpBuilder {
     }
 }
 
-/// Create a one-time-passcode input with `length` slots, bound to a
-/// reactive [`State<String>`] holding the joined value.
+/// A one-time-passcode input with `length` slots, bound to a
+/// [`Signal<String>`] holding the joined value.
 ///
 /// ```ignore
-/// let code = ctx.use_state_keyed("code", || String::new());
-/// input_otp(&code, 6).numeric_only(true)
+/// let code = ctx.use_signal(String::new());
+/// input_otp(code, 6).numeric_only(true)
 /// ```
-pub fn input_otp(value: &State<String>, length: usize) -> InputOtpBuilder {
+pub fn input_otp(value: Signal<String>, length: usize) -> InputOtpBuilder {
     InputOtpBuilder::new(value, length)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Mutex, atomic::AtomicBool};
+    use std::sync::Mutex;
 
     use blinc_core::events::event_types;
-    use blinc_core::{ReactiveGraph, State};
 
     use crate::div::ElementBuilder;
     use crate::event_handler::EventContext;
@@ -510,10 +511,8 @@ mod tests {
     /// actually broke.
     static OTP_FOCUS_TEST_LOCK: Mutex<()> = Mutex::new(());
 
-    fn test_state(initial: impl Into<String>) -> State<String> {
-        let graph = Arc::new(std::sync::Mutex::new(ReactiveGraph::new()));
-        let signal = graph.lock().unwrap().create_signal(initial.into());
-        State::new(signal, graph, Arc::new(AtomicBool::new(false)))
+    fn test_state(initial: impl Into<String>) -> Signal<String> {
+        blinc_core::reactive::signal(initial.into())
     }
 
     fn reset_focus_for_test() {
@@ -582,7 +581,7 @@ mod tests {
             1,
             &slots,
             false,
-            &value,
+            value,
             None,
             None,
         );
@@ -623,7 +622,7 @@ mod tests {
                     i,
                     &slots,
                     false,
-                    &value,
+                    value,
                     None,
                     None,
                 )
@@ -672,7 +671,7 @@ mod tests {
             0,
             &slots,
             false,
-            &value,
+            value,
             None,
             None,
         );
@@ -703,7 +702,7 @@ mod tests {
             0,
             &slots,
             false,
-            &value,
+            value,
             None,
             None,
         );
@@ -740,7 +739,7 @@ mod tests {
                     index,
                     &slots,
                     true,
-                    &value,
+                    value,
                     None,
                     None,
                 )
@@ -786,7 +785,7 @@ mod tests {
             0,
             &slots,
             false,
-            &value,
+            value,
             None,
             None,
         );
@@ -795,7 +794,7 @@ mod tests {
             1,
             &slots,
             false,
-            &value,
+            value,
             None,
             None,
         );
@@ -833,7 +832,7 @@ mod tests {
             1,
             &slots,
             false,
-            &value,
+            value,
             None,
             Some(on_complete),
         );
@@ -869,7 +868,7 @@ mod tests {
             0,
             &slots,
             false,
-            &value,
+            value,
             None,
             Some(on_complete),
         );

@@ -15,24 +15,19 @@
 //! use blinc_cn::prelude::*;
 //!
 //! fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-//!     // Create checkbox state from context
-//!     let checked = ctx.use_state_for("my_checkbox", false);
+//!     let checked = ctx.use_signal(false);
 //!
-//!     cn::checkbox(&checked)
+//!     cn::checkbox(checked)
 //!         .label("Accept terms")
 //!         .on_change(|is_checked| println!("Checked: {}", is_checked))
 //! }
 //!
-//! // Pre-checked
-//! let checked = ctx.use_state_for("agree", true);
-//! cn::checkbox(&checked)
-//!
-//! // Disabled
-//! cn::checkbox(&checked)
-//!     .disabled(true)
+//! // Disabled while `locked` holds
+//! cn::checkbox(checked).disabled(locked)
 //! ```
 
-use blinc_core::State;
+use blinc_core::reactive::Signal;
+use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
 use blinc_layout::prelude::*;
@@ -83,26 +78,20 @@ impl CheckboxSize {
 
 /// Checkbox component
 ///
-/// A toggle checkbox with hover and press feedback.
-/// Uses `State<bool>` from context for reactive state management.
+/// A toggle checkbox with hover and press feedback, reading and writing a
+/// `Signal<bool>`.
 pub struct Checkbox {
     /// The layout checkbox, with cn's classes, sizes and radius on it.
     inner: layout_checkbox::CheckboxBuilder,
 }
 
 impl Checkbox {
-    /// Create a new checkbox with state from context
-    ///
-    /// # Example
-    /// ```ignore
-    /// let checked = ctx.use_state_for("my_checkbox", false);
-    /// cn::checkbox(&checked)
-    /// ```
+    /// A checkbox that reads and writes `checked`.
     #[track_caller]
-    pub fn new(checked_state: &State<bool>) -> Self {
+    pub fn new(checked: Signal<bool>) -> Self {
         Self::with_config(
             InstanceKey::new("checkbox").get(),
-            CheckboxConfig::new(checked_state.clone()),
+            CheckboxConfig::new(checked),
         )
     }
 
@@ -117,7 +106,7 @@ impl Checkbox {
         // The look is the layout checkbox's `.blinc-checkbox` rules; cn adds
         // its classes, which `CN_STYLES` hangs its own hooks on, and its size
         // ladder.
-        let mut inner = layout_checkbox::checkbox(&config.checked_state)
+        let mut inner = layout_checkbox::checkbox(config.checked)
             .class("cn-checkbox")
             // Added and taken away with the state, so the stylesheet's
             // `.cn-checkbox--checked` rules follow it in place.
@@ -127,9 +116,6 @@ impl Checkbox {
             .border_width(config.size.border_width())
             .rounded(radius)
             .disabled(config.disabled);
-        if config.disabled {
-            inner = inner.class("cn-checkbox--disabled");
-        }
         if let Some(label) = config.label {
             inner = inner.label(label);
         }
@@ -194,20 +180,20 @@ impl ElementBuilder for Checkbox {
 /// Internal configuration for building a Checkbox
 #[derive(Clone)]
 struct CheckboxConfig {
-    checked_state: State<bool>,
+    checked: Signal<bool>,
     size: CheckboxSize,
-    label: Option<String>,
-    disabled: bool,
+    label: Option<Reactive<String>>,
+    disabled: Reactive<bool>,
     on_change: Option<Arc<dyn Fn(bool) + Send + Sync>>,
 }
 
 impl CheckboxConfig {
-    fn new(checked_state: State<bool>) -> Self {
+    fn new(checked: Signal<bool>) -> Self {
         Self {
-            checked_state,
+            checked,
             size: CheckboxSize::default(),
             label: None,
-            disabled: false,
+            disabled: Reactive::Const(false),
             on_change: None,
         }
     }
@@ -222,21 +208,21 @@ pub struct CheckboxBuilder {
 }
 
 impl CheckboxBuilder {
-    /// Create a new checkbox builder with state from context
+    /// A checkbox that reads and writes `checked`.
     #[track_caller]
-    pub fn new(checked_state: &State<bool>) -> Self {
+    pub fn new(checked: Signal<bool>) -> Self {
         Self {
             key: InstanceKey::new("checkbox"),
-            config: CheckboxConfig::new(checked_state.clone()),
+            config: CheckboxConfig::new(checked),
             built: std::cell::OnceCell::new(),
         }
     }
 
     /// Create a checkbox builder with an explicit key
-    pub fn with_key(key: impl Into<String>, checked_state: &State<bool>) -> Self {
+    pub fn with_key(key: impl Into<String>, checked: Signal<bool>) -> Self {
         Self {
             key: InstanceKey::explicit(key),
-            config: CheckboxConfig::new(checked_state.clone()),
+            config: CheckboxConfig::new(checked),
             built: std::cell::OnceCell::new(),
         }
     }
@@ -254,15 +240,15 @@ impl CheckboxBuilder {
         self
     }
 
-    /// Add a label to the checkbox
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.config.label = Some(label.into());
+    /// The label beside the box: a string, Signal or Computed.
+    pub fn label(mut self, label: impl IntoReactive<String>) -> Self {
+        self.config.label = Some(label.into_reactive());
         self
     }
 
-    /// Set disabled state
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether it is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 
@@ -309,10 +295,7 @@ impl ElementBuilder for CheckboxBuilder {
     }
 }
 
-/// Create a checkbox with state from context
-///
-/// The checkbox uses reactive `State<bool>` for its checked status.
-/// State changes automatically trigger visual updates via signals.
+/// A checkbox that reads and writes `checked`, following it in place.
 ///
 /// # Example
 ///
@@ -320,15 +303,15 @@ impl ElementBuilder for CheckboxBuilder {
 /// use blinc_cn::prelude::*;
 ///
 /// fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-///     let checked = ctx.use_state_for("remember_me", false);
+///     let checked = ctx.use_signal(false);
 ///
-///     cn::checkbox(&checked)
+///     cn::checkbox(checked)
 ///         .label("Remember me")
 ///         .on_change(|checked| println!("Checked: {}", checked))
 /// }
 /// ```
-pub fn checkbox(state: &State<bool>) -> CheckboxBuilder {
-    CheckboxBuilder::new(state)
+pub fn checkbox(checked: Signal<bool>) -> CheckboxBuilder {
+    CheckboxBuilder::new(checked)
 }
 
 #[cfg(test)]

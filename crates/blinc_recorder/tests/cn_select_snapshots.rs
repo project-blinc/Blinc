@@ -5,7 +5,7 @@
 
 use blinc_cn::{combobox, dropdown_menu, popover, select};
 use blinc_core::Color;
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::signal;
 use blinc_layout::div::div;
 use blinc_recorder::{Golden, Headless};
 use blinc_theme::{ColorScheme, ColorToken, HybridTheme, ThemeState};
@@ -31,14 +31,10 @@ fn session_sized(w: u32, h: u32) -> Option<Headless> {
 }
 
 fn mount_select(ui: &mut Headless, disabled: bool) {
-    let value = State::new(
-        signal::<String>(String::new()),
-        global_graph(),
-        global_dirty_flag(),
-    );
+    let value = signal(String::new());
     ui.mount(move |_| {
         div().w(W as f32).h(H as f32).p(4.0).child(
-            select(&value)
+            select(value)
                 .option("a", "Apple")
                 .option("b", "Banana")
                 .placeholder("Fruit")
@@ -134,14 +130,10 @@ fn the_dropdown_trigger_tints_on_hover_and_press() {
 }
 
 fn mount_combobox(ui: &mut Headless, disabled: bool) {
-    let value = State::new(
-        signal::<String>(String::new()),
-        global_graph(),
-        global_dirty_flag(),
-    );
+    let value = signal(String::new());
     ui.mount(move |_| {
         div().w(W as f32).h(H as f32).p(4.0).child(
-            combobox(&value)
+            combobox(value)
                 .option("a", "Apple")
                 .option("b", "Banana")
                 .placeholder("Fruit")
@@ -198,13 +190,9 @@ fn a_long_combobox_list_stays_inside_its_popup() {
     let Some(mut ui) = session_sized(W, 420) else {
         return;
     };
-    let value = State::new(
-        signal::<String>(String::new()),
-        global_graph(),
-        global_dirty_flag(),
-    );
+    let value = signal(String::new());
     ui.mount(move |_| {
-        let mut c = combobox(&value).placeholder("Framework").w(180.0);
+        let mut c = combobox(value).placeholder("Framework").w(180.0);
         for i in 0..10 {
             c = c.option(format!("v{i}"), format!("Option {i}"));
         }
@@ -332,14 +320,10 @@ fn the_select_caret_spins_open() {
     let Some(mut ui) = session_sized(W, 240) else {
         return;
     };
-    let value = State::new(
-        signal::<String>(String::new()),
-        global_graph(),
-        global_dirty_flag(),
-    );
+    let value = signal(String::new());
     ui.mount(move |_| {
         div().w(W as f32).h(240.0).p(4.0).child(
-            select(&value)
+            select(value)
                 .option("a", "Apple")
                 .placeholder("Fruit")
                 .w(180.0),
@@ -354,14 +338,10 @@ fn the_combobox_caret_spins_open() {
     let Some(mut ui) = session_sized(W, 240) else {
         return;
     };
-    let value = State::new(
-        signal::<String>(String::new()),
-        global_graph(),
-        global_dirty_flag(),
-    );
+    let value = signal(String::new());
     ui.mount(move |_| {
         div().w(W as f32).h(240.0).p(4.0).child(
-            combobox(&value)
+            combobox(value)
                 .option("a", "Apple")
                 .placeholder("Fruit")
                 .w(180.0),

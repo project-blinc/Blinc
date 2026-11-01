@@ -48,7 +48,7 @@ impl CnPagination {
         // and no float clamp standing in for "at least page 1". Handing
         // over the signal rather than a narrowed copy keeps one id, so
         // the binding writes back to what the author declared.
-        let page = blinc_cn::PageValue::I32(crate::bridge::i32_state(&self.page));
+        let page = blinc_cn::PageValue::I32(crate::bridge::i32_state(&self.page).signal());
 
         let total = self.total.max(0.0) as usize;
         let mut b = blinc_cn::PaginationBuilder::with_page_value(total, page).size(self.size());

@@ -9,7 +9,8 @@
 //! .my-switch:checked { background: #16a34a; }
 //! ```
 //!
-//! Uses `State<bool>` from context for reactive state management.
+//! It reads and writes a `Signal<bool>`; `label` and `disabled` are bound in
+//! place.
 //!
 //! # Example
 //!
@@ -17,31 +18,25 @@
 //! use blinc_cn::prelude::*;
 //!
 //! fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-//!     // Create switch state from context
-//!     let enabled = ctx.use_state_for("notifications", false);
+//!     let enabled = ctx.use_signal(false);
 //!
-//!     cn::switch(&enabled)
+//!     cn::switch(enabled)
 //!         .label("Enable notifications")
 //!         .on_change(|is_on| println!("Switch: {}", is_on))
 //! }
 //!
-//! // Different sizes
-//! let dark_mode = ctx.use_state_for("dark_mode", true);
-//! cn::switch(&dark_mode)
-//!     .size(SwitchSize::Small)
-//!
-//! // Disabled state
-//! cn::switch(&enabled)
-//!     .disabled(true)
+//! cn::switch(dark_mode).size(SwitchSize::Small)
+//! cn::switch(enabled).disabled(locked)
 //! ```
 
-use blinc_core::State;
+use blinc_core::reactive::Signal;
+use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
 use blinc_layout::prelude::*;
 use blinc_layout::style;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
-use blinc_theme::{ColorToken, ThemeState};
+use blinc_theme::ThemeState;
 use std::sync::Arc;
 
 /// Switch size variants
@@ -97,23 +92,15 @@ impl SwitchSize {
 /// Switch component
 ///
 /// A toggle switch whose thumb slides between its ends.
-/// Uses `State<bool>` from context for reactive state management.
 pub struct Switch {
     /// The fully-built inner element (Div containing switch and optional label)
     inner: Div,
 }
 
 impl Switch {
-    /// Create a new switch with state and animation scheduler from context
-    ///
-    ///
-    /// # Example
-    /// ```ignore
-    /// let enabled = ctx.use_state_for("my_switch", false);
-    /// cn::switch(&enabled)
-    /// ```
-    pub fn new(on_state: &State<bool>) -> Self {
-        Self::with_config(SwitchConfig::new(on_state.clone()))
+    /// A switch that reads and writes `on`.
+    pub fn new(on: Signal<bool>) -> Self {
+        Self::with_config(SwitchConfig::new(on))
     }
 
     /// Create from a full configuration
@@ -124,7 +111,7 @@ impl Switch {
         let thumb_size = config.size.thumb_size();
         let padding = 2.0; // Padding from track edge
         let radius = track_height / 2.0; // Fully rounded track
-        let disabled = config.disabled;
+        let on = config.on;
 
         // The thumb sits at the track's start; `:checked` rules move it. Its
         // size and the track's are layout, set here; every colour, the
@@ -135,7 +122,7 @@ impl Switch {
             .h(thumb_size)
             .style(&style! { rounded: thumb_size / 2.0 });
 
-        let mut switch = div()
+        let switch = div()
             .class("cn-switch")
             .class(config.size.css_class())
             .w(track_width)
@@ -145,63 +132,48 @@ impl Switch {
             .items_center()
             .padding_x(blinc_layout::units::px(padding))
             .child(thumb)
-            // `:checked` rules follow the switch in place.
-            .attr_when("checked", "", &config.on_state);
+            // `:checked` and `:disabled` rules follow the switch in place.
+            .attr_when("checked", "", on)
+            .attr_when("disabled", "", config.disabled.clone());
 
-        if disabled {
-            switch = switch.class("cn-switch--disabled").attr("disabled", "");
-        }
-
-        let on_state_for_click = config.on_state.clone();
-        let on_change = config.on_change.clone();
-        switch = switch.on_click(move |_| {
-            if disabled {
-                return;
+        // The track and its label both toggle; the bound `disabled` is read
+        // when the click arrives.
+        let toggle = {
+            let disabled = config.disabled.clone();
+            let on_change = config.on_change.clone();
+            move || {
+                if disabled.now().unwrap_or(false) {
+                    return;
+                }
+                let next = !on.try_get().unwrap_or(false);
+                on.set(next);
+                if let Some(ref callback) = on_change {
+                    callback(next);
+                }
             }
-            let new_value = !on_state_for_click.get();
-            on_state_for_click.set(new_value);
-            if let Some(ref callback) = on_change {
-                callback(new_value);
-            }
-        });
+        };
 
-        // If there's a label, wrap in a row
-        let inner = if let Some(ref label_text) = config.label {
-            let label_color = if disabled {
-                theme.color(ColorToken::TextTertiary)
-            } else {
-                theme.color(ColorToken::TextPrimary)
-            };
-
-            // The label toggles too, matching a checkbox and radio and
-            // what a pointer cursor on this row already promises.
-            let state_for_label = config.on_state.clone();
-            let on_change_for_label = config.on_change.clone();
-
+        let inner = if let Some(label) = config.label {
+            let row_toggle = toggle.clone();
+            let switch = switch.on_click(move |_| toggle());
+            // The row carries `disabled` too, so the label's colour is a rule.
             div()
+                .class("cn-switch-row")
+                .attr_when("disabled", "", config.disabled)
                 .flex_row()
                 .gap(theme.spacing().space_1)
                 .items_center()
                 .cursor_pointer()
                 .child(switch)
                 .child(
-                    text(label_text)
-                        .size(theme.typography().text_sm)
-                        .color(label_color),
+                    blinc_layout::text::Text::bound(label)
+                        .class("cn-switch-label")
+                        .size(theme.typography().text_sm),
                 )
-                .on_click(move |_| {
-                    if disabled {
-                        return;
-                    }
-                    let next = !state_for_label.get();
-                    state_for_label.set(next);
-                    if let Some(ref callback) = on_change_for_label {
-                        callback(next);
-                    }
-                })
+                .on_click(move |_| row_toggle())
         } else {
-            // Wrap single switch in a div for consistent behavior
-            div().child(switch)
+            // A single switch in a row, so it lays out as a unit.
+            div().child(switch.on_click(move |_| toggle()))
         };
 
         Self { inner }
@@ -249,20 +221,20 @@ impl ElementBuilder for Switch {
 /// Internal configuration for building a Switch
 #[derive(Clone)]
 struct SwitchConfig {
-    on_state: State<bool>,
+    on: Signal<bool>,
     size: SwitchSize,
-    label: Option<String>,
-    disabled: bool,
+    label: Option<Reactive<String>>,
+    disabled: Reactive<bool>,
     on_change: Option<Arc<dyn Fn(bool) + Send + Sync>>,
 }
 
 impl SwitchConfig {
-    fn new(on_state: State<bool>) -> Self {
+    fn new(on: Signal<bool>) -> Self {
         Self {
-            on_state,
+            on,
             size: SwitchSize::default(),
             label: None,
-            disabled: false,
+            disabled: Reactive::Const(false),
             on_change: None,
         }
     }
@@ -276,10 +248,10 @@ pub struct SwitchBuilder {
 }
 
 impl SwitchBuilder {
-    /// Create a new switch builder with state and scheduler from context
-    pub fn new(on_state: &State<bool>) -> Self {
+    /// A switch that reads and writes `on`.
+    pub fn new(on: Signal<bool>) -> Self {
         Self {
-            config: SwitchConfig::new(on_state.clone()),
+            config: SwitchConfig::new(on),
             built: std::cell::OnceCell::new(),
         }
     }
@@ -297,15 +269,15 @@ impl SwitchBuilder {
         self
     }
 
-    /// Add a label to the switch
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.config.label = Some(label.into());
+    /// The label beside the track: a string, Signal or Computed.
+    pub fn label(mut self, label: impl IntoReactive<String>) -> Self {
+        self.config.label = Some(label.into_reactive());
         self
     }
 
-    /// Set disabled state
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether it is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 
@@ -352,10 +324,7 @@ impl ElementBuilder for SwitchBuilder {
     }
 }
 
-/// Create a switch with state from context
-///
-/// The switch uses reactive `State<bool>` for its on/off status.
-/// State changes automatically trigger visual updates via signals.
+/// A switch that reads and writes `on`, following it in place.
 ///
 /// # Example
 ///
@@ -363,15 +332,15 @@ impl ElementBuilder for SwitchBuilder {
 /// use blinc_cn::prelude::*;
 ///
 /// fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-///     let dark_mode = ctx.use_state_for("dark_mode", false);
+///     let dark_mode = ctx.use_signal(false);
 ///
-///     cn::switch(&dark_mode)
+///     cn::switch(dark_mode)
 ///         .label("Dark mode")
 ///         .on_change(|enabled| println!("Dark mode: {}", enabled))
 /// }
 /// ```
-pub fn switch(state: &State<bool>) -> SwitchBuilder {
-    SwitchBuilder::new(state)
+pub fn switch(on: Signal<bool>) -> SwitchBuilder {
+    SwitchBuilder::new(on)
 }
 
 #[cfg(test)]

@@ -4,7 +4,7 @@
 //! variant and size for its items and keeps one item on.
 
 use blinc_cn::{ToggleSize, ToggleVariant, toggle, toggle_group, toggle_item};
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::{global_graph, signal};
 use blinc_layout::LayoutNodeId;
 use blinc_layout::css_parser::Stylesheet;
 use blinc_layout::div::ElementBuilder;
@@ -34,8 +34,8 @@ fn init() {
     });
 }
 
-fn state<T: Clone + Send + Sync + 'static>(initial: T) -> State<T> {
-    State::new(signal::<T>(initial), global_graph(), global_dirty_flag())
+fn flag(initial: bool) -> blinc_core::reactive::Signal<bool> {
+    signal(initial)
 }
 
 fn tree_of(ui: &impl ElementBuilder) -> RenderTree {
@@ -77,8 +77,8 @@ fn frame(tree: &mut RenderTree) {
 fn a_toggle_is_one_element_with_its_state_as_data() {
     init();
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let on = state(false);
-    let ui = toggle(&on)
+    let on = flag(false);
+    let ui = toggle(on)
         .variant(ToggleVariant::Outline)
         .size(ToggleSize::Small)
         .label("B");
@@ -106,20 +106,40 @@ fn a_toggle_is_one_element_with_its_state_as_data() {
 fn a_click_toggles_and_a_disabled_toggle_ignores_it() {
     init();
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let on = state(false);
-    let live = toggle(&on).label("B");
+    let on = flag(false);
+    let live = toggle(on).label("B");
     let _ = tree_of(&live);
     click(&live);
     assert!(on.get());
     click(&live);
     assert!(!on.get());
 
-    let blocked = toggle(&on).label("B").disabled(true);
+    let blocked = toggle(on).label("B").disabled(true);
     let tree = tree_of(&blocked);
     click(&blocked);
     assert!(!on.get(), "a disabled toggle toggled");
     let t = nodes(&tree, "cn-toggle")[0];
     assert!(attr(&tree, t, "disabled").is_some());
+}
+
+#[test]
+fn a_bound_disabled_follows_its_signal_in_place() {
+    init();
+    let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let on = flag(false);
+    let locked = flag(true);
+    let ui = toggle(on).label("B").disabled(locked);
+    let mut tree = tree_of(&ui);
+    let t = nodes(&tree, "cn-toggle")[0];
+    assert!(attr(&tree, t, "disabled").is_some());
+    click(&ui);
+    assert!(!on.get(), "a disabled toggle toggled");
+
+    locked.set(false);
+    frame(&mut tree);
+    assert_eq!(attr(&tree, t, "disabled"), None);
+    click(&ui);
+    assert!(on.get(), "re-enabled, the click did not toggle it");
 }
 
 fn click(el: &impl ElementBuilder) {
@@ -135,8 +155,8 @@ fn click(el: &impl ElementBuilder) {
 fn a_group_sets_variant_and_size_and_keeps_one_item_on() {
     init();
     let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    let value = state("a".to_string());
-    let ui = toggle_group(&value)
+    let value = signal("a".to_string());
+    let ui = toggle_group(value)
         .variant(ToggleVariant::Outline)
         .size(ToggleSize::Large)
         .item(toggle_item("a").label("L"))

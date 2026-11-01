@@ -45,7 +45,7 @@ impl CnSwitch {
             _ => blinc_cn::SwitchSize::Medium,
         };
         let state = bool_state(&self.checked);
-        let mut s = blinc_cn::switch(&state).size(size);
+        let mut s = blinc_cn::switch(state.signal()).size(size);
         if !self.label.is_empty() {
             s = s.label(self.label.clone());
         }

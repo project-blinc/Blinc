@@ -240,8 +240,8 @@ impl Slider {
         let round_to_step_drag = round_to_step;
 
         // Clones for event handlers
-        let value_state_for_click = config.value_state.clone();
-        let value_state_for_drag = config.value_state.clone();
+        let value_state_for_click = config.value_state;
+        let value_state_for_drag = config.value_state;
         let on_change_for_click = config.on_change.clone();
         let on_change_for_drag = config.on_change.clone();
 
@@ -610,12 +610,9 @@ impl Slider {
             if config.label.is_some() || config.show_value {
                 let mut header = div().flex_row().justify_between().items_center();
 
-                if let Some(ref label_text) = config.label {
-                    let mut lbl = label(label_text).size(LabelSize::Medium);
-                    if disabled {
-                        lbl = lbl.disabled(true);
-                    }
-                    header = header.child(lbl);
+                if let Some(label_text) = config.label.clone() {
+                    header =
+                        header.child(label(label_text).size(LabelSize::Medium).disabled(disabled));
                 }
 
                 if config.show_value {
@@ -626,7 +623,7 @@ impl Slider {
                     };
                     // The shown text follows the value in place: a string
                     // derived from the number, bound to the text node.
-                    let value_state_for_display = config.value_state.clone();
+                    let value_state_for_display = config.value_state;
                     let step_for_display = config.step;
                     let shown: State<String> = State::mapped(
                         config.value_state.signal_id(),
@@ -714,7 +711,7 @@ struct SliderConfig {
     max: f32,
     step: Option<f32>,
     size: SliderSize,
-    label: Option<String>,
+    label: Option<blinc_layout::binding::Reactive<String>>,
     show_value: bool,
     disabled: bool,
     width: Option<f32>,
@@ -814,8 +811,9 @@ impl SliderBuilder {
     }
 
     /// Add a label above the slider
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.config.label = Some(label.into());
+    /// A label above the track: a string, Signal or Computed.
+    pub fn label(mut self, label: impl blinc_layout::binding::IntoReactive<String>) -> Self {
+        self.config.label = Some(label.into_reactive());
         self
     }
 

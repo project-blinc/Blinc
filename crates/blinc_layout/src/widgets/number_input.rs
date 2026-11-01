@@ -4,14 +4,14 @@
 //! and a parse + clamp + format pipeline so callers work in `f64`
 //! rather than `String`. The visible field is a regular text input —
 //! same focus ring, same theme tokens, same CSS hooks (`.cn-input` etc.
-//! work as-is on top). The number-specific surface (`State<f64>`,
+//! work as-is on top). The number-specific surface (`Signal<f64>`,
 //! `min` / `max` / `step` / `precision`) lives in this thin wrapper.
 //!
 //! # Example
 //!
 //! ```ignore
-//! let count = ctx.use_state_keyed("count", || 1.0);
-//! number_input(&count)
+//! let count = ctx.use_signal(1.0);
+//! number_input(count)
 //!     .min(0.0)
 //!     .max(100.0)
 //!     .step(1.0)
@@ -33,8 +33,9 @@
 
 use std::sync::Arc;
 
-use blinc_core::State;
+use blinc_core::reactive::Signal;
 
+use crate::binding::{IntoReactive, Reactive};
 use crate::div::{ElementBuilder, ElementTypeId};
 use crate::element::RenderProps;
 use crate::tree::{LayoutNodeId, LayoutTree};
@@ -42,7 +43,7 @@ use crate::widgets::text_input::{
     InputType, SharedTextInputData, TextInput, text_input, text_input_data,
 };
 
-/// Reactive numeric value bound to a [`State<f64>`]. Use `f64` for the
+/// Numeric value bound to a [`Signal<f64>`]. Use `f64` for the
 /// widest range — `cn::number_input` can layer a precision/format
 /// hint on top if integer semantics are wanted. Generic-over-numeric
 /// is intentionally NOT done here: it'd multiply config types four
@@ -50,7 +51,7 @@ use crate::widgets::text_input::{
 /// integer-display fine.
 #[derive(Clone)]
 pub struct NumberInputConfig {
-    state: State<f64>,
+    state: Signal<f64>,
     data: SharedTextInputData,
     /// Lower bound (inclusive). `None` = no lower bound.
     pub min: Option<f64>,
@@ -70,13 +71,21 @@ pub struct NumberInputConfig {
 /// Increment `state` by `step`, clamping against `[min, max]`. Used by
 /// caller-supplied `+` buttons (notably `cn::number_input`).
 pub fn step_up(config: &NumberInputConfig) {
-    let next = clamp(config.state.get() + config.step, config.min, config.max);
+    let next = clamp(
+        config.state.try_get().unwrap_or(0.0) + config.step,
+        config.min,
+        config.max,
+    );
     set_value(config, next);
 }
 
 /// Decrement `state` by `step`, clamping against `[min, max]`.
 pub fn step_down(config: &NumberInputConfig) {
-    let next = clamp(config.state.get() - config.step, config.min, config.max);
+    let next = clamp(
+        config.state.try_get().unwrap_or(0.0) - config.step,
+        config.min,
+        config.max,
+    );
     set_value(config, next);
 }
 
@@ -130,7 +139,7 @@ pub struct NumberInputBuilder {
     width: Option<f32>,
     height: Option<f32>,
     placeholder: Option<String>,
-    disabled: bool,
+    disabled: Reactive<bool>,
     rounded: Option<f32>,
     css_element_id: Option<String>,
     css_classes: Vec<String>,
@@ -138,20 +147,21 @@ pub struct NumberInputBuilder {
 }
 
 impl NumberInputBuilder {
+    /// A number input that reads and writes `state`.
     #[track_caller]
-    pub fn new(state: &State<f64>) -> Self {
+    pub fn new(state: Signal<f64>) -> Self {
         let data = text_input_data();
         // Seed the input with the current state value so first paint
         // shows the right thing — without this, the text input would
         // render empty until the user typed.
         if let Ok(mut d) = data.lock() {
-            d.value = format_value(state.get(), 2);
+            d.value = format_value(state.try_get().unwrap_or(0.0), 2);
             d.cursor = d.value.chars().count();
             d.input_type = InputType::Number;
         }
         Self {
             config: NumberInputConfig {
-                state: state.clone(),
+                state,
                 data,
                 min: None,
                 max: None,
@@ -162,7 +172,7 @@ impl NumberInputBuilder {
             width: None,
             height: None,
             placeholder: None,
-            disabled: false,
+            disabled: Reactive::Const(false),
             rounded: None,
             css_element_id: None,
             css_classes: Vec::new(),
@@ -205,7 +215,7 @@ impl NumberInputBuilder {
     pub fn precision(mut self, precision: usize) -> Self {
         self.config.precision = precision;
         if let Ok(mut d) = self.config.data.lock() {
-            d.value = format_value(self.config.state.get(), precision);
+            d.value = format_value(self.config.state.try_get().unwrap_or(0.0), precision);
             d.cursor = d.value.chars().count();
         }
         self
@@ -226,8 +236,9 @@ impl NumberInputBuilder {
         self
     }
 
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.disabled = disabled;
+    /// Whether it is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.disabled = disabled.into_reactive();
         self
     }
 
@@ -261,7 +272,7 @@ impl NumberInputBuilder {
 
 impl NumberInput {
     fn from_builder(b: &NumberInputBuilder) -> Self {
-        let state = b.config.state.clone();
+        let state = b.config.state;
         let min = b.config.min;
         let max = b.config.max;
         let precision = b.config.precision;
@@ -286,9 +297,7 @@ impl NumberInput {
         if let Some(ref p) = b.placeholder {
             input = input.placeholder(p.clone());
         }
-        if b.disabled {
-            input = input.disabled(true);
-        }
+        input = input.disabled(b.disabled.clone());
         if let Some(r) = b.rounded {
             input = input.rounded(r);
         }
@@ -405,13 +414,13 @@ impl ElementBuilder for NumberInputBuilder {
     }
 }
 
-/// Create a number input bound to a reactive [`State<f64>`].
+/// A number input that reads and writes `state`.
 ///
 /// ```ignore
-/// let count = ctx.use_state_keyed("count", || 0.0);
-/// number_input(&count).min(0.0).max(99.0).step(1.0).precision(0)
+/// let count = ctx.use_signal(0.0);
+/// number_input(count).min(0.0).max(99.0).step(1.0).precision(0)
 /// ```
 #[track_caller]
-pub fn number_input(state: &State<f64>) -> NumberInputBuilder {
+pub fn number_input(state: Signal<f64>) -> NumberInputBuilder {
     NumberInputBuilder::new(state)
 }

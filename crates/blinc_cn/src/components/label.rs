@@ -58,25 +58,11 @@ impl Label {
     fn with_config(config: LabelConfig) -> Self {
         let theme = ThemeState::get();
         let typography = theme.typography();
-
-        let text_color = if config.disabled {
-            theme.color(ColorToken::TextTertiary)
-        } else {
-            theme.color(ColorToken::TextPrimary)
-        };
-
         let font_size = config.size.font_size(&typography);
 
-        let disabled_class = if config.disabled {
-            "cn-label--disabled"
-        } else {
-            ""
-        };
-
+        // The text's colour, the asterisk's and the dimmed look while
+        // `disabled` holds are `.cn-label` rules.
         let inner = if config.required {
-            // Build a row with text + asterisk
-            let required_color = theme.color(ColorToken::Error);
-
             // No `w_fit()` / `h_fit()`: both set `align_self: Start` as a
             // side effect, which overrides the parent's `align-items`.
             // In a row that pinned the label to the top, so a label beside
@@ -85,25 +71,29 @@ impl Label {
             // being squeezed.
             div()
                 .flex_shrink_0()
-                .class("cn-label")
-                .class(disabled_class)
                 .flex_row()
                 .gap(2.0)
                 .child_box(crate::reactive_props::reactive_text(
                     &config.text,
-                    move |t| t.size(font_size).color(text_color).medium().no_wrap(),
+                    move |t| t.class("cn-label-text").size(font_size).medium().no_wrap(),
                 ))
-                .child(text("*").size(font_size).color(required_color).medium())
+                .child(
+                    text("*")
+                        .class("cn-label-required")
+                        .size(font_size)
+                        .medium(),
+                )
         } else {
             div()
                 .flex_shrink_0()
-                .class("cn-label")
-                .class(disabled_class)
                 .child_box(crate::reactive_props::reactive_text(
                     &config.text,
-                    move |t| t.size(font_size).color(text_color).medium().no_wrap(),
+                    move |t| t.class("cn-label-text").size(font_size).medium().no_wrap(),
                 ))
-        };
+        }
+        .class("cn-label")
+        .class_when("cn-label--disabled", config.disabled.clone())
+        .attr_when("disabled", "", config.disabled);
 
         Self { inner }
     }
@@ -126,18 +116,16 @@ pub(crate) struct LabelConfig {
     text: blinc_layout::binding::Reactive<String>,
     size: LabelSize,
     required: bool,
-    disabled: bool,
+    disabled: blinc_layout::binding::Reactive<bool>,
 }
 
-/// Hand-written: `Reactive<T>` carries type-erased handles and is not
-/// `Clone` itself, though every variant's payload is.
 impl Clone for LabelConfig {
     fn clone(&self) -> Self {
         Self {
-            text: crate::reactive_props::clone_reactive(&self.text),
+            text: self.text.clone(),
             size: self.size,
             required: self.required,
-            disabled: self.disabled,
+            disabled: self.disabled.clone(),
         }
     }
 }
@@ -148,7 +136,7 @@ impl LabelConfig {
             text,
             size: LabelSize::default(),
             required: false,
-            disabled: false,
+            disabled: blinc_layout::binding::Reactive::Const(false),
         }
     }
 }
@@ -189,9 +177,9 @@ impl LabelBuilder {
         self
     }
 
-    /// Disable the label (dimmed appearance)
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Dim the label while `disabled` holds: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl blinc_layout::binding::IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 

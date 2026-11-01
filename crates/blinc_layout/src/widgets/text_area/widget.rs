@@ -154,12 +154,16 @@ impl TextArea {
     }
 
     /// Set disabled state
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.lock().unwrap().disabled = disabled;
-        if let Ok(mut s) = self.state.lock() {
-            s.disabled = disabled;
-            if disabled {
-                s.visual = TextFieldState::Disabled;
+    /// Whether the field is disabled: a bool, Signal or Computed. A bound
+    /// value is followed in place.
+    pub fn disabled(self, disabled: impl crate::binding::IntoReactive<bool>) -> Self {
+        match disabled.into_reactive() {
+            crate::binding::Reactive::Const(on) => set_disabled(&self.state, &self.config, on),
+            bound => {
+                let (state, config) = (Arc::clone(&self.state), Arc::clone(&self.config));
+                blinc_core::reactive::effect(move |g| {
+                    set_disabled(&state, &config, bound.read(g).unwrap_or(false));
+                });
             }
         }
         self
@@ -667,5 +671,25 @@ impl ElementBuilder for TextArea {
                 notify_text_area(&state);
             }
         }))
+    }
+}
+
+/// Disable or enable a field and have what it shows follow.
+fn set_disabled(state: &SharedTextAreaState, config: &Mutex<TextAreaConfig>, on: bool) {
+    config.lock().unwrap().disabled = on;
+    let changed = match state.lock() {
+        Ok(mut s) if s.disabled != on => {
+            s.disabled = on;
+            if on {
+                s.visual = TextFieldState::Disabled;
+            } else if s.visual == TextFieldState::Disabled {
+                s.visual = TextFieldState::Idle;
+            }
+            true
+        }
+        _ => false,
+    };
+    if changed {
+        super::focus::notify_text_area(state);
     }
 }

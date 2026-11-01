@@ -8,10 +8,10 @@
 //! ```ignore
 //! // Before: user must manage internal component state
 //! let fruit_open = ctx.use_state_keyed("fruit_open", || false);
-//! cn::select(&fruit, &fruit_open)
+//! cn::select(fruit, fruit_open)
 //!
 //! // After: component manages internal state via singleton
-//! cn::select(&fruit)  // open_state is internal to the component
+//! cn::select(fruit)  // open_state is internal to the component
 //! ```
 //!
 //! # Initialization

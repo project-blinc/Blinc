@@ -1,7 +1,8 @@
 //! Select component for dropdown value selection
 //!
-//! A themed select dropdown with click-to-open and keyboard navigation.
-//! Uses state-driven reactivity for proper persistence across UI rebuilds.
+//! A themed select dropdown with click-to-open and keyboard navigation. It
+//! reads and writes a `Signal<String>`; `label` and `disabled` are bound in
+//! place.
 //!
 //! # Example
 //!
@@ -9,9 +10,9 @@
 //! use blinc_cn::prelude::*;
 //!
 //! fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-//!     let fruit = ctx.use_state_keyed("fruit", || "apple".to_string());
+//!     let fruit = ctx.use_signal("apple".to_string());
 //!
-//!     cn::select(&fruit)
+//!     cn::select(fruit)
 //!         .placeholder("Choose a fruit...")
 //!         .option("apple", "Apple")
 //!         .option("banana", "Banana")
@@ -19,26 +20,18 @@
 //!         .on_change(|value| println!("Selected: {}", value))
 //! }
 //!
-//! // Different sizes
-//! cn::select(&value)
-//!     .size(SelectSize::Large)
-//!
-//! // Disabled state
-//! cn::select(&value)
-//!     .disabled(true)
-//!
-//! // With label
-//! cn::select(&value)
-//!     .label("Favorite Fruit")
+//! cn::select(value).size(SelectSize::Large)
+//! cn::select(value).disabled(locked)
+//! cn::select(value).label("Favorite Fruit")
 //! ```
 
 use std::cell::OnceCell;
 use std::sync::Arc;
 
-use blinc_core::State;
 use blinc_core::context_state::BlincContextState;
 use blinc_core::owner::Owner;
-use blinc_core::reactive::{ReactiveGraph, computed};
+use blinc_core::reactive::{ReactiveGraph, Signal, computed};
+use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::click_outside;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
@@ -175,11 +168,11 @@ impl Select {
         let text_tertiary = theme.color(ColorToken::TextTertiary);
         let surface_elevated = theme.color(ColorToken::SurfaceElevated);
 
-        let disabled = config.disabled;
+        let disabled = config.disabled.clone();
 
-        // Create internal open_state using the singleton (tracks whether dropdown should be shown)
+        // Whether the list is showing; kept per instance across rebuilds.
         let open_key = format!("{}_open", instance_key);
-        let open_state = BlincContextState::get().use_state_keyed(&open_key, || false);
+        let open_state = BlincContextState::get().use_signal_keyed(&open_key, || false);
 
         let dropdown_width = config.width.unwrap_or(200.0);
 
@@ -191,9 +184,18 @@ impl Select {
         // Chevron SVG (down arrow)
         let chevron_svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
 
-        // The value shown, as a one-row list keyed by the value.
-        let value = config.value_state.signal();
-        let shown = computed(move |g: &ReactiveGraph| vec![g.get(value).unwrap_or_default()]);
+        // The value shown, as a one-row list keyed by the value and whether
+        // the select is disabled, which dims it.
+        let value = config.value;
+        let shown = {
+            let disabled = disabled.clone();
+            computed(move |g: &ReactiveGraph| {
+                vec![(
+                    g.get(value).unwrap_or_default(),
+                    disabled.read(g).unwrap_or(false),
+                )]
+            })
+        };
         let options_for_display = config.options.clone();
         let placeholder = config
             .placeholder
@@ -201,8 +203,8 @@ impl Select {
             .unwrap_or_else(|| "Select...".to_string());
         let content_wrapper = div().overflow_clip().flex_1().for_each(
             shown,
-            |value: &String| value.clone(),
-            move |current: String| -> Div {
+            |shown: &(String, bool)| format!("{}{}", shown.1 as u8, shown.0),
+            move |(current, disabled): (String, bool)| -> Div {
                 let selected = options_for_display.iter().find(|opt| opt.value == current);
                 let text_clr = if disabled || selected.is_none() {
                     text_tertiary
@@ -229,7 +231,7 @@ impl Select {
 
         // Trigger button — click handler is on the trigger itself (not the wrapper)
         // so clicking dropdown items does NOT re-toggle the dropdown.
-        let open_state_trigger = open_state.clone();
+        let open_state_trigger = open_state;
         let trigger = div()
             .class("cn-select-trigger")
             .flex_row()
@@ -238,7 +240,8 @@ impl Select {
             .justify_between()
             .h(height)
             .p_px(padding)
-            .attr_when("data-state", "open", &open_state)
+            .attr_when("data-state", "open", open_state)
+            .attr_when("disabled", "", disabled.clone())
             .border_width(1.0)
             .rounded(radius)
             .overflow_clip()
@@ -253,12 +256,12 @@ impl Select {
                     .flex_shrink_0()
                     .child(svg(chevron_svg).size(16.0, 16.0).tint(text_tertiary)),
             )
-            .when(disabled, |t| t.attr("disabled", ""))
-            .when(!disabled, |t| t.cursor_pointer())
-            .when(disabled, |t| t.cursor_not_allowed())
-            .on_click(move |_ctx| {
-                if !disabled {
-                    open_state_trigger.set(!open_state_trigger.get());
+            .on_click({
+                let disabled = disabled.clone();
+                move |_ctx| {
+                    if !disabled.now().unwrap_or(false) {
+                        open_state_trigger.set(!open_state_trigger.try_get().unwrap_or(false));
+                    }
                 }
             });
 
@@ -266,8 +269,8 @@ impl Select {
         let wrapper_id = format!("cn-select-{}", instance_key);
         let options_for_dropdown = config.options.clone();
         let on_change_for_dropdown = config.on_change.clone();
-        let value_state_for_dropdown = config.value_state.clone();
-        let open_state_for_dropdown = open_state.clone();
+        let value_for_dropdown = config.value;
+        let open_state_for_dropdown = open_state;
         let instance_key_owned = instance_key.to_string();
         let wrapper_id_for_list = wrapper_id.clone();
 
@@ -280,9 +283,9 @@ impl Select {
             .overflow_visible()
             .w(dropdown_width)
             .child(trigger)
-            .show(&open_state, move || {
+            .show(open_state, move || {
                 // A click outside closes the list for as long as it is open.
-                let dismiss = open_state_for_dropdown.clone();
+                let dismiss = open_state_for_dropdown;
                 click_outside::register_click_outside(
                     &wrapper_id_for_list,
                     &wrapper_id_for_list,
@@ -293,9 +296,9 @@ impl Select {
 
                 build_dropdown_content(
                     &options_for_dropdown,
-                    &value_state_for_dropdown.get(),
-                    &value_state_for_dropdown,
-                    &open_state_for_dropdown,
+                    &value_for_dropdown.try_get().unwrap_or_default(),
+                    value_for_dropdown,
+                    open_state_for_dropdown,
                     &on_change_for_dropdown,
                     &instance_key_owned,
                     dropdown_width,
@@ -313,14 +316,11 @@ impl Select {
             });
 
         // If there's a label, wrap in a container
-        let inner = if let Some(ref label_text) = config.label {
+        let inner = if let Some(label_text) = config.label {
             let spacing = theme.spacing_value(SpacingToken::Space2);
             let mut outer = div().flex_col().gap_px(spacing).w(dropdown_width).h_fit();
 
-            let mut lbl = label(label_text).size(LabelSize::Medium);
-            if disabled {
-                lbl = lbl.disabled(true);
-            }
+            let lbl = label(label_text).size(LabelSize::Medium).disabled(disabled);
 
             outer = outer.child(lbl).child(select_element);
             outer
@@ -370,25 +370,25 @@ impl ElementBuilder for Select {
 #[derive(Clone)]
 #[allow(clippy::type_complexity)]
 struct SelectConfig {
-    value_state: State<String>,
+    value: Signal<String>,
     options: Vec<SelectOption>,
     placeholder: Option<String>,
-    label: Option<String>,
+    label: Option<Reactive<String>>,
     size: SelectSize,
-    disabled: bool,
+    disabled: Reactive<bool>,
     width: Option<f32>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
 }
 
 impl SelectConfig {
-    fn new(value_state: State<String>) -> Self {
+    fn new(value: Signal<String>) -> Self {
         Self {
-            value_state,
+            value,
             options: Vec::new(),
             placeholder: None,
             label: None,
             size: SelectSize::default(),
-            disabled: false,
+            disabled: Reactive::Const(false),
             width: None,
             on_change: None,
         }
@@ -404,24 +404,23 @@ pub struct SelectBuilder {
 }
 
 impl SelectBuilder {
-    /// Create a new select builder with value state
+    /// A select that reads and writes `value`.
     ///
-    /// The open state is managed internally using the global context singleton.
-    /// Uses `#[track_caller]` to generate a unique instance key based on the call site.
+    /// Whether the list is open is kept per instance, keyed by the call site.
     #[track_caller]
-    pub fn new(value_state: &State<String>) -> Self {
+    pub fn new(value: Signal<String>) -> Self {
         Self {
             key: InstanceKey::new("select"),
-            config: SelectConfig::new(value_state.clone()),
+            config: SelectConfig::new(value),
             built: OnceCell::new(),
         }
     }
 
     /// Create a select builder with an explicit key
-    pub fn with_key(key: impl Into<String>, value_state: &State<String>) -> Self {
+    pub fn with_key(key: impl Into<String>, value: Signal<String>) -> Self {
         Self {
             key: InstanceKey::explicit(key),
-            config: SelectConfig::new(value_state.clone()),
+            config: SelectConfig::new(value),
             built: OnceCell::new(),
         }
     }
@@ -459,9 +458,9 @@ impl SelectBuilder {
         self
     }
 
-    /// Add a label above the select
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.config.label = Some(label.into());
+    /// A label above the select: a string, Signal or Computed.
+    pub fn label(mut self, label: impl IntoReactive<String>) -> Self {
+        self.config.label = Some(label.into_reactive());
         self
     }
 
@@ -471,9 +470,9 @@ impl SelectBuilder {
         self
     }
 
-    /// Set disabled state
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether it is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 
@@ -519,11 +518,10 @@ impl ElementBuilder for SelectBuilder {
     }
 }
 
-/// Create a select with value state
+/// A select that reads and writes `value`.
 ///
-/// The select uses state-driven reactivity - changes to the value state
-/// will trigger a rebuild of the component. The open/closed state is
-/// managed internally using the global context singleton.
+/// The shown value follows the signal in place, and `label` and `disabled`
+/// are bound. Whether the list is open is kept per instance.
 ///
 /// # Example
 ///
@@ -531,9 +529,9 @@ impl ElementBuilder for SelectBuilder {
 /// use blinc_cn::prelude::*;
 ///
 /// fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-///     let fruit = ctx.use_state_keyed("fruit", || "apple".to_string());
+///     let fruit = ctx.use_signal("apple".to_string());
 ///
-///     cn::select(&fruit)
+///     cn::select(fruit)
 ///         .placeholder("Choose a fruit...")
 ///         .option("apple", "Apple")
 ///         .option("banana", "Banana")
@@ -541,8 +539,8 @@ impl ElementBuilder for SelectBuilder {
 /// }
 /// ```
 #[track_caller]
-pub fn select(value_state: &State<String>) -> SelectBuilder {
-    SelectBuilder::new(value_state)
+pub fn select(value: Signal<String>) -> SelectBuilder {
+    SelectBuilder::new(value)
 }
 
 /// Build the dropdown content as an absolutely positioned child.
@@ -551,8 +549,8 @@ pub fn select(value_state: &State<String>) -> SelectBuilder {
 fn build_dropdown_content(
     options: &[SelectOption],
     current_selected: &str,
-    value_state: &State<String>,
-    open_state: &State<bool>,
+    value: Signal<String>,
+    open_state: Signal<bool>,
     on_change: &Option<Arc<dyn Fn(&str) + Send + Sync>>,
     key: &str,
     width: f32,
@@ -594,8 +592,6 @@ fn build_dropdown_content(
         let is_selected = opt_value == current_selected;
         let is_opt_disabled = opt.disabled;
 
-        let value_state_for_opt = value_state.clone();
-        let open_state_for_opt = open_state.clone();
         let on_change_for_opt = on_change.clone();
         let opt_value_for_click = opt_value.clone();
 
@@ -641,8 +637,8 @@ fn build_dropdown_content(
             })
             .on_click(move |_ctx| {
                 if !is_opt_disabled {
-                    value_state_for_opt.set(opt_value_for_click.clone());
-                    open_state_for_opt.set(false);
+                    value.set(opt_value_for_click.clone());
+                    open_state.set(false);
 
                     if let Some(ref cb) = on_change_for_opt {
                         cb(&opt_value_for_click);

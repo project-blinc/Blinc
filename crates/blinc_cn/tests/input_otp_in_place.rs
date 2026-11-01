@@ -3,7 +3,7 @@
 
 mod common;
 
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::signal;
 use blinc_layout::LayoutNodeId;
 use blinc_layout::div::div;
 use blinc_layout::renderer::{ElementType, RenderTree};
@@ -54,8 +54,8 @@ fn shown(tree: &RenderTree, slot: LayoutNodeId) -> String {
 fn a_value_written_from_outside_shows_across_the_slots() {
     guarded(|| {
         init();
-        let value = State::new(signal(String::new()), global_graph(), global_dirty_flag());
-        let otp = blinc_cn::input_otp(&value, 4).numeric_only(true);
+        let value = signal(String::new());
+        let otp = blinc_cn::input_otp(value, 4).numeric_only(true);
         let host = div().w(400.0).h(200.0).child(otp);
         let mut tree = RenderTree::from_element(&host);
         tree.compute_layout(400.0, 200.0);

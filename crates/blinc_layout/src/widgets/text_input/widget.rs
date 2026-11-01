@@ -212,11 +212,16 @@ impl TextInput {
         self
     }
 
-    pub fn disabled(self, disabled: bool) -> Self {
-        if let Ok(mut d) = self.data.lock() {
-            d.disabled = disabled;
-            if disabled {
-                d.visual = TextFieldState::Disabled;
+    /// Whether the field is disabled: a bool, Signal or Computed. A bound
+    /// value is followed in place.
+    pub fn disabled(self, disabled: impl crate::binding::IntoReactive<bool>) -> Self {
+        match disabled.into_reactive() {
+            crate::binding::Reactive::Const(on) => set_disabled(&self.data, on),
+            bound => {
+                let data = Arc::clone(&self.data);
+                blinc_core::reactive::effect(move |g| {
+                    set_disabled(&data, bound.read(g).unwrap_or(false));
+                });
             }
         }
         self
@@ -298,6 +303,17 @@ impl TextInput {
             d.css_classes.push(blinc_core::intern::intern(name));
         }
         self.inner = std::cell::RefCell::new(self.inner.take().class(name));
+        self
+    }
+
+    /// Give the field `name` as a class while `condition` holds: a bool,
+    /// Signal or Computed, followed in place.
+    pub fn class_when(
+        mut self,
+        name: &str,
+        condition: impl crate::binding::IntoReactive<bool>,
+    ) -> Self {
+        self.inner = std::cell::RefCell::new(self.inner.take().class_when(name, condition));
         self
     }
 
@@ -440,5 +456,24 @@ impl ElementBuilder for TextInput {
         // A new width can scroll the text differently.
         let data = Arc::clone(&self.data);
         Some(Arc::new(move |_bounds| notify_text_input(&data)))
+    }
+}
+
+/// Disable or enable a field and have what it shows follow.
+fn set_disabled(data: &SharedTextInputData, on: bool) {
+    let changed = match data.lock() {
+        Ok(mut d) if d.disabled != on => {
+            d.disabled = on;
+            if on {
+                d.visual = TextFieldState::Disabled;
+            } else if d.visual == TextFieldState::Disabled {
+                d.visual = TextFieldState::Idle;
+            }
+            true
+        }
+        _ => false,
+    };
+    if changed {
+        super::focus::notify_text_input(data);
     }
 }

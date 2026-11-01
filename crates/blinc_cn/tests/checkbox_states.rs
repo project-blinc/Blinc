@@ -77,14 +77,14 @@ fn a_checkbox_looks_the_same_in_every_state() {
     let got = guarded(|| {
         let mut out = String::new();
         out += &scenario("core with a label", "", true, |c| {
-            Box::new(blinc_layout::widgets::checkbox(c).label("Accept"))
+            Box::new(blinc_layout::widgets::checkbox(c.signal()).label("Accept"))
         });
         out += &scenario("core without a label", "", true, |c| {
-            Box::new(blinc_layout::widgets::checkbox(c))
+            Box::new(blinc_layout::widgets::checkbox(c.signal()))
         });
         out += &scenario("core disabled", "", true, |c| {
             Box::new(
-                blinc_layout::widgets::checkbox(c)
+                blinc_layout::widgets::checkbox(c.signal())
                     .label("Accept")
                     .disabled(true),
             )
@@ -93,10 +93,16 @@ fn a_checkbox_looks_the_same_in_every_state() {
             "core under hover and checked rules",
             "#cb:hover { background: #336699; border-color: #ff8800 } #cb:checked { background: #228844; accent-color: #ff0000 }",
             true,
-            |c| Box::new(blinc_layout::widgets::checkbox(c).id("cb").label("Accept")),
+            |c| {
+                Box::new(
+                    blinc_layout::widgets::checkbox(c.signal())
+                        .id("cb")
+                        .label("Accept"),
+                )
+            },
         );
         out += &cn_scenario("cn", true, |c| {
-            Box::new(blinc_cn::checkbox(c).label("Accept"))
+            Box::new(blinc_cn::checkbox(c.signal()).label("Accept"))
         });
         out
     });

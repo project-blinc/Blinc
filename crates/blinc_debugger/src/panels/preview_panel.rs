@@ -90,17 +90,17 @@ impl BuiltPreviewPanel {
                     .items_center()
                     .gap(12.0)
                     .child(
-                        switch(&bounds_state)
+                        switch(bounds_state.signal())
                             .size(SwitchSize::Small)
                             .label("Bounds"),
                     )
                     .child(
-                        switch(&cursor_state)
+                        switch(cursor_state.signal())
                             .size(SwitchSize::Small)
                             .label("Cursor"),
                     )
                     .child(
-                        select(&zoom_state)
+                        select(zoom_state.signal())
                             .size(SelectSize::Small)
                             .w(80.0)
                             .option("50", "50%")

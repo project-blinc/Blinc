@@ -39,7 +39,7 @@ fn init() {
 fn writing_the_state_retargets_the_springs() {
     init();
     let open = bool_state(false);
-    let c = blinc_cn::CollapsibleBuilder::new(&open);
+    let c = blinc_cn::CollapsibleBuilder::new(open.signal());
     let scale = c.scale_anim();
 
     assert_eq!(
@@ -64,6 +64,6 @@ fn writing_the_state_retargets_the_springs() {
 fn an_initially_open_section_starts_open() {
     init();
     let open = bool_state(true);
-    let c = blinc_cn::CollapsibleBuilder::new(&open);
+    let c = blinc_cn::CollapsibleBuilder::new(open.signal());
     assert_eq!(c.scale_anim().lock().unwrap().target(), 1.0);
 }

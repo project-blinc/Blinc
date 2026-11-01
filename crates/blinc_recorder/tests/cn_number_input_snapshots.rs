@@ -5,7 +5,7 @@
 
 use blinc_cn::number_input;
 use blinc_core::Color;
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::{Signal, signal};
 use blinc_layout::div::div;
 use blinc_recorder::Headless;
 use blinc_theme::{ColorScheme, HybridTheme};
@@ -26,22 +26,15 @@ fn session() -> Option<Headless> {
     Some(ui)
 }
 
-fn mount(ui: &mut Headless, start: f64, min: f64, max: f64) -> State<f64> {
-    let state = State::new(signal::<f64>(start), global_graph(), global_dirty_flag());
-    let bound = state.clone();
+fn mount(ui: &mut Headless, start: f64, min: f64, max: f64) -> Signal<f64> {
+    let state = signal(start);
     ui.mount(move |_| {
         div()
             .w(W as f32)
             .h(H as f32)
             .items_center()
             .justify_center()
-            .child(
-                number_input(&bound)
-                    .min(min)
-                    .max(max)
-                    .step(1.0)
-                    .precision(0),
-            )
+            .child(number_input(state).min(min).max(max).step(1.0).precision(0))
     });
     ui.leave().settle();
     state
@@ -112,16 +105,15 @@ fn the_field_is_clear_and_borderless() {
     assert!(fill(&ui, ".cn-number-input-field").map_or(0.0, |c| c.a) < 0.01);
 }
 
-fn mount_disabled(ui: &mut Headless, start: f64) -> State<f64> {
-    let state = State::new(signal::<f64>(start), global_graph(), global_dirty_flag());
-    let bound = state.clone();
+fn mount_disabled(ui: &mut Headless, start: f64) -> Signal<f64> {
+    let state = signal(start);
     ui.mount(move |_| {
         div()
             .w(W as f32)
             .h(H as f32)
             .items_center()
             .justify_center()
-            .child(number_input(&bound).min(0.0).max(10.0).disabled(true))
+            .child(number_input(state).min(0.0).max(10.0).disabled(true))
     });
     ui.leave().settle();
     state
@@ -162,4 +154,42 @@ fn a_disabled_number_input_ignores_the_wheel() {
     ui.hover(".cn-number-input-field").settle();
     ui.scroll(0.0, 80.0).settle();
     assert_eq!(state.get(), 5.0);
+}
+
+#[test]
+fn a_bound_disabled_follows_its_signal_in_place() {
+    let Some(mut ui) = session() else { return };
+    let state = signal(5.0);
+    let locked = signal(true);
+    ui.mount(move |_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .items_center()
+            .justify_center()
+            .child(number_input(state).min(0.0).max(10.0).disabled(locked))
+    });
+    ui.leave().settle();
+    let disabled = |ui: &Headless, selector: &str| {
+        let node = ui.find(selector).expect(selector);
+        ui.tree().element_registry().has_class(node, "disabled=")
+    };
+    assert!(disabled(&ui, ".cn-number-input-group"));
+    assert!(disabled(&ui, ".cn-number-input-field"));
+    ui.click(".cn-number-input-step--inc").settle();
+    ui.hover(".cn-number-input-field")
+        .scroll(0.0, 40.0)
+        .settle();
+    assert_eq!(state.get(), 5.0, "a disabled input changed");
+
+    locked.set(false);
+    ui.settle();
+    assert!(!disabled(&ui, ".cn-number-input-group"));
+    assert!(!disabled(&ui, ".cn-number-input-field"));
+    ui.click(".cn-number-input-step--inc").settle();
+    assert_eq!(state.get(), 6.0, "re-enabled, the step did nothing");
+    ui.hover(".cn-number-input-field")
+        .scroll(0.0, 40.0)
+        .settle();
+    assert_eq!(state.get(), 7.0, "re-enabled, the wheel did nothing");
 }

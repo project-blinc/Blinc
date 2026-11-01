@@ -59,7 +59,7 @@ fn labelled_row_is_clickable(w: &dyn ElementBuilder) -> bool {
 fn a_labelled_switch_toggles_from_its_label() {
     init();
     let on = bool_state(false);
-    let w = blinc_cn::switch(&on).label("wifi");
+    let w = blinc_cn::switch(on.signal()).label("wifi");
     assert!(
         labelled_row_is_clickable(&w),
         "the labelled row must be clickable, not just the track"
@@ -71,7 +71,7 @@ fn a_labelled_switch_toggles_from_its_label() {
 fn a_labelled_checkbox_toggles_from_its_label() {
     init();
     let checked = bool_state(false);
-    let w = blinc_cn::checkbox(&checked).label("remember me");
+    let w = blinc_cn::checkbox(checked.signal()).label("remember me");
     assert!(
         labelled_row_is_clickable(&w),
         "the labelled row must be clickable"

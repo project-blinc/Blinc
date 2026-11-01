@@ -44,7 +44,7 @@ fn build(checked: &State<bool>) -> Scene {
     let host = div()
         .w(200.0)
         .h(60.0)
-        .child(blinc_cn::switch(checked).label("busy"));
+        .child(blinc_cn::switch(checked.signal()).label("busy"));
     let mut tree = RenderTree::from_element(&host);
     tree.set_stylesheet(cn);
     tree.apply_all_stylesheet_styles();

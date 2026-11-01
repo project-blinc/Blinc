@@ -25,7 +25,7 @@ fn session(on: bool) -> Option<Headless> {
             .h(60.0)
             .items_center()
             .justify_center()
-            .child(switch(&state))
+            .child(switch(state.signal()))
     });
     ui.leave().settle();
     Some(ui)

@@ -9,9 +9,9 @@
 //! use blinc_cn::prelude::*;
 //!
 //! fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-//!     let country = ctx.use_state_keyed("country", || "".to_string());
+//!     let country = ctx.use_signal(String::new());
 //!
-//!     cn::combobox(&country)
+//!     cn::combobox(country)
 //!         .placeholder("Search countries...")
 //!         .option("us", "United States")
 //!         .option("uk", "United Kingdom")
@@ -21,30 +21,30 @@
 //! }
 //!
 //! // Different sizes
-//! cn::combobox(&value)
+//! cn::combobox(value)
 //!     .size(ComboboxSize::Large)
 //!
-//! // Disabled state
-//! cn::combobox(&value)
-//!     .disabled(true)
+//! // Disabled while `locked` holds
+//! cn::combobox(value)
+//!     .disabled(locked)
 //!
 //! // With label
-//! cn::combobox(&value)
+//! cn::combobox(value)
 //!     .label("Country")
 //!
 //! // Allow custom values (not just from options)
-//! cn::combobox(&value)
+//! cn::combobox(value)
 //!     .allow_custom(true)
 //! ```
 
 use std::cell::OnceCell;
 use std::sync::Arc;
 
-use blinc_core::State;
 use blinc_core::context_state::BlincContextState;
 use blinc_core::owner::Owner;
-use blinc_core::reactive::{ReactiveGraph, computed};
+use blinc_core::reactive::{ReactiveGraph, Signal, computed};
 use blinc_layout::IntoReactive;
+use blinc_layout::binding::Reactive;
 use blinc_layout::click_outside;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
@@ -191,24 +191,21 @@ impl Combobox {
         let text_tertiary = theme.color(ColorToken::TextTertiary);
         let surface_elevated = theme.color(ColorToken::SurfaceElevated);
 
-        let disabled = config.disabled;
+        let disabled = config.disabled.clone();
 
-        // Create internal open_state using the singleton (tracks whether dropdown should be shown)
-        let open_key = format!("{}_open", instance_key);
-        let open_state = BlincContextState::get().use_state_keyed(&open_key, || false);
-
-        // Create search input data
-        let search_key = format!("{}_search", instance_key);
-        let search_input_data: SharedTextInputData = BlincContextState::get()
-            .use_state_keyed(&search_key, || {
-                blinc_layout::widgets::text_input::text_input_data()
-            })
-            .get();
-
-        // Create a State<String> for reactive filtering
-        let search_query_key = format!("{}_search_query", instance_key);
-        let search_query_state: State<String> =
-            BlincContextState::get().use_state_keyed(&search_query_key, String::new);
+        // Whether the list is showing, the search field and what is typed in
+        // it; kept per instance across rebuilds.
+        let ctx = BlincContextState::get();
+        let open_state = ctx.use_signal_keyed(&format!("{instance_key}_open"), || false);
+        let search_input_data: SharedTextInputData = ctx
+            .use_signal_keyed(
+                &format!("{instance_key}_search"),
+                blinc_layout::widgets::text_input::text_input_data,
+            )
+            .try_get()
+            .unwrap_or_else(blinc_layout::widgets::text_input::text_input_data);
+        let search_query_state =
+            ctx.use_signal_keyed(&format!("{instance_key}_search_query"), String::new);
 
         let dropdown_width = config.width.unwrap_or(200.0);
 
@@ -216,11 +213,7 @@ impl Combobox {
         // value and the search, and its border is `.cn-combobox-trigger` rules
         // over `:hover`, `:disabled` and `data-state="open"`; the list is built
         // while it is open, and its rows follow the search.
-        let (value, open, query) = (
-            config.value_state.signal(),
-            open_state.signal(),
-            search_query_state.signal(),
-        );
+        let (value, open, query) = (config.value, open_state, search_query_state);
 
         let options_for_display = config.options.clone();
         let placeholder = config
@@ -257,13 +250,14 @@ impl Combobox {
 
         // Trigger button — click handler is on the trigger itself (not the wrapper)
         // so clicking dropdown items does NOT re-toggle the dropdown.
-        let open_state_trigger = open_state.clone();
+        let open_state_trigger = open_state;
         let search_data_trigger = search_input_data.clone();
-        let search_query_trigger = search_query_state.clone();
+        let search_query_trigger = search_query_state;
+        let disabled_for_click = disabled.clone();
         let trigger = div()
             .class("cn-combobox-trigger")
-            .attr_when("data-state", "open", &open_state)
-            .when(disabled, |t| t.attr("disabled", ""))
+            .attr_when("data-state", "open", open_state)
+            .attr_when("disabled", "", disabled.clone())
             .flex_row()
             .w_full()
             .items_center()
@@ -291,10 +285,10 @@ impl Combobox {
             )
             .cursor_pointer()
             .on_click(move |_ctx| {
-                if disabled {
+                if disabled_for_click.now().unwrap_or(false) {
                     return;
                 }
-                let is_currently_open = open_state_trigger.get();
+                let is_currently_open = open_state_trigger.try_get().unwrap_or(false);
                 if is_currently_open {
                     // Closing: clear search text
                     if let Ok(mut data) = search_data_trigger.lock() {
@@ -315,10 +309,10 @@ impl Combobox {
         let wrapper_id_for_list = wrapper_id.clone();
         let options_for_dropdown = config.options.clone();
         let on_change_for_dropdown = config.on_change.clone();
-        let value_state_for_dropdown = config.value_state.clone();
-        let open_state_for_dropdown = open_state.clone();
+        let value_for_dropdown = config.value;
+        let open_state_for_dropdown = open_state;
         let search_data_for_dropdown = search_input_data.clone();
-        let search_query_for_dropdown = search_query_state.clone();
+        let search_query_for_dropdown = search_query_state;
         let allow_custom = config.allow_custom;
         let placeholder_for_content = config.placeholder.clone();
         let instance_key_owned = instance_key.to_string();
@@ -332,12 +326,12 @@ impl Combobox {
             .overflow_visible()
             .w(dropdown_width)
             .child(trigger)
-            .show(&open_state, move || {
+            .show(open_state, move || {
                 // A click outside closes the list, and clears the search, for
                 // as long as it is open.
-                let dismiss_state = open_state_for_dropdown.clone();
+                let dismiss_state = open_state_for_dropdown;
                 let dismiss_search_data = search_data_for_dropdown.clone();
-                let dismiss_search_query = search_query_for_dropdown.clone();
+                let dismiss_search_query = search_query_for_dropdown;
                 click_outside::register_click_outside(
                     &wrapper_id_for_list,
                     &wrapper_id_for_list,
@@ -355,13 +349,13 @@ impl Combobox {
 
                 build_dropdown_content(
                     &options_for_dropdown,
-                    &value_state_for_dropdown.get(),
-                    &value_state_for_dropdown,
-                    &open_state_for_dropdown,
+                    &value_for_dropdown.try_get().unwrap_or_default(),
+                    value_for_dropdown,
+                    open_state_for_dropdown,
                     &on_change_for_dropdown,
                     &instance_key_owned,
                     &search_data_for_dropdown,
-                    &search_query_for_dropdown,
+                    search_query_for_dropdown,
                     dropdown_width,
                     height,
                     font_size,
@@ -380,20 +374,18 @@ impl Combobox {
 
         // Build the outer container with optional label
         let container_width = config.width.unwrap_or(dropdown_width);
-        let mut combobox_container = div().w(container_width).child(combobox_element);
+        // Dimmed by `.cn-combobox-box:disabled`.
+        let combobox_container = div()
+            .class("cn-combobox-box")
+            .attr_when("disabled", "", disabled.clone())
+            .w(container_width)
+            .child(combobox_element);
 
-        if disabled {
-            combobox_container = combobox_container.opacity(0.5);
-        }
-
-        let inner = if let Some(ref label_text) = config.label {
+        let inner = if let Some(label_text) = config.label {
             let spacing = theme.spacing_value(SpacingToken::Space2);
             let mut outer = div().flex_col().gap_px(spacing).w(container_width).h_fit();
 
-            let mut lbl = label(label_text).size(LabelSize::Medium);
-            if disabled {
-                lbl = lbl.disabled(true);
-            }
+            let lbl = label(label_text).size(LabelSize::Medium).disabled(disabled);
 
             outer = outer.child(lbl).child(combobox_container);
             outer
@@ -443,12 +435,12 @@ impl ElementBuilder for Combobox {
 #[derive(Clone)]
 #[allow(clippy::type_complexity)]
 struct ComboboxConfig {
-    value_state: State<String>,
+    value: Signal<String>,
     options: Vec<ComboboxOption>,
     placeholder: Option<String>,
-    label: Option<String>,
+    label: Option<Reactive<String>>,
     size: ComboboxSize,
-    disabled: bool,
+    disabled: Reactive<bool>,
     width: Option<f32>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
     /// Allow entering custom values not in the options list
@@ -456,14 +448,14 @@ struct ComboboxConfig {
 }
 
 impl ComboboxConfig {
-    fn new(value_state: State<String>) -> Self {
+    fn new(value: Signal<String>) -> Self {
         Self {
-            value_state,
+            value,
             options: Vec::new(),
             placeholder: None,
             label: None,
             size: ComboboxSize::default(),
-            disabled: false,
+            disabled: Reactive::Const(false),
             width: None,
             on_change: None,
             allow_custom: false,
@@ -480,24 +472,24 @@ pub struct ComboboxBuilder {
 }
 
 impl ComboboxBuilder {
-    /// Create a new combobox builder with value state
+    /// A combobox that reads and writes `value`.
     ///
-    /// The open state is managed internally using the global context singleton.
-    /// Uses `#[track_caller]` to generate a unique instance key based on the call site.
+    /// Whether the list is open, and the search, are kept per instance, keyed
+    /// by the call site.
     #[track_caller]
-    pub fn new(value_state: &State<String>) -> Self {
+    pub fn new(value: Signal<String>) -> Self {
         Self {
             key: InstanceKey::new("combobox"),
-            config: ComboboxConfig::new(value_state.clone()),
+            config: ComboboxConfig::new(value),
             built: OnceCell::new(),
         }
     }
 
     /// Create a combobox builder with an explicit key
-    pub fn with_key(key: impl Into<String>, value_state: &State<String>) -> Self {
+    pub fn with_key(key: impl Into<String>, value: Signal<String>) -> Self {
         Self {
             key: InstanceKey::explicit(key),
-            config: ComboboxConfig::new(value_state.clone()),
+            config: ComboboxConfig::new(value),
             built: OnceCell::new(),
         }
     }
@@ -535,9 +527,9 @@ impl ComboboxBuilder {
         self
     }
 
-    /// Add a label above the combobox
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.config.label = Some(label.into());
+    /// A label above the combobox: a string, Signal or Computed.
+    pub fn label(mut self, label: impl IntoReactive<String>) -> Self {
+        self.config.label = Some(label.into_reactive());
         self
     }
 
@@ -547,9 +539,9 @@ impl ComboboxBuilder {
         self
     }
 
-    /// Set disabled state
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether it is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 
@@ -601,11 +593,10 @@ impl ElementBuilder for ComboboxBuilder {
     }
 }
 
-/// Create a combobox with value state
+/// A combobox that reads and writes `value`.
 ///
-/// The combobox uses state-driven reactivity - changes to the value state
-/// will trigger a rebuild of the component. The open/closed state is
-/// managed internally using the global context singleton.
+/// The shown text follows the value and the search in place, and `label` and
+/// `disabled` are bound. Whether the list is open is kept per instance.
 ///
 /// # Example
 ///
@@ -613,9 +604,9 @@ impl ElementBuilder for ComboboxBuilder {
 /// use blinc_cn::prelude::*;
 ///
 /// fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-///     let country = ctx.use_state_keyed("country", || "".to_string());
+///     let country = ctx.use_signal(String::new());
 ///
-///     cn::combobox(&country)
+///     cn::combobox(country)
 ///         .placeholder("Search countries...")
 ///         .option("us", "United States")
 ///         .option("uk", "United Kingdom")
@@ -623,8 +614,8 @@ impl ElementBuilder for ComboboxBuilder {
 /// }
 /// ```
 #[track_caller]
-pub fn combobox(value_state: &State<String>) -> ComboboxBuilder {
-    ComboboxBuilder::new(value_state)
+pub fn combobox(value: Signal<String>) -> ComboboxBuilder {
+    ComboboxBuilder::new(value)
 }
 
 /// A row of the open list.
@@ -646,12 +637,12 @@ enum ListRow {
 fn build_dropdown_content(
     options: &[ComboboxOption],
     current_selected: &str,
-    value_state: &State<String>,
-    open_state: &State<bool>,
+    value_state: Signal<String>,
+    open_state: Signal<bool>,
     on_change: &Option<Arc<dyn Fn(&str) + Send + Sync>>,
     key: &str,
     search_data: &SharedTextInputData,
-    search_query_state: &State<String>,
+    search_query_state: Signal<String>,
     width: f32,
     trigger_height: f32,
     font_size: f32,
@@ -692,7 +683,7 @@ fn build_dropdown_content(
         .clone()
         .unwrap_or_else(|| "Type to search...".to_string());
 
-    let search_query_for_sync = search_query_state.clone();
+    let search_query_for_sync = search_query_state;
 
     // No `.w_full()` — inside the flex_row container `flex_grow()` distributes
     // the remaining width after the container's padding. `w_full()` would
@@ -733,7 +724,7 @@ fn build_dropdown_content(
     // The rows follow the search in place: the options that match, else a
     // "no results" row and, when allowed, one to use the search as the value.
     let options_content_key = format!("{}_options_content", key);
-    let query = search_query_state.signal();
+    let query = search_query_state;
     let options_for_rows = options.to_vec();
     let rows = computed(move |g: &ReactiveGraph| {
         let search = g.get(query).unwrap_or_default();
@@ -754,11 +745,8 @@ fn build_dropdown_content(
 
     let options = options.to_vec();
     let current_selected = current_selected.to_string();
-    let value_state = value_state.clone();
-    let open_state = open_state.clone();
     let on_change = on_change.clone();
     let search_data = search_data.clone();
-    let search_query_state = search_query_state.clone();
     let key = key.to_string();
     // Choosing a value closes the list and clears the search.
     let choose = Arc::new(move |chosen: String| {

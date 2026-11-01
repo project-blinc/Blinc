@@ -7,24 +7,23 @@
 //!
 //! ```ignore
 //! use blinc_cn::prelude::*;
-//! use blinc_core::use_state_keyed;
 //!
 //! // Basic sidebar
-//! let is_collapsed = use_state_keyed("sidebar_collapsed", || false);
+//! let is_collapsed = ctx.use_signal(false);
 //!
-//! cn::sidebar(&is_collapsed)
+//! cn::sidebar(is_collapsed)
 //!     .item("Home", home_icon, || println!("Home clicked"))
 //!     .item("Settings", settings_icon, || println!("Settings clicked"))
 //!     .item("Profile", profile_icon, || println!("Profile clicked"))
 //!
 //! // With custom widths
-//! cn::sidebar(&is_collapsed)
+//! cn::sidebar(is_collapsed)
 //!     .expanded_width(280.0)
 //!     .collapsed_width(64.0)
 //!     .item("Dashboard", icon, || {})
 //!
 //! // With sections
-//! cn::sidebar(&is_collapsed)
+//! cn::sidebar(is_collapsed)
 //!     .section("Main")
 //!         .item("Home", icon, || {})
 //!         .item("Explore", icon, || {})
@@ -36,7 +35,7 @@
 use std::cell::OnceCell;
 use std::sync::Arc;
 
-use blinc_core::State;
+use blinc_core::reactive::Signal;
 use blinc_core::reactive::{ReactiveGraph, computed};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
@@ -116,22 +115,23 @@ impl Sidebar {
         // A copy held inside the stateful would take the toggle's write
         // and never pass it on, leaving the caller's signal saying the
         // rail was open while it was shut.
-        let collapsed = builder.is_collapsed.clone();
+        let collapsed = builder.is_collapsed;
 
         let content_anim_key = format!("{key}_content");
 
         // Hoisted out of the rail's closure so the content area can read
         // it too. Keyed by the sidebar, so it is the same signal the rail
         // writes on a click, and it survives the rail's rebuilds.
-        let active_menu: State<Option<SidebarItem>> =
-            blinc_core::context_state::use_state_keyed(&format!("{key}_active_menu"), || None);
+        let active_menu: Signal<Option<SidebarItem>> =
+            blinc_core::context_state::BlincContextState::get()
+                .use_signal_keyed(&format!("{key}_active_menu"), || None);
         // The rail is built once. Collapsing hides the labels and titles in
         // place, so the rail's width changes and its keyed animation follows
         // it; the selection moves the active class and icon colour.
         let container_key = format!("{}_container", key);
-        let collapsed_sig = collapsed.signal();
+        let collapsed_sig = collapsed;
         let expanded = computed(move |g: &ReactiveGraph| !g.get(collapsed_sig).unwrap_or(false));
-        let active_sig = active_menu.signal();
+        let active_sig = active_menu;
 
         let layout_anim_key = format!("{}_layout", key);
         let sidebar_anim_key = format!("{}_sidebar_container", key);
@@ -163,7 +163,7 @@ impl Sidebar {
 
         if show_toggle {
             let toggle_key = format!("{}_toggle", container_key);
-            let collapsed_for_click = collapsed.clone();
+            let collapsed_for_click = collapsed;
             // The chevron points right while collapsed, left while open.
             let chevron_angle = computed(move |g: &ReactiveGraph| {
                 if g.get(collapsed_sig).unwrap_or(false) {
@@ -252,7 +252,7 @@ impl Sidebar {
                 };
 
                 let item_on_click = item.on_click.clone();
-                let active_menu_for_click = active_menu.clone();
+                let active_menu_for_click = active_menu;
                 let item_for_click = item.clone();
 
                 let item_element = div()
@@ -332,7 +332,7 @@ impl Sidebar {
                     // The selection, handed over rather than made the
                     // caller's problem: a convenience argument is the
                     // point of a builder like this.
-                    .child(content_fn(active_menu.get()));
+                    .child(content_fn(active_menu.try_get().flatten()));
                 Box::new(
                     div()
                         .flex_row()
@@ -394,7 +394,7 @@ type ContentBuilderFn = Arc<dyn Fn(Option<SidebarItem>) -> Div + Send + Sync>;
 /// Builder for sidebar component
 pub struct SidebarBuilder {
     key: InstanceKey,
-    is_collapsed: State<bool>,
+    is_collapsed: Signal<bool>,
     collapsed_width: f32,
     expanded_width: f32,
     sections: Vec<SidebarSection>,
@@ -411,10 +411,10 @@ pub struct SidebarBuilder {
 impl SidebarBuilder {
     /// Create a new sidebar builder
     #[track_caller]
-    pub fn new(is_collapsed: &State<bool>) -> Self {
+    pub fn new(is_collapsed: Signal<bool>) -> Self {
         Self {
             key: InstanceKey::new("sidebar"),
-            is_collapsed: is_collapsed.clone(),
+            is_collapsed,
             collapsed_width: 64.0,
             expanded_width: 240.0,
             sections: vec![SidebarSection {
@@ -526,7 +526,7 @@ impl SidebarBuilder {
     /// # Example
     ///
     /// ```ignore
-    /// cn::sidebar(&collapsed)
+    /// cn::sidebar(collapsed)
     ///     .item("Home", home_icon, || {})
     ///     .item("Settings", settings_icon, || {})
     ///     .content(|| {
@@ -590,9 +590,7 @@ impl ElementBuilder for SidebarBuilder {
 ///
 /// ```ignore
 /// use blinc_cn::prelude::*;
-/// use blinc_core::use_state_keyed;
-///
-/// let collapsed = use_state_keyed("sidebar_collapsed", || false);
+/// let collapsed = ctx.use_signal(false);
 ///
 /// // Home icon SVG
 /// let home_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>"#;
@@ -600,12 +598,12 @@ impl ElementBuilder for SidebarBuilder {
 /// // Settings icon SVG
 /// let settings_icon = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="..."/></svg>"#;
 ///
-/// cn::sidebar(&collapsed)
+/// cn::sidebar(collapsed)
 ///     .item("Home", home_icon, || println!("Home"))
 ///     .item("Settings", settings_icon, || println!("Settings"))
 /// ```
 #[track_caller]
-pub fn sidebar(is_collapsed: &State<bool>) -> SidebarBuilder {
+pub fn sidebar(is_collapsed: Signal<bool>) -> SidebarBuilder {
     SidebarBuilder::new(is_collapsed)
 }
 

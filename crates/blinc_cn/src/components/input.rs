@@ -153,13 +153,12 @@ impl Input {
         }
 
         // Label (reuses Label component)
-        if let Some(ref label_text) = config.label {
-            let mut lbl = label(label_text).size(LabelSize::Medium);
+        if let Some(label_text) = config.label.clone() {
+            let mut lbl = label(label_text)
+                .size(LabelSize::Medium)
+                .disabled(config.disabled.clone());
             if config.required {
                 lbl = lbl.required();
-            }
-            if config.disabled {
-                lbl = lbl.disabled(true);
             }
             container = container.child(lbl);
         }
@@ -205,7 +204,7 @@ impl Input {
             .text_size(config.size.font_size(typography))
             .rounded(radius)
             .input_type(config.input_type)
-            .disabled(config.disabled)
+            .disabled(config.disabled.clone())
             .masked(config.password);
 
         // The box's look is the `.cn-input` rules; only an idle colour the
@@ -325,10 +324,10 @@ struct InputConfig {
     /// Caller's handle onto this field, if bound.
     input_ref: Option<blinc_layout::selector::InputRef>,
     size: InputSize,
-    label: Option<String>,
+    label: Option<blinc_layout::binding::Reactive<String>>,
     description: Option<String>,
     error: Option<String>,
-    disabled: bool,
+    disabled: blinc_layout::binding::Reactive<bool>,
     required: bool,
     input_type: InputType,
     placeholder: Option<String>,
@@ -355,7 +354,7 @@ impl Default for InputConfig {
             label: None,
             description: None,
             error: None,
-            disabled: false,
+            disabled: blinc_layout::binding::Reactive::Const(false),
             required: false,
             input_type: InputType::Text,
             placeholder: None,
@@ -410,8 +409,8 @@ impl InputBuilder {
     }
 
     /// Set a label above the input
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.config.label = Some(label.into());
+    pub fn label(mut self, label: impl blinc_layout::binding::IntoReactive<String>) -> Self {
+        self.config.label = Some(label.into_reactive());
         self
     }
 
@@ -456,8 +455,9 @@ impl InputBuilder {
     }
 
     /// Disable the input
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether it is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl blinc_layout::binding::IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 

@@ -27,7 +27,7 @@ fn the_active_rules_move_with_the_selected_tab() {
     guarded(|| {
         let selected = string_state("a");
         let host = div().w(400.0).h(200.0).child(
-            blinc_cn::tabs(&selected)
+            blinc_cn::tabs(selected.signal())
                 .transition(blinc_cn::TabsTransition::None)
                 .tab("a", "Alpha", || div().child(text("alpha")))
                 .tab("b", "Beta", || div().child(text("beta"))),

@@ -373,3 +373,21 @@ fn a_disabled_attribute_toggled_in_place_restyles_a_disabled_rule() {
     s.frame();
     assert_eq!(s.opacity(s.node), 1.0);
 }
+
+#[test]
+fn a_later_rule_the_node_already_matches_stays_on_top_of_a_class() {
+    let on = flag(false);
+    let mut s = scene(
+        Some(".t:checked { background: #ff0000 } .t:disabled { background: #00ff00 }"),
+        |d| d.attr("disabled", "").attr_when("checked", "", &on),
+    );
+    assert_eq!(s.fill(s.node), GREEN);
+
+    on.set(true);
+    s.frame();
+    assert_eq!(s.fill(s.node), GREEN, "the earlier :checked rule won");
+
+    on.set(false);
+    s.frame();
+    assert_eq!(s.fill(s.node), GREEN);
+}

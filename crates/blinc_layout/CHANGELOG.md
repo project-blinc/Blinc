@@ -5,11 +5,13 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- A class added in place no longer overrides a later rule the element already matched. A checked switch that was disabled from the start showed the `:checked` fill over the later `:disabled` one; one disabled through a signal showed the disabled fill. Both follow the cascade now.
 - An unfocused text field no longer keeps the window drawing. Every `TextInput`, `TextArea`, code editor and rich text editor mounts a caret canvas, and any visible canvas asked for a frame each vsync, so a form on screen held the CPU awake. Their carets now ask for frames only while they can show.
 - A CSS transition of a transform now carries every component of it when any one changes. Easing only the scale of a translated element (a pressed checked switch thumb) used to rebuild the transform from the scale alone and drop the translation. A transform written from transition values is composed translate, rotate, skew, scale, so the translation is no longer scaled.
 - An element that keeps a pointer state across a restyle now eases to its new look. Unchecking a hovered switch changes the rule that applies from `:checked:hover` to `:hover`; that was applied without a transition, so the fill snapped.
 
 ### Added
+- `Reactive<T>` is `Clone` and has `now()`, the value it holds at the moment, so a widget can hand one bound prop to several bindings and read it in a handler.
 - `Div::flex_grow_value` takes a signal or a computed as well as a number; a change patches the style and relayouts, so siblings growing by complementary fractions share their parent's width as it is laid out.
 - `Div::max_w_full` sets `max-width: 100%`.
 - A SCROLL event carries the target's bounds and the pointer's position within it (`bounds_x`, `bounds_width`, `local_x`, ...), as pointer events do; it carried only the window position.
@@ -20,6 +22,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - `@layer name { ... }` in stylesheets: its class rules sit below every unlayered rule regardless of specificity. `CN_STYLES` is wrapped in one, so an app stylesheet themes cn components whichever was added first.
 
 ### Changed
+- **Breaking:** `widgets::checkbox`, `checkbox_labeled` and `widgets::toggle` take a `Signal<bool>` instead of a `&State<bool>`, `widgets::radio_group` a `Signal<String>`, `widgets::number_input` a `Signal<f64>`, and `widgets::input_otp` a `Signal<String>`. `TextInput::class_when` adds a class while a condition holds. `TextInput::disabled` and `TextArea::disabled` take a bool, Signal or Computed too. `.disabled(..)` and `.label(..)` take a value, Signal or Computed and follow it in place; the label's colour is the `.blinc-checkbox-label` rules, dimmed under `.blinc-checkbox-row:disabled`.
 - `TextInput::border_width` sets the field's configured border width too, so the content's height follows it; `TextInput` and `TextArea` default to the theme's `RadiusToken::Lg` rather than a literal 8px.
 - `TextArea` takes its box look from the same `.blinc-input` rules as `TextInput`, with a `disabled` attribute that follows its state, and no longer binds its own colours. The `TextAreaConfig` box colours (`bg_color`, `hover_bg_color`, `focused_bg_color`, `border_color`, `hover_border_color`, `focused_border_color`) are removed; use rules, or `.bg(..)` and `.border_color(..)` for inline style.
 - `TextInput` is one element with the class `blinc-input`, carrying `disabled` and `data-invalid` attributes that follow its data; fill, border, hover and focus are the `.blinc-input` rules of `ua_styles::UA_STYLES`, with a `transition`, and the box no longer binds its own colours. `hover_border_color`, `focused_border_color`, `error_border_color`, `border_colors`, `hover_bg_color`, `focused_bg_color` and `bg_colors` are removed, and the `TextInputConfig` box colours with them; use rules. `idle_border_color` and `idle_bg_color` set inline style. Text, placeholder, caret and selection colours are unchanged.

@@ -12,15 +12,15 @@
 //! use blinc_cn::prelude::*;
 //!
 //! fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-//!     let qty = ctx.use_state_keyed("qty", || 1.0);
-//!     cn::number_input(&qty).min(0.0).max(99.0).step(1.0).precision(0)
+//!     let qty = ctx.use_signal(1.0);
+//!     cn::number_input(qty).min(0.0).max(99.0).step(1.0).precision(0)
 //! }
 //! ```
 
-use blinc_core::State;
-use blinc_core::reactive::{ReactiveGraph, computed};
+use blinc_core::reactive::{ReactiveGraph, Signal, computed};
 use blinc_icons::{icons, to_svg};
 use blinc_layout::InstanceKey;
+use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::ElementBuilder;
 use blinc_layout::prelude::*;
 use blinc_layout::svg::svg;
@@ -35,15 +35,16 @@ use crate::components::input::InputSize;
 
 /// Internal config for the cn number input.
 #[allow(clippy::type_complexity)]
+#[derive(Clone)]
 struct Config {
-    state: State<f64>,
+    state: Signal<f64>,
     min: Option<f64>,
     max: Option<f64>,
     step: f64,
     precision: usize,
     size: InputSize,
     placeholder: Option<String>,
-    disabled: bool,
+    disabled: Reactive<bool>,
     /// Explicit total width (steppers + field). `None` = auto-derive
     /// from precision + min / max bounds.
     width: Option<f32>,
@@ -65,19 +66,20 @@ pub struct NumberInput {
 }
 
 impl NumberInputBuilder {
+    /// A number input that reads and writes `state`.
     #[track_caller]
-    pub fn new(state: &State<f64>) -> Self {
+    pub fn new(state: Signal<f64>) -> Self {
         Self {
             key: InstanceKey::new("cn_number_input"),
             config: Config {
-                state: state.clone(),
+                state,
                 min: None,
                 max: None,
                 step: 1.0,
                 precision: 2,
                 size: InputSize::Medium,
                 placeholder: None,
-                disabled: false,
+                disabled: Reactive::Const(false),
                 width: None,
                 max_width: 200.0,
                 on_change: None,
@@ -88,24 +90,8 @@ impl NumberInputBuilder {
 
     fn get_or_build(&self) -> &NumberInput {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            NumberInput::from_config(&self.key, self.clone_config())
+            NumberInput::from_config(&self.key, self.config.clone())
         })
-    }
-
-    fn clone_config(&self) -> Config {
-        Config {
-            state: self.config.state.clone(),
-            min: self.config.min,
-            max: self.config.max,
-            step: self.config.step,
-            precision: self.config.precision,
-            size: self.config.size,
-            placeholder: self.config.placeholder.clone(),
-            disabled: self.config.disabled,
-            width: self.config.width,
-            max_width: self.config.max_width,
-            on_change: self.config.on_change.clone(),
-        }
     }
 
     pub fn min(mut self, min: f64) -> Self {
@@ -138,8 +124,9 @@ impl NumberInputBuilder {
         self
     }
 
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether it is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 
@@ -194,7 +181,7 @@ impl NumberInput {
 
         let data = text_input_data();
         if let Ok(mut d) = data.lock() {
-            d.value = format_number(config.state.get(), config.precision);
+            d.value = format_number(config.state.try_get().unwrap_or(0.0), config.precision);
             d.cursor = d.value.chars().count();
             d.input_type = InputType::Number;
         }
@@ -211,7 +198,7 @@ impl NumberInput {
             .border_width(1.0)
             .overflow_clip()
             .class("cn-number-input-group")
-            .when(config.disabled, |g| g.attr("disabled", ""))
+            .attr_when("disabled", "", config.disabled.clone())
             .on_scroll(wheel_stepper(&config, Arc::clone(&wheel_remainder)))
             .on_hover_leave(move |_| *wheel_remainder.lock().unwrap() = 0.0)
             .child(stepper(&config, -1.0, height))
@@ -231,11 +218,12 @@ fn wheel_stepper(
     config: &Config,
     remainder: Arc<std::sync::Mutex<f32>>,
 ) -> impl Fn(&blinc_layout::event_handler::EventContext) + Send + Sync + 'static {
-    let (state, on_change) = (config.state.clone(), config.on_change.clone());
-    let (min, max, step, disabled) = (config.min, config.max, config.step, config.disabled);
+    let (state, on_change) = (config.state, config.on_change.clone());
+    let (min, max, step) = (config.min, config.max, config.step);
+    let disabled = config.disabled.clone();
     move |ctx| {
         let mut left = remainder.lock().unwrap();
-        if disabled {
+        if disabled.now().unwrap_or(false) {
             *left = 0.0;
             return;
         }
@@ -247,7 +235,7 @@ fn wheel_stepper(
         if steps == 0 {
             return;
         }
-        let current = state.get();
+        let current = state.try_get().unwrap_or(0.0);
         let next = clamp(current + steps as f64 * step, min, max);
         if (next - current).abs() < f64::EPSILON {
             return;
@@ -268,7 +256,7 @@ fn wheel_stepper(
 /// precision 1, so the next `"0"` lands after the `.0`). A step taken with
 /// the field focused sets `force_sync_once`, so it still shows.
 fn show_state_in_field(config: &Config, data: &SharedTextInputData) {
-    let signal = config.state.signal();
+    let signal = config.state;
     let precision = config.precision;
     let data = data.clone();
     blinc_core::reactive::effect(move |graph| {
@@ -316,18 +304,19 @@ fn number_field(
         .border_width(0.0)
         .idle_bg_color(blinc_core::Color::TRANSPARENT)
         .class("cn-number-input-field")
-        .disabled(config.disabled);
+        .disabled(config.disabled.clone());
 
     // Keyboard stepping (↑ / ↓ / `+` / `−`): `+1` increments and `-1`
     // decrements, as the buttons do.
     {
-        let state = config.state.clone();
+        let state = config.state;
         let (min, max, step) = (config.min, config.max, config.step);
         let on_change = config.on_change.clone();
         let data = data.clone();
         field = field.on_step(move |delta| {
-            let next = clamp(state.get() + delta as f64 * step, min, max);
-            if (next - state.get()).abs() < f64::EPSILON {
+            let current = state.try_get().unwrap_or(0.0);
+            let next = clamp(current + delta as f64 * step, min, max);
+            if (next - current).abs() < f64::EPSILON {
                 return; // at bound — no-op
             }
             // Before the write: the field shows the value even though it
@@ -348,7 +337,7 @@ fn number_field(
     // `"-"`, `"."`, `"-."`) leave `state` untouched so the user can finish
     // typing without the wrapper "correcting" mid-edit.
     {
-        let state = config.state.clone();
+        let state = config.state;
         let (min, max, precision) = (config.min, config.max, config.precision);
         let data = data.clone();
         let on_change = config.on_change.clone();
@@ -362,7 +351,7 @@ fn number_field(
             };
             let clamped = clamp(parsed, min, max);
             // Only a change is written: every write wakes the dependents.
-            if (clamped - state.get()).abs() > f64::EPSILON {
+            if (clamped - state.try_get().unwrap_or(0.0)).abs() > f64::EPSILON {
                 state.set(clamped);
                 if let Some(ref cb) = on_change {
                     cb(clamped);
@@ -388,23 +377,28 @@ fn stepper(config: &Config, delta: f64, height: f32) -> Div {
     let theme = ThemeState::get();
     let typography = theme.typography();
     let font_size = config.size.font_size(&typography);
-    let (min, max, step, disabled) = (config.min, config.max, config.step, config.disabled);
+    let (min, max, step) = (config.min, config.max, config.step);
     let is_dec = delta < 0.0;
 
-    let value = config.state.signal();
-    let at_bound = computed(move |g: &ReactiveGraph| {
-        disabled
-            || g.get(value)
-                .is_some_and(|v| clamp(v + delta * step, min, max) == v)
-    });
+    // Disabled with the input, and where a step would change nothing.
+    let value = config.state;
+    let at_bound = {
+        let disabled = config.disabled.clone();
+        computed(move |g: &ReactiveGraph| {
+            disabled.read(g).unwrap_or(false)
+                || g.get(value)
+                    .is_some_and(|v| clamp(v + delta * step, min, max) == v)
+        })
+    };
 
     // SVG icons rather than glyphs: a glyph renders in whatever face and
     // weight resolve at run time, and shifted between paints.
     let icon_size = (font_size + 2.0).min(height * 0.45);
     let icon = to_svg(if is_dec { icons::MINUS } else { icons::PLUS }, icon_size);
 
-    let state = config.state.clone();
+    let state = config.state;
     let on_change = config.on_change.clone();
+    let disabled = config.disabled.clone();
     div()
         .w(height)
         .h(height)
@@ -421,11 +415,12 @@ fn stepper(config: &Config, delta: f64, height: f32) -> Div {
         .attr_when("disabled", "", &at_bound)
         .child(svg(&icon).size(icon_size, icon_size).internal())
         .on_click(move |_| {
-            if disabled {
+            if disabled.now().unwrap_or(false) {
                 return;
             }
-            let next = clamp(state.get() + delta * step, min, max);
-            if (next - state.get()).abs() < f64::EPSILON {
+            let current = state.try_get().unwrap_or(0.0);
+            let next = clamp(current + delta * step, min, max);
+            if (next - current).abs() < f64::EPSILON {
                 return; // at bound — no-op
             }
             // The field picks the value up through `show_state_in_field`.
@@ -565,9 +560,9 @@ impl ElementBuilder for NumberInputBuilder {
     }
 }
 
-/// Create a cn-styled number input bound to a [`State<f64>`].
+/// A cn number input that reads and writes `state`, following it in place.
 #[track_caller]
-pub fn number_input(state: &State<f64>) -> NumberInputBuilder {
+pub fn number_input(state: Signal<f64>) -> NumberInputBuilder {
     NumberInputBuilder::new(state)
 }
 
@@ -598,16 +593,15 @@ mod tests {
         });
     }
 
-    fn test_state(initial: f64) -> State<f64> {
-        use blinc_core::reactive::{global_dirty_flag, global_graph, signal};
-        State::new(signal(initial), global_graph(), global_dirty_flag())
+    fn test_state(initial: f64) -> Signal<f64> {
+        blinc_core::reactive::signal(initial)
     }
 
     fn number_input_widths(value: f64) -> (f32, f32) {
         init_theme();
 
         let state = test_state(value);
-        let input = number_input(&state)
+        let input = number_input(state)
             .min(0.0)
             .max(99.0)
             .step(1.0)

@@ -61,7 +61,7 @@ impl CnSlider {
         // takes either precision, so the DSL's `f64` is what the widget
         // reads and writes. One value, one id, nothing to keep in step.
         let state = crate::bridge::f64_state(&self.value);
-        let mut s = blinc_cn::slider(&state).size(self.size());
+        let mut s = blinc_cn::slider(state.signal()).size(self.size());
 
         // Zero is what an omitted number prop reads as, and zero is a
         // meaningful bound — so `min` only overrides when `max` says a

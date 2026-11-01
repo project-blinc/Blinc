@@ -124,17 +124,19 @@ breadcrumb()
 
 ## Pagination
 
+Page buttons over a page count, bound to the current page. The page is a
+`Signal<usize>`, a `Signal<i32>` or a float signal, rounded to a page:
+
 ```rust
-pagination()
-    .total(100)
-    .page_size(10)
-    .current_page(current_page)
-    .on_page_change(|page| set_current_page(page))
-    .child(pagination_content()
-        .child(pagination_previous())
-        .child(pagination_items())
-        .child(pagination_next()))
+let page = ctx.use_signal(1usize);
+
+cn::pagination(10, page)
+    .visible_pages(7)
+    .show_first_last(true)
+    .on_page_change(|page| println!("page {page}"))
 ```
+
+`.small()` and `.large()` set the size.
 
 ## Sidebar
 

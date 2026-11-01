@@ -31,7 +31,10 @@ fn solid(tree: &RenderTree, node: LayoutNodeId) -> [f32; 3] {
 }
 
 fn build(checked: &blinc_core::reactive::State<bool>) -> (RenderTree, LayoutNodeId) {
-    let host = div().w(400.0).h(200.0).child(blinc_cn::checkbox(checked));
+    let host = div()
+        .w(400.0)
+        .h(200.0)
+        .child(blinc_cn::checkbox(checked.signal()));
     let mut tree = RenderTree::from_element(&host);
     tree.set_stylesheet(sheet(RULE));
     tree.apply_stylesheet_layout_overrides();
@@ -128,7 +131,10 @@ fn the_checked_attribute_follows_the_state_for_a_checked_rule() {
     init();
     guarded(|| {
         let checked = bool_state(false);
-        let host = div().w(400.0).h(200.0).child(blinc_cn::checkbox(&checked));
+        let host = div()
+            .w(400.0)
+            .h(200.0)
+            .child(blinc_cn::checkbox(checked.signal()));
         let mut tree = RenderTree::from_element(&host);
         tree.set_stylesheet(sheet(".cn-checkbox:checked { background: #123456; }"));
         tree.apply_stylesheet_layout_overrides();

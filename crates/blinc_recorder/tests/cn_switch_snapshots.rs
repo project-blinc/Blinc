@@ -5,7 +5,7 @@
 //! records the images in `.blinc/snapshots/blinc_recorder/<os>/`.
 
 use blinc_cn::{SwitchSize, switch};
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::{Signal, signal};
 use blinc_layout::div::div;
 use blinc_recorder::Headless;
 use blinc_theme::{ColorScheme, HybridTheme};
@@ -26,18 +26,32 @@ fn session() -> Option<Headless> {
     Some(ui)
 }
 
-fn mount(ui: &mut Headless, on: bool, disabled: bool, size: SwitchSize) -> State<bool> {
-    let state = State::new(signal::<bool>(on), global_graph(), global_dirty_flag());
-    let bound = state.clone();
-    ui.mount(move |_| {
-        div()
-            .w(W as f32)
-            .h(H as f32)
-            .items_center()
-            .justify_center()
-            .child(switch(&bound).size(size).disabled(disabled))
-    });
+/// `disabled` as a constant.
+fn mount(ui: &mut Headless, on: bool, disabled: bool, size: SwitchSize) -> Signal<bool> {
+    let state = signal(on);
+    ui.mount(move |_| host(switch(state).size(size).disabled(disabled)));
     state
+}
+
+/// `disabled` bound to a signal.
+fn mount_bound(
+    ui: &mut Headless,
+    on: bool,
+    disabled: Signal<bool>,
+    size: SwitchSize,
+) -> Signal<bool> {
+    let state = signal(on);
+    ui.mount(move |_| host(switch(state).size(size).disabled(disabled)));
+    state
+}
+
+fn host(switch: blinc_cn::switch::SwitchBuilder) -> blinc_layout::div::Div {
+    div()
+        .w(W as f32)
+        .h(H as f32)
+        .items_center()
+        .justify_center()
+        .child(switch)
 }
 
 #[test]
@@ -85,4 +99,33 @@ fn a_click_moves_the_thumb_across() {
     ui.settle();
     ui.leave().settle();
     ui.assert_snapshot("cn_switch_click_after");
+}
+
+#[test]
+fn a_bound_disabled_follows_its_signal_in_place() {
+    let Some(mut ui) = session() else { return };
+    let disabled = signal(false);
+    let on = mount_bound(&mut ui, false, disabled, SwitchSize::Medium);
+    ui.leave().settle();
+
+    disabled.set(true);
+    ui.settle();
+    ui.assert_snapshot("cn_switch_off_disabled");
+    ui.click(".cn-switch").settle();
+    assert!(!on.get(), "a disabled switch was switched on");
+
+    disabled.set(false);
+    ui.leave().settle();
+    ui.assert_snapshot("cn_switch_off_idle");
+    ui.click(".cn-switch").settle();
+    assert!(on.get(), "re-enabled, the click did not switch it on");
+}
+
+/// A constant and a bound `disabled` cascade alike under `:checked`.
+#[test]
+fn on_and_disabled_looks_the_same_bound_or_constant() {
+    let Some(mut ui) = session() else { return };
+    mount_bound(&mut ui, true, signal(true), SwitchSize::Medium);
+    ui.leave().settle();
+    ui.assert_snapshot("cn_switch_on_disabled");
 }

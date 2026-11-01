@@ -59,7 +59,7 @@ fn scenario(name: &str, build: Build) -> String {
 
 fn two_tabs(state: &blinc_core::reactive::State<String>) -> Box<dyn ElementBuilder> {
     Box::new(
-        tabs(state)
+        tabs(state.signal())
             .transition(TabsTransition::None)
             .tab("a", "Alpha", panel("alpha"))
             .tab("b", "Beta", panel("beta"))
@@ -77,7 +77,7 @@ fn a_tabs_strip_looks_the_same_in_every_state() {
             "icons, a badge, a disabled tab, small",
             Box::new(|state| {
                 Box::new(
-                    tabs(state)
+                    tabs(state.signal())
                         .transition(TabsTransition::None)
                         .size(TabsSize::Small)
                         .tab_item(
@@ -93,7 +93,7 @@ fn a_tabs_strip_looks_the_same_in_every_state() {
             "large",
             Box::new(|state| {
                 Box::new(
-                    tabs(state)
+                    tabs(state.signal())
                         .transition(TabsTransition::None)
                         .size(TabsSize::Large)
                         .tab("a", "Alpha", panel("alpha"))

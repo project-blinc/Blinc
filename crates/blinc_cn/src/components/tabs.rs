@@ -8,10 +8,10 @@
 //! use blinc_cn::prelude::*;
 //!
 //! fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-//!     let active_tab = ctx.use_state_keyed("active_tab", || "account".to_string());
+//!     let active_tab = ctx.use_signal("account".to_string());
 //!
 //!     // Simple text labels
-//!     cn::tabs(&active_tab)
+//!     cn::tabs(active_tab)
 //!         .tab("account", "Account", || {
 //!             div().child(text("Account settings here"))
 //!         })
@@ -66,8 +66,9 @@ use std::cell::OnceCell;
 use std::sync::Arc;
 
 use blinc_animation::{AnimationPreset, MultiKeyframeAnimation};
+use blinc_core::Color;
+use blinc_core::reactive::Signal;
 use blinc_core::reactive::{ReactiveGraph, computed, signal};
-use blinc_core::{Color, State};
 use blinc_layout::div::ElementTypeId;
 // For query_motion to trigger suspended animations
 use blinc_layout::element::{CursorStyle, RenderProps};
@@ -313,7 +314,7 @@ impl TabsTransition {
 #[derive(Clone)]
 #[allow(clippy::type_complexity)]
 struct TabsConfig {
-    state: State<String>,
+    state: Signal<String>,
     tabs: Vec<TabItem>,
     size: TabsSize,
     default_value: Option<String>,
@@ -362,13 +363,13 @@ impl std::fmt::Debug for TabsBuilder {
 }
 
 impl TabsBuilder {
-    /// Create a new tabs builder with state
+    /// Tabs that read and write the selected value `state`.
     #[track_caller]
-    pub fn new(state: &State<String>) -> Self {
+    pub fn new(state: Signal<String>) -> Self {
         Self {
             key: InstanceKey::new("tabs"),
             config: TabsConfig {
-                state: state.clone(),
+                state,
                 tabs: Vec::new(),
                 size: TabsSize::default(),
                 default_value: None,
@@ -382,11 +383,11 @@ impl TabsBuilder {
     }
 
     /// Create a tabs builder with an explicit key
-    pub fn with_key(key: impl Into<String>, state: &State<String>) -> Self {
+    pub fn with_key(key: impl Into<String>, state: Signal<String>) -> Self {
         Self {
             key: InstanceKey::explicit(key),
             config: TabsConfig {
-                state: state.clone(),
+                state,
                 tabs: Vec::new(),
                 size: TabsSize::default(),
                 default_value: None,
@@ -514,8 +515,7 @@ impl TabsBuilder {
         let theme = ThemeState::get();
         let config = &self.config;
 
-        // Get current value from state - use State<T>::get() directly
-        let current_value = config.state.get();
+        let current_value = config.state.try_get().unwrap_or_default();
 
         // If current value is empty and we have a default, use it
         if current_value.is_empty() {
@@ -542,7 +542,7 @@ impl TabsBuilder {
         // Container 1: Tab Button Area
         // ========================================
         let tabs_for_buttons = config.tabs.clone();
-        let state_for_buttons = config.state.clone();
+        let state_for_buttons = config.state;
         let on_change = config.on_change.clone();
         let transition = config.transition;
 
@@ -572,7 +572,7 @@ impl TabsBuilder {
                 &trigger_key,
                 &tab.menu_item,
                 size,
-                state_for_buttons.clone(),
+                state_for_buttons,
                 on_change.clone(),
                 tab_motion_key,
             ));
@@ -587,7 +587,7 @@ impl TabsBuilder {
         let tab_content_area = {
             let tabs_for_value = config.tabs.clone();
             let tabs_for_panel = config.tabs.clone();
-            let selected = config.state.signal();
+            let selected = config.state;
             let transition = config.transition;
             let motion_base_key = self.key.derive("motion");
             // The selected value, if a tab has it: the one row.
@@ -676,7 +676,7 @@ fn build_tab_trigger(
     trigger_key: &str,
     menu_item: &TabMenuItem,
     size: TabsSize,
-    tab_state: State<String>,
+    tab_state: Signal<String>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
     motion_key: Option<String>,
 ) -> Div {
@@ -691,7 +691,7 @@ fn build_tab_trigger(
     let badge_text = menu_item.badge.clone();
 
     let interaction = Interaction::keyed(&format!("{}:{}", trigger_key, value));
-    let (selected, hovered) = (tab_state.signal(), interaction.hovered().signal());
+    let (selected, hovered) = (tab_state, interaction.hovered().signal());
     // Each reads the selected tab itself, so each is woken by it.
     let is_selected = move |g: &ReactiveGraph, selected_value: &str| {
         g.get(selected).unwrap_or_default() == selected_value
@@ -794,7 +794,7 @@ fn build_tab_trigger(
     if !disabled {
         let value_for_click = value.clone();
         trigger = trigger.on_click(move |_| {
-            if tab_state.get() == value_for_click {
+            if tab_state.try_get().as_deref() == Some(value_for_click.as_str()) {
                 return;
             }
             // Start the motion animation for the new tab content
@@ -856,14 +856,14 @@ impl std::ops::Deref for TabsBuilder {
 /// # Example
 ///
 /// ```ignore
-/// let tab_state = ctx.use_state_keyed("tabs", || "tab1".to_string());
+/// let tab_state = ctx.use_signal("tab1".to_string());
 ///
-/// cn::tabs(&tab_state)
+/// cn::tabs(tab_state)
 ///     .tab("tab1", "First Tab", || div().child(text("Content 1")))
 ///     .tab("tab2", "Second Tab", || div().child(text("Content 2")))
 /// ```
 #[track_caller]
-pub fn tabs(state: &State<String>) -> TabsBuilder {
+pub fn tabs(state: Signal<String>) -> TabsBuilder {
     TabsBuilder::new(state)
 }
 

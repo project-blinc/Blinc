@@ -34,7 +34,7 @@ fn the_section_follows_its_state_in_place() {
     guarded(|| {
         init();
         let open = open_state(false);
-        let section = blinc_cn::collapsible(&open).content(|| div().w_full().h(80.0));
+        let section = blinc_cn::collapsible(open.signal()).content(|| div().w_full().h(80.0));
         let host = div().w(400.0).h(400.0).flex_col().child(section);
         let mut tree = RenderTree::from_element(&host);
         tree.compute_layout(400.0, 400.0);
@@ -58,7 +58,8 @@ fn the_trigger_turns_its_chevron_and_follows_the_pointer() {
     guarded(|| {
         init();
         let open = open_state(false);
-        let section = blinc_cn::collapsible_section("Details", &open, || div().w_full().h(40.0));
+        let section =
+            blinc_cn::collapsible_section("Details", open.signal(), || div().w_full().h(40.0));
         let host = div().w(400.0).h(400.0).child(section);
         let mut tree = RenderTree::from_element(&host);
         tree.compute_layout(400.0, 400.0);

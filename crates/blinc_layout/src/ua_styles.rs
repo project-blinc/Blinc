@@ -56,6 +56,8 @@ pub const UA_STYLES: &str = concat!(
     transition: opacity var(--duration-fast) var(--ease-state);
 }
 .blinc-checkbox:checked > .blinc-checkbox-mark { opacity: 1; }
+.blinc-checkbox-label { color: var(--text-primary); }
+.blinc-checkbox-row:disabled > .blinc-checkbox-label { color: var(--text-tertiary); }
 
 /* The ring is the element; its border colour, the dot and the disabled fill
    follow its `checked` and `disabled` attributes. Border width is set in Rust
@@ -89,6 +91,10 @@ pub const UA_STYLES: &str = concat!(
         transform var(--duration-fastest) var(--ease-state);
 }
 .blinc-radio:checked > .blinc-radio-dot { opacity: 1; }
+.blinc-radio-label { color: var(--text-primary); }
+.blinc-radio-row:disabled > .blinc-radio-label { color: var(--text-tertiary); }
+.blinc-radio-group-label { color: var(--text-secondary); }
+.blinc-radio-group:disabled > .blinc-radio-group-label { color: var(--text-tertiary); }
 .blinc-radio:active:not(:disabled) .blinc-radio-dot { transform: scale(0.8, 0.8); }
 
 /* A button that stays pressed: clear when off, a faint wash of the text

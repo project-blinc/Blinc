@@ -5,7 +5,7 @@
 
 mod common;
 
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::{Signal, signal};
 use blinc_layout::LayoutNodeId;
 use blinc_layout::div::div;
 use blinc_layout::event_router::{EventRouter, MouseButton};
@@ -15,13 +15,13 @@ use common::*;
 struct Scene {
     tree: RenderTree,
     router: EventRouter,
-    value: State<String>,
+    value: Signal<String>,
 }
 
 fn scene() -> Scene {
     init();
-    let value = State::new(signal(String::new()), global_graph(), global_dirty_flag());
-    let select = blinc_cn::select(&value)
+    let value = signal(String::new());
+    let select = blinc_cn::select(value)
         .placeholder("Pick a fruit")
         .option("apple", "Apple")
         .option("pear", "Pear")

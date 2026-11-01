@@ -143,7 +143,7 @@ impl BuiltTimelinePanel {
             )
             .child(
                 // Speed selector
-                select(&speed_state)
+                select(speed_state.signal())
                     .size(SelectSize::Small)
                     .w(80.0)
                     .option("0.5", "0.5x")
@@ -173,7 +173,7 @@ impl BuiltTimelinePanel {
             .justify_center()
             .child(Self::event_markers())
             .child(
-                slider(&position_state)
+                slider(position_state.signal())
                     .min(0.0)
                     .max(1.0)
                     .size(SliderSize::Small)

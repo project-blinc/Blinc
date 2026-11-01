@@ -60,7 +60,7 @@ impl CnInputOTP {
 
     fn to_cn_widget(&self) -> blinc_cn::InputOtpBuilder {
         let state = crate::bridge::string_state(&self.value);
-        let mut b = blinc_cn::input_otp(&state, self.length()).size(self.size());
+        let mut b = blinc_cn::input_otp(state.signal(), self.length()).size(self.size());
 
         if self.numeric_only {
             b = b.numeric_only(true);

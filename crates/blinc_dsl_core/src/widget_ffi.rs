@@ -1366,7 +1366,7 @@ pub(crate) extern "C" fn blinc_checkbox_view(
     // Same call_id keying as Button — see comment there.
     let key = dsl_state_key("checkbox", call_id);
     let state = blinc_core::use_state_keyed(&key, || checked != 0);
-    let widget = blinc_layout::widgets::checkbox_labeled(&state, label);
+    let widget = blinc_layout::widgets::checkbox_labeled(state.signal(), label);
     finish_custom_widget(widget, style)
 }
 

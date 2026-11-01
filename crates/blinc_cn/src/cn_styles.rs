@@ -610,9 +610,9 @@ pub const CN_STYLES: &str = concat!(
 .cn-label {
     color: var(--cn-label-color, var(--text-primary));
 }
-.cn-label--disabled {
-    color: var(--text-tertiary);
-}
+.cn-label-text { color: var(--cn-label-color, var(--text-primary)); }
+.cn-label:disabled > .cn-label-text { color: var(--text-tertiary); }
+.cn-label-required { color: var(--error); }
 
 /* ============================================================================
    Kbd
@@ -662,6 +662,8 @@ pub const CN_STYLES: &str = concat!(
 .cn-switch:disabled {
     background: var(--input-bg-disabled);
     border: 1px solid var(--border-secondary);
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 .cn-switch-thumb {
     background: var(--text-inverse);
@@ -680,10 +682,8 @@ pub const CN_STYLES: &str = concat!(
 .cn-switch--sm:checked:active:not(:disabled) > .cn-switch-thumb { transform: translateX(14px) scale(0.9); }
 .cn-switch--md:checked:active:not(:disabled) > .cn-switch-thumb { transform: translateX(20px) scale(0.9); }
 .cn-switch--lg:checked:active:not(:disabled) > .cn-switch-thumb { transform: translateX(24px) scale(0.9); }
-.cn-switch--disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
+.cn-switch-label { color: var(--text-primary); }
+.cn-switch-row:disabled > .cn-switch-label { color: var(--text-tertiary); }
 
 /* ============================================================================
    Toggle (binary on/off button — shadcn `<Toggle>`)
@@ -793,6 +793,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-select-trigger[data-state="open"]:not(:disabled) {
     border-color: var(--border-hover);
 }
+.cn-combobox-box:disabled { opacity: 0.5; }
 .cn-select-trigger:disabled {
     box-shadow: none;
     background: var(--input-bg-disabled);

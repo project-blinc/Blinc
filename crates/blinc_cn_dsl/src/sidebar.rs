@@ -80,7 +80,7 @@ impl CnSidebar {
         let children = std::mem::take(&mut *self.children.lock().expect("children mutex"));
 
         let collapsed = crate::bridge::bool_state(&self.collapsed);
-        let mut b = blinc_cn::sidebar(&collapsed);
+        let mut b = blinc_cn::sidebar(collapsed.signal());
         if self.expanded_w > 0.0 {
             b = b.expanded_width(self.expanded_w as f32);
         }

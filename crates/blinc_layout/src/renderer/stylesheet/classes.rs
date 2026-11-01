@@ -186,13 +186,7 @@ impl RenderTree {
             if added.is_empty() {
                 continue;
             }
-            let styles: Vec<(Order, ElementStyle)> = added
-                .into_iter()
-                .map(|i| {
-                    let tier = Self::rule_order(&rules[i].0, &rules[i].1);
-                    ((tier.0, tier.1, i), rules[i].1.clone())
-                })
-                .collect();
+            let styles = Self::layer_rules(&before, added, rules);
             self.eased(descendant, stylesheet, ease, |tree| {
                 tree.keep_snapshots(descendant);
                 tree.dynamic_classes
@@ -271,6 +265,29 @@ impl RenderTree {
             .collect()
     }
 
+    /// The layer a class brings: the rules it `added`, and with them every
+    /// rule the node matched `before` that sits later in the cascade than the
+    /// first of those. The layer goes over the snapshot, which already holds
+    /// the earlier rules, so a later one is carried in it to stay on top.
+    fn layer_rules(
+        before: &[usize],
+        added: Vec<usize>,
+        rules: &[(crate::css_parser::ComplexSelector, ElementStyle)],
+    ) -> Rules {
+        let order = |i: usize| {
+            let tier = Self::rule_order(&rules[i].0, &rules[i].1);
+            (tier.0, tier.1, i)
+        };
+        let Some(first) = added.iter().map(|i| order(*i)).min() else {
+            return Vec::new();
+        };
+        added
+            .into_iter()
+            .chain(before.iter().copied().filter(|i| order(*i) > first))
+            .map(|i| (order(i), rules[i].1.clone()))
+            .collect()
+    }
+
     fn set_registered_classes(&self, node: LayoutNodeId, classes: Vec<Arc<str>>) {
         if classes.is_empty() {
             self.element_registry.clear_classes(node);
@@ -295,14 +312,7 @@ impl RenderTree {
 
         let after = self.matching_base_rules(node, stylesheet);
         let added: Vec<usize> = after.into_iter().filter(|i| !before.contains(i)).collect();
-        let rules = stylesheet.complex_rules();
-        let styles: Vec<(Order, ElementStyle)> = added
-            .into_iter()
-            .map(|i| {
-                let tier = Self::rule_order(&rules[i].0, &rules[i].1);
-                ((tier.0, tier.1, i), rules[i].1.clone())
-            })
-            .collect();
+        let styles = Self::layer_rules(&before, added, stylesheet.complex_rules());
 
         // What the node is without the class's rules, kept so it can be put
         // back. It is kept already when a state rule has applied to the node.

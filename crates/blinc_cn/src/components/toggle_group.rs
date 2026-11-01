@@ -13,8 +13,8 @@
 //! use blinc_cn::prelude::*;
 //!
 //! fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-//!     let align = ctx.use_state_keyed("text-align", || "left".to_string());
-//!     cn::toggle_group(&align)
+//!     let align = ctx.use_signal("left".to_string());
+//!     cn::toggle_group(align)
 //!         .variant(cn::ToggleVariant::Outline)
 //!         .item(cn::toggle_item("left").icon(to_svg(icons::ALIGN_LEFT, 16.0)))
 //!         .item(cn::toggle_item("center").icon(to_svg(icons::ALIGN_CENTER, 16.0)))
@@ -23,11 +23,12 @@
 //! ```
 //!
 //! Multi-select (`type="multiple"`) is a follow-up — needs a
-//! `State<Vec<String>>` overload + a different click-handler that
+//! `Signal<Vec<String>>` overload + a different click-handler that
 //! toggles set membership.
 
-use blinc_core::reactive::{ReactiveGraph, computed};
-use blinc_core::{Color, State};
+use blinc_core::Color;
+use blinc_core::reactive::{ReactiveGraph, Signal, computed};
+use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::ElementBuilder;
 use blinc_layout::prelude::*;
 use blinc_layout::svg::svg;
@@ -87,12 +88,13 @@ pub fn toggle_item(value: impl Into<String>) -> ToggleItem {
 
 /// Toggle group config (internal — driven by the builder).
 #[allow(clippy::type_complexity)]
+#[derive(Clone)]
 struct ToggleGroupConfig {
-    state: State<String>,
+    value: Signal<String>,
     items: Vec<ToggleItem>,
     variant: ToggleVariant,
     size: ToggleSize,
-    disabled: bool,
+    disabled: Reactive<bool>,
     /// Set by `.gap(..)`; the group's rules give 4px otherwise.
     gap: Option<f32>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
@@ -129,19 +131,22 @@ fn build_item(
     config: &ToggleGroupConfig,
     item: &ToggleItem,
 ) -> impl ElementBuilder + 'static {
-    let group_state = config.state.clone();
-    let group_state_for_click = config.state.clone();
+    let group = config.value;
     let item_value = item.value.clone();
     let item_value_for_click = item.value.clone();
     let item_label = item.label.clone();
     let item_icon = item.icon.clone();
-    let item_disabled = item.disabled || config.disabled;
+    // An item is disabled on its own, or with the group.
+    let disabled = if item.disabled {
+        Reactive::Const(true)
+    } else {
+        config.disabled.clone()
+    };
     let on_change = config.on_change.clone();
     let icon_size = config.size.icon_size();
     let _ = item.aria_label.clone(); // future a11y plumb
 
     // On while the group holds this item's value; the rules do the rest.
-    let group = group_state.signal();
     let is_on = {
         let value = item_value.clone();
         computed(move |g: &ReactiveGraph| g.get(group).unwrap_or_default() == value)
@@ -157,10 +162,8 @@ fn build_item(
         .attr_when("data-state", "on", &is_on)
         .attr_when("data-state", "off", &is_off)
         .attr_when("checked", "", &is_on)
+        .attr_when("disabled", "", disabled.clone())
         .cursor_pointer();
-    if item_disabled {
-        body = body.attr("disabled", "");
-    }
 
     if let Some(ref icon_svg) = item_icon {
         body = body.child(svg(icon_svg).size(icon_size, icon_size).internal());
@@ -170,15 +173,15 @@ fn build_item(
     }
 
     body.on_click(move |_| {
-        if item_disabled {
+        if disabled.now().unwrap_or(false) {
             return;
         }
         // Single-select: clicking the on item is a no-op (matches
         // shadcn's `type="single"`); clicking another item promotes it.
         // To clear selection, the parent state must be set to "" by
         // the caller.
-        if group_state_for_click.get() != item_value_for_click {
-            group_state_for_click.set(item_value_for_click.clone());
+        if group.try_get().as_deref() != Some(item_value_for_click.as_str()) {
+            group.set(item_value_for_click.clone());
             if let Some(ref cb) = on_change {
                 cb(&item_value_for_click);
             }
@@ -232,16 +235,17 @@ pub struct ToggleGroupBuilder {
 }
 
 impl ToggleGroupBuilder {
+    /// A toggle group that reads and writes `value`.
     #[track_caller]
-    pub fn new(state: &State<String>) -> Self {
+    pub fn new(value: Signal<String>) -> Self {
         Self {
             key: InstanceKey::new("toggle_group"),
             config: ToggleGroupConfig {
-                state: state.clone(),
+                value,
                 items: Vec::new(),
                 variant: ToggleVariant::default(),
                 size: ToggleSize::default(),
-                disabled: false,
+                disabled: Reactive::Const(false),
                 gap: None,
                 on_change: None,
             },
@@ -251,20 +255,8 @@ impl ToggleGroupBuilder {
 
     fn get_or_build(&self) -> &ToggleGroup {
         ::blinc_layout::build_once::build_once(&self.built, || {
-            ToggleGroup::with_config(&self.key, self.clone_config())
+            ToggleGroup::with_config(&self.key, self.config.clone())
         })
-    }
-
-    fn clone_config(&self) -> ToggleGroupConfig {
-        ToggleGroupConfig {
-            state: self.config.state.clone(),
-            items: self.config.items.clone(),
-            variant: self.config.variant,
-            size: self.config.size,
-            disabled: self.config.disabled,
-            gap: self.config.gap,
-            on_change: self.config.on_change.clone(),
-        }
     }
 
     /// Name this group's per-item state explicitly.
@@ -294,8 +286,9 @@ impl ToggleGroupBuilder {
         self
     }
 
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether every item is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 
@@ -351,11 +344,11 @@ impl ElementBuilder for ToggleGroupBuilder {
     }
 }
 
-/// Create a single-select toggle group bound to a [`State<String>`].
+/// A single-select toggle group that reads and writes `value`.
 ///
 /// Clicking an item sets the group state to that item's value. Clicking
 /// the already-selected item is a no-op (matches shadcn's `type="single"`).
 #[track_caller]
-pub fn toggle_group(state: &State<String>) -> ToggleGroupBuilder {
-    ToggleGroupBuilder::new(state)
+pub fn toggle_group(value: Signal<String>) -> ToggleGroupBuilder {
+    ToggleGroupBuilder::new(value)
 }

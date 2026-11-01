@@ -89,6 +89,38 @@ pub enum Reactive<T> {
     Computed(Computed<T>),
 }
 
+impl<T: Clone> Clone for Reactive<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Const(v) => Self::Const(v.clone()),
+            Self::Bound(state) => Self::Bound(state.clone()),
+            Self::Computed(computed) => Self::Computed(computed.clone()),
+        }
+    }
+}
+
+impl<T: Clone + Send + 'static> Reactive<T> {
+    /// The value it holds now, for a handler that reads a bound prop when
+    /// its event arrives. `None` only when the source has no value yet.
+    pub fn now(&self) -> Option<T> {
+        match self {
+            Self::Const(v) => Some(v.clone()),
+            Self::Bound(state) => state.try_get(),
+            Self::Computed(computed) => computed.try_get(),
+        }
+    }
+
+    /// The value it holds, read inside a `computed` or effect closure through
+    /// the graph it is given, so the computation follows it.
+    pub fn read(&self, g: &blinc_core::reactive::ReactiveGraph) -> Option<T> {
+        match self {
+            Self::Const(v) => Some(v.clone()),
+            Self::Bound(state) => g.get(state.signal()),
+            Self::Computed(computed) => g.read_derived_in_flight(computed.derived()),
+        }
+    }
+}
+
 /// Type-erased value carrier for reactive bindings.
 ///
 /// `Reactive::Bound` stores the read + write closures as type-erased

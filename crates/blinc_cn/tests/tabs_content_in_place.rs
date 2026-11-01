@@ -29,7 +29,7 @@ fn scene(transition: TabsTransition) -> Scene {
     let builds = Arc::new(AtomicUsize::new(0));
     let counted = Arc::clone(&builds);
     let host = div().w(400.0).h(300.0).child(
-        tabs(&selected)
+        tabs(selected.signal())
             .transition(transition)
             .tab("a", "Alpha", move || {
                 counted.fetch_add(1, Ordering::SeqCst);

@@ -97,7 +97,7 @@ impl CnCombobox {
 
         let values: Vec<String> = options.iter().map(|o| o.option_value()).collect();
 
-        let mut b = blinc_cn::ComboboxBuilder::with_key(self.instance_key(&values), &state)
+        let mut b = blinc_cn::ComboboxBuilder::with_key(self.instance_key(&values), state.signal())
             .size(self.size());
         if !self.placeholder.is_empty() {
             b = b.placeholder(self.placeholder.clone());

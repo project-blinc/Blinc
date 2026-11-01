@@ -19,21 +19,21 @@
 //! # Example
 //!
 //! ```ignore
-//! let bold_on = ctx.use_state_keyed("bold", || false);
-//! toggle(&bold_on)
+//! let bold_on = ctx.use_signal(false);
+//! toggle(bold_on)
 //!     .label("B")
 //!     .on_change(|on| println!("bold: {}", on))
 //! ```
 
 use std::sync::Arc;
 
-use blinc_core::State;
-use blinc_core::reactive::{ReactiveGraph, computed};
+use blinc_core::reactive::{ReactiveGraph, Signal, computed};
 
+use crate::binding::{IntoReactive, Reactive};
 use crate::div::{Div, ElementBuilder, div};
 use crate::element::RenderProps;
 use crate::svg::svg;
-use crate::text::text;
+use crate::text::Text;
 use crate::tree::{LayoutNodeId, LayoutTree};
 
 /// The class whose rules in [`crate::ua_styles::UA_STYLES`] give a toggle its
@@ -43,12 +43,12 @@ pub const DEFAULT_CLASS: &str = "blinc-toggle";
 /// Toggle configuration.
 #[derive(Clone)]
 pub struct ToggleConfig {
-    /// Reactive on/off state.
-    on: State<bool>,
-    /// Whether the toggle is disabled.
-    pub disabled: bool,
-    /// Optional text label.
-    pub label: Option<String>,
+    /// Whether it is on.
+    on: Signal<bool>,
+    /// Whether it is disabled; bound in place.
+    disabled: Reactive<bool>,
+    /// Text label; bound in place.
+    label: Option<Reactive<String>>,
     /// Optional SVG icon markup (rendered before the label).
     pub icon: Option<String>,
     /// Icon size in logical px.
@@ -66,10 +66,10 @@ pub struct ToggleConfig {
 }
 
 impl ToggleConfig {
-    fn new(on: State<bool>) -> Self {
+    fn new(on: Signal<bool>) -> Self {
         Self {
             on,
-            disabled: false,
+            disabled: Reactive::Const(false),
             label: None,
             icon: None,
             icon_size: 16.0,
@@ -89,22 +89,22 @@ pub struct Toggle {
 
 impl Toggle {
     fn with_config(config: ToggleConfig) -> Self {
-        let on_state_for_click = config.on.clone();
         let on_change = config.on_change.clone();
-        let disabled = config.disabled;
+        let disabled = config.disabled.clone();
 
         // `data-state` is the on/off pair ashui's stylesheet and Radix write;
         // `checked` is the attribute `:checked` rules match.
-        let on = config.on.signal();
+        let on = config.on;
         let off = computed(move |g: &ReactiveGraph| !g.get(on).unwrap_or(false));
 
         let mut body = div()
             .class(DEFAULT_CLASS)
             .attr("data-variant", &config.variant)
             .attr("data-size", &config.size)
-            .attr_when("data-state", "on", &config.on)
+            .attr_when("data-state", "on", on)
             .attr_when("data-state", "off", &off)
-            .attr_when("checked", "", &config.on)
+            .attr_when("checked", "", on)
+            .attr_when("disabled", "", config.disabled.clone())
             .cursor_pointer();
         for class in &config.css_classes {
             body = body.class(class);
@@ -112,10 +112,6 @@ impl Toggle {
         if let Some(id) = &config.css_element_id {
             body = body.id(id);
         }
-        if disabled {
-            body = body.attr("disabled", "");
-        }
-
         // The label and the icon take the toggle's colour and font from its
         // rules, so nothing here names either.
         if let Some(ref icon_svg) = config.icon {
@@ -125,16 +121,16 @@ impl Toggle {
                     .internal(),
             );
         }
-        if let Some(ref label_text) = config.label {
-            body = body.child(text(label_text));
+        if let Some(label) = config.label {
+            body = body.child(Text::bound(label));
         }
 
         let inner = body.on_click(move |_| {
-            if disabled {
+            if disabled.now().unwrap_or(false) {
                 return;
             }
-            let next = !on_state_for_click.get();
-            on_state_for_click.set(next);
+            let next = !on.try_get().unwrap_or(false);
+            on.set(next);
             if let Some(ref handler) = on_change {
                 handler(next);
             }
@@ -190,9 +186,10 @@ pub struct ToggleBuilder {
 }
 
 impl ToggleBuilder {
-    pub fn new(on: &State<bool>) -> Self {
+    /// A toggle that reads and writes `on`.
+    pub fn new(on: Signal<bool>) -> Self {
         Self {
-            config: ToggleConfig::new(on.clone()),
+            config: ToggleConfig::new(on),
             built: std::cell::OnceCell::new(),
         }
     }
@@ -213,8 +210,9 @@ impl ToggleBuilder {
         self
     }
 
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.config.label = Some(label.into());
+    /// The label: a string, Signal or Computed.
+    pub fn label(mut self, label: impl IntoReactive<String>) -> Self {
+        self.config.label = Some(label.into_reactive());
         self
     }
 
@@ -243,8 +241,9 @@ impl ToggleBuilder {
         self
     }
 
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether it is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 
@@ -295,12 +294,12 @@ impl ElementBuilder for ToggleBuilder {
     }
 }
 
-/// Create a toggle bound to a reactive `State<bool>`.
+/// A toggle that reads and writes `on`, following it in place.
 ///
 /// ```ignore
-/// let bold = ctx.use_state_keyed("bold", || false);
-/// toggle(&bold).label("B").on_change(|on| /* … */)
+/// let bold = ctx.use_signal(false);
+/// toggle(bold).label("B").on_change(|on| /* … */)
 /// ```
-pub fn toggle(on: &State<bool>) -> ToggleBuilder {
+pub fn toggle(on: Signal<bool>) -> ToggleBuilder {
     ToggleBuilder::new(on)
 }

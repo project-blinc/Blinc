@@ -52,7 +52,7 @@ impl CnNumberInput {
 
     fn to_cn_widget(&self) -> blinc_cn::NumberInputBuilder {
         let state = crate::bridge::f64_state(&self.value);
-        let mut n = blinc_cn::number_input(&state).size(self.size());
+        let mut n = blinc_cn::number_input(state.signal()).size(self.size());
 
         // Zero is what an omitted number prop reads as and is also a
         // meaningful bound, so a range only applies when `max` says one

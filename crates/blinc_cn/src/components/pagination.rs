@@ -7,16 +7,13 @@
 //! ```ignore
 //! use blinc_cn::prelude::*;
 //!
-//! // Basic pagination
-//! cn::pagination()
-//!     .total_pages(10)
-//!     .current_page(page_state.clone())
+//! let page = ctx.use_signal(1usize);
+//!
+//! cn::pagination(10, page)
 //!     .on_page_change(|page| println!("Go to page {}", page))
 //!
 //! // With custom visible pages
-//! cn::pagination()
-//!     .total_pages(100)
-//!     .current_page(page_state.clone())
+//! cn::pagination(100, page)
 //!     .visible_pages(7)
 //!     .show_first_last(true)
 //! ```
@@ -24,8 +21,7 @@
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use blinc_core::State;
-use blinc_core::reactive::{ReactiveGraph, computed};
+use blinc_core::reactive::{ReactiveGraph, Signal, computed};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
 use blinc_layout::element::CursorStyle;
@@ -115,12 +111,12 @@ impl Pagination {
         let visible_pages = builder.visible_pages;
         let show_first_last = builder.show_first_last;
         let on_page_change = builder.on_page_change.clone();
-        let page_state = builder.current_page.clone();
+        let page_state = builder.current_page;
 
         // The row is built once: a keyed list of slots worked out from the
         // current page. A page that stays in view keeps its button; the
         // active and disabled looks are classes bound to the page.
-        let page = page_state.clone();
+        let page = page_state;
         let slots = computed(move |g: &ReactiveGraph| {
             page_slots(page.read(g), total_pages, visible_pages, show_first_last)
         });
@@ -134,7 +130,7 @@ impl Pagination {
                 slots,
                 |slot: &Slot| *slot,
                 move |slot: Slot| -> Div {
-                    let page = page_state.clone();
+                    let page = page_state;
                     let on_change = on_page_change.clone();
                     // Where a click on this slot goes from `current`, if anywhere.
                     let target = move |current: usize| -> Option<usize> {
@@ -148,7 +144,6 @@ impl Pagination {
                         }
                     };
                     let go = {
-                        let page = page.clone();
                         move || {
                             if let Some(to) = target(page.get()) {
                                 page.set(to);
@@ -177,12 +172,8 @@ impl Pagination {
                                     .color(text_tertiary),
                             ),
                         Slot::Page(n) => {
-                            let active = {
-                                let page = page.clone();
-                                computed(move |g: &ReactiveGraph| page.read(g) == n)
-                            };
+                            let active = { computed(move |g: &ReactiveGraph| page.read(g) == n) };
                             let text_color = {
-                                let page = page.clone();
                                 computed(move |g: &ReactiveGraph| {
                                     if page.read(g) == n {
                                         ThemeState::get().color(ColorToken::TextInverse)
@@ -213,11 +204,9 @@ impl Pagination {
                         }
                         _ => {
                             let disabled = {
-                                let page = page.clone();
                                 computed(move |g: &ReactiveGraph| target(page.read(g)).is_none())
                             };
                             let icon_color = {
-                                let page = page.clone();
                                 computed(move |g: &ReactiveGraph| {
                                     if target(page.read(g)).is_none() {
                                         text_tertiary.with_alpha(0.5)
@@ -364,18 +353,18 @@ impl ElementBuilder for Pagination {
 /// Builder for pagination component
 /// Where a pagination reads and writes its page number.
 ///
-/// A caller holding a `State<usize>` passes it straight through. The
+/// A caller holding a `Signal<usize>` passes it straight through. The
 /// DSL has no usize signal — every number there is one `f64` — so it
 /// hands over its own signal and this rounds at the boundary. Narrowing
 /// to a widget-owned copy instead would mint a second id and leave
 /// anything keyed on the first (a `deps` list, an animation key) stale.
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum PageValue {
     /// A caller's own page counter.
-    Usize(State<usize>),
+    Usize(Signal<usize>),
     /// A whole-number signal. What the DSL binds: a page is an integer,
     /// so nothing is rounded on the way through.
-    I32(State<i32>),
+    I32(Signal<i32>),
     /// A number signal of any precision, rounded to a page.
     Number(crate::reactive_props::NumberValue),
 }
@@ -385,8 +374,8 @@ impl PageValue {
     /// is not a page.
     pub fn get(&self) -> usize {
         match self {
-            Self::Usize(s) => s.get(),
-            Self::I32(s) => s.get().max(1) as usize,
+            Self::Usize(s) => s.try_get().unwrap_or(1),
+            Self::I32(s) => s.try_get().unwrap_or(1).max(1) as usize,
             Self::Number(n) => n.get().round().max(1.0) as usize,
         }
     }
@@ -404,13 +393,13 @@ impl PageValue {
     pub fn read(&self, g: &ReactiveGraph) -> usize {
         use crate::reactive_props::NumberValue;
         match self {
-            Self::Usize(s) => g.get(s.signal()).unwrap_or(1),
-            Self::I32(s) => g.get(s.signal()).unwrap_or(1).max(1) as usize,
+            Self::Usize(s) => g.get(*s).unwrap_or(1),
+            Self::I32(s) => g.get(*s).unwrap_or(1).max(1) as usize,
             Self::Number(NumberValue::F32(s)) => {
-                g.get(s.signal()).unwrap_or(1.0).round().max(1.0) as usize
+                g.get(*s).unwrap_or(1.0_f32).round().max(1.0) as usize
             }
             Self::Number(NumberValue::F64(s)) => {
-                g.get(s.signal()).unwrap_or(1.0).round().max(1.0) as usize
+                g.get(*s).unwrap_or(1.0_f64).round().max(1.0) as usize
             }
         }
     }
@@ -418,10 +407,34 @@ impl PageValue {
     /// What to subscribe to. One id either way.
     pub fn signal_id(&self) -> blinc_core::reactive::SignalId {
         match self {
-            Self::Usize(s) => s.signal_id(),
-            Self::I32(s) => s.signal_id(),
+            Self::Usize(s) => s.id(),
+            Self::I32(s) => s.id(),
             Self::Number(n) => n.signal_id(),
         }
+    }
+}
+
+impl From<Signal<usize>> for PageValue {
+    fn from(s: Signal<usize>) -> Self {
+        Self::Usize(s)
+    }
+}
+
+impl From<Signal<i32>> for PageValue {
+    fn from(s: Signal<i32>) -> Self {
+        Self::I32(s)
+    }
+}
+
+impl From<Signal<f32>> for PageValue {
+    fn from(s: Signal<f32>) -> Self {
+        Self::Number(s.into())
+    }
+}
+
+impl From<Signal<f64>> for PageValue {
+    fn from(s: Signal<f64>) -> Self {
+        Self::Number(s.into())
     }
 }
 
@@ -441,11 +454,8 @@ pub struct PaginationBuilder {
 }
 
 impl PaginationBuilder {
-    /// Create a new pagination builder
+    /// Drive the page from any [`PageValue`].
     #[track_caller]
-    /// Drive the page from a number signal of any precision, for a
-    /// caller with no `State<usize>` to offer — the DSL, where every
-    /// number is one `f64`.
     pub fn with_page_value(total_pages: usize, page: PageValue) -> Self {
         Self {
             key: InstanceKey::new("pagination"),
@@ -461,11 +471,14 @@ impl PaginationBuilder {
         }
     }
 
-    pub fn new(total_pages: usize, current_page: State<usize>) -> Self {
+    /// A pagination over `total_pages` that reads and writes the current
+    /// page: a `Signal<usize>`, `Signal<i32>` or a float signal.
+    #[track_caller]
+    pub fn new(total_pages: usize, current_page: impl Into<PageValue>) -> Self {
         Self {
             key: InstanceKey::new("pagination"),
             total_pages,
-            current_page: PageValue::Usize(current_page),
+            current_page: current_page.into(),
             visible_pages: 5,
             show_first_last: false,
             size: PaginationSize::default(),
@@ -573,17 +586,15 @@ impl ElementBuilder for PaginationBuilder {
 ///
 /// ```ignore
 /// use blinc_cn::prelude::*;
-/// use blinc_core::use_state_keyed;
+/// let page = ctx.use_signal(1usize);
 ///
-/// let page = use_state_keyed("pagination_page", || 1usize);
-///
-/// cn::pagination(10, page.clone())
+/// cn::pagination(10, page)
 ///     .visible_pages(7)
 ///     .show_first_last(true)
 ///     .on_page_change(|page| println!("Page: {}", page))
 /// ```
 #[track_caller]
-pub fn pagination(total_pages: usize, current_page: State<usize>) -> PaginationBuilder {
+pub fn pagination(total_pages: usize, current_page: impl Into<PageValue>) -> PaginationBuilder {
     PaginationBuilder::new(total_pages, current_page)
 }
 

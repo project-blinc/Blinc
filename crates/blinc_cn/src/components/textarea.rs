@@ -81,10 +81,10 @@ struct TextareaConfig {
     size: TextareaSize,
     rows: Option<usize>,
     cols: Option<usize>,
-    label: Option<String>,
+    label: Option<blinc_layout::binding::Reactive<String>>,
     description: Option<String>,
     error: Option<String>,
-    disabled: bool,
+    disabled: blinc_layout::binding::Reactive<bool>,
     required: bool,
     placeholder: Option<String>,
     max_length: Option<usize>,
@@ -107,7 +107,7 @@ impl TextareaConfig {
             label: None,
             description: None,
             error: None,
-            disabled: false,
+            disabled: blinc_layout::binding::Reactive::Const(false),
             required: false,
             placeholder: None,
             max_length: None,
@@ -146,7 +146,7 @@ impl Textarea {
         let mut ta = ta
             .font_size(config.size.font_size(&typography))
             .rounded(radius)
-            .disabled(config.disabled)
+            .disabled(config.disabled.clone())
             .wrap(config.wrap);
 
         if let Some(cb) = config.on_change.clone() {
@@ -225,13 +225,12 @@ impl Textarea {
                 }
 
                 // Label
-                if let Some(ref label_text) = config.label {
-                    let mut lbl = label(label_text).size(LabelSize::Medium);
+                if let Some(label_text) = config.label.clone() {
+                    let mut lbl = label(label_text)
+                        .size(LabelSize::Medium)
+                        .disabled(config.disabled.clone());
                     if config.required {
                         lbl = lbl.required();
-                    }
-                    if config.disabled {
-                        lbl = lbl.disabled(true);
                     }
                     container = container.child(lbl);
                 }
@@ -354,8 +353,8 @@ impl TextareaBuilder {
     }
 
     /// Set a label above the textarea
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.config.label = Some(label.into());
+    pub fn label(mut self, label: impl blinc_layout::binding::IntoReactive<String>) -> Self {
+        self.config.label = Some(label.into_reactive());
         self
     }
 
@@ -405,8 +404,9 @@ impl TextareaBuilder {
     }
 
     /// Disable the textarea
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether it is disabled: a bool, Signal or Computed.
+    pub fn disabled(mut self, disabled: impl blinc_layout::binding::IntoReactive<bool>) -> Self {
+        self.config.disabled = disabled.into_reactive();
         self
     }
 
@@ -552,7 +552,10 @@ mod tests {
             .size(TextareaSize::Large);
 
         assert_eq!(ta.config.size, TextareaSize::Large);
-        assert_eq!(ta.config.label, Some("Description".to_string()));
+        assert_eq!(
+            ta.config.label.as_ref().and_then(|l| l.now()).as_deref(),
+            Some("Description")
+        );
         assert_eq!(ta.config.rows, Some(5));
     }
 

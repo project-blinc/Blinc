@@ -3,7 +3,7 @@
 //! disabled, with and without a label.
 
 use blinc_cn::{CheckboxSize, checkbox};
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::{Signal, signal};
 use blinc_layout::div::div;
 use blinc_recorder::Headless;
 use blinc_theme::{ColorScheme, HybridTheme};
@@ -30,11 +30,20 @@ fn mount(
     disabled: bool,
     size: CheckboxSize,
     label: bool,
-) -> State<bool> {
-    let state = State::new(signal::<bool>(on), global_graph(), global_dirty_flag());
-    let bound = state.clone();
+) -> Signal<bool> {
+    mount_bound(ui, on, signal(disabled), size, label)
+}
+
+fn mount_bound(
+    ui: &mut Headless,
+    on: bool,
+    disabled: Signal<bool>,
+    size: CheckboxSize,
+    label: bool,
+) -> Signal<bool> {
+    let checked = signal(on);
     ui.mount(move |_| {
-        let mut cb = checkbox(&bound).size(size).disabled(disabled);
+        let mut cb = checkbox(checked).size(size).disabled(disabled);
         if label {
             cb = cb.label("Accept");
         }
@@ -45,7 +54,7 @@ fn mount(
             .justify_center()
             .child(cb)
     });
-    state
+    checked
 }
 
 #[test]
@@ -85,13 +94,33 @@ fn sizes_when_checked() {
 #[test]
 fn a_click_checks_it() {
     let Some(mut ui) = session() else { return };
-    let state = mount(&mut ui, false, false, CheckboxSize::Medium, true);
+    let checked = mount(&mut ui, false, false, CheckboxSize::Medium, true);
     ui.leave().settle();
     ui.press(".cn-checkbox").advance(80);
     ui.release();
-    assert!(state.get(), "the click did not check it");
+    assert!(checked.get(), "the click did not check it");
     ui.advance(32);
     ui.assert_snapshot("cn_checkbox_click_midway");
     ui.settle();
     ui.assert_snapshot("cn_checkbox_click_after");
+}
+
+#[test]
+fn a_bound_disabled_follows_its_signal_in_place() {
+    let Some(mut ui) = session() else { return };
+    let disabled = signal(false);
+    let checked = mount_bound(&mut ui, false, disabled, CheckboxSize::Medium, true);
+    ui.leave().settle();
+
+    disabled.set(true);
+    ui.settle();
+    ui.assert_snapshot("cn_checkbox_unchecked_disabled");
+    ui.click(".cn-checkbox").settle();
+    assert!(!checked.get(), "a disabled checkbox was checked");
+
+    disabled.set(false);
+    ui.leave().settle();
+    ui.assert_snapshot("cn_checkbox_unchecked_idle");
+    ui.click(".cn-checkbox").settle();
+    assert!(checked.get(), "re-enabled, the click did not check it");
 }

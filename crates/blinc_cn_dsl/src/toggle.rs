@@ -125,7 +125,7 @@ impl CnToggle {
 
     fn to_cn_widget(&self) -> blinc_cn::ToggleBuilder {
         let state = bool_state(&self.pressed);
-        let mut t = blinc_cn::toggle(&state)
+        let mut t = blinc_cn::toggle(state.signal())
             .size(self.size())
             .variant(self.variant());
         if !self.label.is_empty() {

@@ -5,7 +5,7 @@
 mod common;
 
 use blinc_cn::SliderBuilder;
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::{Signal, signal};
 use blinc_layout::div::div;
 use blinc_layout::event_router::{EventRouter, MouseButton};
 use blinc_layout::renderer::RenderTree;
@@ -19,13 +19,13 @@ const TRAVEL: f32 = WIDTH - THUMB;
 struct Scene {
     tree: RenderTree,
     router: EventRouter,
-    value: State<f32>,
+    value: Signal<f32>,
     key: String,
 }
 
 fn scene(key: &str, disabled: bool) -> Scene {
-    let value = State::new(signal::<f32>(0.5), global_graph(), global_dirty_flag());
-    let slider = SliderBuilder::with_key(key, &value)
+    let value = signal::<f32>(0.5);
+    let slider = SliderBuilder::with_key(key, value)
         .min(0.0)
         .max(1.0)
         .w(WIDTH)
@@ -79,7 +79,7 @@ impl Scene {
 
     fn spring(&self, part: &str) -> blinc_layout::motion::SharedAnimatedValue {
         let key = if part == "thumb" {
-            format!("cn-slider:{}:thumb", self.value.signal_id().to_raw())
+            format!("cn-slider:{}:thumb", self.value.id().to_raw())
         } else {
             format!("cn-slider:{}:{part}", self.key)
         };

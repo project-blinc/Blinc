@@ -31,7 +31,7 @@ fn the_selected_rules_move_with_the_selection() {
     guarded(|| {
         let selected = string_state("a");
         let host = div().w(400.0).h(200.0).child(
-            blinc_cn::radio_group(&selected)
+            blinc_cn::radio_group(selected.signal())
                 .option("a", "Alpha")
                 .option("b", "Beta"),
         );

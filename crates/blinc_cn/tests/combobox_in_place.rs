@@ -5,7 +5,7 @@
 mod common;
 
 use blinc_core::context_state::BlincContextState;
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::{Signal, signal};
 use blinc_layout::LayoutNodeId;
 use blinc_layout::div::div;
 use blinc_layout::event_router::{EventRouter, MouseButton};
@@ -15,14 +15,14 @@ use common::*;
 struct Scene {
     tree: RenderTree,
     router: EventRouter,
-    value: State<String>,
-    query: State<String>,
+    value: Signal<String>,
+    query: Signal<String>,
 }
 
 fn scene(key: &str) -> Scene {
     init();
-    let value = State::new(signal(String::new()), global_graph(), global_dirty_flag());
-    let combobox = blinc_cn::ComboboxBuilder::with_key(key, &value)
+    let value = signal(String::new());
+    let combobox = blinc_cn::ComboboxBuilder::with_key(key, value)
         .placeholder("Pick a fruit")
         .option("apple", "Apple")
         .option("pear", "Pear")
@@ -34,7 +34,7 @@ fn scene(key: &str) -> Scene {
     tree.compute_layout(400.0, 400.0);
     // What the search field writes as it is typed in.
     let query =
-        BlincContextState::get().use_state_keyed(&format!("{key}_search_query"), String::new);
+        BlincContextState::get().use_signal_keyed(&format!("{key}_search_query"), String::new);
     Scene {
         tree,
         router: EventRouter::new(),

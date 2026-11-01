@@ -102,7 +102,7 @@ impl CnToggleGroup {
 
         let options: Vec<String> = items.iter().map(|i| i.option_value()).collect();
 
-        let mut b = blinc_cn::toggle_group(&state)
+        let mut b = blinc_cn::toggle_group(state.signal())
             .key(self.group_key(&options))
             .variant(self.variant())
             .size(self.size());

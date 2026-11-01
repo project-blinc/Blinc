@@ -17,18 +17,17 @@
 //! use blinc_cn::prelude::*;
 //!
 //! fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-//!     let is_open = ctx.use_state_for("collapsible", false);
+//!     let is_open = ctx.use_signal(false);
 //!
 //!     div().flex_col().gap(8.0).children([
 //!         // Trigger button
 //!         cn::button("Toggle")
 //!             .on_click({
-//!                 let is_open = is_open.clone();
 //!                 move |_| is_open.set(!is_open.get())
 //!             }),
 //!
 //!         // Collapsible content - no ctx needed!
-//!         cn::collapsible(&is_open)
+//!         cn::collapsible(is_open)
 //!             .content(|| {
 //!                 div().p(16.0).bg(Color::GRAY)
 //!                     .child(text("This content expands and collapses"))
@@ -38,7 +37,7 @@
 //! ```
 
 use blinc_animation::{AnimatedValue, SpringConfig};
-use blinc_core::State;
+use blinc_core::reactive::Signal;
 use blinc_core::reactive::{Computed, ReactiveGraph, computed};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::ElementTypeId;
@@ -109,7 +108,7 @@ impl ElementBuilder for Collapsible {
 type ContentBuilderFn = std::sync::Arc<dyn Fn() -> Div + Send + Sync>;
 
 pub struct CollapsibleBuilder {
-    is_open: State<bool>,
+    is_open: Signal<bool>,
     content: Option<ContentBuilderFn>,
     scale_anim: SharedAnimatedValue,
     opacity_anim: SharedAnimatedValue,
@@ -154,13 +153,13 @@ impl CollapsibleBuilder {
     /// one key, since `InstanceKey::new` would see this function body
     /// as the location.
     #[track_caller]
-    pub fn new(is_open: &State<bool>) -> Self {
+    pub fn new(is_open: Signal<bool>) -> Self {
         Self::with_key(InstanceKey::new("collapsible"), is_open)
     }
 
     /// Create with explicit instance key (for multiple collapsibles)
-    pub fn with_key(key: InstanceKey, is_open: &State<bool>) -> Self {
-        let is_currently_open = is_open.get();
+    pub fn with_key(key: InstanceKey, is_open: Signal<bool>) -> Self {
+        let is_currently_open = is_open.try_get().unwrap_or(false);
         let initial_scale = if is_currently_open { 1.0 } else { 0.0 };
         let initial_opacity = if is_currently_open { 1.0 } else { 0.0 };
 
@@ -174,7 +173,7 @@ impl CollapsibleBuilder {
         //
         // `initial_*` applies on first build only; afterwards the live
         // value is returned wherever it is.
-        let anim_key = is_open.signal_id().to_raw();
+        let anim_key = is_open.id().to_raw();
         let scale_anim = blinc_layout::stateful::persisted_animated_value(
             &format!("cn-collapsible:{anim_key}:scale"),
             initial_scale,
@@ -209,7 +208,7 @@ impl CollapsibleBuilder {
         );
 
         Self {
-            is_open: is_open.clone(),
+            is_open,
             content: None,
             scale_anim,
             opacity_anim,
@@ -224,11 +223,11 @@ impl CollapsibleBuilder {
     }
 
     fn make(&self) -> Collapsible {
-        let anim_key = format!("cn-collapsible-{}", self.is_open.signal_id().to_raw());
+        let anim_key = format!("cn-collapsible-{}", self.is_open.id().to_raw());
         // Built once. The section collapses to no height while closed, in
         // place, and its content is always laid out so the height
         // animation has something to shrink and grow.
-        let open = self.is_open.signal();
+        let open = self.is_open;
         let closed = computed(move |g: &ReactiveGraph| !g.get(open).unwrap_or(false));
         let body = match &self.content {
             Some(f) => f(),
@@ -250,7 +249,7 @@ impl CollapsibleBuilder {
 
     /// Toggle the collapsible state
     pub fn toggle(&self) {
-        let current = self.is_open.get();
+        let current = self.is_open.try_get().unwrap_or(false);
         self.set_open(!current);
     }
 
@@ -309,7 +308,7 @@ where
     E: ElementBuilder + 'static,
 {
     #[allow(dead_code)]
-    is_open: State<bool>,
+    is_open: Signal<bool>,
     scale_anim: SharedAnimatedValue,
     opacity_anim: SharedAnimatedValue,
     #[allow(dead_code)]
@@ -349,7 +348,7 @@ where
     /// Build into a Collapsible, consuming self
     pub fn build_collapsible(self) -> Collapsible {
         let content = (self.content)();
-        let is_open = self.is_open.get();
+        let is_open = self.is_open.try_get().unwrap_or(false);
 
         // Height animation rather than `scale_y`, matching
         // `cn::accordion`. Scaling squashes the content and fades it as
@@ -361,7 +360,7 @@ where
         // bounds, so removing it would leave nothing to shrink. It is
         // `overflow_clip` plus an explicit zero height that hide it when
         // shut.
-        let anim_key = format!("cn-collapsible-{}", self.is_open.signal_id().to_raw());
+        let anim_key = format!("cn-collapsible-{}", self.is_open.id().to_raw());
         let inner = div()
             .w_full()
             .flex_col()
@@ -424,13 +423,13 @@ impl CollapsibleTrigger {
     /// Create a new trigger with label and associated open state
     pub fn new(
         label: impl Into<String>,
-        is_open: &State<bool>,
+        is_open: Signal<bool>,
         scale_anim: SharedAnimatedValue,
         opacity_anim: SharedAnimatedValue,
     ) -> Self {
         let theme = ThemeState::get();
         let label_text = label.into();
-        let is_open_for_click = is_open.clone();
+        let is_open_for_click = is_open;
         let scale_anim_for_click = scale_anim;
         let opacity_anim_for_click = opacity_anim;
 
@@ -440,10 +439,8 @@ impl CollapsibleTrigger {
         let surface_hover = theme.color(ColorToken::SurfaceElevated);
         let radius = theme.radius(RadiusToken::Md);
 
-        let interaction = Interaction::keyed(&format!(
-            "cn-collapsible-trigger-{}",
-            is_open.signal_id().to_raw()
-        ));
+        let interaction =
+            Interaction::keyed(&format!("cn-collapsible-trigger-{}", is_open.id().to_raw()));
         let (hovered, pressed) = (
             interaction.hovered().signal(),
             interaction.pressed().signal(),
@@ -455,7 +452,7 @@ impl CollapsibleTrigger {
                 blinc_core::Color::TRANSPARENT
             }
         });
-        let open = is_open.signal();
+        let open = is_open;
         let chevron_angle = computed(move |g: &ReactiveGraph| {
             if g.get(open).unwrap_or(false) {
                 180.0
@@ -486,7 +483,7 @@ impl CollapsibleTrigger {
                     .child(svg(CHEVRON_DOWN_SVG).size(16.0, 16.0).color(text_secondary)),
             )
             .on_click(move |_| {
-                let current = is_open_for_click.get();
+                let current = is_open_for_click.try_get().unwrap_or(false);
                 let new_state = !current;
                 is_open_for_click.set(new_state);
 
@@ -551,16 +548,16 @@ impl ElementBuilder for CollapsibleTrigger {
 /// # Example
 ///
 /// ```ignore
-/// let is_open = ctx.use_state_for("details", false);
+/// let is_open = ctx.use_signal(false);
 ///
-/// cn::collapsible(&is_open)
+/// cn::collapsible(is_open)
 ///     .content(|| {
 ///         div().p(16.0)
 ///             .child(text("This content can be hidden"))
 ///     })
 /// ```
 #[track_caller]
-pub fn collapsible(is_open: &State<bool>) -> CollapsibleBuilder {
+pub fn collapsible(is_open: Signal<bool>) -> CollapsibleBuilder {
     CollapsibleBuilder::new(is_open)
 }
 
@@ -574,11 +571,11 @@ pub fn collapsible(is_open: &State<bool>) -> CollapsibleBuilder {
 /// # Example
 ///
 /// ```ignore
-/// let is_open = ctx.use_state_for("faq-1", false);
+/// let is_open = ctx.use_signal(false);
 ///
 /// cn::collapsible_section(
 ///     "What is Blinc?",
-///     &is_open,
+///     is_open,
 ///     || {
 ///         div().p(16.0).child(
 ///             text("Blinc is a Rust UI framework...")
@@ -588,7 +585,7 @@ pub fn collapsible(is_open: &State<bool>) -> CollapsibleBuilder {
 /// ```
 pub fn collapsible_section<F, E>(
     trigger_label: impl Into<String>,
-    is_open: &State<bool>,
+    is_open: Signal<bool>,
     content: F,
 ) -> Div
 where
@@ -598,7 +595,7 @@ where
     let theme = ThemeState::get();
 
     // Create animations using global scheduler
-    let is_currently_open = is_open.get();
+    let is_currently_open = is_open.try_get().unwrap_or(false);
     let initial_scale = if is_currently_open { 1.0 } else { 0.0 };
     let initial_opacity = if is_currently_open { 1.0 } else { 0.0 };
 

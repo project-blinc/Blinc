@@ -36,7 +36,7 @@ fn settle(h: &mut Harness, transition: TabsTransition) {
 fn scenario(name: &str, transition: TabsTransition, builds: &Arc<AtomicUsize>) -> String {
     let selected = string_state("a");
     let counted = Arc::clone(builds);
-    let widget = tabs(&selected)
+    let widget = tabs(selected.signal())
         .transition(transition)
         .tab("a", "Alpha", move || {
             counted.fetch_add(1, Ordering::SeqCst);

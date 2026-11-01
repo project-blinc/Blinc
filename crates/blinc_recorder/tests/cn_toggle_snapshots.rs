@@ -3,7 +3,7 @@
 //! disabled, in each variant and size.
 
 use blinc_cn::{ToggleSize, ToggleVariant, toggle, toggle_group, toggle_item};
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::{Signal, signal};
 use blinc_layout::div::div;
 use blinc_recorder::Headless;
 use blinc_theme::{ColorScheme, HybridTheme};
@@ -30,9 +30,8 @@ fn mount_toggle(
     disabled: bool,
     variant: ToggleVariant,
     size: ToggleSize,
-) -> State<bool> {
-    let state = State::new(signal::<bool>(on), global_graph(), global_dirty_flag());
-    let bound = state.clone();
+) -> Signal<bool> {
+    let state = signal(on);
     ui.mount(move |_| {
         div()
             .w(W as f32)
@@ -40,7 +39,7 @@ fn mount_toggle(
             .items_center()
             .justify_center()
             .child(
-                toggle(&bound)
+                toggle(state)
                     .variant(variant)
                     .size(size)
                     .disabled(disabled)
@@ -140,11 +139,7 @@ fn a_click_turns_it_on() {
 }
 
 fn mount_group(ui: &mut Headless, variant: ToggleVariant, size: ToggleSize, disable_b: bool) {
-    let state = State::new(
-        signal::<String>("a".to_string()),
-        global_graph(),
-        global_dirty_flag(),
-    );
+    let state = signal("a".to_string());
     ui.mount(move |_| {
         div()
             .w(W as f32)
@@ -152,7 +147,7 @@ fn mount_group(ui: &mut Headless, variant: ToggleVariant, size: ToggleSize, disa
             .items_center()
             .justify_center()
             .child(
-                toggle_group(&state)
+                toggle_group(state)
                     .variant(variant)
                     .size(size)
                     .item(toggle_item("a").label("Left"))

@@ -156,7 +156,7 @@ impl BoolTarget {
 /// when something calls its own `set_*` method. Bound to a signal that
 /// a switch, a button or an FSM action writes, it changes the signal
 /// and stays put — which looks like the binding is ignored. Every
-/// animated widget taking a `State<bool>` needs this, so it lives here
+/// animated widget taking a `Signal<bool>` needs this, so it lives here
 /// rather than being written per widget.
 ///
 /// `kind` distinguishes widget types sharing a signal: a switch and a
@@ -168,10 +168,9 @@ impl BoolTarget {
 /// reads, so it re-fires on every write to that signal.
 pub fn bind_bool_targets(
     kind: u64,
-    state: &blinc_core::reactive::State<bool>,
+    signal: blinc_core::reactive::Signal<bool>,
     targets: Vec<BoolTarget>,
 ) {
-    let signal = state.signal();
     {
         let mut guard = BOUND.lock().unwrap_or_else(|e| e.into_inner());
         let seen = guard.get_or_insert_with(std::collections::HashSet::new);
@@ -251,24 +250,24 @@ pub mod num_binding {
 /// A number a widget reads and writes, in whichever precision the
 /// caller keeps it.
 ///
-/// Widgets work in `f32`, because geometry and springs do. The state
+/// Widgets work in `f32`, because geometry and springs do. The signal
 /// behind one need not: `number_input` keeps an `f64`, and a slider
 /// bound to the same number has to *be* that number rather than a copy
 /// narrowed on the way in. Accepting either precision means neither
 /// side mirrors the other, so there is one value with one identity
 /// instead of two that can drift.
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum NumberValue {
-    F32(blinc_core::reactive::State<f32>),
-    F64(blinc_core::reactive::State<f64>),
+    F32(blinc_core::reactive::Signal<f32>),
+    F64(blinc_core::reactive::Signal<f64>),
 }
 
 impl NumberValue {
     /// The current number, narrowed to what a widget works in.
     pub fn get(&self) -> f32 {
         match self {
-            Self::F32(s) => s.get(),
-            Self::F64(s) => s.get() as f32,
+            Self::F32(s) => s.try_get().unwrap_or_default(),
+            Self::F64(s) => s.try_get().unwrap_or_default() as f32,
         }
     }
 
@@ -284,8 +283,8 @@ impl NumberValue {
     /// persisted animation key built from it is stable.
     pub fn signal_id(&self) -> blinc_core::reactive::SignalId {
         match self {
-            Self::F32(s) => s.signal_id(),
-            Self::F64(s) => s.signal_id(),
+            Self::F32(s) => s.id(),
+            Self::F64(s) => s.id(),
         }
     }
 
@@ -299,35 +298,21 @@ impl NumberValue {
     ) where
         F: Fn(f32) -> f32 + Send + Sync + 'static,
     {
-        match self {
-            Self::F32(s) => bind_number_target(kind, s.signal(), anim, place),
-            Self::F64(s) => {
-                bind_number_target(kind, s.signal(), anim, move |v: f64| place(v as f32))
-            }
+        match *self {
+            Self::F32(s) => bind_number_target(kind, s, anim, place),
+            Self::F64(s) => bind_number_target(kind, s, anim, move |v: f64| place(v as f32)),
         }
     }
 }
 
-impl From<&blinc_core::reactive::State<f32>> for NumberValue {
-    fn from(s: &blinc_core::reactive::State<f32>) -> Self {
-        Self::F32(s.clone())
-    }
-}
-
-impl From<blinc_core::reactive::State<f32>> for NumberValue {
-    fn from(s: blinc_core::reactive::State<f32>) -> Self {
+impl From<blinc_core::reactive::Signal<f32>> for NumberValue {
+    fn from(s: blinc_core::reactive::Signal<f32>) -> Self {
         Self::F32(s)
     }
 }
 
-impl From<&blinc_core::reactive::State<f64>> for NumberValue {
-    fn from(s: &blinc_core::reactive::State<f64>) -> Self {
-        Self::F64(s.clone())
-    }
-}
-
-impl From<blinc_core::reactive::State<f64>> for NumberValue {
-    fn from(s: blinc_core::reactive::State<f64>) -> Self {
+impl From<blinc_core::reactive::Signal<f64>> for NumberValue {
+    fn from(s: blinc_core::reactive::Signal<f64>) -> Self {
         Self::F64(s)
     }
 }

@@ -71,9 +71,9 @@ fn surfaces_and_thumbs_carry_a_shadow() {
             .flex_col()
             .gap(2.0)
             .child(card())
-            .child(switch(&on))
+            .child(switch(on.signal()))
             .child(kbd("K"))
-            .child(slider(&level))
+            .child(slider(level.signal()))
             .child(accordion())
     });
     ui.leave().settle();
@@ -105,8 +105,8 @@ fn triggers_carry_the_small_shadow_until_disabled() {
             .h(300.0)
             .flex_col()
             .gap(2.0)
-            .child(blinc_cn::select(&a).option("a", "A"))
-            .child(blinc_cn::combobox(&b).option("a", "A"))
+            .child(blinc_cn::select(a.signal()).option("a", "A"))
+            .child(blinc_cn::combobox(b.signal()).option("a", "A"))
             .child(blinc_cn::dropdown_menu("Menu").item("x", || {}))
     });
     ui.leave().settle();
@@ -125,8 +125,12 @@ fn triggers_carry_the_small_shadow_until_disabled() {
             .h(300.0)
             .flex_col()
             .gap(2.0)
-            .child(blinc_cn::select(&a).option("a", "A").disabled(true))
-            .child(blinc_cn::combobox(&b).option("a", "A").disabled(true))
+            .child(blinc_cn::select(a.signal()).option("a", "A").disabled(true))
+            .child(
+                blinc_cn::combobox(b.signal())
+                    .option("a", "A")
+                    .disabled(true),
+            )
     });
     ui.leave().settle();
     for class in [".cn-select-trigger", ".cn-combobox-trigger"] {
@@ -153,7 +157,7 @@ fn form_fields_carry_the_small_shadow_until_disabled() {
             .gap(2.0)
             .child(blinc_cn::input(&t2))
             .child(blinc_cn::textarea(&a2))
-            .child(blinc_cn::number_input(&n2))
+            .child(blinc_cn::number_input(n2.signal()))
     });
     ui.leave().settle();
     for class in [".cn-input", ".cn-textarea", ".cn-number-input-group"] {
@@ -168,7 +172,7 @@ fn form_fields_carry_the_small_shadow_until_disabled() {
             .gap(2.0)
             .child(blinc_cn::input(&text).disabled(true))
             .child(blinc_cn::textarea(&area).disabled(true))
-            .child(blinc_cn::number_input(&n).disabled(true))
+            .child(blinc_cn::number_input(n.signal()).disabled(true))
     });
     ui.leave().settle();
     for class in [".cn-input", ".cn-textarea", ".cn-number-input-group"] {

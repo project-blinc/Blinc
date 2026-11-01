@@ -2967,11 +2967,11 @@ fn form_input_section() -> impl ElementBuilder + use<> {
 // ============================================================================
 
 fn form_controls_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
-    let cb_state = ctx.use_state_keyed("demo_checkbox", || false);
-    let cb_accent_state = ctx.use_state_keyed("accent_checkbox", || true);
-    let cb_disabled_state = ctx.use_state_keyed("disabled_checkbox", || false);
+    let cb_state = ctx.use_signal(false);
+    let cb_accent_state = ctx.use_signal(true);
+    let cb_disabled_state = ctx.use_signal(false);
 
-    let radio_state = ctx.use_state_keyed("theme_radio", || "light".to_string());
+    let radio_state = ctx.use_signal("light".to_string());
 
     section_container()
         .child(section_title("Checkbox & Radio CSS Styling"))
@@ -2994,7 +2994,7 @@ fn form_controls_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                 .gap(32.0)
                                 .items_center()
                                 .child(
-                                    checkbox(&cb_state)
+                                    checkbox(cb_state)
                                         .id("demo-checkbox")
                                         .label("Accept terms"),
                                 )
@@ -3012,7 +3012,7 @@ fn form_controls_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                         .gap(12.0)
                         .child(code_label("#accent-checkbox { accent-color: #eab308; } :checked { background: #eab308; }"))
                         .child(
-                            checkbox(&cb_accent_state)
+                            checkbox(cb_accent_state)
                                 .id("accent-checkbox")
                                 .label("Amber accent checkbox (pre-checked)"),
                         ),
@@ -3024,7 +3024,7 @@ fn form_controls_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                         .gap(12.0)
                         .child(code_label("#disabled-checkbox { opacity: 0.5; } + .disabled(true)"))
                         .child(
-                            checkbox(&cb_disabled_state)
+                            checkbox(cb_disabled_state)
                                 .id("disabled-checkbox")
                                 .disabled(true)
                                 .label("Disabled checkbox"),
@@ -3042,7 +3042,7 @@ fn form_controls_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                 .gap(32.0)
                                 .items_center()
                                 .child(
-                                    radio_group(&radio_state)
+                                    radio_group(radio_state)
                                         .id("theme-radio")
                                         .label("Theme")
                                         .horizontal()

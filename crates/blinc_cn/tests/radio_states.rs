@@ -87,7 +87,7 @@ fn a_radio_group_looks_the_same_in_every_state() {
         let mut out = String::new();
         out += &scenario("core", "", true, |s| {
             Box::new(
-                blinc_layout::widgets::radio_group(s)
+                blinc_layout::widgets::radio_group(s.signal())
                     .option("a", "Alpha")
                     .option("b", "Beta")
                     .option("c", "Gamma"),
@@ -95,7 +95,7 @@ fn a_radio_group_looks_the_same_in_every_state() {
         });
         out += &scenario("core with a disabled option", "", true, |s| {
             Box::new(
-                blinc_layout::widgets::radio_group(s)
+                blinc_layout::widgets::radio_group(s.signal())
                     .option("a", "Alpha")
                     .option_disabled("b", "Beta")
                     .option("c", "Gamma"),
@@ -107,7 +107,7 @@ fn a_radio_group_looks_the_same_in_every_state() {
             true,
             |s| {
                 Box::new(
-                    blinc_layout::widgets::radio_group(s)
+                    blinc_layout::widgets::radio_group(s.signal())
                         .id("g")
                         .option("a", "Alpha")
                         .option("b", "Beta")
@@ -117,7 +117,7 @@ fn a_radio_group_looks_the_same_in_every_state() {
         );
         out += &cn_scenario("cn", |s| {
             Box::new(
-                blinc_cn::radio_group(s)
+                blinc_cn::radio_group(s.signal())
                     .option("a", "Alpha")
                     .option("b", "Beta")
                     .option("c", "Gamma"),

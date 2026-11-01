@@ -25,7 +25,7 @@ struct Scene {
 fn scene() -> Scene {
     init();
     let collapsed = State::new(signal(false), global_graph(), global_dirty_flag());
-    let bar = blinc_cn::sidebar(&collapsed)
+    let bar = blinc_cn::sidebar(collapsed.signal())
         .show_toggle(true)
         .section("Mail")
         .item_active("Inbox", ICON, || {})

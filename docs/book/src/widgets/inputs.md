@@ -102,24 +102,25 @@ gives it the theme's disabled fill and muted text; restyle it with a
 ### Basic Checkbox
 
 ```rust
-use blinc_core::context_state::use_state_keyed;
 use blinc_layout::widgets::checkbox::checkbox;
 
-let remember = use_state_keyed("remember_me", || false);
+let remember = ctx.use_signal(false);
 
-checkbox(&remember).on_change(|checked| println!("Checkbox is now: {checked}"))
+checkbox(remember).on_change(|checked| println!("Checkbox is now: {checked}"))
 ```
 
-The checkbox reads and writes the `State<bool>` it is given, so the state
+The checkbox reads and writes the `Signal<bool>` it is given, so the signal
 is the source of truth: set it from elsewhere and the box follows.
+`.disabled(..)` and `.label(..)` take a value, Signal or Computed and follow
+it in place.
 
 ### Labeled Checkbox
 
 ```rust
-checkbox(&remember).label("Remember me")
+checkbox(remember).label("Remember me")
 ```
 
-`checkbox_labeled(&remember, "Remember me")` is the same.
+`checkbox_labeled(remember, "Remember me")` is the same.
 
 ### Styled Checkbox
 
@@ -135,7 +136,7 @@ rules of your own; they win over the defaults:
 ```
 
 ```rust
-checkbox(&remember)
+checkbox(remember)
     .class("my-checkbox")   // on the box
     .checkbox_size(20.0)    // sizes are layout, so they stay in Rust
     .border_width(2.0)
@@ -148,7 +149,7 @@ come from rules, so there are no colour setters.
 ### Initially Checked
 
 ```rust
-let remember = use_state_keyed("remember_me", || true); // Start checked
+let remember = ctx.use_signal(true); // Start checked
 ```
 
 ---
@@ -158,9 +159,9 @@ let remember = use_state_keyed("remember_me", || true); // Start checked
 ```rust
 use blinc_layout::widgets::radio_group;
 
-let theme = use_state_keyed("theme", || "light".to_string());
+let theme = ctx.use_signal("light".to_string());
 
-radio_group(&theme)
+radio_group(theme)
     .label("Theme")
     .horizontal()
     .option("light", "Light")
@@ -270,9 +271,9 @@ while handling focus movement across slots.
 use blinc_layout::widgets::input_otp::input_otp;
 
 fn verification_code(ctx: &WindowedContext) -> impl ElementBuilder {
-    let code = ctx.use_state_keyed("otp_code", || String::new());
+    let code = ctx.use_signal(String::new());
 
-    input_otp(&code, 6)
+    input_otp(code, 6)
         .numeric_only(true)
         .on_complete(|code| println!("complete code: {code}"))
 }
@@ -396,7 +397,7 @@ fn main() {
 fn login_form(ctx: &WindowedContext) -> impl ElementBuilder {
     let email_state = text_input_state_with_placeholder("Email address");
     let password_state = text_input_state_with_placeholder("Password");
-    let remember_state = use_state_keyed("remember_me", || false);
+    let remember_state = ctx.use_signal(false);
 
     div()
         .w(400.0)
@@ -439,9 +440,7 @@ fn login_form(ctx: &WindowedContext) -> impl ElementBuilder {
         )
         // Remember me
         .child(
-            checkbox(&remember_state)
-                .label("Remember me")
-                .label_color(Color::WHITE)
+            checkbox(remember_state).label("Remember me")
         )
         // Submit button
         .child(
