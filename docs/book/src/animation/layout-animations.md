@@ -2,7 +2,7 @@
 
 Blinc provides two FLIP-based systems for animating layout changes:
 
-1. **`animate_bounds()` (Rust API)** — Spring-physics-driven, animates position, size, or both. Used by components like accordion and sidebar.
+1. **`animate_bounds()` (Rust API)** — animates position, size, or both, over the theme's motion tokens or on a spring. Used by components like the accordion, collapsible, tree view and sidebar.
 2. **CSS FLIP transitions** — CSS-transition-driven, animates position via `transform`. Used for sortable lists and grids.
 
 Both follow the same principle: layout runs once to compute final positions, then visual offsets animate elements from where they *were* to where they *are*.
@@ -32,8 +32,17 @@ div()
         VisualAnimationConfig::height()
             .with_key("my-panel")
             .clip_to_animated()
-            .gentle(),
+            .theme_timed(),
     )
+```
+
+`theme_timed()` eases over the theme's normal duration on its ease-out curve,
+which is what cn's components use. For open and shut, put the closed geometry
+in a rule keyed on an attribute the builder binds, and let the animation ease
+the change:
+
+```css
+.my-panel[data-state="closed"] { height: 0; }
 ```
 
 ### VisualAnimationConfig Presets
@@ -52,7 +61,10 @@ div()
 VisualAnimationConfig::height()
     .with_key("unique-key")       // Stable identity across rebuilds (required in stateful)
     .clip_to_animated()           // Clip content to animated bounds during animation
-    .gentle()                     // Use gentle spring (SpringConfig::gentle())
+    .theme_timed()                // The theme's normal duration and ease-out
+
+// Timed
+.timed(250, Easing::EaseOut)      // A duration in ms and a curve
 
 // Spring presets
 .gentle()                         // Slow, smooth (stiffness: 120, damping: 14)

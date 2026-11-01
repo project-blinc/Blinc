@@ -776,6 +776,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-select-trigger[data-state="open"] > .cn-chevron,
 .cn-combobox-trigger[data-state="open"] > .cn-chevron,
 .cn-dropdown-trigger[data-state="open"] > .cn-chevron,
+.cn-collapsible-trigger[data-state="open"] > .cn-chevron,
 .cn-accordion-trigger[data-state="open"] > .cn-chevron {
     transform: rotate(180deg);
 }
@@ -1099,7 +1100,10 @@ pub const CN_STYLES: &str = concat!(
     background: var(--cn-accordion-bg, var(--surface));
     border: 1.5px solid var(--cn-accordion-border, var(--border));
     border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-md);
 }
+.cn-accordion-separator { background: var(--cn-accordion-border, var(--border)); }
+.cn-accordion-trigger > .cn-chevron { color: var(--text-secondary); }
 .cn-accordion-trigger {
     padding: var(--space-4) var(--space-3);
     cursor: pointer;
@@ -1115,7 +1119,11 @@ pub const CN_STYLES: &str = concat!(
     background: var(--cn-accordion-content-bg, var(--background));
     border-top: 1px solid var(--border);
     color: var(--text-secondary);
+    overflow: hidden;
 }
+/* Closed, laid out at no height and without its divider; opening and
+   closing are a change of size, which the layout animation eases. */
+.cn-accordion-content[data-state="closed"] { height: 0; border-top-width: 0; }
 
 /* ============================================================================
    Breadcrumb
@@ -1235,6 +1243,10 @@ pub const CN_STYLES: &str = concat!(
    Sidebar
    ============================================================================ */
 
+/* The toggle's chevron points left while the rail is open and turns right
+   while it is collapsed. */
+.cn-sidebar-chevron { transition: transform var(--duration-normal) var(--ease-state); }
+.cn-sidebar[data-state="collapsed"] .cn-sidebar-chevron { transform: rotate(180deg); }
 .cn-sidebar {
     background: var(--cn-sidebar-bg, var(--surface));
     border-right: 1px solid var(--border);
@@ -1454,6 +1466,12 @@ pub const CN_STYLES: &str = concat!(
    Tree View
    ============================================================================ */
 
+/* A node's children close to no height by rule while it is shut, the change
+   eased by their layout animation; its chevron turns down while it is open. */
+.cn-tree-children { overflow: hidden; }
+.cn-tree-children[data-state="closed"] { height: 0; }
+.cn-tree-chevron { transition: transform var(--duration-normal) var(--ease-state); }
+.cn-tree-node[data-state="open"] > .cn-tree-chevron { transform: rotate(90deg); }
 .cn-tree-node {
     /* No `padding` here — Rust owns per-side padding so the left side
        can encode tree-depth indent. CSS overriding `padding:` would
@@ -1491,10 +1509,25 @@ pub const CN_STYLES: &str = concat!(
    Collapsible
    ============================================================================ */
 
+/* Closed, the content is laid out at no height; opening and closing are a
+   change of size, which the content's layout animation eases. */
+.cn-collapsible-content { overflow: hidden; }
+.cn-collapsible-content[data-state="closed"] { height: 0; }
+.cn-collapsible-section {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
 .cn-collapsible-trigger {
     cursor: pointer;
     color: var(--text-primary);
+    border-radius: var(--radius-md);
+    transition: background-color var(--duration-fast) var(--ease-state);
 }
+.cn-collapsible-trigger:hover,
+.cn-collapsible-trigger:active {
+    background: color-mix(in srgb, var(--surface-elevated) 50%, transparent);
+}
+.cn-collapsible-trigger > .cn-chevron { color: var(--text-secondary); }
 
 /* ============================================================================
    Combobox

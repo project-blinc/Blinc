@@ -1,18 +1,26 @@
-//! A collapsible is built once: its section opens and shuts in place when
-//! the bound state changes, from anywhere, and its trigger's chevron turns
-//! and fill follows the pointer, with no subtree rebuilt.
+//! A collapsible is built once: its content opens and shuts in place when
+//! the bound signal changes, from anywhere, by its `data-state` rule, and its
+//! trigger's chevron and fill follow rules, with no subtree rebuilt.
 
 mod common;
 
-use blinc_core::reactive::{State, global_dirty_flag, global_graph, signal};
+use blinc_core::reactive::{Signal, signal};
 use blinc_layout::LayoutNodeId;
+use blinc_layout::css_parser::Stylesheet;
 use blinc_layout::div::div;
 use blinc_layout::event_router::{EventRouter, MouseButton};
 use blinc_layout::renderer::RenderTree;
 use common::*;
 
-fn open_state(initial: bool) -> State<bool> {
-    State::new(signal(initial), global_graph(), global_dirty_flag())
+fn tree_of(host: &blinc_layout::div::Div) -> RenderTree {
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let mut tree = RenderTree::from_element(host);
+    tree.set_stylesheet(
+        Stylesheet::parse_with_variables(blinc_cn::cn_styles::CN_STYLES, &vars).expect("css"),
+    );
+    tree.apply_all_stylesheet_styles();
+    tree.compute_layout(400.0, 400.0);
+    tree
 }
 
 fn frame(tree: &mut RenderTree) {
@@ -25,31 +33,60 @@ fn frame(tree: &mut RenderTree) {
     tree.compute_layout(400.0, 400.0);
 }
 
-fn first_child(tree: &RenderTree, node: LayoutNodeId) -> LayoutNodeId {
-    tree.layout_tree.children(node)[0]
+fn find(tree: &RenderTree, class: &str) -> LayoutNodeId {
+    let registry = tree.element_registry();
+    let mut stack = vec![tree.root().unwrap()];
+    while let Some(node) = stack.pop() {
+        if registry.has_class(node, class) {
+            return node;
+        }
+        stack.extend(tree.layout_tree.children(node));
+    }
+    panic!("no `{class}`");
+}
+
+fn layout_height(tree: &RenderTree, node: LayoutNodeId) -> f32 {
+    tree.layout_tree
+        .get_bounds(node, (0.0, 0.0))
+        .unwrap()
+        .height
+}
+
+fn section(open: Signal<bool>) -> RenderTree {
+    let section = blinc_cn::collapsible(open).content(|| div().w_full().h(80.0));
+    tree_of(&div().w(400.0).h(400.0).flex_col().child(section))
 }
 
 #[test]
-fn the_section_follows_its_state_in_place() {
+fn the_content_follows_its_signal_in_place() {
     guarded(|| {
         init();
-        let open = open_state(false);
-        let section = blinc_cn::collapsible(open.signal()).content(|| div().w_full().h(80.0));
-        let host = div().w(400.0).h(400.0).flex_col().child(section);
-        let mut tree = RenderTree::from_element(&host);
-        tree.compute_layout(400.0, 400.0);
-        // host > collapsible wrapper > folding body
-        let body = first_child(&tree, first_child(&tree, tree.root().unwrap()));
-        let height = |tree: &RenderTree| tree.get_absolute_bounds(body).unwrap().height;
-        assert_eq!(height(&tree), 0.0, "a closed section has height");
+        let open = signal(false);
+        let mut tree = section(open);
+        let body = find(&tree, "cn-collapsible-content");
+        assert_eq!(
+            layout_height(&tree, body),
+            0.0,
+            "a closed section has height"
+        );
 
         open.set(true);
         frame(&mut tree);
-        assert_eq!(height(&tree), 80.0, "the section did not open");
+        assert_eq!(layout_height(&tree, body), 80.0, "the section did not open");
 
         open.set(false);
         frame(&mut tree);
-        assert_eq!(height(&tree), 0.0, "the section did not shut");
+        assert_eq!(layout_height(&tree, body), 0.0, "the section did not shut");
+    })
+}
+
+#[test]
+fn an_initially_open_section_starts_open() {
+    guarded(|| {
+        init();
+        let tree = section(signal(true));
+        let body = find(&tree, "cn-collapsible-content");
+        assert_eq!(layout_height(&tree, body), 80.0);
     })
 }
 
@@ -57,27 +94,23 @@ fn the_section_follows_its_state_in_place() {
 fn the_trigger_turns_its_chevron_and_follows_the_pointer() {
     guarded(|| {
         init();
-        let open = open_state(false);
-        let section =
-            blinc_cn::collapsible_section("Details", open.signal(), || div().w_full().h(40.0));
-        let host = div().w(400.0).h(400.0).child(section);
-        let mut tree = RenderTree::from_element(&host);
-        tree.compute_layout(400.0, 400.0);
-        let trigger = first_child(&tree, first_child(&tree, tree.root().unwrap()));
-        let chevron = tree.layout_tree.children(trigger)[1];
+        let open = signal(false);
+        let section = blinc_cn::collapsible_section("Details", open, || div().w_full().h(40.0));
+        let mut tree = tree_of(&div().w(400.0).h(400.0).child(section));
+        let trigger = find(&tree, "cn-collapsible-trigger");
         let fill = |tree: &RenderTree| {
             format!(
                 "{:?}",
                 tree.get_render_node(trigger).unwrap().props.background
             )
         };
-        let turn = |tree: &RenderTree| {
-            format!(
-                "{:?}",
-                tree.get_render_node(chevron).unwrap().props.transform
-            )
+        // The chevron turns by a `[data-state="open"]` rule.
+        let open_attr = |tree: &RenderTree| {
+            tree.element_registry()
+                .has_class(trigger, "data-state=open")
         };
-        let (rest_fill, closed_turn) = (fill(&tree), turn(&tree));
+        let rest_fill = fill(&tree);
+        assert!(!open_attr(&tree));
 
         let b = tree.get_absolute_bounds(trigger).unwrap();
         let (x, y) = (b.x + b.width / 2.0, b.y + b.height / 2.0);
@@ -86,6 +119,7 @@ fn the_trigger_turns_its_chevron_and_follows_the_pointer() {
             tree.dispatch_event(node, event, x, y);
         }
         frame(&mut tree);
+        tree.apply_stylesheet_state_styles(&router);
         assert_ne!(fill(&tree), rest_fill, "hovering did not change the fill");
 
         let mut events = router.on_mouse_down(&tree, x, y, MouseButton::Left);
@@ -95,6 +129,6 @@ fn the_trigger_turns_its_chevron_and_follows_the_pointer() {
         }
         frame(&mut tree);
         assert!(open.get(), "clicking the trigger did not open the section");
-        assert_ne!(turn(&tree), closed_turn, "the chevron did not turn");
+        assert!(open_attr(&tree), "the trigger is not marked open");
     })
 }

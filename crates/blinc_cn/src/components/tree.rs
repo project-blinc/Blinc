@@ -251,47 +251,25 @@ impl TreeViewBuilder {
     fn build_component(&self) -> TreeView {
         let theme = ThemeState::get();
 
-        // Get scheduler for animations
-        let scheduler = get_global_scheduler()
-            .expect("Animation scheduler not initialized - call this after app starts");
-
-        let mut expand_states: Vec<(String, State<bool>, SharedAnimatedValue)> = Vec::new();
+        let mut expand_states: Vec<(String, State<bool>)> = Vec::new();
 
         // Create expand state for each node recursively
         fn collect_states(
             node: &TreeNodeConfig,
             instance_key: &InstanceKey,
-            scheduler: &SchedulerHandle,
-            states: &mut Vec<(String, State<bool>, SharedAnimatedValue)>,
-            spring_config: SpringConfig,
+            states: &mut Vec<(String, State<bool>)>,
         ) {
             let state_key = format!("{}_{}_expanded", instance_key.get(), node.key);
             let is_expanded: State<bool> =
                 BlincContextState::get().use_state_keyed(&state_key, || node.initially_expanded);
-
-            let initial_value = if is_expanded.get() { 1.0 } else { 0.0 };
-            let anim: SharedAnimatedValue = Arc::new(Mutex::new(AnimatedValue::new(
-                scheduler.clone(),
-                initial_value,
-                spring_config,
-            )));
-
-            states.push((node.key.clone(), is_expanded, anim));
-
+            states.push((node.key.clone(), is_expanded));
             for child in &node.children {
-                collect_states(child, instance_key, scheduler, states, spring_config);
+                collect_states(child, instance_key, states);
             }
         }
 
-        let spring_config = SpringConfig::snappy();
         for node in &self.nodes {
-            collect_states(
-                node,
-                &self.instance_key,
-                &scheduler,
-                &mut expand_states,
-                spring_config,
-            );
+            collect_states(node, &self.instance_key, &mut expand_states);
         }
 
         // Selection state
@@ -329,7 +307,7 @@ impl TreeViewBuilder {
                 depth: usize,
                 indent_size: f32,
                 show_guides: bool,
-                expand_states: &[(String, State<bool>, SharedAnimatedValue)],
+                expand_states: &[(String, State<bool>)],
                 selected: &State<Option<String>>,
                 on_select: &Option<SelectCallback>,
                 text_primary: Color,
@@ -348,10 +326,18 @@ impl TreeViewBuilder {
                 // Find this node's expand state
                 let expand_state = expand_states
                     .iter()
-                    .find(|(k, _, _)| k == &node.key)
-                    .map(|(_, s, a)| (s.clone(), a.clone()));
+                    .find(|(k, _)| k == &node.key)
+                    .map(|(_, s)| s.clone());
 
-                let expanded_sig = expand_state.as_ref().map(|(s, _)| s.signal());
+                let expanded_sig = expand_state.as_ref().map(|s| s.signal());
+                // A node with children carries `data-state`, which turns its
+                // chevron and closes its children by rule.
+                let open = computed(move |g: &ReactiveGraph| {
+                    expanded_sig.and_then(|s| g.get(s)).unwrap_or(false)
+                });
+                let closed = computed(move |g: &ReactiveGraph| {
+                    !expanded_sig.and_then(|s| g.get(s)).unwrap_or(false)
+                });
                 let selected_sig = selected.signal();
                 let key = node.key.clone();
                 let is_selected = computed(move |g: &ReactiveGraph| {
@@ -404,6 +390,13 @@ impl TreeViewBuilder {
                     .bg(&bg)
                     .class_when("cn-tree-node--selected", &is_selected)
                     .cursor(CursorStyle::Pointer);
+                if has_children {
+                    row = row.attr_when("data-state", "open", &open).attr_when(
+                        "data-state",
+                        "closed",
+                        &closed,
+                    );
+                }
 
                 row = row.on_click(move |_| {
                     // Update selection
@@ -415,23 +408,17 @@ impl TreeViewBuilder {
                     }
 
                     // Also toggle expand if has children
-                    if let Some((state, anim)) = &expand_state_for_row {
-                        let new_expanded = !state.get();
-                        state.set(new_expanded);
-                        let target = if new_expanded { 1.0 } else { 0.0 };
-                        anim.lock().unwrap().set_target(target);
+                    if let Some(state) = &expand_state_for_row {
+                        state.set(!state.get());
                     }
                 });
 
                 // Expand/collapse chevron (if has children)
                 if has_children {
-                    // Points right, and turns down while expanded.
-                    let chevron_angle = computed(move |g: &ReactiveGraph| {
-                        let open = expanded_sig.and_then(|s| g.get(s)).unwrap_or(false);
-                        if open { 90.0 } else { 0.0 }
-                    });
+                    // Points right, and turns down by rule while expanded.
                     row = row.child(
                         div()
+                            .class("cn-tree-chevron")
                             .w(16.0)
                             .h(16.0)
                             .flex()
@@ -439,7 +426,6 @@ impl TreeViewBuilder {
                             .justify_center()
                             .mr(1.0)
                             .flex_shrink_0()
-                            .rotate_deg(&chevron_angle)
                             .child(
                                 svg(CHEVRON_RIGHT_SVG)
                                     .size(16.0, 16.0)
@@ -524,6 +510,9 @@ impl TreeViewBuilder {
                     // expanded form, and the FLIP `from_bounds` snapshot
                     // doesn't compose with the new `to_bounds`).
                     let mut children_container = div()
+                        .class("cn-tree-children")
+                        .attr_when("data-state", "open", &open)
+                        .attr_when("data-state", "closed", &closed)
                         .flex_col()
                         .w_full()
                         .flex_shrink_0()
@@ -533,7 +522,7 @@ impl TreeViewBuilder {
                             blinc_layout::visual_animation::VisualAnimationConfig::height()
                                 .with_key(&anim_key)
                                 .clip_to_animated()
-                                .snappy(),
+                                .theme_timed(),
                         );
 
                     // Optional guide line - positioned at center of this node's chevron.
@@ -571,14 +560,6 @@ impl TreeViewBuilder {
                             diff_modified,
                         ));
                     }
-
-                    // Collapsed to no height while the node is shut;
-                    // the children stay laid out so the height
-                    // animation has something to shrink and grow.
-                    let collapsed = computed(move |g: &ReactiveGraph| {
-                        !expanded_sig.and_then(|s| g.get(s)).unwrap_or(false)
-                    });
-                    children_container = children_container.collapsed_when(&collapsed);
 
                     node_div = node_div.child(children_container);
                 }

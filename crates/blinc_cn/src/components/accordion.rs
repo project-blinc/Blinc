@@ -3,7 +3,11 @@
 //! A set of vertically stacked collapsible sections. Supports single-open
 //! (only one section open at a time) or multi-open modes.
 //!
-//! Uses global animation scheduler - no context needed.
+//! Each section's trigger and content carry `data-state="open"` or
+//! `"closed"`. The `.cn-accordion-content[data-state="closed"]` rule lays a
+//! closed section out at no height, and the change of size eases over the
+//! theme's normal duration; the sections below move with it. Restyle it with
+//! rules of your own.
 //!
 //! # Example - Single Open
 //!
@@ -33,22 +37,16 @@
 //!     .item("b", "Second Section", || content_b())
 //! ```
 
-use blinc_animation::{AnimatedValue, SpringConfig};
 use blinc_core::context_state::BlincContextState;
-use blinc_core::{State, use_state_keyed};
-use blinc_layout::div::ElementTypeId;
-use blinc_layout::element::{CursorStyle, RenderProps};
-// LayoutAnimationConfig is no longer used - using new VisualAnimationConfig system
-use blinc_core::reactive::{ReactiveGraph, computed};
+use blinc_core::reactive::{ReactiveGraph, Signal, computed};
 use blinc_layout::InstanceKey;
-use blinc_layout::motion::{SharedAnimatedValue, motion};
+use blinc_layout::div::ElementTypeId;
+use blinc_layout::element::RenderProps;
 use blinc_layout::prelude::*;
-use blinc_layout::render_state::get_global_scheduler;
-use blinc_layout::style;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
-use blinc_theme::{ColorToken, RadiusToken, ThemeState};
+use blinc_layout::visual_animation::VisualAnimationConfig;
 use std::cell::OnceCell;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 /// Chevron down SVG icon
 const CHEVRON_DOWN_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
@@ -114,24 +112,15 @@ struct AccordionItem {
     key: String,
     label: String,
     content: ContentBuilderFn,
-    /// Caller-owned open state. `None` means the accordion keeps its
+    /// Caller-owned open signal. `None` means the accordion keeps its
     /// own, keyed by instance and section so it survives rebuilds.
-    state: Option<State<bool>>,
-}
-
-/// Runtime state for an accordion item (created during build)
-#[derive(Clone)]
-struct AccordionItemState {
-    key: String,
-    is_open: State<bool>,
-    opacity_anim: SharedAnimatedValue,
+    state: Option<Signal<bool>>,
 }
 
 /// Builder for creating Accordion components with fluent API
 pub struct AccordionBuilder {
     instance_key: InstanceKey,
     mode: AccordionMode,
-    spring_config: SpringConfig,
     initial_open: Option<String>,
     /// Item definitions (not yet built)
     items: Vec<AccordionItem>,
@@ -146,12 +135,10 @@ pub struct AccordionBuilder {
 impl AccordionBuilder {
     /// Create a new accordion builder
     ///
-    /// Uses global animation scheduler - no context needed.
     pub fn new() -> Self {
         Self {
             instance_key: InstanceKey::new("accordion"),
             mode: AccordionMode::Single,
-            spring_config: SpringConfig::snappy(),
             initial_open: None,
             items: Vec::new(),
             classes: Vec::new(),
@@ -177,12 +164,6 @@ impl AccordionBuilder {
         self
     }
 
-    /// Set custom spring configuration for animations
-    pub fn spring(mut self, config: SpringConfig) -> Self {
-        self.spring_config = config;
-        self
-    }
-
     /// Add an accordion item
     ///
     /// # Arguments
@@ -205,19 +186,19 @@ impl AccordionBuilder {
 
     /// Add a section whose open state the caller owns.
     ///
-    /// The accordion reads and writes that `State` instead of its own,
+    /// The accordion reads and writes that signal instead of its own,
     /// so a section folds when the state is written from outside and
     /// the state reflects a click on the header. Use this to drive a
     /// section from a signal; [`item`](Self::item) keeps the state
     /// internal, which is what you want when nothing outside cares.
     ///
     /// [`default_open`](Self::default_open) does not apply to a section
-    /// added this way: the state already carries the initial value.
+    /// added this way: the signal already carries the initial value.
     pub fn item_with_state<F>(
         mut self,
         key: impl Into<String>,
         label: impl Into<String>,
-        state: State<bool>,
+        state: Signal<bool>,
         content: F,
     ) -> Self
     where
@@ -246,15 +227,6 @@ impl AccordionBuilder {
 
     /// Build the final Accordion component
     pub fn build_component(&self) -> Accordion {
-        let theme = ThemeState::get();
-
-        // Get scheduler from global
-        let scheduler = get_global_scheduler()
-            .expect("Animation scheduler not initialized - call this after app starts");
-
-        // Build combined item data with runtime state - no mutex needed, just Vec
-        let mut items_with_state: Vec<(AccordionItem, AccordionItemState)> = Vec::new();
-
         // `item()` namespaces each key to this instance, so the caller's
         // `default_open` key has to be namespaced the same way before it
         // can match anything.
@@ -263,190 +235,132 @@ impl AccordionBuilder {
             .as_deref()
             .map(|key| self.instance_key.derive(key));
 
-        for item in &self.items {
-            let is_initially_open = initial_open_key.as_ref() == Some(&item.key);
-
-            // A caller-owned state carries its own initial value; only
-            // an internal one needs seeding from `default_open`.
-            let is_open: State<bool> = match &item.state {
-                Some(state) => state.clone(),
-                None => {
-                    let state_key = format!("{}_{}_open", self.instance_key.get(), item.key);
-                    BlincContextState::get().use_state_keyed(&state_key, || is_initially_open)
-                }
-            };
-
-            // Get actual current state (may differ from initial if persisted)
-            let actual_is_open = is_open.get();
-            let actual_opacity = if actual_is_open { 1.0 } else { 0.0 };
-
-            // Create opacity animation
-            let opacity_anim: SharedAnimatedValue = Arc::new(Mutex::new(AnimatedValue::new(
-                scheduler.clone(),
-                actual_opacity,
-                self.spring_config,
-            )));
-
-            let item_state = AccordionItemState {
-                key: item.key.clone(),
-                is_open,
-                opacity_anim,
-            };
-
-            items_with_state.push((item.clone(), item_state));
-        }
-
-        // Theme colors
-        let text_primary = theme.color(ColorToken::TextPrimary);
-        let text_secondary = theme.color(ColorToken::TextSecondary);
-        let border_color = theme.color(ColorToken::Border);
-        let radius = theme.radius(RadiusToken::Lg);
-
-        let key_for_container = format!("{}_container", self.instance_key.get());
-        let item_count = items_with_state.len();
+        // A caller-owned signal carries its own initial value; only an
+        // internal one is seeded from `default_open`.
+        let sections: Vec<(AccordionItem, Signal<bool>)> = self
+            .items
+            .iter()
+            .map(|item| {
+                let is_open = item.state.unwrap_or_else(|| {
+                    let open_now = initial_open_key.as_ref() == Some(&item.key);
+                    BlincContextState::get().use_signal_keyed(
+                        &format!("{}_{}_open", self.instance_key.get(), item.key),
+                        || open_now,
+                    )
+                });
+                (item.clone(), is_open)
+            })
+            .collect();
+        let all_open: Vec<Signal<bool>> = sections.iter().map(|(_, s)| *s).collect();
         let mode = self.mode;
+        let count = sections.len();
 
-        // Clone all states for single-mode closing (needed in on_click)
-        let all_item_states: Vec<AccordionItemState> =
-            items_with_state.iter().map(|(_, s)| s.clone()).collect();
-
-        // The accordion is built once. Each section's chevron and height
-        // follow its open state in place, and the height change animates.
+        // Built once. Each section's chevron, height and look follow its
+        // `data-state` by rule, and the size and position changes ease over
+        // the theme's normal duration.
         let mut content = div()
             .class("cn-accordion")
             .flex_col()
             .w_full()
             .flex_shrink()
-            .style(&style! { rounded: radius, shadow_md, bg: theme.color(ColorToken::SurfaceElevated), border: (1.5, border_color) })
             .overflow_clip()
             .animate_bounds(
-                blinc_layout::visual_animation::VisualAnimationConfig::height()
-                    .with_key(&key_for_container)
+                VisualAnimationConfig::height()
+                    .with_key(format!("{}_container", self.instance_key.get()))
                     .clip_to_animated()
-                    .snappy(),
+                    .theme_timed(),
             );
 
-        for (index, (item, item_state)) in items_with_state.iter().enumerate() {
-            let is_open = item_state.is_open.clone();
-            let opacity_anim = item_state.opacity_anim.clone();
-            let item_key = item_state.key.clone();
-
-            let content_fn = item.content.clone();
-            let label = item.label.clone();
-
-            // Clones for on_click closure
-            let is_open_for_click = is_open.clone();
-            let opacity_anim_for_click = opacity_anim.clone();
-            let all_states_for_click = all_item_states.clone();
-            let key_for_click = item_key.clone();
-
-            let open = is_open.signal();
-            let closed = computed(move |g: &ReactiveGraph| !g.get(open).unwrap_or(false));
+        for (index, (item, is_open)) in sections.into_iter().enumerate() {
+            let open = computed(move |g: &ReactiveGraph| g.get(is_open).unwrap_or(false));
+            let closed = computed(move |g: &ReactiveGraph| !g.get(is_open).unwrap_or(false));
+            let all_open = all_open.clone();
 
             let trigger = div()
                 .class("cn-accordion-trigger")
-                .attr_when("data-state", "open", &is_open)
+                .attr_when("data-state", "open", &open)
+                .attr_when("data-state", "closed", &closed)
                 .flex_row()
                 .w_full()
-                // Builder padding fallback MUST match the
-                // `.cn-accordion-trigger` CSS (space-4 / space-3 =
-                // 16px / 12px), so there is never a shift when the class
-                // applies.
+                // Matches `.cn-accordion-trigger`'s padding, so nothing shifts
+                // when the rule applies.
                 .py(4.0)
                 .px(3.0)
                 .justify_between()
                 .items_center()
-                .cursor(CursorStyle::Pointer)
                 .child(
-                    text(&label)
+                    text(&item.label)
                         .size(14.0)
                         .weight(blinc_layout::div::FontWeight::Medium)
-                        .color(text_primary)
                         .pointer_events_none(),
                 )
                 .child(
                     div()
                         .class("cn-chevron")
-                        .child(svg(CHEVRON_DOWN_SVG).size(16.0, 16.0).color(text_secondary)),
+                        .child(svg(CHEVRON_DOWN_SVG).size(16.0, 16.0)),
                 )
                 .on_click(move |_| {
-                    let current = is_open_for_click.get();
-                    let new_state = !current;
-
-                    // In single mode, close all other sections first
-                    if mode == AccordionMode::Single && new_state {
-                        for state in &all_states_for_click {
-                            if state.key != key_for_click && state.is_open.get() {
-                                state.is_open.set(false);
-                                state.opacity_anim.lock().unwrap().set_target(0.0);
+                    let opening = !is_open.try_get().unwrap_or(false);
+                    // In single mode, opening a section closes the others.
+                    if mode == AccordionMode::Single && opening {
+                        for other in &all_open {
+                            if other.id() != is_open.id() {
+                                other.set(false);
                             }
                         }
                     }
-
-                    // Toggle this section
-                    is_open_for_click.set(new_state);
-
-                    let target_opacity = if new_state { 1.0 } else { 0.0 };
-                    opacity_anim_for_click
-                        .lock()
-                        .unwrap()
-                        .set_target(target_opacity);
+                    is_open.set(opening);
                 });
 
-            // The content is always laid out and painted, and collapsed to no
-            // height while the section is closed: the height animation then
-            // clips it as it closes instead of it vanishing first. Its padding
-            // sits inside, so a closed section has none.
-            let anim_key = format!("accordion-content-{}", item_key);
-            let collapsible_content = div()
+            // The content is always laid out, so the height animation clips
+            // it as it closes instead of it vanishing first. Its padding sits
+            // inside, so a closed section has none.
+            let section_content = div()
                 .class("cn-accordion-content")
+                .attr_when("data-state", "open", &open)
+                .attr_when("data-state", "closed", &closed)
                 .flex_col()
                 .w_full()
-                .style(&style! { bg: theme.color(ColorToken::Surface) })
-                .border_top(1.0, border_color)
                 .overflow_clip()
                 .animate_bounds(
-                    blinc_layout::visual_animation::VisualAnimationConfig::height()
-                        .with_key(&anim_key)
+                    VisualAnimationConfig::height()
+                        .with_key(format!("accordion-content-{}", item.key))
                         .clip_to_animated()
-                        .snappy(),
+                        .theme_timed(),
                 )
-                .collapsed_when(&closed)
                 .child(
                     div()
                         .flex_col()
                         .w_full()
                         .py(2.0)
                         .px(1.0)
-                        .child(content_fn()),
+                        .child((item.content)()),
                 );
 
-            // Item wrapper: trigger (always visible) + collapsible content
-            // Both item_div and separators animate position for fluid transitions
-            let item_div_key = format!("accordion-item-{}", item_key);
-            let item_div = div()
-                .flex_col()
-                .w_full()
-                .animate_bounds(
-                    blinc_layout::visual_animation::VisualAnimationConfig::position()
-                        .with_key(&item_div_key)
-                        .snappy(),
-                )
-                .child(trigger)
-                .child(collapsible_content);
-
-            content = content.child(item_div);
-
-            // Add separator between items (not after last)
-            // Separator also animates position for fluid transitions
-            if index < item_count - 1 {
-                let separator_key = format!("accordion-sep-{}", item_key);
+            // Sections and separators below an opening one move with it.
+            content = content.child(
+                div()
+                    .flex_col()
+                    .w_full()
+                    .animate_bounds(
+                        VisualAnimationConfig::position()
+                            .with_key(format!("accordion-item-{}", item.key))
+                            .theme_timed(),
+                    )
+                    .child(trigger)
+                    .child(section_content),
+            );
+            if index + 1 < count {
                 content = content.child(
-                    div().w_full().h(1.0).bg(border_color).animate_bounds(
-                        blinc_layout::visual_animation::VisualAnimationConfig::position()
-                            .with_key(&separator_key)
-                            .snappy(),
-                    ),
+                    div()
+                        .class("cn-accordion-separator")
+                        .w_full()
+                        .h(1.0)
+                        .animate_bounds(
+                            VisualAnimationConfig::position()
+                                .with_key(format!("accordion-sep-{}", item.key))
+                                .theme_timed(),
+                        ),
                 );
             }
         }

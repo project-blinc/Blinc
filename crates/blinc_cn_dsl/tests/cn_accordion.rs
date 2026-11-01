@@ -37,6 +37,16 @@ fn compiled(src: &str, name: &str) -> BlincDsl {
 fn laid_out(dsl: &BlincDsl) -> RenderTree {
     let host = div().w(400.0).h(600.0).child_box(dsl.view_widget());
     let mut tree = RenderTree::from_element(&host);
+    // A shut section's height is a cn rule.
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    tree.set_stylesheet(
+        blinc_layout::css_parser::Stylesheet::parse_with_variables(
+            blinc_cn::cn_styles::CN_STYLES,
+            &vars,
+        )
+        .expect("css"),
+    );
+    tree.apply_all_stylesheet_styles();
     tree.compute_layout(400.0, 600.0);
     tree
 }

@@ -131,6 +131,8 @@ impl Sidebar {
         let container_key = format!("{}_container", key);
         let collapsed_sig = collapsed;
         let expanded = computed(move |g: &ReactiveGraph| !g.get(collapsed_sig).unwrap_or(false));
+        let collapsed_now =
+            computed(move |g: &ReactiveGraph| g.get(collapsed_sig).unwrap_or(false));
         let active_sig = active_menu;
 
         let layout_anim_key = format!("{}_layout", key);
@@ -140,13 +142,16 @@ impl Sidebar {
             VisualAnimationConfig::size()
                 .with_key(&sidebar_anim_key)
                 .clip_to_animated()
-                .snappy(),
+                .theme_timed(),
         );
 
         // Sections and items container
         // Uses w_fit() so width is determined by children content
+        // `data-state` turns the toggle's chevron by rule.
         let mut items_container = div()
             .class("cn-sidebar")
+            .attr_when("data-state", "expanded", &expanded)
+            .attr_when("data-state", "collapsed", &collapsed_now)
             .flex_col()
             .border_right(1.0, border)
             .bg(surface)
@@ -158,23 +163,16 @@ impl Sidebar {
                 VisualAnimationConfig::all()
                     .with_key(&layout_anim_key)
                     .clip_to_animated()
-                    .snappy(),
+                    .theme_timed(),
             );
 
         if show_toggle {
             let toggle_key = format!("{}_toggle", container_key);
             let collapsed_for_click = collapsed;
-            // The chevron points right while collapsed, left while open.
-            let chevron_angle = computed(move |g: &ReactiveGraph| {
-                if g.get(collapsed_sig).unwrap_or(false) {
-                    180.0
-                } else {
-                    0.0
-                }
-            });
             items_container = items_container.child(
                 div().child(
                     div()
+                        .class("cn-sidebar-toggle")
                         .w_fit()
                         .flex_row()
                         .items_center()
@@ -186,13 +184,13 @@ impl Sidebar {
                             VisualAnimationConfig::size()
                                 .with_key(format!("{}_anim", toggle_key))
                                 .clip_to_animated()
-                                .snappy(),
+                                .theme_timed(),
                         )
                         .child(
                             div()
+                                .class("cn-sidebar-chevron")
                                 .flex_shrink_0()
                                 .self_end()
-                                .rotate_deg(&chevron_angle)
                                 .child(svg(CHEVRON_LEFT_SVG).size(18.0, 18.0).color(text_secondary))
                                 .pointer_events_none(),
                         )
@@ -213,7 +211,7 @@ impl Sidebar {
                         VisualAnimationConfig::all()
                             .with_key(&title_anim_key)
                             .clip_to_animated()
-                            .snappy(),
+                            .theme_timed(),
                     )
                     .when(&expanded, |d| {
                         d.child(
@@ -272,7 +270,7 @@ impl Sidebar {
                         VisualAnimationConfig::all()
                             .with_key(format!("{}_anim", item_key))
                             .clip_to_animated()
-                            .snappy(),
+                            .theme_timed(),
                     )
                     .child(
                         div()
@@ -327,7 +325,7 @@ impl Sidebar {
                         VisualAnimationConfig::all()
                             .with_key(&content_anim_key)
                             .clip_to_animated()
-                            .snappy(),
+                            .theme_timed(),
                     )
                     // The selection, handed over rather than made the
                     // caller's problem: a convenience argument is the

@@ -552,3 +552,54 @@ fn a_dropdown_menu_takes_its_look_from_the_menu_rules() {
     assert!((opacity - 0.5).abs() < 0.01, "disabled opacity {opacity}");
     assert!(ui.find(".cn-menu-separator").is_some(), "the separator");
 }
+
+#[test]
+fn the_collapsible_caret_spins_open() {
+    let Some(mut ui) = session_sized(W, 240) else {
+        return;
+    };
+    let open = signal(false);
+    ui.mount(move |_| {
+        div()
+            .w(W as f32)
+            .h(240.0)
+            .p(4.0)
+            .child(blinc_cn::collapsible_section("Details", open, || {
+                div().w_full().h(40.0)
+            }))
+    });
+    ui.leave().settle();
+    assert_caret_spins(&mut ui, ".cn-collapsible-trigger");
+}
+
+#[test]
+fn collapsing_the_sidebar_turns_its_chevron() {
+    let Some(mut ui) = session_sized(W, 240) else {
+        return;
+    };
+    let collapsed = signal(false);
+    ui.mount(move |_| {
+        div()
+            .w(W as f32)
+            .h(240.0)
+            .child(blinc_cn::sidebar(collapsed).item("Home", "", || {}))
+    });
+    ui.leave().settle();
+    let angle = |ui: &Headless| {
+        let node = ui.find(".cn-sidebar-chevron").expect("the chevron");
+        match ui
+            .tree()
+            .get_render_node(node)
+            .and_then(|n| n.props.transform.clone())
+        {
+            Some(blinc_core::Transform::Affine2D(a)) => {
+                a.elements[1].atan2(a.elements[0]).to_degrees().abs()
+            }
+            _ => 0.0,
+        }
+    };
+    assert!(angle(&ui) < 1.0, "points left while open");
+    ui.click(".cn-sidebar-toggle").settle();
+    assert!(collapsed.get(), "the toggle did not collapse the rail");
+    assert!((angle(&ui) - 180.0).abs() < 1.0, "turned: {}", angle(&ui));
+}

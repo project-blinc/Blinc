@@ -28,7 +28,11 @@ fn scene() -> Scene {
         .node("docs", "docs", |n| n.child("readme", "README.md", |c| c));
     let host = div().w(300.0).h(400.0).child(view);
     let mut tree = RenderTree::from_element(&host);
-    tree.set_stylesheet(Stylesheet::parse(RULE).expect("css"));
+    // cn's rules close a shut node's children; the test's rule marks the
+    // selected row.
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let css = format!("{}\n{RULE}", blinc_cn::cn_styles::CN_STYLES);
+    tree.set_stylesheet(Stylesheet::parse_with_variables(&css, &vars).expect("css"));
     tree.apply_stylesheet_layout_overrides();
     tree.apply_stylesheet_base_styles();
     tree.compute_layout(300.0, 400.0);

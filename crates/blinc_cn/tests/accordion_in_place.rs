@@ -22,6 +22,16 @@ fn scene() -> Scene {
         .item("two", "Second", || div().w_full().h(60.0));
     let host = div().w(400.0).h(400.0).child(accordion);
     let mut tree = RenderTree::from_element(&host);
+    // A closed section's height is a rule.
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    tree.set_stylesheet(
+        blinc_layout::css_parser::Stylesheet::parse_with_variables(
+            blinc_cn::cn_styles::CN_STYLES,
+            &vars,
+        )
+        .expect("css"),
+    );
+    tree.apply_all_stylesheet_styles();
     tree.compute_layout(400.0, 400.0);
     Scene {
         tree,

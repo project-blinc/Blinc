@@ -81,7 +81,7 @@ impl CnAccordion {
             match item.bound_state() {
                 // A bound section owns its state, so it carries its own
                 // initial value and needs no `default_open`.
-                Some(state) => b = b.item_with_state(key, item.label.clone(), state, body),
+                Some(state) => b = b.item_with_state(key, item.label.clone(), state.signal(), body),
                 None => {
                     if item.starts_open() {
                         open = Some(key.clone());
