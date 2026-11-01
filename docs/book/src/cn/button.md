@@ -137,14 +137,11 @@ button("")
 ### A Button That Follows a Signal
 
 ```rust
-let saving = ctx.use_state_keyed("saving", || false);
+let saving = ctx.use_signal(false);
 
 button("Save")
-    .disabled(&saving)
-    .on_click({
-        let saving = saving.clone();
-        move |_| saving.set(true)
-    })
+    .disabled(saving)
+    .on_click(move |_| saving.set(true))
 ```
 
 ## API Reference

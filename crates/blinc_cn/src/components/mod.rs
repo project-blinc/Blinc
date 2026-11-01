@@ -31,7 +31,10 @@ pub mod kbd;
 pub mod label;
 pub mod menubar;
 pub mod navigation_menu;
+pub mod number_gauge;
 pub mod number_input;
+pub mod number_range_gauge;
+pub(crate) mod number_wheel;
 pub mod pagination;
 pub mod popover;
 pub mod progress;
@@ -100,7 +103,9 @@ pub use navigation_menu::{
     NavigationLink, NavigationLinkBuilder, NavigationMenu, NavigationMenuBuilder, navigation_link,
     navigation_menu,
 };
+pub use number_gauge::{GaugeSize, NumberGauge, NumberGaugeBuilder, number_gauge};
 pub use number_input::{NumberInput, NumberInputBuilder, number_input};
+pub use number_range_gauge::{NumberRangeGauge, NumberRangeGaugeBuilder, number_range_gauge};
 pub use pagination::{PageValue, Pagination, PaginationBuilder, PaginationSize, pagination};
 pub use popover::{Popover, PopoverAlign, PopoverBuilder, PopoverSide, popover};
 pub use progress::{AnimatedProgress, Progress, ProgressSize, progress, progress_animated};

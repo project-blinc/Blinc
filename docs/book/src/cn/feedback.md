@@ -108,24 +108,19 @@ Progress bar — value is in the 0..=100 range:
 progress(75.0)
 ```
 
-### Signal-bound (recommended)
+### Bound to a signal
 
-`progress(...)` accepts `impl IntoReactive<f32>`, so you can pass
-either an eager `f32` or a `&State<f32>`. With a signal, updates patch
-the indicator's GPU scale-x transform directly — no Stateful rebuild,
-no per-frame layout recompute.
+The value is an `f32`, a `Signal<f32>` or a `Computed<f32>`. A bound
+value moves the bar in place, without a rebuild:
 
 ```rust
-use blinc_core::context_state::use_state;
-
-let pct = use_state(0.0_f32);
+let pct = ctx.use_signal(0.0_f32);
 
 div()
-    .child(progress(&pct).w(300.0))
+    .child(progress(pct).w(300.0))
     .child(
-        button("Advance").on_click(move |_| {
-            pct.update(|v| (v + 10.0).min(100.0));
-        })
+        button("Advance")
+            .on_click(move |_| pct.update(|v| (v + 10.0).min(100.0))),
     )
 ```
 
@@ -137,31 +132,25 @@ progress(0.0).indeterminate(true)
 
 ### With Label
 
-The label needs to re-render when `pct` changes, so wrap it in a
-`Stateful` with `.deps(...)`. The progress bar itself binds the
-signal directly and updates with no rebuild.
+A label bound to a `Computed` follows the same signal:
 
 ```rust
-use blinc_layout::stateful::{NoState, stateful};
+use blinc_core::reactive::computed;
 
-let pct = use_state(0.0_f32);
+let pct = ctx.use_signal(0.0_f32);
+let shown = computed(move |g| format!("{}%", g.get(pct).unwrap_or(0.0) as i32));
 
 div()
     .flex_col()
-    .gap(4.0)
+    .gap(1.0)
     .child(
-        stateful::<NoState>()
-            .deps([pct.signal_id()])
-            .on_state({
-                let pct = pct.clone();
-                move |_ctx| {
-                    div().flex_row().justify_between()
-                        .child(text("Uploading..."))
-                        .child(text(&format!("{}%", pct.get() as i32)))
-                }
-            })
+        div()
+            .flex_row()
+            .justify_between()
+            .child(cn::label("Uploading..."))
+            .child(cn::label(shown)),
     )
-    .child(progress(&pct))
+    .child(progress(pct))
 ```
 
 ## Spinner

@@ -357,123 +357,155 @@ your own.
 
 ## Slider
 
-Range slider:
+A number picked along a track. The slider still takes a `State<f32>` or
+`State<f64>`:
 
 ```rust
-slider()
-    .value(volume)
+let volume = ctx.use_state_keyed("volume", || 50.0);
+
+cn::slider(&volume)
     .min(0.0)
     .max(100.0)
     .step(1.0)
-    .on_change(|value| set_volume(value))
+    .label("Volume")
+    .show_value()
+    .on_change(|value| println!("volume: {value}"))
 ```
 
-### Range Slider
+`.size(SliderSize::Small)` and `.disabled(true)` work as elsewhere. For two
+ends on one control, use a [Number Range Gauge](#number-range-gauge).
+
+## Number Gauge
+
+A number shown as a fill, with the value written over it:
 
 ```rust
-slider()
-    .value_range(min_price, max_price)
-    .min(0.0)
-    .max(1000.0)
-    .on_change_range(|min, max| {
-        set_min_price(min);
-        set_max_price(max);
-    })
+let opacity = ctx.use_signal(64.0);
+
+cn::number_gauge(opacity)
+    .range(0.0..=100.0)              // the default
+    .step(1.0)                       // the default
+    .size(GaugeSize::Medium)         // Small, Medium, Large
+    .format(|n| format!("{n} %"))
+    .disabled(locked)                // a bool, Signal or Computed
+    .on_change(|n| println!("opacity: {n}"))
+```
+
+Drag it, click where you want it, or scroll over it. After a click the arrow
+keys, Page Up/Down and Home/End move it too. Values snap to the step.
+
+The gauge is as wide as its longest value needs, so it doesn't change width
+as you drag; `.w(px)` sets a width instead.
+
+### Number Range Gauge
+
+Two ends on one gauge, held in one `Signal<RangeInclusive<f64>>`:
+
+```rust
+let band = ctx.use_signal(18.0..=24.0);
+
+cn::number_range_gauge(band)
+    .range(10.0..=30.0)
+    .step(0.5)
+    .format(|r| format!("{}–{} °C", r.start(), r.end()))
+```
+
+Clicking or scrolling moves the nearer end. The ends never cross.
+
+### Styling
+
+Both are a `.cn-number-gauge` (the range one also `.cn-number-range-gauge`)
+holding `.cn-number-gauge-fill`, `.cn-number-gauge-thumb` and
+`.cn-number-gauge-rest`, with the value in `.cn-number-gauge-value`. The range
+gauge puts each face in a `.cn-number-gauge-layer` with
+`data-endpoint="lower"` or `"upper"`. The gauge has `data-state="dragging"`
+during a drag, `data-focus-visible` once a key has moved it, and `disabled`.
+Colours, the border, the radius per size (`.cn-number-gauge--sm`, `--md`,
+`--lg`) and the cursor are rules of `CN_STYLES`:
+
+```css
+.my-gauge > .cn-number-gauge-fill { background: color-mix(in srgb, #16a34a 25%, var(--input-bg)); }
+.my-gauge > .cn-number-gauge-thumb { color: #16a34a; }
+```
+
+```rust
+cn::number_gauge(opacity).class("my-gauge")
 ```
 
 ## Label
 
-```rust
-// Associated with input via for
-label("Email").for_id("email-input")
+Inputs, selects and checkboxes take a `.label(..)` of their own. A standalone
+label's text is a string, a `Signal<String>` or a `Computed<String>`, and
+follows a signal in place:
 
-// Direct child of input
-checkbox()
-    .child(label("Remember me"))
+```rust
+cn::label("Email").required()      // marks the field required
+cn::label("Notes").size(LabelSize::Small)
+cn::label(status)                  // a Signal<String>
 ```
 
 ## Form Layout Example
 
 ```rust
+use blinc_core::reactive::computed;
+use blinc_layout::widgets::text_input::{InputType, text_input_data};
+
+let name = text_input_data();
+let email = text_input_data();
+let country = ctx.use_state_keyed("country", || String::new());
+let accepted = ctx.use_state_keyed("accepted", || false);
+
+// Submit stays disabled until the terms are accepted.
+let agreed = accepted.signal();
+let blocked = computed(move |g| !g.get(agreed).unwrap_or(false));
+
 div()
     .flex_col()
-    .gap(24.0)
+    .gap(6.0) // 6 × 4px
     .max_w(400.0)
-    // Name field
+    .child(cn::input(&name).label("Name").placeholder("Ada Lovelace"))
     .child(
-        div().flex_col().gap(4.0)
-            .child(label("Name"))
-            .child(input()
-                .placeholder("John Doe")
-                .value(&name)
-                .on_change(|v| set_name(v)))
+        cn::input(&email)
+            .label("Email")
+            .input_type(InputType::Email)
+            .placeholder("ada@example.com"),
     )
-    // Email field
     .child(
-        div().flex_col().gap(4.0)
-            .child(label("Email"))
-            .child(input()
-                .input_type("email")
-                .placeholder("john@example.com")
-                .value(&email)
-                .on_change(|v| set_email(v)))
+        cn::select(&country)
+            .label("Country")
+            .placeholder("Select a country...")
+            .option("us", "United States")
+            .option("uk", "United Kingdom")
+            .option("ca", "Canada"),
     )
-    // Country select
-    .child(
-        div().flex_col().gap(4.0)
-            .child(label("Country"))
-            .child(select()
-                .value(&country)
-                .on_change(|v| set_country(v))
-                .child(select_trigger().child(select_value()))
-                .child(select_content()
-                    .child(select_item("us").child(text("United States")))
-                    .child(select_item("uk").child(text("United Kingdom")))
-                    .child(select_item("ca").child(text("Canada")))))
-    )
-    // Terms checkbox
-    .child(
-        checkbox()
-            .checked(accepted_terms)
-            .on_change(|v| set_accepted_terms(v))
-            .child(label("I accept the terms and conditions"))
-    )
-    // Submit button
-    .child(
-        button("Submit")
-            .full_width(true)
-            .disabled(!accepted_terms)
-            .on_click(|| submit_form())
-    )
+    .child(cn::checkbox(&accepted).label("I accept the terms and conditions"))
+    .child(cn::button("Submit").disabled(blocked).on_click(|_| submit()))
 ```
 
 ## Validation
 
-```rust
-let email = use_state_keyed("form_email", || String::new());
-let email_error = use_derived(|| {
-    let value = email.get();
-    if value.is_empty() {
-        None
-    } else if !value.contains('@') {
-        Some("Invalid email address")
-    } else {
-        None
-    }
-});
+An `Email` or `Number` input checks its own value and sets `data-invalid`
+while it fails, which the `.cn-input` rules show as a red border. For a
+message of your own, write it to a signal and show it in a label:
 
-div().flex_col().gap(4.0)
-    .child(label("Email"))
-    .child(input()
-        .value(&email)
-        .error(email_error.is_some())
-        .on_change({
-            let email = email.clone();
-            move |v| email.set(v)
-        }))
+```rust
+let email = text_input_data();
+let problem = ctx.use_signal(String::new());
+
+div()
+    .flex_col()
+    .gap(1.0)
     .child(
-        email_error.map(|err|
-            text(err).size(12.0).color(Color::RED)
-        )
+        cn::input(&email)
+            .label("Email")
+            .input_type(InputType::Email)
+            .on_change(move |value| {
+                problem.set(if value.is_empty() || value.contains('@') {
+                    String::new()
+                } else {
+                    "Enter an email address".into()
+                })
+            }),
     )
+    .child(cn::label(problem).size(LabelSize::Small))
 ```

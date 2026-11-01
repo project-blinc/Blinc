@@ -208,6 +208,29 @@ impl RenderTree {
         any_modified
     }
 
+    /// A SCROLL event for `node_id`, with where over it the wheel turned, as
+    /// pointer events carry it.
+    fn scroll_context(
+        &self,
+        node_id: LayoutNodeId,
+        (mouse_x, mouse_y): (f32, f32),
+        (dx, dy): (f32, f32),
+    ) -> crate::event_handler::EventContext {
+        let ctx = crate::event_handler::EventContext::new(
+            blinc_core::events::event_types::SCROLL,
+            node_id,
+        )
+        .with_mouse_pos(mouse_x, mouse_y)
+        .with_scroll_delta(dx, dy);
+        match self.get_absolute_bounds(node_id) {
+            Some(b) => ctx
+                .with_bounds_pos(b.x, b.y)
+                .with_bounds(b.width, b.height)
+                .with_local_pos(mouse_x - b.x, mouse_y - b.y),
+            None => ctx,
+        }
+    }
+
     /// Dispatch scroll event through ancestor chain with consumption tracking
     ///
     /// For nested scrolls, inner scrolls consume delta for their direction,
@@ -314,12 +337,8 @@ impl RenderTree {
                 }
                 self.last_scroll_target = Some((node_id, now_ms));
             } else {
-                let mut ctx = crate::event_handler::EventContext::new(
-                    blinc_core::events::event_types::SCROLL,
-                    node_id,
-                )
-                .with_mouse_pos(mouse_x, mouse_y)
-                .with_scroll_delta(dispatch_x, dispatch_y);
+                let mut ctx =
+                    self.scroll_context(node_id, (mouse_x, mouse_y), (dispatch_x, dispatch_y));
                 ctx.stable_id = self
                     .stable_id(node_id)
                     .unwrap_or(crate::tree::StableNodeId::ROOT);
@@ -423,13 +442,9 @@ impl RenderTree {
                 }
                 self.last_scroll_target = Some((node_id, scroll_time));
             } else {
-                let mut ctx = crate::event_handler::EventContext::new(
-                    blinc_core::events::event_types::SCROLL,
-                    node_id,
-                )
-                .with_mouse_pos(mouse_x, mouse_y)
-                .with_scroll_delta(dispatch_x, dispatch_y)
-                .with_scroll_time(scroll_time);
+                let mut ctx = self
+                    .scroll_context(node_id, (mouse_x, mouse_y), (dispatch_x, dispatch_y))
+                    .with_scroll_time(scroll_time);
                 ctx.stable_id = self
                     .stable_id(node_id)
                     .unwrap_or(crate::tree::StableNodeId::ROOT);

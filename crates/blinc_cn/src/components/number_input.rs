@@ -224,14 +224,9 @@ impl NumberInput {
     }
 }
 
-/// One wheel line is this many layout units, as the runners normalise it.
-const WHEEL_STEP_UNITS: f32 = 40.0;
-
 /// Wheel stepping, as ashui's: vertical scrolling over the control steps the
-/// value by its step, wheel up increasing it. Trackpad deltas accumulate in
-/// `remainder` until a whole step, and reversing the direction or leaving the
-/// control clears what is left. A disabled control, or a mostly horizontal
-/// gesture, does nothing.
+/// value by its step, wheel up increasing it. Leaving the control clears a
+/// partial step. A disabled control does nothing.
 fn wheel_stepper(
     config: &Config,
     remainder: Arc<std::sync::Mutex<f32>>,
@@ -240,21 +235,16 @@ fn wheel_stepper(
     let (min, max, step, disabled) = (config.min, config.max, config.step, config.disabled);
     move |ctx| {
         let mut left = remainder.lock().unwrap();
-        let (dx, dy) = (ctx.scroll_delta_x, ctx.scroll_delta_y);
         if disabled {
             *left = 0.0;
             return;
         }
-        if dy == 0.0 || dx.abs() > dy.abs() {
+        let Some(steps) =
+            super::number_wheel::wheel_steps(&mut left, ctx.scroll_delta_x, ctx.scroll_delta_y)
+        else {
             return;
-        }
-        if *left * dy < 0.0 {
-            *left = 0.0;
-        }
-        *left += dy;
-        let steps = (*left / WHEEL_STEP_UNITS).trunc();
-        *left -= steps * WHEEL_STEP_UNITS;
-        if steps == 0.0 {
+        };
+        if steps == 0 {
             return;
         }
         let current = state.get();

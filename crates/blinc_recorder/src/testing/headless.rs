@@ -546,6 +546,24 @@ impl Headless {
         self.mouse_up()
     }
 
+    /// Press `key_code` (the codes the window gives: 37 is Left, 33 Page Up).
+    /// It reaches every key handler, as in a window; each decides whether it
+    /// has focus.
+    pub fn key(&mut self, key_code: u32) -> &mut Self {
+        if let Some(tree) = self.tree.as_mut() {
+            tree.broadcast_key_event(
+                blinc_core::events::event_types::KEY_DOWN,
+                key_code,
+                false,
+                false,
+                false,
+                false,
+            );
+        }
+        self.frame(0);
+        self
+    }
+
     /// Move the pointer off everything.
     pub fn leave(&mut self) -> &mut Self {
         self.move_to(-10.0, -10.0)

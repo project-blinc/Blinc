@@ -79,7 +79,9 @@ pub mod cn {
     pub use crate::components::label::label;
     pub use crate::components::menubar::{MenuTriggerMode, MenuTriggerStyle, menubar};
     pub use crate::components::navigation_menu::{navigation_link, navigation_menu};
+    pub use crate::components::number_gauge::{GaugeSize, number_gauge};
     pub use crate::components::number_input::number_input;
+    pub use crate::components::number_range_gauge::number_range_gauge;
     pub use crate::components::pagination::pagination;
     pub use crate::components::popover::{PopoverAlign, PopoverSide, popover};
     pub use crate::components::progress::{progress, progress_animated};
@@ -179,6 +181,12 @@ pub mod prelude {
     pub use crate::components::navigation_menu::{
         NavigationLink, NavigationLinkBuilder, NavigationMenu, NavigationMenuBuilder,
         navigation_link, navigation_menu,
+    };
+    pub use crate::components::number_gauge::{
+        GaugeSize, NumberGauge, NumberGaugeBuilder, number_gauge,
+    };
+    pub use crate::components::number_range_gauge::{
+        NumberRangeGauge, NumberRangeGaugeBuilder, number_range_gauge,
     };
     pub use crate::components::pagination::{
         PageValue, Pagination, PaginationBuilder, PaginationSize, pagination,

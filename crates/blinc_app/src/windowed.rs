@@ -4707,6 +4707,8 @@ impl WindowedApp {
                                         Key::Down => 40,
                                         Key::Home => 36,
                                         Key::End => 35,
+                                        Key::PageUp => 33,
+                                        Key::PageDown => 34,
                                         // Map letter keys to ASCII uppercase for Cmd+key shortcuts
                                         Key::A => 65, Key::B => 66, Key::C => 67,
                                         Key::D => 68, Key::E => 69, Key::F => 70,

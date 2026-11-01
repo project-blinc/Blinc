@@ -1972,8 +1972,37 @@ impl Div {
     ///
     /// Use this for proportional sizing. For example, an element with flex_grow_value(2.0)
     /// will grow to twice the size of an element with flex_grow_value(1.0).
-    pub fn flex_grow_value(mut self, value: f32) -> Self {
-        self.style.flex_grow = value;
+    ///
+    /// Accepts a signal or a computed as well: a change patches the style
+    /// and relayouts, so siblings growing by complementary fractions share
+    /// whatever width layout gives their parent.
+    pub fn flex_grow_value(mut self, value: impl crate::binding::IntoReactive<f32>) -> Self {
+        use crate::binding::{LayoutPendingBinding, Reactive};
+        match value.into_reactive() {
+            Reactive::Const(grow) => self.style.flex_grow = grow,
+            Reactive::Bound(state) => {
+                if let Some(grow) = state.try_get() {
+                    self.style.flex_grow = grow;
+                }
+                self.pending_bindings
+                    .push(Box::new(LayoutPendingBinding::new(
+                        state,
+                        crate::property::PropertyId::FlexGrow,
+                        |style, grow: f32| style.flex_grow = grow,
+                    )));
+            }
+            Reactive::Computed(computed) => {
+                if let Some(grow) = computed.try_get() {
+                    self.style.flex_grow = grow;
+                }
+                self.pending_bindings
+                    .push(Box::new(LayoutPendingBinding::from_computed(
+                        computed,
+                        crate::property::PropertyId::FlexGrow,
+                        |style, grow: f32| style.flex_grow = grow,
+                    )));
+            }
+        }
         self
     }
 
@@ -2365,6 +2394,12 @@ impl Div {
     /// Set max-width in pixels
     pub fn max_w(mut self, px: f32) -> Self {
         self.style.max_size.width = LengthPercentageAuto::length(px);
+        self
+    }
+
+    /// Set max-width to 100%: never wider than the parent's content box.
+    pub fn max_w_full(mut self) -> Self {
+        self.style.max_size.width = LengthPercentageAuto::percent(1.0);
         self
     }
 

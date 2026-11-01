@@ -10,6 +10,9 @@ All notable changes to `blinc_layout` will be documented in this file.
 - An element that keeps a pointer state across a restyle now eases to its new look. Unchecking a hovered switch changes the rule that applies from `:checked:hover` to `:hover`; that was applied without a transition, so the fill snapped.
 
 ### Added
+- `Div::flex_grow_value` takes a signal or a computed as well as a number; a change patches the style and relayouts, so siblings growing by complementary fractions share their parent's width as it is laid out.
+- `Div::max_w_full` sets `max-width: 100%`.
+- A SCROLL event carries the target's bounds and the pointer's position within it (`bounds_x`, `bounds_width`, `local_x`, ...), as pointer events do; it carried only the window position.
 - `Canvas::redraw_while` names when a canvas animates; outside it the canvas still repaints with other frames but asks for none. `RenderTree::canvas_wants_frames` reports whether any canvas from the last full paint asks for one.
 - `RenderTree::motion_output_promoted` reports whether the last full paint drew every motion-bound node into a promoted composite layer and recorded no composite binding.
 - Escape clears a search `TextInput` that has text, as on the web; an empty one, and every other field, still loses focus on Escape.

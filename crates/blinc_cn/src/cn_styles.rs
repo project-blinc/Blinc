@@ -553,6 +553,56 @@ pub const CN_STYLES: &str = concat!(
 }
 .cn-number-input-step:disabled { color: var(--text-tertiary); }
 
+/* Number gauge, after ashui's: a number over a range as a fill tinted from
+   the primary, the value centred on it and a six-dot grip at the fill's edge.
+   The grip deepens while the gauge is hovered, pressed, dragged or keyed. */
+.cn-number-gauge {
+    border-color: var(--border);
+    background: var(--input-bg);
+    color: var(--text-primary);
+    cursor: ew-resize;
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+    transition: border-color var(--duration-fast) var(--ease-state);
+}
+.cn-number-gauge--sm { border-radius: var(--radius-sm); }
+.cn-number-gauge--md, .cn-number-gauge--lg { border-radius: var(--radius-default); }
+.cn-number-gauge:hover:not(:disabled) { border-color: var(--border-hover); }
+.cn-number-gauge[data-focus-visible] { outline-color: var(--focus-ring); }
+.cn-number-gauge-fill { background: color-mix(in srgb, var(--primary) 22%, var(--input-bg)); }
+.cn-number-gauge-rest { background: transparent; }
+.cn-number-gauge-thumb {
+    background: color-mix(in srgb, var(--primary) 30%, var(--input-bg));
+    color: var(--primary);
+    transition: background-color var(--duration-fast) var(--ease-state);
+}
+.cn-number-gauge:hover:not(:disabled) > .cn-number-gauge-thumb,
+.cn-number-gauge:active:not(:disabled) > .cn-number-gauge-thumb,
+.cn-number-gauge[data-state="dragging"] > .cn-number-gauge-thumb,
+.cn-number-gauge[data-focus-visible] > .cn-number-gauge-thumb {
+    background: color-mix(in srgb, var(--primary) 44%, var(--input-bg));
+}
+.cn-number-gauge:disabled { color: var(--text-tertiary); cursor: default; }
+.cn-number-gauge:disabled > .cn-number-gauge-fill { background: var(--input-bg-disabled); }
+.cn-number-gauge:disabled > .cn-number-gauge-thumb {
+    background: var(--border-secondary);
+    color: var(--text-tertiary);
+}
+/* A range gauge stacks two faces: the upper paints the interval, the lower
+   covers what lies before its grip with the track. */
+.cn-number-gauge-layer[data-endpoint="lower"] > .cn-number-gauge-fill { background: var(--input-bg); }
+.cn-number-gauge:hover:not(:disabled) > .cn-number-gauge-layer > .cn-number-gauge-thumb,
+.cn-number-gauge:active:not(:disabled) > .cn-number-gauge-layer > .cn-number-gauge-thumb,
+.cn-number-gauge[data-state="dragging"] > .cn-number-gauge-layer > .cn-number-gauge-thumb,
+.cn-number-gauge[data-focus-visible] > .cn-number-gauge-layer > .cn-number-gauge-thumb {
+    background: color-mix(in srgb, var(--primary) 44%, var(--input-bg));
+}
+.cn-number-gauge:disabled > .cn-number-gauge-layer > .cn-number-gauge-fill { background: var(--input-bg-disabled); }
+.cn-number-gauge:disabled > .cn-number-gauge-layer > .cn-number-gauge-thumb {
+    background: var(--border-secondary);
+    color: var(--text-tertiary);
+}
+
 /* ============================================================================
    Label
    ============================================================================ */

@@ -113,6 +113,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                         .child(form_inputs_section(ctx))
                         .child(toggles_section(ctx))
                         .child(slider_section(ctx))
+                        .child(gauges_section(ctx))
                         .child(radio_section(ctx))
                         .child(select_section(ctx))
                         .child(combobox_section(ctx))
@@ -1082,6 +1083,71 @@ fn slider_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                 ),
             ),
     )
+}
+
+// ============================================================================
+// NUMBER GAUGES SECTION
+// ============================================================================
+
+fn gauges_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
+    let opacity = ctx.use_signal(64.0);
+    let gain = ctx.use_signal(-6.0);
+    let small = ctx.use_signal(3.0);
+    let locked = ctx.use_signal(40.0);
+    let band = ctx.use_signal(18.0..=24.0);
+
+    let row = |name: &str, gauge: Box<dyn ElementBuilder>| {
+        div()
+            .flex_col()
+            .gap_px(4.0)
+            .child(cn::label(name))
+            .child(gauge)
+    };
+
+    section_container()
+        .child(section_title("Number Gauges"))
+        .child(
+            div()
+                .flex_row()
+                .flex_wrap()
+                .items_start()
+                .gap_px(24.0)
+                .child(row(
+                    "Opacity",
+                    Box::new(cn::number_gauge(opacity).format(|n| format!("{n} %"))),
+                ))
+                .child(row(
+                    "Gain",
+                    Box::new(
+                        cn::number_gauge(gain)
+                            .range(-24.0..=12.0)
+                            .step(0.5)
+                            .format(|n| format!("{n:+} dB")),
+                    ),
+                ))
+                .child(row(
+                    "Small",
+                    Box::new(
+                        cn::number_gauge(small)
+                            .range(0.0..=10.0)
+                            .size(cn::GaugeSize::Small),
+                    ),
+                ))
+                .child(row(
+                    "Disabled",
+                    Box::new(cn::number_gauge(locked).disabled(true)),
+                ))
+                .child(row(
+                    "Comfort band",
+                    Box::new(
+                        cn::number_range_gauge(band)
+                            .range(10.0..=30.0)
+                            .step(0.5)
+                            .size(cn::GaugeSize::Large)
+                            .format(|r| format!("{}–{} °C", r.start(), r.end())),
+                    ),
+                )),
+        )
 }
 
 // ============================================================================
