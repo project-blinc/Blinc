@@ -337,22 +337,18 @@ impl DropdownMenuBuilder {
                 .justify_between()
                 .px(4.0)
                 .py(2.0)
-                .rounded(theme.radius(RadiusToken::Md))
-                .border(1.0, theme.color(ColorToken::Border))
+                .border_width(1.0)
                 .child(
                     text(&label)
                         .size(theme.typography().text_sm)
-                        .color(theme.color(ColorToken::TextPrimary))
                         .no_wrap()
                         .no_cursor()
                         .pointer_events_none(),
                 )
                 .child(
-                    div().class("cn-chevron").child(
-                        svg(CHEVRON_DOWN_SVG)
-                            .size(16.0, 16.0)
-                            .color(theme.color(ColorToken::TextSecondary)),
-                    ),
+                    div()
+                        .class("cn-chevron")
+                        .child(svg(CHEVRON_DOWN_SVG).size(16.0, 16.0)),
                 )
         } else {
             div()
@@ -475,11 +471,6 @@ fn spawn_dropdown_menu(
     key: String,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
-    let bg = theme.color(ColorToken::Surface);
-    let border = theme.color(ColorToken::Border);
-    let text_color = theme.color(ColorToken::TextPrimary);
-    let text_secondary = theme.color(ColorToken::TextSecondary);
-    let text_tertiary = theme.color(ColorToken::TextTertiary);
     let radius = theme.radius(RadiusToken::Md);
     let font_size = 14.0;
     let padding = 12.0;
@@ -536,11 +527,6 @@ fn spawn_dropdown_menu(
                 &menu_id_for_content,
                 &click_outside_key_for_content,
                 &id_chain_for_content,
-                bg,
-                border,
-                text_color,
-                text_secondary,
-                text_tertiary,
                 radius,
                 font_size,
                 padding,
@@ -580,11 +566,6 @@ fn spawn_dropdown_submenu(
     parent_submenu_state: State<Option<u64>>,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
-    let bg = theme.color(ColorToken::Surface);
-    let border = theme.color(ColorToken::Border);
-    let text_color = theme.color(ColorToken::TextPrimary);
-    let text_secondary = theme.color(ColorToken::TextSecondary);
-    let text_tertiary = theme.color(ColorToken::TextTertiary);
     let radius = theme.radius(RadiusToken::Md);
     let font_size = 14.0;
     let padding = 12.0;
@@ -646,11 +627,6 @@ fn spawn_dropdown_submenu(
                 &submenu_id_for_content,
                 &root_click_outside_key_for_content,
                 &id_chain_for_content,
-                bg,
-                border,
-                text_color,
-                text_secondary,
-                text_tertiary,
                 radius,
                 font_size,
                 padding,
@@ -677,11 +653,6 @@ fn build_dropdown_menu_div(
     self_id: &str,
     root_click_outside_key: &str,
     id_chain: &State<Vec<String>>,
-    bg: Color,
-    border: Color,
-    text_color: Color,
-    text_secondary: Color,
-    text_tertiary: Color,
     radius: f32,
     font_size: f32,
     padding: f32,
@@ -689,8 +660,8 @@ fn build_dropdown_menu_div(
     let child_submenu_state: State<Option<u64>> = BlincContextState::get()
         .use_state_keyed(&format!("dropdown_child_sub_{}", self_id), || None);
 
-    // The row the arrow keys are on. The menu starts with none, as ashui's does
-    // when it is opened by a press.
+    // The row the arrow keys are on. The menu starts with none when it is
+    // opened by a press.
     let active: State<Option<usize>> =
         BlincContextState::get().use_state_keyed(&format!("dropdown_active_{}", self_id), || None);
     active.set(None);
@@ -699,32 +670,14 @@ fn build_dropdown_menu_div(
     // one does (nothing for a row that opens a submenu).
     let mut navigable: Vec<(usize, Option<ItemAction>)> = Vec::new();
 
-    let mut menu = div()
+    let mut menu = super::menu::panel(radius)
         .class("cn-dropdown-menu")
         .id(self_id)
-        .flex_col()
-        .w(width)
-        .bg(bg)
-        .border(1.0, border)
-        .rounded(radius)
-        .lock_corner_shape()
-        .shadow_lg()
-        .overflow_clip()
-        .h_fit();
-    // No top/bottom padding — items extend edge-to-edge so the rounded
-    // overflow_clip can trim their hover bg into the panel's outer
-    // curve. A `py(1.0)` here would leave a 1px strip of the panel's
-    // surface bg between the first/last item's hover highlight and
-    // the rounded corner.
+        .w(width);
 
     for (idx, item) in items.iter().enumerate() {
         if item.is_separator() {
-            // `hr()` (no explicit wrapper bg) lets the panel's CSS
-            // `--surface-elevated` show through the separator's
-            // padding area. `hr_with_bg(bg)` painted the wrapper
-            // pure-white `Surface`, which created a visible band
-            // against the elevated panel.
-            menu = menu.child(hr());
+            menu = menu.child(super::menu::separator());
         } else {
             let item_label = item.get_label().to_string();
             let item_shortcut = item.get_shortcut().map(|s| s.to_string());
@@ -740,61 +693,17 @@ fn build_dropdown_menu_div(
             let root_click_outside_key_for_open = root_click_outside_key.to_string();
             let submenu_key = format!("{}_sub-{}", self_id, idx);
 
-            let item_text_color = if item_disabled {
-                text_tertiary
-            } else {
-                text_color
-            };
-            let shortcut_color = text_secondary;
-
-            // Build the row as a plain div — NO Stateful wrapper.
-            //
-            // Stateful subtree rebuilds inside an overlay's content closure
-            // contaminate base_styles with hover state (background colours
-            // freeze on, motion FSM gets re-entered, child z-ordering goes
-            // stale). Same lesson menubar learned: plain div + CSS
-            // `.cn-dropdown-item:hover` handles the hover background.
-            let mut left_side = div()
-                .w_fit()
-                .h_fit()
-                .flex_row()
-                .items_center()
-                .gap(padding / 4.0);
-
-            if let Some(ref icon_svg) = item_icon {
-                left_side = left_side.child(svg(icon_svg).size(16.0, 16.0).color(item_text_color));
-            }
-
-            left_side = left_side
-                .child(
-                    text(&item_label)
-                        .size(font_size)
-                        .color(item_text_color)
-                        .no_cursor()
-                        .pointer_events_none(),
-                )
-                .pointer_events_none();
-
-            let right_side: Option<Div> = if let Some(ref shortcut) = item_shortcut {
-                Some(
-                    div().child(
-                        text(shortcut)
-                            .size(font_size - 2.0)
-                            .color(shortcut_color)
-                            .monospace()
-                            .no_cursor(),
-                    ),
-                )
-            } else if has_submenu {
-                let chevron_right = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>"#;
-                Some(
-                    div()
-                        .child(svg(chevron_right).size(12.0, 12.0).color(text_tertiary))
-                        .pointer_events_none(),
-                )
-            } else {
-                None
-            };
+            // The row is a plain div with no Stateful wrapper: a rebuild
+            // inside an overlay's content would freeze its hover look.
+            let (left_side, right_side) = super::menu::item_parts(
+                item_icon.as_deref(),
+                &item_label,
+                item_shortcut.as_deref(),
+                has_submenu,
+                font_size,
+                padding / 4.0,
+                true,
+            );
 
             if !item_disabled {
                 navigable.push((
@@ -809,6 +718,7 @@ fn build_dropdown_menu_div(
             let is_active =
                 computed(move |g: &ReactiveGraph| g.get(active_signal).flatten() == Some(idx));
             let mut row_content = div()
+                .class("cn-menu-item")
                 .class("cn-dropdown-item")
                 .class_when("cn-dropdown-item--active", is_active)
                 .w_full()
@@ -822,19 +732,11 @@ fn build_dropdown_menu_div(
                 row_content = row_content.class("cn-dropdown-item--has-submenu");
             }
             row_content = row_content
-                .cursor(if item_disabled {
-                    CursorStyle::NotAllowed
-                } else {
-                    CursorStyle::Pointer
-                })
+                .attr_when("disabled", "", item_disabled)
                 .flex_row()
                 .items_center()
                 .justify_between()
                 .child(left_side);
-
-            if item_disabled {
-                row_content = row_content.class("cn-dropdown-item--disabled");
-            }
 
             if let Some(right) = right_side {
                 row_content = row_content.child(right);
@@ -1085,8 +987,6 @@ mod tests {
         ];
         let chain: State<Vec<String>> =
             BlincContextState::get().use_state_keyed("keyed_menu_chain", Vec::<String>::new);
-        let theme = ThemeState::get();
-        let c = theme.color(ColorToken::TextPrimary);
         let menu = build_dropdown_menu_div(
             &items,
             160.0,
@@ -1094,11 +994,6 @@ mod tests {
             "keyed-menu",
             "keyed-menu-key",
             &chain,
-            c,
-            c,
-            c,
-            c,
-            c,
             4.0,
             14.0,
             12.0,

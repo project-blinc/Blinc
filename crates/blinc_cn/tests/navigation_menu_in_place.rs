@@ -14,8 +14,8 @@ use blinc_layout::renderer::{ElementType, RenderTree};
 use blinc_theme::{ColorToken, ThemeState};
 use common::*;
 
-/// Marks an item the active class is on, as the theme's rule would.
-const RULE: &str = ".cn-nav-link--active { background: #123456 }";
+/// Marks an item the active class is on, hovered or not.
+const RULE: &str = ".cn-nav-link--active, .cn-nav-link--active:hover { background: #123456 }";
 
 struct Scene {
     tree: RenderTree,
@@ -31,7 +31,11 @@ fn scene() -> Scene {
         .item("About", || {});
     let host = div().w(800.0).h(100.0).child(nav);
     let mut tree = RenderTree::from_element(&host);
-    tree.set_stylesheet(Stylesheet::parse(RULE).expect("css"));
+    // cn's rules give the links their colours; the test's rule marks the
+    // active one.
+    let vars = ThemeState::get().to_css_variable_map();
+    let css = format!("{}\n{RULE}", blinc_cn::cn_styles::CN_STYLES);
+    tree.set_stylesheet(Stylesheet::parse_with_variables(&css, &vars).expect("css"));
     tree.apply_stylesheet_layout_overrides();
     tree.apply_stylesheet_base_styles();
     tree.compute_layout(800.0, 100.0);
@@ -72,13 +76,12 @@ impl Scene {
         self.tree.layout_tree.children(item)[0]
     }
 
-    /// The colour the label is drawn in: a bound colour, else its own.
+    /// The colour the label is drawn in, as the paint walk resolves it.
     fn label_color(&self, item: LayoutNodeId) -> Color {
-        let render = self.tree.get_render_node(self.label(item)).unwrap();
-        let [r, g, b, a] = match &render.element_type {
-            ElementType::Text(t) => render.props.text_color.unwrap_or(t.color),
-            _ => panic!("the item's first child is not its label"),
-        };
+        let [r, g, b, a] = self
+            .tree
+            .resolved_text_color(self.label(item))
+            .expect("the label has a colour");
         Color::rgba(r, g, b, a)
     }
 
@@ -98,6 +101,7 @@ impl Scene {
         );
         let updates = blinc_layout::take_pending_partial_prop_updates();
         self.tree.apply_partial_property_updates(updates);
+        self.tree.apply_stylesheet_state_styles(&self.router);
         self.tree.compute_layout(800.0, 100.0);
     }
 }

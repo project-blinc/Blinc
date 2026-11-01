@@ -293,7 +293,6 @@ impl TooltipBuilder {
                             .class(side_class)
                             .flex_row()
                             .items_center()
-                            .lock_corner_shape()
                             .child(text(&text_owned).size(font_size).no_wrap())
                     })
                     .show();

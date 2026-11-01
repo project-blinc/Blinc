@@ -523,7 +523,7 @@ pub const CN_STYLES: &str = concat!(
     outline: 2px solid var(--focus-ring-success);
 }
 
-/* Number input, after ashui's: a number between a - and a +, one bordered
+/* Number input: a number between a - and a +, one bordered
    piece. The steps are transparent and tint on hover and press; the field is
    borderless and clear (set in Rust, so the input rules give way to it). */
 .cn-number-input-group {
@@ -553,7 +553,7 @@ pub const CN_STYLES: &str = concat!(
 }
 .cn-number-input-step:disabled { color: var(--text-tertiary); }
 
-/* Number gauge, after ashui's: a number over a range as a fill tinted from
+/* Number gauge: a number over a range as a fill tinted from
    the primary, the value centred on it and a six-dot grip at the fill's edge.
    The grip deepens while the gauge is hovered, pressed, dragged or keyed. */
 .cn-number-gauge {
@@ -761,7 +761,7 @@ pub const CN_STYLES: &str = concat!(
    ============================================================================ */
 
 /* The caret of a trigger turns half a turn while its list is open, eased by a
-   transition so it spins rather than flips (ashui's chevrons do the same). */
+   transition so it spins rather than flips. */
 .cn-chevron {
     transition: transform var(--duration-normal) var(--ease-state);
 }
@@ -859,6 +859,7 @@ pub const CN_STYLES: &str = concat!(
     cursor: not-allowed;
 }
 .cn-select-trigger > .cn-chevron { color: var(--text-tertiary); }
+.cn-dropdown-trigger > .cn-chevron { color: var(--text-secondary); }
 
 /* ============================================================================
    Slider
@@ -1013,7 +1014,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-drawer-title, .cn-sheet-title { color: var(--text-primary); }
 .cn-sheet-description { color: var(--text-secondary); }
 .cn-drawer-separator, .cn-sheet-separator { background: var(--border); }
-/* The close button, as ashui's sheet's: quiet until hovered. */
+/* The close button: quiet until hovered. */
 .cn-drawer-close, .cn-sheet-close {
     color: var(--text-secondary);
     border-radius: var(--radius-md);
@@ -1191,12 +1192,17 @@ pub const CN_STYLES: &str = concat!(
 .cn-nav-menu-content .cn-nav-link:hover {
     background: var(--accent-subtle);
 }
+/* Inside the panel a link's title is primary and its description secondary. */
+.cn-nav-menu-content .cn-nav-link { color: var(--text-primary); }
+.cn-nav-link-description { color: var(--text-secondary); }
 
 .cn-nav-menu-content {
     /* Floating overlay → elevation 2 */
     background: var(--surface-elevated);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
     /* CSS-driven enter — slide down + fade. Motion FSM workaround. */
     animation: cn-nav-menu-enter var(--duration-fast) var(--ease-state);
     transform-origin: top center;
@@ -1243,16 +1249,44 @@ pub const CN_STYLES: &str = concat!(
 }
 
 /* ============================================================================
+   Menus: the panel, rows, shortcuts, submenu chevrons and separators every
+   cn menu is built from. The dropdown, context and menubar menus add their
+   own class for their enter animation and row padding.
+   ============================================================================ */
+
+/* No padding: rows run to the rounded edge, which clips their highlight. */
+.cn-menu {
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-default);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
+}
+/* No transition on rows: sweeping the pointer across them would leave several
+   half-lit at once. */
+.cn-menu-item {
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    cursor: pointer;
+}
+/* `--accent-subtle`, since the panel already sits at `--surface-elevated`. */
+.cn-menu-item:hover:not(:disabled),
+.cn-dropdown-item--active {
+    background: var(--accent-subtle);
+}
+.cn-menu-item:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.cn-menu-shortcut { color: var(--text-secondary); letter-spacing: 0.05em; }
+.cn-menu-chevron { color: var(--text-tertiary); }
+.cn-menu-separator { background: var(--border); margin: var(--space-1) 0; }
+
+/* ============================================================================
    Dropdown Menu
    ============================================================================ */
 
 .cn-dropdown-menu {
-    /* Shared overlay-menu chrome with select / context / combobox.
-       No outer padding so item hover bgs run flush with the panel's
-       rounded edge — see `.cn-select-content` for the rationale. */
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-default);
     /* CSS-driven enter — slight scale + fade. Motion FSM workaround. */
     animation: cn-dropdown-menu-enter var(--duration-fast) var(--ease-state);
     transform-origin: top center;
@@ -1264,21 +1298,6 @@ pub const CN_STYLES: &str = concat!(
 }
 .cn-dropdown-item {
     padding: var(--space-2) var(--space-3);
-    cursor: pointer;
-    color: var(--text-primary);
-    font-size: var(--text-sm);
-    /* No `border-radius` — see `.cn-select-item`. */
-    /* No transition — see cn-menubar-item rationale. */
-}
-/* `--accent-subtle` — parent panel sits at `--surface-elevated`,
-   so hovering to the same tier would be invisible. */
-.cn-dropdown-item:hover,
-.cn-dropdown-item--active {
-    background: var(--accent-subtle);
-}
-.cn-dropdown-item--disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
 }
 .cn-dropdown-item--destructive {
     color: var(--error);
@@ -1289,12 +1308,6 @@ pub const CN_STYLES: &str = concat!(
    ============================================================================ */
 
 .cn-context-menu {
-    /* Shared overlay-menu chrome with select / dropdown / combobox.
-       No outer padding so item hover bgs run flush with the panel's
-       rounded edge — see `.cn-select-content` for the rationale. */
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-default);
     /* CSS-driven enter — small scale + fade. */
     animation: cn-context-menu-enter var(--duration-fast) var(--ease-state);
     transform-origin: top left;
@@ -1327,14 +1340,6 @@ pub const CN_STYLES: &str = concat!(
        up. Horizontal padding stays at space-3 so the row chrome's
        hit area extends comfortably past the label edge. */
     padding: var(--space-1-5) var(--space-3);
-    /* No `border-radius` — see `.cn-select-item`. */
-    cursor: pointer;
-    color: var(--text-primary);
-    font-size: var(--text-sm);
-    /* No transition — see cn-menubar-item rationale. */
-}
-.cn-context-menu-item:hover {
-    background: var(--accent-subtle);
 }
 
 /* ============================================================================
@@ -1366,10 +1371,6 @@ pub const CN_STYLES: &str = concat!(
    instead of the pure-white `Surface` the Rust-side `.bg(...)`
    fallback was painting. */
 .cn-menubar-content {
-    /* No outer padding — see `.cn-select-content`. */
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-default);
     /* Reuse the dropdown keyframes — same top-anchored slide/fade. */
     animation: cn-dropdown-menu-enter var(--duration-fast) var(--ease-state);
     transform-origin: top center;
@@ -1383,26 +1384,7 @@ pub const CN_STYLES: &str = concat!(
     animation: none;
 }
 .cn-menubar-item {
-    /* Match `.cn-dropdown-item` / `.cn-context-menu-item` so all three
-       menu primitives share the same row chrome. The Rust builder
-       applies a smaller `.py / .px` to set a sensible fallback when
-       cn_styles isn't loaded; this CSS rule overrides it when the
-       stylesheet IS present. No `border-radius` — see
-       `.cn-select-item`. */
     padding: var(--space-2) var(--space-3);
-    background: transparent;
-    color: var(--text-primary);
-    font-size: var(--text-sm);
-    /* No CSS `transition` here — when the cursor moves across menu rows
-       quickly, the transition trail leaves multiple rows partially
-       highlighted (each at a different point in the fade-out animation),
-       which reads as a stuck-hover bug. Instant on/off matches the HID. */
-}
-/* `--accent-subtle` — parent dropdown panel sits at `--surface-elevated`,
-   so hovering to the same tier is invisible. Match cn-dropdown-item /
-   cn-context-menu-item for visual consistency across menu primitives. */
-.cn-menubar-item:hover {
-    background: var(--accent-subtle);
 }
 
 /* ============================================================================
@@ -1503,7 +1485,10 @@ pub const CN_STYLES: &str = concat!(
 /* The dropdown menu's default trigger: filled as the outline button is,
    tinted on hover and press. */
 .cn-dropdown-trigger {
+    color: var(--text-primary);
     background: transparent;
+    border-color: var(--border);
+    border-radius: var(--radius-md);
     box-shadow: var(--shadow-sm);
     transition: background-color var(--duration-fast) var(--ease-state);
 }

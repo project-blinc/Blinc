@@ -410,15 +410,11 @@ fn build_popover_overlay(
         .content(move || {
             let user_content = (content_fn)();
 
-            // `lock_corner_shape` keeps panel corners circular even when a
-            // theme advertises a squircle exponent — overlay chrome reads
-            // cleanest with platform-default rounded-rect shape.
             // Fill, border, radius and shadow are `.cn-popover-content` rules.
             div()
                 .class("cn-popover-content")
                 .id(&popover_id_for_content)
                 .flex_col()
-                .lock_corner_shape()
                 .p_px(padding)
                 .min_w(150.0)
                 .overflow_clip()

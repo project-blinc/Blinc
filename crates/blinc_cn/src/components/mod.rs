@@ -29,6 +29,7 @@ pub mod input;
 pub mod input_otp;
 pub mod kbd;
 pub mod label;
+pub(crate) mod menu;
 pub mod menubar;
 pub mod navigation_menu;
 pub mod number_gauge;

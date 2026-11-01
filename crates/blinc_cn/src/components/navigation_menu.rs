@@ -67,13 +67,6 @@ pub struct NavigationMenu {
 
 impl NavigationMenu {
     fn from_builder(builder: &NavigationMenuBuilder) -> Self {
-        let theme = ThemeState::get();
-        let text_primary = theme.color(ColorToken::TextPrimary);
-        let text_secondary = theme.color(ColorToken::TextSecondary);
-        let surface = theme.color(ColorToken::Surface);
-        let border = theme.color(ColorToken::Border);
-        let radius = theme.radius(RadiusToken::Md);
-
         let key_base = builder.key.get().to_string();
         let items = builder.items.clone();
         let min_content_width = builder.min_content_width;
@@ -86,8 +79,8 @@ impl NavigationMenu {
         let overlay_handle_state: State<Option<u64>> =
             BlincContextState::get().use_state_keyed(&format!("{}_handle", key_base), || None);
 
-        // The bar is built once. Which menu is open, and what the pointer is
-        // over, are signals the items' classes and colours are bound to.
+        // The bar is built once. Which menu is open is a signal the items'
+        // classes are bound to; their colours are `.cn-nav-link` rules.
         let mut nav = div()
             .class("cn-nav-menu")
             .flex_row()
@@ -97,7 +90,6 @@ impl NavigationMenu {
 
         for (idx, item) in items.iter().enumerate() {
             let interaction = Interaction::keyed(&format!("{}_{}_btn", key_base, idx));
-            let hovered = interaction.hovered().signal();
             let label = match item {
                 NavMenuItem::Link { label, .. } | NavMenuItem::Trigger { label, .. } => {
                     label.clone()
@@ -108,14 +100,6 @@ impl NavigationMenu {
             let active = active_menu.signal();
             let open = computed(move |g: &ReactiveGraph| {
                 is_trigger && g.get(active).flatten() == Some(idx)
-            });
-            let text_color = computed(move |g: &ReactiveGraph| {
-                let open = is_trigger && g.get(active).flatten() == Some(idx);
-                if open || g.get(hovered).unwrap_or(false) {
-                    text_primary
-                } else {
-                    text_secondary
-                }
             });
 
             let mut entry = div()
@@ -128,13 +112,11 @@ impl NavigationMenu {
                 .gap(1.0)
                 .px(3.0)
                 .py(2.0)
-                .cursor(CursorStyle::Pointer)
                 .track(&interaction)
                 .child(
                     text(&label)
                         .size(14.0)
                         .medium()
-                        .color(&text_color)
                         .no_wrap()
                         .no_cursor()
                         .pointer_events_none(),
@@ -166,7 +148,7 @@ impl NavigationMenu {
                         .child(
                             div()
                                 .pointer_events_none()
-                                .child(svg(chevron).size(12.0, 12.0).color(&text_color)),
+                                .child(svg(chevron).size(12.0, 12.0)),
                         )
                         .on_hover_enter(move |ctx| {
                             // This menu is open already: revive an exit in
@@ -204,9 +186,6 @@ impl NavigationMenu {
                                 active_menu_for_hover.clone(),
                                 overlay_handle_for_hover.clone(),
                                 menu_key.clone(),
-                                surface,
-                                border,
-                                radius,
                             );
                             overlay_handle_for_hover.set(Some(handle.raw()));
                             active_menu_for_hover.set(Some(idx));
@@ -249,9 +228,6 @@ fn show_navigation_dropdown(
     active_menu_state: State<Option<usize>>,
     overlay_handle_state: State<Option<u64>>,
     _key: String,
-    surface: blinc_core::Color,
-    border: blinc_core::Color,
-    radius: f32,
 ) -> OverlayHandle {
     let active_menu_for_close = active_menu_state.clone();
     let overlay_handle_for_close = overlay_handle_state.clone();
@@ -289,10 +265,8 @@ fn show_navigation_dropdown(
             div()
                 .class("cn-nav-menu-content")
                 .min_w(min_width / 4.0)
-                .bg(surface)
-                .border(1.0, border)
-                .rounded(radius)
-                .shadow_lg()
+                // Fill, border, radius and shadow are `.cn-nav-menu-content`
+                // rules.
                 .overflow_clip()
                 // No top/bottom padding — items extend edge-to-edge so
                 // the rounded overflow_clip can trim their hover bg
@@ -497,10 +471,6 @@ pub struct NavigationLink {
 
 impl NavigationLink {
     fn from_builder(builder: &NavigationLinkBuilder) -> Self {
-        let theme = ThemeState::get();
-        let text_primary = theme.color(ColorToken::TextPrimary);
-        let text_secondary = theme.color(ColorToken::TextSecondary);
-
         let label = builder.label.clone();
         let description = builder.description.clone();
         let on_click = builder.on_click.clone();
@@ -512,20 +482,18 @@ impl NavigationLink {
             .gap(1.0)
             .px(3.0)
             .py(2.0)
-            .cursor(CursorStyle::Pointer)
             .child(
                 text(&label)
                     .size(14.0)
                     .medium()
-                    .color(text_primary)
                     .no_cursor()
                     .pointer_events_none(),
             );
         if let Some(ref desc) = description {
             link = link.child(
                 text(desc)
+                    .class("cn-nav-link-description")
                     .size(12.0)
-                    .color(text_secondary)
                     .no_cursor()
                     .pointer_events_none(),
             );

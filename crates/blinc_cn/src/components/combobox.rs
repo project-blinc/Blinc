@@ -652,7 +652,6 @@ fn build_dropdown_content(
         // Fill, border, radius and shadow are `.cn-combobox-content` rules; the
         // radius stays here too because the panel clips its rows to it.
         .rounded(radius)
-        .lock_corner_shape()
         .overflow_clip()
         // Absolutely positioned below the trigger, rendered in foreground pass
         // so it appears above all sibling content regardless of tree order

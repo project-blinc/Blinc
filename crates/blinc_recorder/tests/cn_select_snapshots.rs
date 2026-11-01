@@ -500,3 +500,55 @@ fn dialog_and_sheet_panels_take_their_look_from_rules() {
         ui.settle();
     }
 }
+
+/// An open dropdown menu is the shared menu: its panel, rows, shortcut and
+/// disabled row take their look from the `.cn-menu*` rules.
+#[test]
+fn a_dropdown_menu_takes_its_look_from_the_menu_rules() {
+    let Some(mut ui) = session_sized(W, 260) else {
+        return;
+    };
+    ui.mount(move |_| {
+        div().w(W as f32).h(260.0).p(4.0).child(
+            dropdown_menu("Actions")
+                .item_with_shortcut("Copy", "C", || {})
+                .separator()
+                .item_disabled("Paste"),
+        )
+    });
+    ui.leave().settle();
+    ui.click(".cn-dropdown-trigger").settle();
+    let theme = ThemeState::get();
+    let (fill, border) = props(&ui, ".cn-menu");
+    assert!(
+        same(fill, theme.color(ColorToken::SurfaceElevated)),
+        "fill {fill:?}"
+    );
+    assert!(same(border, theme.color(ColorToken::Border)), "border");
+    let panel = ui.find(".cn-menu").unwrap();
+    let p = &ui.tree().get_render_node(panel).unwrap().props;
+    assert!(p.shadow.iter().any(|s| s.color.a > 0.0), "no shadow");
+    assert_eq!(
+        first_text_colour(&ui, panel, "cn-menu-shortcut"),
+        rgba(theme.color(ColorToken::TextSecondary)),
+        "shortcut"
+    );
+    let registry = ui.tree().element_registry();
+    let disabled: Vec<_> = registry
+        .class_to_nodes_index()
+        .get("cn-menu-item")
+        .into_iter()
+        .flatten()
+        .copied()
+        .filter(|n| registry.has_class(*n, "disabled="))
+        .collect();
+    assert_eq!(disabled.len(), 1, "one disabled row");
+    let opacity = ui
+        .tree()
+        .get_render_node(disabled[0])
+        .unwrap()
+        .props
+        .opacity;
+    assert!((opacity - 0.5).abs() < 0.01, "disabled opacity {opacity}");
+    assert!(ui.find(".cn-menu-separator").is_some(), "the separator");
+}

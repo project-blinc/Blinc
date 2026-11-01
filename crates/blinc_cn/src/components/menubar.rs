@@ -371,8 +371,6 @@ impl MenubarBuilder {
     /// Build the menubar component
     fn build_component(&self) -> Menubar {
         let theme = ThemeState::get();
-        let bg = theme.color(ColorToken::Surface);
-        let border = theme.color(ColorToken::Border);
 
         // State for tracking which menu is currently open (None = none open)
         let active_menu: State<Option<usize>> =
@@ -392,9 +390,8 @@ impl MenubarBuilder {
             .flex_row()
             .items_center()
             .h_fit()
-            .px(4.0)
-            .style(&style! { bg: bg })
-            .border_bottom(1.0, border);
+            // Fill and border are `.cn-menubar` rules.
+            .px(4.0);
 
         // Add each menu trigger
         for (idx, menu) in menus.iter().enumerate() {
@@ -426,22 +423,18 @@ impl MenubarBuilder {
             let radius = style_radius.unwrap_or_else(|| theme.radius(RadiusToken::Sm));
 
             let trigger_content: Div = match &menu_trigger {
-                MenubarTrigger::Label(label) => {
-                    let text_col = theme.color(ColorToken::TextPrimary);
-                    div()
-                        .flex_row()
-                        .items_center()
-                        .style(&style! { rounded: radius })
-                        .px(2.0)
-                        .py(1.0)
-                        .child(
-                            text(label)
-                                .size(style_font_size)
-                                .color(text_col)
-                                .no_cursor()
-                                .pointer_events_none(),
-                        )
-                }
+                MenubarTrigger::Label(label) => div()
+                    .flex_row()
+                    .items_center()
+                    .style(&style! { rounded: radius })
+                    .px(2.0)
+                    .py(1.0)
+                    .child(
+                        text(label)
+                            .size(style_font_size)
+                            .no_cursor()
+                            .pointer_events_none(),
+                    ),
                 MenubarTrigger::Custom(custom_fn) => div()
                     .flex_row()
                     .items_center()
@@ -600,11 +593,6 @@ fn spawn_menubar_dropdown(
     hover_mode: bool,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
-    let bg = theme.color(ColorToken::Surface);
-    let border = theme.color(ColorToken::Border);
-    let text_color = theme.color(ColorToken::TextPrimary);
-    let text_secondary = theme.color(ColorToken::TextSecondary);
-    let text_tertiary = theme.color(ColorToken::TextTertiary);
     let radius = theme.radius(RadiusToken::Md);
     let font_size = 14.0;
     let padding = 12.0;
@@ -662,11 +650,6 @@ fn spawn_menubar_dropdown(
                 hover_mode,
                 &menu_key_for_content,
                 &child_submenu_for_content,
-                bg,
-                border,
-                text_color,
-                text_secondary,
-                text_tertiary,
                 radius,
                 font_size,
                 padding,
@@ -698,11 +681,6 @@ fn spawn_menubar_submenu(
     key: String,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
-    let bg = theme.color(ColorToken::Surface);
-    let border = theme.color(ColorToken::Border);
-    let text_color = theme.color(ColorToken::TextPrimary);
-    let text_secondary = theme.color(ColorToken::TextSecondary);
-    let text_tertiary = theme.color(ColorToken::TextTertiary);
     let radius = theme.radius(RadiusToken::Md);
     let font_size = 14.0;
     let padding = 12.0;
@@ -751,11 +729,6 @@ fn spawn_menubar_submenu(
                 /* hover_mode */ true,
                 &menu_key_for_content,
                 &child_submenu_for_content,
-                bg,
-                border,
-                text_color,
-                text_secondary,
-                text_tertiary,
                 radius,
                 font_size,
                 padding,
@@ -785,11 +758,6 @@ fn build_menubar_menu_div(
     hover_mode: bool,
     key: &str,
     child_submenu_state: &State<Option<u64>>,
-    bg: Color,
-    border: Color,
-    text_color: Color,
-    text_secondary: Color,
-    text_tertiary: Color,
     radius: f32,
     font_size: f32,
     padding: f32,
@@ -797,17 +765,10 @@ fn build_menubar_menu_div(
     let _ = is_root; // reserved for future styling hooks
     let menu_id = key;
 
-    let mut menu = div()
+    let mut menu = super::menu::panel(radius)
         .class("cn-menubar-content")
         .id(menu_id)
-        .flex_col()
-        .w(width)
-        .style(&style! { bg: bg, border: (1.0, border), rounded: radius })
-        .lock_corner_shape()
-        .shadow_lg()
-        .overflow_clip()
-        .h_fit();
-    // No top/bottom padding — see dropdown_menu.rs for rationale.
+        .w(width);
 
     // In hover mode the dropdown stays open while the cursor sits inside it.
     // Tooltip dismiss rules drive the countdown; container hover handlers
@@ -835,8 +796,7 @@ fn build_menubar_menu_div(
 
     for (idx, item) in items.iter().enumerate() {
         if item.is_separator() {
-            // See dropdown_menu.rs for rationale.
-            menu = menu.child(hr());
+            menu = menu.child(super::menu::separator());
         } else {
             let item_label = item.get_label().to_string();
             let item_shortcut = item.get_shortcut().map(|s| s.to_string());
@@ -850,59 +810,15 @@ fn build_menubar_menu_div(
             let child_submenu_for_hover_close = child_submenu_state.clone();
             let submenu_key = format!("{}_sub-{}", key, idx);
 
-            let item_text_color = if item_disabled {
-                text_tertiary
-            } else {
-                text_color
-            };
-            let shortcut_color = text_secondary;
-            let cursor = if item_disabled {
-                CursorStyle::NotAllowed
-            } else {
-                CursorStyle::Pointer
-            };
-
-            let mut left_side = div()
-                .w_fit()
-                .h_fit()
-                .flex_row()
-                .items_center()
-                .gap(padding / 4.0);
-
-            if let Some(ref icon_svg) = item_icon {
-                left_side = left_side.child(svg(icon_svg).size(16.0, 16.0).color(item_text_color));
-            }
-
-            left_side = left_side
-                .child(
-                    text(&item_label)
-                        .size(font_size)
-                        .color(item_text_color)
-                        .no_cursor()
-                        .pointer_events_none(),
-                )
-                .pointer_events_none();
-
-            let right_side: Option<Div> = if let Some(ref shortcut) = item_shortcut {
-                Some(
-                    div().child(
-                        text(shortcut)
-                            .size(font_size - 2.0)
-                            .color(shortcut_color)
-                            .monospace()
-                            .no_cursor(),
-                    ),
-                )
-            } else if has_submenu {
-                let chevron_right = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>"#;
-                Some(
-                    div()
-                        .child(svg(chevron_right).size(12.0, 12.0).color(text_tertiary))
-                        .pointer_events_none(),
-                )
-            } else {
-                None
-            };
+            let (left_side, right_side) = super::menu::item_parts(
+                item_icon.as_deref(),
+                &item_label,
+                item_shortcut.as_deref(),
+                has_submenu,
+                font_size,
+                padding / 4.0,
+                true,
+            );
 
             let mut row_content = div()
                 .w_full()
@@ -916,7 +832,9 @@ fn build_menubar_menu_div(
             }
 
             let mut row = row_content
+                .class("cn-menu-item")
                 .class("cn-menubar-item")
+                .attr_when("disabled", "", item_disabled)
                 .w_full()
                 .h_fit()
                 // Fallback padding MUST equal the `.cn-menubar-item` CSS
@@ -926,8 +844,7 @@ fn build_menubar_menu_div(
                 // the fallback differs, that row's text visibly shifts
                 // against its siblings.
                 .py(2.0)
-                .px(3.0)
-                .cursor(cursor);
+                .px(3.0);
             if has_submenu {
                 // CSS hook for the panel's `:has()` flicker
                 // suppression rule. See cn_styles.rs's

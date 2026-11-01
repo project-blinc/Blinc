@@ -422,7 +422,6 @@ fn build_hover_card_overlay(
             div()
                 .class("cn-hover-card-content")
                 .flex_col()
-                .lock_corner_shape()
                 .p_px(padding)
                 .min_w(200.0)
                 .max_w(320.0)

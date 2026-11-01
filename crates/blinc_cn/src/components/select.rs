@@ -181,7 +181,7 @@ impl Select {
 
         // The value shown, as a one-row list keyed by the value. Its text
         // inherits the trigger's colour, which `[data-placeholder]` and
-        // `:disabled` rules dim, as ashui's select does.
+        // `:disabled` rules dim.
         let value = config.value;
         let shown = computed(move |g: &ReactiveGraph| vec![g.get(value).unwrap_or_default()]);
         let placeholder_shown = {
@@ -552,7 +552,6 @@ fn build_dropdown_content(
         // Fill, border, radius and shadow are `.cn-select-content` rules; the
         // radius stays here too because the panel clips its rows to it.
         .rounded(radius)
-        .lock_corner_shape()
         .overflow_clip()
         .h_fit()
         // Absolutely positioned below the trigger, rendered in foreground pass

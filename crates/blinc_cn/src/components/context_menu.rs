@@ -330,11 +330,6 @@ impl ContextMenuBuilder {
     /// Show the context menu
     pub fn show(self) -> OverlayHandle {
         let theme = ThemeState::get();
-        let bg = theme.color(ColorToken::Surface);
-        let border = theme.color(ColorToken::Border);
-        let text_color = theme.color(ColorToken::TextPrimary);
-        let text_secondary = theme.color(ColorToken::TextSecondary);
-        let text_tertiary = theme.color(ColorToken::TextTertiary);
         let radius = theme.radius(RadiusToken::Md);
 
         let font_size = 14.0;
@@ -402,11 +397,6 @@ impl ContextMenuBuilder {
                     &menu_id_for_content,
                     &click_outside_key_for_content,
                     &id_chain_for_content,
-                    bg,
-                    border,
-                    text_color,
-                    text_secondary,
-                    text_tertiary,
                     radius,
                     font_size,
                     padding,
@@ -551,11 +541,6 @@ fn spawn_submenu(
     parent_submenu_state: State<Option<u64>>,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
-    let bg = theme.color(ColorToken::Surface);
-    let border = theme.color(ColorToken::Border);
-    let text_color = theme.color(ColorToken::TextPrimary);
-    let text_secondary = theme.color(ColorToken::TextSecondary);
-    let text_tertiary = theme.color(ColorToken::TextTertiary);
     let radius = theme.radius(RadiusToken::Md);
     let font_size = 14.0;
     let padding = 12.0;
@@ -612,11 +597,6 @@ fn spawn_submenu(
                 &submenu_id_for_content,
                 &root_click_outside_key_for_content,
                 &id_chain_for_content,
-                bg,
-                border,
-                text_color,
-                text_secondary,
-                text_tertiary,
                 radius,
                 font_size,
                 padding,
@@ -649,11 +629,6 @@ fn build_menu_content(
     self_id: &str,
     root_click_outside_key: &str,
     id_chain: &State<Vec<String>>,
-    bg: Color,
-    border: Color,
-    text_color: Color,
-    text_secondary: Color,
-    text_tertiary: Color,
     radius: f32,
     font_size: f32,
     padding: f32,
@@ -663,35 +638,23 @@ fn build_menu_content(
     let child_submenu_state: State<Option<u64>> = BlincContextState::get()
         .use_state_keyed(&format!("ctxmenu_child_sub_{}", self_id), || None);
 
-    let mut menu = div()
+    let mut menu = super::menu::panel(radius)
         .class("cn-context-menu")
         .id(self_id)
-        .flex_col()
         // `min_w(width).w_fit()` so the menu honours the configured
         // minimum width but grows to fit longer labels instead of
         // forcing them to wrap. Fixed `.w(width)` (the prior code)
         // clipped labels like "Auto-layout: force-directed" mid-
         // word once the text + icon + shortcut exceeded `width`.
         .min_w(width)
-        .w_fit()
-        .bg(bg)
-        .border(1.0, border)
-        .rounded(radius)
-        .lock_corner_shape()
-        .shadow_lg()
-        .overflow_clip()
-        .h_fit();
+        .w_fit();
     // (Enter animation lives on the base `.cn-context-menu` class
     // again — suppressed via CSS `:has()` rule when a submenu
     // trigger is hovered. See cn_styles.rs.)
 
     for (idx, item) in items.iter().enumerate() {
         if item.is_separator {
-            // See dropdown_menu.rs for rationale — `hr()` lets the
-            // panel's --surface-elevated CSS bg show through the
-            // separator's padding instead of being covered by pure
-            // white `Surface`.
-            menu = menu.child(hr());
+            menu = menu.child(super::menu::separator());
         } else {
             let item_label = item.label.clone();
             let item_shortcut = item.shortcut.clone();
@@ -707,69 +670,21 @@ fn build_menu_content(
             let id_chain_for_open = id_chain.clone();
             let root_click_outside_key_for_open = root_click_outside_key.to_string();
 
-            let item_text_color = if item_disabled {
-                text_tertiary
-            } else {
-                text_color
-            };
-
-            let shortcut_color = text_secondary;
-
-            // Plain div, NO Stateful wrapper. Same reason as menubar /
-            // dropdown_menu: Stateful subtree rebuilds inside an overlay
-            // content closure contaminate base_styles with hover state and
-            // jank the motion FSM / child z-ordering. CSS
-            // `.cn-context-menu-item:hover` handles the hover background.
-            let mut left_side = div()
-                .w_fit()
-                .h_fit()
-                .flex_row()
-                .items_center()
-                .gap(padding / 4.0);
-
-            if let Some(ref icon_svg) = item_icon {
-                left_side = left_side.child(svg(icon_svg).size(16.0, 16.0).color(item_text_color));
-            }
-
-            left_side = left_side
-                .child(
-                    text(&item_label)
-                        .size(font_size)
-                        .color(item_text_color)
-                        // `no_wrap` so the menu container grows
-                        // horizontally to fit long labels instead of
-                        // wrapping the text into multiple lines (which
-                        // looked clipped + uneven, e.g. the "Auto-
-                        // layout: force-directed" item dropping the
-                        // final word).
-                        .no_wrap()
-                        .no_cursor()
-                        .pointer_events_none(),
-                )
-                .pointer_events_none();
-
-            let right_side: Option<Div> = if let Some(ref shortcut) = item_shortcut {
-                Some(
-                    div().child(
-                        text(shortcut)
-                            .size(font_size - 2.0)
-                            .color(shortcut_color)
-                            .monospace()
-                            .no_cursor(),
-                    ),
-                )
-            } else if has_submenu {
-                let chevron_right = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>"#;
-                Some(
-                    div()
-                        .child(svg(chevron_right).size(12.0, 12.0).color(text_tertiary))
-                        .pointer_events_none(),
-                )
-            } else {
-                None
-            };
+            // The row is a plain div with no Stateful wrapper: a rebuild
+            // inside an overlay's content would freeze its hover look.
+            // Labels don't wrap, so the panel widens to its longest row.
+            let (left_side, right_side) = super::menu::item_parts(
+                item_icon.as_deref(),
+                &item_label,
+                item_shortcut.as_deref(),
+                has_submenu,
+                font_size,
+                padding / 4.0,
+                false,
+            );
 
             let mut row_content = div()
+                .class("cn-menu-item")
                 .class("cn-context-menu-item")
                 .w_full()
                 .h_fit()
@@ -790,11 +705,7 @@ fn build_menu_content(
                 row_content = row_content.class("cn-context-menu-item--has-submenu");
             }
             row_content = row_content
-                .cursor(if item_disabled {
-                    CursorStyle::NotAllowed
-                } else {
-                    CursorStyle::Pointer
-                })
+                .attr_when("disabled", "", item_disabled)
                 .flex_row()
                 .items_center()
                 // Minimum horizontal gap between the label and the
