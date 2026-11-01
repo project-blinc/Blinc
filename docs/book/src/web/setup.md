@@ -51,9 +51,9 @@ wasm-opt = false
 # the browser. The target gate keeps `cargo build --workspace` from
 # trying to link an empty cdylib on macOS / Linux.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-blinc_app = { version = "0.4", default-features = false, features = ["web"] }
-blinc_layout = { version = "0.4" }
-blinc_core = { version = "0.4" }
+blinc_app = { version = "0.6", default-features = false, features = ["web"] }
+blinc_layout = { version = "0.6" }
+blinc_core = { version = "0.6" }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = ["console"] }

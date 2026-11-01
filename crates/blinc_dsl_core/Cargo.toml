@@ -2,7 +2,8 @@
 # One test binary: see tests/main.rs.
 autotests = false
 name = "blinc_dsl_core"
-version.workspace = true
+# Outside the 0.6.0 release; versioned on its own.
+version = "0.5.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -51,18 +52,18 @@ blinc_runtime = { path = "../blinc_runtime", version = "0.5.1", default-features
 # uses it directly in the value-returning view externs
 # (`$Blinc$Text$view`, `$Blinc$Div$view`, …) to construct real
 # widgets that flow back through the JIT as widget handles.
-blinc_layout = { path = "../blinc_layout", version = "0.5.1" }
+blinc_layout = { path = "../blinc_layout", version = "0.6.0" }
 
 # `blinc_core` carries the canonical `Brush` / `Color` /
 # `CornerRadius` types `RenderPropsOverlay` overlays on top of a
 # widget's base `RenderProps`. `blinc_layout` doesn't re-export
 # them publicly, so we depend on `blinc_core` directly.
-blinc_core = { path = "../blinc_core", version = "0.5.1" }
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
 
 # Several ready-made layout widgets pull token colors from the
 # global theme during construction. The DSL thunks lazily initialize
 # this for headless/test hosts that do not have an app loop yet.
-blinc_theme = { path = "../blinc_theme", version = "0.5.1" }
+blinc_theme = { path = "../blinc_theme", version = "0.6.0" }
 
 # `blinc_dsl_macro` carries the `#[extern_widget]` attribute macro
 # that desugars Rust widget definitions into the extern thunk +

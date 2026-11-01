@@ -17,17 +17,17 @@ headless = ["png", "dep:blinc_app", "dep:blinc_layout", "dep:blinc_theme", "dep:
 
 [dependencies]
 png = { version = "0.17", optional = true }
-blinc_core = { path = "../blinc_core", version = "0.5.1" }
-blinc_app = { path = "../blinc_app", version = "0.5.1", optional = true }
-blinc_layout = { path = "../blinc_layout", version = "0.5.1", optional = true, features = ["recorder"] }
-blinc_theme = { path = "../blinc_theme", version = "0.5.1", optional = true }
-blinc_animation = { path = "../blinc_animation", version = "0.5.1", optional = true }
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
+blinc_app = { path = "../blinc_app", version = "0.6.0", optional = true }
+blinc_layout = { path = "../blinc_layout", version = "0.6.0", optional = true, features = ["recorder"] }
+blinc_theme = { path = "../blinc_theme", version = "0.6.0", optional = true }
+blinc_animation = { path = "../blinc_animation", version = "0.6.0", optional = true }
 wgpu = { workspace = true, optional = true }
 parking_lot = "0.12"
 serde = { version = "1.0", features = ["derive"] }
 tracing.workspace = true
 
 [dev-dependencies]
-blinc_cn = { path = "../blinc_cn", version = "0.5.1" }
-blinc_theme = { path = "../blinc_theme", version = "0.5.1" }
-blinc_layout = { path = "../blinc_layout", version = "0.5.1", features = ["recorder"] }
+blinc_cn = { path = "../blinc_cn", version = "0.6.0" }
+blinc_theme = { path = "../blinc_theme", version = "0.6.0" }
+blinc_layout = { path = "../blinc_layout", version = "0.6.0", features = ["recorder"] }

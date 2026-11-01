@@ -17,13 +17,13 @@ Enable in `Cargo.toml`:
 
 ```toml
 [dependencies]
-blinc_app = { version = "0.5", features = ["dialogs", "tray", "notifications", "hotkeys"] }
+blinc_app = { version = "0.6", features = ["dialogs", "tray", "notifications", "hotkeys"] }
 ```
 
 Or use the umbrella `windowed-full` to enable all four:
 
 ```toml
-blinc_app = { version = "0.5", features = ["windowed-full"] }
+blinc_app = { version = "0.6", features = ["windowed-full"] }
 ```
 
 Without the corresponding feature, the matching module's APIs compile to no-op stubs — calls return `None` / silently do nothing — so you can prototype against them and turn the flag on later.

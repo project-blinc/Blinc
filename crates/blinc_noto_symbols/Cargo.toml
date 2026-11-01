@@ -17,7 +17,7 @@ include = ["src/**", "assets/**", "README.md"]
 [dependencies]
 # Target crate — the whole point of this plugin is to register a
 # font face with blinc_text's global registry.
-blinc_text = { path = "../blinc_text", version = "0.5.1" }
+blinc_text = { path = "../blinc_text", version = "0.6.0" }
 
 # Pulled in so we can log a one-line debug message when the
 # subset is registered. Version-matched to what blinc_text uses.

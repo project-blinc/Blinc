@@ -7,7 +7,7 @@ the optional Segoe UI Emoji pack — with **zero source changes**.
 
 ```toml
 [dependencies]
-blinc_noto_emoji = "0.5"
+blinc_noto_emoji = "0.6"
 ```
 
 That's the whole integration. No `use blinc_noto_emoji;` in your
@@ -86,7 +86,7 @@ targets, use a cfg-gated dependency:
 
 ```toml
 [target.'cfg(not(any(target_os = "macos", target_os = "ios")))'.dependencies]
-blinc_noto_emoji = "0.5"
+blinc_noto_emoji = "0.6"
 ```
 
 ## `blinc_<font>_emoji` naming convention

@@ -23,9 +23,9 @@ gles = []  # OpenGL ES fallback for older devices
 
 [dependencies]
 # Core dependencies (always available)
-blinc_core = { path = "../../crates/blinc_core", version = "0.5.1" }
-blinc_animation = { path = "../../crates/blinc_animation", version = "0.5.1" }
-blinc_platform = { path = "../../crates/blinc_platform", version = "0.5.1" }
+blinc_core = { path = "../../crates/blinc_core", version = "0.6.0" }
+blinc_animation = { path = "../../crates/blinc_animation", version = "0.6.0" }
+blinc_platform = { path = "../../crates/blinc_platform", version = "0.6.0" }
 
 # Logging
 tracing.workspace = true
@@ -37,4 +37,4 @@ tracing.workspace = true
 
 # GPU (Vulkan preferred, GLES fallback)
 # [target.'cfg(target_os = "ohos")'.dependencies]
-# blinc_gpu = { path = "../../crates/blinc_gpu", version = "0.5.1", default-features = false, features = ["vulkan"] }
+# blinc_gpu = { path = "../../crates/blinc_gpu", version = "0.6.0", default-features = false, features = ["vulkan"] }

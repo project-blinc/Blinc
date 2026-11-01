@@ -12,7 +12,7 @@ Add `blinc_app` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-blinc_app = { version = "0.1", features = ["windowed"] }
+blinc_app = { version = "0.6", features = ["windowed"] }
 ```
 
 The `windowed` feature enables desktop windowing support. For headless rendering (e.g., server-side), omit this feature.

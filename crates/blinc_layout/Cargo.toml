@@ -39,10 +39,10 @@ clipboard_image = ["arboard/image-data"]
 # width is an estimate. `blinc_app` turns it on for you.
 text_measurer = ["dep:blinc_text"]
 [dependencies]
-blinc_core = { path = "../blinc_core", version = "0.5.1" }
-blinc_css = { path = "../blinc_css", version = "0.5.1" }
-blinc_animation = { path = "../blinc_animation", version = "0.5.1" }
-blinc_theme = { path = "../blinc_theme", version = "0.5.1" }
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
+blinc_css = { path = "../blinc_css", version = "0.6.0" }
+blinc_animation = { path = "../blinc_animation", version = "0.6.0" }
+blinc_theme = { path = "../blinc_theme", version = "0.6.0" }
 
 # Layout
 taffy.workspace = true
@@ -66,13 +66,13 @@ regex.workspace = true
 # feature so silent UIs don't drag in the audio decoder stack. Apps
 # that want media widgets enable `blinc_layout/media` (or just opt in
 # transitively through their own dep on `blinc_media`).
-blinc_media = { path = "../blinc_media", version = "0.5.1", optional = true }
+blinc_media = { path = "../blinc_media", version = "0.6.0", optional = true }
 
 # Font-backed text measurement, behind the `text_measurer` feature.
 # blinc_text depends only on blinc_core, so this direction is
 # cycle-free; putting the measurer in blinc_text instead would have
 # made it depend on this crate and everything this crate pulls.
-blinc_text = { path = "../blinc_text", version = "0.5.1", optional = true }
+blinc_text = { path = "../blinc_text", version = "0.6.0", optional = true }
 
 # Markdown parsing
 pulldown-cmark = "0.10"

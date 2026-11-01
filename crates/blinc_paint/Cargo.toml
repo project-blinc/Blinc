@@ -18,7 +18,7 @@ default = []
 
 [dependencies]
 # Core types (unified with blinc_core)
-blinc_core = { path = "../blinc_core", version = "0.5.1" }
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
 
 # GPU types (shared with blinc_gpu)
 bytemuck.workspace = true

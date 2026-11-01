@@ -13,7 +13,7 @@ keywords = ["ui", "gui", "text", "font", "blinc"]
 categories = ["gui", "text-processing"]
 
 [dependencies]
-blinc_core = { path = "../blinc_core", version = "0.5.1" }
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
 
 # Font parsing
 ttf-parser = { workspace = true }

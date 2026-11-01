@@ -20,7 +20,7 @@ default = []
 svg_raster_images = ["resvg/raster-images"]
 
 [dependencies]
-blinc_core = { path = "../blinc_core", version = "0.5.1" }
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
 usvg = "0.44"
 # `default-features = false` drops the `raster-images` feature group
 # (gif + image-webp + zune-jpeg). Re-enable with this crate's

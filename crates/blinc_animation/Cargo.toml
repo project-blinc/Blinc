@@ -18,7 +18,7 @@ default = []
 zrtl-plugin = []  # Enable ZRTL plugin exports (for when Zyntax Grammar2 is ready)
 
 [dependencies]
-blinc_core = { path = "../blinc_core", version = "0.5.1" }
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
 
 # Data structures
 slotmap.workspace = true

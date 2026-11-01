@@ -34,7 +34,7 @@ out of default builds; they only show up when the feature is on.
 
    ```toml
    [dependencies]
-   blinc_app = { version = "0.5", features = ["windowed", "hot-reload"] }
+   blinc_app = { version = "0.6", features = ["windowed", "hot-reload"] }
    ```
 
 2. Install the Dioxus CLI (one-time):

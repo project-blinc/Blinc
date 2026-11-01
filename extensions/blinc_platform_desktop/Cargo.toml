@@ -16,7 +16,7 @@ default = []
 
 [dependencies]
 # Platform abstraction
-blinc_platform = { path = "../../crates/blinc_platform", version = "0.5.1" }
+blinc_platform = { path = "../../crates/blinc_platform", version = "0.6.0" }
 
 # Windowing
 winit.workspace = true

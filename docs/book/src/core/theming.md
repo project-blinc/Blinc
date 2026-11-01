@@ -432,7 +432,7 @@ Add the `watcher` feature to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-blinc_theme = { version = "0.1", features = ["watcher"] }
+blinc_theme = { version = "0.6", features = ["watcher"] }
 ```
 
 ### Basic Usage

@@ -23,12 +23,12 @@ interactive = []
 
 [dependencies]
 # Core Blinc crates
-blinc_core = { path = "../blinc_core", version = "0.5.1" }
-blinc_gpu = { path = "../blinc_gpu", version = "0.5.1" }
-blinc_layout = { path = "../blinc_layout", version = "0.5.1" }
-blinc_paint = { path = "../blinc_paint", version = "0.5.1" }
-blinc_text = { path = "../blinc_text", version = "0.5.1" }
-blinc_svg = { path = "../blinc_svg", version = "0.5.1" }
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
+blinc_gpu = { path = "../blinc_gpu", version = "0.6.0" }
+blinc_layout = { path = "../blinc_layout", version = "0.6.0" }
+blinc_paint = { path = "../blinc_paint", version = "0.6.0" }
+blinc_text = { path = "../blinc_text", version = "0.6.0" }
+blinc_svg = { path = "../blinc_svg", version = "0.6.0" }
 
 # GPU and windowing
 wgpu.workspace = true

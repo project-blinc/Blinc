@@ -13,8 +13,8 @@ name = "blinc"
 path = "src/main.rs"
 
 [dependencies]
-blinc_core = { path = "../blinc_core", version = "0.5.1" }
-blinc_animation = { path = "../blinc_animation", version = "0.5.1" }
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
+blinc_animation = { path = "../blinc_animation", version = "0.6.0" }
 
 # CLI
 clap.workspace = true

@@ -83,7 +83,7 @@ exclude = [
 # Build for iOS: cargo build --target aarch64-apple-ios -p blinc_platform_ios
 
 [workspace.package]
-version = "0.5.1"
+version = "0.6.0"
 edition = "2024"
 license = "Apache-2.0"
 repository = "https://github.com/project-blinc/Blinc"

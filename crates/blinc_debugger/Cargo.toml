@@ -15,14 +15,14 @@ path = "src/main.rs"
 
 [dependencies]
 # Blinc crates
-blinc_app = { path = "../blinc_app", version = "0.5.1" }
-blinc_layout = { path = "../blinc_layout", version = "0.5.1" }
-blinc_theme = { path = "../blinc_theme", version = "0.5.1" }
-blinc_cn = { path = "../blinc_cn", version = "0.5.1" }
-blinc_icons = { path = "../blinc_icons", version = "0.5.1" }
-blinc_recorder = { path = "../blinc_recorder", version = "0.5.1" }
-blinc_animation = { path = "../blinc_animation", version = "0.5.1" }
-blinc_core = { path = "../blinc_core", version = "0.5.1" }
+blinc_app = { path = "../blinc_app", version = "0.6.0" }
+blinc_layout = { path = "../blinc_layout", version = "0.6.0" }
+blinc_theme = { path = "../blinc_theme", version = "0.6.0" }
+blinc_cn = { path = "../blinc_cn", version = "0.6.0" }
+blinc_icons = { path = "../blinc_icons", version = "0.6.0" }
+blinc_recorder = { path = "../blinc_recorder", version = "0.6.0" }
+blinc_animation = { path = "../blinc_animation", version = "0.6.0" }
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }

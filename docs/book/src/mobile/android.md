@@ -51,8 +51,8 @@ name = "my_app"
 crate-type = ["cdylib", "staticlib"]
 
 [target.'cfg(target_os = "android")'.dependencies]
-blinc_app = { version = "0.5", features = ["android"] }
-blinc_platform_android = "0.5"
+blinc_app = { version = "0.6", features = ["android"] }
+blinc_platform_android = "0.6"
 android-activity = { version = "0.6", features = ["native-activity"] }
 log = "0.4"
 android_logger = "0.14"

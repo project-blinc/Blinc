@@ -1,7 +1,8 @@
 [package]
 name = "blinc_dsl_macro"
 description = "Proc-macros for the Blinc DSL — `#[extern_widget]` Rust→DSL widget exports"
-version.workspace = true
+# Outside the 0.6.0 release; versioned on its own.
+version = "0.5.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

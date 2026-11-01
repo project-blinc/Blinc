@@ -9,9 +9,9 @@ documentation = "https://docs.rs/blinc_media"
 rust-version.workspace = true
 
 [dependencies]
-blinc_core = { path = "../blinc_core", version = "0.5.1" }
-blinc_platform = { path = "../blinc_platform", version = "0.5.1" }
-blinc_animation = { path = "../blinc_animation", version = "0.5.1" }
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
+blinc_platform = { path = "../blinc_platform", version = "0.6.0" }
+blinc_animation = { path = "../blinc_animation", version = "0.6.0" }
 tracing.workspace = true
 
 # Audio playback + capture (desktop) — Vorbis, WAV, FLAC.

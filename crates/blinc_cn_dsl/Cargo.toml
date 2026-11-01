@@ -3,7 +3,8 @@
 autotests = false
 name = "blinc_cn_dsl"
 description = "DSL bindings for the blinc_cn widget pack — exposes cn.* widgets to the Blinc DSL via #[extern_widget]"
-version.workspace = true
+# Outside the 0.6.0 release; versioned on its own.
+version = "0.5.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -16,7 +17,7 @@ crate-type = ["lib"]
 [dev-dependencies]
 # Animated widgets (Spinner, Progress) call `get_scheduler()` at build
 # time; render tests install a global scheduler the way an app would.
-blinc_animation = { path = "../blinc_animation", version = "0.5.1" }
+blinc_animation = { path = "../blinc_animation", version = "0.6.0" }
 # `tracing_subscriber::fmt::try_init` for the integration tests.
 tracing-subscriber.workspace = true
 # Renderer surface + ZyntaxValue used to materialise widgets through
@@ -27,7 +28,7 @@ zyntax_embed = { git = "https://github.com/darmie/zyntax", rev = "262a7d1ed45efa
 # `blinc_dsl_core` uses for counter_dsl / reactive_dsl.
 blinc_app = { path = "../blinc_app", default-features = false, features = ["windowed"] }
 # `ColorScheme` enum + `ThemeBundle` for `run_with_theme`.
-blinc_theme = { path = "../blinc_theme", version = "0.5.1" }
+blinc_theme = { path = "../blinc_theme", version = "0.6.0" }
 
 [[example]]
 name = "cn_dsl_demo"
@@ -50,22 +51,22 @@ blinc_dsl_core = { path = "../blinc_dsl_core", version = "0.5.1" }
 
 # Widget catalog being exposed. Each `cn.<Name>` wrapper in this crate
 # delegates construction to a `blinc_cn::<name>` builder.
-blinc_cn = { path = "../blinc_cn", version = "0.5.1" }
+blinc_cn = { path = "../blinc_cn", version = "0.6.0" }
 
 # Icon names as data: a `.blinc` source names an icon in a string prop,
 # so the lookup cannot be a const reference and needs the registry.
-blinc_icons = { path = "../blinc_icons", version = "0.5.1", features = [
+blinc_icons = { path = "../blinc_icons", version = "0.6.0", features = [
     "registry",
 ] }
 
 # `ElementBuilder` is the trait every widget returns; the wrappers
 # need it in scope so the macro can box the build result.
-blinc_layout = { path = "../blinc_layout", version = "0.5.1" }
+blinc_layout = { path = "../blinc_layout", version = "0.6.0" }
 
 # `Color::from_hex` for the shared string-hex colour parser used by
 # every widget exposing a colour prop. Also `blinc_core::reactive::*`
 # for the `Reactive<T>` Signal → Computed bridge in widget wrappers.
-blinc_core = { path = "../blinc_core", version = "0.5.1" }
+blinc_core = { path = "../blinc_core", version = "0.6.0" }
 
 # Logging — unknown-variant / unknown-size diagnostics surface as
 # `tracing::warn!` so DSL typos show up without breaking the build.
