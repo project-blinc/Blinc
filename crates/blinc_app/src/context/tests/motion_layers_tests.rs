@@ -550,3 +550,102 @@ fn static_motion_group_opacity_endpoints_keep_repaint_records() {
         }
     }
 }
+
+#[test]
+#[ignore] // Requires GPU
+fn promoted_rotation_beside_a_cross_stream_group_keeps_the_fast_path() {
+    use blinc_animation::{AnimatedValue, AnimationScheduler};
+    blinc_theme::ThemeState::init(
+        blinc_theme::HybridTheme::bundle(),
+        blinc_theme::ColorScheme::Light,
+    );
+    let mut app = app();
+    let scheduler = Arc::new(Mutex::new(AnimationScheduler::new()));
+    let angle = Arc::new(Mutex::new(AnimatedValue::with_default(
+        scheduler.lock().unwrap().handle(),
+        0.0,
+    )));
+    angle.lock().unwrap().set_target(360.0);
+    // An empty overlay root is a portal group, so the dynamic batch carries
+    // cross-stream groups as an app with overlays does; the rotating bar is
+    // promoted to its own layer. The marker is restyled without invalidating
+    // the cache, so it shows whether a frame walked the tree.
+    let ui = div()
+        .w(160.0)
+        .h(120.0)
+        .bg(Color::BLUE)
+        .child(div().absolute().overlay_root())
+        .child(
+            div().absolute().left(80.0).top(20.0).w(60.0).h(60.0).child(
+                div()
+                    .w(60.0)
+                    .h(60.0)
+                    .child(div().w(60.0).h(12.0).bg(Color::RED))
+                    .motion()
+                    .rotate(angle.clone()),
+            ),
+        )
+        .child(
+            div()
+                .id("marker")
+                .absolute()
+                .left(150.0)
+                .top(110.0)
+                .w(10.0)
+                .h(10.0)
+                .bg(Color::YELLOW),
+        );
+    let mut tree = RenderTree::from_element(&ui);
+    tree.compute_layout(160.0, 120.0);
+    tree.compute_animation_status();
+    let marker = tree.query_by_id("marker").unwrap();
+    let state = RenderState::new(scheduler.clone());
+    let c = app.context();
+    fn draw(
+        c: &mut RenderContext,
+        tree: &RenderTree,
+        state: &RenderState,
+        fast: bool,
+    ) -> image::RgbaImage {
+        let (texture, view) = static_motion_group_surface(c);
+        c.render_tree_with_motion_opt(tree, state, 160, 120, &view, Some(&texture), fast)
+            .unwrap();
+        read_rendered_pixels(c.device(), c.queue(), &texture, 160, 120)
+    }
+    let yellow = |page: &image::RgbaImage| {
+        let p = page.get_pixel(155, 115).0;
+        p[0] > 200 && p[1] > 200 && p[2] < 60
+    };
+    let start = draw(c, &tree, &state, false);
+    assert!(yellow(&start));
+    assert!(
+        [c.cached_bg_batch.as_ref(), c.cached_dynamic_batch.as_ref()]
+            .into_iter()
+            .flatten()
+            .any(|b| b.has_cross_stream_groups())
+    );
+    assert!(tree.motion_output_promoted());
+    assert!(!c.motion_subtree_textures.is_empty());
+
+    tree.update_render_props(marker, |p| p.background = Some(Color::BLACK.into()));
+    angle.lock().unwrap().set_immediate(90.0);
+    angle.lock().unwrap().set_target(360.0);
+    let fast = draw(c, &tree, &state, true);
+    assert!(yellow(&fast), "a fast frame reuses the cache");
+    let full = draw(c, &tree, &state, false);
+    assert!(!yellow(&full), "a requested full paint walks the tree");
+
+    let differs = |a: &image::RgbaImage, b: &image::RgbaImage| {
+        a.enumerate_pixels()
+            .zip(b.pixels())
+            .filter(|((x, y, _), _)| *x < 150 || *y < 110)
+            .filter(|((_, _, p), q)| p.0.iter().zip(q.0).any(|(m, n)| m.abs_diff(n) > 2))
+            .count()
+    };
+    assert!(differs(&start, &fast) > 0, "the fast frame shows the turn");
+    assert_eq!(
+        differs(&fast, &full),
+        0,
+        "the fast frame's turn matches a full paint"
+    );
+}

@@ -454,13 +454,16 @@ impl RenderContext {
                         .cached_bg_batch
                         .as_ref()
                         .is_some_and(|b| b.has_cross_stream_groups()));
-            let patched =
-                if (bindings_animating || binding_repaint) && self.cached_dynamic_batch.is_some() {
-                    let scale_factor = tree.scale_factor();
-                    self.apply_binding_deltas(tree, scale_factor)
-                } else {
-                    true
-                };
+            // Promoted layers carry all moving output, so the cache presents as is.
+            let patched = if (bindings_animating || binding_repaint)
+                && self.cached_dynamic_batch.is_some()
+                && !tree.motion_output_promoted()
+            {
+                let scale_factor = tree.scale_factor();
+                self.apply_binding_deltas(tree, scale_factor)
+            } else {
+                true
+            };
             // Handle every rejected patch, including when partial-damage replay is
             // disabled.
             if !patched {

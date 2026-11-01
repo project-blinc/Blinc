@@ -9,6 +9,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - An element that keeps a pointer state across a restyle now eases to its new look. Unchecking a hovered switch changes the rule that applies from `:checked:hover` to `:hover`; that was applied without a transition, so the fill snapped.
 
 ### Added
+- `RenderTree::motion_output_promoted` reports whether the last full paint drew every motion-bound node into a promoted composite layer and recorded no composite binding.
 - Escape clears a search `TextInput` that has text, as on the web; an empty one, and every other field, still loses focus on Escape.
 - `.class::placeholder { color }` and `.class::selection { background }` colour the placeholder and the selection of a `TextInput` or `TextArea`, as `#id::placeholder` already did; an id rule wins over a class rule. `Stylesheet::get_class_pseudo_element` reads them.
 - `@layer name { ... }` in stylesheets: its class rules sit below every unlayered rule regardless of specificity. `CN_STYLES` is wrapped in one, so an app stylesheet themes cn components whichever was added first.

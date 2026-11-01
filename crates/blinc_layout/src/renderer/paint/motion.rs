@@ -90,6 +90,7 @@ impl RenderTree {
         // reads this between full paints to patch the cached
         // primitive buffer in place.
         self.composite_bindings.borrow_mut().clear();
+        self.painted_unpromoted_binding.set(false);
         // Phase 4b: per-CSS-animated-node paint metadata. Same
         // lifecycle as composite_bindings — cleared every full
         // paint, repopulated below for every node whose
@@ -2046,6 +2047,12 @@ impl RenderTree {
         // gets clobbered by Glass / Foreground's empty range when
         // `insert` overwrites — the fast path then iterates zero
         // primitives, patches nothing, and the bar appears frozen.
+        if motion_bindings_ref.is_some()
+            && effective_layer == target_layer
+            && !ctx.bg_batch_is_composite()
+        {
+            self.painted_unpromoted_binding.set(true);
+        }
         if let Some(start) = composite_bg_start.filter(|_| effective_layer == target_layer) {
             let end = ctx.bg_primitive_count();
             // Retained foreground bindings have no background range, but their

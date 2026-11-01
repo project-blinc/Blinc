@@ -776,6 +776,10 @@ pub struct RenderTree {
     /// stays alive but its entries are ignored — the next full paint
     /// clears and repopulates.
     composite_bindings: RefCell<HashMap<LayoutNodeId, CompositeBindingMeta>>,
+    /// Set when the last full paint drew a motion-bound node outside a
+    /// promoted composite layer. Such a node's output lives in the cached
+    /// batches; a promoted layer's is blitted at its current transform.
+    painted_unpromoted_binding: Cell<bool>,
     /// Per-CSS-animated-node paint state. Populated by the walker
     /// for every node whose `current_animation_status` is
     /// `Animating(AnimatedKind::Css)`; consumed by Phase 4's
@@ -1110,6 +1114,7 @@ impl RenderTree {
             painted_node_ids: RefCell::new(HashSet::new()),
             motion_bindings: HashMap::new(),
             composite_bindings: RefCell::new(HashMap::new()),
+            painted_unpromoted_binding: Cell::new(false),
             css_anim_paint_records: RefCell::new(HashMap::new()),
             canvas_paint_records: RefCell::new(HashMap::new()),
             overlay_canvas_paint_records: RefCell::new(HashMap::new()),
@@ -1610,6 +1615,16 @@ impl RenderTree {
         &self,
     ) -> std::cell::Ref<'_, HashMap<LayoutNodeId, CompositeBindingMeta>> {
         self.composite_bindings.borrow()
+    }
+
+    /// Whether the last full paint drew every motion-bound node into a
+    /// promoted composite layer and recorded no composite binding. Moving
+    /// bindings then leave the cached batches unchanged: each layer is
+    /// blitted at its current transform.
+    pub fn motion_output_promoted(&self) -> bool {
+        !self.motion_bindings.is_empty()
+            && !self.painted_unpromoted_binding.get()
+            && self.composite_bindings.borrow().is_empty()
     }
 
     /// Mutable accessor for the composite-bindings map. Used by the
