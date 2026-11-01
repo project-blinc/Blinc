@@ -47,9 +47,6 @@ impl CnSpinner {
             }
         };
         let mut b = blinc_cn::spinner().size(size);
-        if self.duration_ms > 0 {
-            b = b.duration_ms(self.duration_ms as u32);
-        }
         if let Some(c) = crate::color::parse_color_prop("cn.Spinner", "color", &self.color) {
             b = b.color(c);
         }

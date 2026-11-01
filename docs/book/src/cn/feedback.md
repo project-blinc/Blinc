@@ -164,9 +164,20 @@ spinner()
 ### Spinner Sizes
 
 ```rust
-spinner().size(SpinnerSize::Sm)   // Small
-spinner().size(SpinnerSize::Md)   // Medium (default)
-spinner().size(SpinnerSize::Lg)   // Large
+spinner().size(SpinnerSize::Small)    // 16px
+spinner().size(SpinnerSize::Medium)   // 24px, the default
+spinner().size(SpinnerSize::Large)    // 32px
+```
+
+### Styling
+
+A spinner is a faint track ring (`.cn-spinner__track`) with a half-circle arc
+(`.cn-spinner__arc`) turning once a second by the `cn-spinner-turn`
+keyframes. `.color(..)` and `.track_color(..)` set the colours on one
+spinner; rules set them, and the speed, for any you give a class:
+
+```css
+.slow-spinner .cn-spinner__arc { animation-duration: 2000ms; }
 ```
 
 ### In Button
@@ -183,6 +194,14 @@ Placeholder for loading content:
 
 ```rust
 skeleton().w(200.0).h(20.0)
+skeleton_circle(48.0)
+```
+
+It pulses by the `cn-skeleton-pulse` keyframes on `.cn-skeleton`;
+`.cn-skeleton--circle` rounds the circle. Restyle or slow it with a rule:
+
+```css
+.my-skeleton { animation-duration: 3000ms; }
 ```
 
 ### Card Skeleton

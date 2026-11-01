@@ -1,8 +1,13 @@
 //! Spinner component for loading indicators
 //!
-//! A circular loading indicator that renders as a static track ring with a
-//! motion-bound, polygon-masked 180° arc rotating on top. The timeline is
-//! constructed internally — callers just write `cn::spinner()`.
+//! A circular loading indicator: a faint track ring with a half-circle arc
+//! turning on top. The arc's colour and its turn are `.cn-spinner__arc` rules
+//! (`@keyframes cn-spinner-turn`); the track's colour is `.cn-spinner__track`.
+//! A different speed is a rule of your own:
+//!
+//! ```css
+//! .slow-spinner .cn-spinner__arc { animation-duration: 2000ms; }
+//! ```
 //!
 //! # Example
 //!
@@ -17,19 +22,17 @@
 //! cn::spinner()
 //!     .size(SpinnerSize::Large)
 //!     .color(Color::BLUE)
-//!     .duration_ms(2000)
+//!     .class("slow-spinner")
 //! ```
 
-use blinc_animation::{AnimatedTimeline, SharedAnimatedTimeline, get_scheduler};
 use blinc_core::{ClipLength, ClipPath, Color};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::{Div, ElementTypeId};
 use blinc_layout::element::RenderProps;
 use blinc_layout::prelude::*;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
-use blinc_theme::{ColorToken, ThemeState};
 use std::cell::{OnceCell, RefCell};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use taffy::Style;
 
 /// Spinner size variants
@@ -64,50 +67,15 @@ impl SpinnerSize {
 
 /// Internal configuration accumulated by `SpinnerBuilder` before the
 /// inner element is materialised on first `ElementBuilder` access.
+#[derive(Clone, Default)]
 struct SpinnerConfig {
     size: SpinnerSize,
     color: Option<blinc_layout::binding::Reactive<Color>>,
-    /// Faint full-circle ring drawn behind the rotating arc. Defaults
-    /// to `ColorToken::Border` when `None`. Pass `Color::TRANSPARENT`
-    /// (or override via `.track_color(...)`) to suppress the track.
+    /// The faint full-circle ring behind the arc; `.cn-spinner__track`'s
+    /// colour when `None`.
     track_color: Option<blinc_layout::binding::Reactive<Color>>,
-    duration_ms: u32,
     classes: Vec<Arc<str>>,
     user_id: Option<String>,
-}
-
-// `Reactive<T>` isn't `Clone` -- it carries type-erased handles -- but
-// every variant's payload is.
-impl Clone for SpinnerConfig {
-    fn clone(&self) -> Self {
-        Self {
-            size: self.size,
-            color: self
-                .color
-                .as_ref()
-                .map(crate::reactive_props::clone_reactive),
-            track_color: self
-                .track_color
-                .as_ref()
-                .map(crate::reactive_props::clone_reactive),
-            duration_ms: self.duration_ms,
-            classes: self.classes.clone(),
-            user_id: self.user_id.clone(),
-        }
-    }
-}
-
-impl Default for SpinnerConfig {
-    fn default() -> Self {
-        Self {
-            size: SpinnerSize::default(),
-            color: None,
-            track_color: None,
-            duration_ms: 1000,
-            classes: Vec::new(),
-            user_id: None,
-        }
-    }
 }
 
 /// Built spinner — wraps the composed inner `Div`. Created by
@@ -117,47 +85,14 @@ pub struct Spinner {
 }
 
 impl Spinner {
-    /// Materialise the spinner tree from accumulated config. `_key`
-    /// is the call-site `InstanceKey`; we don't currently use it to
-    /// persist the timeline across rebuilds (a fresh timeline on each
-    /// rebuild just restarts the rotation from 0° — visually
-    /// indistinguishable for a non-stop spinner).
+    /// Materialise the spinner tree from accumulated config.
     fn with_config(_key: InstanceKey, config: SpinnerConfig) -> Self {
-        let theme = ThemeState::get();
         let diameter = config.size.diameter();
         let border_width = config.size.border_width();
         let half = diameter / 2.0;
-        // Bound colours ride the property-binding path: `border_color`
-        // registers a writer, so a set patches render props in place --
-        // no rebuild, and the rotation keeps its phase instead of
-        // snapping back to 0°.
-        let spinner_color = config.color.unwrap_or_else(|| {
-            blinc_layout::binding::Reactive::Const(theme.color(ColorToken::Primary))
-        });
-        let track_color = config.track_color.unwrap_or_else(|| {
-            blinc_layout::binding::Reactive::Const(theme.color(ColorToken::Border))
-        });
-        let spinner_color_now = crate::reactive_props::current(&spinner_color);
-        let track_color_now = crate::reactive_props::current(&track_color);
 
-        // Internal timeline — one per built spinner. The scheduler
-        // handle is global so multiple spinners share the same animation
-        // pump without contention.
-        let scheduler = get_scheduler();
-        let timeline: SharedAnimatedTimeline =
-            Arc::new(Mutex::new(AnimatedTimeline::new(scheduler)));
-
-        let entry_id = timeline.lock().unwrap().configure(|t| {
-            let id = t.add(0, config.duration_ms, 0.0, 360.0);
-            t.set_loop(-1);
-            t.start();
-            id
-        });
-
-        // Polygon mask: rectangle covering the left half of the
-        // bounding box. The polygon test runs in element-local coords,
-        // so the mask rotates with the element under motion's
-        // `rotate_timeline`, exposing a 180° arc that sweeps around.
+        // A rectangle over the left half, in the arc's own coordinates, so
+        // it turns with the arc and shows a half circle going round.
         let polygon = ClipPath::Polygon {
             points: vec![
                 (ClipLength::Px(0.0), ClipLength::Px(0.0)),
@@ -167,30 +102,32 @@ impl Spinner {
             ],
         };
 
-        // Static track ring — full circle, faint colour. Sits in the
-        // static cache; only the arc above rotates.
-        let track = div()
+        // Colours are rules unless set on the builder; a bound colour patches
+        // the border in place.
+        let mut track = div()
             .class("cn-spinner__track")
             .absolute()
             .inset(0.0)
             .w(diameter)
             .h(diameter)
             .rounded(half)
-            .border(border_width, track_color_now)
-            .border_color(track_color);
+            .border_width(border_width);
+        if let Some(color) = config.track_color {
+            track = track.border_color(color);
+        }
 
-        // Rotating arc: full-circle ring masked to 180° by polygon.
-        let arc = motion().rotate_timeline(timeline.clone(), entry_id).child(
-            div()
-                .class("cn-spinner__arc")
-                .w(diameter)
-                .h(diameter)
-                .rounded(half)
-                .border(border_width, spinner_color_now)
-                .border_color(spinner_color)
-                .clip_path(polygon),
-        );
-
+        let mut arc = div()
+            .class("cn-spinner__arc")
+            .absolute()
+            .inset(0.0)
+            .w(diameter)
+            .h(diameter)
+            .rounded(half)
+            .border_width(border_width)
+            .clip_path(polygon);
+        if let Some(color) = config.color {
+            arc = arc.border_color(color);
+        }
         let arc_layer = div()
             .absolute()
             .inset(0.0)
@@ -278,23 +215,16 @@ impl SpinnerBuilder {
         self
     }
 
-    /// Set the rotating arc colour. Defaults to `ColorToken::Primary`.
+    /// Set the turning arc's colour; `.cn-spinner__arc`'s otherwise.
     pub fn color(self, color: impl blinc_layout::binding::IntoReactive<Color>) -> Self {
         self.config.borrow_mut().color = Some(color.into_reactive());
         self
     }
 
-    /// Override the faint full-circle track ring colour. Defaults
-    /// to `ColorToken::Border`. Pass `Color::TRANSPARENT` to hide
-    /// the track entirely (e.g. for a pure-arc spinner).
+    /// Set the track ring's colour; `.cn-spinner__track`'s otherwise. Pass
+    /// `Color::TRANSPARENT` to hide the track.
     pub fn track_color(self, color: impl blinc_layout::binding::IntoReactive<Color>) -> Self {
         self.config.borrow_mut().track_color = Some(color.into_reactive());
-        self
-    }
-
-    /// Set the rotation duration in milliseconds (default: 1000ms).
-    pub fn duration_ms(self, duration: u32) -> Self {
-        self.config.borrow_mut().duration_ms = duration;
         self
     }
 
@@ -357,10 +287,7 @@ impl ElementBuilder for SpinnerBuilder {
     }
 }
 
-/// Create an animated spinner loading indicator.
-///
-/// The timeline is constructed internally — no need to pass one in.
-/// Uses `#[track_caller]` for a stable per-call-site key.
+/// A turning spinner for work in progress. Its turn and colours are rules.
 ///
 /// # Example
 ///
@@ -372,9 +299,7 @@ impl ElementBuilder for SpinnerBuilder {
 /// }
 ///
 /// // With customisation
-/// cn::spinner()
-///     .size(SpinnerSize::Large)
-///     .duration_ms(2000)
+/// cn::spinner().size(SpinnerSize::Large)
 /// ```
 #[track_caller]
 pub fn spinner() -> SpinnerBuilder {

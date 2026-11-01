@@ -373,9 +373,17 @@ pub const CN_STYLES: &str = concat!(
    Skeleton
    ============================================================================ */
 
+/* A placeholder that pulses while content loads. */
 .cn-skeleton {
     background: var(--cn-skeleton-bg, var(--surface-elevated));
     border-radius: var(--radius-sm);
+    animation: cn-skeleton-pulse 1500ms var(--ease-in-out) infinite;
+}
+.cn-skeleton--circle { border-radius: var(--radius-full); }
+@keyframes cn-skeleton-pulse {
+    from { opacity: 1; }
+    50%  { opacity: 0.4; }
+    to   { opacity: 1; }
 }
 
 /* ============================================================================
@@ -949,8 +957,18 @@ pub const CN_STYLES: &str = concat!(
    Spinner
    ============================================================================ */
 
+/* A faint track with a half-circle arc going round, a turn a second. */
 .cn-spinner {
     color: var(--cn-spinner-color, var(--primary));
+}
+.cn-spinner__track { border-color: var(--cn-spinner-track, var(--border)); }
+.cn-spinner__arc {
+    border-color: var(--cn-spinner-color, var(--primary));
+    animation: cn-spinner-turn 1000ms linear infinite;
+}
+@keyframes cn-spinner-turn {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
 }
 
 /* ============================================================================
