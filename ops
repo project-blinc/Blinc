@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1793565246,"nonce":"KVpbWJsHNrzNxi5D1DyxFu5m+Ms=","status":2}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1793565262,"nonce":"Ocw+sw63dsktdpQS8gXYhMqNB5g=","message":"Amended to include the CHANGELOG entry: the commit is now a9e54c5c54c304fbc5be5f7642b134a01d8216c8.","files":null}]}
