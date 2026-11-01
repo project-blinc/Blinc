@@ -1,5 +1,5 @@
 //! NumberGauge: a number over a range, shown as a fill with the value centred
-//! on it, after ashui's.
+//! on it.
 //!
 //! Drag the fill's edge or press anywhere to seek, scroll over it, or, once it
 //! has been pressed, use the arrows, Page Up/Down and Home/End. Values snap to

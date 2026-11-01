@@ -124,8 +124,8 @@ fn a_checkbox_that_starts_checked_gets_the_rules_and_loses_them() {
     });
 }
 
-/// The same state is a `:checked` attribute, which is how ashui's
-/// stylesheet writes it.
+/// The same state is a `:checked` attribute, the form a stylesheet writes it
+/// in.
 #[test]
 fn the_checked_attribute_follows_the_state_for_a_checked_rule() {
     init();

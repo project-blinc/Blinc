@@ -1,5 +1,4 @@
-//! NumberRangeGauge: an interval over a range, a fill between two grips,
-//! after ashui's.
+//! NumberRangeGauge: an interval over a range, a fill between two grips.
 //!
 //! Two gauge faces share one box: the upper paints the interval up to its
 //! grip, the lower lies above it and covers the part before its own grip with

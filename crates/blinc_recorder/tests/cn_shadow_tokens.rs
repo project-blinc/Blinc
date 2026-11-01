@@ -1,6 +1,6 @@
 #![cfg(feature = "headless")]
-//! Which cn components carry a shadow once the stylesheet is applied. ashui's
-//! sheet gives shadows to the filled button variants, the outline variant, the
+//! Which cn components carry a shadow once the stylesheet is applied. The
+//! stylesheet gives shadows to the filled button variants, the outline variant, the
 //! card, the switch thumb, the kbd, the slider thumb and the accordion; the
 //! rest are flat by design.
 

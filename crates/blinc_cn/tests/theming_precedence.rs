@@ -339,7 +339,7 @@ fn cn_typography_reaches_a_button_label() {
     );
 }
 
-/// cn's stylesheet shrinks a pressed button, as ashui's does, and a release
+/// cn's stylesheet shrinks a pressed button, and a release
 /// puts it back.
 #[test]
 fn a_pressed_cn_button_shrinks_and_a_release_restores_it() {

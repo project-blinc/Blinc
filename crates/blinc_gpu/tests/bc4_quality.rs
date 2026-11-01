@@ -6,7 +6,7 @@
 //! for a pixel is simply the nearest palette entry, so an encoder cannot
 //! do better than that and should not do worse.
 //!
-//! Reported by the ashui session against a real 2K texture. This builds
+//! Reported against a real 2K texture. This builds
 //! its own image so the check stands alone.
 //!
 //! Two kinds of test live here. The ones that call `tbc` directly are

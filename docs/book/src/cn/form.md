@@ -254,8 +254,8 @@ toggle(bold).label("B").disabled(locked)   // a bool, Signal or Computed
 
 A toggle is one element carrying `data-state="on"` or `"off"` (and a
 `checked` attribute while on), `data-variant`, `data-size` and `disabled`.
-Its look is the `.blinc-toggle` rules of the layout stylesheet, ported from
-ashui's: transparent when off, a faint wash of the text colour when on, a
+Its look is the `.blinc-toggle` rules of the layout stylesheet: transparent
+when off, a faint wash of the text colour when on, a
 lighter wash on hover, and a slight shrink while pressed, all eased by a
 `transition`. Sizes and variants are attribute selectors, so your own rules
 can use them the same way:

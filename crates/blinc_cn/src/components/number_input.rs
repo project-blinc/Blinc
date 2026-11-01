@@ -211,7 +211,7 @@ impl NumberInput {
     }
 }
 
-/// Wheel stepping, as ashui's: vertical scrolling over the control steps the
+/// Wheel stepping: vertical scrolling over the control steps the
 /// value by its step, wheel up increasing it. Leaving the control clears a
 /// partial step. A disabled control does nothing.
 fn wheel_stepper(

@@ -36,7 +36,7 @@ use crate::tree::{LayoutNodeId, LayoutTree};
 /// its default look.
 pub const DEFAULT_CLASS: &str = "blinc-checkbox";
 
-/// The mark: ashui's check, a bold round-capped stroke on a 24x24 grid that
+/// The mark: a bold round-capped stroke on a 24x24 grid that
 /// spans about two thirds of the mark's size, drawn in the box's `color`.
 const CHECKMARK_SVG: &str = r#"<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>

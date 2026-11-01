@@ -92,7 +92,7 @@ impl Toggle {
         let on_change = config.on_change.clone();
         let disabled = config.disabled.clone();
 
-        // `data-state` is the on/off pair ashui's stylesheet and Radix write;
+        // `data-state` is the on/off pair stylesheets (and Radix) write;
         // `checked` is the attribute `:checked` rules match.
         let on = config.on;
         let off = computed(move |g: &ReactiveGraph| !g.get(on).unwrap_or(false));

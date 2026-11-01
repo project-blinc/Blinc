@@ -1,4 +1,4 @@
-//! Wheel stepping shared by the numeric controls, after ashui's `NumberWheel`.
+//! Wheel stepping shared by the numeric controls.
 
 /// One wheel line is this many layout units, as the runners normalise it.
 pub(crate) const WHEEL_STEP_UNITS: f32 = 40.0;

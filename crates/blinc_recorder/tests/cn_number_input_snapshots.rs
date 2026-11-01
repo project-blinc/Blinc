@@ -120,7 +120,7 @@ fn mount_disabled(ui: &mut Headless, start: f64) -> Signal<f64> {
 }
 
 #[test]
-fn the_wheel_steps_the_value_like_ashuis() {
+fn the_wheel_steps_the_value_by_whole_steps() {
     let Some(mut ui) = session() else { return };
     let state = mount(&mut ui, 5.0, 0.0, 10.0);
     ui.hover(".cn-number-input-field").settle();

@@ -164,7 +164,7 @@ pub struct Toggle {
 impl Toggle {
     fn from_config(config: ToggleConfig) -> Self {
         // The look is the `.blinc-toggle` rules; the variant and size select
-        // among them as attributes, as ashui's stylesheet does.
+        // among them as attributes.
         let mut inner = layout_toggle::toggle(config.on)
             .class("cn-toggle")
             .class(config.variant.css_class())
