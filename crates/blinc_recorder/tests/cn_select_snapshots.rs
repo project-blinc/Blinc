@@ -382,3 +382,121 @@ fn the_dropdown_caret_spins_open() {
     ui.leave().settle();
     assert_caret_spins(&mut ui, ".cn-dropdown-trigger");
 }
+
+/// The open popover's fill, border, radius and shadow are `.cn-popover-content`
+/// rules, so a rule of the app's own reaches them.
+#[test]
+fn the_popover_panel_takes_its_look_from_rules() {
+    let Some(mut ui) = session() else { return };
+    ui.mount(move |_| {
+        div().w(W as f32).h(H as f32).p(4.0).child(
+            popover(|_open| div().class("pop-trigger").w(80.0).h(24.0))
+                .content(|| div().w(60.0).h(40.0)),
+        )
+    });
+    ui.leave().settle();
+    ui.click(".pop-trigger").settle();
+    let theme = ThemeState::get();
+    let (fill, border) = props(&ui, ".cn-popover-content");
+    assert!(
+        same(fill, theme.color(ColorToken::SurfaceElevated)),
+        "fill {fill:?}"
+    );
+    assert!(
+        same(border, theme.color(ColorToken::Border)),
+        "border {border:?}"
+    );
+    let node = ui.find(".cn-popover-content").unwrap();
+    let p = &ui.tree().get_render_node(node).unwrap().props;
+    assert_eq!(
+        p.border_radius.top_left,
+        theme.radius(blinc_theme::RadiusToken::Md),
+        "radius"
+    );
+    assert!(
+        p.shadow.iter().any(|s| s.color.a > 0.0),
+        "the panel has no shadow"
+    );
+}
+
+/// The first text under `node`, and its resolved colour.
+fn first_text_colour(
+    ui: &Headless,
+    node: blinc_layout::tree::LayoutNodeId,
+    class: &str,
+) -> [f32; 4] {
+    let registry = ui.tree().element_registry();
+    let mut stack = vec![node];
+    while let Some(n) = stack.pop() {
+        if registry.has_class(n, class) {
+            return ui.tree().resolved_text_color(n).expect("a colour");
+        }
+        stack.extend(ui.tree().layout_tree.children(n));
+    }
+    panic!("no `{class}` under the panel");
+}
+
+fn rgba(c: Color) -> [f32; 4] {
+    [c.r, c.g, c.b, c.a]
+}
+
+/// A dialog's and a sheet's panel, title and description take their look
+/// from rules: the elevated surface, the theme's border, a shadow, and the
+/// primary and secondary text colours.
+#[test]
+fn dialog_and_sheet_panels_take_their_look_from_rules() {
+    let Some(mut ui) = session_sized(W, 400) else {
+        return;
+    };
+    ui.mount(move |_| div().w(W as f32).h(400.0));
+    ui.leave().settle();
+    let theme = ThemeState::get();
+    for (panel, open) in [
+        (
+            ".cn-dialog",
+            Box::new(|| {
+                blinc_cn::dialog()
+                    .title("Title")
+                    .description("Words")
+                    .show();
+            }) as Box<dyn Fn()>,
+        ),
+        (
+            ".cn-sheet",
+            Box::new(|| {
+                blinc_cn::sheet().title("Title").description("Words").show();
+            }),
+        ),
+    ] {
+        open();
+        ui.settle();
+        let (fill, border) = props(&ui, panel);
+        assert!(
+            same(fill, theme.color(ColorToken::SurfaceElevated)),
+            "{panel} fill {fill:?}"
+        );
+        assert!(
+            same(border, theme.color(ColorToken::Border)),
+            "{panel} border"
+        );
+        let node = ui.find(panel).unwrap();
+        let p = &ui.tree().get_render_node(node).unwrap().props;
+        assert!(p.shadow.iter().any(|s| s.color.a > 0.0), "{panel} shadow");
+        let kind = &panel[4..];
+        assert_eq!(
+            first_text_colour(&ui, node, &format!("cn-{kind}-title")),
+            rgba(theme.color(ColorToken::TextPrimary)),
+            "{panel} title"
+        );
+        assert_eq!(
+            first_text_colour(&ui, node, &format!("cn-{kind}-description")),
+            rgba(theme.color(ColorToken::TextSecondary)),
+            "{panel} description"
+        );
+        blinc_layout::overlay_state::overlay_stack()
+            .lock()
+            .unwrap()
+            .close_all();
+        ui.settle();
+    }
+}

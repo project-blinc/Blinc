@@ -363,11 +363,7 @@ fn build_popover_overlay(
     overlay_handle_state: State<Option<u64>>,
     trigger_id: String,
 ) -> OverlayHandle {
-    let theme = ThemeState::get();
-    let bg = theme.color(ColorToken::SurfaceElevated);
-    let border = theme.color(ColorToken::Border);
-    let radius = theme.radius(RadiusToken::Lg);
-    let padding = theme.spacing_value(SpacingToken::Space4);
+    let padding = ThemeState::get().spacing_value(SpacingToken::Space4);
 
     let anchor_dir = match side {
         PopoverSide::Top => AnchorDirection::Top,
@@ -417,16 +413,13 @@ fn build_popover_overlay(
             // `lock_corner_shape` keeps panel corners circular even when a
             // theme advertises a squircle exponent — overlay chrome reads
             // cleanest with platform-default rounded-rect shape.
+            // Fill, border, radius and shadow are `.cn-popover-content` rules.
             div()
                 .class("cn-popover-content")
                 .id(&popover_id_for_content)
                 .flex_col()
-                .bg(bg)
-                .border(1.0, border)
-                .rounded(radius)
                 .lock_corner_shape()
                 .p_px(padding)
-                .shadow_lg()
                 .min_w(150.0)
                 .overflow_clip()
                 .child(user_content)

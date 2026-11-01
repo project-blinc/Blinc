@@ -442,6 +442,23 @@ impl Headless {
         let Some(tree) = self.tree.as_mut() else {
             return;
         };
+        // An overlay opened or closed: rebuild its layer in place, as the
+        // window does, so what it shows is in the tree.
+        {
+            use blinc_layout::overlay_state::{overlay_stack, rebuild_overlay_subtree_if_dirty};
+            rebuild_overlay_subtree_if_dirty(
+                tree.element_registry(),
+                blinc_layout::widgets::overlay_stack::OVERLAY_STACK_LAYER_ID,
+                overlay_stack().lock().is_ok_and(|s| s.take_dirty()),
+                || {
+                    overlay_stack()
+                        .lock()
+                        .ok()
+                        .map(|s| s.build_overlay_layer())
+                        .unwrap_or_default()
+                },
+            );
+        }
         for _ in 0..3 {
             let updates = tree.take_pending_property_updates();
             let mut needs_layout = tree.apply_partial_property_updates(updates).needs_layout;

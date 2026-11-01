@@ -369,11 +369,7 @@ fn build_hover_card_overlay(
     close_delay_ms: u32,
     overlay_handle_state: State<Option<u64>>,
 ) -> OverlayHandle {
-    let theme = ThemeState::get();
-    let bg = theme.color(ColorToken::SurfaceElevated);
-    let border = theme.color(ColorToken::Border);
-    let radius = theme.radius(RadiusToken::Lg);
-    let padding = theme.spacing_value(SpacingToken::Space4);
+    let padding = ThemeState::get().spacing_value(SpacingToken::Space4);
 
     // Single-instance is enforced PER-TRIGGER via the widget's stored handle
     // (see `build_component`). Avoid `close_all_of_kind(Tooltip)` here —
@@ -421,15 +417,13 @@ fn build_hover_card_overlay(
 
             // Card-side hover handlers — keep card open when mouse moves
             // from trigger into card.
+            // Fill, border, radius and shadow are `.cn-hover-card-content`
+            // rules.
             div()
                 .class("cn-hover-card-content")
                 .flex_col()
-                .bg(bg)
-                .border(1.0, border)
-                .rounded(radius)
                 .lock_corner_shape()
                 .p_px(padding)
-                .shadow_lg()
                 .min_w(200.0)
                 .max_w(320.0)
                 .child(user_content)

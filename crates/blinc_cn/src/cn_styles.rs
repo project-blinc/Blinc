@@ -821,6 +821,8 @@ pub const CN_STYLES: &str = concat!(
     /* Reuse the dropdown keyframes — same top-anchored slide/fade. */
     animation: cn-dropdown-menu-enter var(--duration-fast) var(--ease-state);
     transform-origin: top center;
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
 }
 
 .cn-select-item {
@@ -841,7 +843,7 @@ pub const CN_STYLES: &str = concat!(
    already at `--surface-elevated`; hovering to the same colour
    would be invisible. `--accent-subtle` is a low-alpha accent
    tint specifically designed for this use. */
-.cn-select-item:hover {
+.cn-select-item:hover:not(:disabled) {
     background: var(--accent-subtle);
 }
 /* `--selection` (~24 % alpha accent on Hybrid, 20 % on macOS) vs hover's
@@ -851,6 +853,12 @@ pub const CN_STYLES: &str = concat!(
     background: var(--selection);
     color: var(--accent);
 }
+.cn-select-item:disabled {
+    color: var(--text-tertiary);
+    background: transparent;
+    cursor: not-allowed;
+}
+.cn-select-trigger > .cn-chevron { color: var(--text-tertiary); }
 
 /* ============================================================================
    Slider
@@ -954,6 +962,7 @@ pub const CN_STYLES: &str = concat!(
     border-radius: var(--radius-sm);
     font-size: var(--text-xs);
     padding: var(--space-1-5) var(--space-3);
+    box-shadow: var(--shadow-sm);
     /* Fades in, growing out of the edge that faces its trigger. */
     animation: cn-tooltip-enter var(--duration-fast) var(--ease-out);
     transform-origin: bottom center;
@@ -977,11 +986,15 @@ pub const CN_STYLES: &str = concat!(
     background: var(--cn-dialog-bg, var(--surface-elevated));
     border: 1px solid var(--cn-dialog-border, var(--border));
     border-radius: var(--radius-xl);
+    color: var(--text-primary);
+    box-shadow: var(--cn-dialog-shadow, var(--shadow-xl));
     padding: var(--space-6);
     gap: var(--space-4);
     /* Enter/exit motion is driven by the OverlayBuilder motion_enter /
        motion_exit; no CSS keyframe here. */
 }
+.cn-dialog-title { color: var(--text-primary); }
+.cn-dialog-description { color: var(--text-secondary); }
 
 /* ============================================================================
    Drawer
@@ -992,6 +1005,25 @@ pub const CN_STYLES: &str = concat!(
        DrawerBuilder motion_enter / motion_exit. */
     background: var(--cn-drawer-bg, var(--surface-elevated));
     border: 1px solid var(--cn-drawer-border, var(--border));
+}
+.cn-drawer, .cn-sheet {
+    color: var(--text-primary);
+    box-shadow: var(--shadow-xl);
+}
+.cn-drawer-title, .cn-sheet-title { color: var(--text-primary); }
+.cn-sheet-description { color: var(--text-secondary); }
+.cn-drawer-separator, .cn-sheet-separator { background: var(--border); }
+/* The close button, as ashui's sheet's: quiet until hovered. */
+.cn-drawer-close, .cn-sheet-close {
+    color: var(--text-secondary);
+    border-radius: var(--radius-md);
+    transition:
+        background-color var(--duration-fast) var(--ease-state),
+        color var(--duration-fast) var(--ease-state);
+}
+.cn-drawer-close:hover, .cn-sheet-close:hover {
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    color: var(--text-primary);
 }
 .cn-drawer-header {
     border-bottom: 1px solid var(--border);
@@ -1382,6 +1414,8 @@ pub const CN_STYLES: &str = concat!(
     background: var(--surface-elevated);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
     padding: var(--space-4);
     /* CSS-driven enter — same approach as cn-tooltip while the motion FSM
        integration with the new OverlayStack is being fixed. */
@@ -1403,6 +1437,8 @@ pub const CN_STYLES: &str = concat!(
     background: var(--surface-elevated);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
     padding: var(--space-4);
     /* CSS-driven enter — same approach as cn-tooltip / cn-popover. */
     animation: cn-hover-card-enter var(--duration-normal) var(--ease-spring);
@@ -1479,6 +1515,7 @@ pub const CN_STYLES: &str = concat!(
 }
 
 .cn-combobox-trigger {
+    color: var(--text-primary);
     background: var(--surface);
     box-shadow: var(--shadow-sm);
     border-color: var(--border);
@@ -1493,7 +1530,10 @@ pub const CN_STYLES: &str = concat!(
    pointer pseudo-class apply after plain ones. */
 .cn-combobox-trigger[data-state="open"]:not(:disabled),
 .cn-combobox-trigger[data-state="open"]:hover:not(:disabled) { border-color: var(--border-focus); }
+/* Nothing chosen, or disabled: the shown text, which inherits, dims. */
+.cn-combobox-trigger[data-placeholder] { color: var(--text-tertiary); }
 .cn-combobox-trigger:disabled {
+    color: var(--text-tertiary);
     box-shadow: none;
     background: var(--input-bg-disabled);
     border-color: var(--border-secondary);
@@ -1505,6 +1545,8 @@ pub const CN_STYLES: &str = concat!(
     background: var(--surface-elevated);
     border: 1px solid var(--border);
     border-radius: var(--radius-default);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-md);
     /* Reuse the dropdown keyframes — same top-anchored slide/fade. */
     animation: cn-dropdown-menu-enter var(--duration-fast) var(--ease-state);
     transform-origin: top center;
@@ -1523,13 +1565,21 @@ pub const CN_STYLES: &str = concat!(
    background even when Surface is pure white — `accent-subtle` alone
    on `Surface = #FFFFFF` (macOS light) renders as a ~5 % blue tint
    that's effectively invisible. */
-.cn-combobox-item:hover {
+.cn-combobox-item:hover:not(:disabled) {
     background: var(--accent-subtle);
 }
 .cn-combobox-item--selected {
     background: var(--selection);
     color: var(--accent);
 }
+.cn-combobox-item:disabled {
+    color: var(--text-tertiary);
+    background: transparent;
+    cursor: not-allowed;
+}
+.cn-combobox-empty { color: var(--text-tertiary); }
+.cn-combobox-search-row { border-bottom: 1px solid var(--border); }
+.cn-combobox-trigger > .cn-chevron { color: var(--text-tertiary); }
 
 /* ============================================================================
    Table (shadcn `<Table>` family)

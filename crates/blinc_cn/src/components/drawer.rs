@@ -210,10 +210,6 @@ impl DrawerBuilder {
     /// Show the drawer
     pub fn show(self) -> OverlayHandle {
         let theme = ThemeState::get();
-        let bg = theme.color(ColorToken::Surface);
-        let border = theme.color(ColorToken::Border);
-        let text_primary = theme.color(ColorToken::TextPrimary);
-        let text_secondary = theme.color(ColorToken::TextSecondary);
 
         let side = self.side;
         let size = self.size;
@@ -289,10 +285,6 @@ impl DrawerBuilder {
                     &footer,
                     show_close,
                     &on_close,
-                    bg,
-                    border,
-                    text_primary,
-                    text_secondary,
                     drawer_handle,
                 );
                 for c in &classes {
@@ -350,10 +342,6 @@ fn build_drawer_content(
     footer: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     show_close: bool,
     on_close: &Option<Arc<dyn Fn() + Send + Sync>>,
-    bg: Color,
-    border: Color,
-    text_primary: Color,
-    text_secondary: Color,
     handle: OverlayHandle,
 ) -> Div {
     let theme = ThemeState::get();
@@ -375,8 +363,7 @@ fn build_drawer_content(
         .class(side_class)
         .w(size.width())
         .h_full()
-        .style(&style! { bg: bg, border: (1.0, border) })
-        .shadow_xl()
+        // Fill, border, text colour and shadow are `.cn-drawer` rules.
         .flex_col()
         .overflow_clip();
 
@@ -401,7 +388,7 @@ fn build_drawer_content(
             header_div = header_div.child(
                 text(title_text)
                     .size(theme.typography().text_lg)
-                    .color(text_primary)
+                    .class("cn-drawer-title")
                     .semibold(),
             );
         } else {
@@ -416,10 +403,10 @@ fn build_drawer_content(
             let on_close_clone = on_close.clone();
             header_div = header_div.child(
                 div()
+                    .class("cn-drawer-close")
                     .w(32.0)
                     .h(32.0)
                     .items_center()
-                    .style(&style! { rounded: theme.radius(RadiusToken::Sm) })
                     .cursor_pointer()
                     .on_click(move |_| {
                         if let Some(ref cb) = on_close_clone {
@@ -427,14 +414,14 @@ fn build_drawer_content(
                         }
                         handle.close();
                     })
-                    .child(svg(close_icon).size(18.0, 18.0).color(text_secondary)),
+                    .child(svg(close_icon).size(18.0, 18.0)),
             );
         }
 
         drawer = drawer.child(header_div);
 
         // Separator under header
-        drawer = drawer.child(div().w_full().h(1.0).bg(border));
+        drawer = drawer.child(div().class("cn-drawer-separator").w_full().h(1.0));
     }
 
     // Body section with children (scrollable)
@@ -461,7 +448,7 @@ fn build_drawer_content(
             drawer = drawer.child(div().flex_1());
         }
 
-        drawer = drawer.child(div().w_full().h(1.0).bg(border)); // Separator
+        drawer = drawer.child(div().class("cn-drawer-separator").w_full().h(1.0)); // Separator
         // padding from CSS: .cn-drawer-footer { padding: 16px; }
         drawer = drawer.child(div().class("cn-drawer-footer").w_full().child(footer_fn()));
     }

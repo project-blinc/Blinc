@@ -183,13 +183,8 @@ impl Combobox {
         let radius = theme.radius(RadiusToken::Sm);
 
         // Colors
-        let bg = theme.color(ColorToken::Surface);
-        let border = theme.color(ColorToken::Border);
-        let border_hover = theme.color(ColorToken::BorderHover);
-        let border_focus = theme.color(ColorToken::BorderFocus);
         let text_color = theme.color(ColorToken::TextPrimary);
         let text_tertiary = theme.color(ColorToken::TextTertiary);
-        let surface_elevated = theme.color(ColorToken::SurfaceElevated);
 
         let disabled = config.disabled.clone();
 
@@ -235,15 +230,12 @@ impl Combobox {
                 placeholder.clone()
             }
         });
-        let options_for_colour = config.options.clone();
-        let display_color = computed(move |g: &ReactiveGraph| {
+        // Nothing chosen: the trigger carries `data-placeholder`, and its rule
+        // dims the shown text, which inherits the trigger's colour.
+        let options_for_placeholder = config.options.clone();
+        let placeholder_shown = computed(move |g: &ReactiveGraph| {
             let current = g.get(value).unwrap_or_default();
-            let chosen = options_for_colour.iter().any(|o| o.value == current);
-            if chosen || !current.is_empty() {
-                text_color
-            } else {
-                text_tertiary
-            }
+            current.is_empty() && !options_for_placeholder.iter().any(|o| o.value == current)
         });
         // Chevron SVG (down arrow)
         let chevron_svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
@@ -258,6 +250,7 @@ impl Combobox {
             .class("cn-combobox-trigger")
             .attr_when("data-state", "open", open_state)
             .attr_when("disabled", "", disabled.clone())
+            .attr_when("data-placeholder", "", &placeholder_shown)
             .flex_row()
             .w_full()
             .items_center()
@@ -269,8 +262,7 @@ impl Combobox {
                 div().flex_1().overflow_clip().child(
                     Text::bound(display_text.into_reactive())
                         .size(font_size)
-                        .no_cursor()
-                        .color(&display_color),
+                        .no_cursor(),
                 ),
             )
             .flex_shrink_0()
@@ -281,7 +273,7 @@ impl Combobox {
                     .class("cn-chevron")
                     .ml(1.0)
                     .flex_shrink_0()
-                    .child(svg(chevron_svg).size(16.0, 16.0).tint(text_tertiary)),
+                    .child(svg(chevron_svg).size(16.0, 16.0)),
             )
             .cursor_pointer()
             .on_click(move |_ctx| {
@@ -361,12 +353,8 @@ impl Combobox {
                     font_size,
                     padding,
                     radius,
-                    bg,
-                    border,
-                    border_focus,
                     text_color,
                     text_tertiary,
-                    surface_elevated,
                     allow_custom,
                     &placeholder_for_content,
                 )
@@ -648,12 +636,8 @@ fn build_dropdown_content(
     font_size: f32,
     padding: f32,
     radius: f32,
-    bg: blinc_core::Color,
-    border: blinc_core::Color,
-    border_focus: blinc_core::Color,
     text_color: blinc_core::Color,
     text_tertiary: blinc_core::Color,
-    surface_elevated: blinc_core::Color,
     allow_custom: bool,
     placeholder: &Option<String>,
 ) -> Div {
@@ -665,11 +649,10 @@ fn build_dropdown_content(
         .id(dropdown_id)
         .flex_col()
         .w(width)
-        .bg(bg)
-        .border(1.0, border)
+        // Fill, border, radius and shadow are `.cn-combobox-content` rules; the
+        // radius stays here too because the panel clips its rows to it.
         .rounded(radius)
         .lock_corner_shape()
-        .shadow_lg()
         .overflow_clip()
         // Absolutely positioned below the trigger, rendered in foreground pass
         // so it appears above all sibling content regardless of tree order
@@ -709,6 +692,7 @@ fn build_dropdown_content(
     // got cropped at the dropdown's right border. Flex layout distributes
     // remaining space after padding instead.
     let search_container = div()
+        .class("cn-combobox-search-row")
         .w_full()
         .flex_shrink_0()
         .flex_row()
@@ -716,7 +700,6 @@ fn build_dropdown_content(
         .justify_center()
         .px(padding / 8.0)
         .py(padding / 8.0)
-        .border_bottom(1.0, border)
         .child(search_input);
 
     dropdown_div = dropdown_div.child(search_container);
@@ -775,8 +758,8 @@ fn build_dropdown_content(
                 match row {
                     ListRow::NoResults => div().w_full().p_px(padding).child(
                         text("No results found")
-                            .size(font_size)
-                            .color(text_tertiary),
+                            .class("cn-combobox-empty")
+                            .size(font_size),
                     ),
                     ListRow::Custom(custom_value) => {
                         let choose = choose.clone();
@@ -785,15 +768,13 @@ fn build_dropdown_content(
                             .class("cn-combobox-item")
                             .w_full()
                             .h_fit()
-                            .cursor(CursorStyle::Pointer)
                             .flex_row()
                             .items_center()
                             .child(
                                 div().child(
                                     text(format!("Use \"{}\"", custom_value))
                                         .size(font_size)
-                                        .no_cursor()
-                                        .color(text_color),
+                                        .no_cursor(),
                                 ),
                             )
                             .on_click(move |_ctx| choose(custom_value.clone()))
@@ -801,24 +782,14 @@ fn build_dropdown_content(
                     ListRow::Option(idx) => {
                         let opt = &options[idx];
                         let is_opt_disabled = opt.disabled;
-                        let option_text_color = if is_opt_disabled {
-                            text_tertiary
-                        } else {
-                            text_color
-                        };
-                        // Background is owned by CSS (.cn-combobox-item /
-                        // .cn-combobox-item:hover / .cn-combobox-item--selected) — an
-                        // explicit `.bg(base_bg)` here overrides the :hover selector.
+                        // Fill, text colour and cursor, selected, hovered or
+                        // disabled, are `.cn-combobox-item` rules.
                         let mut option_item = div()
                             .id(format!("{}_opt_{}", key, idx))
                             .class("cn-combobox-item")
                             .w_full()
                             .h_fit()
-                            .cursor(if is_opt_disabled {
-                                CursorStyle::NotAllowed
-                            } else {
-                                CursorStyle::Pointer
-                            })
+                            .attr_when("disabled", "", is_opt_disabled)
                             .flex_row()
                             .items_center();
                         if opt.value == current_selected {
@@ -830,12 +801,7 @@ fn build_dropdown_content(
                             .child(if let Some(ref content_fn) = opt.content {
                                 content_fn()
                             } else {
-                                div().child(
-                                    text(&opt.label)
-                                        .size(font_size)
-                                        .no_cursor()
-                                        .color(option_text_color),
-                                )
+                                div().child(text(&opt.label).size(font_size).no_cursor())
                             })
                             .on_click(move |_ctx| {
                                 if !is_opt_disabled {
@@ -846,9 +812,6 @@ fn build_dropdown_content(
                 }
             },
         );
-
-    let _ = surface_elevated;
-    let _ = bg;
 
     dropdown_div = dropdown_div.child(options_content);
 

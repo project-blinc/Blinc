@@ -112,3 +112,31 @@ fn a_tooltip_fades_in_with_its_text_and_settles_opaque() {
         assert!(!tree.css_has_active());
     })
 }
+
+/// Fill, text colour and shadow are `.cn-tooltip` rules, not set in Rust.
+#[test]
+fn the_tooltips_look_is_its_rules() {
+    guarded(|| {
+        let (tree, node) = hover_open(TooltipSide::Top);
+        let theme = blinc_theme::ThemeState::get();
+        let props = &tree.get_render_node(node).unwrap().props;
+        let bg = theme.color(blinc_theme::ColorToken::TooltipBackground);
+        match &props.background {
+            Some(blinc_core::Brush::Solid(c)) => {
+                assert!(
+                    (c.r - bg.r).abs() < 0.01 && (c.g - bg.g).abs() < 0.01,
+                    "fill {c:?}"
+                )
+            }
+            other => panic!("not a solid fill: {other:?}"),
+        }
+        assert!(props.shadow.iter().any(|s| s.color.a > 0.0), "no shadow");
+        let label = tree.layout_tree.children(node)[0];
+        let fg = theme.color(blinc_theme::ColorToken::TooltipText);
+        assert_eq!(
+            tree.resolved_text_color(label),
+            Some([fg.r, fg.g, fg.b, fg.a]),
+            "text colour"
+        );
+    })
+}

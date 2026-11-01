@@ -212,10 +212,6 @@ impl SheetBuilder {
     /// Show the sheet
     pub fn show(self) -> OverlayHandle {
         let theme = ThemeState::get();
-        let bg = theme.color(ColorToken::Surface);
-        let border = theme.color(ColorToken::Border);
-        let text_primary = theme.color(ColorToken::TextPrimary);
-        let text_secondary = theme.color(ColorToken::TextSecondary);
 
         let side = self.side;
         let size = self.size;
@@ -301,10 +297,6 @@ impl SheetBuilder {
                     &footer,
                     show_close,
                     &on_close,
-                    bg,
-                    border,
-                    text_primary,
-                    text_secondary,
                     sheet_handle,
                 )
             })
@@ -354,10 +346,6 @@ fn build_sheet_content(
     footer: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     show_close: bool,
     on_close: &Option<Arc<dyn Fn() + Send + Sync>>,
-    bg: Color,
-    border: Color,
-    text_primary: Color,
-    text_secondary: Color,
     handle: OverlayHandle,
 ) -> Div {
     let theme = ThemeState::get();
@@ -409,8 +397,7 @@ fn build_sheet_content(
     let mut sheet = div()
         .class("cn-sheet")
         .class(side_class)
-        .style(&style! { bg: bg, border: (1.0, border) })
-        .shadow_xl()
+        // Fill, border, text colour and shadow are `.cn-sheet` rules.
         .flex_col()
         .overflow_clip();
 
@@ -448,7 +435,7 @@ fn build_sheet_content(
         header_text = header_text.child(
             text(title_text)
                 .size(theme.typography().text_lg)
-                .color(text_primary)
+                .class("cn-sheet-title")
                 .medium(),
         );
     }
@@ -457,7 +444,7 @@ fn build_sheet_content(
         header_text = header_text.child(
             text(desc_text)
                 .size(theme.typography().text_sm)
-                .color(text_secondary),
+                .class("cn-sheet-description"),
         );
     }
 
@@ -470,10 +457,10 @@ fn build_sheet_content(
         let on_close_clone = on_close.clone();
         header = header.child(
             div()
+                .class("cn-sheet-close")
                 .w(32.0)
                 .h(32.0)
                 .items_center()
-                .style(&style! { rounded: theme.radius(RadiusToken::Sm) })
                 .cursor_pointer()
                 .on_click(move |_| {
                     if let Some(ref cb) = on_close_clone {
@@ -481,14 +468,14 @@ fn build_sheet_content(
                     }
                     handle.close();
                 })
-                .child(svg(close_icon).size(18.0, 18.0).color(text_secondary)),
+                .child(svg(close_icon).size(18.0, 18.0)),
         );
     }
 
     sheet = sheet.child(header);
 
     // Separator under header
-    sheet = sheet.child(div().w_full().h(1.0).bg(border));
+    sheet = sheet.child(div().class("cn-sheet-separator").w_full().h(1.0));
 
     // Content section (scrollable)
     if let Some(content_fn) = content {
@@ -503,7 +490,7 @@ fn build_sheet_content(
 
     // Footer section
     if let Some(footer_fn) = footer {
-        sheet = sheet.child(div().w_full().h(1.0).bg(border)); // Separator
+        sheet = sheet.child(div().class("cn-sheet-separator").w_full().h(1.0)); // Separator
         sheet = sheet.child(div().w_full().p_4().child(footer_fn()));
     }
 

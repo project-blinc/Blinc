@@ -265,11 +265,6 @@ impl DialogBuilder {
     /// or clicking the Cancel/Confirm buttons.
     pub fn show(self) -> OverlayHandle {
         let theme = ThemeState::get();
-        let bg = theme.color(ColorToken::Surface);
-        let border = theme.color(ColorToken::Border);
-        let text_primary = theme.color(ColorToken::TextPrimary);
-        let text_secondary = theme.color(ColorToken::TextSecondary);
-        let radius = theme.radius(RadiusToken::Lg);
         let spacing = theme.spacing_value(SpacingToken::Space4);
 
         let title = self.title;
@@ -329,11 +324,6 @@ impl DialogBuilder {
                     &content,
                     &footer,
                     max_width,
-                    bg,
-                    border,
-                    text_primary,
-                    text_secondary,
-                    radius,
                     spacing,
                     &confirm_text,
                     &cancel_text,
@@ -469,11 +459,6 @@ fn build_dialog_content(
     content: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     footer: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     max_width: f32,
-    bg: Color,
-    border: Color,
-    text_primary: Color,
-    text_secondary: Color,
-    radius: f32,
     _spacing: f32,
     confirm_text: &str,
     _cancel_text: &str,
@@ -492,15 +477,16 @@ fn build_dialog_content(
     if title.is_some() || description.is_some() {
         let mut header = div().w_full().flex_col().gap_2(); // 8px gap from theme
 
+        // Their colours are `.cn-dialog-title` and `.cn-dialog-description`.
         if let Some(title_text) = title {
-            header = header.child(h3(title_text).color(text_primary));
+            header = header.child(h3(title_text).class("cn-dialog-title"));
         }
 
         if let Some(desc_text) = description {
             header = header.child(
                 text(desc_text)
-                    .size(theme.typography().text_sm)
-                    .color(text_secondary),
+                    .class("cn-dialog-description")
+                    .size(theme.typography().text_sm),
             );
         }
 
@@ -564,17 +550,11 @@ fn build_dialog_content(
             .child(footer_content),
     ); // 16px margin from theme
 
-    // Build the dialog container (card styling). `.cn-dialog` carries the
-    // `cn-dialog-enter` CSS @keyframes animation; OverlayStack's motion
-    // wrapper handles exit (when motion FSM lands a fix).
+    // The panel: fill, border, radius and shadow are `.cn-dialog` rules.
     div()
         .class("cn-dialog")
         .min_w(300.0)
         .max_w(max_width)
-        .bg(bg)
-        .border(1.0, border)
-        .rounded(radius)
-        .shadow_xl()
         .flex_col()
         .child(inner_content)
 }

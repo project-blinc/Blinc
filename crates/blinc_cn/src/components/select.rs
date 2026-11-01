@@ -162,11 +162,6 @@ impl Select {
         let radius = theme.radius(RadiusToken::Md);
 
         // Colors
-        let border = theme.color(ColorToken::Border);
-        let border_hover = theme.color(ColorToken::BorderHover);
-        let text_color = theme.color(ColorToken::TextPrimary);
-        let text_tertiary = theme.color(ColorToken::TextTertiary);
-        let surface_elevated = theme.color(ColorToken::SurfaceElevated);
 
         let disabled = config.disabled.clone();
 
@@ -248,7 +243,7 @@ impl Select {
                     .class("cn-chevron")
                     .ml(1.0)
                     .flex_shrink_0()
-                    .child(svg(chevron_svg).size(16.0, 16.0).tint(text_tertiary)),
+                    .child(svg(chevron_svg).size(16.0, 16.0)),
             )
             .on_click({
                 let disabled = disabled.clone();
@@ -300,12 +295,6 @@ impl Select {
                     font_size,
                     padding,
                     radius,
-                    // Fixed Surface: the trigger's fill follows the pointer.
-                    theme.color(ColorToken::Surface),
-                    border,
-                    text_color,
-                    text_tertiary,
-                    surface_elevated,
                 )
             });
 
@@ -552,11 +541,6 @@ fn build_dropdown_content(
     font_size: f32,
     padding: f32,
     radius: f32,
-    bg: blinc_core::Color,
-    border: blinc_core::Color,
-    text_color: blinc_core::Color,
-    text_tertiary: blinc_core::Color,
-    surface_elevated: blinc_core::Color,
 ) -> Div {
     let dropdown_id = key;
 
@@ -565,11 +549,10 @@ fn build_dropdown_content(
         .id(dropdown_id)
         .flex_col()
         .w(width)
-        .bg(bg)
-        .border(1.0, border)
+        // Fill, border, radius and shadow are `.cn-select-content` rules; the
+        // radius stays here too because the panel clips its rows to it.
         .rounded(radius)
         .lock_corner_shape()
-        .shadow_lg()
         .overflow_clip()
         .h_fit()
         // Absolutely positioned below the trigger, rendered in foreground pass
@@ -589,21 +572,8 @@ fn build_dropdown_content(
         let on_change_for_opt = on_change.clone();
         let opt_value_for_click = opt_value.clone();
 
-        let option_text_color = if is_opt_disabled {
-            text_tertiary
-        } else {
-            text_color
-        };
-
-        // No inline bg — `.w_full()` items would otherwise blanket the
-        // dropdown panel's `--surface-elevated` CSS bg with pure-white
-        // `Surface` for every non-selected row, leaving only the thin
-        // `var(--space-1)` padding edge of the panel visible. CSS
-        // `.cn-select-item:hover` / `.cn-select-item--selected` set
-        // the bg when interactive; everything else stays transparent
-        // so the panel's own surface-elevated fill reads through.
-        let _ = surface_elevated;
-
+        // An option's fill and text colour, selected, hovered or disabled,
+        // are `.cn-select-item` rules.
         // Plain div with element ID for proper event registration during subtree rebuilds.
         // Hover styles come from `.cn-select-item:hover` in cn_styles.rs.
         let item_id = format!("{}_opt_{}", key, idx);
@@ -612,22 +582,13 @@ fn build_dropdown_content(
             .class("cn-select-item")
             .w_full()
             .h_fit()
-            .cursor(if is_opt_disabled {
-                CursorStyle::NotAllowed
-            } else {
-                CursorStyle::Pointer
-            })
+            .attr_when("disabled", "", is_opt_disabled)
             .flex_row()
             .items_center()
             .child(if let Some(ref content_fn) = opt_content {
                 content_fn()
             } else {
-                div().child(
-                    text(&opt_label)
-                        .size(font_size)
-                        .no_cursor()
-                        .color(option_text_color),
-                )
+                div().child(text(&opt_label).size(font_size).no_cursor())
             })
             .on_click(move |_ctx| {
                 if !is_opt_disabled {

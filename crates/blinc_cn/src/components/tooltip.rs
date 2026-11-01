@@ -242,11 +242,7 @@ impl TooltipBuilder {
                     return;
                 };
                 let text_owned = text_str.clone();
-                let theme = ThemeState::get();
-                let bg = theme.color(ColorToken::TooltipBackground);
-                let fg = theme.color(ColorToken::TooltipText);
-                let radius = theme.radius(RadiusToken::Sm);
-                let font_size = theme.typography().text_xs;
+                let font_size = ThemeState::get().typography().text_xs;
                 let anchor_dir = match side {
                     TooltipSide::Top => AnchorDirection::Top,
                     TooltipSide::Bottom => AnchorDirection::Bottom,
@@ -290,17 +286,15 @@ impl TooltipBuilder {
                     .on_close(move |_reason| {
                         stored_close.set(None);
                     })
+                    // Fill, text colour, radius and shadow are `.cn-tooltip` rules.
                     .content(move || {
                         div()
                             .class("cn-tooltip")
                             .class(side_class)
                             .flex_row()
                             .items_center()
-                            .bg(bg)
-                            .rounded(radius)
                             .lock_corner_shape()
-                            .shadow_sm()
-                            .child(text(&text_owned).size(font_size).color(fg).no_wrap())
+                            .child(text(&text_owned).size(font_size).no_wrap())
                     })
                     .show();
                 stored_open.set(Some(handle.raw()));
