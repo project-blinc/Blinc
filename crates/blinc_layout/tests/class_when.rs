@@ -391,3 +391,59 @@ fn a_later_rule_the_node_already_matches_stays_on_top_of_a_class() {
     s.frame();
     assert_eq!(s.fill(s.node), GREEN);
 }
+
+#[test]
+fn an_attribute_with_two_bound_values_reaches_a_child_rule_either_way() {
+    let _guard = LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let _ = blinc_layout::stateful::take_pending_partial_prop_updates();
+    with_registry(|_| {});
+    let open = flag(false);
+    let closed = flag(true);
+    let ui = div().w(400.0).h(300.0).child(
+        div()
+            .class("t")
+            .attr_when("data-state", "open", &open)
+            .attr_when("data-state", "closed", &closed)
+            .child(
+                div()
+                    .class("c")
+                    .w(10.0)
+                    .h(10.0)
+                    .bg(Color::rgb(0.0, 0.0, 1.0)),
+            ),
+    );
+    let mut tree = RenderTree::from_element(&ui);
+    tree.set_stylesheet(
+        Stylesheet::parse(".t[data-state=\"open\"] > .c { background: #ff0000 }").expect("css"),
+    );
+    tree.apply_stylesheet_layout_overrides();
+    tree.apply_stylesheet_base_styles();
+    tree.compute_layout(400.0, 300.0);
+    let t = tree.layout_tree.children(tree.root().unwrap())[0];
+    let c = tree.layout_tree.children(t)[0];
+    let fill = |tree: &RenderTree| match &tree.get_render_node(c).unwrap().props.background {
+        Some(Brush::Solid(col)) => (col.r, col.g, col.b),
+        other => panic!("{other:?}"),
+    };
+    let land = |tree: &mut RenderTree| {
+        let updates = blinc_layout::stateful::take_pending_partial_prop_updates();
+        tree.apply_partial_property_updates(updates);
+    };
+    assert_eq!(fill(&tree), BLUE);
+
+    // The open value lands while the closed one is still listed.
+    open.set(true);
+    land(&mut tree);
+    closed.set(false);
+    land(&mut tree);
+    assert_eq!(fill(&tree), RED, "opened");
+
+    closed.set(true);
+    land(&mut tree);
+    open.set(false);
+    land(&mut tree);
+    assert_eq!(fill(&tree), BLUE, "closed again");
+    for node in [tree.root().unwrap(), t, c] {
+        blinc_layout::binding::unregister_node(node);
+    }
+}

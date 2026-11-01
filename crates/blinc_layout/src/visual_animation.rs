@@ -9,7 +9,9 @@
 //! Key principle: **Taffy owns layout truth** - animations never modify the layout tree.
 //! Instead, we track visual offsets that get animated back to zero.
 
-use blinc_animation::{AnimatedValue, SchedulerHandle, SpringConfig};
+use blinc_animation::{
+    AnimatedValue, Easing, Keyframe, KeyframeAnimation, KeyframeId, SchedulerHandle, SpringConfig,
+};
 use blinc_core::Rect;
 
 use crate::element::ElementBounds;
@@ -33,13 +35,130 @@ pub enum AnimationDirection {
 // Animated Offset Components
 // ============================================================================
 
+/// One delta easing back to zero: on a spring, or over a duration on an
+/// easing curve.
+pub enum Delta {
+    Spring(AnimatedValue),
+    Timed(TimedDelta),
+}
+
+impl Delta {
+    /// A delta that starts at `from` and eases to zero.
+    fn start(from: f32, config: &VisualAnimationConfig, scheduler: &SchedulerHandle) -> Self {
+        match config.timed {
+            Some((duration_ms, easing)) => Self::Timed(TimedDelta::new(
+                from,
+                duration_ms,
+                easing,
+                scheduler.clone(),
+            )),
+            None => {
+                let mut anim = AnimatedValue::new(scheduler.clone(), from, config.spring);
+                anim.set_target(0.0);
+                Self::Spring(anim)
+            }
+        }
+    }
+
+    pub fn get(&self) -> f32 {
+        match self {
+            Self::Spring(v) => v.get(),
+            Self::Timed(t) => t.get(),
+        }
+    }
+
+    pub fn is_animating(&self) -> bool {
+        match self {
+            Self::Spring(v) => v.is_animating(),
+            Self::Timed(t) => t.is_animating(),
+        }
+    }
+
+    /// Ease from `from` to zero again, from now.
+    fn restart(&mut self, from: f32) {
+        match self {
+            Self::Spring(v) => {
+                v.set_immediate(from);
+                v.set_target(0.0);
+            }
+            Self::Timed(t) => t.restart(from),
+        }
+    }
+}
+
+/// A delta easing from a value to zero over a duration, run by the scheduler
+/// as a keyframe animation so it asks for frames while it plays.
+pub struct TimedDelta {
+    scheduler: SchedulerHandle,
+    id: Option<KeyframeId>,
+    duration_ms: u32,
+    easing: Easing,
+}
+
+impl TimedDelta {
+    fn new(from: f32, duration_ms: u32, easing: Easing, scheduler: SchedulerHandle) -> Self {
+        let mut delta = Self {
+            scheduler,
+            id: None,
+            duration_ms,
+            easing,
+        };
+        delta.restart(from);
+        delta
+    }
+
+    fn restart(&mut self, from: f32) {
+        if let Some(id) = self.id.take() {
+            self.scheduler.remove_keyframe(id);
+        }
+        let animation = KeyframeAnimation::new(
+            self.duration_ms.max(1),
+            vec![
+                Keyframe {
+                    time: 0.0,
+                    value: from,
+                    easing: Easing::Linear,
+                },
+                Keyframe {
+                    time: 1.0,
+                    value: 0.0,
+                    easing: self.easing,
+                },
+            ],
+        );
+        self.id = self.scheduler.register_keyframe(animation);
+        if let Some(id) = self.id {
+            self.scheduler.start_keyframe(id);
+        }
+    }
+
+    fn get(&self) -> f32 {
+        self.id
+            .and_then(|id| self.scheduler.get_keyframe_value(id))
+            .unwrap_or(0.0)
+    }
+
+    fn is_animating(&self) -> bool {
+        self.id
+            .is_some_and(|id| self.scheduler.is_keyframe_playing(id))
+    }
+}
+
+impl Drop for TimedDelta {
+    fn drop(&mut self) {
+        if let Some(id) = self.id.take() {
+            self.scheduler.remove_keyframe(id);
+        }
+    }
+}
+
 /// Animated offset from layout position to visual position
 /// Values animate from initial offset back to 0 (identity)
 pub struct AnimatedOffset {
     /// Horizontal offset (dx from layout position)
-    pub x: Option<AnimatedValue>,
+    pub x: Option<Delta>,
     /// Vertical offset (dy from layout position)
-    pub y: Option<AnimatedValue>,
+    pub y: Option<Delta>,
 }
 
 impl AnimatedOffset {
@@ -69,9 +188,9 @@ impl AnimatedOffset {
 /// Values animate from initial delta back to 0 (identity)
 pub struct AnimatedSizeDelta {
     /// Width delta (dw from layout width)
-    pub width: Option<AnimatedValue>,
+    pub width: Option<Delta>,
     /// Height delta (dh from layout height)
-    pub height: Option<AnimatedValue>,
+    pub height: Option<Delta>,
 }
 
 impl AnimatedSizeDelta {
@@ -182,16 +301,12 @@ impl VisualAnimation {
         // Create animated offsets - start at delta, animate to 0
         let offset = AnimatedOffset {
             x: if config.animate.position && dx.abs() > config.threshold {
-                let mut anim = AnimatedValue::new(scheduler.clone(), dx, config.spring);
-                anim.set_target(0.0);
-                Some(anim)
+                Some(Delta::start(dx, config, &scheduler))
             } else {
                 None
             },
             y: if config.animate.position && dy.abs() > config.threshold {
-                let mut anim = AnimatedValue::new(scheduler.clone(), dy, config.spring);
-                anim.set_target(0.0);
-                Some(anim)
+                Some(Delta::start(dy, config, &scheduler))
             } else {
                 None
             },
@@ -199,16 +314,12 @@ impl VisualAnimation {
 
         let size_delta = AnimatedSizeDelta {
             width: if config.animate.size && dw.abs() > config.threshold {
-                let mut anim = AnimatedValue::new(scheduler.clone(), dw, config.spring);
-                anim.set_target(0.0);
-                Some(anim)
+                Some(Delta::start(dw, config, &scheduler))
             } else {
                 None
             },
             height: if config.animate.size && dh.abs() > config.threshold {
-                let mut anim = AnimatedValue::new(scheduler.clone(), dh, config.spring);
-                anim.set_target(0.0);
-                Some(anim)
+                Some(Delta::start(dh, config, &scheduler))
             } else {
                 None
             },
@@ -251,21 +362,16 @@ impl VisualAnimation {
 
         // Update or create animated values with new initial values, still targeting 0
         if let Some(ref mut anim) = self.offset.x {
-            // Set current value to the new offset, keep targeting 0
-            anim.set_immediate(dx);
-            anim.set_target(0.0);
+            anim.restart(dx);
         }
         if let Some(ref mut anim) = self.offset.y {
-            anim.set_immediate(dy);
-            anim.set_target(0.0);
+            anim.restart(dy);
         }
         if let Some(ref mut anim) = self.size_delta.width {
-            anim.set_immediate(dw);
-            anim.set_target(0.0);
+            anim.restart(dw);
         }
         if let Some(ref mut anim) = self.size_delta.height {
-            anim.set_immediate(dh);
-            anim.set_target(0.0);
+            anim.restart(dh);
         }
     }
 
@@ -376,8 +482,11 @@ pub struct VisualAnimationConfig {
     /// Which properties to animate
     pub animate: AnimateProperties,
 
-    /// Spring configuration
+    /// Spring configuration, used when `timed` is `None`
     pub spring: SpringConfig,
+
+    /// Ease over this many milliseconds on this curve instead of a spring.
+    pub timed: Option<(u32, Easing)>,
 
     /// Minimum change threshold (ignore tiny changes)
     pub threshold: f32,
@@ -402,6 +511,7 @@ impl VisualAnimationConfig {
                 size: true,
             },
             spring: SpringConfig::snappy(),
+            timed: None,
             threshold: 1.0,
             clip_behavior: ClipBehavior::ClipToAnimated,
         }
@@ -416,6 +526,7 @@ impl VisualAnimationConfig {
                 size: true,
             },
             spring: SpringConfig::snappy(),
+            timed: None,
             threshold: 1.0,
             clip_behavior: ClipBehavior::ClipToAnimated,
         }
@@ -430,6 +541,7 @@ impl VisualAnimationConfig {
                 size: true,
             },
             spring: SpringConfig::snappy(),
+            timed: None,
             threshold: 1.0,
             clip_behavior: ClipBehavior::ClipToAnimated,
         }
@@ -444,6 +556,7 @@ impl VisualAnimationConfig {
                 size: false,
             },
             spring: SpringConfig::snappy(),
+            timed: None,
             threshold: 1.0,
             clip_behavior: ClipBehavior::NoClip,
         }
@@ -458,6 +571,7 @@ impl VisualAnimationConfig {
                 size: true,
             },
             spring: SpringConfig::snappy(),
+            timed: None,
             threshold: 1.0,
             clip_behavior: ClipBehavior::ClipToAnimated,
         }
@@ -469,9 +583,26 @@ impl VisualAnimationConfig {
         self
     }
 
+    /// Ease over `duration_ms` on `easing` instead of a spring.
+    pub fn timed(mut self, duration_ms: u32, easing: Easing) -> Self {
+        self.timed = Some((duration_ms, easing));
+        self
+    }
+
+    /// Ease over the theme's normal duration on its ease-out curve, the
+    /// default for a component's layout motion.
+    pub fn theme_timed(self) -> Self {
+        let tokens = blinc_theme::ThemeState::get().animations();
+        self.timed(
+            tokens.duration_normal as u32,
+            tokens.ease_out.to_animation_easing(),
+        )
+    }
+
     /// Use spring configuration
     pub fn with_spring(mut self, config: SpringConfig) -> Self {
         self.spring = config;
+        self.timed = None;
         self
     }
 
@@ -537,6 +668,44 @@ mod tests {
         let config = VisualAnimationConfig::position();
         assert!(config.animate.position);
         assert!(!config.animate.size);
+    }
+
+    #[test]
+    fn a_timed_animation_eases_over_its_duration() {
+        let scheduler = blinc_animation::AnimationScheduler::new();
+        let config = VisualAnimationConfig::height().timed(200, Easing::Linear);
+        let from = ElementBounds {
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 0.0,
+        };
+        let to = ElementBounds {
+            height: 80.0,
+            ..from
+        };
+        let anim =
+            VisualAnimation::from_bounds_change("k".into(), from, to, &config, scheduler.handle())
+                .expect("a height change animates");
+        assert_eq!(
+            anim.current_visual_bounds().height,
+            0.0,
+            "starts where it was"
+        );
+        scheduler.tick_by(0.1);
+        let half = anim.current_visual_bounds().height;
+        assert!(
+            (half - 40.0).abs() < 1.0,
+            "halfway at half the duration: {half}"
+        );
+        assert!(anim.is_animating());
+        scheduler.tick_by(0.15);
+        assert_eq!(
+            anim.current_visual_bounds().height,
+            80.0,
+            "lands on the layout"
+        );
+        assert!(!anim.is_animating());
     }
 
     #[test]

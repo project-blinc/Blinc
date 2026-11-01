@@ -5,12 +5,14 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- An attribute bound to two values at once (`data-state` set to `open` while `closed` is still listed) reads as the value set last. A child rule keyed on the new value (`.trigger[data-state="open"] > .chevron`) failed to apply when the new value landed first.
 - A class added in place no longer overrides a later rule the element already matched. A checked switch that was disabled from the start showed the `:checked` fill over the later `:disabled` one; one disabled through a signal showed the disabled fill. Both follow the cascade now.
 - An unfocused text field no longer keeps the window drawing. Every `TextInput`, `TextArea`, code editor and rich text editor mounts a caret canvas, and any visible canvas asked for a frame each vsync, so a form on screen held the CPU awake. Their carets now ask for frames only while they can show.
 - A CSS transition of a transform now carries every component of it when any one changes. Easing only the scale of a translated element (a pressed checked switch thumb) used to rebuild the transform from the scale alone and drop the translation. A transform written from transition values is composed translate, rotate, skew, scale, so the translation is no longer scaled.
 - An element that keeps a pointer state across a restyle now eases to its new look. Unchecking a hovered switch changes the rule that applies from `:checked:hover` to `:hover`; that was applied without a transition, so the fill snapped.
 
 ### Added
+- `VisualAnimationConfig::timed(duration_ms, easing)` and `theme_timed()` ease a layout animation over a duration on a curve instead of a spring; `theme_timed()` takes the theme's normal duration and ease-out. A timed animation runs as a scheduler keyframe, so it asks for frames while it plays.
 - `Reactive<T>` is `Clone` and has `now()`, the value it holds at the moment, so a widget can hand one bound prop to several bindings and read it in a handler.
 - `Div::flex_grow_value` takes a signal or a computed as well as a number; a change patches the style and relayouts, so siblings growing by complementary fractions share their parent's width as it is laid out.
 - `Div::max_w_full` sets `max-width: 100%`.
