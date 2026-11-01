@@ -148,3 +148,28 @@ fn a_disabled_field_does_not_respond() {
     ui.hover(".cn-input").settle();
     assert_eq!(border(&ui), idle, "hover changed a disabled field");
 }
+
+#[test]
+fn only_a_focused_caret_asks_for_frames() {
+    let Some(mut ui) = session() else { return };
+    mount(&mut ui, "", None, false);
+    ui.snapshot().expect("snapshot");
+    assert!(
+        !ui.tree().canvas_wants_frames(),
+        "an unfocused field kept its caret asking for frames"
+    );
+
+    ui.click(".cn-input").settle();
+    ui.snapshot().expect("snapshot");
+    assert!(
+        ui.tree().canvas_wants_frames(),
+        "a focused caret stopped asking for frames to blink"
+    );
+
+    blinc_layout::widgets::text_input::blur_all_text_inputs();
+    ui.settle().snapshot().expect("snapshot");
+    assert!(
+        !ui.tree().canvas_wants_frames(),
+        "a blurred field kept its caret asking for frames"
+    );
+}

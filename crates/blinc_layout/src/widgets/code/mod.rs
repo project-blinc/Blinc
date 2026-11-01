@@ -2870,6 +2870,7 @@ fn build_editor_content(
         }
 
         let cursor_state_for_canvas = Arc::clone(&data.cursor_state);
+        let cursor_state_for_frames = Arc::clone(&data.cursor_state);
         let cursor_canvas = canvas(
             move |ctx: &mut dyn blinc_core::DrawContext, bounds: crate::canvas::CanvasBounds| {
                 let cs = cursor_state_for_canvas.lock().unwrap();
@@ -2893,6 +2894,7 @@ fn build_editor_content(
                 );
             },
         )
+        .redraw_while(move || cursor_state_for_frames.lock().unwrap().visible)
         .absolute()
         .top(cursor_top)
         .left(cursor_x)

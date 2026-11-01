@@ -176,6 +176,7 @@ pub fn cursor_state() -> SharedCursorState {
 /// ```
 pub fn cursor_canvas(state: &SharedCursorState, height: f32) -> Canvas {
     let state = Arc::clone(state);
+    let for_frames = Arc::clone(&state);
 
     canvas(move |ctx: &mut dyn DrawContext, bounds: CanvasBounds| {
         let s = state.lock().unwrap();
@@ -205,6 +206,7 @@ pub fn cursor_canvas(state: &SharedCursorState, height: f32) -> Canvas {
             Brush::Solid(color),
         );
     })
+    .redraw_while(move || for_frames.lock().unwrap().visible)
     .w(2.0) // Default cursor width
     .h(height)
 }
@@ -221,6 +223,7 @@ pub fn cursor_canvas(state: &SharedCursorState, height: f32) -> Canvas {
 /// * `top` - Top offset for vertical centering
 pub fn cursor_canvas_absolute(state: &SharedCursorState, height: f32, top: f32) -> Canvas {
     let state = Arc::clone(state);
+    let for_frames = Arc::clone(&state);
 
     canvas(move |ctx: &mut dyn DrawContext, bounds: CanvasBounds| {
         let s = state.lock().unwrap();
@@ -250,6 +253,7 @@ pub fn cursor_canvas_absolute(state: &SharedCursorState, height: f32, top: f32) 
             Brush::Solid(color),
         );
     })
+    .redraw_while(move || for_frames.lock().unwrap().visible)
     .absolute()
     .left(0.0)
     .top(top)

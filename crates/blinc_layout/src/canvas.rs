@@ -80,6 +80,9 @@ pub struct CanvasBounds {
 /// Canvas render function type - uses Rc for single-threaded UI
 pub type CanvasRenderFn = Rc<dyn Fn(&mut dyn DrawContext, CanvasBounds)>;
 
+/// Whether a canvas wants another frame. See [`Canvas::redraw_while`].
+pub type CanvasRedrawFn = Rc<dyn Fn() -> bool>;
+
 /// Canvas element for custom GPU drawing
 ///
 /// The canvas element reserves space in the layout and provides direct access
@@ -103,6 +106,8 @@ pub struct Canvas {
     opacity: f32,
     /// Render layer (background, foreground, glass)
     layer: RenderLayer,
+    /// When frames are wanted; `None` wants one every frame it is visible.
+    redraw_while: Option<CanvasRedrawFn>,
 }
 
 impl Canvas {
@@ -113,6 +118,7 @@ impl Canvas {
             render_fn: None,
             opacity: 1.0,
             layer: RenderLayer::default(),
+            redraw_while: None,
         }
     }
 
@@ -126,6 +132,7 @@ impl Canvas {
             render_fn: Some(Rc::new(render_fn)),
             opacity: 1.0,
             layer: RenderLayer::default(),
+            redraw_while: None,
         }
     }
 
@@ -135,6 +142,21 @@ impl Canvas {
         F: Fn(&mut dyn DrawContext, CanvasBounds) + 'static,
     {
         self.render_fn = Some(Rc::new(render_fn));
+        self
+    }
+
+    /// Asks for frames only while `wants` returns true.
+    ///
+    /// A visible canvas otherwise asks for a frame every vsync, since its
+    /// callback may draw something different each time. A canvas that
+    /// animates only in some state, such as a caret while its field is
+    /// focused, names that state here so the window can idle outside it.
+    /// It still repaints on frames something else asks for.
+    pub fn redraw_while<F>(mut self, wants: F) -> Self
+    where
+        F: Fn() -> bool + 'static,
+    {
+        self.redraw_while = Some(Rc::new(wants));
         self
     }
 
@@ -255,6 +277,10 @@ impl ElementBuilder for Canvas {
         self.render_fn.clone()
     }
 
+    fn canvas_redraw_while(&self) -> Option<CanvasRedrawFn> {
+        self.redraw_while.clone()
+    }
+
     fn layout_style(&self) -> Option<&taffy::Style> {
         Some(&self.style)
     }
@@ -272,6 +298,15 @@ pub struct CanvasData {
     /// top of any children. Also short-circuits the
     /// `had_canvas_painted` flag so the fast path can engage.
     pub is_static: bool,
+    /// See [`Canvas::redraw_while`].
+    pub redraw_while: Option<CanvasRedrawFn>,
+}
+
+impl CanvasData {
+    /// Whether this canvas asks for another frame while it is visible.
+    pub fn wants_frames(&self) -> bool {
+        self.redraw_while.as_ref().is_none_or(|wants| wants())
+    }
 }
 
 impl std::fmt::Debug for CanvasData {
@@ -279,6 +314,7 @@ impl std::fmt::Debug for CanvasData {
         f.debug_struct("CanvasData")
             .field("has_render_fn", &self.render_fn.is_some())
             .field("is_static", &self.is_static)
+            .field("has_redraw_while", &self.redraw_while.is_some())
             .finish()
     }
 }

@@ -351,6 +351,7 @@ impl RenderTree {
             ElementTypeId::Canvas => ElementType::Canvas(CanvasData {
                 render_fn: element.canvas_render_info(),
                 is_static: element.is_static_canvas(),
+                redraw_while: element.canvas_redraw_while(),
             }),
             ElementTypeId::StyledText => {
                 if let Some(info) = element.styled_text_render_info() {
@@ -664,6 +665,7 @@ impl RenderTree {
             ElementTypeId::Canvas => ElementType::Canvas(CanvasData {
                 render_fn: element.canvas_render_info(),
                 is_static: element.is_static_canvas(),
+                redraw_while: element.canvas_redraw_while(),
             }),
             ElementTypeId::StyledText => {
                 if let Some(info) = element.styled_text_render_info() {

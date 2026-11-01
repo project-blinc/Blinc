@@ -403,6 +403,15 @@ pub struct CanvasPaintRecord {
     /// inside a focused cn::input stay visible above the popover
     /// bg/border their host paints into the dyn batch.
     pub in_overlay_subtree: bool,
+    /// See [`crate::canvas::Canvas::redraw_while`].
+    pub redraw_while: Option<crate::canvas::CanvasRedrawFn>,
+}
+
+impl CanvasPaintRecord {
+    /// Whether this canvas asks for another frame.
+    pub fn wants_frames(&self) -> bool {
+        self.redraw_while.as_ref().is_none_or(|wants| wants())
+    }
 }
 
 impl std::fmt::Debug for CanvasPaintRecord {
@@ -731,6 +740,8 @@ pub struct RenderTree {
     /// Dynamic canvas output retained by its owning group or batch. Its callback
     /// requires a full walk so content and commands keep one owner.
     had_retained_canvas_painted: Cell<bool>,
+    /// Frame predicates of the retained canvases; `None` always wants one.
+    retained_canvas_redraws: RefCell<Vec<Option<crate::canvas::CanvasRedrawFn>>>,
     /// Capture candidates and their deferred-content requirements.
     cross_stream_groups: RefCell<HashMap<LayoutNodeId, DeferredContent>>,
     /// When `true`, the paint walker skips invoking each
@@ -1109,6 +1120,7 @@ impl RenderTree {
             visible_anim_active: Cell::new(false),
             had_canvas_painted: Cell::new(false),
             had_retained_canvas_painted: Cell::new(false),
+            retained_canvas_redraws: RefCell::new(Vec::new()),
             cross_stream_groups: RefCell::new(HashMap::new()),
             skip_canvas_drawing: Cell::new(false),
             painted_node_ids: RefCell::new(HashSet::new()),
@@ -1567,6 +1579,20 @@ impl RenderTree {
     /// Such callbacks must repaint with their owning commands each frame.
     pub fn had_retained_canvas_painted(&self) -> bool {
         self.had_retained_canvas_painted.get()
+    }
+
+    /// Whether a canvas painted on the last full paint asks for another
+    /// frame. Overlay-subtree canvases are not counted.
+    pub fn canvas_wants_frames(&self) -> bool {
+        self.canvas_paint_records
+            .borrow()
+            .values()
+            .any(CanvasPaintRecord::wants_frames)
+            || self
+                .retained_canvas_redraws
+                .borrow()
+                .iter()
+                .any(|wants| wants.as_ref().is_none_or(|wants| wants()))
     }
 
     /// Setter for `had_canvas_painted`. Called by the paint walker

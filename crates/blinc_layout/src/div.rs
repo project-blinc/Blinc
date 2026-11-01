@@ -5167,6 +5167,12 @@ pub trait ElementBuilder {
         false
     }
 
+    /// See [`crate::canvas::Canvas::redraw_while`]. Applies only when
+    /// `element_type_id` is [`ElementTypeId::Canvas`].
+    fn canvas_redraw_while(&self) -> Option<crate::canvas::CanvasRedrawFn> {
+        None
+    }
+
     /// The taffy `Style` that this element actually installs on its
     /// layout node — i.e. the style after any widget-internal
     /// adjustments `build()` would apply. The default delegates to
@@ -5432,6 +5438,9 @@ impl<T: ?Sized + ElementBuilder> ElementBuilder for Box<T> {
     }
     fn is_static_canvas(&self) -> bool {
         (**self).is_static_canvas()
+    }
+    fn canvas_redraw_while(&self) -> Option<crate::canvas::CanvasRedrawFn> {
+        (**self).canvas_redraw_while()
     }
     fn effective_layout_style(&self) -> Option<taffy::Style> {
         (**self).effective_layout_style()

@@ -184,6 +184,7 @@ pub(super) fn content(
         })
     };
     let state_for_caret = Arc::clone(state);
+    let state_for_frames = Arc::clone(state);
     let caret = canvas(
         move |ctx: &mut dyn blinc_core::DrawContext, bounds: crate::canvas::CanvasBounds| {
             let (shown, cursor_state) = {
@@ -206,6 +207,7 @@ pub(super) fn content(
             );
         },
     )
+    .redraw_while(move || state_for_frames.lock().unwrap().visual.is_focused())
     .w(2.0)
     .h(cursor_height);
 

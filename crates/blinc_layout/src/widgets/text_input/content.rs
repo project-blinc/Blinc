@@ -213,6 +213,7 @@ pub(super) fn content(
             })
         };
         let data_for_caret = Arc::clone(data);
+        let data_for_frames = Arc::clone(data);
         let caret = canvas(
             move |ctx: &mut dyn blinc_core::DrawContext, bounds: crate::canvas::CanvasBounds| {
                 let (shown, cursor_state) = {
@@ -243,6 +244,10 @@ pub(super) fn content(
                 );
             },
         )
+        .redraw_while(move || {
+            let d = data_for_frames.lock().unwrap();
+            d.visual.is_focused() && d.selection_start.is_none()
+        })
         .w(2.0)
         .h(cursor_height);
         clip_container = clip_container.child(

@@ -78,6 +78,7 @@ impl RenderTree {
         // actually runs.
         self.had_canvas_painted.set(false);
         self.had_retained_canvas_painted.set(false);
+        self.retained_canvas_redraws.borrow_mut().clear();
         // Same lifecycle for the painted-node set: cleared here, grown
         // by the walk, queried via `painted_node_ids()` to filter
         // animating Statefuls down to those whose node is actually on
@@ -699,7 +700,12 @@ impl RenderTree {
                         state.is_motion_active(node)
                     }
                 });
-                if canvas_paints_dynamic || has_active_binding || has_active_motion {
+                let canvas_wants_frames = canvas_paints_dynamic
+                    && matches!(
+                        &render_node.element_type,
+                        ElementType::Canvas(canvas_data) if canvas_data.wants_frames()
+                    );
+                if canvas_wants_frames || has_active_binding || has_active_motion {
                     self.visible_anim_active.set(true);
                 }
             }
@@ -1639,6 +1645,9 @@ impl RenderTree {
                             || ctx.bg_batch_is_composite());
                     if retained_canvas {
                         self.had_retained_canvas_painted.set(true);
+                        self.retained_canvas_redraws
+                            .borrow_mut()
+                            .push(canvas_data.redraw_while.clone());
                     }
                     let skip_drawing =
                         skip_drawing_flag && !canvas_data.is_static && !retained_canvas;
@@ -1672,6 +1681,7 @@ impl RenderTree {
                             z_layer: saved_z_layer,
                             opacity: saved_opacity,
                             in_overlay_subtree: nested_overlay,
+                            redraw_while: canvas_data.redraw_while.clone(),
                         };
                         if nested_overlay {
                             self.overlay_canvas_paint_records

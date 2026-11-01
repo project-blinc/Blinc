@@ -402,8 +402,7 @@ impl RenderContext {
                 // walker didn't run this frame, so reset the flag
                 // from current animation state. Mirrors the motion
                 // damage path's end-of-frame restate.
-                let has_visible_canvas =
-                    !tree.canvas_paint_records().is_empty() || tree.had_retained_canvas_painted();
+                let canvas_wants_frames = tree.canvas_wants_frames();
                 let any_visible_anim = {
                     let painted_set = tree.painted_node_ids().clone();
                     let painted_stable = tree.painted_stable_ids();
@@ -413,7 +412,7 @@ impl RenderContext {
                         &painted_stable,
                     )
                 };
-                tree.set_visible_anim_active(any_visible_anim || has_visible_canvas);
+                tree.set_visible_anim_active(any_visible_anim || canvas_wants_frames);
                 tracing::trace!(
                     target: "blinc_app::frame_timing",
                     path = "css_patch",
@@ -652,8 +651,7 @@ impl RenderContext {
 
                 // Replace the redraw signal from visible canvases and current animation
                 // activity.
-                let has_visible_canvas =
-                    !tree.canvas_paint_records().is_empty() || tree.had_retained_canvas_painted();
+                let canvas_wants_frames = tree.canvas_wants_frames();
                 let any_visible_anim = {
                     let painted_set = tree.painted_node_ids().clone();
                     let painted_stable = tree.painted_stable_ids();
@@ -663,7 +661,7 @@ impl RenderContext {
                         &painted_stable,
                     )
                 };
-                tree.set_visible_anim_active(any_visible_anim || has_visible_canvas);
+                tree.set_visible_anim_active(any_visible_anim || canvas_wants_frames);
 
                 let path_label = if bindings_animating {
                     "binding_damage"
@@ -826,14 +824,13 @@ impl RenderContext {
         }
 
         // Keep the redraw signal current after full paint as well as cache replay.
-        let has_visible_canvas =
-            !tree.canvas_paint_records().is_empty() || tree.had_retained_canvas_painted();
+        let canvas_wants_frames = tree.canvas_wants_frames();
         let any_visible_anim = {
             let painted_set = tree.painted_node_ids().clone();
             let painted_stable = tree.painted_stable_ids();
             tree.has_any_active_animation_visible(render_state, &painted_set, &painted_stable)
         };
-        tree.set_visible_anim_active(any_visible_anim || has_visible_canvas);
+        tree.set_visible_anim_active(any_visible_anim || canvas_wants_frames);
 
         Ok(())
     }

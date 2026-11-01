@@ -202,6 +202,7 @@ fn cursor_overlay_canvas(
     color: Color,
     width: f32,
 ) -> Canvas {
+    let (state_for_frames, cursor_for_frames) = (state.clone(), cursor_state.clone());
     canvas(move |ctx: &mut dyn DrawContext, _bounds: CanvasBounds| {
         // Compute opacity from blink state.
         let (opacity, visible) = match cursor_state.lock() {
@@ -228,6 +229,10 @@ fn cursor_overlay_canvas(
             CornerRadius::default(),
             Brush::Solid(c),
         );
+    })
+    .redraw_while(move || {
+        cursor_for_frames.lock().is_ok_and(|s| s.visible)
+            && state_for_frames.lock().is_ok_and(|d| d.focused)
     })
     .absolute()
     .left(0.0)
