@@ -773,6 +773,7 @@ pub const CN_STYLES: &str = concat!(
 }
 
 .cn-select-trigger {
+    color: var(--text-primary);
     background: transparent;
     box-shadow: var(--shadow-sm);
     border-color: var(--border);
@@ -794,7 +795,10 @@ pub const CN_STYLES: &str = concat!(
     border-color: var(--border-hover);
 }
 .cn-combobox-box:disabled { opacity: 0.5; }
+/* No value chosen, or disabled: the shown text, which inherits, dims. */
+.cn-select-trigger[data-placeholder] { color: var(--text-tertiary); }
 .cn-select-trigger:disabled {
+    color: var(--text-tertiary);
     box-shadow: none;
     background: var(--input-bg-disabled);
     border-color: var(--border-secondary);

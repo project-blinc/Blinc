@@ -319,10 +319,12 @@ cn::select(fruit)
 ### Styling
 
 The trigger is one element with the class `cn-select-trigger`. It has a
-`disabled` attribute while disabled and `data-state="open"` while its list is
-showing, so its fill and border are rules, eased by a `transition`: a faint
-tint on `:hover`, a stronger one on `:active`, a darker border while open, and
-the disabled palette. Restyle it with rules of your own:
+`disabled` attribute while disabled, `data-placeholder` while nothing is
+chosen and `data-state="open"` while its list is showing, so its look is
+rules, eased by a `transition`: a faint tint on `:hover`, a stronger one on
+`:active`, a darker border while open, and the disabled palette. The shown
+text inherits the trigger's `color`, which the placeholder and disabled rules
+dim. Restyle it with rules of your own:
 
 ```css
 .cn-select-trigger[data-state="open"] { border-color: #16a34a; }

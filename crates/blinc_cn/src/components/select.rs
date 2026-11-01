@@ -184,16 +184,16 @@ impl Select {
         // Chevron SVG (down arrow)
         let chevron_svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
 
-        // The value shown, as a one-row list keyed by the value and whether
-        // the select is disabled, which dims it.
+        // The value shown, as a one-row list keyed by the value. Its text
+        // inherits the trigger's colour, which `[data-placeholder]` and
+        // `:disabled` rules dim, as ashui's select does.
         let value = config.value;
-        let shown = {
-            let disabled = disabled.clone();
+        let shown = computed(move |g: &ReactiveGraph| vec![g.get(value).unwrap_or_default()]);
+        let placeholder_shown = {
+            let options = config.options.clone();
             computed(move |g: &ReactiveGraph| {
-                vec![(
-                    g.get(value).unwrap_or_default(),
-                    disabled.read(g).unwrap_or(false),
-                )]
+                let current = g.get(value).unwrap_or_default();
+                !options.iter().any(|opt| opt.value == current)
             })
         };
         let options_for_display = config.options.clone();
@@ -203,28 +203,21 @@ impl Select {
             .unwrap_or_else(|| "Select...".to_string());
         let content_wrapper = div().overflow_clip().flex_1().for_each(
             shown,
-            |shown: &(String, bool)| format!("{}{}", shown.1 as u8, shown.0),
-            move |(current, disabled): (String, bool)| -> Div {
+            |value: &String| value.clone(),
+            move |current: String| -> Div {
                 let selected = options_for_display.iter().find(|opt| opt.value == current);
-                let text_clr = if disabled || selected.is_none() {
-                    text_tertiary
-                } else {
-                    text_color
-                };
                 match selected {
                     Some(opt) => match opt.content {
                         Some(ref content_fn) => content_fn(),
                         None => div()
                             .h_fit()
                             .overflow_clip()
-                            .child(text(&opt.label).size(font_size).no_cursor().color(text_clr)),
+                            .child(text(&opt.label).size(font_size).no_cursor()),
                     },
-                    None => div().h_fit().overflow_clip().child(
-                        text(&placeholder)
-                            .size(font_size)
-                            .no_cursor()
-                            .color(text_clr),
-                    ),
+                    None => div()
+                        .h_fit()
+                        .overflow_clip()
+                        .child(text(&placeholder).size(font_size).no_cursor()),
                 }
             },
         );
@@ -242,6 +235,7 @@ impl Select {
             .p_px(padding)
             .attr_when("data-state", "open", open_state)
             .attr_when("disabled", "", disabled.clone())
+            .attr_when("data-placeholder", "", &placeholder_shown)
             .border_width(1.0)
             .rounded(radius)
             .overflow_clip()
