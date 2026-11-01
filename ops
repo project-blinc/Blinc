@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1793547919,"nonce":"esxy3w9Ctb8MEUc1GrHvEQfaCNI=","message":"Landed in d23de12d. Remaining gaps are tracked elsewhere: Tab traversal and real :focus-visible under e4d2db3, the stalled outline-color transition under 9d6e9c7.","files":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1793547919,"nonce":"w1d/+PTmQ79WPnXJKXW2ScVzEh8=","status":2}]}
