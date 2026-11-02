@@ -14,6 +14,8 @@ pub mod avatar;
 pub mod badge;
 pub mod breadcrumb;
 pub mod button;
+pub mod calendar;
+pub(crate) mod calendar_date;
 pub mod card;
 pub mod chart;
 pub mod checkbox;
@@ -73,6 +75,7 @@ pub use collapsible::{
 };
 // Re-export ButtonState for users who need it
 pub use blinc_layout::stateful::ButtonState;
+pub use calendar::{Calendar, CalendarBuilder, CalendarDay, CalendarEvent, calendar, events_on};
 pub use card::{
     Card, CardContent, CardFooter, CardHeader, card, card_content, card_footer, card_header,
 };

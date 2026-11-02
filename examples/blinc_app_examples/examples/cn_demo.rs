@@ -27,6 +27,9 @@ pub fn theme_bundle() -> ThemeBundle {
                 #css-overrides .cn-button--destructive:hover { background: var(--primary); }
                 #css-overrides .cn-badge--success { background: #00cc66; }
                 #css-demo-card { border-width: 2px; border-color: var(--primary); }
+                .cn-calendar-event[data-kind="weather"] { color: #f59e0b; }
+                .cn-calendar-event[data-kind="rain"] { color: #38bdf8; }
+                .cn-calendar-event[data-kind="deadline"] { background: var(--error); }
             "#,
         )
 }
@@ -116,6 +119,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                         .child(gauges_section(ctx))
                         .child(radio_section(ctx))
                         .child(select_section(ctx))
+                        .child(calendar_section(ctx))
                         .child(combobox_section(ctx))
                         .child(context_menu_section())
                         .child(dropdown_menu_section())
@@ -1146,6 +1150,84 @@ fn gauges_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                     ),
                 )),
         )
+}
+
+// ============================================================================
+// CALENDAR SECTION
+// ============================================================================
+
+fn calendar_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
+    let today = CalendarDay::today();
+    let on = |days: i64| today.add_days(days);
+    let icon = |path: &str| to_svg(path, 8.0);
+    let picked = ctx.use_signal(Some(today));
+    let events = ctx.use_signal(vec![
+        CalendarEvent::new(on(0), "Sunny")
+            .kind("weather")
+            .icon(icon(icons::SUN)),
+        CalendarEvent::new(on(1), "Standup").kind("meeting"),
+        CalendarEvent::new(on(1), "Design review").kind("meeting"),
+        CalendarEvent::new(on(2), "Rain")
+            .kind("rain")
+            .icon(icon(icons::CLOUD_RAIN)),
+        CalendarEvent::new(on(3), "Customer call")
+            .kind("meeting")
+            .icon(icon(icons::VIDEO)),
+        CalendarEvent::new(on(5), "Release").kind("deadline"),
+    ]);
+    // What is on the chosen day.
+    let agenda = blinc_core::reactive::computed(move |g| {
+        let Some(day) = g.get(picked).flatten() else {
+            return "Pick a day".to_string();
+        };
+        let all = g.get(events).unwrap_or_default();
+        let titles: Vec<&str> = events_on(&all, day)
+            .iter()
+            .map(|e| e.title.as_str())
+            .collect();
+        let date = format!("{}-{:02}-{:02}", day.year, day.month, day.day);
+        match titles.is_empty() {
+            true => format!("{date}: nothing planned"),
+            false => format!("{date}: {}", titles.join(", ")),
+        }
+    });
+    let monday = ctx.use_signal(None::<CalendarDay>);
+
+    section_container().child(section_title("Calendar")).child(
+        div()
+            .flex_row()
+            .flex_wrap()
+            .items_start()
+            .gap_px(24.0)
+            .child(
+                div()
+                    .flex_col()
+                    .gap_px(8.0)
+                    .child(cn::label("Meetings, weather and a deadline"))
+                    .child(cn::calendar(picked).events(events))
+                    .child(cn::label(agenda))
+                    .child(cn::button("Add a meeting on this day").on_click(move |_| {
+                        if let Some(day) = picked.get() {
+                            events.update(|mut all| {
+                                all.push(CalendarEvent::new(day, "New meeting").kind("meeting"));
+                                all
+                            });
+                        }
+                    })),
+            )
+            .child(
+                div()
+                    .flex_col()
+                    .gap_px(8.0)
+                    .child(cn::label("Monday first, 2020 to 2030"))
+                    .child(
+                        cn::calendar(monday)
+                            .week_start(1)
+                            .min_year(2020)
+                            .max_year(2030),
+                    ),
+            ),
+    )
 }
 
 // ============================================================================

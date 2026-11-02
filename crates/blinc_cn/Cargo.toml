@@ -29,5 +29,18 @@ taffy.workspace = true
 # Logging
 tracing.workspace = true
 
+# The calendar's swipe: the gap between two scroll events.
+web-time = "1.1"
+
+# Today's local date, for the calendar.
+[target.'cfg(all(unix, not(target_arch = "wasm32")))'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_SystemInformation"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+
 [dev-dependencies]
 tracing-subscriber = { workspace = true }

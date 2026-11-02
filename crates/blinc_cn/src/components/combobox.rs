@@ -255,13 +255,15 @@ impl Combobox {
             .w_full()
             .items_center()
             .h(height)
-            .p_px(padding)
+            // Side padding only: the height and centring place the line.
+            .padding_x_px(padding)
             .border_width(1.0)
             .rounded(radius)
             .child(
                 div().flex_1().overflow_clip().child(
                     Text::bound(display_text.into_reactive())
                         .size(font_size)
+                        .no_wrap()
                         .no_cursor(),
                 ),
             )

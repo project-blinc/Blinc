@@ -60,6 +60,7 @@ pub mod cn {
     pub use crate::components::badge::{BadgeStyle, BadgeVariant, badge};
     pub use crate::components::breadcrumb::breadcrumb;
     pub use crate::components::button::button;
+    pub use crate::components::calendar::calendar;
     pub use crate::components::card::{card, card_content, card_footer, card_header};
     pub use crate::components::chart::{
         bar_chart, comparison_bar_chart, histogram, line_chart, spark_line, threshold_line_chart,
@@ -141,6 +142,9 @@ pub mod prelude {
         Button, ButtonBuilder, ButtonSize, ButtonVariant, IconPosition, button,
     };
     // Re-export ButtonState for use with buttons
+    pub use crate::components::calendar::{
+        Calendar, CalendarBuilder, CalendarDay, CalendarEvent, calendar, events_on,
+    };
     pub use crate::components::card::{
         Card, CardContent, CardFooter, CardHeader, card, card_content, card_footer, card_header,
     };

@@ -207,12 +207,12 @@ impl Select {
                         None => div()
                             .h_fit()
                             .overflow_clip()
-                            .child(text(&opt.label).size(font_size).no_cursor()),
+                            .child(text(&opt.label).size(font_size).no_wrap().no_cursor()),
                     },
                     None => div()
                         .h_fit()
                         .overflow_clip()
-                        .child(text(&placeholder).size(font_size).no_cursor()),
+                        .child(text(&placeholder).size(font_size).no_wrap().no_cursor()),
                 }
             },
         );
@@ -227,7 +227,8 @@ impl Select {
             .items_center()
             .justify_between()
             .h(height)
-            .p_px(padding)
+            // Side padding only: the height and centring place the line.
+            .padding_x_px(padding)
             .attr_when("data-state", "open", open_state)
             .attr_when("disabled", "", disabled.clone())
             .attr_when("data-placeholder", "", &placeholder_shown)
@@ -258,6 +259,7 @@ impl Select {
         let wrapper_id = format!("cn-select-{}", instance_key);
         let options_for_dropdown = config.options.clone();
         let on_change_for_dropdown = config.on_change.clone();
+        let virtual_rows = config.virtual_rows;
         let value_for_dropdown = config.value;
         let open_state_for_dropdown = open_state;
         let instance_key_owned = instance_key.to_string();
@@ -293,8 +295,8 @@ impl Select {
                     dropdown_width,
                     height,
                     font_size,
-                    padding,
                     radius,
+                    virtual_rows,
                 )
             });
 
@@ -361,6 +363,9 @@ struct SelectConfig {
     disabled: Reactive<bool>,
     width: Option<f32>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
+    /// The fixed row height of a virtual list, which builds only the rows
+    /// in view.
+    virtual_rows: Option<f32>,
 }
 
 impl SelectConfig {
@@ -374,6 +379,7 @@ impl SelectConfig {
             disabled: Reactive::Const(false),
             width: None,
             on_change: None,
+            virtual_rows: None,
         }
     }
 }
@@ -466,6 +472,13 @@ impl SelectBuilder {
     }
 
     /// Set the change callback
+    /// Build only the options in view, each `row_height` px tall, so a list
+    /// of hundreds opens at once.
+    pub fn virtual_rows(mut self, row_height: f32) -> Self {
+        self.config.virtual_rows = Some(row_height.max(1.0));
+        self
+    }
+
     pub fn on_change<F>(mut self, callback: F) -> Self
     where
         F: Fn(&str) + Send + Sync + 'static,
@@ -526,6 +539,9 @@ pub fn select(value: Signal<String>) -> SelectBuilder {
     SelectBuilder::new(value)
 }
 
+/// The tallest the open list grows before it scrolls.
+const LIST_MAX_HEIGHT: f32 = 300.0;
+
 /// Build the dropdown content as an absolutely positioned child.
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
@@ -539,12 +555,12 @@ fn build_dropdown_content(
     width: f32,
     trigger_height: f32,
     font_size: f32,
-    padding: f32,
     radius: f32,
+    virtual_rows: Option<f32>,
 ) -> Div {
     let dropdown_id = key;
 
-    let mut dropdown_div = div()
+    let dropdown_div = div()
         .class("cn-select-content")
         .id(dropdown_id)
         .flex_col()
@@ -561,53 +577,128 @@ fn build_dropdown_content(
         .left(0.0)
         .foreground();
 
-    for (idx, opt) in options.iter().enumerate() {
-        let opt_value = opt.value.clone();
-        let opt_label = opt.label.clone();
-        let opt_content = opt.content.clone();
-        let is_selected = opt_value == current_selected;
-        let is_opt_disabled = opt.disabled;
+    // A long list scrolls, and opens with the chosen option in the middle.
+    let reveal = blinc_layout::selector::ScrollRef::new();
+    let list = div()
+        .class("cn-select-list")
+        .flex_col()
+        .w_full()
+        .max_h(LIST_MAX_HEIGHT)
+        .overflow_y_scroll()
+        .bind_scroll(&reveal);
+    let row = OptionRow {
+        options: Arc::new(options.to_vec()),
+        current: current_selected.to_string(),
+        value,
+        open_state,
+        on_change: on_change.clone(),
+        key: key.to_string(),
+        font_size,
+    };
 
-        let on_change_for_opt = on_change.clone();
-        let opt_value_for_click = opt_value.clone();
+    let Some(row_height) = virtual_rows else {
+        let mut list = list;
+        for (idx, option) in options.iter().enumerate() {
+            if option.value == current_selected {
+                reveal.scroll_to(&row.id(idx));
+            }
+            list = list.child(row.build(idx));
+        }
+        return dropdown_div.child(list);
+    };
 
-        // An option's fill and text colour, selected, hovered or disabled,
-        // are `.cn-select-item` rules.
-        // Plain div with element ID for proper event registration during subtree rebuilds.
-        // Hover styles come from `.cn-select-item:hover` in cn_styles.rs.
-        let item_id = format!("{}_opt_{}", key, idx);
+    // Virtual: only the rows in view, and a few either side, exist, placed
+    // over a spacer as tall as every row.
+    let count = options.len();
+    let total = count as f32 * row_height;
+    let view = LIST_MAX_HEIGHT.min(total);
+    let initial = options
+        .iter()
+        .position(|o| o.value == current_selected)
+        .map_or(0.0, |i| {
+            (i as f32 * row_height + row_height / 2.0 - view / 2.0).clamp(0.0, total - view)
+        });
+    if initial > 0.0 {
+        reveal.set_scroll_offset(0.0, initial);
+    }
+    let offset = reveal.watch_y(initial);
+    let window = computed(move |g: &ReactiveGraph| {
+        let y = g.get(offset).unwrap_or(initial);
+        let first = ((y / row_height) as usize).saturating_sub(OVERSCAN);
+        let last = (((y + view) / row_height).ceil() as usize + OVERSCAN).min(count);
+        (first..last).collect::<Vec<usize>>()
+    });
+    // Full height, never shrunk to the list: the culling of an enclosing
+    // `viewport_cull` scroll tests this box, and the rows sit inside it.
+    let rows = div().relative().w_full().h(total).flex_shrink_0().for_each(
+        &window,
+        |idx: &usize| *idx,
+        move |idx: usize| {
+            row.build(idx)
+                .absolute()
+                .left(0.0)
+                .right(0.0)
+                .top(idx as f32 * row_height)
+                .h(row_height)
+        },
+    );
+    dropdown_div.child(list.h(view).child(rows))
+}
+
+/// Rows built either side of those in view in a virtual list.
+const OVERSCAN: usize = 4;
+
+/// What an option row needs, shared by every row of one open list.
+#[derive(Clone)]
+struct OptionRow {
+    options: Arc<Vec<SelectOption>>,
+    current: String,
+    value: Signal<String>,
+    open_state: Signal<bool>,
+    #[allow(clippy::type_complexity)]
+    on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
+    key: String,
+    font_size: f32,
+}
+
+impl OptionRow {
+    fn id(&self, idx: usize) -> String {
+        format!("{}_opt_{}", self.key, idx)
+    }
+
+    /// The row of option `idx`. Its fill and text colour, selected, hovered
+    /// or disabled, are `.cn-select-item` rules.
+    fn build(&self, idx: usize) -> Div {
+        let opt = &self.options[idx];
+        let chosen = opt.value.clone();
+        let disabled = opt.disabled;
+        let (value, open_state, on_change) = (self.value, self.open_state, self.on_change.clone());
         let mut item = div()
-            .id(&item_id)
+            .id(self.id(idx))
             .class("cn-select-item")
             .w_full()
             .h_fit()
-            .attr_when("disabled", "", is_opt_disabled)
+            .attr_when("disabled", "", disabled)
             .flex_row()
             .items_center()
-            .child(if let Some(ref content_fn) = opt_content {
-                content_fn()
-            } else {
-                div().child(text(&opt_label).size(font_size).no_cursor())
+            .child(match opt.content {
+                Some(ref content_fn) => content_fn(),
+                None => div().child(text(&opt.label).size(self.font_size).no_cursor()),
             })
             .on_click(move |_ctx| {
-                if !is_opt_disabled {
-                    value.set(opt_value_for_click.clone());
+                if !disabled {
+                    value.set(chosen.clone());
                     open_state.set(false);
-
-                    if let Some(ref cb) = on_change_for_opt {
-                        cb(&opt_value_for_click);
+                    if let Some(ref cb) = on_change {
+                        cb(&chosen);
                     }
                 }
             });
-
-        if is_selected {
+        if opt.value == self.current {
             item = item.class("cn-select-item--selected");
         }
-
-        dropdown_div = dropdown_div.child(item);
+        item
     }
-
-    dropdown_div
 }
 
 #[cfg(test)]

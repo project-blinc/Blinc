@@ -316,6 +316,19 @@ cn::select(fruit)
 
 `.disabled(..)` makes the whole select inert; it takes a bool, Signal or Computed.
 
+The open list grows to 300px and then scrolls, and it opens with the chosen
+option in the middle. For a long list, `.virtual_rows(row_height)` builds only
+the rows in view, each `row_height` pixels tall, so hundreds of options open
+at once:
+
+```rust
+let year = ctx.use_signal("2026".to_string());
+
+cn::select(year)
+    .options((1900..=2100).map(|y| SelectOption::new(y.to_string(), y.to_string())))
+    .virtual_rows(32.0)
+```
+
 ### Styling
 
 The trigger is one element with the class `cn-select-trigger`. It has a
@@ -328,6 +341,69 @@ dim. Restyle it with rules of your own:
 
 ```css
 .cn-select-trigger[data-state="open"] { border-color: #16a34a; }
+```
+
+## Calendar
+
+A month of days to pick a date from, bound to a `Signal<Option<CalendarDay>>`:
+
+```rust
+let picked = ctx.use_signal(None::<CalendarDay>);
+
+cn::calendar(picked)
+    .week_start(1)          // Monday first; 0 (Sunday) is the default
+    .min_year(2020)
+    .max_year(2030)
+    .on_change(|day| println!("{}-{}-{}", day.year, day.month, day.day))
+```
+
+`CalendarDay` holds a year, a month from 1 to 12 and a day. `CalendarDay::today()`
+is the local date, and `add_days`, `add_months` and `weekday` do the date
+arithmetic. The month and year selects, or the buttons either side of them,
+turn the month, as does dragging or a two-finger swipe across the days
+(leftward for the next; scrolling up and down still moves the page);
+choosing a day of the month before or after turns to it.
+Once a day has been clicked, the arrows move by a day or a week, Page Up and
+Page Down by a month, Home and End to the ends of the week, and Enter or Space
+choose.
+
+### Events
+
+`.events(..)` marks days with what is on them: meetings, the weather,
+deadlines. It takes a list, or a Signal or Computed of one, and the marks
+follow it in place. Up to three show along the bottom of a day, each a dot or,
+with `.icon(..)`, the event's icon:
+
+```rust
+let events = ctx.use_signal(vec![
+    CalendarEvent::new(CalendarDay::new(2026, 11, 3), "Standup").kind("meeting"),
+    CalendarEvent::new(CalendarDay::new(2026, 11, 4), "Rain")
+        .kind("rain")
+        .icon(to_svg(icons::CLOUD_RAIN, 8.0)),
+]);
+
+cn::calendar(picked).events(events)
+```
+
+`events_on(&events, day)` lists what is on a day, for showing beside the
+calendar.
+
+### Styling
+
+The parts are `.cn-calendar`, `-header`, `-caption`, `-nav` (with
+`data-step="prev"` or `"next"`), `-body`, `-weekdays`, `-weekday`, `-months`,
+`-grid` and `-day`. A day carries `data-outside`, `data-today`,
+`data-selected`, `data-events`, `data-focus-visible` while the keys are on it,
+and `disabled` outside the allowed years. A turning month's grid carries
+`data-enter` while it slides in and `data-leaving` while it slides out, each
+`"next"` or `"prev"`, and slides by the `cn-calendar-*` keyframes. An event's
+mark is `.cn-calendar-event` with its `data-kind`, and `.cn-calendar-event--icon`
+when it is an icon; a dot takes its `background`, an icon its `color`:
+
+```css
+.cn-calendar-event[data-kind="rain"] { color: #38bdf8; }
+.cn-calendar-event[data-kind="deadline"] { background: var(--error); }
+.cn-calendar-day[data-today] { background: transparent; }
 ```
 
 ## Combobox

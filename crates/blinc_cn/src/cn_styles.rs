@@ -1533,6 +1533,107 @@ pub const CN_STYLES: &str = concat!(
 .cn-tree[data-guides] .cn-tree-guide { background: var(--border); }
 
 /* ============================================================================
+   Calendar
+   ============================================================================ */
+
+/* A month and year to pick between two quiet buttons, the week's days, and
+   six weeks of days in a grid of seven. */
+.cn-calendar {
+    flex-direction: column;
+    gap: 12px;
+    align-self: flex-start;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+}
+.cn-calendar-header { flex-direction: row; align-items: center; justify-content: space-between; }
+.cn-calendar-caption { flex-direction: row; align-items: center; gap: 4px; }
+.cn-calendar-caption .cn-select-trigger { height: 28px; padding: 0 6px; }
+.cn-calendar-caption .cn-select-item { justify-content: center; }
+.cn-calendar-nav {
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-state),
+        color var(--duration-fast) var(--ease-state);
+}
+.cn-calendar-nav:hover {
+    background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+    color: var(--text-primary);
+}
+.cn-calendar-nav:disabled { opacity: 0.4; cursor: default; }
+.cn-calendar-body { flex-direction: column; gap: 2px; }
+.cn-calendar-weekdays { display: grid; grid-template-columns: repeat(7, 36px); }
+/* The days, clipped a little outside them so focus rings show: a month
+   turning slides the new one in from its side, pushing the old out the
+   other. */
+.cn-calendar-months { overflow: hidden; margin: -4px; padding: 4px; }
+.cn-calendar-grid { display: grid; grid-template-columns: repeat(7, 36px); row-gap: 2px; }
+.cn-calendar-grid[data-enter="next"] { animation: cn-calendar-from-next var(--duration-normal) var(--ease-nav); }
+.cn-calendar-grid[data-enter="prev"] { animation: cn-calendar-from-prev var(--duration-normal) var(--ease-nav); }
+.cn-calendar-grid[data-leaving="next"] { animation: cn-calendar-to-prev var(--duration-normal) var(--ease-nav) forwards; }
+.cn-calendar-grid[data-leaving="prev"] { animation: cn-calendar-to-next var(--duration-normal) var(--ease-nav) forwards; }
+@keyframes cn-calendar-from-next {
+    from { transform: translateX(260px); opacity: 0.4; }
+    to { transform: translateX(0); opacity: 1; }
+}
+@keyframes cn-calendar-from-prev {
+    from { transform: translateX(-260px); opacity: 0.4; }
+    to { transform: translateX(0); opacity: 1; }
+}
+@keyframes cn-calendar-to-prev {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(-260px); opacity: 0.4; }
+}
+@keyframes cn-calendar-to-next {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(260px); opacity: 0.4; }
+}
+.cn-calendar-weekday { height: 28px; align-items: center; justify-content: center; color: var(--text-secondary); }
+.cn-calendar-day {
+    width: 36px;
+    height: 36px;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    outline: 0 solid var(--focus-ring);
+    outline-offset: 1px;
+    transition: background var(--duration-fast) var(--ease-state),
+        color var(--duration-fast) var(--ease-state);
+}
+.cn-calendar-day:hover { background: color-mix(in srgb, var(--text-primary) 7%, transparent); }
+.cn-calendar-day:active { transform: scale(0.94); }
+.cn-calendar-day[data-outside] { color: var(--text-tertiary); }
+.cn-calendar-day[data-today] { background: var(--accent-subtle); color: var(--accent); font-weight: 600; }
+.cn-calendar-day[data-selected], .cn-calendar-day[data-selected]:hover {
+    background: var(--primary);
+    color: var(--text-inverse);
+}
+.cn-calendar-day[data-focus-visible] { outline-width: 2px; }
+.cn-calendar-day:disabled { opacity: 0.4; cursor: default; }
+.cn-calendar-event {
+    width: 4px;
+    height: 4px;
+    border-radius: 9999px;
+    background: var(--primary);
+}
+.cn-calendar-event--icon { width: 8px; height: 8px; border-radius: 0; background: transparent; color: var(--primary); }
+.cn-calendar-day[data-selected] .cn-calendar-event { background: var(--text-inverse); }
+.cn-calendar-day[data-selected] .cn-calendar-event--icon { background: transparent; color: var(--text-inverse); }
+
+/* ============================================================================
    Resizable
    ============================================================================ */
 
