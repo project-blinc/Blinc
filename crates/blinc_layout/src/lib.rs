@@ -180,7 +180,8 @@ pub use text::{Text, text};
 // Renderer
 pub use renderer::{
     GlassPanel, ImageData, LayoutRenderer, OnReadyCallback, OnReadyEntry, RenderTree,
-    RenderTreeDebugStats, StyledTextData, StyledTextSpan, SvgData, TextData, UpdateResult,
+    RenderTreeDebugStats, ScrollGesturePhase, StyledTextData, StyledTextSpan, SvgData, TextData,
+    UpdateResult,
 };
 
 // Canvas element

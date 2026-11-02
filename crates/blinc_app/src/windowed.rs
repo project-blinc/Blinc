@@ -4930,6 +4930,21 @@ impl WindowedApp {
                                     if phase == blinc_platform::ScrollPhase::Ended {
                                         gesture_ended = true;
                                     }
+                                    // Which scrolls make one gesture, and which
+                                    // are momentum, for the handlers.
+                                    use blinc_layout::ScrollGesturePhase as G;
+                                    match phase {
+                                        blinc_platform::ScrollPhase::Started => {
+                                            tree.on_scroll_gesture(G::Touch)
+                                        }
+                                        blinc_platform::ScrollPhase::Ended => {
+                                            tree.on_scroll_gesture(G::Lift)
+                                        }
+                                        blinc_platform::ScrollPhase::MomentumEnded => {
+                                            tree.on_scroll_gesture(G::MomentumEnd)
+                                        }
+                                        blinc_platform::ScrollPhase::Moved => {}
+                                    }
 
                                     // Use nested scroll support - get hit result for smart dispatch
                                     // Store mouse position and delta for dispatch phase
@@ -5277,8 +5292,12 @@ impl WindowedApp {
                             // redraw so the queued work actually runs.
                             // Sliders, sortable lists, splitter panes — any
                             // Stateful-driven drag — flow through here.
+                            // A bound value a handler wrote (a signal a prop
+                            // follows) is a change too, from a scroll or drag
+                            // as much as a click.
                             let state_changed = blinc_layout::peek_needs_redraw()
-                                || blinc_layout::has_pending_subtree_rebuilds();
+                                || blinc_layout::has_pending_subtree_rebuilds()
+                                || blinc_layout::has_pending_partial_prop_updates();
                             if state_changed {
                                 frame_dirty.store(true, Ordering::Release);
                                 window.request_redraw();
@@ -5389,7 +5408,8 @@ impl WindowedApp {
                         // its normal prop-update / subtree-rebuild path.
                         let dirty = frame_dirty.swap(false, Ordering::AcqRel);
                         let stateful_dirty = blinc_layout::peek_needs_redraw()
-                            || blinc_layout::has_pending_subtree_rebuilds();
+                            || blinc_layout::has_pending_subtree_rebuilds()
+                            || blinc_layout::has_pending_partial_prop_updates();
                         // Wayland keep-alive: when the frame-gate is active we must
                         // keep presenting even when the scene is static. Once
                         // animations finish and the redraw chain goes quiet,

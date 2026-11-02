@@ -4714,6 +4714,17 @@ impl Div {
         self
     }
 
+    /// Register a handler for the end of a scroll gesture this element took:
+    /// the fingers lifting, or the momentum after them running out.
+    pub fn on_scroll_end<F>(mut self, handler: F) -> Self
+    where
+        F: Fn(&crate::event_handler::EventContext) + 'static,
+    {
+        self.event_handlers
+            .on(blinc_core::events::event_types::SCROLL_END, handler);
+        self
+    }
+
     /// Register a scroll handler that takes horizontal scrolling only, such
     /// as a two-finger swipe. A scroll that is mostly vertical passes on to
     /// the nearest container that takes it, so the page still scrolls with

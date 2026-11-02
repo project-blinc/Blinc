@@ -278,8 +278,11 @@ impl RenderTree {
         // windowed.rs, which starved normal scroll containers too.
         let text_input_focused = crate::widgets::text_input::has_focused_text_input();
 
-        let mut target: Option<LayoutNodeId> = None;
-        for &node_id in &chain {
+        // A gesture that a handler took stays with it.
+        let latched = self.latched_scroll_target();
+        let mut target: Option<LayoutNodeId> = latched;
+        let unlatched: &[LayoutNodeId] = if latched.is_some() { &[] } else { &chain };
+        for &node_id in unlatched {
             let has_handler = self.stable_id(node_id).is_some_and(|sid| {
                 self.handler_registry
                     .has_handler(sid, blinc_core::events::event_types::SCROLL)
@@ -304,6 +307,7 @@ impl RenderTree {
         let Some(node_id) = target else {
             return (delta_x, delta_y);
         };
+        self.latch_scroll_target(node_id);
 
         let has_scroll_physics = self.get_scroll_direction(node_id).is_some();
         let direction = self
@@ -347,6 +351,7 @@ impl RenderTree {
             } else {
                 let mut ctx =
                     self.scroll_context(node_id, (mouse_x, mouse_y), (dispatch_x, dispatch_y));
+                (ctx.scroll_gesture, ctx.scroll_momentum) = self.scroll_gesture_now();
                 ctx.stable_id = self
                     .stable_id(node_id)
                     .unwrap_or(crate::tree::StableNodeId::ROOT);
@@ -398,8 +403,11 @@ impl RenderTree {
         // Mirror its focus rule too — while a text input is focused,
         // route only to physics containers, not bare SCROLL handlers.
         let text_input_focused = crate::widgets::text_input::has_focused_text_input();
-        let mut target: Option<LayoutNodeId> = None;
-        for &node_id in &chain {
+        // A gesture that a handler took stays with it.
+        let latched = self.latched_scroll_target();
+        let mut target: Option<LayoutNodeId> = latched;
+        let unlatched: &[LayoutNodeId] = if latched.is_some() { &[] } else { &chain };
+        for &node_id in unlatched {
             let has_handler = self.stable_id(node_id).is_some_and(|sid| {
                 self.handler_registry
                     .has_handler(sid, blinc_core::events::event_types::SCROLL)
@@ -424,6 +432,7 @@ impl RenderTree {
         let Some(node_id) = target else {
             return (delta_x, delta_y);
         };
+        self.latch_scroll_target(node_id);
 
         let has_scroll_physics = self.get_scroll_direction(node_id).is_some();
         let direction = self
@@ -461,6 +470,7 @@ impl RenderTree {
                 let mut ctx = self
                     .scroll_context(node_id, (mouse_x, mouse_y), (dispatch_x, dispatch_y))
                     .with_scroll_time(scroll_time);
+                (ctx.scroll_gesture, ctx.scroll_momentum) = self.scroll_gesture_now();
                 ctx.stable_id = self
                     .stable_id(node_id)
                     .unwrap_or(crate::tree::StableNodeId::ROOT);
@@ -1058,9 +1068,24 @@ impl RenderTree {
         let Some((node_id, _)) = self.last_scroll_target.take() else {
             return;
         };
-        if let Some(physics) = self.scroll_physics.get(&node_id) {
-            physics.lock().unwrap().on_scroll_end();
+        match self.scroll_physics.get(&node_id) {
+            Some(physics) => physics.lock().unwrap().on_scroll_end(),
+            None => self.dispatch_scroll_end(node_id),
         }
+    }
+
+    /// Tell a scroll handler with no physics of its own that its gesture
+    /// ended, as `SCROLL_END`.
+    fn dispatch_scroll_end(&mut self, node_id: LayoutNodeId) {
+        let Some(stable_id) = self.stable_id(node_id) else {
+            return;
+        };
+        let mut ctx = crate::event_handler::EventContext::new(
+            blinc_core::events::event_types::SCROLL_END,
+            node_id,
+        );
+        ctx.stable_id = stable_id;
+        self.handler_registry.dispatch(&ctx);
     }
 
     /// Notify the most recently scrolled container that the scroll
@@ -1073,8 +1098,9 @@ impl RenderTree {
         let Some((node_id, _)) = self.last_scroll_target.take() else {
             return;
         };
-        if let Some(physics) = self.scroll_physics.get(&node_id) {
-            physics.lock().unwrap().on_gesture_end();
+        match self.scroll_physics.get(&node_id) {
+            Some(physics) => physics.lock().unwrap().on_gesture_end(),
+            None => self.dispatch_scroll_end(node_id),
         }
     }
 

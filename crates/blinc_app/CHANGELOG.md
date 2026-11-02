@@ -4,6 +4,10 @@ All notable changes to `blinc_app` will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- A bound value a scroll or drag handler writes is drawn at once. The window drew after input only when something called `request_redraw()` or queued a rebuild, so a signal written from a scroll handler waited for an unrelated frame, such as the pointer leaving and re-entering.
+- A trackpad scroll gesture stays with the scroll handler it started on, its momentum included, wherever the pointer goes, so a swipe on one element no longer drives the one the pointer moves onto. The window reports the platform's scroll phases to the render tree, which tells momentum from a new touch even where the platform reports momentum starting as a touch.
+
 ### Performance
 - A window showing an unfocused text field goes idle. The compositor's end-of-frame redraw signal counts only canvases that ask for frames (`RenderTree::canvas_wants_frames`), not every visible one.
 - A spinning `cn::spinner` or other promoted motion layer keeps the compositor fast path while a cross-stream opacity group is cached elsewhere on the page. Every such frame used to repaint the whole tree, because the binding patcher rejected any cached group while any motion binding existed. The fast path now skips the patcher when every painted binding is a promoted layer, which it blits at its current transform; a frame that asks for a full paint still walks the tree, so scrolling the spinner away lets the window go idle.

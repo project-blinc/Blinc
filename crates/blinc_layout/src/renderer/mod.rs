@@ -50,6 +50,8 @@ mod paint;
 mod queries;
 mod registries;
 mod scroll;
+mod scroll_gesture;
+pub use scroll_gesture::ScrollGesturePhase;
 pub(crate) mod stylesheet;
 mod transfers;
 mod types;
@@ -940,6 +942,9 @@ pub struct RenderTree {
     /// the parent mid-gesture as soon as the inner reaches an edge, which
     /// looks like the scroll "jumps" across the container boundary.
     last_scroll_target: Option<(LayoutNodeId, f64)>,
+    /// The scroll gesture under way: its number, whether it is momentum, and
+    /// the handler it belongs to.
+    scroll_gesture: scroll_gesture::SharedScrollGesture,
     /// On-ready callbacks for elements (fires once after first layout)
     /// Maps string_id to callback entry for stable tracking across rebuilds.
     on_ready_callbacks: HashMap<String, OnReadyEntry>,
@@ -1153,6 +1158,7 @@ impl RenderTree {
             scroll_refs: HashMap::new(),
             active_scroll_refs: Vec::new(),
             last_scroll_target: None,
+            scroll_gesture: Default::default(),
             on_ready_callbacks: HashMap::new(),
             stylesheet: None,
             state_style_table: RefCell::new(crate::state_style_table::StateStyleTable::empty()),

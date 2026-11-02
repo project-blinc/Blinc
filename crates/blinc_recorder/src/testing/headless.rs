@@ -640,6 +640,33 @@ impl Headless {
         self
     }
 
+    /// End the scroll gesture under way, as the fingers lifting from a
+    /// trackpad do; scrolls after this are momentum until [`Self::scroll_start`].
+    pub fn scroll_end(&mut self) -> &mut Self {
+        if let Some(tree) = self.tree.as_mut() {
+            tree.on_gesture_end();
+            tree.on_scroll_gesture(blinc_layout::ScrollGesturePhase::Lift);
+        }
+        self.frame(0);
+        self
+    }
+
+    /// Start a scroll gesture, as fingers touching a trackpad do.
+    pub fn scroll_start(&mut self) -> &mut Self {
+        if let Some(tree) = self.tree.as_mut() {
+            tree.begin_scroll_gesture();
+        }
+        self
+    }
+
+    /// The momentum after a lift stops.
+    pub fn scroll_momentum_end(&mut self) -> &mut Self {
+        if let Some(tree) = self.tree.as_mut() {
+            tree.on_scroll_gesture(blinc_layout::ScrollGesturePhase::MomentumEnd);
+        }
+        self
+    }
+
     // ---- recording and replay ------------------------------------------
 
     /// Start recording what the UI is given and how it looks, in the form the

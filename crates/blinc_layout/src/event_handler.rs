@@ -91,6 +91,13 @@ pub struct EventContext {
     /// Scroll event time in milliseconds (for touch velocity tracking)
     /// If Some, indicates touch scroll that needs velocity tracking for momentum
     pub scroll_time: Option<f64>,
+    /// Whether a SCROLL is momentum the platform runs on after the fingers
+    /// lifted, rather than the fingers moving.
+    pub scroll_momentum: bool,
+    /// Which scroll gesture a SCROLL belongs to: a number that changes each
+    /// time fingers touch a trackpad. Wheels report no gestures; theirs stays
+    /// the same.
+    pub scroll_gesture: u64,
     /// Drag delta for DRAG/DRAG_END events (offset from drag start)
     pub drag_delta_x: f32,
     pub drag_delta_y: f32,
@@ -141,6 +148,8 @@ impl EventContext {
             scroll_delta_x: 0.0,
             scroll_delta_y: 0.0,
             scroll_time: None,
+            scroll_momentum: false,
+            scroll_gesture: 0,
             drag_delta_x: 0.0,
             drag_delta_y: 0.0,
             pinch_center_x: 0.0,
