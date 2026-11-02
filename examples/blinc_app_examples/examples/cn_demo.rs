@@ -725,6 +725,11 @@ fn form_inputs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
     // Number input states for the new cn::number_input row.
     let qty = ctx.use_signal(1.0);
     let temperature = ctx.use_signal(22.5);
+    let sized = [
+        ctx.use_signal(1.0),
+        ctx.use_signal(2.0),
+        ctx.use_signal(3.0),
+    ];
 
     let otp_code = ctx.use_signal(String::new());
 
@@ -813,6 +818,30 @@ fn form_inputs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                                 .max(60.0)
                                                 .step(0.5)
                                                 .precision(1),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .flex_col()
+                                        .gap_px(4.0)
+                                        .child(cn::label("Sizes: small, medium, large"))
+                                        .child(
+                                            div().flex_row().items_center().gap_px(8.0).children(
+                                                [
+                                                    InputSize::Small,
+                                                    InputSize::Medium,
+                                                    InputSize::Large,
+                                                ]
+                                                .into_iter()
+                                                .zip(sized)
+                                                .map(|(size, value)| {
+                                                    cn::number_input(value)
+                                                        .min(0.0)
+                                                        .max(9.0)
+                                                        .precision(0)
+                                                        .size(size)
+                                                }),
+                                            ),
                                         ),
                                 ),
                         ),

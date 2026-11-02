@@ -193,3 +193,65 @@ fn a_bound_disabled_follows_its_signal_in_place() {
         .settle();
     assert_eq!(state.get(), 7.0, "re-enabled, the wheel did nothing");
 }
+
+/// Each size has its own row height and stepper width, and names itself in
+/// `data-size` for rules to key on.
+#[test]
+fn the_sizes_have_their_own_scale() {
+    use blinc_cn::InputSize;
+    if !Headless::available() {
+        return;
+    }
+    let Ok(mut ui) = Headless::new(360, 64) else {
+        return;
+    };
+    ui.theme(
+        HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
+        ColorScheme::Dark,
+    );
+    let sizes = [InputSize::Small, InputSize::Medium, InputSize::Large];
+    ui.mount(move |_| {
+        div()
+            .w(360.0)
+            .h(64.0)
+            .flex_row()
+            .items_center()
+            .justify_center()
+            .gap(2.0)
+            .children(sizes.into_iter().map(|size| {
+                number_input(signal(5.0))
+                    .min(0.0)
+                    .max(9.0)
+                    .precision(0)
+                    .size(size)
+            }))
+    });
+    ui.leave().settle();
+
+    let tree = ui.tree();
+    let registry = tree.element_registry();
+    let mut groups = Vec::new();
+    let mut stack = vec![tree.root().unwrap()];
+    while let Some(n) = stack.pop() {
+        if registry.has_class(n, "cn-number-input-group") {
+            groups.push(n);
+        }
+        let mut kids = tree.layout_tree.children(n);
+        kids.reverse();
+        stack.extend(kids);
+    }
+    assert_eq!(groups.len(), 3);
+    for (node, (name, row, step)) in
+        groups
+            .into_iter()
+            .zip([("sm", 24.0, 24.0), ("md", 32.0, 32.0), ("lg", 40.0, 36.0)])
+    {
+        assert_eq!(registry.attribute(node, "data-size").as_deref(), Some(name));
+        let b = tree.get_absolute_bounds(node).unwrap();
+        assert!((b.height - row).abs() < 0.5, "{name} row {}", b.height);
+        let first_step = tree.layout_tree.children(node)[0];
+        let s = tree.get_absolute_bounds(first_step).unwrap();
+        assert!((s.width - step).abs() < 0.5, "{name} step {}", s.width);
+    }
+    ui.assert_snapshot("cn_number_input_sizes");
+}

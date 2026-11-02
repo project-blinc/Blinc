@@ -130,6 +130,16 @@ cn::number_input(qty)
     .on_change(|value| println!("qty: {value}"))
 ```
 
+`.size(..)` picks a scale of its own, a step smaller than a text input's, so
+the control sits in a row beside others. The group carries the size as
+`data-size` for rules to key on:
+
+| Size | `data-size` | Row | Steps | Field (at least) | Text |
+|------|-------------|-----|-------|------------------|------|
+| `InputSize::Small` | `sm` | 24px | 24px | 40px | 12px |
+| `InputSize::Medium` (default) | `md` | 32px | 32px | 48px | 13px |
+| `InputSize::Large` | `lg` | 40px | 36px | 52px | 14px |
+
 Typing, the arrow keys, the buttons and the mouse wheel all clamp to `min` and `max`. One wheel line is one step and wheel up increases the value; trackpad movement accumulates into steps, and a disabled input ignores the wheel. The
 width follows the bounds, not the value, so typing never resizes it.
 

@@ -156,30 +156,58 @@ impl NumberInputBuilder {
     }
 }
 
+/// A number input's dimensions at one size. Its scale is its own, a step
+/// smaller than a text input's: the control sits beside other controls in a
+/// row rather than taking one.
+struct Metrics {
+    row: f32,
+    step: f32,
+    /// The narrowest the field is, however short its bounds.
+    field: f32,
+    font: f32,
+    padding: f32,
+    radius: RadiusToken,
+    /// The group's `data-size`.
+    name: &'static str,
+}
+
+impl Metrics {
+    fn of(size: InputSize) -> Self {
+        let (row, step, field, font, padding, name) = match size {
+            InputSize::Small => (24.0, 24.0, 40.0, 12.0, 4.0, "sm"),
+            InputSize::Medium => (32.0, 32.0, 48.0, 13.0, 6.0, "md"),
+            InputSize::Large => (40.0, 36.0, 52.0, 14.0, 8.0, "lg"),
+        };
+        let radius = match size {
+            InputSize::Small => RadiusToken::Sm,
+            _ => RadiusToken::Default,
+        };
+        Self {
+            row,
+            step,
+            field,
+            font,
+            padding,
+            radius,
+            name,
+        }
+    }
+}
+
 impl NumberInput {
     fn from_config(instance_key: &InstanceKey, config: Config) -> Self {
         let theme = ThemeState::get();
-        let typography = theme.typography();
-        let height = config.size.height(theme);
-        let font_size = config.size.font_size(&typography);
-        let radius = theme.radius(RadiusToken::Default);
-        // Steppers are square at the row height.
-        let button_w = height;
+        let m = Metrics::of(config.size);
+        let radius = theme.radius(m.radius);
 
         // The width follows the bounds, not the value, so typing digits
         // never resizes the control.
-        const DEFAULT_FIELD_W: f32 = 32.0;
-        let auto_field_w = auto_field_width(
-            config.min,
-            config.max,
-            config.precision,
-            font_size,
-            DEFAULT_FIELD_W,
-        );
+        let auto_field_w =
+            auto_field_width(config.min, config.max, config.precision, m.font, m.field);
         let total_w = config
             .width
-            .unwrap_or_else(|| (auto_field_w + button_w * 2.0).min(config.max_width));
-        let field_w = (total_w - button_w * 2.0).max(DEFAULT_FIELD_W);
+            .unwrap_or_else(|| (auto_field_w + m.step * 2.0).min(config.max_width));
+        let field_w = (total_w - m.step * 2.0).max(m.field);
 
         let data = text_input_data();
         if let Ok(mut d) = data.lock() {
@@ -189,23 +217,24 @@ impl NumberInput {
         }
         show_state_in_field(&config, &data);
 
-        let field = number_field(&config, &data, field_w, height);
+        let field = number_field(&config, &data, field_w, &m);
         let wheel_remainder = Arc::new(std::sync::Mutex::new(0.0f32));
         let group = div()
             .w(total_w)
-            .h(height)
+            .h(m.row)
             .flex_row()
             .items_center()
             .rounded(radius)
             .border_width(1.0)
             .overflow_clip()
             .class("cn-number-input-group")
+            .attr("data-size", m.name)
             .attr_when("disabled", "", config.disabled.clone())
             .on_scroll(wheel_stepper(&config, Arc::clone(&wheel_remainder)))
             .on_hover_leave(move |_| *wheel_remainder.lock().unwrap() = 0.0)
-            .child(stepper(&config, -1.0, height))
+            .child(stepper(&config, -1.0, &m))
             .child(field)
-            .child(stepper(&config, 1.0, height));
+            .child(stepper(&config, 1.0, &m));
 
         Self {
             inner: div().h_fit().w_fit().child(group),
@@ -294,14 +323,15 @@ fn number_field(
     config: &Config,
     data: &SharedTextInputData,
     width: f32,
-    height: f32,
+    m: &Metrics,
 ) -> blinc_layout::widgets::text_input::TextInput {
     let mut field = text_input(data)
         .input_type(InputType::Number)
         .text_align(blinc_core::TextAlign::Center)
-        .padding_x(4.0)
+        .text_size(m.font)
+        .padding_x(m.padding)
         .w(width)
-        .h(height)
+        .h(m.row)
         .rounded(0.0)
         .border_width(0.0)
         .idle_bg_color(blinc_core::Color::TRANSPARENT)
@@ -375,10 +405,7 @@ fn number_field(
 /// A `+` or `−` button: steps the state by `delta` steps. Its fill and icon
 /// colour are `.cn-number-input-step` rules; it is `disabled` while the input
 /// is, and where a step would change nothing.
-fn stepper(config: &Config, delta: f64, height: f32) -> Div {
-    let theme = ThemeState::get();
-    let typography = theme.typography();
-    let font_size = config.size.font_size(&typography);
+fn stepper(config: &Config, delta: f64, m: &Metrics) -> Div {
     let (min, max, step) = (config.min, config.max, config.step);
     let is_dec = delta < 0.0;
 
@@ -395,15 +422,15 @@ fn stepper(config: &Config, delta: f64, height: f32) -> Div {
 
     // SVG icons rather than glyphs: a glyph renders in whatever face and
     // weight resolve at run time, and shifted between paints.
-    let icon_size = (font_size + 2.0).min(height * 0.45);
+    let icon_size = (m.font + 2.0).min(m.row * 0.45);
     let icon = to_svg(if is_dec { icons::MINUS } else { icons::PLUS }, icon_size);
 
     let state = config.state;
     let on_change = config.on_change.clone();
     let disabled = config.disabled.clone();
     div()
-        .w(height)
-        .h(height)
+        .w(m.step)
+        .h(m.row)
         .flex_row()
         .items_center()
         .justify_center()
