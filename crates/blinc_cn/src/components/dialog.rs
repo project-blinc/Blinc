@@ -31,7 +31,6 @@
 
 use std::sync::Arc;
 
-use blinc_animation::{AnimationPreset, MultiKeyframeAnimation};
 use blinc_core::Color;
 use blinc_layout::InstanceKey;
 use blinc_layout::overlay_state::overlay_stack;
@@ -83,10 +82,6 @@ pub struct DialogBuilder {
     on_close: Option<Arc<dyn Fn() + Send + Sync>>,
     confirm_destructive: bool,
     show_cancel: bool,
-    /// Custom enter animation (defaults to dialog_in)
-    enter_animation: Option<MultiKeyframeAnimation>,
-    /// Custom exit animation (defaults to dialog_out)
-    exit_animation: Option<MultiKeyframeAnimation>,
     /// User-added CSS classes
     classes: Vec<std::sync::Arc<str>>,
     /// User-set element ID
@@ -112,8 +107,6 @@ impl DialogBuilder {
             on_close: None,
             confirm_destructive: false,
             show_cancel: true,
-            enter_animation: None,
-            exit_animation: None,
             classes: Vec::new(),
             user_id: None,
             key: InstanceKey::new("dialog"),
@@ -224,40 +217,6 @@ impl DialogBuilder {
         self
     }
 
-    /// Set a custom enter animation
-    ///
-    /// Overrides the default `AnimationPreset::grow_in(200)` animation.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// use blinc_animation::AnimationPreset;
-    ///
-    /// cn::dialog()
-    ///     .title("Custom Animation")
-    ///     .enter_animation(AnimationPreset::bounce_in(300))
-    ///     .show();
-    ///
-    /// // For more dramatic scale animation:
-    /// cn::dialog()
-    ///     .title("Scale Animation")
-    ///     .enter_animation(AnimationPreset::dialog_in(200))
-    ///     .exit_animation(AnimationPreset::dialog_out(150))
-    ///     .show();
-    /// ```
-    pub fn enter_animation(mut self, animation: MultiKeyframeAnimation) -> Self {
-        self.enter_animation = Some(animation);
-        self
-    }
-
-    /// Set a custom exit animation
-    ///
-    /// Overrides the default `AnimationPreset::grow_out(150)` animation.
-    pub fn exit_animation(mut self, animation: MultiKeyframeAnimation) -> Self {
-        self.exit_animation = Some(animation);
-        self
-    }
-
     /// Show the dialog
     ///
     /// This creates a modal overlay with the dialog content.
@@ -281,17 +240,6 @@ impl DialogBuilder {
         let show_cancel = self.show_cancel;
         let classes = self.classes;
         let user_id = self.user_id;
-        // Scale-in / scale-out by default (matches router page navigation feel).
-        // The theme's `ease_sheet` slot drives the curve so the dialog
-        // reads as "substantial modal surface" rather than a generic
-        // ease-out scale. User-supplied animations still override.
-        let sheet_easing = theme.animations().ease_sheet.to_animation_easing();
-        let enter_animation = self
-            .enter_animation
-            .unwrap_or_else(|| AnimationPreset::scale_in_with(200, sheet_easing));
-        let exit_animation = self
-            .exit_animation
-            .unwrap_or_else(|| AnimationPreset::scale_out_with(150, sheet_easing));
 
         // Pre-allocate the handle id so the confirm/cancel buttons can capture
         // it before show() is called (same pattern as popover). Buttons close
@@ -315,8 +263,8 @@ impl DialogBuilder {
             })
             // Dialog defaults (DismissRules::default_for(Dialog)):
             // on_escape=true, on_click_outside=true (backdrop click), backdrop=Some.
-            .motion_enter(enter_animation)
-            .motion_exit(exit_animation)
+            // Rises in and out by the `.cn-dialog-motion` rules.
+            .motion_class("cn-dialog-motion")
             .content(move || {
                 let mut content_div = build_dialog_content(
                     &title,

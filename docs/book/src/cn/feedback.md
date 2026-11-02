@@ -291,6 +291,19 @@ toaster()
     .position(ToasterPosition::TopRight)  // TopLeft, TopRight, BottomLeft, BottomRight
 ```
 
+### Toast Motion
+
+A toast slides in from beyond the side of its corner and back out when it is
+dismissed, by the `.cn-toast-motion-right` and `.cn-toast-motion-left` rules.
+Its wrapper carries `data-motion="enter"`, then `"exit"` while it leaves, and
+stays until its exit has played:
+
+```css
+.cn-toast-motion-right[data-motion="exit"] {
+    animation: cn-slide-to-right 400ms var(--ease-in) forwards;
+}
+```
+
 ## Examples
 
 ### Loading State

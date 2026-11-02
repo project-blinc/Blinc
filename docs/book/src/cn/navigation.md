@@ -4,24 +4,34 @@ Components for navigation: tabs, menus, breadcrumbs, and sidebars.
 
 ## Tabs
 
-Organize content into tabbed sections:
+Organize content into tabbed sections, bound to a `Signal<String>` holding the
+selected tab's value:
 
 ```rust
 use blinc_cn::prelude::*;
 
-tabs()
-    .value(active_tab)
-    .on_change(|tab| set_active_tab(tab))
-    .child(tabs_list()
-        .child(tabs_trigger("account").child(text("Account")))
-        .child(tabs_trigger("password").child(text("Password")))
-        .child(tabs_trigger("settings").child(text("Settings"))))
-    .child(tabs_content("account")
-        .child(text("Account settings...")))
-    .child(tabs_content("password")
-        .child(text("Password settings...")))
-    .child(tabs_content("settings")
-        .child(text("Other settings...")))
+let tab = ctx.use_signal("account".to_string());
+
+tabs(tab)
+    .tab("account", "Account", || div().child(text("Account settings...")))
+    .tab("password", "Password", || div().child(text("Password settings...")))
+    .tab("settings", "Settings", || div().child(text("Other settings...")))
+    .transition(TabsTransition::SlideLeft)
+    .on_change(|value| println!("now on {value}"))
+```
+
+### Switching
+
+The new panel enters and the old one leaves by the `.cn-tabs-panel` rules for
+its `data-transition` (`fade`, the default, `slide-left`, `slide-right`,
+`slide-up` or `slide-down`; `TabsTransition::None` switches at once). A panel
+carries `data-motion="enter"`, then `"exit"` while it leaves, overlaying the
+new one until its exit has played. A rule of your own changes the motion:
+
+```css
+.cn-tabs-panel[data-transition="fade"][data-motion="enter"] {
+    animation: cn-fade-in 400ms var(--ease-out);
+}
 ```
 
 ## Dropdown Menu

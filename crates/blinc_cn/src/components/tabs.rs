@@ -63,19 +63,18 @@
 //! ```
 
 use std::cell::OnceCell;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use blinc_animation::{AnimationPreset, MultiKeyframeAnimation};
 use blinc_core::Color;
 use blinc_core::reactive::Signal;
 use blinc_core::reactive::{ReactiveGraph, computed, signal};
 use blinc_layout::div::ElementTypeId;
 // For query_motion to trigger suspended animations
 use blinc_layout::element::{CursorStyle, RenderProps};
-use blinc_layout::motion::motion_derived;
 use blinc_layout::prelude::*;
 use blinc_layout::region::Row;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
+use blinc_layout::widgets::css_motion::CssMotion;
 use blinc_theme::{ColorScheme, ColorToken, RadiusToken, ThemeState};
 
 use blinc_layout::selector::query_motion;
@@ -285,27 +284,16 @@ pub enum TabsTransition {
 }
 
 impl TabsTransition {
-    /// Get enter animation for this transition
-    fn enter_animation(&self) -> Option<MultiKeyframeAnimation> {
+    /// The panel's `data-transition`, which the `.cn-tabs-panel` rules key
+    /// its enter and exit on.
+    fn attr(&self) -> Option<&'static str> {
         match self {
             TabsTransition::None => None,
-            TabsTransition::Fade => Some(AnimationPreset::fade_in(250)),
-            TabsTransition::SlideLeft => Some(AnimationPreset::slide_in_left(250, 20.0)),
-            TabsTransition::SlideRight => Some(AnimationPreset::slide_in_right(250, 50.0)),
-            TabsTransition::SlideUp => Some(AnimationPreset::slide_in_top(250, 20.0)),
-            TabsTransition::SlideDown => Some(AnimationPreset::slide_in_bottom(250, 20.0)),
-        }
-    }
-
-    /// Get exit animation for this transition
-    fn exit_animation(&self) -> Option<MultiKeyframeAnimation> {
-        match self {
-            TabsTransition::None => None,
-            TabsTransition::Fade => Some(AnimationPreset::fade_out(200)),
-            TabsTransition::SlideLeft => Some(AnimationPreset::slide_out_left(200, 20.0)),
-            TabsTransition::SlideRight => Some(AnimationPreset::slide_out_right(200, 25.0)),
-            TabsTransition::SlideUp => Some(AnimationPreset::slide_out_top(200, 20.0)),
-            TabsTransition::SlideDown => Some(AnimationPreset::slide_out_bottom(200, 20.0)),
+            TabsTransition::Fade => Some("fade"),
+            TabsTransition::SlideLeft => Some("slide-left"),
+            TabsTransition::SlideRight => Some("slide-right"),
+            TabsTransition::SlideUp => Some("slide-up"),
+            TabsTransition::SlideDown => Some("slide-down"),
         }
     }
 }
@@ -561,20 +549,12 @@ impl TabsBuilder {
         for tab in tabs_for_buttons.iter() {
             let value = tab.menu_item.value();
 
-            // Build motion key for this tab's content
-            let tab_motion_key = if transition != TabsTransition::None {
-                Some(format!("{}:{}", motion_base_key_str, value))
-            } else {
-                None
-            };
-
             tab_button_area = tab_button_area.child(build_tab_trigger(
                 &trigger_key,
                 &tab.menu_item,
                 size,
                 state_for_buttons,
                 on_change.clone(),
-                tab_motion_key,
             ));
         }
 
@@ -615,35 +595,40 @@ impl TabsBuilder {
                             .find(|t| t.menu_item.value() == value)
                             .expect("a panel is built for a tab that exists");
                         let content = (tab.content)();
-                        if transition == TabsTransition::None {
+                        let Some(name) = transition.attr() else {
                             return Row::new(div().w_full().flex_grow().child(content));
-                        }
+                        };
 
-                        // The key the strip's triggers start the enter
-                        // animation with.
-                        let tab_motion_key = format!("{}:{}", motion_base_key, value);
-                        let mut m = motion_derived(&tab_motion_key);
-                        if let Some(enter) = transition.enter_animation() {
-                            m = m.enter_animation(enter);
-                        }
-                        if let Some(exit) = transition.exit_animation() {
-                            m = m.exit_animation(exit);
-                        }
-
+                        // Enters and leaves by the `.cn-tabs-panel` rules for
+                        // its `data-transition`; a leaving panel overlays the
+                        // new one until its exit has played.
+                        let motion = Arc::new(Mutex::new(CssMotion::new(
+                            blinc_core::intern::intern("cn-tabs-panel"),
+                            format!("cn-tabs-panel-{}-{}", motion_base_key, value),
+                        )));
                         let leaving = signal(false);
-                        let panel = div()
+                        let panel = motion
+                            .lock()
+                            .unwrap()
+                            .element(div().attr("data-transition", name))
                             .class_when("cn-tabs-panel--leaving", leaving)
                             .w_full()
                             .flex_grow()
-                            .child(m.child(content));
-                        let exit_key = format!("motion:{}:child:0", tab_motion_key);
-                        let done_key = exit_key.clone();
+                            .child(content);
+                        let exiting = Arc::clone(&motion);
+                        // Asked once a frame while it leaves: a frame's worth
+                        // of time each.
+                        let frames = std::sync::atomic::AtomicU64::new(0);
                         Row::new(panel).on_leave(
                             move || {
                                 leaving.set(true);
-                                query_motion(&exit_key).exit();
+                                exiting.lock().unwrap().exit();
                             },
-                            move || !query_motion(&done_key).is_animating(),
+                            move || {
+                                let now =
+                                    16 * frames.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                motion.lock().unwrap().exit_done(now)
+                            },
                         )
                     },
                 )
@@ -678,7 +663,6 @@ fn build_tab_trigger(
     size: TabsSize,
     tab_state: Signal<String>,
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
-    motion_key: Option<String>,
 ) -> Div {
     let theme = ThemeState::get();
     let text_primary = theme.color(ColorToken::TextPrimary);
@@ -797,12 +781,6 @@ fn build_tab_trigger(
             if tab_state.try_get().as_deref() == Some(value_for_click.as_str()) {
                 return;
             }
-            // Start the motion animation for the new tab content
-            if let Some(ref mk) = motion_key {
-                let full_motion_key = format!("motion:{}:child:0", mk);
-                query_motion(&full_motion_key).start();
-            }
-
             tab_state.set(value_for_click.clone());
             if let Some(ref cb) = on_change {
                 cb(&value_for_click);

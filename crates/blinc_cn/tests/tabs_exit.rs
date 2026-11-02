@@ -1,9 +1,9 @@
 //! A tab panel's exit plays: the old panel stays mounted, out of flow, for its
-//! motion's exit animation and goes when it is done.
+//! CSS exit animation and goes when it is done.
 //!
-//! The frame does what the windowed runner does, in its order: process the
-//! queued motion exits and sync the motion store, drain the property updates,
-//! do the motion frame bookkeeping, then tick.
+//! The frame does what the windowed runner does, in its order: drain the
+//! property updates and lay out, start the CSS animations rules give, tick
+//! them and write their values.
 
 mod common;
 
@@ -26,7 +26,8 @@ struct Runner {
 }
 
 fn runner(selected: &blinc_core::reactive::State<String>) -> Runner {
-    let css = Arc::new(Stylesheet::parse(CN_STYLES).expect("cn styles"));
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let css = Arc::new(Stylesheet::parse_with_variables(CN_STYLES, &vars).expect("cn styles"));
     set_active_stylesheet(Arc::clone(&css));
 
     let shared = create_shared_motion_states();
@@ -88,6 +89,11 @@ impl Runner {
         self.rs.process_global_motion_starts();
         self.rs.tick(self.now_ms);
         self.rs.sync_shared_motion_states();
+
+        self.tree.start_all_css_animations();
+        let store = self.tree.css_anim_store();
+        store.lock().unwrap().tick(16.0);
+        self.tree.apply_all_css_animation_props();
     }
 
     fn panels(&self) -> Vec<LayoutNodeId> {
@@ -114,17 +120,27 @@ fn the_old_panel_plays_its_exit_before_it_goes() {
             "the old panel did not stay for its exit"
         );
         assert_eq!(r.panels()[0], old);
+        let registry = r.tree.element_registry();
+        assert_eq!(
+            registry.attribute(old, "data-motion").as_deref(),
+            Some("exit"),
+            "the old panel is leaving"
+        );
+        let id = registry.get_id(old).expect("the panel's id");
 
         let start = r.now_ms;
         let mut left = None;
+        let mut played = false;
         while r.now_ms - start <= 2000 {
             r.frame();
+            played |= blinc_layout::css_animation_playing(&id);
             if r.panels().len() == 1 {
                 left = Some(r.now_ms - start);
                 break;
             }
         }
         let took = left.expect("the old panel never left");
+        assert!(played, "its exit animation never played");
         assert!(
             took >= 100,
             "the old panel left after {took}ms, before its exit could play"

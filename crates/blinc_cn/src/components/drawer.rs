@@ -36,7 +36,6 @@
 
 use std::sync::Arc;
 
-use blinc_animation::AnimationPreset;
 use blinc_core::Color;
 use blinc_layout::InstanceKey;
 use blinc_layout::overlay_state::overlay_stack;
@@ -89,8 +88,6 @@ pub struct DrawerBuilder {
     footer: Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     show_close: bool,
     on_close: Option<Arc<dyn Fn() + Send + Sync>>,
-    /// Animation duration in ms
-    animation_duration: u32,
     /// User-added CSS classes
     classes: Vec<std::sync::Arc<str>>,
     /// User-set element ID
@@ -112,7 +109,6 @@ impl DrawerBuilder {
             footer: None,
             show_close: true,
             on_close: None,
-            animation_duration: 250,
             key: InstanceKey::new("drawer"),
             classes: Vec::new(),
             user_id: None,
@@ -189,12 +185,6 @@ impl DrawerBuilder {
         self
     }
 
-    /// Set animation duration in milliseconds
-    pub fn animation_duration(mut self, duration_ms: u32) -> Self {
-        self.animation_duration = duration_ms;
-        self
-    }
-
     /// Add a CSS class for selector matching
     pub fn class(mut self, name: impl AsRef<str>) -> Self {
         self.classes.push(blinc_core::intern::intern(name.as_ref()));
@@ -231,22 +221,11 @@ impl DrawerBuilder {
         // stretches the perpendicular axis to viewport for Edge positions).
         let drawer_width = size.width();
 
-        // Slide from the edge the drawer is anchored to. Theme's
-        // `ease_sheet` shapes the slide so the drawer reads as a heavy
-        // surface rather than a generic ease-out.
-        let sheet_easing = theme.animations().ease_sheet.to_animation_easing();
-        let (in_dx, out_dx) = match side {
-            DrawerSide::Left => (-drawer_width, -drawer_width),
-            DrawerSide::Right => (drawer_width, drawer_width),
+        // Slides from beyond its edge by the `.cn-drawer-motion-{side}` rules.
+        let motion_class = match side {
+            DrawerSide::Left => "cn-drawer-motion-left",
+            DrawerSide::Right => "cn-drawer-motion-right",
         };
-        let enter_animation =
-            AnimationPreset::slide_in_with(self.animation_duration, in_dx, 0.0, sheet_easing);
-        let exit_animation = AnimationPreset::slide_out_with(
-            (self.animation_duration as f32 * 0.7) as u32,
-            out_dx,
-            0.0,
-            sheet_easing,
-        );
 
         // Pre-allocate the handle id so the close button can capture it
         // (same pattern as dialog/popover — `handle.close()` instead of
@@ -273,8 +252,7 @@ impl DrawerBuilder {
             // Modal defaults: ESC, click-outside (backdrop dismiss), backdrop=Some.
             .edge(edge_side)
             .size(drawer_width, 0.0) // height ignored — position_wrapper uses viewport.1
-            .motion_enter(enter_animation)
-            .motion_exit(exit_animation)
+            .motion_class(motion_class)
             .content(move || {
                 let mut content_div = build_drawer_content(
                     side,

@@ -34,7 +34,6 @@
 
 use std::sync::Arc;
 
-use blinc_animation::{AnimationPreset, MultiKeyframeAnimation};
 use blinc_core::Color;
 use blinc_layout::InstanceKey;
 use blinc_layout::overlay_state::overlay_stack;
@@ -104,12 +103,6 @@ pub struct SheetBuilder {
     footer: Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     show_close: bool,
     on_close: Option<Arc<dyn Fn() + Send + Sync>>,
-    /// Custom enter animation
-    enter_animation: Option<MultiKeyframeAnimation>,
-    /// Custom exit animation
-    exit_animation: Option<MultiKeyframeAnimation>,
-    /// Animation duration in ms
-    animation_duration: u32,
     /// Unique key for motion animation
     key: InstanceKey,
 }
@@ -127,9 +120,6 @@ impl SheetBuilder {
             footer: None,
             show_close: true,
             on_close: None,
-            enter_animation: None,
-            exit_animation: None,
-            animation_duration: 300,
             key: InstanceKey::new("sheet"),
         }
     }
@@ -191,24 +181,6 @@ impl SheetBuilder {
         self
     }
 
-    /// Set custom enter animation
-    pub fn enter_animation(mut self, animation: MultiKeyframeAnimation) -> Self {
-        self.enter_animation = Some(animation);
-        self
-    }
-
-    /// Set custom exit animation
-    pub fn exit_animation(mut self, animation: MultiKeyframeAnimation) -> Self {
-        self.exit_animation = Some(animation);
-        self
-    }
-
-    /// Set animation duration in milliseconds
-    pub fn animation_duration(mut self, duration_ms: u32) -> Self {
-        self.animation_duration = duration_ms;
-        self
-    }
-
     /// Show the sheet
     pub fn show(self) -> OverlayHandle {
         let theme = ThemeState::get();
@@ -237,31 +209,13 @@ impl SheetBuilder {
             SheetSide::Top | SheetSide::Bottom => (0.0, size.height()),
         };
 
-        // Slide in / out from the entry edge. Distance matches the panel's
-        // axis dimension so it fully slides off-screen.
-        let slide_distance = match side {
-            SheetSide::Left | SheetSide::Right => size.width(),
-            SheetSide::Top | SheetSide::Bottom => size.height(),
+        // Slides from beyond its edge by the `.cn-sheet-motion-{side}` rules.
+        let motion_class = match side {
+            SheetSide::Left => "cn-sheet-motion-left",
+            SheetSide::Right => "cn-sheet-motion-right",
+            SheetSide::Top => "cn-sheet-motion-top",
+            SheetSide::Bottom => "cn-sheet-motion-bottom",
         };
-        // Theme's `ease_sheet` slot drives the slide curve so sheets
-        // read as "substantial drawer surface" — long-tail decelerate
-        // on enter, mirrored ease-in on exit. User overrides apply on
-        // top.
-        let sheet_easing = theme.animations().ease_sheet.to_animation_easing();
-        let (in_dx, in_dy, out_dx, out_dy) = match side {
-            SheetSide::Left => (-slide_distance, 0.0, -slide_distance, 0.0),
-            SheetSide::Right => (slide_distance, 0.0, slide_distance, 0.0),
-            SheetSide::Top => (0.0, -slide_distance, 0.0, -slide_distance),
-            SheetSide::Bottom => (0.0, slide_distance, 0.0, slide_distance),
-        };
-        let enter_animation = self
-            .enter_animation
-            .clone()
-            .unwrap_or_else(|| AnimationPreset::slide_in_with(300, in_dx, in_dy, sheet_easing));
-        let exit_animation = self
-            .exit_animation
-            .clone()
-            .unwrap_or_else(|| AnimationPreset::slide_out_with(225, out_dx, out_dy, sheet_easing));
 
         let next_handle_id = overlay_stack()
             .lock()
@@ -285,8 +239,7 @@ impl SheetBuilder {
             // Modal defaults: ESC, click-outside (backdrop dismiss), backdrop=Some.
             .edge(edge_side)
             .size(panel_w, panel_h)
-            .motion_enter(enter_animation)
-            .motion_exit(exit_animation)
+            .motion_class(motion_class)
             .content(move || {
                 build_sheet_content(
                     side,

@@ -748,6 +748,51 @@ pub const CN_STYLES: &str = concat!(
     cursor: not-allowed;
 }
 
+/* A panel enters and leaves by its `data-transition`: it fades, or slides a
+   little from a side as it fades. */
+@keyframes cn-tab-from-left {
+    from { opacity: 0; transform: translateX(-20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+@keyframes cn-tab-to-left {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(-20px); }
+}
+@keyframes cn-tab-from-right {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+@keyframes cn-tab-to-right {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(20px); }
+}
+@keyframes cn-tab-from-top {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes cn-tab-to-top {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-20px); }
+}
+@keyframes cn-tab-from-bottom {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes cn-tab-to-bottom {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(20px); }
+}
+.cn-tabs-panel[data-transition="fade"][data-motion="enter"] { animation: cn-fade-in var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="fade"][data-motion="exit"] { animation: cn-fade-out var(--duration-fast) var(--ease-in) forwards; }
+.cn-tabs-panel[data-transition="slide-left"][data-motion="enter"] { animation: cn-tab-from-left var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="slide-left"][data-motion="exit"] { animation: cn-tab-to-left var(--duration-fast) var(--ease-in) forwards; }
+.cn-tabs-panel[data-transition="slide-right"][data-motion="enter"] { animation: cn-tab-from-right var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="slide-right"][data-motion="exit"] { animation: cn-tab-to-right var(--duration-fast) var(--ease-in) forwards; }
+.cn-tabs-panel[data-transition="slide-up"][data-motion="enter"] { animation: cn-tab-from-top var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="slide-up"][data-motion="exit"] { animation: cn-tab-to-top var(--duration-fast) var(--ease-in) forwards; }
+.cn-tabs-panel[data-transition="slide-down"][data-motion="enter"] { animation: cn-tab-from-bottom var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="slide-down"][data-motion="exit"] { animation: cn-tab-to-bottom var(--duration-fast) var(--ease-in) forwards; }
+
 /* A panel leaving after a switch overlays the new one instead of sitting
    above it, so the content does not jump while it fades out. */
 .cn-tabs-panel--leaving {
@@ -1531,6 +1576,80 @@ pub const CN_STYLES: &str = concat!(
 .cn-tree-group[data-state="closed"] { height: 0; }
 .cn-tree-guide { background: transparent; }
 .cn-tree[data-guides] .cn-tree-guide { background: var(--border); }
+
+/* ============================================================================
+   Overlay motion
+   ============================================================================ */
+
+/* Dialogs, sheets, drawers and toasts enter and leave by these rules. Each one's
+   wrapper carries `data-motion="enter"`, then `"exit"` while it closes, and
+   stays until its exit has played; the backdrop behind it, `.overlay-backdrop`,
+   fades with it. A dialog rises into place; a sheet or drawer slides from
+   beyond its edge by its own size. */
+@keyframes cn-rise-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes cn-rise-out {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to { opacity: 0; transform: translateY(-4px) scale(0.96); }
+}
+@keyframes cn-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cn-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes cn-slide-from-right {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+@keyframes cn-slide-to-right {
+    from { transform: translateX(0); }
+    to { transform: translateX(100%); }
+}
+@keyframes cn-slide-from-left {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+}
+@keyframes cn-slide-to-left {
+    from { transform: translateX(0); }
+    to { transform: translateX(-100%); }
+}
+@keyframes cn-slide-from-bottom {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+@keyframes cn-slide-to-bottom {
+    from { transform: translateY(0); }
+    to { transform: translateY(100%); }
+}
+@keyframes cn-slide-from-top {
+    from { transform: translateY(-100%); }
+    to { transform: translateY(0); }
+}
+@keyframes cn-slide-to-top {
+    from { transform: translateY(0); }
+    to { transform: translateY(-100%); }
+}
+.cn-dialog-motion[data-motion="enter"] { animation: cn-rise-in var(--duration-normal) var(--ease-sheet); }
+.cn-dialog-motion[data-motion="exit"] { animation: cn-rise-out var(--duration-fast) var(--ease-in) forwards; }
+.cn-sheet-motion-right[data-motion="enter"] { animation: cn-slide-from-right var(--duration-slow) var(--ease-sheet); }
+.cn-sheet-motion-right[data-motion="exit"] { animation: cn-slide-to-right var(--duration-normal) var(--ease-sheet) forwards; }
+.cn-sheet-motion-left[data-motion="enter"] { animation: cn-slide-from-left var(--duration-slow) var(--ease-sheet); }
+.cn-sheet-motion-left[data-motion="exit"] { animation: cn-slide-to-left var(--duration-normal) var(--ease-sheet) forwards; }
+.cn-sheet-motion-bottom[data-motion="enter"] { animation: cn-slide-from-bottom var(--duration-slow) var(--ease-sheet); }
+.cn-sheet-motion-bottom[data-motion="exit"] { animation: cn-slide-to-bottom var(--duration-normal) var(--ease-sheet) forwards; }
+.cn-sheet-motion-top[data-motion="enter"] { animation: cn-slide-from-top var(--duration-slow) var(--ease-sheet); }
+.cn-sheet-motion-top[data-motion="exit"] { animation: cn-slide-to-top var(--duration-normal) var(--ease-sheet) forwards; }
+.cn-drawer-motion-right[data-motion="enter"] { animation: cn-slide-from-right var(--duration-slow) var(--ease-sheet); }
+.cn-drawer-motion-right[data-motion="exit"] { animation: cn-slide-to-right var(--duration-normal) var(--ease-in) forwards; }
+.cn-drawer-motion-left[data-motion="enter"] { animation: cn-slide-from-left var(--duration-slow) var(--ease-sheet); }
+.cn-drawer-motion-left[data-motion="exit"] { animation: cn-slide-to-left var(--duration-normal) var(--ease-in) forwards; }
+/* A toast slides in from beyond its side and back out, without fading:
+   its shadow would show through its fill part-way. */
+.cn-toast-motion-right[data-motion="enter"] { animation: cn-slide-from-right var(--duration-normal) var(--ease-sheet); }
+.cn-toast-motion-right[data-motion="exit"] { animation: cn-slide-to-right var(--duration-fast) var(--ease-in) forwards; }
+.cn-toast-motion-left[data-motion="enter"] { animation: cn-slide-from-left var(--duration-normal) var(--ease-sheet); }
+.cn-toast-motion-left[data-motion="exit"] { animation: cn-slide-to-left var(--duration-fast) var(--ease-in) forwards; }
+.overlay-backdrop[data-motion="enter"] { animation: cn-fade-in var(--duration-normal) var(--ease-out); }
+.overlay-backdrop[data-motion="exit"] { animation: cn-fade-out var(--duration-fast) var(--ease-in) forwards; }
 
 /* ============================================================================
    Calendar

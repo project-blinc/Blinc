@@ -161,6 +161,31 @@ drawer()
         .child(/* content */))
 ```
 
+## Motion
+
+Dialogs, sheets and drawers enter and leave by rules of `CN_STYLES`. Each one's
+wrapper carries `data-motion="enter"`, then `"exit"` while it closes, and stays
+until its exit animation has played; the backdrop behind it,
+`.overlay-backdrop`, fades in and out with it.
+
+| Overlay | Wrapper class | Enter | Exit |
+|---|---|---|---|
+| dialog | `.cn-dialog-motion` | `cn-rise-in` | `cn-rise-out` |
+| sheet | `.cn-sheet-motion-{left,right,top,bottom}` | `cn-slide-from-{side}` | `cn-slide-to-{side}` |
+| drawer | `.cn-drawer-motion-{left,right}` | `cn-slide-from-{side}` | `cn-slide-to-{side}` |
+
+A sheet or drawer slides by its own size (`translateX(100%)`). The timing is
+the theme's motion tokens; a rule of your own changes it:
+
+```css
+.cn-dialog-motion[data-motion="enter"] {
+    animation: cn-rise-in 400ms var(--ease-sheet);
+}
+.cn-sheet-motion-right[data-motion="exit"] {
+    animation: cn-slide-to-right var(--duration-fast) var(--ease-in) forwards;
+}
+```
+
 ## Examples
 
 ### Form Dialog

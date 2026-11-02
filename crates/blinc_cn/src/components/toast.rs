@@ -273,8 +273,14 @@ impl ToastBuilder {
             .unwrap_or(0);
         let toast_handle = ToastHandle::from_raw(next_id);
 
+        // Slides in from its side by the `.cn-toast-motion-{side}` rules.
+        let motion_class = match corner {
+            Corner::TopLeft | Corner::BottomLeft => "cn-toast-motion-left",
+            Corner::TopRight | Corner::BottomRight => "cn-toast-motion-right",
+        };
         let mut builder = TrayBuilder::new()
             .corner(corner)
+            .motion_class(motion_class)
             .dismiss_on_click(false) // dismiss via explicit close button / action
             .content(move || {
                 build_toast_content(

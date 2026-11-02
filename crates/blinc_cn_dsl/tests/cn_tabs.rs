@@ -134,10 +134,12 @@ fn tabs_draw_their_strip_and_follow_the_bound_signal() {
 
     assert!(h.shows("what we sent you"), "swapped: {:?}", h.texts());
 
-    // The panel that went stays for its exit animation, and is let go at the
-    // next frame that finds nothing animating. There is no paint pass here to
-    // start one.
-    h.frame();
+    // The panel that went stays for its exit animation, and is let go once
+    // it has played; with no paint pass here none starts, so it goes after a
+    // few frames' wait for one.
+    for _ in 0..12 {
+        h.frame();
+    }
     assert!(
         !h.shows("who you are"),
         "and the first panel went: {:?}",
