@@ -12,6 +12,9 @@ All notable changes to `blinc_layout` will be documented in this file.
 - An element that keeps a pointer state across a restyle now eases to its new look. Unchecking a hovered switch changes the rule that applies from `:checked:hover` to `:hover`; that was applied without a transition, so the fill snapped.
 
 ### Added
+- A CSS `animation` set by a rule keyed on more than a single class (an attribute such as `.grid[data-enter="next"]`, a compound, a descendant) plays. It starts when an element is built matching the rule, and when a bound attribute or class makes a different animation the one that applies; when none applies any more, the animation stops. Only single-class rules started before.
+- `Div::on_scroll_x(handler)`: a scroll handler that takes horizontal scrolling only, such as a two-finger swipe. A scroll that is mostly vertical passes on to the nearest container that takes it, so the page still scrolls with the pointer over the element.
+- `ScrollRef::watch_y(initial)`: the container's vertical offset as a `Signal<f32>` the renderer keeps up to date as it scrolls, for content that follows the scroll such as a virtual list's window. A wheel or touch scroll brings the ref up to date as it lands, not only on the next physics tick.
 - `VisualAnimationConfig::timed(duration_ms, easing)` and `theme_timed()` ease a layout animation over a duration on a curve instead of a spring; `theme_timed()` takes the theme's normal duration and ease-out. A timed animation runs as a scheduler keyframe, so it asks for frames while it plays.
 - `Reactive<T>` is `Clone` and has `now()`, the value it holds at the moment, so a widget can hand one bound prop to several bindings and read it in a handler.
 - `Div::flex_grow_value` takes a signal or a computed as well as a number; a change patches the style and relayouts, so siblings growing by complementary fractions share their parent's width as it is laid out.

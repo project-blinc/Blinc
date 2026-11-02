@@ -32,6 +32,9 @@ pub struct ScrollRefInner {
     pending_scroll: Option<PendingScroll>,
     /// Whether the scroll state has been modified
     dirty: bool,
+    /// The vertical offset as a signal, for content that follows the scroll
+    /// (a virtual list's window); made by [`ScrollRef::watch_y`].
+    watch_y: Option<blinc_core::reactive::Signal<f32>>,
 }
 
 /// A pending scroll operation to be executed by the renderer
@@ -186,11 +189,28 @@ impl ScrollRef {
         content_size: (f32, f32),
         viewport_size: (f32, f32),
     ) {
-        if let Ok(mut inner) = self.inner.lock() {
+        let watch = self.inner.lock().ok().and_then(|mut inner| {
             inner.offset = offset;
             inner.content_size = Some(content_size);
             inner.viewport_size = Some(viewport_size);
+            inner.watch_y
+        });
+        // Set outside the lock: what follows the signal may read this ref.
+        if let Some(watch) = watch {
+            if watch.try_get().is_none_or(|y| (y - offset.1).abs() > 0.5) {
+                watch.set(offset.1);
+            }
         }
+    }
+
+    /// The vertical offset (0 at the top, growing downward) as a signal the
+    /// renderer keeps up to date as the container scrolls, starting at
+    /// `initial` until it first reports.
+    pub fn watch_y(&self, initial: f32) -> blinc_core::reactive::Signal<f32> {
+        let mut inner = self.inner.lock().unwrap();
+        *inner
+            .watch_y
+            .get_or_insert_with(|| blinc_core::reactive::signal(initial))
     }
 
     /// Take pending scroll command (called by renderer each frame)

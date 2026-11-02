@@ -67,7 +67,9 @@ fn off_and_on_in_every_state() {
 
         ui.press(".cn-switch").settle();
         ui.assert_snapshot(&format!("cn_switch_{name}_pressed"));
-        ui.leave();
+        // Leaving the window lets the press go; what it set in motion
+        // settles before the next mount.
+        ui.leave().settle();
 
         mount(&mut ui, on, true, SwitchSize::Medium);
         ui.leave().settle();

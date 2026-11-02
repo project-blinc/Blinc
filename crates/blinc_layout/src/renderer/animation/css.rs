@@ -74,7 +74,20 @@ impl RenderTree {
         let Some(style) = stylesheet.get_class(class) else {
             return false;
         };
-        let Some(anim_config) = style.animation.as_ref() else {
+        let Some(anim_config) = style.animation.clone() else {
+            return false;
+        };
+        self.start_css_animation_from(node_id, &anim_config)
+    }
+
+    /// Start the keyframes `anim_config` names on a node, replacing any
+    /// animation it is playing.
+    pub(crate) fn start_css_animation_from(
+        &mut self,
+        node_id: LayoutNodeId,
+        anim_config: &crate::css_parser::CssAnimation,
+    ) -> bool {
+        let Some(stylesheet) = self.stylesheet.clone() else {
             return false;
         };
         let Some(keyframes) = stylesheet.get_keyframes(&anim_config.name) else {
@@ -527,6 +540,10 @@ impl RenderTree {
                 }
             }
         }
+
+        // Rules keyed on more than one class: attributes, compounds,
+        // descendants.
+        self.start_rule_animations();
     }
 
     /// Write the playing CSS animations' current values onto their nodes.

@@ -285,6 +285,11 @@ impl RenderTree {
                     .has_handler(sid, blinc_core::events::event_types::SCROLL)
             });
             let has_registered_physics = self.scroll_physics.contains_key(&node_id);
+            // A handler that takes one axis lets a scroll along the other by.
+            let has_handler = has_handler
+                && self
+                    .handler_axis(node_id)
+                    .is_none_or(|axis| Self::delta_along(axis, delta_x, delta_y));
             let eligible = if text_input_focused {
                 has_registered_physics
             } else {
@@ -300,8 +305,10 @@ impl RenderTree {
             return (delta_x, delta_y);
         };
 
-        let direction = self.get_scroll_direction(node_id);
-        let has_scroll_physics = direction.is_some();
+        let has_scroll_physics = self.get_scroll_direction(node_id).is_some();
+        let direction = self
+            .get_scroll_direction(node_id)
+            .or_else(|| self.handler_axis(node_id));
         let handles_x = direction.is_none_or(|d| {
             matches!(
                 d,
@@ -335,6 +342,7 @@ impl RenderTree {
                     p.apply_touch_scroll_delta(dispatch_x, dispatch_y, now_ms);
                     p.on_scroll_activity();
                 }
+                self.sync_scroll_ref(node_id);
                 self.last_scroll_target = Some((node_id, now_ms));
             } else {
                 let mut ctx =
@@ -397,6 +405,11 @@ impl RenderTree {
                     .has_handler(sid, blinc_core::events::event_types::SCROLL)
             });
             let has_registered_physics = self.scroll_physics.contains_key(&node_id);
+            // A handler that takes one axis lets a scroll along the other by.
+            let has_handler = has_handler
+                && self
+                    .handler_axis(node_id)
+                    .is_none_or(|axis| Self::delta_along(axis, delta_x, delta_y));
             let eligible = if text_input_focused {
                 has_registered_physics
             } else {
@@ -412,8 +425,10 @@ impl RenderTree {
             return (delta_x, delta_y);
         };
 
-        let direction = self.get_scroll_direction(node_id);
-        let has_scroll_physics = direction.is_some();
+        let has_scroll_physics = self.get_scroll_direction(node_id).is_some();
+        let direction = self
+            .get_scroll_direction(node_id)
+            .or_else(|| self.handler_axis(node_id));
         let handles_x = direction.is_none_or(|d| {
             matches!(
                 d,
@@ -440,6 +455,7 @@ impl RenderTree {
                     p.apply_touch_scroll_delta(dispatch_x, dispatch_y, scroll_time);
                     p.on_scroll_activity();
                 }
+                self.sync_scroll_ref(node_id);
                 self.last_scroll_target = Some((node_id, scroll_time));
             } else {
                 let mut ctx = self
@@ -889,6 +905,21 @@ impl RenderTree {
     /// Get the scroll direction for a node (if it's a scroll container)
     ///
     /// Returns None if the node is not a scroll container.
+    /// The one axis a node's scroll handler takes, if it takes only one.
+    fn handler_axis(&self, node_id: LayoutNodeId) -> Option<crate::scroll::ScrollDirection> {
+        self.get_render_node(node_id)
+            .and_then(|n| n.props.scroll_handler_axis)
+    }
+
+    /// Whether a scroll moves mostly along `axis`.
+    fn delta_along(axis: crate::scroll::ScrollDirection, dx: f32, dy: f32) -> bool {
+        match axis {
+            crate::scroll::ScrollDirection::Horizontal => dx.abs() > dy.abs(),
+            crate::scroll::ScrollDirection::Vertical => dy.abs() >= dx.abs(),
+            crate::scroll::ScrollDirection::Both => true,
+        }
+    }
+
     pub fn get_scroll_direction(
         &self,
         node_id: LayoutNodeId,
@@ -1102,6 +1133,26 @@ impl RenderTree {
     ///
     /// Call this each frame with the current time in milliseconds.
     /// Uses actual time delta for smooth, frame-rate independent animation.
+    /// Bring a container's `ScrollRef` up to date with its physics, so what
+    /// reads the ref, or watches its offset, sees a scroll as it lands.
+    fn sync_scroll_ref(&self, node_id: LayoutNodeId) {
+        let (Some(scroll_ref), Some(physics)) = (
+            self.scroll_refs.get(&node_id),
+            self.scroll_physics.get(&node_id),
+        ) else {
+            return;
+        };
+        let (offset, content, viewport) = {
+            let p = physics.lock().unwrap();
+            (
+                (p.offset_x.abs(), p.offset_y.abs()),
+                (p.content_width, p.content_height),
+                (p.viewport_width, p.viewport_height),
+            )
+        };
+        scroll_ref.update_state(offset, content, viewport);
+    }
+
     pub fn tick_scroll_physics(&mut self, current_time_ms: u64) -> bool {
         // Delta time from a MICROSECOND clock, not the millisecond
         // `current_time_ms` arg: integer-ms `dt` quantises a 16.67ms

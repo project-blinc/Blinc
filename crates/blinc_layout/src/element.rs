@@ -359,6 +359,9 @@ pub struct RenderProps {
     /// Whether this element has `position: sticky` behavior.
     /// Sticky elements clamp their position when scrolling past thresholds.
     pub is_sticky: bool,
+    /// The axis a scroll handler on this element takes, when it takes one
+    /// only: scrolling along the other passes on to the next container.
+    pub scroll_handler_axis: Option<crate::scroll::ScrollDirection>,
     /// Sticky scroll-lock threshold from top (in pixels).
     pub sticky_top: Option<f32>,
     /// Sticky scroll-lock threshold from bottom (in pixels).
@@ -523,6 +526,7 @@ impl Default for RenderProps {
             pointer_events_none: false,
             is_fixed: false,
             is_sticky: false,
+            scroll_handler_axis: None,
             sticky_top: None,
             sticky_bottom: None,
             layer_effects: Vec::new(),

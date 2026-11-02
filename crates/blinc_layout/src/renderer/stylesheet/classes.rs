@@ -9,7 +9,8 @@
 //! `.switch:checked > .thumb` follows the switch. A rule that depends on the
 //! class from a sibling selector, or through `:not`, waits for the next full
 //! style pass. A node whose rules give it a `transition` eases to what the
-//! change gives it, as it does for `:hover`.
+//! change gives it, as it does for `:hover`, and a change that gives it a
+//! different `animation` starts that animation.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -135,8 +136,63 @@ impl RenderTree {
             .and_then(|i| rules[i].1.transition.clone())
     }
 
+    /// The `animation` the stateless rules matching a node now give it, if
+    /// any: the latest in the cascade among those that set one.
+    fn matching_animation(
+        &self,
+        node: LayoutNodeId,
+        stylesheet: &crate::css_parser::Stylesheet,
+    ) -> Option<crate::css_parser::CssAnimation> {
+        let none: HashSet<LayoutNodeId> = HashSet::new();
+        let rules = stylesheet.complex_rules();
+        rules
+            .iter()
+            .enumerate()
+            .filter(|(_, (selector, style))| style.animation.is_some() && !selector.has_state())
+            .filter(|(_, (selector, _))| {
+                self.complex_selector_matches(selector, node, &none, &none, None)
+            })
+            .max_by_key(|(i, (selector, style))| (Self::rule_order(selector, style), *i))
+            .and_then(|(_, (_, style))| style.animation.clone())
+    }
+
+    /// Start the animations the stateless rules give nodes that play none,
+    /// whatever the rule keys on: an attribute, a class in a compound, a
+    /// descendant.
+    pub(crate) fn start_rule_animations(&mut self) {
+        let Some(stylesheet) = self.stylesheet.clone() else {
+            return;
+        };
+        if !stylesheet
+            .complex_rules()
+            .iter()
+            .any(|(selector, style)| style.animation.is_some() && !selector.has_state())
+        {
+            return;
+        }
+        let nodes: Vec<LayoutNodeId> = self.render_nodes.keys().copied().collect();
+        for node in nodes {
+            let Some(stable) = self.stable_id(node) else {
+                continue;
+            };
+            if self
+                .css_anim_store
+                .lock()
+                .unwrap()
+                .animations
+                .contains_key(&stable)
+            {
+                continue;
+            }
+            if let Some(animation) = self.matching_animation(node, &stylesheet) {
+                self.start_css_animation_from(node, &animation);
+            }
+        }
+    }
+
     /// Run `change` on a node, and start the transitions its `transition`
-    /// asks for between what it was and what it is.
+    /// asks for between what it was and what it is, and the animation the
+    /// change gives it.
     fn eased(
         &mut self,
         node: LayoutNodeId,
@@ -150,10 +206,26 @@ impl RenderTree {
         let before = spec
             .as_ref()
             .and_then(|_| self.snapshot_before_keyframe_properties(node));
+        let animation_before = ease
+            .then(|| self.matching_animation(node, stylesheet))
+            .flatten();
         change(self);
         if let (Some(before), Some(spec)) = (before, spec) {
             if let Some(after) = self.snapshot_keyframe_properties(node) {
                 self.detect_and_start_transitions(node, &before, &after, &spec);
+            }
+        }
+        if ease {
+            let animation_after = self.matching_animation(node, stylesheet);
+            let name =
+                |a: &Option<crate::css_parser::CssAnimation>| a.as_ref().map(|a| a.name.clone());
+            if name(&animation_after) != name(&animation_before) {
+                match animation_after {
+                    Some(animation) => {
+                        self.start_css_animation_from(node, &animation);
+                    }
+                    None => self.stop_css_animation(node),
+                }
             }
         }
     }

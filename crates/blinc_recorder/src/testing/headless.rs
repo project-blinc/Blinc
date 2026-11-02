@@ -263,6 +263,11 @@ impl Headless {
         let dt = dt_ms as f32;
         self.ctx.animations.lock().unwrap().tick_by(dt / 1000.0);
 
+        // A scroll a handler asked for (`ScrollRef::scroll_to`), as the
+        // window applies it at the top of its frame.
+        if let Some(tree) = self.tree.as_mut() {
+            tree.process_pending_scroll_refs();
+        }
         self.drain_queued_css();
         self.rebuild_if_needed();
         self.apply_queued_updates();
@@ -488,6 +493,8 @@ impl Headless {
 
     fn deliver(&mut self, events: Vec<(LayoutNodeId, u32)>) {
         let (x, y) = self.pointer;
+        // A drag carries how far it has gone, as the window gives it.
+        let (dx, dy) = self.ctx.event_router.drag_delta();
         if let Some(tree) = self.tree.as_mut() {
             for (node, event) in events {
                 let (bx, by, bw, bh) = self
@@ -495,7 +502,28 @@ impl Headless {
                     .event_router
                     .get_node_bounds(node)
                     .unwrap_or((0.0, 0.0, 0.0, 0.0));
-                tree.dispatch_event_with_local(node, event, x, y, x - bx, y - by, bx, by, bw, bh);
+                let dragging = event == blinc_core::events::event_types::DRAG
+                    || event == blinc_core::events::event_types::DRAG_END;
+                let (dx, dy) = if dragging { (dx, dy) } else { (0.0, 0.0) };
+                tree.dispatch_event_full(
+                    node,
+                    event,
+                    x,
+                    y,
+                    x - bx,
+                    y - by,
+                    bx,
+                    by,
+                    bw,
+                    bh,
+                    dx,
+                    dy,
+                    1.0,
+                    false,
+                    false,
+                    false,
+                    false,
+                );
             }
         }
         self.frame(0);
@@ -504,7 +532,12 @@ impl Headless {
     /// Move the pointer to `(x, y)`.
     pub fn move_to(&mut self, x: f32, y: f32) -> &mut Self {
         self.pointer = (x, y);
+        // While a button is held, the window's drag path: DRAG to the
+        // pressed element and its ancestors, with no hover walk.
         let events = match self.tree.as_ref() {
+            Some(tree) if self.ctx.event_router.is_press_in_flight() => {
+                self.ctx.event_router.on_mouse_drag_fast(tree, x, y)
+            }
             Some(tree) => self.ctx.event_router.on_mouse_move(tree, x, y),
             None => return self,
         };
@@ -581,9 +614,16 @@ impl Headless {
         self
     }
 
-    /// Move the pointer off everything.
+    /// Move the pointer out of the window, as the window reports it: a press
+    /// in flight is released and nothing stays hovered.
     pub fn leave(&mut self) -> &mut Self {
-        self.move_to(-10.0, -10.0)
+        self.pointer = (-10.0, -10.0);
+        let events = match self.tree.as_ref() {
+            Some(tree) => self.ctx.event_router.on_mouse_leave(tree),
+            None => return self,
+        };
+        self.deliver(events);
+        self
     }
 
     /// Scroll under the pointer.

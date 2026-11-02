@@ -455,6 +455,8 @@ pub struct Div {
     pub(crate) is_fixed: bool,
     /// Sticky positioning (sticks when scrolled past threshold)
     pub(crate) is_sticky: bool,
+    /// The one axis its scroll handler takes, from `on_scroll_x`.
+    pub(crate) scroll_axis: Option<crate::scroll::ScrollDirection>,
     /// Sticky top threshold
     pub(crate) sticky_top: Option<f32>,
     /// Outline width in pixels
@@ -581,6 +583,7 @@ impl Div {
             outline_offset: 0.0,
             is_fixed: false,
             is_sticky: false,
+            scroll_axis: None,
             sticky_top: None,
             z_index: 0,
             scroll_physics: None,
@@ -649,6 +652,7 @@ impl Div {
             outline_offset: 0.0,
             is_fixed: false,
             is_sticky: false,
+            scroll_axis: None,
             sticky_top: None,
             z_index: 0,
             scroll_physics: None,
@@ -4710,6 +4714,18 @@ impl Div {
         self
     }
 
+    /// Register a scroll handler that takes horizontal scrolling only, such
+    /// as a two-finger swipe. A scroll that is mostly vertical passes on to
+    /// the nearest container that takes it, so the page still scrolls with
+    /// the pointer over this element.
+    pub fn on_scroll_x<F>(mut self, handler: F) -> Self
+    where
+        F: Fn(&crate::event_handler::EventContext) + 'static,
+    {
+        self.scroll_axis = Some(crate::scroll::ScrollDirection::Horizontal);
+        self.on_scroll(handler)
+    }
+
     /// Register a mouse move handler (pointer movement over this element)
     pub fn on_mouse_move<F>(mut self, handler: F) -> Self
     where
@@ -5755,6 +5771,7 @@ impl ElementBuilder for Div {
             outline_offset: self.outline_offset,
             is_fixed: self.is_fixed,
             is_sticky: self.is_sticky,
+            scroll_handler_axis: self.scroll_axis,
             sticky_top: self.sticky_top,
             z_index: self.z_index,
             ..Default::default()
