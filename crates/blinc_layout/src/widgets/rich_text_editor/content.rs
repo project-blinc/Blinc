@@ -113,11 +113,12 @@ pub(super) fn content(
             }
         }
     };
-    let document = div().w_full().flex_col().gap_px(theme.block_gap).for_each(
-        &blocks,
-        |key| (key.index, key.digest),
-        render,
-    );
+    let document = div()
+        .class("blinc-rich-text")
+        .w_full()
+        .flex_col()
+        .gap_px(theme.block_gap)
+        .for_each(&blocks, |key| (key.index, key.digest), render);
 
     let spans = {
         let (state, theme) = (Arc::clone(state), theme.clone());
@@ -130,7 +131,7 @@ pub(super) fn content(
             }
         })
     };
-    let highlight = Color::rgba(theme.text.r, theme.text.g, theme.text.b, 0.18);
+    let highlight = theme.text.map(|c| c.with_alpha(0.18));
     let selection = anchor().for_each(
         &spans,
         |span| {
@@ -142,13 +143,17 @@ pub(super) fn content(
             )
         },
         move |span: Span| {
-            div()
+            let rect = div()
+                .class("blinc-rich-text-selection")
                 .absolute()
                 .left(span.x)
                 .top(span.y)
                 .w(span.w)
-                .h(span.h)
-                .bg(highlight)
+                .h(span.h);
+            match highlight {
+                Some(c) => rect.bg(c),
+                None => rect,
+            }
         },
     );
 
@@ -195,11 +200,12 @@ pub(super) fn content(
 
 /// Canvas overlay that draws a blinking cursor at the current document
 /// position. It reads the cursor geometry from `state` on each paint, so the
-/// blink and a moved cursor need no rebuild.
+/// blink and a moved cursor need no rebuild. Without a `color` it is
+/// `--blinc-rich-text-caret`, else the text colour, read each paint.
 fn cursor_overlay_canvas(
     state: RichTextState,
     cursor_state: SharedCursorState,
-    color: Color,
+    color: Option<Color>,
     width: f32,
 ) -> Canvas {
     let (state_for_frames, cursor_for_frames) = (state.clone(), cursor_state.clone());
@@ -223,6 +229,12 @@ fn cursor_overlay_canvas(
             return;
         };
 
+        let color = color.unwrap_or_else(|| {
+            crate::ua_styles::stylesheet_color(
+                "var(--blinc-rich-text-caret, var(--text-primary))",
+                blinc_theme::ColorToken::TextPrimary,
+            )
+        });
         let c = Color::rgba(color.r, color.g, color.b, color.a * opacity);
         ctx.fill_rect(
             Rect::new(x, y, 2.0, h),

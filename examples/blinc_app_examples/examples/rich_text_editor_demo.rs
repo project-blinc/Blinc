@@ -43,7 +43,8 @@ fn main() -> Result<()> {
 }
 
 pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
-    let theme = RichTextTheme::dark();
+    // Colours from the stylesheet, so the editor follows the theme.
+    let theme = RichTextTheme::default();
 
     // Compute the explicit pixel width of the column the document renders
     // into. RichText needs this so each line wraps to the correct width
@@ -169,5 +170,6 @@ Editing, undo/redo, and the floating selection toolbar all work — select any t
 "#;
 
 fn sample_document(_theme: &RichTextTheme) -> RichDocument {
-    RichDocument::from_markdown(SAMPLE_MARKDOWN, Color::WHITE)
+    // Transparent: text without a colour of its own takes the editor's.
+    RichDocument::from_markdown(SAMPLE_MARKDOWN, Color::TRANSPARENT)
 }

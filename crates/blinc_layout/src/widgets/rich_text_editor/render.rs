@@ -9,9 +9,10 @@
 //!
 //! # Theme
 //!
-//! Colors and font sizes are passed in via [`RichTextTheme`] so the renderer
-//! stays decoupled from the application theme system. A reasonable default
-//! is provided ([`RichTextTheme::dark`] / [`RichTextTheme::light`]).
+//! Sizes are passed in via [`RichTextTheme`]. Colours come from the
+//! `.blinc-rich-text` rules of the layout stylesheet unless the theme sets
+//! them; [`RichTextTheme::dark`] and [`RichTextTheme::light`] are fixed
+//! palettes.
 
 use super::document::{Block, BlockKind, RichDocument};
 use crate::div::{Div, FontWeight, div};
@@ -21,19 +22,20 @@ use blinc_core::Color;
 
 /// Visual configuration for the rich text renderer.
 ///
-/// All colors and sizes are explicit so the editor never reaches into a
-/// global theme — pass a different `RichTextTheme` per editor instance to
-/// theme it however you like.
+/// Sizes are explicit. A colour left `None` comes from the stylesheet's
+/// `.blinc-rich-text` rules, so it follows the theme; one set here wins.
 #[derive(Clone, Debug)]
 pub struct RichTextTheme {
-    /// Default text color (paragraphs, list items).
-    pub text: Color,
-    /// Muted color used for blockquote text and list bullets.
-    pub muted: Color,
-    /// Color of the blockquote left border.
-    pub quote_border: Color,
-    /// Color of the divider line.
-    pub divider: Color,
+    /// Text without a colour of its own, over the `.blinc-rich-text`
+    /// rule's; also the caret and selection colour.
+    pub text: Option<Color>,
+    /// List markers, over the `.blinc-rich-text-marker` rule's.
+    pub muted: Option<Color>,
+    /// The blockquote's left border, over the `.blinc-rich-text-quote-bar`
+    /// rule's.
+    pub quote_border: Option<Color>,
+    /// The divider line, over the `.blinc-rich-text-divider` rule's.
+    pub divider: Option<Color>,
     /// Base font size for paragraph text (px).
     pub font_size: f32,
     /// Heading sizes for levels 1..=6 in px.
@@ -52,37 +54,25 @@ pub struct RichTextTheme {
 }
 
 impl RichTextTheme {
-    /// Reasonable defaults for a dark UI.
+    /// A fixed palette for a dark UI, whatever the theme.
     pub fn dark() -> Self {
         Self {
-            text: Color::rgba(0.92, 0.92, 0.95, 1.0),
-            muted: Color::rgba(0.62, 0.62, 0.7, 1.0),
-            quote_border: Color::rgba(0.35, 0.35, 0.42, 1.0),
-            divider: Color::rgba(0.25, 0.25, 0.32, 1.0),
-            font_size: 15.0,
-            heading_sizes: [30.0, 24.0, 20.0, 18.0, 16.0, 15.0],
-            block_gap: 8.0,
-            indent_step: 24.0,
-            quote_border_width: 3.0,
-            bullet_column_width: 18.0,
-            line_height: 1.45,
+            text: Some(Color::rgba(0.92, 0.92, 0.95, 1.0)),
+            muted: Some(Color::rgba(0.62, 0.62, 0.7, 1.0)),
+            quote_border: Some(Color::rgba(0.35, 0.35, 0.42, 1.0)),
+            divider: Some(Color::rgba(0.25, 0.25, 0.32, 1.0)),
+            ..Self::default()
         }
     }
 
-    /// Reasonable defaults for a light UI.
+    /// A fixed palette for a light UI, whatever the theme.
     pub fn light() -> Self {
         Self {
-            text: Color::rgba(0.10, 0.10, 0.13, 1.0),
-            muted: Color::rgba(0.42, 0.42, 0.5, 1.0),
-            quote_border: Color::rgba(0.78, 0.78, 0.84, 1.0),
-            divider: Color::rgba(0.88, 0.88, 0.92, 1.0),
-            font_size: 15.0,
-            heading_sizes: [30.0, 24.0, 20.0, 18.0, 16.0, 15.0],
-            block_gap: 8.0,
-            indent_step: 24.0,
-            quote_border_width: 3.0,
-            bullet_column_width: 18.0,
-            line_height: 1.45,
+            text: Some(Color::rgba(0.10, 0.10, 0.13, 1.0)),
+            muted: Some(Color::rgba(0.42, 0.42, 0.5, 1.0)),
+            quote_border: Some(Color::rgba(0.78, 0.78, 0.84, 1.0)),
+            divider: Some(Color::rgba(0.88, 0.88, 0.92, 1.0)),
+            ..Self::default()
         }
     }
 
@@ -92,9 +82,22 @@ impl RichTextTheme {
     }
 }
 
+/// Colours from the stylesheet, so the editor follows the theme.
 impl Default for RichTextTheme {
     fn default() -> Self {
-        Self::dark()
+        Self {
+            text: None,
+            muted: None,
+            quote_border: None,
+            divider: None,
+            font_size: 15.0,
+            heading_sizes: [30.0, 24.0, 20.0, 18.0, 16.0, 15.0],
+            block_gap: 8.0,
+            indent_step: 24.0,
+            quote_border_width: 3.0,
+            bullet_column_width: 18.0,
+            line_height: 1.45,
+        }
     }
 }
 
@@ -110,7 +113,11 @@ impl Default for RichTextTheme {
 /// builders so that the renderer is independent of the global 4-unit
 /// spacing scale used by the rest of the layout API.
 pub fn render_document(doc: &RichDocument, theme: &RichTextTheme, content_width: f32) -> Div {
-    let mut root = div().w_full().flex_col().gap_px(theme.block_gap);
+    let mut root = div()
+        .class("blinc-rich-text")
+        .w_full()
+        .flex_col()
+        .gap_px(theme.block_gap);
     for (i, block) in doc.blocks.iter().enumerate() {
         root = root.child(render_block(doc, i, block, theme, content_width));
     }
@@ -170,7 +177,14 @@ pub(super) fn render_block(
             )
         }
         BlockKind::Quote => quote_div(block, theme, indent_px, inner_width),
-        BlockKind::Divider => indented_block(div().w_full().h(1.0).bg(theme.divider), indent_px),
+        BlockKind::Divider => {
+            let line = div().class("blinc-rich-text-divider").w_full().h(1.0);
+            let line = match theme.divider {
+                Some(c) => line.bg(c),
+                None => line,
+            };
+            indented_block(line, indent_px)
+        }
     }
 }
 
@@ -390,7 +404,11 @@ fn absolute_positioned_line(
         } else {
             body_baseline
         };
-        let positioned = div()
+        let mut positioned = div();
+        if is_code {
+            positioned = positioned.class("blinc-rich-text-code");
+        }
+        let positioned = positioned
             .absolute()
             .left(x_cursor + lead_w)
             // Rounded: an absolute top lands on a whole pixel anyway,
@@ -449,9 +467,9 @@ fn list_item_div(
     indent_px: f32,
     inner_width: f32,
 ) -> Div {
-    let marker_text = rich_text_styled(StyledText::plain(&marker, theme.muted))
-        .size(theme.font_size)
-        .default_color(theme.muted);
+    // Transparent: the marker takes the `.blinc-rich-text-marker` colour.
+    let ink = theme.muted.unwrap_or(Color::TRANSPARENT);
+    let marker_text = rich_text_styled(StyledText::plain(&marker, ink)).size(theme.font_size);
     // The marker column eats `bullet_column_width + 8` (gap) of the inner width.
     let line_width = (inner_width - theme.bullet_column_width - 8.0).max(0.0);
 
@@ -459,7 +477,12 @@ fn list_item_div(
         .w_full()
         .flex_row()
         .gap_px(8.0)
-        .child(div().w(theme.bullet_column_width).child(marker_text))
+        .child(
+            div()
+                .class("blinc-rich-text-marker")
+                .w(theme.bullet_column_width)
+                .child(marker_text),
+        )
         .child(paragraph_div(
             block,
             theme,
@@ -487,7 +510,15 @@ fn quote_div(block: &Block, theme: &RichTextTheme, indent_px: f32, inner_width: 
         .w_full()
         .flex_row()
         .gap_px(12.0)
-        .child(div().w(theme.quote_border_width).bg(theme.quote_border))
+        .child({
+            let bar = div()
+                .class("blinc-rich-text-quote-bar")
+                .w(theme.quote_border_width);
+            match theme.quote_border {
+                Some(c) => bar.bg(c),
+                None => bar,
+            }
+        })
         .child(inner);
     indented_block(row, indent_px)
 }
@@ -570,10 +601,8 @@ fn run_baseline(
 
 /// Build a monospace `RichText` for a code run. No chip background or
 /// internal padding — purely a font + color change — so the rendered
-/// pixel width matches the geometry's `RunGeometry.width` exactly.
-/// (The chip styling needs sub-pixel control of where the chip starts
-/// and ends, which we can revisit once the basic per-run measurement
-/// path is stable.)
+/// pixel width matches the geometry's `RunGeometry.width` exactly. Its
+/// colour is the `.blinc-rich-text-code` rule's, from the run's wrapper.
 fn make_code_run(
     line: &crate::styled_text::StyledLine,
     theme: &RichTextTheme,
@@ -582,18 +611,16 @@ fn make_code_run(
     _italic: bool,
 ) -> RichText {
     let mut chip_line = line.clone();
-    let code_color = Color::rgba(0.93, 0.85, 0.55, 1.0);
     for span in chip_line.spans.iter_mut() {
         // Drop the `code` flag so the inner `RichText` doesn't recurse,
-        // and pin the color to our code tint.
+        // and clear the colour so the code rule's applies.
         span.code = false;
-        span.color = code_color;
+        span.color = Color::TRANSPARENT;
     }
     let styled = StyledText::from_lines(vec![chip_line]);
     rich_text_styled(styled)
         .size(font_size)
         .weight(FontWeight::Normal)
-        .default_color(code_color)
         .line_height(theme.line_height)
         .monospace()
 }
@@ -705,6 +732,10 @@ fn slice_segment(
 /// Build a `RichText` for a wrapped line. Each line goes into its own
 /// `RichText`, so wrapping inside a single line never happens at the
 /// shaper level — we already pre-wrap in `paragraph_div`.
+///
+/// Spans without a colour of their own take the inherited
+/// `.blinc-rich-text` colour, or the theme's text colour when it sets one:
+/// a span's colour is the only one that wins over an inherited rule.
 fn make_rich_text(
     line: &crate::styled_text::StyledLine,
     theme: &RichTextTheme,
@@ -712,60 +743,21 @@ fn make_rich_text(
     weight: FontWeight,
     italic: bool,
 ) -> RichText {
-    let styled = StyledText::from_lines(vec![line.clone()]);
+    let mut line = line.clone();
+    if let Some(c) = theme.text {
+        for span in line.spans.iter_mut().filter(|s| s.color.a <= 0.0) {
+            span.color = c;
+        }
+    }
+    let styled = StyledText::from_lines(vec![line]);
     let mut rt = rich_text_styled(styled)
         .size(font_size)
         .weight(weight)
-        .default_color(theme.text)
         .line_height(theme.line_height);
     if italic {
         rt = rt.italic();
     }
     rt
-}
-
-/// Reserved for the future "real chip" rendering — a code run with a
-/// rounded background, internal padding, and a 1px border. Currently
-/// unused; the active path is [`make_code_run`] which does the
-/// font/color switch only so the rendered pixel widths match the
-/// `RunGeometry` widths exactly.
-#[allow(dead_code)]
-fn make_code_chip(
-    line: &crate::styled_text::StyledLine,
-    theme: &RichTextTheme,
-    font_size: f32,
-) -> Div {
-    // Force the spans to drop the `code` flag so the inner RichText
-    // doesn't recurse, and reset color so the chip's tint wins.
-    let mut chip_line = line.clone();
-    let chip_color = Color::rgba(0.93, 0.85, 0.55, 1.0);
-    for span in chip_line.spans.iter_mut() {
-        span.code = false;
-        span.color = chip_color;
-    }
-    let styled = StyledText::from_lines(vec![chip_line]);
-    let rt = rich_text_styled(styled)
-        .size(font_size * 0.92)
-        .weight(FontWeight::Normal)
-        .default_color(chip_color)
-        .line_height(theme.line_height)
-        .monospace();
-    let mut chip = div()
-        .padding_x_px(5.0)
-        .rounded(3.0)
-        .bg(Color::rgba(0.18, 0.18, 0.22, 1.0))
-        .border(1.0, Color::rgba(0.30, 0.30, 0.36, 1.0))
-        .child(rt);
-    // Raw-pixel horizontal margin so the chip has visible breathing
-    // room from neighbouring text. `mx()` would multiply by 4 (Blinc's
-    // 4-unit spacing scale), so go through `style_mut` directly.
-    {
-        use taffy::LengthPercentageAuto;
-        let s = chip.style_mut();
-        s.margin.left = LengthPercentageAuto::length(3.0);
-        s.margin.right = LengthPercentageAuto::length(3.0);
-    }
-    chip
 }
 
 pub use super::geometry::compute_line_geometry;

@@ -411,7 +411,8 @@ fn rewrite_spans_after_insert(
         let new_span = TextSpan {
             start: byte,
             end: byte + added_bytes,
-            color: fmt.color.unwrap_or(blinc_core::Color::WHITE),
+            // Transparent: the text takes the editor's text colour.
+            color: fmt.color.unwrap_or(blinc_core::Color::TRANSPARENT),
             bold: fmt.bold,
             italic: fmt.italic,
             underline: fmt.underline,

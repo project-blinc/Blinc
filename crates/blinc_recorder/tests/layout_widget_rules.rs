@@ -344,3 +344,129 @@ fn the_editor_takes_selection_and_syntax_colours() {
     ));
     ui.assert_snapshot("layout_code_rules");
 }
+
+const PROSE: &str = "Plain prose here\n\n- listed\n\n> quoted\n\n---\n\nsome `code` inline";
+
+/// A rich text editor following the theme: the document text, markers,
+/// quote bar, divider and code take their rules' colours.
+#[test]
+fn rich_text_follows_the_theme_in_both_schemes() {
+    use blinc_layout::widgets::rich_text_editor::{
+        RichDocument, RichTextTheme, rich_text_editor, rich_text_state,
+    };
+    for (scheme, dark) in [(ColorScheme::Dark, true), (ColorScheme::Light, false)] {
+        let Some(mut ui) = session(scheme) else {
+            return;
+        };
+        let theme = ThemeState::get();
+        let state = rich_text_state(RichDocument::from_markdown(PROSE, Color::TRANSPARENT));
+        ui.mount(move |_| {
+            div()
+                .w(W as f32)
+                .h(H as f32)
+                .padding(blinc_layout::units::px(12.0))
+                .child(rich_text_editor(&state, RichTextTheme::default(), 380.0))
+        });
+        ui.leave().settle();
+
+        let rules = |ui: &Headless, class| background(ui, one(ui, class));
+        assert!(close(
+            rules(&ui, "blinc-rich-text-quote-bar"),
+            theme.color(ColorToken::BorderSecondary)
+        ));
+        assert!(close(
+            rules(&ui, "blinc-rich-text-divider"),
+            theme.color(ColorToken::Border)
+        ));
+        // The document's most contrasting ink is its body text.
+        for (what, node, want) in [
+            (
+                "prose",
+                one(&ui, "blinc-rich-text"),
+                ColorToken::TextPrimary,
+            ),
+            (
+                "marker",
+                one(&ui, "blinc-rich-text-marker"),
+                ColorToken::TextTertiary,
+            ),
+            (
+                "code",
+                one(&ui, "blinc-rich-text-code"),
+                ColorToken::Warning,
+            ),
+        ] {
+            let ((got, bg), want) = (ink(&mut ui, node, dark), token(want));
+            assert!(
+                drawn_in(got, want, bg),
+                "{scheme:?} {what} drawn {got:?} over {bg:?}, want {want:?}"
+            );
+        }
+    }
+}
+
+/// The selection toolbar takes its rules' colours; a fixed palette from
+/// `RichTextTheme::dark()` still colours the text.
+#[test]
+fn the_rich_text_toolbar_and_a_fixed_palette() {
+    use blinc_layout::widgets::rich_text_editor::{
+        DocPosition, RichDocument, RichTextTheme, Selection, rich_text_editor, rich_text_state,
+    };
+    let Some(mut ui) = session(ColorScheme::Light) else {
+        return;
+    };
+    let theme = ThemeState::get();
+    let state = rich_text_state(RichDocument::from_markdown(
+        "Select this text",
+        Color::TRANSPARENT,
+    ));
+    {
+        let mut d = state.lock().unwrap();
+        d.focused = true;
+        d.selection = Some(Selection {
+            anchor: DocPosition::new(0, 0, 0),
+            head: DocPosition::new(0, 0, 6),
+        });
+    }
+    let fixed = rich_text_state(RichDocument::from_markdown(
+        "Fixed palette",
+        Color::TRANSPARENT,
+    ));
+    ui.mount(move |_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(12.0))
+            .flex_col()
+            .gap(30.0)
+            .child(rich_text_editor(&state, RichTextTheme::default(), 380.0))
+            .child(rich_text_editor(&fixed, RichTextTheme::dark(), 380.0))
+    });
+    ui.leave().settle();
+
+    let toolbar = one(&ui, "blinc-rte-toolbar");
+    assert!(close(
+        background(&ui, toolbar),
+        theme.color(ColorToken::SurfaceElevated)
+    ));
+    assert!(close(
+        background(&ui, one(&ui, "blinc-rich-text-selection")),
+        theme.color(ColorToken::Selection)
+    ));
+    let button = one(&ui, "blinc-rte-button");
+    let ((got, bg), want) = (ink(&mut ui, button, false), token(ColorToken::TextPrimary));
+    assert!(drawn_in(got, want, bg), "toolbar label {got:?} over {bg:?}");
+    assert!(close(
+        background(&ui, one(&ui, "blinc-rte-swatch--default")),
+        theme.color(ColorToken::TextPrimary)
+    ));
+
+    // The dark palette's near-white text, on the light theme.
+    let documents = all(&ui, "blinc-rich-text");
+    let (brightest, _) = ink(&mut ui, documents[1], true);
+    assert!(
+        brightest.iter().all(|&c| c > 220),
+        "fixed palette text {brightest:?}"
+    );
+    ui.assert_snapshot("layout_rich_text_rules");
+}

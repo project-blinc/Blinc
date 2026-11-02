@@ -5,6 +5,7 @@ All notable changes to `blinc_app` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Styled text (`RichText`) without a colour of its own takes the CSS colour it inherits. It took only a colour set on its own node, so text under a coloured container drew in the element's default.
 - A bound value a scroll or drag handler writes is drawn at once. The window drew after input only when something called `request_redraw()` or queued a rebuild, so a signal written from a scroll handler waited for an unrelated frame, such as the pointer leaving and re-entering.
 - A trackpad scroll gesture stays with the scroll handler it started on, its momentum included, wherever the pointer goes, so a swipe on one element no longer drives the one the pointer moves onto. The window reports the platform's scroll phases to the render tree, which tells momentum from a new touch even where the platform reports momentum starting as a touch.
 

@@ -147,7 +147,7 @@ impl Scene {
     /// Rectangles filled with the selection's highlight colour.
     fn highlights(&self) -> usize {
         let theme = RichTextTheme::dark();
-        let highlight = Color::rgba(theme.text.r, theme.text.g, theme.text.b, 0.18);
+        let highlight = theme.text.unwrap().with_alpha(0.18);
         self.nodes()
             .into_iter()
             .filter(|&n| {

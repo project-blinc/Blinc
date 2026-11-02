@@ -749,11 +749,11 @@ impl RenderContext {
                             }
                         }
 
-                        // CSS text_color override takes precedence over span colors
-                        let default_color = render_node
-                            .props
-                            .text_color
-                            .unwrap_or(styled_data.default_color);
+                        // A span's own colour wins; uncoloured text takes the
+                        // CSS colour the node sets or inherits, else the
+                        // element's default.
+                        let default_color =
+                            effective_text_color.unwrap_or(styled_data.default_color);
                         let final_color = color.unwrap_or(default_color);
                         segments.push((
                             seg_start,

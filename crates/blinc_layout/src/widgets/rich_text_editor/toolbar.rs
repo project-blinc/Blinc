@@ -85,6 +85,7 @@ pub fn selection_toolbar(
 
     let mark_row = mark_row(state, version, theme);
     let mut toolbar = div()
+        .class("blinc-rte-toolbar")
         .absolute()
         .left(tx)
         .top(ty)
@@ -98,16 +99,8 @@ pub fn selection_toolbar(
         // background layer where text glyphs are composited last and
         // can show through.
         .foreground()
-        .bg(Color::rgba(0.10, 0.10, 0.13, 1.0))
         .rounded(8.0)
-        .border(1.0, Color::rgba(0.30, 0.30, 0.36, 1.0))
-        .shadow(blinc_core::Shadow {
-            offset_x: 0.0,
-            offset_y: 4.0,
-            blur: 12.0,
-            spread: 0.0,
-            color: Color::rgba(0.0, 0.0, 0.0, 0.45),
-        })
+        .border_width(1.0)
         .child(mark_row);
 
     // Inline picker, rendered as a second row below the mark row.
@@ -135,7 +128,7 @@ pub fn selection_toolbar(
 
 /// Horizontal hairline between the mark row and an open picker row.
 fn row_separator() -> Div {
-    div().h(1.0).w_full().bg(Color::rgba(0.34, 0.34, 0.40, 1.0))
+    div().class("blinc-rte-separator").h(1.0).w_full()
 }
 
 /// Build the row of mark buttons (B, I, U, S, code) plus the color
@@ -217,8 +210,8 @@ fn mark_row(state: &RichTextState, version: &State<u32>, theme: &RichTextTheme) 
 /// content is a colored circle so users immediately recognise it as
 /// a color picker trigger. Clicking opens (or closes) the inline
 /// color picker row beneath the toolbar. The swatch shows the
-/// currently active color (defaults to white), so you can tell at a
-/// glance what the next typed character will look like.
+/// currently active color (the text colour by default), so you can tell
+/// at a glance what the next typed character will look like.
 fn color_swatch_button(state: &RichTextState, version: &State<u32>) -> Div {
     let state_for_click = Arc::clone(state);
     let version_for_click = version.clone();
@@ -226,7 +219,7 @@ fn color_swatch_button(state: &RichTextState, version: &State<u32>) -> Div {
         .lock()
         .ok()
         .and_then(|d| d.active_format.color)
-        .unwrap_or(Color::WHITE);
+        .unwrap_or(Color::TRANSPARENT);
     div()
         .w(28.0)
         .h(24.0)
@@ -234,14 +227,7 @@ fn color_swatch_button(state: &RichTextState, version: &State<u32>) -> Div {
         .justify_center()
         .rounded(4.0)
         .cursor_pointer()
-        .child(
-            div()
-                .w(14.0)
-                .h(14.0)
-                .rounded(7.0)
-                .bg(current_color)
-                .border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.32)),
-        )
+        .child(swatch(current_color).w(14.0).h(14.0).rounded(7.0))
         .on_mouse_down(move |_| {
             if let Ok(mut data) = state_for_click.lock() {
                 data.suppress_next_outer_click = true;
@@ -278,18 +264,17 @@ fn heading_picker_row(state: &RichTextState, version: &State<u32>) -> Div {
         let version_for_click = version.clone();
         row = row.child(
             div()
+                .class("blinc-rte-pill")
                 .w(34.0)
                 .h(24.0)
                 .items_center()
                 .justify_center()
                 .rounded(4.0)
-                .bg(Color::rgba(0.20, 0.20, 0.26, 1.0))
                 .cursor_pointer()
                 .child(
                     crate::text::text(label)
                         .size(font_size)
                         .weight(weight)
-                        .color(Color::WHITE)
                         .no_cursor(),
                 )
                 .on_mouse_down(move |_| {
@@ -420,10 +405,7 @@ fn mark_button(
     // Keep the label passive so the parent button's pointer cursor
     // wins on hover. This only affects cursor style; hit-testing and
     // rendering are unchanged.
-    let mut t = crate::text::text(label)
-        .size(13.0)
-        .color(Color::WHITE)
-        .no_cursor();
+    let mut t = crate::text::text(label).size(13.0).no_cursor();
     if style.bold {
         t = t.weight(crate::div::FontWeight::Bold);
     }
@@ -440,6 +422,7 @@ fn mark_button(
         t = t.monospace();
     }
     div()
+        .class("blinc-rte-button")
         .w(28.0)
         .h(24.0)
         .items_center()
@@ -476,18 +459,14 @@ fn picker_button(
     let state_for_click = Arc::clone(state);
     let version_for_click = version.clone();
     div()
+        .class("blinc-rte-button")
         .w(28.0)
         .h(24.0)
         .items_center()
         .justify_center()
         .rounded(4.0)
         .cursor_pointer()
-        .child(
-            crate::text::text(label)
-                .size(13.0)
-                .color(Color::WHITE)
-                .no_cursor(),
-        )
+        .child(crate::text::text(label).size(13.0).no_cursor())
         .on_mouse_down(move |_| {
             if let Ok(mut data) = state_for_click.lock() {
                 // See mark_button for the rationale.
@@ -499,12 +478,23 @@ fn picker_button(
         })
 }
 
+/// A colour swatch: `color` filled, or the text colour for the transparent
+/// default, which the `.blinc-rte-swatch--default` rule draws.
+fn swatch(color: Color) -> Div {
+    let dot = div().class("blinc-rte-swatch").border_width(1.0);
+    if color.a > 0.0 {
+        dot.bg(color)
+    } else {
+        dot.class("blinc-rte-swatch--default")
+    }
+}
+
 /// Vertical separator between groups in the toolbar.
 fn divider() -> Div {
     div()
+        .class("blinc-rte-separator")
         .w(1.0)
         .h(20.0)
-        .bg(Color::rgba(0.34, 0.34, 0.40, 1.0))
         .ml(1.0)
         .mr(1.0)
 }
@@ -514,19 +504,11 @@ fn divider() -> Div {
 // =====================================================================
 
 /// Preset palette used by the inline color picker. Order matches a
-/// typical text-color popover: a default white plus a small set of
-/// useful highlight colors.
+/// typical text-color popover: the default (transparent, so the text takes
+/// the editor's text colour) plus a small set of useful highlight colors.
 fn color_palette() -> &'static [(Color, &'static str)] {
     const PALETTE: &[(Color, &str)] = &[
-        (
-            Color {
-                r: 0.92,
-                g: 0.92,
-                b: 0.95,
-                a: 1.0,
-            },
-            "Default",
-        ),
+        (Color::TRANSPARENT, "Default"),
         (
             Color {
                 r: 0.94,
@@ -601,12 +583,10 @@ fn color_picker_row(state: &RichTextState, version: &State<u32>) -> Div {
         let version_for_click = version.clone();
         let c = *color;
         row = row.child(
-            div()
+            swatch(c)
                 .w(18.0)
                 .h(18.0)
                 .rounded(9.0)
-                .bg(c)
-                .border(1.0, Color::rgba(1.0, 1.0, 1.0, 0.18))
                 .cursor_pointer()
                 .on_mouse_down(move |_| {
                     if let Ok(mut data) = state_for_click.lock() {
@@ -651,11 +631,6 @@ fn link_prompt_row(
     } else {
         draft
     };
-    let placeholder_color = if draft.is_empty() {
-        Color::rgba(0.55, 0.55, 0.65, 1.0)
-    } else {
-        Color::WHITE
-    };
 
     let state_for_apply = Arc::clone(state);
     let version_for_apply = version.clone();
@@ -680,22 +655,26 @@ fn link_prompt_row(
         .gap_px(6.0)
         .child(
             div()
+                .class("blinc-rte-link-input")
                 .h(22.0)
                 .padding_x_px(8.0)
                 .min_w(160.0)
                 .flex_grow()
                 .items_center()
                 .rounded(4.0)
-                .bg(Color::rgba(0.10, 0.10, 0.13, 1.0))
-                .border(1.0, Color::rgba(0.34, 0.34, 0.40, 1.0))
+                .border_width(1.0)
                 .cursor_text()
-                .child(
-                    crate::text::text(placeholder)
+                .child({
+                    let t = crate::text::text(placeholder)
                         .size(12.0)
-                        .color(placeholder_color)
                         .no_cursor()
-                        .no_wrap(),
-                )
+                        .no_wrap();
+                    if draft.is_empty() {
+                        t.class("blinc-rte-link-placeholder")
+                    } else {
+                        t
+                    }
+                })
                 .on_mouse_down(input_click),
         )
         .child(prompt_button(
@@ -759,20 +738,14 @@ fn prompt_button(
         _ => 60.0,
     };
     div()
+        .class("blinc-rte-pill")
         .w(w)
         .h(22.0)
         .items_center()
         .justify_center()
         .rounded(4.0)
-        .bg(Color::rgba(0.20, 0.20, 0.26, 1.0))
         .cursor_pointer()
-        .child(
-            crate::text::text(label)
-                .size(11.0)
-                .color(Color::WHITE)
-                .no_cursor()
-                .no_wrap(),
-        )
+        .child(crate::text::text(label).size(11.0).no_cursor().no_wrap())
         .on_mouse_down(move |_| {
             if let Ok(mut data) = state.lock() {
                 data.suppress_next_outer_click = true;
