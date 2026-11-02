@@ -43,7 +43,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-tabs-list, .cn-tabs-trigger,
 .cn-select-trigger, .cn-select-content, .cn-select-item,
 .cn-combobox-trigger, .cn-combobox-content, .cn-combobox-item,
-.cn-slider-track, .cn-progress,
+.cn-slider-field, .cn-progress,
 .cn-avatar, .cn-tooltip,
 .cn-dialog, .cn-drawer, .cn-sheet, .cn-toast,
 .cn-accordion, .cn-accordion-trigger, .cn-accordion-content,
@@ -926,48 +926,53 @@ pub const CN_STYLES: &str = concat!(
    Slider
    ============================================================================ */
 
-.cn-slider-track {
-    /* Match `.cn-progress` and `.cn-switch-track` — `--border` reads as
-       quiet chrome that delineates the track without competing with
-       the primary fill. `--surface-elevated` previously vanished
-       against the page on light themes (panel + page are both very
-       near-white in Hybrid). */
-    background: var(--cn-slider-track-bg, var(--border));
+/* A fill, the thumb and the rest of the track in a row. The thumb grows
+   under the pointer and more while held; a disabled slider mutes every part
+   instead of fading. */
+.cn-slider {
     border-radius: var(--radius-full);
+    cursor: pointer;
+    outline: 2px solid transparent;
+    outline-offset: 2px;
 }
+.cn-slider[data-focus-visible] { outline-color: var(--focus-ring); }
 .cn-slider-fill {
     background: var(--cn-slider-fill-bg, var(--primary));
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-full) 0 0 var(--radius-full);
+}
+.cn-slider-rest {
+    background: var(--cn-slider-track-bg, var(--border));
+    border-radius: 0 var(--radius-full) var(--radius-full) 0;
 }
 .cn-slider-thumb {
-    /* No `background` here — bg is driven entirely by the Rust-side
-       `.bg(...)` call so per-state interiors (TextInverse for idle,
-       transparent for hover, input-bg-disabled for disabled via the
-       `--disabled` class) aren't clobbered by CSS-class application
-       order. The base CSS used to set `background: var(--surface)`,
-       which was applied AFTER any inline `.bg(TRANSPARENT)` and made
-       the hover halo invisible through the thumb's centre.
-       No `border` either — same rationale as the bg: state-specific
-       outlines (Border idle, Primary hover/drag, BorderSecondary
-       disabled) come from Rust. CSS keeps just the always-true chrome
-       (full rounded corners, pointer cursor). */
+    background: var(--cn-slider-thumb-bg, var(--text-inverse));
+    border: 2px solid var(--primary);
     border-radius: var(--radius-full);
     box-shadow: var(--shadow-sm);
-    cursor: pointer;
+    transition: transform var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state);
 }
-/* Disabled thumb tone — matches the disabled-button / disabled-input
-   surface family (--input-bg-disabled). Just changing the thumb bg
-   isn't enough on its own — `cn::slider` also overrides the track to
-   `--input-bg-disabled` and the fill to `--border-secondary` so the
-   whole control reads as inert (same approach `cn::switch` takes:
-   muted track + thumb chrome that doesn't change opacity). */
-.cn-slider-thumb--disabled {
-    box-shadow: none;
+.cn-slider:hover:not(:disabled) > .cn-slider-thumb {
+    transform: scale(1.1);
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary-hover);
+}
+.cn-slider:active:not(:disabled) > .cn-slider-thumb,
+.cn-slider[data-state="dragging"] > .cn-slider-thumb {
+    transform: scale(1.2);
+}
+.cn-slider:disabled { cursor: not-allowed; }
+.cn-slider:disabled > .cn-slider-rest { background: var(--input-bg-disabled); }
+.cn-slider:disabled > .cn-slider-fill { background: var(--border-secondary); }
+.cn-slider:disabled > .cn-slider-thumb {
     background: var(--input-bg-disabled);
-    border-color: var(--border-secondary);
-    border-width: 1px;
-    cursor: not-allowed;
+    border: 1px solid var(--border-secondary);
+    box-shadow: none;
 }
+.cn-slider-label { color: var(--text-primary); }
+.cn-slider-value { color: var(--text-secondary); }
+.cn-slider-field[data-disabled] .cn-slider-label,
+.cn-slider-field[data-disabled] .cn-slider-value { color: var(--text-tertiary); }
 
 /* ============================================================================
    Progress

@@ -201,52 +201,6 @@ pub mod bool_binding {
     pub const COLLAPSIBLE: u64 = 2;
 }
 
-/// Drive an animated value from a bound number, the numeric counterpart
-/// of [`bind_bool_targets`].
-///
-/// Generic over the number's type so a widget can be bound to whatever
-/// precision the caller keeps.
-///
-/// `place` maps the value to where the animation should sit — for a
-/// slider, a value to a thumb offset in pixels. It is captured once, so
-/// the geometry it closes over is the geometry of the first build; a
-/// widget whose size changes has to re-seed the animation itself.
-///
-/// Registered once per `(signal, kind)`, which is why the animation it
-/// drives has to outlive a rebuild. Pair it with
-/// `persisted_animated_value`, or later builds animate a value nothing
-/// paints.
-pub fn bind_number_target<T, F>(
-    kind: u64,
-    signal: blinc_core::reactive::Signal<T>,
-    anim: &blinc_layout::motion::SharedAnimatedValue,
-    place: F,
-) where
-    T: Clone + Send + 'static,
-    F: Fn(T) -> f32 + Send + Sync + 'static,
-{
-    {
-        let mut guard = BOUND.lock().unwrap_or_else(|e| e.into_inner());
-        let seen = guard.get_or_insert_with(std::collections::HashSet::new);
-        if !seen.insert((signal.id().to_raw(), kind)) {
-            return;
-        }
-    }
-
-    let anim = anim.clone();
-    blinc_core::reactive::effect(move |graph| {
-        // Through the PASSED graph — see `bind_bool_targets`.
-        let Some(v) = graph.get(signal) else { return };
-        anim.lock().unwrap().set_target(place(v));
-    });
-}
-
-/// Widget-kind discriminators for [`bind_number_target`]. Numbered apart
-/// from `bool_binding` because both share one registration set.
-pub mod num_binding {
-    pub const SLIDER: u64 = 101;
-}
-
 /// A number a widget reads and writes, in whichever precision the
 /// caller keeps it.
 ///
@@ -271,6 +225,14 @@ impl NumberValue {
         }
     }
 
+    /// The current number as of `g`, so a computed reading it follows it.
+    pub fn read(&self, g: &blinc_core::reactive::ReactiveGraph) -> f32 {
+        match *self {
+            Self::F32(s) => g.get(s).unwrap_or_default(),
+            Self::F64(s) => g.get(s).unwrap_or_default() as f32,
+        }
+    }
+
     /// Write it back in the caller's precision.
     pub fn set(&self, value: f32) {
         match self {
@@ -285,22 +247,6 @@ impl NumberValue {
         match self {
             Self::F32(s) => s.id(),
             Self::F64(s) => s.id(),
-        }
-    }
-
-    /// Follow this number with an animation, whatever its precision.
-    /// See [`bind_number_target`] for what `kind` and `place` mean.
-    pub fn bind_target<F>(
-        &self,
-        kind: u64,
-        anim: &blinc_layout::motion::SharedAnimatedValue,
-        place: F,
-    ) where
-        F: Fn(f32) -> f32 + Send + Sync + 'static,
-    {
-        match *self {
-            Self::F32(s) => bind_number_target(kind, s, anim, place),
-            Self::F64(s) => bind_number_target(kind, s, anim, move |v: f64| place(v as f32)),
         }
     }
 }

@@ -298,6 +298,7 @@ impl NumberRangeGauge {
                 .child(lower_face)
                 .child(value_label(size, label)),
             instance,
+            &format!("cn-number-gauge-{instance}"),
             disabled,
             Edits {
                 seek: Arc::new({

@@ -452,8 +452,24 @@ cn::slider(volume)
     .on_change(|value| println!("volume: {value}"))
 ```
 
-`.size(SliderSize::Small)` and `.disabled(true)` work as elsewhere. For two
-ends on one control, use a [Number Range Gauge](#number-range-gauge).
+Click where you want it or drag the thumb; the wheel steps it, and after a
+click the arrow keys, Page Up/Down and Home/End move it too. Without a step,
+an arrow or wheel step moves a hundredth of the range. `.size(SliderSize::Small)`
+sets the size, `.w(px)` the track's length (300px unless set), and
+`.disabled(..)` takes a bool, Signal or Computed and follows it in place.
+
+The slider is a `.cn-slider` row of `.cn-slider-fill`, `.cn-slider-thumb` and
+`.cn-slider-rest`, inside a `.cn-slider-field` with a `.cn-slider-header`
+(`.cn-slider-label`, `.cn-slider-value`) when it has a label or shows its value.
+Colours are those rules; `--cn-slider-fill-bg`, `--cn-slider-track-bg` and
+`--cn-slider-thumb-bg` recolour one. The thumb grows under the pointer and more
+while held, and a disabled slider carries `disabled`:
+
+```css
+.cn-slider:disabled > .cn-slider-fill { background: var(--border); }
+```
+
+For two ends on one control, use a [Number Range Gauge](#number-range-gauge).
 
 ## Number Gauge
 

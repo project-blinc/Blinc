@@ -1055,6 +1055,9 @@ fn slider_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
     let volume = ctx.use_signal(0.5);
     let brightness = ctx.use_signal(75.0);
     let disabled_slider = ctx.use_signal(0.3);
+    let locked = ctx.use_signal(true);
+    let small = ctx.use_signal(0.2);
+    let large = ctx.use_signal(0.8);
 
     section_container().child(section_title("Sliders")).child(
         div()
@@ -1082,7 +1085,16 @@ fn slider_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                 div()
                     .h_fit()
                     .w(300.0)
-                    .child(cn::slider(disabled_slider).label("Disabled").disabled(true)),
+                    .child(cn::slider(small).size(SliderSize::Small))
+                    .child(cn::slider(large).size(SliderSize::Large)),
+            )
+            // The switch disables the slider in place.
+            .child(cn::switch(locked).label("Locked"))
+            .child(
+                div()
+                    .h_fit()
+                    .w(300.0)
+                    .child(cn::slider(disabled_slider).label("Disabled").disabled(locked)),
             ),
     )
 }

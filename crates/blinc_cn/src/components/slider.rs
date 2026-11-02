@@ -1,683 +1,330 @@
-//! Slider component for range value selection
+//! Slider: a number picked along a track.
 //!
-//! A themed slider/range input with click-to-set and drag-to-adjust.
-//! Uses context-driven state for proper persistence across UI rebuilds.
+//! A fill, the thumb and the rest of the track sit in a row. The fill and the
+//! rest grow in proportion to the value, so layout places the thumb and it
+//! follows the bound number in place, whoever writes it. A press seeks, or
+//! takes hold of the thumb where it was grabbed; a drag follows; the wheel
+//! steps; once pressed, the arrows, Page Up/Down and Home/End move it.
 //!
-//! # Example
+//! Every colour, the thumb's border and shadow, and how it grows under the
+//! pointer are `.cn-slider` rules in `CN_STYLES`; sizes are layout and set
+//! here.
 //!
 //! ```ignore
-//! use blinc_cn::prelude::*;
-//!
-//! fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-//!     // Create slider state from context (0.0 to 1.0 by default)
-//!     let volume = ctx.use_state_for("volume", 0.5);
-//!
-//!     cn::slider(ctx, &volume)
-//!         .label("Volume")
-//!         .on_change(|value| println!("Volume: {}", value))
-//! }
-//!
-//! // Custom range
-//! let brightness = ctx.use_state_for("brightness", 50.0);
-//! cn::slider(ctx, &brightness)
-//!     .min(0.0)
+//! let volume = ctx.use_signal(50.0);
+//! cn::slider(volume)
 //!     .max(100.0)
 //!     .step(1.0)
-//!
-//! // Different sizes
-//! cn::slider(ctx, &value)
-//!     .size(SliderSize::Large)
-//!
-//! // Custom colors
-//! cn::slider(ctx, &value)
-//!     .track_color(Color::GRAY)
-//!     .fill_color(Color::BLUE)
-//!     .thumb_color(Color::WHITE)
-//!
-//! // Disabled state
-//! cn::slider(ctx, &value)
-//!     .disabled(true)
+//!     .label("Volume")
+//!     .show_value()
+//!     .disabled(muted)
 //! ```
 
-use blinc_animation::{AnimationContext, SpringConfig};
-use blinc_core::{BlincContext, BlincContextState, Color, State};
+use blinc_core::reactive::{Computed, ReactiveGraph, computed};
+use blinc_layout::InstanceKey;
+use blinc_layout::binding::{IntoReactive, Reactive};
 use blinc_layout::div::ElementTypeId;
-use blinc_layout::element::{CursorStyle, RenderProps};
-use blinc_layout::motion::motion;
+use blinc_layout::element::RenderProps;
 use blinc_layout::prelude::*;
-use blinc_layout::style;
+use blinc_layout::text::Text;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
-use blinc_macros::BlincComponent;
-use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 use std::sync::{Arc, Mutex};
 
-use super::label::{LabelSize, label};
-use blinc_layout::InstanceKey;
+use super::number_gauge::{Edits, bound_flag, interactive};
+use crate::reactive_props::NumberValue;
 
-/// BlincComponent for slider state and animations
-/// Generates type-safe hooks that persist across UI rebuilds:
-/// - `SliderState::use_thumb_offset(ctx, initial, config) -> SharedAnimatedValue`
-/// - `SliderState::use_drag_start_x(ctx, 0.0) -> State<f32>`
-#[derive(BlincComponent)]
-struct SliderState {
-    /// Animated X offset for thumb position
-    #[animation]
-    thumb_offset: f32,
-    /// Mouse X position at drag start (screen coordinates)
-    drag_start_x: f32,
-    /// Thumb offset at drag start
-    drag_start_offset: f32,
-    /// Whether a drag is currently in progress (to suppress click-to-jump)
-    is_dragging: bool,
-}
+/// The track's length when no width is set.
+const DEFAULT_WIDTH: f32 = 300.0;
 
 /// Slider size variants
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SliderSize {
-    /// Small slider (track: 4px, thumb: 14px)
+    /// Small slider (track: 3px, thumb: 12px)
     Small,
-    /// Medium slider (track: 6px, thumb: 18px)
+    /// Medium slider (track: 4px, thumb: 16px)
     #[default]
     Medium,
-    /// Large slider (track: 8px, thumb: 22px)
+    /// Large slider (track: 6px, thumb: 22px)
     Large,
 }
 
 impl SliderSize {
-    /// Get the track height for this size
-    fn track_height(&self) -> f32 {
+    /// The height of the row the thumb sits in.
+    fn height(self) -> f32 {
         match self {
-            SliderSize::Small => 4.0,
-            SliderSize::Medium => 6.0,
-            SliderSize::Large => 8.0,
+            SliderSize::Small => 16.0,
+            SliderSize::Medium => 20.0,
+            SliderSize::Large => 28.0,
         }
     }
 
-    /// Get the thumb diameter for this size
-    fn thumb_size(&self) -> f32 {
+    fn track_height(self) -> f32 {
         match self {
-            SliderSize::Small => 14.0,
-            SliderSize::Medium => 18.0,
+            SliderSize::Small => 3.0,
+            SliderSize::Medium => 4.0,
+            SliderSize::Large => 6.0,
+        }
+    }
+
+    fn thumb_size(self) -> f32 {
+        match self {
+            SliderSize::Small => 12.0,
+            SliderSize::Medium => 16.0,
             SliderSize::Large => 22.0,
+        }
+    }
+
+    /// The label and value's size.
+    fn font_size(self) -> f32 {
+        match self {
+            SliderSize::Small => 12.0,
+            SliderSize::Medium => 14.0,
+            SliderSize::Large => 16.0,
+        }
+    }
+
+    /// Between the label row and the track.
+    fn gap(self) -> f32 {
+        match self {
+            SliderSize::Small => 8.0,
+            SliderSize::Medium => 10.0,
+            SliderSize::Large => 12.0,
+        }
+    }
+
+    /// The `data-size` its rules key on.
+    fn attr(self) -> &'static str {
+        match self {
+            SliderSize::Small => "sm",
+            SliderSize::Medium => "md",
+            SliderSize::Large => "lg",
         }
     }
 }
 
-/// Slider component
-///
-/// A range slider with click-to-set and drag-to-adjust value.
-/// Uses context-driven state for proper persistence across UI rebuilds.
+/// The bounds, the step and the thumb, and the arithmetic over them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Travel {
+    min: f32,
+    max: f32,
+    step: Option<f32>,
+    thumb: f32,
+}
+
+impl Travel {
+    /// `v` on the step grid from `min`, within the bounds.
+    fn snap(&self, v: f32) -> f32 {
+        let v = if v.is_finite() { v } else { self.min };
+        match self.step {
+            Some(s) if s > 0.0 => {
+                (self.min + ((v - self.min) / s).round() * s).clamp(self.min, self.max)
+            }
+            _ => v.clamp(self.min, self.max),
+        }
+    }
+
+    /// Where `v` sits between the bounds, from 0 to 1.
+    fn fraction(&self, v: f32) -> f32 {
+        if self.max > self.min && v.is_finite() {
+            ((v - self.min) / (self.max - self.min)).clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    }
+
+    /// The value whose thumb centre is `x` from the left of a slider `width`
+    /// wide.
+    fn at(&self, x: f32, width: f32) -> f32 {
+        let travel = width - self.thumb;
+        let t = if travel > 0.0 {
+            ((x - self.thumb / 2.0) / travel).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        self.min + t * (self.max - self.min)
+    }
+
+    /// Where the thumb's centre is for `v` in a slider `width` wide.
+    fn centre(&self, v: f32, width: f32) -> f32 {
+        self.thumb / 2.0 + self.fraction(v) * (width - self.thumb).max(0.0)
+    }
+
+    /// What an arrow or a wheel step moves by: the step, or a hundredth of
+    /// the range without one.
+    fn nudge(&self) -> f32 {
+        self.step
+            .filter(|s| *s > 0.0)
+            .unwrap_or((self.max - self.min) / 100.0)
+    }
+
+    /// The value a navigation key moves `v` to, or `None` for any other key.
+    fn key(&self, v: f32, key_code: u32) -> Option<f32> {
+        let page = self.nudge().max((self.max - self.min) / 10.0);
+        Some(match key_code {
+            39 | 38 => v + self.nudge(),
+            37 | 40 => v - self.nudge(),
+            33 => v + page,
+            34 => v - page,
+            36 => self.min,
+            35 => self.max,
+            _ => return None,
+        })
+    }
+
+    /// The value as the readout shows it: whole numbers for a whole step,
+    /// two places otherwise.
+    fn format(&self, v: f32) -> String {
+        if self.step.is_some_and(|s| s >= 1.0) {
+            format!("{v:.0}")
+        } else {
+            format!("{v:.2}")
+        }
+    }
+}
+
+/// Slider component. See the module docs.
 pub struct Slider {
-    /// The fully-built inner element (Div containing slider and optional label)
     inner: Div,
 }
 
 impl Slider {
-    /// Create a new slider with context and state
-    ///
-    /// # Example
-    /// ```ignore
-    /// let volume = ctx.use_state_for("volume", 0.5);
-    /// cn::slider(&volume)
-    /// ```
+    /// A slider over `0.0..=1.0` reading and writing `value`.
     #[track_caller]
-    pub fn new(value_state: impl Into<crate::reactive_props::NumberValue>) -> Self {
-        Self::with_config(
-            InstanceKey::new("slider"),
-            SliderConfig::new(value_state.into()),
-        )
+    pub fn new(value: impl Into<NumberValue>) -> Self {
+        Self::with_config(InstanceKey::new("slider"), SliderConfig::new(value.into()))
     }
 
-    /// Create from a full configuration
     fn with_config(key: InstanceKey, config: SliderConfig) -> Self {
-        let theme = ThemeState::get();
-        let track_height = config.size.track_height();
-        let thumb_size = config.size.thumb_size();
-        let radius = theme.radius(RadiusToken::Full);
-
-        // Get colors. Mute track + fill + thumb when disabled so the
-        // whole control reads as inert — same approach `cn::switch`
-        // takes (track → input-bg-disabled, no opacity dimming on the
-        // surfaces). Pre-fix the slider only muted via container
-        // `opacity(0.5)`, which dimmed every layer including the
-        // thumb's bg and left the knob looking like a translucent ring.
-        let track_bg = config.track_color.unwrap_or_else(|| {
-            if config.disabled {
-                theme.color(ColorToken::InputBgDisabled)
-            } else {
-                theme.color(ColorToken::Border)
-            }
-        });
-        // Fill color for the filled portion of the track. Killing the
-        // primary blue on disabled is what makes the control stop
-        // reading as "active"; without it, a blue fill on a gray
-        // disabled track still looks interactive.
-        let fill_bg = config.fill_color.unwrap_or_else(|| {
-            if config.disabled {
-                theme.color(ColorToken::BorderSecondary)
-            } else {
-                theme.color(ColorToken::Primary)
-            }
-        });
-
-        let disabled = config.disabled;
-        let min = config.min;
-        let max = config.max;
-        let step = config.step;
-        let width: Option<f32> = config.width;
-
-        // Track width - use config width or default
-        let track_width = config.width.unwrap_or(300.0);
-
-        // Calculate initial thumb offset based on current value
-        let initial_value = config.value_state.get();
-        let initial_norm = ((initial_value - min) / (max - min)).clamp(0.0, 1.0);
-        let initial_offset = initial_norm * (track_width - thumb_size);
-
-        // Get PERSISTED state from context using BlincComponent macro
-        // These survive across UI rebuilds!
-        // Use the instance_key from InstanceKey so each slider has its own state
-        let instance_key = key.get().to_string();
-
-        let ctx = BlincContextState::get();
-
-        // Persisted, and keyed by the bound signal rather than by the
-        // instance: the retarget below registers once for that signal,
-        // so the animation it holds has to be the one a later build
-        // paints. A fresh spring per build would leave the effect
-        // driving a value nothing reads.
-        let travel = track_width - thumb_size;
-        let thumb_offset = blinc_layout::stateful::persisted_animated_value(
-            &format!(
-                "cn-slider:{}:thumb",
-                config.value_state.signal_id().to_raw()
-            ),
-            initial_offset,
-            SpringConfig::snappy(),
-        );
-        // A write from anywhere else -- a number input bound to the same
-        // signal, an FSM action -- moves the thumb without rebuilding
-        // the track. The pointer handlers set the offset themselves and
-        // then write the value, so this fires behind them with the
-        // position they already chose.
-        config.value_state.bind_target(
-            crate::reactive_props::num_binding::SLIDER,
-            &thumb_offset,
-            move |v| {
-                let norm = if (max - min).abs() > f32::EPSILON {
-                    ((v - min) / (max - min)).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-                norm * travel
-            },
-        );
-        let drag_start_x = ctx.use_state_keyed(&format!("{}_drag_start_x", instance_key), || 0.0);
-        let drag_start_offset =
-            ctx.use_state_keyed(&format!("{}_drag_start_offset", instance_key), || 0.0);
-        // Click-to-jump suppression between DRAG_END and the click
-        // that fires right after. (Click events fire even after a
-        // drag; without this we'd seek the thumb to the release point.)
-        let just_dragged = ctx.use_state_keyed(&format!("{}_just_dragged", instance_key), || false);
-
-        // Clones for closures
-        let thumb_offset_for_click = thumb_offset.clone();
-
-        // Round to step helper
-        let round_to_step = move |value: f32| -> f32 {
-            if let Some(s) = step {
-                if s > 0.0 {
-                    let steps = ((value - min) / s).round();
-                    (min + steps * s).clamp(min, max)
-                } else {
-                    value.clamp(min, max)
-                }
-            } else {
-                value.clamp(min, max)
-            }
+        let size = config.size;
+        let value = config.value_state;
+        let travel = Travel {
+            min: config.min,
+            max: config.max.max(config.min),
+            step: config.step,
+            thumb: size.thumb_size(),
         };
-        let round_to_step_click = round_to_step;
-        let round_to_step_drag = round_to_step;
+        let width = config.width.unwrap_or(DEFAULT_WIDTH);
+        let disabled = config.disabled.clone();
+        let instance = key.get().to_string();
 
-        // Clones for event handlers
-        let value_state_for_click = config.value_state;
-        let value_state_for_drag = config.value_state;
-        let on_change_for_click = config.on_change.clone();
-        let on_change_for_drag = config.on_change.clone();
-
-        // Clone for container drag handling and fill
-        let thumb_offset_for_fill = thumb_offset.clone();
-        let thumb_offset_for_drag = thumb_offset.clone();
-        let thumb_offset_for_down = thumb_offset.clone();
-        let drag_start_x_for_down = drag_start_x.clone();
-        let drag_start_offset_for_down = drag_start_offset.clone();
-        let drag_start_x_for_drag = drag_start_x.clone();
-        let drag_start_offset_for_drag = drag_start_offset.clone();
-        let just_dragged_for_click = just_dragged.clone();
-        let just_dragged_for_drag_end = just_dragged.clone();
-
-        // Get visual feedback colors. The thumb chrome no longer
-        // varies between idle / hover / drag — matching the design
-        // reference (Material-style slider) the thumb is a 2px primary
-        // ring with a Surface fill across all active states, and the
-        // halo carries all hover/drag feedback. Pre-fix idle used 1px
-        // Border (gray) and hover/drag used 2px Primary (blue), which
-        // (a) was inconsistent with the reference and (b) re-introduced
-        // AA-fighting between the SDF circle edge and a thicker stroke
-        // when the bg was transparent.
-        let thumb_border_active = theme.color(ColorToken::Primary);
-        let thumb_border_disabled = theme.color(ColorToken::BorderSecondary);
-
-        let halo_size = thumb_size * 2.0;
-        // Soft accent-tinted halo. `AccentSubtle` is the shared
-        // hover-bg token (combobox / select / etc.) so the colour
-        // family is consistent across widgets, but at its native
-        // alpha (~14-16 %) the halo reads heavier than the
-        // Material-style reference. Drop to ~8 % so the halo
-        // registers as a soft glow rather than a solid disc.
-        let halo_bg = theme.color(ColorToken::Primary).with_alpha(0.08);
-        let halo_offset = (halo_size - thumb_size) / 2.0;
-
-        // Thumb chrome builder.
-        let thumb_fill_override = config.thumb_color;
-        let make_thumb_div = move || {
-            let mut td = div()
-                .class("cn-slider-thumb")
-                .w(thumb_size)
-                .h(thumb_size)
-                .style(&style! { rounded: thumb_size / 2.0 });
-            if disabled {
-                td = td
-                    .class("cn-slider-thumb--disabled")
-                    .style(&style! { bg: theme.color(ColorToken::InputBgDisabled), border: (1.0, thumb_border_disabled) });
-            } else {
-                let fill = thumb_fill_override.unwrap_or_else(|| theme.color(ColorToken::Surface));
-                td = td.bg(fill).border(2.0, thumb_border_active);
-            }
-            td
-        };
-
-        // Fill bar geometry (precomputed; used inside on_state).
-        let fill_left = thumb_size / 2.0 - track_width;
-
-        // Clones for the stateful's child handlers and on_state body.
-        let thumb_offset_for_state = thumb_offset.clone();
-        let thumb_offset_for_fill_in = thumb_offset_for_fill.clone();
-        let just_dragged_for_click = just_dragged.clone();
-
-        // The halo is lit while the pointer is over the slider or a drag is
-        // under way. Its scale is a spring the handlers below point at 1 or
-        // 0, read by a motion container when painting, so nothing rebuilds.
-        let halo_scale = blinc_layout::stateful::persisted_animated_value(
-            &format!("cn-slider:{}:halo", instance_key),
-            0.0,
-            SpringConfig::snappy(),
-        );
-        let hovered = ctx.use_state_keyed(&format!("{}_hovered", instance_key), || false);
-        let dragging = ctx.use_state_keyed(&format!("{}_dragging", instance_key), || false);
-        let light = {
-            let halo_scale = halo_scale.clone();
-            move |on: bool| {
-                if !disabled {
-                    halo_scale
-                        .lock()
-                        .unwrap()
-                        .set_target(if on { 1.0 } else { 0.0 });
-                }
-            }
-        };
-        let light_for_down = light.clone();
-        let light_for_drag_end = light.clone();
-        let light_for_enter = light.clone();
-        let light_for_leave = light.clone();
-        let light_for_up = light;
-        let hovered_for_enter = hovered.clone();
-        let hovered_for_leave = hovered.clone();
-        let hovered_for_drag_end = hovered.clone();
-        let hovered_for_up = hovered;
-        let dragging_for_drag = dragging.clone();
-        let dragging_for_drag_end = dragging.clone();
-        let dragging_for_leave = dragging.clone();
-        let dragging_for_up = dragging;
-
-        let halo = div()
-            .absolute()
-            .top(-halo_offset)
-            .left(-halo_offset)
-            .w(halo_size)
-            .h(halo_size)
-            .pointer_events_none()
+        let part = |class: &str| div().class(class).pointer_events_none();
+        let row = div()
+            .class("cn-slider")
+            .attr("data-size", size.attr())
+            .attr_when("disabled", "", disabled.clone())
+            .flex_row()
+            .items_center()
+            .flex_shrink_0()
+            .w(width)
+            .h(size.height())
             .child(
-                motion().scale(halo_scale).child(
-                    div()
-                        .class("cn-slider-halo")
-                        .w(halo_size)
-                        .h(halo_size)
-                        .style(&style! { rounded: halo_size / 2.0, bg: halo_bg }),
-                ),
+                part("cn-slider-fill")
+                    .w(0.0)
+                    .h(size.track_height())
+                    .flex_grow_value(computed(move |g: &ReactiveGraph| {
+                        travel.fraction(value.read(g))
+                    })),
+            )
+            .child(
+                part("cn-slider-thumb")
+                    .w(travel.thumb)
+                    .h(travel.thumb)
+                    .flex_shrink_0(),
+            )
+            .child(
+                part("cn-slider-rest")
+                    .w(0.0)
+                    .h(size.track_height())
+                    .flex_grow_value(computed(move |g: &ReactiveGraph| {
+                        1.0 - travel.fraction(value.read(g))
+                    })),
             );
 
-        // Thumb assembly: halo and thumb chrome, moved along the track by
-        // the thumb's spring.
-        let thumb_combo = div()
-            .relative()
-            .w(thumb_size)
-            .h(thumb_size)
-            .child(halo)
-            .child(make_thumb_div());
-        let thumb_wrapper = div().absolute().left(0.0).top(0.0).child(
-            motion()
-                .translate_x(thumb_offset_for_state)
-                .child(thumb_combo),
+        // A user edit: snapped, written only when it changes, then reported.
+        let set: Arc<dyn Fn(f32) + Send + Sync> = {
+            let on_change = config.on_change.clone();
+            Arc::new(move |v: f32| {
+                let v = travel.snap(v);
+                if (v - value.get()).abs() <= f32::EPSILON {
+                    return;
+                }
+                value.set(v);
+                if let Some(ref cb) = on_change {
+                    cb(v);
+                }
+            })
+        };
+        // How far from the thumb's centre a press on it landed, kept for the
+        // drag so the thumb does not jump to the pointer.
+        let grab = Arc::new(Mutex::new(0.0f32));
+        let slider = interactive(
+            row,
+            &instance,
+            &format!("cn-slider-{instance}"),
+            disabled.clone(),
+            Edits {
+                seek: Arc::new({
+                    let set = Arc::clone(&set);
+                    move |x, width, press| {
+                        let mut grab = grab.lock().unwrap();
+                        if press {
+                            let off = x - travel.centre(value.get(), width);
+                            *grab = if off.abs() <= travel.thumb / 2.0 {
+                                off
+                            } else {
+                                0.0
+                            };
+                        }
+                        set(travel.at(x - *grab, width))
+                    }
+                }),
+                wheel: Arc::new({
+                    let set = Arc::clone(&set);
+                    move |steps, _x, _width| set(value.get() + steps as f32 * travel.nudge())
+                }),
+                key: Arc::new(move |key_code| match travel.key(value.get(), key_code) {
+                    Some(next) => {
+                        set(next);
+                        true
+                    }
+                    None => false,
+                }),
+            },
         );
 
-        // Fill bar.
-        let fill_bar = div()
-            .class("cn-slider-fill")
-            .w(track_width)
-            .h(track_height)
-            .style(&style! { rounded: radius, bg: fill_bg });
-        let fill_positioned = div().absolute().left(fill_left).top(0.0).child(fill_bar);
-        let animated_fill = motion()
-            .translate_x(thumb_offset_for_fill_in)
-            .child(fill_positioned);
-        let track_fill = div()
-            .absolute()
-            .left(0.0)
-            .top((thumb_size - track_height) / 2.0)
-            .w(track_width)
-            .h(track_height)
-            .overflow_clip()
-            .style(&style! { rounded: radius })
-            .relative()
-            .child(animated_fill);
-
-        // Track visual, purely cosmetic. Click-to-seek is on the container so
-        // it catches clicks anywhere on the slider's bounds, including over
-        // the fill and the thumb, which stack above this element.
-        let track_visual = div()
-            .class("cn-slider-track")
-            .absolute()
-            .left(0.0)
-            .right(0.0)
-            .top((thumb_size - track_height) / 2.0)
-            .h(track_height)
-            .style(&style! { rounded: radius, bg: track_bg })
-            .cursor_pointer();
-
-        let mut container = div()
-            .relative()
-            .h(thumb_size)
-            .overflow_visible()
-            .cursor(CursorStyle::Grab)
-            .child(track_visual)
-            .child(track_fill)
-            .child(thumb_wrapper);
-        if let Some(w) = width {
-            container = container.w(w);
-        } else {
-            container = container.w_full();
-        }
-
-        let slider_container = container
-            // A press lights the halo and records where a drag starts.
-            .on_mouse_down(move |event| {
-                if disabled {
-                    return;
-                }
-                light_for_down(true);
-                drag_start_x_for_down.set(event.mouse_x);
-                let current = thumb_offset_for_down.lock().unwrap().get();
-                drag_start_offset_for_down.set(current);
-            })
-            // A drag moves the thumb and the value with the pointer.
-            //
-            // When `step` is set the thumb snaps to step positions —
-            // the visible thumb tracks `value_state` (which is
-            // already snapped) instead of the continuous mouse
-            // position. Without this the continuous thumb and the
-            // snapped value diverge, and the previous baked
-            // continuous-position primitives can stay in the cache
-            // while the new render reflects the snapped value,
-            // producing a "double thumb" visual.
-            .on_drag(move |event| {
-                if disabled {
-                    return;
-                }
-                if !dragging_for_drag.get() {
-                    dragging_for_drag.set(true);
-                }
-                let start_x = drag_start_x_for_drag.get();
-                let delta_x = event.mouse_x - start_x;
-                let start_offset = drag_start_offset_for_drag.get();
-                let max_offset = track_width - thumb_size;
-                let continuous_offset = (start_offset + delta_x).clamp(0.0, max_offset);
-                let norm = if max_offset > 0.0 {
-                    continuous_offset / max_offset
-                } else {
-                    0.0
-                };
-                let raw = min + norm * (max - min);
-                let new_val = round_to_step_drag(raw);
-                // Snap the thumb to the value when `step` is set;
-                // otherwise track the cursor continuously.
-                let target_offset = if step.is_some() {
-                    if (max - min).abs() > f32::EPSILON {
-                        ((new_val - min) / (max - min)) * max_offset
-                    } else {
-                        0.0
-                    }
-                } else {
-                    continuous_offset
-                };
-                thumb_offset_for_drag
-                    .lock()
-                    .unwrap()
-                    .set_immediate(target_offset);
-                if (value_state_for_drag.get() - new_val).abs() > f32::EPSILON {
-                    value_state_for_drag.set(new_val);
-                    if let Some(ref cb) = on_change_for_drag {
-                        cb(new_val);
-                    }
-                }
-            })
-            // The end of a drag sets the click-suppression flag for the
-            // click that fires right after, and puts the halo out unless
-            // the pointer is still over the slider.
-            .on_drag_end(move |_event| {
-                just_dragged_for_drag_end.set(true);
-                dragging_for_drag_end.set(false);
-                if !hovered_for_drag_end.get() {
-                    light_for_drag_end(false);
-                }
-            })
-            // Click-to-seek: a click anywhere on the slider container
-            // (track, fill, or thumb) jumps the thumb to the click
-            // position. Attached to the container so it catches
-            // clicks regardless of which child element they land on
-            // — track_visual, track_fill, and thumb_wrapper all stack
-            // above each other and would otherwise swallow events
-            // depending on which one happens to be on top at the
-            // click point.
-            //
-            // `just_dragged` is the post-drag suppression flag: a
-            // click event also fires after every drag (on POINTER_UP
-            // with no movement filter), so without this gate every
-            // released drag would seek to the release point.
-            .on_click(move |event| {
-                if disabled {
-                    return;
-                }
-                if just_dragged_for_click.get() {
-                    just_dragged_for_click.set(false);
-                    return;
-                }
-                let container_w = event.bounds_width;
-                if container_w <= 0.0 {
-                    return;
-                }
-                // The thumb's centre is what tracks the value: when
-                // the user clicks at `x`, drop the centre there.
-                // `x_offset` is the thumb's LEFT edge — shift left
-                // by `thumb_size/2` and clamp to the travel range.
-                let max_offset = container_w - thumb_size;
-                let x_offset = (event.local_x - thumb_size / 2.0).clamp(0.0, max_offset);
-                let norm = if max_offset > 0.0 {
-                    x_offset / max_offset
-                } else {
-                    0.0
-                };
-                let raw = min + norm * (max - min);
-                let new_val = round_to_step_click(raw);
-                // Mirror the drag handler: when `step` is set, snap the
-                // thumb to the stepped value rather than to the raw
-                // pointer x, so the visible thumb and the value stay
-                // aligned. Without this, clicking on a stepped slider
-                // springs the thumb to the cursor while value_state
-                // snaps to the nearest step — visibly diverging
-                // positions and (during the multi-frame spring) the
-                // double-thumb ghost the user reported.
-                let target_offset = if step.is_some() {
-                    if (max - min).abs() > f32::EPSILON {
-                        ((new_val - min) / (max - min)) * max_offset
-                    } else {
-                        0.0
-                    }
-                } else {
-                    x_offset
-                };
-                value_state_for_click.set(new_val);
-                // `set_immediate` (not `set_target`) — drag handler
-                // also uses set_immediate and produces no artifact;
-                // the spring's multi-frame in-flight state was
-                // leaving a ghost thumb chrome at the prior position
-                // (matching the screenshot symptom). Click-to-seek
-                // now jumps cleanly to target, same as drag.
-                thumb_offset_for_click
-                    .lock()
-                    .unwrap()
-                    .set_immediate(target_offset);
-                if let Some(ref cb) = on_change_for_click {
-                    cb(new_val);
-                }
-            })
-            .on_hover_enter(move |_| {
-                hovered_for_enter.set(true);
-                light_for_enter(true);
-            })
-            .on_hover_leave(move |_| {
-                hovered_for_leave.set(false);
-                if !dragging_for_leave.get() {
-                    light_for_leave(false);
-                }
-            })
-            // A release that comes without a drag end still ends the drag.
-            .on_mouse_up(move |_| {
-                if dragging_for_up.get() {
-                    dragging_for_up.set(false);
-                    if !hovered_for_up.get() {
-                        light_for_up(false);
-                    }
-                }
-            });
-
-        // Pre-fix the entire container was `.opacity(0.5)` on disabled
-        // — that dimmed the thumb's bg along with everything else and
-        // left the knob looking like a translucent ring. Matching the
-        // switch toggle's pattern: keep all surfaces fully opaque,
-        // express disabled via chrome changes (thinner border on thumb,
-        // see thumb construction above). Track / fill colour overrides
-        // for disabled can go via .track_color() / .fill_color() per
-        // builder; the default tracks (--border) already read as inert
-        // chrome.
-
-        // If there's a label or show_value, wrap in a container
         let inner = if config.label.is_some() || config.show_value {
-            let spacing = theme.spacing_value(blinc_theme::SpacingToken::Space2);
-            let mut outer = div().h_fit().flex_col().gap_px(spacing);
-
-            // Apply width to container.
-            //
-            // The fallback is `track_width`, not `w_full`: the thumb
-            // travel and the fill are laid out against `track_width`,
-            // while the background track pins `left(0).right(0)` and
-            // takes whatever the container gives it. Stretching the
-            // container drew a track longer than the range it maps —
-            // the thumb hit its maximum well short of the end.
-            outer = outer.w(width.unwrap_or(track_width));
-
-            // Header row with label and optional value
-            if config.label.is_some() || config.show_value {
-                let mut header = div().flex_row().justify_between().items_center();
-
-                if let Some(label_text) = config.label.clone() {
-                    header =
-                        header.child(label(label_text).size(LabelSize::Medium).disabled(disabled));
-                }
-
-                if config.show_value {
-                    let value_color = if disabled {
-                        theme.color(ColorToken::TextTertiary)
-                    } else {
-                        theme.color(ColorToken::TextSecondary)
-                    };
-                    // The shown text follows the value in place: a string
-                    // derived from the number, bound to the text node.
-                    let value_state_for_display = config.value_state;
-                    let step_for_display = config.step;
-                    let shown: State<String> = State::mapped(
-                        config.value_state.signal_id(),
-                        Arc::new(move || {
-                            let current_value = value_state_for_display.get();
-                            Some(if step_for_display.is_some_and(|step| step >= 1.0) {
-                                format!("{:.0}", current_value)
-                            } else {
-                                format!("{:.2}", current_value)
-                            })
-                        }),
-                        blinc_core::reactive::global_graph(),
-                        blinc_core::reactive::global_dirty_flag(),
-                    );
-                    header = header.child(
-                        div().child(
-                            blinc_layout::text::Text::bound(
-                                blinc_layout::binding::Reactive::Bound(shown),
-                            )
-                            .size(14.0)
-                            .color(value_color),
-                        ),
-                    );
-                }
-
-                outer = outer.child(header);
+            let caption = |class: &str, text: Reactive<String>| {
+                div()
+                    .class(class)
+                    .child(Text::bound(text).size(size.font_size()).no_wrap())
+            };
+            let mut header = div()
+                .class("cn-slider-header")
+                .flex_row()
+                .justify_between()
+                .items_center();
+            if let Some(label) = config.label.clone() {
+                header = header.child(caption("cn-slider-label", label));
             }
-
-            outer = outer.child(slider_container);
-            outer
-        } else {
-            // Same sizing rule as the labelled branch: the track is
-            // only as wide as the travel the thumb is laid out against.
+            if config.show_value {
+                let shown = computed(move |g: &ReactiveGraph| travel.format(value.read(g)));
+                header = header.child(caption("cn-slider-value", Reactive::Computed(shown)));
+            }
             div()
-                .h_fit()
-                .w(width.unwrap_or(track_width))
-                .child(slider_container)
+                .class("cn-slider-field")
+                .attr("data-size", size.attr())
+                .attr_when("data-disabled", "", disabled)
+                .flex_col()
+                .gap_px(size.gap())
+                .w(width)
+                .child(header)
+                .child(slider)
+        } else {
+            slider
         };
+        let inner = config.classes.iter().fold(inner, |d, c| d.class(c));
 
-        Self {
-            inner: div().child(inner),
-        }
-    }
-
-    /// Add a CSS class for selector matching
-    pub fn class(mut self, name: impl AsRef<str>) -> Self {
-        self.inner = self.inner.class(name);
-        self
-    }
-
-    /// Set the element ID for CSS selector matching
-    pub fn id(mut self, id: &str) -> Self {
-        self.inner = self.inner.id(id);
-        self
+        Self { inner }
     }
 }
 
@@ -698,7 +345,19 @@ impl ElementBuilder for Slider {
         self.inner.element_type_id()
     }
 
-    fn element_classes(&self) -> &[std::sync::Arc<str>] {
+    fn layout_style(&self) -> Option<&taffy::Style> {
+        ElementBuilder::layout_style(&self.inner)
+    }
+
+    fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
+        ElementBuilder::event_handlers(&self.inner)
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
+    }
+
+    fn element_classes(&self) -> &[Arc<str>] {
         self.inner.element_classes()
     }
 }
@@ -706,23 +365,21 @@ impl ElementBuilder for Slider {
 /// Internal configuration for building a Slider
 #[derive(Clone)]
 struct SliderConfig {
-    value_state: crate::reactive_props::NumberValue,
+    value_state: NumberValue,
     min: f32,
     max: f32,
     step: Option<f32>,
     size: SliderSize,
-    label: Option<blinc_layout::binding::Reactive<String>>,
+    label: Option<Reactive<String>>,
     show_value: bool,
-    disabled: bool,
+    disabled: Computed<bool>,
     width: Option<f32>,
-    track_color: Option<Color>,
-    fill_color: Option<Color>,
-    thumb_color: Option<Color>,
+    classes: Vec<String>,
     on_change: Option<Arc<dyn Fn(f32) + Send + Sync>>,
 }
 
 impl SliderConfig {
-    fn new(value_state: crate::reactive_props::NumberValue) -> Self {
+    fn new(value_state: NumberValue) -> Self {
         Self {
             value_state,
             min: 0.0,
@@ -731,21 +388,15 @@ impl SliderConfig {
             size: SliderSize::default(),
             label: None,
             show_value: false,
-            disabled: false,
+            disabled: bound_flag(false),
             width: None,
-            track_color: None,
-            fill_color: None,
-            thumb_color: None,
+            classes: Vec::new(),
             on_change: None,
         }
     }
 }
 
-/// Builder for creating Slider components with fluent API
-///
-/// Implements `ElementBuilder` directly via a lazy `OnceCell<Slider>`
-/// so the slider can be used inline without calling `build_final()` —
-/// the same pattern as `CheckboxBuilder` and `RadioGroupBuilder`.
+/// Builder for [`Slider`], usable inline as an element.
 pub struct SliderBuilder {
     key: InstanceKey,
     config: SliderConfig,
@@ -753,109 +404,86 @@ pub struct SliderBuilder {
 }
 
 impl SliderBuilder {
-    /// Create a new slider builder with value state
-    ///
-    /// Uses `#[track_caller]` to generate a unique instance key based on the call site.
+    /// A slider reading and writing `value`.
     #[track_caller]
-    pub fn new(value_state: impl Into<crate::reactive_props::NumberValue>) -> Self {
+    pub fn new(value: impl Into<NumberValue>) -> Self {
         Self {
             key: InstanceKey::new("slider"),
-            config: SliderConfig::new(value_state.into()),
+            config: SliderConfig::new(value.into()),
             built: std::cell::OnceCell::new(),
         }
     }
 
-    /// Create a slider builder with an explicit key
-    pub fn with_key(
-        key: impl Into<String>,
-        value_state: impl Into<crate::reactive_props::NumberValue>,
-    ) -> Self {
+    /// A slider with an explicit key.
+    pub fn with_key(key: impl Into<String>, value: impl Into<NumberValue>) -> Self {
         Self {
             key: InstanceKey::explicit(key),
-            config: SliderConfig::new(value_state.into()),
+            config: SliderConfig::new(value.into()),
             built: std::cell::OnceCell::new(),
         }
     }
 
-    /// Get or build the inner Slider. Materialized on the first
-    /// `ElementBuilder` access; subsequent builder method calls
-    /// after this point are no-ops because the inner is cached.
     fn get_or_build(&self) -> &Slider {
         ::blinc_layout::build_once::build_once(&self.built, || {
             Slider::with_config(self.key.clone(), self.config.clone())
         })
     }
 
-    /// Set the minimum value (default: 0.0)
+    /// The minimum value (default: 0.0)
     pub fn min(mut self, min: f32) -> Self {
         self.config.min = min;
         self
     }
 
-    /// Set the maximum value (default: 1.0)
+    /// The maximum value (default: 1.0)
     pub fn max(mut self, max: f32) -> Self {
         self.config.max = max;
         self
     }
 
-    /// Set the step size for discrete values
+    /// The step values snap to, counted from the minimum.
     pub fn step(mut self, step: f32) -> Self {
         self.config.step = Some(step);
         self
     }
 
-    /// Set the slider size
     pub fn size(mut self, size: SliderSize) -> Self {
         self.config.size = size;
         self
     }
 
-    /// Add a label above the slider
     /// A label above the track: a string, Signal or Computed.
-    pub fn label(mut self, label: impl blinc_layout::binding::IntoReactive<String>) -> Self {
+    pub fn label(mut self, label: impl IntoReactive<String>) -> Self {
         self.config.label = Some(label.into_reactive());
         self
     }
 
-    /// Show the current value next to the slider
+    /// Show the current value above the track's far end.
     pub fn show_value(mut self) -> Self {
         self.config.show_value = true;
         self
     }
 
-    /// Set disabled state
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.config.disabled = disabled;
+    /// Whether it is inert: a value, a Signal or a Computed, followed in place.
+    pub fn disabled(mut self, disabled: impl IntoReactive<bool>) -> Self {
+        self.config.disabled = bound_flag(disabled);
         self
     }
 
-    /// Set a fixed width for the slider track
+    /// The track's length; 300px unless set.
     pub fn w(mut self, width: f32) -> Self {
         self.config.width = Some(width);
         self
     }
 
-    /// Set the unfilled track color
-    pub fn track_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.track_color = Some(color.into());
+    /// A class for rules of your own to match.
+    pub fn class(mut self, name: impl Into<String>) -> Self {
+        self.config.classes.push(name.into());
         self
     }
 
-    /// Set the filled portion color
-    pub fn fill_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.fill_color = Some(color.into());
-        self
-    }
-
-    /// Set the thumb color
-    pub fn thumb_color(mut self, color: impl Into<Color>) -> Self {
-        self.config.thumb_color = Some(color.into());
-        self
-    }
-
-    /// Set the change callback
-    ///
-    /// Called when the slider value changes.
+    /// Called with each value the user sets; a value set from code is not
+    /// reported.
     pub fn on_change<F>(mut self, callback: F) -> Self
     where
         F: Fn(f32) + Send + Sync + 'static,
@@ -882,53 +510,67 @@ impl ElementBuilder for SliderBuilder {
         self.get_or_build().element_type_id()
     }
 
-    fn element_classes(&self) -> &[std::sync::Arc<str>] {
+    fn layout_style(&self) -> Option<&taffy::Style> {
+        self.get_or_build().layout_style()
+    }
+
+    fn event_handlers(&self) -> Option<&blinc_layout::event_handler::EventHandlers> {
+        self.get_or_build().event_handlers()
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        self.get_or_build().element_id()
+    }
+
+    fn element_classes(&self) -> &[Arc<str>] {
         self.get_or_build().element_classes()
     }
 }
 
-/// Create a slider with context and state
-///
-/// The slider uses context-driven state that persists across UI rebuilds.
-/// `SliderBuilder` implements `ElementBuilder`, so the builder can be
-/// used inline as a child — no terminal `build_final()` call needed.
-///
-/// # Example
-///
-/// ```ignore
-/// use blinc_cn::prelude::*;
-///
-/// fn build_ui(ctx: &WindowedContext) -> impl ElementBuilder {
-///     let volume = ctx.use_state_for("volume", 0.5);
-///
-///     cn::slider(&volume)
-///         .min(0.0)
-///         .max(1.0)
-///         .label("Volume")
-///         .show_value()
-///         .on_change(|v| println!("Volume: {}", v))
-/// }
-/// ```
+/// A slider reading and writing `value`, a `Signal<f32>` or `Signal<f64>`.
+/// See the module docs.
 #[track_caller]
-pub fn slider(state: impl Into<crate::reactive_props::NumberValue>) -> SliderBuilder {
-    SliderBuilder::new(state)
+pub fn slider(value: impl Into<NumberValue>) -> SliderBuilder {
+    SliderBuilder::new(value)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    const T: Travel = Travel {
+        min: 0.0,
+        max: 100.0,
+        step: Some(5.0),
+        thumb: 16.0,
+    };
+
     #[test]
-    fn test_slider_sizes() {
-        assert_eq!(SliderSize::Small.track_height(), 4.0);
-        assert_eq!(SliderSize::Medium.track_height(), 6.0);
-        assert_eq!(SliderSize::Large.track_height(), 8.0);
+    fn values_snap_to_the_step_within_the_bounds() {
+        assert_eq!(T.snap(12.0), 10.0);
+        assert_eq!(T.snap(13.0), 15.0);
+        assert_eq!(T.snap(-4.0), 0.0);
+        assert_eq!(T.snap(140.0), 100.0);
     }
 
     #[test]
-    fn test_slider_thumb_sizes() {
-        assert_eq!(SliderSize::Small.thumb_size(), 14.0);
-        assert_eq!(SliderSize::Medium.thumb_size(), 18.0);
-        assert_eq!(SliderSize::Large.thumb_size(), 22.0);
+    fn the_thumb_centre_maps_to_the_value() {
+        let width = 116.0;
+        assert_eq!(T.at(8.0, width), 0.0);
+        assert_eq!(T.at(108.0, width), 100.0);
+        assert_eq!(T.at(58.0, width), 50.0);
+        assert_eq!(T.centre(50.0, width), 58.0);
+    }
+
+    #[test]
+    fn keys_step_page_and_jump() {
+        assert_eq!(T.key(50.0, 39), Some(55.0));
+        assert_eq!(T.key(50.0, 37), Some(45.0));
+        assert_eq!(T.key(50.0, 33), Some(60.0));
+        assert_eq!(T.key(50.0, 36), Some(0.0));
+        assert_eq!(T.key(50.0, 35), Some(100.0));
+        assert_eq!(T.key(50.0, 65), None);
+        let free = Travel { step: None, ..T };
+        assert_eq!(free.key(50.0, 39), Some(51.0));
     }
 }

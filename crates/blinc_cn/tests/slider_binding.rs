@@ -2,9 +2,9 @@
 //!
 //! The value can be kept in either precision, so a number input holding
 //! an `f64` and a slider can share one number rather than two that are
-//! kept in step. Writing it moves the thumb without rebuilding the
-//! track: the spring is retargeted, and the value label is subscribed on
-//! its own.
+//! kept in step. Writing it moves the thumb in place: the fill and the rest
+//! of the track are bound to it, and the value label is subscribed on its
+//! own.
 use blinc_core::reactive::{global_graph, signal};
 use blinc_layout::div::div;
 use blinc_layout::renderer::RenderTree;
@@ -12,7 +12,8 @@ use std::sync::Arc;
 
 const WIDTH: f32 = 300.0;
 /// Medium thumb, and what the travel is `width - thumb`.
-const TRAVEL: f32 = WIDTH - 18.0;
+const THUMB: f32 = 16.0;
+const TRAVEL: f32 = WIDTH - THUMB;
 
 fn init() {
     static I: std::sync::Once = std::sync::Once::new();
@@ -35,7 +36,7 @@ fn init() {
     });
 }
 
-fn build(value: impl Into<blinc_cn::NumberValue>) {
+fn build(value: impl Into<blinc_cn::NumberValue>) -> RenderTree {
     let host = div().w(400.0).h(80.0).child(
         blinc_cn::slider(value)
             .min(0.0)
@@ -45,23 +46,32 @@ fn build(value: impl Into<blinc_cn::NumberValue>) {
     );
     let mut tree = RenderTree::from_element(&host);
     tree.compute_layout(400.0, 80.0);
+    tree
 }
 
-/// The slider's own spring. A non-creating lookup on purpose: if the
-/// widget didn't persist one, this is `None` and the test fails rather
-/// than measuring a spring the test minted itself.
-fn thumb(id: blinc_core::reactive::SignalId) -> blinc_layout::motion::SharedAnimatedValue {
-    blinc_layout::stateful::try_persisted_animated_value(&format!(
-        "cn-slider:{}:thumb",
-        id.to_raw()
-    ))
-    .expect("the slider must persist its thumb spring")
-}
-
-/// Where the thumb is heading, which is what a write changes. Its
-/// current position lags behind while the spring travels.
-fn aiming_at(id: blinc_core::reactive::SignalId) -> f32 {
-    thumb(id).lock().unwrap().target()
+/// How far along its travel the thumb is laid out, after the bound writes
+/// queued so far have landed.
+fn thumb_along(tree: &mut RenderTree) -> f32 {
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    tree.apply_partial_property_updates(updates);
+    tree.compute_layout(400.0, 80.0);
+    let registry = tree.element_registry();
+    let mut stack = vec![tree.root().unwrap()];
+    let (mut slider, mut thumb) = (None, None);
+    while let Some(node) = stack.pop() {
+        if registry.has_class(node, "cn-slider") {
+            slider = Some(node);
+        }
+        if registry.has_class(node, "cn-slider-thumb") {
+            thumb = Some(node);
+        }
+        stack.extend(tree.layout_tree.children(node));
+    }
+    let slider = tree
+        .get_absolute_bounds(slider.expect("no slider"))
+        .unwrap();
+    let thumb = tree.get_absolute_bounds(thumb.expect("no thumb")).unwrap();
+    thumb.x - slider.x
 }
 
 /// The case that did not work: a field bound to the same number is
@@ -70,18 +80,16 @@ fn aiming_at(id: blinc_core::reactive::SignalId) -> f32 {
 fn a_write_from_elsewhere_moves_the_thumb() {
     init();
     let value = signal::<f64>(0.0);
-    build(value);
-    let id = value.id();
-    assert_eq!(aiming_at(id), 0.0, "starts at the floor");
+    let mut tree = build(value);
+    assert_eq!(thumb_along(&mut tree), 0.0, "starts at the floor");
 
     // Nothing rebuilds here. This is the write a number input makes.
     value.set(75.0);
-
+    let actual = thumb_along(&mut tree);
     let expected = 0.75 * TRAVEL;
-    let actual = aiming_at(id);
     assert!(
         (actual - expected).abs() < 1.0,
-        "the thumb aims at three quarters of the travel: {actual} vs {expected}"
+        "the thumb is three quarters along: {actual} vs {expected}"
     );
 }
 
@@ -90,38 +98,32 @@ fn a_write_from_elsewhere_moves_the_thumb() {
 fn either_precision_drives_the_thumb() {
     init();
     let value = signal::<f32>(0.0);
-    build(value);
-    let id = value.id();
+    let mut tree = build(value);
 
     value.set(50.0);
-
+    let actual = thumb_along(&mut tree);
     let expected = 0.5 * TRAVEL;
-    let actual = aiming_at(id);
     assert!(
         (actual - expected).abs() < 1.0,
         "half the travel: {actual} vs {expected}"
     );
 }
 
-/// The spring has to be the SAME one across rebuilds. The binding that
-/// drives it is registered once, so a fresh spring per build would leave
-/// it steering a value nothing paints.
+/// A slider built again over the same number places the thumb from it and
+/// follows it after.
 #[test]
-fn the_spring_survives_a_rebuild() {
+fn a_rebuilt_slider_follows_the_number() {
     init();
     let value = signal::<f64>(20.0);
-    build(value);
-    let first = thumb(value.id());
-    build(value);
-    let second = thumb(value.id());
-    assert!(
-        Arc::ptr_eq(&first, &second),
-        "the same spring, not a fresh one per build"
-    );
+    let _ = build(value);
+    let mut tree = build(value);
+    let expected = 0.2 * TRAVEL;
+    let actual = thumb_along(&mut tree);
+    assert!((actual - expected).abs() < 1.0, "{actual} vs {expected}");
 
     value.set(60.0);
     let expected = 0.6 * TRAVEL;
-    let actual = aiming_at(value.id());
+    let actual = thumb_along(&mut tree);
     assert!(
         (actual - expected).abs() < 1.0,
         "and it still follows writes after a rebuild: {actual} vs {expected}"

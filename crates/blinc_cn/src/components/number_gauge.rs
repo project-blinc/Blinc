@@ -370,24 +370,25 @@ pub(crate) struct Edits {
 
 /// Wires `gauge` to `edits`: a press seeks and takes focus, a drag keeps
 /// seeking, the wheel steps, and keys act while it is focused. Adds the
-/// `data-state="dragging"` and `data-focus-visible` attributes its rules use.
+/// `data-state="dragging"` and `data-focus-visible` attributes its rules use,
+/// and `element_id`, which a press elsewhere is told apart by.
 pub(crate) fn interactive(
     gauge: Div,
     instance: &str,
+    element_id: &str,
     disabled: Computed<bool>,
     edits: Edits,
 ) -> Div {
-    let element_id = format!("cn-number-gauge-{instance}");
     let dragging =
         BlincContextState::get().use_signal_keyed(&format!("{instance}_dragging"), || false);
-    let focus = GaugeFocus::new(instance, &element_id);
+    let focus = GaugeFocus::new(instance, element_id);
     let wheel_left = Arc::new(Mutex::new(0.0f32));
     // The gauge's left edge and width as of the press: a drag event that
     // leaves the gauge carries no bounds of it.
     let pressed_on = Arc::new(Mutex::new((0.0f32, 0.0f32)));
     let Edits { seek, wheel, key } = edits;
     gauge
-        .id(&element_id)
+        .id(element_id)
         .attr_when("data-state", "dragging", dragging)
         .attr_when("data-focus-visible", "", focus.visible())
         .on_mouse_down({
@@ -587,6 +588,7 @@ impl NumberGauge {
         let gauge = interactive(
             face(shell, fraction).child(value_label(size, label)),
             instance,
+            &format!("cn-number-gauge-{instance}"),
             disabled,
             Edits {
                 seek: Arc::new({
