@@ -18,12 +18,15 @@
 //! cn::area_chart().data(visitors).stacked()
 //! ```
 
+mod ease;
 mod legacy;
 mod math;
+mod pie;
 mod plot;
 mod view;
 
 pub use legacy::*;
+pub use pie::{PieBuilder, PieSlice, pie_chart};
 pub use view::{ChartBuilder, area_chart, bar_chart, line_chart};
 
 /// A named series with one value per category label.

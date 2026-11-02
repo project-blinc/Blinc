@@ -3877,6 +3877,50 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             ),
                     ),
             )
+            // Pie and donut row
+            .child(
+                div()
+                    .flex_row()
+                    .gap(24.0)
+                    .child(
+                        div()
+                            .w(280.0)
+                            .flex_col()
+                            .gap(8.0)
+                            .child(text("Pie Chart").size(t_xs()).color(text_secondary))
+                            .child(
+                                cn::pie_chart()
+                                    .size(200.0)
+                                    .slice("Chrome", 275.0)
+                                    .slice("Safari", 200.0)
+                                    .slice("Firefox", 187.0)
+                                    .slice("Edge", 173.0)
+                                    .slice("Other", 90.0),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .w(280.0)
+                            .flex_col()
+                            .gap(8.0)
+                            .child(
+                                text("Donut Chart - hover a slice")
+                                    .size(t_xs())
+                                    .color(text_secondary),
+                            )
+                            .child(
+                                cn::pie_chart()
+                                    .size(200.0)
+                                    .slice("Chrome", 275.0)
+                                    .slice("Safari", 200.0)
+                                    .slice("Firefox", 187.0)
+                                    .slice("Edge", 173.0)
+                                    .slice("Other", 90.0)
+                                    .donut(0.6)
+                                    .total("Visitors"),
+                            ),
+                    ),
+            )
             // Sparklines row
             .child(
                 div()

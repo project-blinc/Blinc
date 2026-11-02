@@ -1,13 +1,13 @@
 //! The plot every line, area and bar chart is: its geometry, the values it
 //! shows while easing to new ones, and what it draws on its canvas.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use blinc_animation::{SharedAnimatedValue, SpringConfig};
 use blinc_core::reactive::{Computed, Signal};
 use blinc_core::{Brush, Color, CornerRadius, DrawContext, Gradient, Path, Point, Rect};
 use blinc_layout::text_measure::{TextLayoutOptions, measure_text_with_options};
 
+use super::ease::Easer;
 use super::math::{flatten, follow, nice_ticks};
 use super::{ChartCurve, ChartSeries};
 
@@ -187,7 +187,7 @@ pub(super) fn count(series: &[ChartSeries]) -> usize {
 
 /// A colour the active stylesheet gives `css`, `var(--chart-1)` or a
 /// literal, or `fallback` without one.
-fn ink(css: &str, fallback: Color) -> Color {
+pub(super) fn ink(css: &str, fallback: Color) -> Color {
     blinc_layout::css_parser::active_stylesheet()
         .and_then(|sheet| sheet.resolve_color(css))
         .unwrap_or(fallback)
@@ -195,27 +195,21 @@ fn ink(css: &str, fallback: Color) -> Color {
 
 /// Series `k`'s colour: its own, or the palette's next.
 pub(super) fn series_ink(series: &ChartSeries, k: usize) -> Color {
-    match &series.color {
-        Some(css) => ink(css, Color::rgb(0.53, 0.53, 0.53)),
-        None => ink(
-            &format!("var(--chart-{})", k % PALETTE + 1),
-            Color::rgb(0.53, 0.53, 0.53),
-        ),
+    palette_ink(series.color.as_deref(), k)
+}
+
+/// The `k`th colour of a chart: `own` if given, or the palette's next.
+pub(super) fn palette_ink(own: Option<&str>, k: usize) -> Color {
+    let grey = Color::rgb(0.53, 0.53, 0.53);
+    match own {
+        Some(css) => ink(css, grey),
+        None => ink(&format!("var(--chart-{})", k % PALETTE + 1), grey),
     }
 }
 
 /// The palette class a series' swatch takes, when it has no colour of its own.
 pub(super) fn palette_class(k: usize) -> String {
     format!("cn-chart-c{}", k % PALETTE + 1)
-}
-
-/// The values on screen, easing from those drawn before a change to the new
-/// ones.
-struct Easing {
-    from: Vec<Vec<f64>>,
-    to: Vec<Vec<f64>>,
-    /// The data the drawing is heading to, to tell a change.
-    seen: Option<Vec<ChartSeries>>,
 }
 
 /// A chart's live state: its data, the category under the pointer, its width
@@ -226,9 +220,12 @@ pub(super) struct Plot {
     pub hover: Signal<i32>,
     pub width: Signal<f32>,
     pub opts: Options,
-    easing: Mutex<Easing>,
-    /// From 0 to 1 while easing to new values; none without a scheduler.
-    progress: Option<SharedAnimatedValue>,
+    easer: Easer,
+}
+
+/// Each series' values, the rows the easing moves.
+fn rows(series: &[ChartSeries]) -> Vec<Vec<f64>> {
+    series.iter().map(|s| s.values.clone()).collect()
 }
 
 impl Plot {
@@ -237,81 +234,36 @@ impl Plot {
         labels: Computed<Vec<String>>,
         opts: Options,
     ) -> Arc<Self> {
-        let progress = blinc_layout::render_state::get_global_scheduler().map(|handle| {
-            // Critically damped: it settles on the new values without
-            // passing them.
-            Arc::new(Mutex::new(blinc_animation::AnimatedValue::new(
-                handle,
-                1.0,
-                SpringConfig::new(120.0, 22.0, 1.0),
-            )))
-        });
         let plot = Arc::new(Self {
             series,
             labels,
             hover: blinc_core::reactive::signal(-1),
             width: blinc_core::reactive::signal(400.0),
             opts,
-            easing: Mutex::new(Easing {
-                from: Vec::new(),
-                to: Vec::new(),
-                seen: None,
-            }),
-            progress,
+            easer: Easer::new(false),
         });
         // New data starts its easing when it arrives, not when it is next
         // drawn.
         let (watched, series) = (Arc::downgrade(&plot), plot.series.clone());
         let _ = blinc_core::reactive::effect(move |_: &blinc_core::reactive::ReactiveGraph| {
             if let (Some(plot), Some(list)) = (watched.upgrade(), series.try_get()) {
-                plot.note(&list);
+                plot.easer.note(&rows(&list));
             }
         });
         plot
     }
 
-    fn progress(&self) -> f64 {
-        self.progress
-            .as_ref()
-            .map_or(1.0, |p| p.lock().unwrap().get().clamp(0.0, 1.0) as f64)
-    }
-
     /// Whether the canvas has to draw again: the data changed, or the values
     /// are still easing.
     pub fn wants_frames(&self) -> bool {
-        let easing = self
-            .progress
-            .as_ref()
-            .is_some_and(|p| p.lock().unwrap().is_animating());
-        easing || self.easing.lock().unwrap().seen != self.series.try_get()
+        let target = self.series.try_get().map(|s| rows(&s));
+        self.easer.wants_frames(target.as_deref())
     }
 
     /// The values to draw now.
     fn shown(&self, series: &[ChartSeries]) -> Vec<Vec<f64>> {
-        self.note(series);
-        let e = self.easing.lock().unwrap();
-        blend(&e.from, &e.to, self.progress())
-    }
-
-    /// Start easing to `series` from what is on screen, if it is new.
-    fn note(&self, series: &[ChartSeries]) {
-        let mut e = self.easing.lock().unwrap();
-        if e.seen.as_deref() != Some(series) {
-            let now = blend(&e.from, &e.to, self.progress());
-            e.from = if e.seen.is_none() {
-                // The first values are drawn as they are.
-                series.iter().map(|s| s.values.clone()).collect()
-            } else {
-                now
-            };
-            e.to = series.iter().map(|s| s.values.clone()).collect();
-            e.seen = Some(series.to_vec());
-            if let Some(p) = &self.progress {
-                let mut p = p.lock().unwrap();
-                p.set_immediate(0.0);
-                p.set_target(1.0);
-            }
-        }
+        self.easer.note(&rows(series));
+        self.easer.shown()
     }
 
     /// Draw the plot on a canvas `width` by its height.
@@ -552,23 +504,6 @@ impl End {
     }
 }
 
-/// `from` moved `t` of the way to `to`; a value with nothing before it
-/// starts from zero.
-fn blend(from: &[Vec<f64>], to: &[Vec<f64>], t: f64) -> Vec<Vec<f64>> {
-    to.iter()
-        .enumerate()
-        .map(|(s, row)| {
-            row.iter()
-                .enumerate()
-                .map(|(i, b)| {
-                    let a = from.get(s).and_then(|r| r.get(i)).copied().unwrap_or(0.0);
-                    a + (b - a) * t
-                })
-                .collect()
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -615,12 +550,5 @@ mod tests {
         assert_eq!(g.category_at(g.centre(0, n), n), Some(0));
         assert_eq!(g.category_at(g.centre(3, n), n), Some(3));
         assert_eq!(g.category_at(g.x1, n), Some(3));
-    }
-
-    #[test]
-    fn values_blend_towards_the_new_ones() {
-        let from = vec![vec![0.0, 10.0]];
-        let to = vec![vec![10.0, 20.0, 30.0]];
-        assert_eq!(blend(&from, &to, 0.5), vec![vec![5.0, 15.0, 15.0]]);
     }
 }

@@ -128,6 +128,26 @@ width unless set), `.min(..)` and `.max(..)` fix the value axis, and
 `.no_grid()`, `.no_axes()`, `.no_tooltip()` and `.legend(false)` leave parts
 out.
 
+### Pie and donut
+
+`cn::pie_chart()` sizes slices by their share of the total, clockwise from the
+top; they sweep in, and ease to new values. `.donut(0.6)` cuts a hole of that
+share of the radius, and `.total("Visitors")` writes the total in it with the
+caption under. Hovering pulls a slice out and shows its value and share.
+
+```rust
+cn::pie_chart()
+    .slice("Chrome", 275.0)
+    .slice("Safari", 200.0)
+    .slice("Other", 90.0)
+    .donut(0.6)
+    .total("Visitors")
+```
+
+`.data(..)` takes a list, Signal or Computed of `PieSlice`; `.size(..)` sets the
+diameter (220 unless set). The total is `.cn-chart-pie-total` and its caption
+`.cn-chart-pie-caption`.
+
 ### Live data
 
 `.data(..)` takes all the series as a list, Signal or Computed of

@@ -2,7 +2,7 @@
 //! A line or area chart draws its series in the palette, marks the category
 //! under the pointer with a tooltip of its values, and eases to new data.
 
-use blinc_cn::{ChartSeries, area_chart, bar_chart, line_chart};
+use blinc_cn::{ChartSeries, PieSlice, area_chart, bar_chart, line_chart, pie_chart};
 use blinc_core::reactive::signal;
 use blinc_layout::LayoutNodeId;
 use blinc_layout::div::div;
@@ -363,4 +363,107 @@ fn stacked_bars_pile() {
     let desktop = top_of(&mut ui, x, token("chart-1")).expect("Desktop");
     assert!(mobile < desktop, "Mobile is on top: {mobile} vs {desktop}");
     ui.assert_snapshot("cn_chart_bars_stacked");
+}
+
+fn browsers() -> Vec<PieSlice> {
+    vec![
+        PieSlice::new("Chrome", 275.0),
+        PieSlice::new("Safari", 200.0),
+        PieSlice::new("Firefox", 187.0),
+        PieSlice::new("Edge", 173.0),
+        PieSlice::new("Other", 90.0),
+    ]
+}
+
+#[test]
+fn a_pie_shows_its_slices_and_the_one_under_the_pointer() {
+    let Some(mut ui) = session() else { return };
+    ui.mount(|_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(16.0))
+            .child(pie_chart().data(browsers()))
+    });
+    ui.leave().settle();
+    assert_eq!(
+        texts(&ui, "cn-chart-legend-name"),
+        ["Chrome", "Safari", "Firefox", "Edge", "Other"]
+    );
+    let plot = ui
+        .tree()
+        .get_absolute_bounds(all(&ui, "cn-chart-plot")[0])
+        .unwrap();
+    let (cx, cy) = (plot.x + plot.width / 2.0, plot.y + plot.height / 2.0);
+    // Chrome starts at the top and runs clockwise: right of the middle.
+    let frame = ui.snapshot().unwrap();
+    let p = frame
+        .get_pixel((cx + 50.0) as u32, (cy - 20.0) as u32)
+        .unwrap();
+    assert!(near([p[0], p[1], p[2]], token("chart-1"), 24), "{p:?}");
+    ui.assert_snapshot("cn_chart_pie");
+
+    ui.move_to(cx + 50.0, cy - 20.0).settle();
+    assert_eq!(texts(&ui, "cn-chart-tooltip-name"), ["Chrome"]);
+    assert_eq!(texts(&ui, "cn-chart-tooltip-value"), ["275 · 30%"]);
+    ui.leave().settle();
+    assert!(all(&ui, "cn-chart-tooltip").is_empty());
+}
+
+#[test]
+fn a_donut_writes_its_total_in_the_hole() {
+    let Some(mut ui) = session() else { return };
+    ui.mount(|_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(16.0))
+            .child(pie_chart().data(browsers()).donut(0.6).total("Visitors"))
+    });
+    ui.leave().settle();
+    assert_eq!(texts(&ui, "cn-chart-pie-total"), ["925"]);
+    assert_eq!(texts(&ui, "cn-chart-pie-caption"), ["Visitors"]);
+    let plot = ui
+        .tree()
+        .get_absolute_bounds(all(&ui, "cn-chart-plot")[0])
+        .unwrap();
+    let (cx, cy) = (plot.x + plot.width / 2.0, plot.y + plot.height / 2.0);
+    // The hole is left as it was: no slice colour at the middle.
+    let frame = ui.snapshot().unwrap();
+    let p = frame.get_pixel(cx as u32, (cy + 25.0) as u32).unwrap();
+    for k in 1..=5 {
+        assert!(
+            !near([p[0], p[1], p[2]], token(&format!("chart-{k}")), 24),
+            "{p:?}"
+        );
+    }
+    ui.assert_snapshot("cn_chart_donut");
+}
+
+#[test]
+fn a_pie_sweeps_in() {
+    let Some(mut ui) = session() else { return };
+    ui.mount(|_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(16.0))
+            .child(pie_chart().data(vec![PieSlice::new("All", 1.0)]))
+    });
+    ui.leave();
+    ui.advance(80);
+    let plot = ui
+        .tree()
+        .get_absolute_bounds(all(&ui, "cn-chart-plot")[0])
+        .unwrap();
+    let (cx, cy) = (plot.x + plot.width / 2.0, plot.y + plot.height / 2.0);
+    // Left of the middle is the last quarter of the sweep: not reached yet.
+    let at = |ui: &mut Headless| {
+        let frame = ui.snapshot().unwrap();
+        let p = frame.get_pixel((cx - 50.0) as u32, cy as u32).unwrap();
+        near([p[0], p[1], p[2]], token("chart-1"), 24)
+    };
+    assert!(!at(&mut ui), "the pie was whole at once");
+    ui.settle();
+    assert!(at(&mut ui), "the pie never closed");
 }

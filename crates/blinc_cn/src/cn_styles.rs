@@ -1052,6 +1052,8 @@ pub const CN_STYLES: &str = concat!(
 .cn-chart-tooltip-row { gap: 8px; }
 .cn-chart-tooltip-name { flex-grow: 1; color: var(--text-secondary); }
 .cn-chart-tooltip-value { margin-left: 12px; font-weight: 500; color: var(--text-primary); }
+.cn-chart-pie-total { font-size: var(--text-2xl); font-weight: 700; color: var(--text-primary); }
+.cn-chart-pie-caption { font-size: var(--text-xs); color: var(--text-secondary); }
 
 /* ============================================================================
    Avatar

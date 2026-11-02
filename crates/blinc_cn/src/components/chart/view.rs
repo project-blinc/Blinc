@@ -16,7 +16,7 @@ use blinc_layout::text_measure::{TextLayoutOptions, measure_text_with_options};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 
 use super::math::compact;
-use super::plot::{BOTTOM, Format, Geometry, Options, Plot, TOP, count, palette_class, series_ink};
+use super::plot::{BOTTOM, Geometry, Options, Plot, TOP, count, palette_class, palette_ink};
 use super::{ChartCurve, ChartSeries};
 
 /// Builder for a line or area chart; usable inline as an element.
@@ -272,7 +272,10 @@ fn list_of(
 }
 
 /// A label part with bound text.
-fn label(class: &str, text: impl Fn(&ReactiveGraph) -> String + Send + Sync + 'static) -> Div {
+pub(super) fn label(
+    class: &str,
+    text: impl Fn(&ReactiveGraph) -> String + Send + Sync + 'static,
+) -> Div {
     div()
         .class(class)
         .child(Text::bound(Reactive::Computed(computed(text))).no_wrap())
@@ -659,14 +662,19 @@ fn tooltip(plot: &Arc<Plot>, labels: &Computed<Vec<String>>, at: &Computed<Optio
 
 /// A series' colour mark: its palette class, or its own colour.
 fn swatch(series: &[ChartSeries], k: usize) -> Div {
+    mark(series.get(k).and_then(|s| s.color.as_deref()), k)
+}
+
+/// The `k`th colour's mark: its palette class, or `own` colour.
+pub(super) fn mark(own: Option<&str>, k: usize) -> Div {
     let mark = div()
         .class("cn-chart-swatch")
         .w(10.0)
         .h(10.0)
         .flex_shrink_0();
-    match series.get(k) {
-        Some(s) if s.color.is_some() => mark.bg(series_ink(s, k)),
-        _ => mark.class(palette_class(k)),
+    match own {
+        Some(css) => mark.bg(palette_ink(Some(css), k)),
+        None => mark.class(palette_class(k)),
     }
 }
 

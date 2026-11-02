@@ -81,9 +81,9 @@ pub use card::{
 };
 pub use chart::{
     ChartBuilder, ChartCurve, ChartSeries, ComparisonBarChart, ComparisonBarChartBuilder,
-    Histogram, HistogramBuilder, SparkLine, SparkLineBuilder, ThresholdBand, ThresholdLineChart,
-    ThresholdLineChartBuilder, area_chart, bar_chart, comparison_bar_chart, histogram, line_chart,
-    spark_line, threshold_line_chart,
+    Histogram, HistogramBuilder, PieBuilder, PieSlice, SparkLine, SparkLineBuilder, ThresholdBand,
+    ThresholdLineChart, ThresholdLineChartBuilder, area_chart, bar_chart, comparison_bar_chart,
+    histogram, line_chart, pie_chart, spark_line, threshold_line_chart,
 };
 pub use checkbox::{Checkbox, CheckboxSize, checkbox};
 pub use combobox::{Combobox, ComboboxBuilder, ComboboxOption, ComboboxSize, combobox};
