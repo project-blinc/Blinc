@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1793554441,"nonce":"j93zIa+2Yminyl6hcxKG9PNLh4g=","added":["debt","area:cn","area:css"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":2,"timestamp":1793634043,"nonce":"lEbPq/V/bCkujbSPsJr7oYigOmM=","title":"Chart: port the interactive chart onto the canvas widget, palette from CSS","was":"Chart reads its palette from CSS variables"}]}
