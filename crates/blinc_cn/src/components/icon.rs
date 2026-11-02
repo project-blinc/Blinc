@@ -74,14 +74,19 @@ impl Icon {
         let size = config.size_px.unwrap_or_else(|| config.size.pixels());
         let stroke_width = config.stroke_width.unwrap_or(blinc_icons::STROKE_WIDTH);
 
+        // Without a colour of its own the icon takes the text colour around
+        // it, as `currentColor` does.
         let color = config
             .color
-            .or_else(|| config.color_token.map(|t| theme.color(t)))
-            .unwrap_or_else(|| theme.color(ColorToken::TextPrimary));
+            .or_else(|| config.color_token.map(|t| theme.color(t)));
 
         // Generate SVG string
         let svg_str = blinc_icons::to_svg_with_stroke(config.path_data, size, stroke_width);
 
+        let mut glyph = svg(&svg_str).size(size, size);
+        if let Some(color) = color {
+            glyph = glyph.color(color);
+        }
         let inner = div()
             .class("cn-icon")
             .w(size)
@@ -89,7 +94,7 @@ impl Icon {
             .flex()
             .items_center()
             .justify_center()
-            .child(svg(&svg_str).size(size, size).color(color));
+            .child(glyph);
 
         Icon { inner }
     }

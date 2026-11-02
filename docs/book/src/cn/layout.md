@@ -17,24 +17,27 @@ avatar()
 ### Avatar Sizes
 
 ```rust
-avatar().size(AvatarSize::Sm)    // 32px
-avatar().size(AvatarSize::Md)    // 40px (default)
-avatar().size(AvatarSize::Lg)    // 48px
-avatar().size(AvatarSize::Xl)    // 64px
+avatar().size(AvatarSize::ExtraSmall) // 24px
+avatar().size(AvatarSize::Small)      // 32px
+avatar().size(AvatarSize::Medium)     // 40px (default)
+avatar().size(AvatarSize::Large)      // 48px
+avatar().size(AvatarSize::ExtraLarge) // 64px
 ```
 
-### Avatar Fallback
+### Avatar Fallback and Status
 
 ```rust
-// Initials fallback
-avatar()
-    .src("user.jpg")  // If fails to load...
-    .fallback("JD")   // Show initials
+// Initials when there is no image
+avatar().fallback("JD")
 
-// Icon fallback
-avatar()
-    .fallback_icon(icons::USER)
+// A status dot: online, offline, away or busy
+avatar().fallback("JD").online()
 ```
+
+The avatar is `.cn-avatar`: its fill and the initials' colour are that rule
+(`--cn-avatar-bg`, `--cn-avatar-fg`), and with nothing to show it draws a
+`.cn-avatar-placeholder`. The dot is `.cn-avatar-status` with `data-status`.
+`.fallback_bg(..)` and `.fallback_color(..)` override the rules for one avatar.
 
 ### Avatar Group
 
@@ -48,6 +51,9 @@ avatar_group()
     .child(avatar().src("user5.jpg"))
 // Displays: [avatar1] [avatar2] [avatar3] [+2]
 ```
+
+Avatars in a `.cn-avatar-group` are ringed so they read apart where they
+overlap; the ring's colour, and the `.cn-avatar-group__more` chip, are rules.
 
 ## Separator
 

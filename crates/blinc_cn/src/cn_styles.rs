@@ -28,6 +28,12 @@
 pub const CN_STYLES: &str = concat!(
     "@layer components {\n",
     r#"
+/* The document's text colour, which text and icons that set none inherit,
+   as a page's root colour is. */
+:root {
+    color: var(--text-primary);
+}
+
 /* ============================================================================
    Typography base — every cn widget inherits the theme's canonical
    sans, body line-height, and dense-HID letter-spacing. CN_STYLES
@@ -1012,8 +1018,21 @@ pub const CN_STYLES: &str = concat!(
 
 .cn-avatar {
     background: var(--cn-avatar-bg, var(--surface));
+    color: var(--cn-avatar-fg, var(--text-primary));
     border-radius: var(--radius-full);
     overflow: hidden;
+}
+.cn-avatar-placeholder { color: var(--text-tertiary); }
+.cn-avatar-status[data-status="online"] { background: var(--success); }
+.cn-avatar-status[data-status="offline"] { background: var(--text-tertiary); }
+.cn-avatar-status[data-status="away"] { background: var(--warning); }
+.cn-avatar-status[data-status="busy"] { background: var(--error); }
+/* Avatars in a group are ringed so they read apart where they overlap. */
+.cn-avatar-group .cn-avatar { border-color: var(--border-secondary); }
+.cn-avatar-group__more {
+    background: var(--surface-elevated);
+    border-color: var(--border-secondary);
+    color: var(--text-tertiary);
 }
 .cn-avatar--square {
     border-radius: var(--radius-default);
@@ -1133,27 +1152,28 @@ pub const CN_STYLES: &str = concat!(
    Toast
    ============================================================================ */
 
+/* A notification: success, warning and destructive toasts colour their
+   border and icon by `data-variant`. */
 .cn-toast {
-    /* Floating notification → elevation 2 */
-    background: var(--cn-toast-bg, var(--surface-elevated));
+    background: var(--cn-toast-bg, var(--surface));
     border: 1px solid var(--cn-toast-border, var(--border));
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
     color: var(--text-primary);
-    /* Enter/exit motion is driven by the ToastBuilder motion_enter /
-       motion_exit (slide from the tray corner by default). */
 }
-.cn-toast--success {
-    border: 1px solid var(--success);
+.cn-toast[data-variant="success"] { border-color: var(--success); }
+.cn-toast[data-variant="warning"] { border-color: var(--warning); }
+.cn-toast[data-variant="destructive"] { border-color: var(--error); }
+.cn-toast[data-variant="success"] .cn-toast-icon { color: var(--success); }
+.cn-toast[data-variant="warning"] .cn-toast-icon { color: var(--warning); }
+.cn-toast[data-variant="destructive"] .cn-toast-icon { color: var(--error); }
+.cn-toast-title { color: var(--text-primary); }
+.cn-toast-description { color: var(--text-secondary); }
+.cn-toast-close {
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
 }
-.cn-toast--warning {
-    border: 1px solid var(--warning);
-}
-.cn-toast--error {
-    border: 1px solid var(--error);
-}
-.cn-toast--info {
-    border: 1px solid var(--info);
-}
+.cn-toast-close:hover { color: var(--text-primary); }
 
 /* ============================================================================
    Accordion

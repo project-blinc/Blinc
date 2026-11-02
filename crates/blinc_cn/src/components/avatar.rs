@@ -139,13 +139,13 @@ pub enum AvatarStatus {
 }
 
 impl AvatarStatus {
-    /// Get the status indicator color
-    fn color(&self, theme: &ThemeState) -> Color {
+    /// The `data-status` its rules colour the dot by.
+    fn attr(&self) -> &'static str {
         match self {
-            AvatarStatus::Online => theme.color(ColorToken::Success),
-            AvatarStatus::Offline => theme.color(ColorToken::TextTertiary),
-            AvatarStatus::Away => theme.color(ColorToken::Warning),
-            AvatarStatus::Busy => theme.color(ColorToken::Error),
+            AvatarStatus::Online => "online",
+            AvatarStatus::Offline => "offline",
+            AvatarStatus::Away => "away",
+            AvatarStatus::Busy => "busy",
         }
     }
 }
@@ -173,8 +173,9 @@ struct AvatarConfig {
     /// (NOT a wrapper). Used by `AvatarGroupBuilder` to give each
     /// avatar a single-primitive border that anti-aliases cleanly,
     /// the same way the spinner track does — no nested wrapper, no
-    /// co-located AA edges.
-    ring: Option<(Color, f32)>,
+    /// co-located AA edges. A ring without a colour takes it from the
+    /// `.cn-avatar-group` rules.
+    ring: Option<(Option<Color>, f32)>,
     /// User-added CSS classes
     classes: Vec<std::sync::Arc<str>>,
     /// User-set element ID
@@ -201,42 +202,33 @@ impl BuiltAvatar {
             });
             (None, AvatarContent::Node(node))
         } else if let Some(ref fallback_text) = config.fallback {
-            // Fallback initials
-            let bg = config
-                .fallback_bg
-                .unwrap_or_else(|| theme.color(ColorToken::Surface));
-            let fg = config
-                .fallback_color
-                .unwrap_or_else(|| theme.color(ColorToken::TextPrimary));
-
-            // The style closure sets everything: rebuilt content is
-            // created after the stylesheet pass, so it inherits nothing.
+            // Initials, coloured by the `.cn-avatar` rule unless overridden.
             let font_size = config.size.font_size();
+            let fg = config.fallback_color;
             let initials = crate::reactive_props::reactive_text(fallback_text, move |t| {
-                t.size(font_size)
-                    .weight(FontWeight::Medium)
-                    .color(fg)
-                    .no_wrap()
+                let t = t.size(font_size).weight(FontWeight::Medium).no_wrap();
+                match fg {
+                    Some(color) => t.color(color),
+                    None => t,
+                }
             });
 
-            (Some(bg), AvatarContent::Node(initials))
+            (config.fallback_bg, AvatarContent::Node(initials))
         } else {
-            // Empty fallback - show placeholder
-            let bg = config
-                .fallback_bg
-                .unwrap_or_else(|| theme.color(ColorToken::Surface));
-            let fg = config
-                .fallback_color
-                .unwrap_or_else(|| theme.color(ColorToken::TextTertiary));
-
-            // Default user icon placeholder
-            let placeholder = text("?")
+            // Nothing to show: a placeholder, `.cn-avatar-placeholder`.
+            let mut placeholder = text("?")
+                .class("cn-avatar-placeholder")
                 .size(config.size.font_size())
                 .weight(FontWeight::Medium)
-                .color(fg)
                 .no_wrap();
+            if let Some(color) = config.fallback_color {
+                placeholder = placeholder.color(color);
+            }
 
-            (Some(bg), AvatarContent::Node(Box::new(placeholder)))
+            (
+                config.fallback_bg,
+                AvatarContent::Node(Box::new(placeholder)),
+            )
         };
 
         // Build the inner avatar container (with clipping for image/initials).
@@ -271,8 +263,10 @@ impl BuiltAvatar {
         // `fill_rect_with_per_side_border`, so the SDF AA gradient at
         // the rounded edge handles border + bg together — no second
         // primitive, no co-located AA.
-        if let Some((color, width)) = config.ring {
-            inner = inner.border(width, color);
+        match config.ring {
+            Some((Some(color), width)) => inner = inner.border(width, color),
+            Some((None, width)) => inner = inner.border_width(width),
+            None => {}
         }
 
         // Add content
@@ -294,20 +288,13 @@ impl BuiltAvatar {
         let container = if let Some(status) = config.status {
             let status_size = config.size.status_size();
             let status_offset = config.size.status_offset();
-            // Status pip is a plain themed dot — colour pulls from
-            // the theme's semantic tokens (Success / Warning / Error
-            // / TextTertiary). No ring, no shadow: the renderer's
-            // SDF corner pipeline already produces a clean anti-
-            // aliased circle, and avoiding the extra border-stroke
-            // outline keeps the pip uncluttered at small sizes.
-            let status_color = status.color(theme);
-
+            // A plain dot, coloured by `.cn-avatar-status[data-status]`.
             let status_indicator = div()
                 .class("cn-avatar-status")
+                .attr("data-status", status.attr())
                 .w(status_size)
                 .h(status_size)
                 .rounded_full()
-                .style(&style! { bg: status_color })
                 .absolute()
                 .bottom(status_offset)
                 .right(status_offset);
@@ -439,7 +426,13 @@ impl AvatarBuilder {
     /// with the avatar's bg into one SDF primitive — same recipe the
     /// spinner track uses — so the edge stays smooth at any radius.
     pub fn ring(self, color: impl Into<Color>, width: f32) -> Self {
-        self.config.borrow_mut().ring = Some((color.into(), width));
+        self.config.borrow_mut().ring = Some((Some(color.into()), width));
+        self
+    }
+
+    /// A ring `width` wide in the colour the group's rules give it.
+    fn group_ring(self, width: f32) -> Self {
+        self.config.borrow_mut().ring = Some((None, width));
         self
     }
 
@@ -648,23 +641,9 @@ impl BuiltAvatarGroup {
         let visible_count = config.max.unwrap_or(total).min(total);
         let remaining = total.saturating_sub(visible_count);
 
-        // Single-primitive ring (no wrapper): each avatar gets its
-        // border applied DIRECTLY on its own outer div via
-        // `AvatarBuilder::ring(...)`. The renderer merges the
-        // border + bg + rounded corner into a single SDF primitive
-        // — same single-primitive recipe `cn::spinner`'s track
-        // and `cn::switch` / `cn::slider`'s thumbs use — so each
-        // avatar's edge is one smooth AA gradient. Avoids the
-        // wrapper-vs-inner co-located AA that previously layered
-        // two ~50 %-alpha gradients at the same curve and let parent
-        // bg leak through as a faint "doubled" outline.
-        // BorderSecondary is calibrated as a divider tone — visible
-        // against Surface in BOTH schemes (light grey #D4D9E4 on
-        // white, medium grey #3A4055 on dark Surface). Surface as
-        // the ring colour disappeared in dark mode because the
-        // avatar's own bg AND the typical card parent are both
-        // Surface; nothing to contrast with.
-        let ring_color = theme.color(ColorToken::BorderSecondary);
+        // Each avatar's ring is a border on its own outer div, so border,
+        // fill and corner are one primitive with one antialiased edge. Its
+        // colour is the `.cn-avatar-group` rule.
 
         // Ring width scales with avatar size — at small sizes a 2px
         // ring is half the visible stroke and the 1px AA at its outer
@@ -678,7 +657,7 @@ impl BuiltAvatarGroup {
             AvatarSize::Large | AvatarSize::ExtraLarge => 4.0,
         };
         for (i, avatar) in config.avatars.into_iter().take(visible_count).enumerate() {
-            let prepared = avatar.ring(ring_color, ring_width);
+            let prepared = avatar.group_ring(ring_width);
             // Negative margin for overlap. Wrap in a layout-only div
             // (no bg/border/rounded — purely for the `ml` margin) so
             // it can't introduce a second primitive at the avatar's
@@ -699,7 +678,8 @@ impl BuiltAvatarGroup {
                 .class("cn-avatar-group__more")
                 .w(size_px)
                 .h(size_px)
-                .style(&style! { rounded: size_px / 2.0, bg: theme.color(ColorToken::SurfaceElevated), border: (ring_width, ring_color) })
+                .rounded(size_px / 2.0)
+                .border_width(ring_width)
                 .flex_row()
                 .items_center()
                 .justify_center()
@@ -708,7 +688,6 @@ impl BuiltAvatarGroup {
                     text(format!("+{}", remaining))
                         .size(config.size.font_size())
                         .weight(FontWeight::Medium)
-                        .color(theme.color(ColorToken::TextTertiary))
                         .no_wrap(),
                 );
 

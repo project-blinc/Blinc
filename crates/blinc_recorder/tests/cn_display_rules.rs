@@ -11,7 +11,7 @@ use blinc_layout::text::text;
 use blinc_recorder::Headless;
 use blinc_theme::{ColorScheme, ColorToken, HybridTheme, ThemeState};
 
-const W: u32 = 360;
+const W: u32 = 420;
 const H: u32 = 360;
 
 fn session(scheme: ColorScheme) -> Option<Headless> {
@@ -219,4 +219,163 @@ fn a_dragged_handle_turns_primary() {
         ui.tree().element_registry().attribute(handle, "data-state"),
         None
     );
+}
+
+/// A toast's fill, border and text are rules; a success toast colours its
+/// border and icon, a default one keeps the plain border.
+#[test]
+fn a_toast_takes_its_variant_from_rules() {
+    let Some(mut ui) = session(ColorScheme::Dark) else {
+        return;
+    };
+    let theme = ThemeState::get();
+    ui.mount(|_| div().w(W as f32).h(H as f32));
+    ui.leave().settle();
+
+    let handle = blinc_cn::toast_success("Saved")
+        .description("Your changes are saved.")
+        .show();
+    ui.settle();
+    let toast = one(&ui, "cn-toast");
+    assert_eq!(
+        ui.tree()
+            .element_registry()
+            .attribute(toast, "data-variant")
+            .as_deref(),
+        Some("success")
+    );
+    assert!(close(
+        background(&ui, toast),
+        theme.color(ColorToken::Surface)
+    ));
+    let border = ui.tree().get_render_node(toast).unwrap().props.border_color;
+    assert!(close(border, theme.color(ColorToken::Success)));
+    for (class, want) in [
+        ("cn-toast-icon", ColorToken::Success),
+        ("cn-toast-title", ColorToken::TextPrimary),
+        ("cn-toast-description", ColorToken::TextSecondary),
+    ] {
+        let node = one(&ui, class);
+        let ((got, bg), want) = (ink(&mut ui, node, true), token(want));
+        assert!(
+            drawn_in(got, want, bg),
+            ".{class} drawn {got:?} over {bg:?}, want {want:?}"
+        );
+    }
+    ui.assert_snapshot("cn_toast_success");
+    handle.dismiss();
+    ui.settle();
+
+    blinc_cn::toast("Note").show();
+    ui.settle();
+    let toast = one(&ui, "cn-toast");
+    let border = ui.tree().get_render_node(toast).unwrap().props.border_color;
+    assert!(close(border, theme.color(ColorToken::Border)));
+}
+
+/// An avatar's fallback, status dot and group ring are rules.
+#[test]
+fn an_avatar_takes_its_colours_from_rules() {
+    let Some(mut ui) = session(ColorScheme::Dark) else {
+        return;
+    };
+    let theme = ThemeState::get();
+    ui.mount(|_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(12.0))
+            .flex_col()
+            .gap(3.0)
+            .child(blinc_cn::avatar().fallback("JD").busy())
+            .child(
+                blinc_cn::avatar_group()
+                    .max(2)
+                    .child(blinc_cn::avatar().fallback("A"))
+                    .child(blinc_cn::avatar().fallback("B"))
+                    .child(blinc_cn::avatar().fallback("C")),
+            )
+    });
+    ui.leave().settle();
+
+    let avatars = all(&ui, "cn-avatar");
+    let first = avatars[0];
+    assert!(close(
+        background(&ui, first),
+        theme.color(ColorToken::Surface)
+    ));
+    let ((got, bg), want) = (ink(&mut ui, first, true), token(ColorToken::TextPrimary));
+    assert!(drawn_in(got, want, bg), "initials {got:?} over {bg:?}");
+    let dot = one(&ui, "cn-avatar-status");
+    assert_eq!(
+        ui.tree()
+            .element_registry()
+            .attribute(dot, "data-status")
+            .as_deref(),
+        Some("busy")
+    );
+    assert!(close(background(&ui, dot), theme.color(ColorToken::Error)));
+
+    // The grouped avatars and the "+1" are ringed by the group's rule.
+    let ring = theme.color(ColorToken::BorderSecondary);
+    let grouped = avatars[1];
+    let border = ui
+        .tree()
+        .get_render_node(grouped)
+        .unwrap()
+        .props
+        .border_color;
+    assert!(close(border, ring), "grouped avatar ring {border:?}");
+    let more = one(&ui, "cn-avatar-group__more");
+    assert!(close(
+        background(&ui, more),
+        theme.color(ColorToken::SurfaceElevated)
+    ));
+    let border = ui.tree().get_render_node(more).unwrap().props.border_color;
+    assert!(close(border, ring));
+    ui.assert_snapshot("cn_avatar_rules");
+}
+
+/// An icon takes the text colour around it, the document's when nothing
+/// around it sets one; a token given to it wins.
+#[test]
+fn an_icon_takes_the_colour_around_it() {
+    let Some(mut ui) = session(ColorScheme::Dark) else {
+        return;
+    };
+    let check = blinc_cn::prelude::icons::CHECK;
+    ui.mount(move |_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .flex_row()
+            .gap(4.0)
+            .child(blinc_cn::icon(check).size_px(32.0))
+            .child(
+                div()
+                    .class("cn-field-error")
+                    .child(blinc_cn::icon(check).size_px(32.0)),
+            )
+            .child(
+                blinc_cn::icon(check)
+                    .size_px(32.0)
+                    .color(ColorToken::Success),
+            )
+    });
+    ui.leave().settle();
+    let icons = all(&ui, "cn-icon");
+    for (i, want) in [
+        ColorToken::TextPrimary,
+        ColorToken::Error,
+        ColorToken::Success,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let ((got, bg), want) = (ink(&mut ui, icons[i], true), token(want));
+        assert!(
+            drawn_in(got, want, bg),
+            "icon {i} drawn {got:?} over {bg:?}, want {want:?}"
+        );
+    }
 }

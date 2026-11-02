@@ -107,6 +107,10 @@ button("Click me") // Uses theme.colors.primary
 ThemeState::set_color_scheme(ColorScheme::Dark);
 ```
 
+`CN_STYLES` gives the document a text colour, `:root { color: var(--text-primary) }`,
+which text and icons that set none inherit, as on a web page. A `cn::icon`
+without a colour of its own takes the colour around it.
+
 ### Accessible
 
 Components include keyboard navigation and proper semantics:

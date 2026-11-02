@@ -245,62 +245,44 @@ div()
 
 ## Toast
 
-Temporary notifications:
+Temporary notifications, stacked in a corner:
 
 ```rust
-// Show a toast
-show_toast(
-    toast()
-        .title("Success")
-        .description("Your changes have been saved.")
-);
+cn::toast("Success")
+    .description("Your changes have been saved.")
+    .show();
 
-// With variant
-show_toast(
-    toast()
-        .variant(ToastVariant::Destructive)
-        .title("Error")
-        .description("Failed to save changes.")
-);
-```
-
-### Toast Variants
-
-```rust
-// Default
-toast().title("Notification")
-
-// Success
-toast()
-    .variant(ToastVariant::Success)
-    .title("Success")
-
-// Destructive/Error
-toast()
+// With a variant
+cn::toast("Error")
+    .description("Failed to save changes.")
     .variant(ToastVariant::Destructive)
-    .title("Error")
+    .show();
+
+// Shorthands
+cn::toast_success("Saved").show();
+cn::toast_warning("Low disk space").show();
+cn::toast_error("Upload failed").show();
 ```
 
 ### With Action
 
 ```rust
-toast()
-    .title("Event created")
+cn::toast("Event created")
     .description("Friday, February 10, 2024")
-    .action(
-        toast_action()
-            .child(button("Undo").size(ButtonSize::Sm))
-            .on_click(|| undo_action())
-    )
+    .action("Undo", || undo_action())
+    .show();
 ```
 
-### Toast Position
+`.corner(Corner::TopRight)` places it, `.duration_ms(..)` or `.persistent()`
+sets how long it stays, and `.show()` returns a handle to `dismiss()` it.
 
-```rust
-// Configure toast container position
-toaster()
-    .position(ToasterPosition::TopRight)  // TopLeft, TopRight, BottomLeft, BottomRight
-```
+### Toast Styling
+
+The toast is `.cn-toast` with `data-variant` (`default`, `success`, `warning`
+or `destructive`); success, warning and destructive toasts colour their border
+and `.cn-toast-icon`. The title and description are `.cn-toast-title` and
+`.cn-toast-description`, the close button `.cn-toast-close`. `--cn-toast-bg`
+and `--cn-toast-border` recolour it.
 
 ### Toast Motion
 

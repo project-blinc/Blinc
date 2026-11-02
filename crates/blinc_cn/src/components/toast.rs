@@ -92,13 +92,13 @@ pub enum ToastVariant {
 }
 
 impl ToastVariant {
-    /// Get the accent color for this variant
-    fn accent_color(&self, theme: &ThemeState) -> Color {
+    /// The `data-variant` its rules key on.
+    fn attr(&self) -> &'static str {
         match self {
-            ToastVariant::Default => theme.color(ColorToken::Primary),
-            ToastVariant::Success => theme.color(ColorToken::Success),
-            ToastVariant::Warning => theme.color(ColorToken::Warning),
-            ToastVariant::Destructive => theme.color(ColorToken::Error),
+            ToastVariant::Default => "default",
+            ToastVariant::Success => "success",
+            ToastVariant::Warning => "warning",
+            ToastVariant::Destructive => "destructive",
         }
     }
 
@@ -244,17 +244,9 @@ impl ToastBuilder {
     /// Show the toast
     #[track_caller]
     pub fn show(self) -> ToastHandle {
-        let theme = ThemeState::get();
-        let bg = theme.color(ColorToken::Surface);
-        let border = theme.color(ColorToken::Border);
-        let text_primary = theme.color(ColorToken::TextPrimary);
-        let text_secondary = theme.color(ColorToken::TextSecondary);
-        let radius = theme.radius(RadiusToken::Lg);
-
         let title = self.title;
         let description = self.description;
         let variant = self.variant;
-        let accent_color = variant.accent_color(theme);
         let icon_svg = variant.icon_svg().map(|s| s.to_string());
         let action_label = self.action_label;
         let action_callback = self.action_callback;
@@ -287,13 +279,7 @@ impl ToastBuilder {
                     &title,
                     &description,
                     &icon_svg,
-                    accent_color,
                     variant,
-                    bg,
-                    border,
-                    text_primary,
-                    text_secondary,
-                    radius,
                     &action_label,
                     &action_callback,
                     show_close,
@@ -316,21 +302,15 @@ impl ToastBuilder {
     }
 }
 
-/// Build the toast content. Animation is delegated to CSS @keyframes
-/// (cn-toast-enter — defined in cn_styles.rs). `toast_handle` is captured
-/// so the action button and close button can dismiss this specific toast.
+/// Build the toast content. Its look is the `.cn-toast*` rules, keyed on
+/// `data-variant`. `toast_handle` is captured so the action button and close
+/// button can dismiss this specific toast.
 #[allow(clippy::too_many_arguments)]
 fn build_toast_content(
     title: &Option<String>,
     description: &Option<String>,
     icon_svg: &Option<String>,
-    accent_color: Color,
     variant: ToastVariant,
-    bg: Color,
-    border: Color,
-    text_primary: Color,
-    text_secondary: Color,
-    radius: f32,
     action_label: &Option<String>,
     action_callback: &Option<Arc<dyn Fn() + Send + Sync>>,
     show_close: bool,
@@ -344,37 +324,23 @@ fn build_toast_content(
     if let Some(custom_fn) = custom_content {
         return custom_fn()
             .class("cn-toast")
-            .w(360.0)
-            .style(&style! { bg: bg, border: (1.0, border), rounded: radius })
-            .shadow_lg();
+            .attr("data-variant", variant.attr())
+            .w(360.0);
     }
 
-    let has_accent = icon_svg.is_some();
-
-    let mut toast = div()
+    let toast = div()
         .class("cn-toast")
-        .w(360.0)
-        .style(&style! { bg: bg, border: (1.0, border), rounded: radius })
-        .shadow_lg();
-
-    match variant {
-        ToastVariant::Success => toast = toast.class("cn-toast--success"),
-        ToastVariant::Warning => toast = toast.class("cn-toast--warning"),
-        ToastVariant::Destructive => toast = toast.class("cn-toast--error"),
-        ToastVariant::Default => toast = toast.class("cn-toast--info"),
-    }
-
-    if has_accent {
-        toast = toast.border(1.0, accent_color);
-    }
+        .attr("data-variant", variant.attr())
+        .w(360.0);
 
     let mut inner = div().w_full().flex_row().items_start().gap_3().p_4();
 
     if let Some(svg_str) = icon_svg {
         inner = inner.child(
             div()
+                .class("cn-toast-icon")
                 .flex_shrink_0()
-                .child(svg(svg_str).size(20.0, 20.0).color(accent_color)),
+                .child(svg(svg_str).size(20.0, 20.0)),
         );
     }
 
@@ -383,8 +349,8 @@ fn build_toast_content(
     if let Some(title_text) = title {
         content = content.child(
             text(title_text)
+                .class("cn-toast-title")
                 .size(theme.typography().text_sm)
-                .color(text_primary)
                 .medium(),
         );
     }
@@ -394,8 +360,8 @@ fn build_toast_content(
     } else if let Some(desc) = description {
         content = content.child(
             text(desc)
-                .size(theme.typography().text_sm)
-                .color(text_secondary),
+                .class("cn-toast-description")
+                .size(theme.typography().text_sm),
         );
     }
 
@@ -421,16 +387,17 @@ fn build_toast_content(
 
         inner = inner.child(
             div()
+                .class("cn-toast-close")
                 .flex_shrink_0()
                 .w(24.0)
                 .h(24.0)
                 .items_center()
-                .style(&style! { rounded: theme.radius(RadiusToken::Sm) })
+                .justify_center()
                 .cursor_pointer()
                 .on_click(move |_| {
                     toast_handle.dismiss();
                 })
-                .child(svg(close_icon).size(16.0, 16.0).color(text_secondary)),
+                .child(svg(close_icon).size(16.0, 16.0)),
         );
     }
 
