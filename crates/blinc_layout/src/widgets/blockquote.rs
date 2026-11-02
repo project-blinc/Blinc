@@ -14,7 +14,6 @@
 //! ```
 
 use blinc_core::Color;
-use blinc_theme::{ColorToken, ThemeState};
 
 use crate::div::{Div, ElementBuilder, div};
 use crate::element::RenderProps;
@@ -23,12 +22,13 @@ use crate::tree::{LayoutNodeId, LayoutTree};
 /// Configuration for blockquote styling
 #[derive(Clone, Debug)]
 pub struct BlockquoteConfig {
-    /// Left border color
-    pub border_color: Color,
-    /// Left border width in pixels
+    /// Left border colour over the `.blinc-blockquote` rule's, when set;
+    /// drawn `border_width` wide.
+    pub border_color: Option<Color>,
+    /// Left border width in pixels, with `border_color`.
     pub border_width: f32,
-    /// Background color (subtle)
-    pub bg_color: Color,
+    /// Background over the rule's, when set.
+    pub bg_color: Option<Color>,
     /// Padding inside the blockquote
     pub padding: f32,
     /// Vertical margin
@@ -37,11 +37,10 @@ pub struct BlockquoteConfig {
 
 impl Default for BlockquoteConfig {
     fn default() -> Self {
-        let theme = ThemeState::get();
         Self {
-            border_color: theme.color(ColorToken::Border),
+            border_color: None,
             border_width: 4.0,
-            bg_color: theme.color(ColorToken::SurfaceOverlay),
+            bg_color: None,
             padding: 4.0,
             margin_y: 2.0,
         }
@@ -67,18 +66,22 @@ impl Blockquote {
 
     /// Create a blockquote with custom configuration
     pub fn with_config(config: BlockquoteConfig) -> Self {
-        let inner = div()
+        let mut inner = div()
             .flex_col()
             .w_full()
             .my(config.margin_y)
-            .bg(config.bg_color)
-            .border_left(config.border_width, config.border_color)
             .p(config.padding);
+        if let Some(bg) = config.bg_color {
+            inner = inner.bg(bg);
+        }
+        if let Some(color) = config.border_color {
+            inner = inner.border_left(config.border_width, color);
+        }
 
         Self {
             inner,
             css_element_id: None,
-            css_classes: Vec::new(),
+            css_classes: vec![blinc_core::intern::intern("blinc-blockquote")],
         }
     }
 
@@ -163,6 +166,7 @@ pub fn blockquote_with_config(config: BlockquoteConfig) -> Blockquote {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use blinc_theme::ThemeState;
 
     fn init_theme() {
         let _ = ThemeState::try_get().unwrap_or_else(|| {

@@ -393,8 +393,8 @@ impl<'a> RenderState<'a> {
                 if let Some(StackItem::Blockquote(bq_content)) = self.stack.pop() {
                     // Wrap the accumulated content in a blockquote widget with config colors
                     let bq_config = crate::widgets::BlockquoteConfig {
-                        border_color: self.config.blockquote_border,
-                        bg_color: self.config.blockquote_bg,
+                        border_color: Some(self.config.blockquote_border),
+                        bg_color: Some(self.config.blockquote_bg),
                         padding: self.config.blockquote_padding,
                         margin_y: self.config.paragraph_spacing / 2.0,
                         ..Default::default()
@@ -649,7 +649,7 @@ impl<'a> RenderState<'a> {
     fn handle_rule(&mut self) {
         // Use config color and minimal margin
         let rule = crate::widgets::hr_with_config(crate::widgets::HrConfig {
-            color: self.config.hr_color,
+            color: Some(self.config.hr_color),
             thickness: 1.0,
             margin_y: 4.0,
         });
@@ -981,7 +981,7 @@ impl<'a> RenderState<'a> {
         match tag_name.to_lowercase().as_str() {
             "hr" => Some(Box::new(crate::widgets::hr_with_config(
                 crate::widgets::HrConfig {
-                    color: self.config.hr_color,
+                    color: Some(self.config.hr_color),
                     thickness: 1.0,
                     margin_y: 4.0,
                 },
@@ -1027,8 +1027,8 @@ impl<'a> RenderState<'a> {
             "blockquote" => {
                 if let Some(inner) = Self::extract_tag_content(html, tag_name) {
                     let bq_config = crate::widgets::BlockquoteConfig {
-                        border_color: self.config.blockquote_border,
-                        bg_color: self.config.blockquote_bg,
+                        border_color: Some(self.config.blockquote_border),
+                        bg_color: Some(self.config.blockquote_bg),
                         padding: self.config.blockquote_padding,
                         margin_y: self.config.paragraph_spacing / 2.0,
                         ..Default::default()
@@ -1067,7 +1067,7 @@ impl<'a> RenderState<'a> {
         if !self.footnote_defs.is_empty() {
             // Add a separator
             let separator = crate::widgets::hr_with_config(crate::widgets::HrConfig {
-                color: self.config.hr_color,
+                color: Some(self.config.hr_color),
                 thickness: 1.0,
                 margin_y: 8.0,
             });

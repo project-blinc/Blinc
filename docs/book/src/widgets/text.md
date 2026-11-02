@@ -160,14 +160,38 @@ link("Click here", "https://example.com")
 
 // Custom styling
 link("Styled link", "https://example.com")
-    .size(18.0)
-    .color(Color::CYAN)
+    .font_size(18.0)
+    .text_color(Color::CYAN)
     .no_underline()
 
 // Underline only on hover
 link("Hover to see underline", "https://example.com")
     .underline_on_hover()
 ```
+
+### Default colours
+
+Links, blockquotes, rules, lists and tables take their colours from the
+default stylesheet's rules, so a stylesheet restyles them:
+
+| Class | Element | Default |
+|-------|---------|---------|
+| `blinc-link` | a `link()` | `--text-link`, `--primary-hover` on hover |
+| `blinc-blockquote` | a `blockquote()` | `--surface-overlay` fill, `--border` left edge |
+| `blinc-hr` | an `hr()` | `--border` |
+| `blinc-list-marker` | a bullet or number | `--text-tertiary` |
+| `blinc-task-box` | a task item's box, `checked` when done | `--text-tertiary` |
+| `blinc-thead`, `blinc-tfoot` | a table's head and foot | `--surface-overlay` |
+| `blinc-th`, `blinc-td` | text from `th_text()`, `td_text()` | `--text-primary`, `--text-secondary` |
+| `blinc-tr-alt` | an odd row from `striped_tr()` | `--accent-subtle` |
+
+```css
+.blinc-link { color: #0ea5e9; }
+.blinc-tr-alt { background: transparent; }
+```
+
+A colour given to the widget (`text_color`, `hr_color`, `header_bg`, a config
+colour) is set on the element and wins over the rule.
 
 ## From StyledText
 

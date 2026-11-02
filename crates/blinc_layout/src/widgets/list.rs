@@ -127,8 +127,8 @@ fn to_roman(mut n: usize) -> String {
 /// Configuration for list styling
 #[derive(Clone, Debug)]
 pub struct ListConfig {
-    /// Color of list markers
-    pub marker_color: Color,
+    /// Marker colour over the `.blinc-list-marker` rule's, when set.
+    pub marker_color: Option<Color>,
     /// Width reserved for the marker
     pub marker_width: f32,
     /// Gap between marker and content
@@ -145,7 +145,7 @@ impl Default for ListConfig {
     fn default() -> Self {
         let theme = ThemeState::get();
         Self {
-            marker_color: theme.color(ColorToken::TextTertiary),
+            marker_color: None,
             marker_width: 24.0,
             marker_gap: 8.0,
             item_spacing: 4.0,
@@ -518,11 +518,13 @@ impl ListItem {
 
         // Build marker element with provided config
         let marker_str = marker.marker_for(index.unwrap_or(0));
-        let marker_element = text(&marker_str)
-            .size(config.marker_font_size)
-            .color(config.marker_color);
+        let mut marker_element = text(&marker_str).size(config.marker_font_size);
+        if let Some(color) = config.marker_color {
+            marker_element = marker_element.color(color);
+        }
 
         let marker_div = div()
+            .class("blinc-list-marker")
             .w(config.marker_width)
             .flex_shrink_0()
             .child(marker_element);
@@ -620,27 +622,32 @@ impl TaskListItem {
                 <path d="M3 8L6.5 11.5L13 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>"#;
 
-            div()
+            let mark = div()
+                .class("blinc-task-box")
+                .attr("checked", "")
                 .w(checkbox_size)
                 .h(checkbox_size)
                 .flex_shrink_0()
-                .bg(config.marker_color)
                 .rounded(2.0)
                 .items_center()
                 .justify_center()
-                .child(
-                    svg(checkmark_svg)
-                        .size(checkbox_size - 4.0, checkbox_size - 4.0)
-                        .tint(Color::WHITE),
-                )
+                .child(svg(checkmark_svg).size(checkbox_size - 4.0, checkbox_size - 4.0));
+            match config.marker_color {
+                Some(color) => mark.bg(color),
+                None => mark,
+            }
         } else {
             // Empty checkbox - just a bordered div
-            div()
+            let mark = div()
+                .class("blinc-task-box")
                 .w(checkbox_size)
                 .h(checkbox_size)
                 .flex_shrink_0()
-                .rounded(2.0)
-                .border(border_width, config.marker_color)
+                .rounded(2.0);
+            match config.marker_color {
+                Some(color) => mark.border(border_width, color),
+                None => mark.border_width(border_width),
+            }
         };
 
         // Container with consistent width for alignment

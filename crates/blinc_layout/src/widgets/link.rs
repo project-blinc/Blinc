@@ -28,7 +28,7 @@
 use std::ops::{Deref, DerefMut};
 
 use blinc_core::Color;
-use blinc_theme::{ColorToken, ThemeState};
+use blinc_theme::ThemeState;
 
 use crate::div::{Div, ElementBuilder, div};
 use crate::element::RenderProps;
@@ -56,10 +56,8 @@ pub fn open_url(url: &str) {
 /// Configuration for link styling
 #[derive(Clone, Debug)]
 pub struct LinkConfig {
-    /// Normal text color
-    pub text_color: Color,
-    /// Color when hovered
-    pub hover_color: Color,
+    /// Text colour over the `.blinc-link` rule's, when set.
+    pub text_color: Option<Color>,
     /// Font size
     pub font_size: f32,
     /// Whether to show underline always
@@ -70,10 +68,8 @@ pub struct LinkConfig {
 
 impl Default for LinkConfig {
     fn default() -> Self {
-        let theme = ThemeState::get();
         Self {
-            text_color: theme.color(ColorToken::TextLink),
-            hover_color: theme.color(ColorToken::PrimaryHover),
+            text_color: None,
             font_size: 16.0,
             underline: true,
             underline_on_hover_only: false,
@@ -101,10 +97,10 @@ impl Link {
 
         // Build the inner div with text - include all final styling here
         // so that build() and render_props()/children_builders() are consistent
-        let mut text_element = text(&label)
-            .size(config.font_size)
-            .color(config.text_color)
-            .no_cursor(); // Text inside link shouldn't override pointer cursor
+        let mut text_element = text(&label).size(config.font_size).no_cursor();
+        if let Some(color) = config.text_color {
+            text_element = text_element.color(color);
+        }
 
         // Apply underline by default (not hover-only)
         if config.underline && !config.underline_on_hover_only {
@@ -124,7 +120,7 @@ impl Link {
             inner,
             url,
             css_element_id: None,
-            css_classes: Vec::new(),
+            css_classes: vec![blinc_core::intern::intern("blinc-link")],
         }
     }
 
@@ -140,10 +136,10 @@ impl Link {
         let url = self.url;
         let config = LinkConfig::default();
 
-        let mut text_element = text(&label)
-            .size(config.font_size)
-            .color(config.text_color)
-            .no_cursor();
+        let mut text_element = text(&label).size(config.font_size).no_cursor();
+        if let Some(color) = config.text_color {
+            text_element = text_element.color(color);
+        }
 
         if config.underline && !config.underline_on_hover_only {
             text_element = text_element.underline();
@@ -161,8 +157,8 @@ impl Link {
         Self {
             inner,
             url,
-            css_element_id: None,
-            css_classes: Vec::new(),
+            css_element_id: self.css_element_id,
+            css_classes: self.css_classes,
         }
     }
 
@@ -170,12 +166,7 @@ impl Link {
     ///
     /// Note: This rebuilds the inner structure.
     pub fn text_color(self, color: Color) -> Self {
-        self.rebuild_with_config(|cfg| cfg.text_color = color)
-    }
-
-    /// Set the hover color
-    pub fn hover_color(self, color: Color) -> Self {
-        self.rebuild_with_config(|cfg| cfg.hover_color = color)
+        self.rebuild_with_config(|cfg| cfg.text_color = Some(color))
     }
 
     /// Set the font size
@@ -228,10 +219,10 @@ impl Link {
         let mut config = LinkConfig::default();
         modify(&mut config);
 
-        let mut text_element = text(&label)
-            .size(config.font_size)
-            .color(config.text_color)
-            .no_cursor();
+        let mut text_element = text(&label).size(config.font_size).no_cursor();
+        if let Some(color) = config.text_color {
+            text_element = text_element.color(color);
+        }
 
         if config.underline && !config.underline_on_hover_only {
             text_element = text_element.underline();

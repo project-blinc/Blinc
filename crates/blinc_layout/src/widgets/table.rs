@@ -65,33 +65,13 @@ use crate::div::{Div, div};
 use crate::text::{Text, text};
 
 // ============================================================================
-// Default Table Styling (from Theme)
+// Default Table Styling
 // ============================================================================
 
-/// Get header background color from theme
-fn header_bg() -> Color {
-    ThemeState::get().color(ColorToken::SurfaceOverlay)
-}
-
-/// Get border color from theme
-fn border_color() -> Color {
-    ThemeState::get().color(ColorToken::Border)
-}
-
-/// Get header text color from theme
-fn header_text_color() -> Color {
-    ThemeState::get().color(ColorToken::TextPrimary)
-}
-
-/// Get cell text color from theme
-fn cell_text_color() -> Color {
-    ThemeState::get().color(ColorToken::TextSecondary)
-}
-
-/// Get alternating row color from theme (subtle accent)
-fn striped_bg() -> Color {
-    ThemeState::get().color(ColorToken::AccentSubtle)
-}
+// The head and foot fills, the header and data text colours, the striped
+// rows and the separators are the `.blinc-thead`, `.blinc-th`, `.blinc-td`,
+// `.blinc-tr-alt` and `.blinc-table-separator` rules of
+// `crate::ua_styles::UA_STYLES`.
 
 /// Default cell padding (in pixels)
 const CELL_PADDING: f32 = 12.0;
@@ -140,7 +120,7 @@ pub fn table() -> Div {
 ///         .child(th("Value")))
 /// ```
 pub fn thead() -> Div {
-    div().flex_col().bg(header_bg())
+    div().class("blinc-thead").flex_col()
 }
 
 /// Create a table body section
@@ -170,7 +150,7 @@ pub fn tbody() -> Div {
 ///     .child(tr().child(td("Total: 100")))
 /// ```
 pub fn tfoot() -> Div {
-    div().flex_col().bg(header_bg())
+    div().class("blinc-tfoot").flex_col()
 }
 
 // ============================================================================
@@ -316,7 +296,7 @@ impl TableCell {
         div()
             .flex_row()
             .child(self)
-            .child(div().w(1.0).h_full().bg(border_color()))
+            .child(div().class("blinc-table-separator").w(1.0).h_full())
     }
 
     /// Convert to the underlying Div (for advanced customization)
@@ -384,10 +364,7 @@ impl crate::div::ElementBuilder for TableCell {
 /// th("Right Aligned").justify_end()
 /// ```
 pub fn th(content: impl Into<String>) -> TableCell {
-    let txt = text(content)
-        .size(DEFAULT_FONT_SIZE)
-        .color(header_text_color())
-        .bold();
+    let txt = th_text(content);
 
     TableCell::new().child(txt)
 }
@@ -403,9 +380,7 @@ pub fn th(content: impl Into<String>) -> TableCell {
 /// td("123.45").justify_end()  // Right-align numbers
 /// ```
 pub fn td(content: impl Into<String>) -> TableCell {
-    let txt = text(content)
-        .size(DEFAULT_FONT_SIZE)
-        .color(cell_text_color());
+    let txt = td_text(content);
 
     TableCell::new().child(txt)
 }
@@ -444,13 +419,11 @@ pub fn cell() -> TableCell {
 ///     .child(striped_tr(2).child(td("Row 2")))
 /// ```
 pub fn striped_tr(index: usize) -> Div {
-    let bg = if index % 2 == 0 {
-        Color::TRANSPARENT
+    if index % 2 == 0 {
+        tr()
     } else {
-        striped_bg()
-    };
-
-    tr().bg(bg)
+        tr().class("blinc-tr-alt")
+    }
 }
 
 // ============================================================================
@@ -475,8 +448,8 @@ pub struct TableBuilder {
     headers: Vec<String>,
     rows: Vec<Vec<String>>,
     striped: bool,
-    header_bg: Color,
-    border_color: Color,
+    /// The head's fill over the rule's, when set.
+    header_bg: Option<Color>,
 }
 
 impl TableBuilder {
@@ -486,8 +459,7 @@ impl TableBuilder {
             headers: Vec::new(),
             rows: Vec::new(),
             striped: false,
-            header_bg: header_bg(),
-            border_color: border_color(),
+            header_bg: None,
         }
     }
 
@@ -512,13 +484,7 @@ impl TableBuilder {
 
     /// Set header background color
     pub fn header_bg(mut self, color: Color) -> Self {
-        self.header_bg = color;
-        self
-    }
-
-    /// Set border color
-    pub fn border_color(mut self, color: Color) -> Self {
-        self.border_color = color;
+        self.header_bg = Some(color);
         self
     }
 
@@ -532,7 +498,11 @@ impl TableBuilder {
             for h in &self.headers {
                 header_row = header_row.child(th(h.as_str()));
             }
-            tbl = tbl.child(thead().bg(self.header_bg).child(header_row));
+            let head = match self.header_bg {
+                Some(bg) => thead().bg(bg),
+                None => thead(),
+            };
+            tbl = tbl.child(head.child(header_row));
         }
 
         // Build body
@@ -570,8 +540,8 @@ impl Default for TableBuilder {
 /// Use `th()` if you need cell-level styling (padding, background).
 pub fn th_text(content: impl Into<String>) -> Text {
     text(content)
+        .class("blinc-th")
         .size(DEFAULT_FONT_SIZE)
-        .color(header_text_color())
         .bold()
 }
 
@@ -580,9 +550,7 @@ pub fn th_text(content: impl Into<String>) -> Text {
 /// Returns a Text element that you can further style.
 /// Use `td()` if you need cell-level styling (padding, background).
 pub fn td_text(content: impl Into<String>) -> Text {
-    text(content)
-        .size(DEFAULT_FONT_SIZE)
-        .color(cell_text_color())
+    text(content).class("blinc-td").size(DEFAULT_FONT_SIZE)
 }
 
 #[cfg(test)]

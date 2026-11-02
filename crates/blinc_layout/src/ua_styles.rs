@@ -187,6 +187,23 @@ pub const UA_STYLES: &str = concat!(
     border-color: var(--border-secondary);
     cursor: not-allowed;
 }
+
+/* Text and tables. */
+.blinc-link { color: var(--text-link); }
+.blinc-link:hover { color: var(--primary-hover); }
+.blinc-blockquote {
+    background: var(--surface-overlay);
+    border-left: 4px solid var(--border);
+}
+.blinc-hr { background: var(--border); }
+.blinc-list-marker { color: var(--text-tertiary); }
+.blinc-task-box { border-color: var(--text-tertiary); }
+.blinc-task-box[checked] { background: var(--text-tertiary); color: #ffffff; }
+.blinc-thead, .blinc-tfoot { background: var(--surface-overlay); }
+.blinc-th { color: var(--text-primary); }
+.blinc-td { color: var(--text-secondary); }
+.blinc-tr-alt { background: var(--accent-subtle); }
+.blinc-table-separator { background: var(--border); }
 "#,
     "}\n"
 );

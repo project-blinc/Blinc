@@ -14,15 +14,14 @@
 //! ```
 
 use blinc_core::Color;
-use blinc_theme::{ColorToken, ThemeState};
 
 use crate::div::{Div, div};
 
 /// Configuration for horizontal rule styling
 #[derive(Clone, Debug)]
 pub struct HrConfig {
-    /// Line color
-    pub color: Color,
+    /// Line colour over the `.blinc-hr` rule's, when set.
+    pub color: Option<Color>,
     /// Line thickness in pixels
     pub thickness: f32,
     /// Vertical margin above and below the line
@@ -31,9 +30,8 @@ pub struct HrConfig {
 
 impl Default for HrConfig {
     fn default() -> Self {
-        let theme = ThemeState::get();
         Self {
-            color: theme.color(ColorToken::Border),
+            color: None,
             thickness: 1.0,
             margin_y: 2.0,
         }
@@ -62,16 +60,22 @@ pub fn hr() -> Div {
 /// create transparent gaps.
 pub fn hr_with_config(config: HrConfig) -> Div {
     // Outer container with padding (inherits parent background)
-    div().w_full().py(config.margin_y).child(
-        // Inner line with the actual color
-        div().w_full().h(config.thickness).bg(config.color),
-    )
+    div().w_full().py(config.margin_y).child(line(&config))
+}
+
+/// The line itself, `.blinc-hr`.
+fn line(config: &HrConfig) -> Div {
+    let line = div().class("blinc-hr").w_full().h(config.thickness);
+    match config.color {
+        Some(color) => line.bg(color),
+        None => line,
+    }
 }
 
 /// Create a horizontal rule with custom color
 pub fn hr_color(color: Color) -> Div {
     let config = HrConfig {
-        color,
+        color: Some(color),
         ..HrConfig::default()
     };
     hr_with_config(config)
@@ -88,7 +92,7 @@ pub fn hr_with_bg(wrapper_bg: Color) -> Div {
         .w_full()
         .py(config.margin_y)
         .bg(wrapper_bg)
-        .child(div().w_full().h(config.thickness).bg(config.color))
+        .child(line(&config))
 }
 
 /// Create a horizontal rule with custom thickness
@@ -105,6 +109,7 @@ mod tests {
     use super::*;
     use crate::div::ElementBuilder;
     use crate::tree::LayoutTree;
+    use blinc_theme::ThemeState;
 
     fn init_theme() {
         let _ = ThemeState::try_get().unwrap_or_else(|| {

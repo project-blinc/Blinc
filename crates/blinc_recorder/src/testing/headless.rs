@@ -152,8 +152,10 @@ impl Headless {
     pub fn new(width: u32, height: u32) -> Result<Self> {
         let app = BlincApp::new()?;
         blinc_layout::init_text_measurer();
-        // The layout widgets' default look, as the runners register it.
-        blinc_layout::ua_styles::install();
+        // The layout widgets' default look, as the runners register it. Queued
+        // per session: each session's context drains the queue, so a run-once
+        // install would leave every later session in the process without it.
+        blinc_core::context_state::queue_pending_stylesheet(blinc_layout::ua_styles::UA_STYLES);
 
         let mut ctx = WindowedContext::headless(width as f32, height as f32);
         ctx.animations = shared_scheduler();
