@@ -2,7 +2,10 @@
 //! A line or area chart draws its series in the palette, marks the category
 //! under the pointer with a tooltip of its values, and eases to new data.
 
-use blinc_cn::{ChartSeries, PieSlice, area_chart, bar_chart, line_chart, pie_chart};
+use blinc_cn::{
+    ChartBand, ChartSeries, PieSlice, area_chart, bar_chart, comparison_bar_chart, histogram,
+    line_chart, pie_chart, spark_line, threshold_line_chart,
+};
 use blinc_core::reactive::signal;
 use blinc_layout::LayoutNodeId;
 use blinc_layout::div::div;
@@ -466,4 +469,116 @@ fn a_pie_sweeps_in() {
     assert!(!at(&mut ui), "the pie was whole at once");
     ui.settle();
     assert!(at(&mut ui), "the pie never closed");
+}
+
+#[test]
+fn a_sparkline_is_only_its_line() {
+    let Some(mut ui) = session() else { return };
+    ui.mount(|_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(16.0))
+            .child(spark_line(vec![1.0, 3.0, 2.0, 5.0, 4.0]).color("var(--chart-2)"))
+    });
+    ui.leave().settle();
+    assert!(
+        all(&ui, "cn-chart-axis").is_empty(),
+        "a sparkline has no labels"
+    );
+    let plot = ui
+        .tree()
+        .get_absolute_bounds(all(&ui, "cn-chart-plot")[0])
+        .unwrap();
+    assert_eq!((plot.width, plot.height), (100.0, 24.0));
+    let x = (plot.x + plot.width / 2.0) as u32;
+    assert!(
+        top_of(&mut ui, x, token("chart-2")).is_some(),
+        "no line in its colour"
+    );
+}
+
+#[test]
+fn a_threshold_chart_colours_dots_by_band() {
+    let Some(mut ui) = session() else { return };
+    ui.mount(|_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(16.0))
+            .child(
+                threshold_line_chart()
+                    .values(vec![12.0, 14.0, 20.0, 28.0])
+                    .band(ChartBand::new(0.0, 16.67).label("60 fps"))
+                    .band(ChartBand::new(16.67, 33.33).label("30 fps"))
+                    .baseline(16.67),
+            )
+    });
+    ui.leave().settle();
+    assert_eq!(texts(&ui, "cn-chart-band-label"), ["60 fps", "30 fps"]);
+    assert!(
+        all(&ui, "cn-chart-legend").is_empty(),
+        "a legend for one series"
+    );
+    ui.assert_snapshot("cn_chart_threshold");
+}
+
+#[test]
+fn a_histogram_counts_into_bins() {
+    let Some(mut ui) = session() else { return };
+    ui.mount(|_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(16.0))
+            .child(
+                histogram(vec![0.0, 1.0, 1.5, 2.0, 9.0, 10.0])
+                    .bins(5)
+                    .marker(5.0),
+            )
+    });
+    ui.leave().settle();
+    // Five bins from 0 to 10; the first, from 0, holds 0, 1 and 1.5.
+    let plot = ui
+        .tree()
+        .get_absolute_bounds(all(&ui, "cn-chart-plot")[0])
+        .unwrap();
+    let zero = all(&ui, "cn-chart-axis")
+        .into_iter()
+        .filter(|n| texts_of(&ui, *n) == "0")
+        .map(|n| ui.tree().get_absolute_bounds(n).unwrap())
+        .max_by(|a, b| a.y.total_cmp(&b.y))
+        .expect("the first bin's label");
+    ui.move_to(zero.x + zero.width / 2.0, plot.y + 60.0)
+        .settle();
+    assert_eq!(texts(&ui, "cn-chart-tooltip-title"), ["0"]);
+    assert_eq!(texts(&ui, "cn-chart-tooltip-value"), ["3"]);
+    ui.assert_snapshot("cn_chart_histogram");
+}
+
+#[test]
+fn a_comparison_notes_each_change() {
+    let Some(mut ui) = session() else { return };
+    ui.mount(|_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(16.0))
+            .child(
+                comparison_bar_chart()
+                    .item("Render", 12.5, 14.2)
+                    .item("Layout", 3.2, 3.0)
+                    .item("Composite", 2.1, 2.3),
+            )
+    });
+    ui.leave().settle();
+    assert_eq!(texts(&ui, "cn-chart-note"), ["+13.6%", "-6.3%", "+9.5%"]);
+    let registry = ui.tree().element_registry();
+    let tones: Vec<Option<String>> = all(&ui, "cn-chart-note")
+        .into_iter()
+        .map(|n| registry.attribute(n, "data-tone"))
+        .collect();
+    assert_eq!(tones, [Some("bad".into()), Some("good".into()), None]);
+    assert_eq!(texts(&ui, "cn-chart-legend-name"), ["Baseline", "Current"]);
+    ui.assert_snapshot("cn_chart_comparison");
 }

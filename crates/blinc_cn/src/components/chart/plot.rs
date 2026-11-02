@@ -9,7 +9,7 @@ use blinc_layout::text_measure::{TextLayoutOptions, measure_text_with_options};
 
 use super::ease::Easer;
 use super::math::{flatten, follow, nice_ticks};
-use super::{ChartCurve, ChartSeries};
+use super::{ChartBand, ChartCurve, ChartMarker, ChartSeries};
 
 /// Room above the plot, and below it for the category labels.
 pub(super) const TOP: f32 = 8.0;
@@ -21,6 +21,10 @@ const LABEL_SIZE: f32 = 12.0;
 const PALETTE: usize = 5;
 
 pub(super) type Format = Arc<dyn Fn(f64) -> String + Send + Sync>;
+/// A note per category and its tone, `"bad"` or `"good"`.
+pub(super) type Notes = Computed<Vec<Option<(String, Option<&'static str>)>>>;
+/// Dashed lines down a plot: where across it, from 0 to 1, and a colour.
+pub(super) type CategoryMarks = Computed<Vec<(f32, Option<String>)>>;
 
 /// What a chart draws and how.
 #[derive(Clone)]
@@ -39,6 +43,30 @@ pub(super) struct Options {
     pub format: Format,
     pub min: Option<f64>,
     pub max: Option<f64>,
+    /// A sparkline: points edge to edge in a hairline margin, no parts.
+    pub bare: bool,
+    /// Value ranges shaded behind the data.
+    pub bands: Vec<ChartBand>,
+    /// Dots take the colour of the band their value is in.
+    pub dots_by_band: bool,
+    /// Dashed lines across the plot at values.
+    pub markers: Vec<ChartMarker>,
+    /// Dashed lines down the plot, at fractions of its width.
+    pub category_markers: Option<CategoryMarks>,
+    /// The space between neighbouring bars, in place of a share of the slot.
+    pub gap: Option<f32>,
+    /// Room right of the plot for a note per category.
+    pub notes: bool,
+}
+
+/// The colour band `k` takes when it has none of its own: good, warning,
+/// bad.
+pub(super) fn band_color(k: usize) -> &'static str {
+    match k {
+        0 => "var(--success)",
+        1 => "var(--warning)",
+        _ => "var(--error)",
+    }
 }
 
 /// Where things are: the plot's box inside the canvas and the value range
@@ -46,6 +74,8 @@ pub(super) struct Options {
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Geometry {
     pub horizontal: bool,
+    /// Points run edge to edge rather than at slot centres.
+    pub edge: bool,
     pub lo: f64,
     pub hi: f64,
     pub ticks: Vec<f64>,
@@ -92,15 +122,22 @@ impl Geometry {
             4.0
         };
         let y1 = opts.height - if opts.axes { BOTTOM } else { 4.0 };
+        let right = if opts.notes { 52.0 } else { RIGHT };
+        let (x0, y0, x1, y1) = if opts.bare {
+            (1.0, 2.0, width - 1.0, opts.height - 2.0)
+        } else {
+            (x0, TOP, width - right, y1)
+        };
         Self {
             horizontal,
+            edge: opts.bare,
             lo,
             hi,
             ticks,
             x0,
-            y0: TOP,
-            x1: (width - RIGHT).max(x0 + 1.0),
-            y1: y1.max(TOP + 1.0),
+            y0,
+            x1: x1.max(x0 + 1.0),
+            y1: y1.max(y0 + 1.0),
         }
     }
 
@@ -135,8 +172,16 @@ impl Geometry {
         self.categories().0 + i as f32 * self.slot(n)
     }
 
-    /// The centre of category `i` of `n` along the category axis.
+    /// The centre of category `i` of `n` along the category axis; for a
+    /// sparkline, its point edge to edge.
     pub fn centre(&self, i: usize, n: usize) -> f32 {
+        if self.edge && !self.horizontal {
+            return if n > 1 {
+                self.x0 + i as f32 / (n - 1) as f32 * (self.x1 - self.x0)
+            } else {
+                (self.x0 + self.x1) / 2.0
+            };
+        }
         self.start(i, n) + self.slot(n) / 2.0
     }
 
@@ -169,6 +214,10 @@ fn domain(series: &[ChartSeries], opts: &Options) -> (f64, f64) {
             lo = lo.min(*v);
             hi = hi.max(*v);
         }
+    }
+    for band in &opts.bands {
+        lo = lo.min(band.from);
+        hi = hi.max(band.to);
     }
     if !lo.is_finite() {
         (lo, hi) = (0.0, 1.0);
@@ -283,27 +332,24 @@ impl Plot {
         // its distance field on any target, multisampled or not.
         if opts.grid {
             let grid = ink("var(--cn-chart-grid)", Color::rgba(0.5, 0.5, 0.5, 0.4));
-            // Dashes 3 on, 4 off, across the plot at each tick, or down it
-            // for horizontal bars; a pixel wide on a pixel row.
+            // Across the plot at each tick, or down it for horizontal bars.
             for t in &g.ticks {
                 let p = g.at(*t).round();
-                let (from, to) = if g.horizontal {
-                    (g.y0, g.y1)
-                } else {
-                    (g.x0, g.x1)
-                };
-                let mut q = from;
-                while q < to {
-                    let len = (to - q).min(3.0);
-                    let dash = if g.horizontal {
-                        Rect::new(p, q, 1.0, len)
-                    } else {
-                        Rect::new(q, p, len, 1.0)
-                    };
-                    ctx.fill_rect(dash, CornerRadius::ZERO, Brush::Solid(grid));
-                    q += 7.0;
-                }
+                dashes(ctx, &g, !g.horizontal, p, (3.0, 4.0), 1.0, grid);
             }
+        }
+        for (k, band) in opts.bands.iter().enumerate() {
+            let c = ink(
+                band.color.as_deref().unwrap_or(band_color(k)),
+                Color::rgb(0.5, 0.5, 0.5),
+            );
+            let (a, b) = (g.at(band.to), g.at(band.from));
+            let rect = Rect::new(g.x0, a.min(b), g.x1 - g.x0, (b - a).abs());
+            ctx.fill_rect(
+                rect,
+                CornerRadius::ZERO,
+                Brush::Solid(c.with_alpha(c.a * 0.12)),
+            );
         }
         // The category under the pointer: a band behind its bars, a line
         // through its points.
@@ -332,6 +378,29 @@ impl Plot {
         } else {
             self.draw_lines(ctx, &g, &series, &values, at);
         }
+        let cursor = ink("var(--cn-chart-cursor)", Color::rgb(0.6, 0.6, 0.6));
+        let own = |css: &Option<String>| css.as_deref().map_or(cursor, |c| ink(c, cursor));
+        for m in &opts.markers {
+            let c = own(&m.color).with_alpha(0.9);
+            dashes(ctx, &g, true, g.at(m.value).round(), (6.0, 4.0), 1.5, c);
+        }
+        for (at, color) in opts
+            .category_markers
+            .as_ref()
+            .and_then(|m| m.try_get())
+            .unwrap_or_default()
+        {
+            let x = (g.x0 + at.clamp(0.0, 1.0) * (g.x1 - g.x0)).round();
+            dashes(
+                ctx,
+                &g,
+                false,
+                x,
+                (6.0, 4.0),
+                1.5,
+                own(&color).with_alpha(0.9),
+            );
+        }
     }
 
     /// Bars side by side in each slot, or piled when stacked, rounded at
@@ -351,7 +420,10 @@ impl Plot {
             |k: usize, i: usize| values.get(k).and_then(|v| v.get(i)).copied().unwrap_or(0.0);
         for i in 0..n {
             let (s, size) = (g.start(i, n), g.slot(n));
-            let pad = size * if groups > 1 { 0.12 } else { 0.18 };
+            let pad = match self.opts.gap {
+                Some(gap) => gap / 2.0,
+                None => size * if groups > 1 { 0.12 } else { 0.18 },
+            };
             let inner = size - pad * 2.0;
             let gap = if groups > 1 {
                 (inner * 0.08).min(4.0)
@@ -453,13 +525,14 @@ impl Plot {
             // The line as capsules along the flattened curve: their round
             // ends make the joins.
             let points = flatten(&xs, &ys, opts.curve);
+            let width = if opts.bare { 1.5 } else { 2.0 };
             ctx.sdf_build(&mut |b| {
                 for pair in points.windows(2) {
                     let (p, q) = (
                         Point::new(pair[0].0, pair[0].1),
                         Point::new(pair[1].0, pair[1].1),
                     );
-                    let segment = b.line(p, q, 2.0);
+                    let segment = b.line(p, q, width);
                     b.fill(segment, Brush::Solid(c));
                 }
             });
@@ -470,10 +543,50 @@ impl Plot {
                 }
                 let centre = Point::new(xs[i], ys[i]);
                 let (ring, dot) = if big { (5.0, 3.5) } else { (3.5, 2.5) };
+                // A dot in a band takes the band's colour.
+                let value = vals.get(i).copied().unwrap_or(0.0);
+                let inside = opts
+                    .dots_by_band
+                    .then(|| {
+                        opts.bands
+                            .iter()
+                            .enumerate()
+                            .rev()
+                            .find(|(_, b)| value >= b.from && value <= b.to)
+                    })
+                    .flatten();
+                let fill = inside.map_or(c, |(k, b)| {
+                    ink(b.color.as_deref().unwrap_or(band_color(k)), c)
+                });
                 ctx.fill_circle(centre, ring, Brush::Solid(surface));
-                ctx.fill_circle(centre, dot, Brush::Solid(c));
+                ctx.fill_circle(centre, dot, Brush::Solid(fill));
             }
         }
+    }
+}
+
+/// A dashed line through the plot at `p`: across it (along x) or down it,
+/// `on` long with `off` between, `thickness` wide.
+fn dashes(
+    ctx: &mut dyn DrawContext,
+    g: &Geometry,
+    across: bool,
+    p: f32,
+    (on, off): (f32, f32),
+    thickness: f32,
+    color: Color,
+) {
+    let (from, to) = if across { (g.x0, g.x1) } else { (g.y0, g.y1) };
+    let mut q = from;
+    while q < to {
+        let len = (to - q).min(on);
+        let dash = if across {
+            Rect::new(q, p, len, thickness)
+        } else {
+            Rect::new(p, q, thickness, len)
+        };
+        ctx.fill_rect(dash, CornerRadius::ZERO, Brush::Solid(color));
+        q += on + off;
     }
 }
 
@@ -523,6 +636,20 @@ mod tests {
             format: Arc::new(super::super::math::compact),
             min: None,
             max: None,
+
+            bare: false,
+
+            bands: Vec::new(),
+
+            dots_by_band: false,
+
+            markers: Vec::new(),
+
+            category_markers: None,
+
+            gap: None,
+
+            notes: false,
         }
     }
 

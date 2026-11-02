@@ -150,9 +150,8 @@ pub mod prelude {
         Card, CardContent, CardFooter, CardHeader, card, card_content, card_footer, card_header,
     };
     pub use crate::components::chart::{
-        ChartBuilder, ChartCurve, ChartSeries, ComparisonBarChart, ComparisonBarChartBuilder,
-        Histogram, HistogramBuilder, PieBuilder, PieSlice, SparkLine, SparkLineBuilder,
-        ThresholdBand, ThresholdLineChart, ThresholdLineChartBuilder, area_chart, bar_chart,
+        ChartBand, ChartBuilder, ChartCurve, ChartMarker, ChartSeries, ComparisonBuilder,
+        ComparisonItem, HistogramBuilder, PieBuilder, PieSlice, area_chart, bar_chart,
         comparison_bar_chart, histogram, line_chart, pie_chart, spark_line, threshold_line_chart,
     };
     pub use crate::components::checkbox::{Checkbox, CheckboxSize, checkbox};

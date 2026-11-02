@@ -1,8 +1,9 @@
 //! Charts: data drawn on a canvas, with the axes, legend and tooltip as
 //! ordinary elements over and under it.
 //!
-//! Line and area charts share one plot. Moving the pointer across it marks
-//! the category under it and shows each series' value there; data given as a
+//! Line, area and bar charts, sparklines, threshold charts, histograms and
+//! comparisons share one plot; pies have their own. Moving the pointer
+//! across a chart marks the category under it and shows its values there; data given as a
 //! Signal or Computed is followed, the drawing easing from the old values to
 //! the new. Series take `--chart-1` to `--chart-5` in turn; the grid, cursor
 //! and dot rings take `--cn-chart-grid`, `--cn-chart-cursor` and
@@ -19,13 +20,16 @@
 //! ```
 
 mod ease;
-mod legacy;
+mod extras;
 mod math;
 mod pie;
 mod plot;
 mod view;
 
-pub use legacy::*;
+pub use extras::{
+    ComparisonBuilder, ComparisonItem, HistogramBuilder, comparison_bar_chart, histogram,
+    spark_line, threshold_line_chart,
+};
 pub use pie::{PieBuilder, PieSlice, pie_chart};
 pub use view::{ChartBuilder, area_chart, bar_chart, line_chart};
 
@@ -48,6 +52,57 @@ impl ChartSeries {
     }
 
     /// Its own colour, any CSS colour, in place of the palette's.
+    pub fn color(mut self, css: impl Into<String>) -> Self {
+        self.color = Some(css.into());
+        self
+    }
+}
+
+/// A value range shaded behind a chart, such as a budget.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChartBand {
+    pub from: f64,
+    pub to: f64,
+    /// Any CSS colour; good, warning and bad in turn if unset.
+    pub color: Option<String>,
+    /// Written at the band's top right.
+    pub label: Option<String>,
+}
+
+impl ChartBand {
+    pub fn new(from: f64, to: f64) -> Self {
+        Self {
+            from,
+            to,
+            color: None,
+            label: None,
+        }
+    }
+
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    pub fn color(mut self, css: impl Into<String>) -> Self {
+        self.color = Some(css.into());
+        self
+    }
+}
+
+/// A dashed reference line at a value, such as a target or a noise floor.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChartMarker {
+    pub value: f64,
+    /// Any CSS colour; the cursor's if unset.
+    pub color: Option<String>,
+}
+
+impl ChartMarker {
+    pub fn new(value: f64) -> Self {
+        Self { value, color: None }
+    }
+
     pub fn color(mut self, css: impl Into<String>) -> Self {
         self.color = Some(css.into());
         self

@@ -1030,7 +1030,6 @@ pub const CN_STYLES: &str = concat!(
     font-size: var(--text-xs);
     color: var(--text-secondary);
 }
-.cn-chart-legend[data-hidden] { display: none; }
 .cn-chart-legend-item { gap: 6px; }
 .cn-chart-swatch { border-radius: 3px; }
 .cn-chart-c1 { background: var(--chart-1); }
@@ -1052,6 +1051,10 @@ pub const CN_STYLES: &str = concat!(
 .cn-chart-tooltip-row { gap: 8px; }
 .cn-chart-tooltip-name { flex-grow: 1; color: var(--text-secondary); }
 .cn-chart-tooltip-value { margin-left: 12px; font-weight: 500; color: var(--text-primary); }
+.cn-chart-band-label { font-size: 10px; color: var(--text-secondary); }
+.cn-chart-note { font-size: var(--text-xs); font-weight: 500; color: var(--text-secondary); }
+.cn-chart-note[data-tone="bad"] { color: var(--error); }
+.cn-chart-note[data-tone="good"] { color: var(--success); }
 .cn-chart-pie-total { font-size: var(--text-2xl); font-weight: 700; color: var(--text-primary); }
 .cn-chart-pie-caption { font-size: var(--text-xs); color: var(--text-secondary); }
 

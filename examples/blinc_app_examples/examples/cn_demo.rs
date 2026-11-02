@@ -3943,11 +3943,10 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                     .gap(8.0)
                                     .child(text("Sales").size(t_sm()).color(text_secondary))
                                     .child(
-                                        cn::spark_line(&[1.0, 2.5, 2.0, 3.5, 3.0, 4.5, 4.0, 5.0])
-                                            .width(100.0)
-                                            .height(24.0)
-                                            .color(theme.color(ColorToken::Success))
-                                            .build(),
+                                        cn::spark_line(vec![
+                                            1.0, 2.5, 2.0, 3.5, 3.0, 4.5, 4.0, 5.0,
+                                        ])
+                                        .color("var(--success)"),
                                     )
                                     .child(
                                         text("+25%")
@@ -3962,12 +3961,11 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                     .gap(8.0)
                                     .child(text("Errors").size(t_sm()).color(text_secondary))
                                     .child(
-                                        cn::spark_line(&[5.0, 4.0, 4.5, 3.0, 3.5, 2.0, 2.5, 1.0])
-                                            .width(100.0)
-                                            .height(24.0)
-                                            .color(theme.color(ColorToken::Error))
-                                            .filled()
-                                            .build(),
+                                        cn::spark_line(vec![
+                                            5.0, 4.0, 4.5, 3.0, 3.5, 2.0, 2.5, 1.0,
+                                        ])
+                                        .color("var(--error)")
+                                        .filled(),
                                     )
                                     .child(
                                         text("-60%")
@@ -3981,14 +3979,9 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                                     .items_center()
                                     .gap(8.0)
                                     .child(text("Latency").size(t_sm()).color(text_secondary))
-                                    .child(
-                                        cn::spark_line(&[
-                                            45.0, 48.0, 42.0, 50.0, 47.0, 45.0, 43.0, 46.0,
-                                        ])
-                                        .width(100.0)
-                                        .height(24.0)
-                                        .build(),
-                                    )
+                                    .child(cn::spark_line(vec![
+                                        45.0, 48.0, 42.0, 50.0, 47.0, 45.0, 43.0, 46.0,
+                                    ]))
                                     .child(text("46ms").size(t_xs()).color(text_secondary)),
                             ),
                     ),
@@ -4006,14 +3999,16 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                     .child(
                         cn::threshold_line_chart()
                             .width(450.0)
-                            .height(160.0)
-                            .data(&[
+                            .height(180.0)
+                            .values(vec![
                                 12.5, 13.2, 14.8, 15.1, 14.5, 16.2, 15.8, 17.4, 18.2, 19.5, 18.8,
                                 20.1, 22.5, 24.8, 28.2, 25.5,
                             ])
-                            .regression_bands(16.67, 33.33) // 60fps and 30fps budgets
-                            .baseline(16.67)
-                            .build(),
+                            // The 60 and 30 fps frame budgets.
+                            .band(ChartBand::new(0.0, 16.67).label("60 fps"))
+                            .band(ChartBand::new(16.67, 33.33).label("30 fps"))
+                            .format(|v| format!("{v}ms"))
+                            .baseline(16.67),
                     ),
             )
             // Histogram
@@ -4027,12 +4022,12 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             .color(text_secondary),
                     )
                     .child(
-                        cn::histogram(&generate_diff_data())
-                            .width(400.0)
-                            .height(120.0)
-                            .bins(40)
-                            .threshold_line(5.0, "noise floor")
-                            .build(),
+                        div().w(400.0).child(
+                            cn::histogram(generate_diff_data())
+                                .height(160.0)
+                                .bins(30)
+                                .marker(5.0),
+                        ),
                     ),
             )
             // Comparison Bar Chart
@@ -4046,15 +4041,16 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             .color(text_secondary),
                     )
                     .child(
-                        cn::comparison_bar_chart()
-                            .width(450.0)
-                            .height(180.0)
-                            .item("Render time", 12.5, 14.2)
-                            .item("Layout time", 3.2, 3.0)
-                            .item("Paint time", 8.4, 11.8)
-                            .item("Composite", 2.1, 2.3)
-                            .threshold(10.0)
-                            .build(),
+                        div().w(450.0).child(
+                            cn::comparison_bar_chart()
+                                .height(200.0)
+                                .item("Render", 12.5, 14.2)
+                                .item("Layout", 3.2, 3.0)
+                                .item("Paint", 8.4, 11.8)
+                                .item("Composite", 2.1, 2.3)
+                                .format(|v| format!("{v}ms"))
+                                .threshold(10.0),
+                        ),
                     ),
             ),
     )

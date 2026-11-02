@@ -180,11 +180,36 @@ label carries `data-hidden`), `.cn-chart-legend` with `.cn-chart-legend-item`
 and `.cn-chart-swatch`, and `.cn-chart-tooltip` with its `-title`, `-row`,
 `-name` and `-value`.
 
-### Other charts
+### Sparklines, thresholds, histograms and comparisons
 
-`cn::spark_line(..)`, `cn::threshold_line_chart()`, `cn::histogram(..)` and
-`cn::comparison_bar_chart()` are drawn as before, without the shared plot,
-until they move onto it.
+These are drawn on the same plot:
+
+```rust
+// A trend beside text: no axes, grid, legend or tooltip, 100 by 24.
+cn::spark_line(vec![1.0, 2.5, 2.0, 3.5, 3.0]).color("var(--success)").filled()
+
+// Values against budgets: each dot takes its band's colour.
+cn::threshold_line_chart()
+    .values(frame_times)
+    .band(ChartBand::new(0.0, 16.67).label("60 fps"))
+    .band(ChartBand::new(16.67, 33.33).label("30 fps"))
+    .baseline(16.67)
+
+// Values counted into equal-width bins.
+cn::histogram(diffs).bins(30).log_scale().marker(5.0)
+
+// Baseline against current per category, the change written beside it.
+cn::comparison_bar_chart()
+    .item("Render", 12.5, 14.2)
+    .item("Layout", 3.2, 3.0)
+    .threshold(10.0)
+```
+
+Any chart takes `.band(..)` for a shaded value range (good, warning and bad in
+turn unless given a colour) and `.marker(ChartMarker::new(v))` for a dashed
+line at a value. A band's label is `.cn-chart-band-label`; a comparison's notes
+are `.cn-chart-note` with `data-tone="bad"` past the threshold or `"good"` for a
+decrease.
 
 ## Table
 

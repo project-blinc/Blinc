@@ -16,7 +16,9 @@ use blinc_layout::text_measure::{TextLayoutOptions, measure_text_with_options};
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
 
 use super::math::compact;
-use super::plot::{BOTTOM, Geometry, Options, Plot, TOP, count, palette_class, palette_ink};
+use super::plot::{
+    BOTTOM, CategoryMarks, Geometry, Notes, Options, Plot, TOP, count, palette_class, palette_ink,
+};
 use super::{ChartCurve, ChartSeries};
 
 /// Builder for a line or area chart; usable inline as an element.
@@ -27,6 +29,10 @@ pub struct ChartBuilder {
     labels: Option<Reactive<Vec<String>>>,
     legend: Option<bool>,
     width: Option<f32>,
+    /// The colour of series that have none of their own.
+    tint: Option<String>,
+    /// A note per category right of the plot, and its tone.
+    notes: Option<Notes>,
     classes: Vec<String>,
     bounds: LayoutBoundsStorage,
     built: OnceCell<(Div, Arc<Plot>)>,
@@ -49,12 +55,28 @@ impl ChartBuilder {
                 format: Arc::new(compact),
                 min: None,
                 max: None,
+
+                bare: false,
+
+                bands: Vec::new(),
+
+                dots_by_band: false,
+
+                markers: Vec::new(),
+
+                category_markers: None,
+
+                gap: None,
+
+                notes: false,
             },
             series: Vec::new(),
             data: None,
             labels: None,
             legend: None,
             width: None,
+            tint: None,
+            notes: None,
             classes: Vec::new(),
             bounds: Arc::new(Mutex::new(None)),
             built: OnceCell::new(),
@@ -180,12 +202,82 @@ impl ChartBuilder {
         self
     }
 
+    /// The colour, any CSS colour, of the series that have none of their
+    /// own; for a single series, its colour.
+    pub fn color(mut self, css: impl Into<String>) -> Self {
+        self.tint = Some(css.into());
+        self
+    }
+
+    /// A value range shaded behind the data.
+    pub fn band(mut self, band: super::ChartBand) -> Self {
+        self.opts.bands.push(band);
+        self
+    }
+
+    /// A dashed line across the plot at a value.
+    pub fn marker(mut self, marker: super::ChartMarker) -> Self {
+        self.opts.markers.push(marker);
+        self
+    }
+
+    /// The space between neighbouring bars, in pixels.
+    pub fn gap(mut self, gap: f32) -> Self {
+        self.opts.gap = Some(gap);
+        self
+    }
+
+    /// Fill down to the axis.
+    pub(super) fn area(mut self) -> Self {
+        self.opts.area = true;
+        self
+    }
+
+    /// A sparkline: the data edge to edge, with no axes, grid, legend or
+    /// tooltip.
+    pub(super) fn bare(mut self) -> Self {
+        (
+            self.opts.bare,
+            self.opts.axes,
+            self.opts.grid,
+            self.opts.tooltip,
+        ) = (true, false, false, false);
+        self.legend = Some(false);
+        self
+    }
+
+    pub(super) fn dots_by_band(mut self) -> Self {
+        self.opts.dots_by_band = true;
+        self
+    }
+
+    pub(super) fn category_markers(mut self, markers: CategoryMarks) -> Self {
+        self.opts.category_markers = Some(markers);
+        self
+    }
+
+    pub(super) fn notes(mut self, notes: Notes) -> Self {
+        self.opts.notes = true;
+        self.notes = Some(notes);
+        self
+    }
+
     fn get_or_build(&self) -> &(Div, Arc<Plot>) {
         ::blinc_layout::build_once::build_once(&self.built, || self.build_chart())
     }
 
     fn build_chart(&self) -> (Div, Arc<Plot>) {
         let series = list_of(self.data.clone(), self.series.clone());
+        let series = match self.tint.clone() {
+            None => series,
+            Some(tint) => computed(move |_: &ReactiveGraph| {
+                let mut list = series.try_get().unwrap_or_default();
+                for s in list.iter_mut().filter(|s| s.color.is_none()) {
+                    s.color = Some(tint.clone());
+                }
+                list
+            }),
+        };
         let labels = {
             let (source, series) = (self.labels.clone(), series.clone());
             computed(move |g: &ReactiveGraph| match &source {
@@ -237,6 +329,12 @@ impl ChartBuilder {
                     .child(category_axis(&geometry, &labels))
             };
         }
+        for band in self.opts.bands.iter().filter(|b| b.label.is_some()) {
+            area = area.child(band_label(&geometry, band));
+        }
+        if let Some(notes) = &self.notes {
+            area = area.child(super::extras::notes(&geometry, notes, &self.opts));
+        }
         if self.opts.tooltip {
             area = with_hover(area, &plot, &geometry, &labels);
         }
@@ -262,13 +360,50 @@ fn list_of(
 ) -> Computed<Vec<ChartSeries>> {
     match data {
         None => computed(move |_: &ReactiveGraph| constant.clone()),
-        Some(Reactive::Const(list)) => computed(move |_: &ReactiveGraph| list.clone()),
-        Some(Reactive::Bound(state)) => {
+        Some(data) => source(data),
+    }
+}
+
+/// A value, Signal or Computed as a Computed.
+pub(super) fn source<T>(data: Reactive<T>) -> Computed<T>
+where
+    T: Clone + Default + Send + Sync + 'static,
+{
+    match data {
+        Reactive::Const(v) => computed(move |_: &ReactiveGraph| v.clone()),
+        Reactive::Bound(state) => {
             let signal = state.signal();
             computed(move |g: &ReactiveGraph| g.get(signal).unwrap_or_default())
         }
-        Some(Reactive::Computed(c)) => c,
+        Reactive::Computed(c) => c,
     }
+}
+
+/// A band's label at its top right, inside the plot.
+fn band_label(geometry: &Computed<Geometry>, band: &super::ChartBand) -> Div {
+    let (text, to, place) = (
+        band.label.clone().unwrap_or_default(),
+        band.to,
+        geometry.clone(),
+    );
+    div()
+        .absolute()
+        .left(0.0)
+        .top(0.0)
+        .w_full()
+        .h_full()
+        .flex_col()
+        .pointer_events_none()
+        .child(div().flex_shrink_0().h(computed(move |_: &ReactiveGraph| {
+            place.try_get().map_or(0.0, |g| g.at(to) + 2.0)
+        })))
+        .child(
+            div()
+                .flex_row()
+                .justify_end()
+                .pr(2.5)
+                .child(label("cn-chart-band-label", move |_| text.clone())),
+        )
 }
 
 /// A label part with bound text.
@@ -680,39 +815,39 @@ pub(super) fn mark(own: Option<&str>, k: usize) -> Div {
 
 /// The series' names and colours, shown for more than one series unless set.
 fn legend(series: &Computed<Vec<ChartSeries>>, shown: Option<bool>) -> Div {
-    let (hidden, indices, items) = (series.clone(), series.clone(), series.clone());
-    div()
-        .class("cn-chart-legend")
-        .flex_row()
-        .flex_wrap()
-        .justify_center()
-        .attr_when(
-            "data-hidden",
-            "",
-            computed(move |_: &ReactiveGraph| {
-                let n = hidden.try_get().map_or(0, |s| s.len());
-                !shown.unwrap_or(n > 1)
-            }),
-        )
-        .for_each(
-            computed(move |_: &ReactiveGraph| {
-                (0..indices.try_get().map_or(0, |s| s.len())).collect::<Vec<usize>>()
-            }),
-            |k: &usize| *k,
-            move |k: usize| {
-                let name = items.clone();
-                div()
-                    .class("cn-chart-legend-item")
-                    .flex_row()
-                    .items_center()
-                    .child(swatch(&items.try_get().unwrap_or_default(), k))
-                    .child(label("cn-chart-legend-name", move |_| {
-                        name.try_get()
-                            .and_then(|s| s.get(k).map(|s| s.name.clone()))
-                            .unwrap_or_default()
-                    }))
-            },
-        )
+    let (count, series) = (series.clone(), series.clone());
+    // Built only while shown.
+    let visible = computed(move |_: &ReactiveGraph| {
+        let n = count.try_get().map_or(0, |s| s.len());
+        shown.unwrap_or(n > 1)
+    });
+    div().show(visible, move || {
+        let (indices, items) = (series.clone(), series.clone());
+        div()
+            .class("cn-chart-legend")
+            .flex_row()
+            .flex_wrap()
+            .justify_center()
+            .for_each(
+                computed(move |_: &ReactiveGraph| {
+                    (0..indices.try_get().map_or(0, |s| s.len())).collect::<Vec<usize>>()
+                }),
+                |k: &usize| *k,
+                move |k: usize| {
+                    let name = items.clone();
+                    div()
+                        .class("cn-chart-legend-item")
+                        .flex_row()
+                        .items_center()
+                        .child(swatch(&items.try_get().unwrap_or_default(), k))
+                        .child(label("cn-chart-legend-name", move |_| {
+                            name.try_get()
+                                .and_then(|s| s.get(k).map(|s| s.name.clone()))
+                                .unwrap_or_default()
+                        }))
+                },
+            )
+    })
 }
 
 impl ElementBuilder for ChartBuilder {
