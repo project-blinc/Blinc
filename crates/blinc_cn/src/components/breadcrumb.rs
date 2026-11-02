@@ -139,16 +139,9 @@ pub struct Breadcrumb {
 
 impl Breadcrumb {
     fn from_builder(builder: &BreadcrumbBuilder) -> Self {
-        let theme = ThemeState::get();
-        let text_primary = theme.color(ColorToken::TextPrimary);
-        let text_secondary = theme.color(ColorToken::TextSecondary);
-        let text_tertiary = theme.color(ColorToken::TextTertiary);
-
         let font_size = builder.size.font_size();
         let icon_size = builder.size.icon_size();
         let gap = builder.size.gap();
-
-        let key = builder.key.get();
         let items_count = builder.items.len();
 
         let mut container = div()
@@ -157,114 +150,57 @@ impl Breadcrumb {
             .items_center()
             .gap(gap);
 
+        // Colours and weight are the `.cn-breadcrumb-*` rules: a link
+        // carries `data-link`, the current page `aria-current="page"`.
         for (idx, item) in builder.items.iter().enumerate() {
             let is_last = idx == items_count - 1;
-            let is_clickable = item.is_clickable() && !is_last;
-
-            // Build the item element
-            if is_clickable {
-                // Clickable item with hover state
-                let item_key = format!("{}_item_{}", key, idx);
-                let label = item.label.clone();
-                let icon = item.icon.clone();
-                let on_click = item.on_click.clone();
-
-                // The colour follows the pointer, so hovering patches the
-                // text and the icon instead of rebuilding the item.
-                let interaction = Interaction::keyed(&item_key);
-                let hovered = interaction.hovered().signal();
-                let (hover_color, rest_color) = (theme.color(ColorToken::Primary), text_secondary);
-                let text_color = computed(move |g: &ReactiveGraph| {
-                    if g.get(hovered).unwrap_or(false) {
-                        hover_color
-                    } else {
-                        rest_color
-                    }
-                });
-
-                let mut item_div = div()
-                    .class("cn-breadcrumb-item")
-                    .flex_row()
-                    .items_center()
-                    .gap(4.0)
-                    .track(&interaction);
-
-                // Add icon if present
-                if let Some(ref icon_svg) = icon {
-                    item_div = item_div.child(
-                        div()
-                            .self_center()
-                            .child(svg(icon_svg).size(icon_size, icon_size).color(&text_color)),
-                    );
-                }
-
-                // Add label
+            let mut item_div = div()
+                .class("cn-breadcrumb-item")
+                .flex_row()
+                .items_center()
+                .gap(4.0);
+            if let Some(ref icon_svg) = item.icon {
                 item_div = item_div.child(
-                    div().self_center().child(
-                        text(&label)
-                            .size(font_size)
-                            .color(&text_color)
-                            .no_cursor()
-                            .no_wrap(),
-                    ),
+                    div()
+                        .self_center()
+                        .child(svg(icon_svg).size(icon_size, icon_size)),
                 );
-
-                let clickable_item = item_div.cursor(CursorStyle::Pointer).on_click(move |_| {
-                    if let Some(ref handler) = on_click {
-                        handler();
-                    }
-                });
-
-                container = container.child(clickable_item);
-            } else {
-                // Non-clickable item (current page)
-                let mut item_div = div()
-                    .class("cn-breadcrumb-item")
-                    .class("cn-breadcrumb-item--active")
-                    .flex_row()
-                    .items_center()
-                    .gap(4.0);
-
-                // Add icon if present
-                if let Some(ref icon_svg) = item.icon {
-                    item_div = item_div.child(
-                        div()
-                            .self_center()
-                            .child(svg(icon_svg).size(icon_size, icon_size).color(text_primary)),
-                    );
-                }
-
-                // Add label - current page is styled differently
-                item_div = item_div.child(
-                    div().self_center().child(
-                        text(&item.label)
-                            .size(font_size)
-                            .color(text_primary)
-                            .medium()
-                            .no_wrap(),
-                    ),
-                );
-
-                container = container.child(item_div);
             }
+            item_div = item_div.child(
+                div()
+                    .self_center()
+                    .child(text(&item.label).size(font_size).no_cursor().no_wrap()),
+            );
+            if is_last {
+                item_div = item_div.attr("aria-current", "page");
+            } else if item.is_clickable() {
+                let on_click = item.on_click.clone();
+                item_div = item_div
+                    .attr("data-link", "")
+                    .cursor(CursorStyle::Pointer)
+                    .on_click(move |_| {
+                        if let Some(ref handler) = on_click {
+                            handler();
+                        }
+                    });
+            }
+            container = container.child(item_div);
 
-            // Add separator if not last item
             if !is_last {
+                let separator = div().class("cn-breadcrumb-separator").items_center();
                 let separator = match &builder.separator {
-                    BreadcrumbSeparator::Chevron => div().items_center().child(
-                        svg(CHEVRON_RIGHT_SVG)
-                            .size(icon_size, icon_size)
-                            .color(text_tertiary),
-                    ),
-                    BreadcrumbSeparator::Slash => div()
-                        .items_center()
-                        .child(text("/").size(font_size).color(text_tertiary).no_wrap()),
-                    BreadcrumbSeparator::Text(s) => div()
-                        .items_center()
-                        .child(text(s).size(font_size).color(text_tertiary).no_wrap()),
-                    BreadcrumbSeparator::Svg(svg_str) => div()
-                        .items_center()
-                        .child(svg(svg_str).size(icon_size, icon_size).color(text_tertiary)),
+                    BreadcrumbSeparator::Chevron => {
+                        separator.child(svg(CHEVRON_RIGHT_SVG).size(icon_size, icon_size))
+                    }
+                    BreadcrumbSeparator::Slash => {
+                        separator.child(text("/").size(font_size).no_wrap())
+                    }
+                    BreadcrumbSeparator::Text(s) => {
+                        separator.child(text(s).size(font_size).no_wrap())
+                    }
+                    BreadcrumbSeparator::Svg(svg_str) => {
+                        separator.child(svg(svg_str).size(icon_size, icon_size))
+                    }
                 };
                 container = container.child(separator);
             }

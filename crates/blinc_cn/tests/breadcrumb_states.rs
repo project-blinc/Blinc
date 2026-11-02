@@ -10,10 +10,15 @@ use common::*;
 use std::sync::Arc;
 
 fn scenario(name: &str, build: impl FnOnce() -> Box<dyn ElementBuilder>) -> String {
-    set_active_stylesheet(Arc::new(Stylesheet::parse("").expect("css")));
+    // The breadcrumb's look is cn's stylesheet.
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let sheet =
+        Stylesheet::parse_with_variables(blinc_cn::cn_styles::CN_STYLES, &vars).expect("css");
+    set_active_stylesheet(Arc::new(sheet.clone()));
     let mut h = Harness::new(build(), vec![], |tree, node, out| {
         describe_tree(tree, node, out, 0)
     });
+    h.style_with(sheet);
     h.in_place = true;
     // The first item: a link.
     let at = h.center(&[0]);

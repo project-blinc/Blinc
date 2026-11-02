@@ -110,33 +110,24 @@ menubar()
 
 ## Breadcrumb
 
-Navigation path:
+The path to the current page, each step but the last a link:
 
 ```rust
-breadcrumb()
-    .child(breadcrumb_list()
-        .child(breadcrumb_item()
-            .child(breadcrumb_link("Home").href("/")))
-        .child(breadcrumb_separator())
-        .child(breadcrumb_item()
-            .child(breadcrumb_link("Products").href("/products")))
-        .child(breadcrumb_separator())
-        .child(breadcrumb_item()
-            .child(breadcrumb_page("Details"))))  // Current page (not a link)
+cn::breadcrumb()
+    .item("Home", || go_home())
+    .item_with_icon("Projects", folder_svg, || open_projects())
+    .current("Settings")
 ```
 
-### With Ellipsis
+`.slash_separator()`, `.text_separator(..)` and `.separator(BreadcrumbSeparator::Svg(..))`
+replace the chevron between steps; `.small()` and `.large()` set the size.
 
-```rust
-breadcrumb()
-    .child(breadcrumb_list()
-        .child(breadcrumb_item().child(breadcrumb_link("Home")))
-        .child(breadcrumb_separator())
-        .child(breadcrumb_ellipsis())  // Collapsed items
-        .child(breadcrumb_separator())
-        .child(breadcrumb_item().child(breadcrumb_link("Category")))
-        .child(breadcrumb_separator())
-        .child(breadcrumb_item().child(breadcrumb_page("Current"))))
+Each step is a `.cn-breadcrumb-item`: a link carries `data-link`, and the last
+step `aria-current="page"`. The separators are `.cn-breadcrumb-separator`.
+Colours and the current page's weight are those rules:
+
+```css
+.cn-breadcrumb-item[data-link]:hover { color: var(--primary); }
 ```
 
 ## Pagination
@@ -154,6 +145,11 @@ cn::pagination(10, page)
 ```
 
 `.small()` and `.large()` set the size.
+
+The buttons are `.cn-pagination-btn`; the current page carries
+`aria-current="page"`, and an arrow with nowhere to go `disabled`, both
+following the page in place. The gaps are `.cn-pagination-ellipsis`. Their
+look is those rules.
 
 ## Sidebar
 

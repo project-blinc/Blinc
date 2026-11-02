@@ -736,6 +736,7 @@ pub const CN_STYLES: &str = concat!(
 }
 .cn-tabs-trigger--active {
     color: var(--text-primary);
+    font-weight: 500;
 }
 /* The pill behind the active trigger, raised to --surface over the
    --surface-overlay tray. It slides to the next trigger on a switch. */
@@ -1189,16 +1190,13 @@ pub const CN_STYLES: &str = concat!(
     gap: var(--space-2);
     color: var(--text-secondary);
 }
-.cn-breadcrumb-item {
-    color: var(--text-secondary);
-    cursor: pointer;
-}
-.cn-breadcrumb-item:hover {
+.cn-breadcrumb-item { color: var(--text-secondary); }
+.cn-breadcrumb-item[data-link]:hover { color: var(--text-primary); }
+.cn-breadcrumb-item[aria-current="page"] {
     color: var(--text-primary);
+    font-weight: 500;
 }
-.cn-breadcrumb-item--active {
-    color: var(--text-primary);
-}
+.cn-breadcrumb-separator { color: var(--text-tertiary); }
 
 /* ============================================================================
    Pagination
@@ -1212,38 +1210,26 @@ pub const CN_STYLES: &str = concat!(
     border-radius: var(--radius-default);
     cursor: pointer;
     color: var(--text-primary);
+    transition: background var(--duration-fast) var(--ease-state),
+        border-color var(--duration-fast) var(--ease-state);
 }
-.cn-pagination-btn:hover {
-    background: var(--surface-elevated);
-}
-.cn-pagination-btn--active {
+.cn-pagination-btn:hover { background: var(--surface-elevated); }
+/* The current page keeps its fill under the pointer; a button with nowhere
+   to go keeps its dimmed look. */
+.cn-pagination-btn[aria-current="page"],
+.cn-pagination-btn[aria-current="page"]:hover {
     background: var(--primary);
-    color: var(--text-inverse);
     border-color: var(--primary);
-}
-/* The current page button is non-interactive (cursor: default, no
-   click handler), so its hover state should stay locked on the active
-   styling. Without this, the generic `.cn-pagination-btn:hover` rule
-   above wins (same specificity, state-selector applied after base) and
-   the primary-blue fill flips to `--surface-elevated` mid-hover — the
-   number disappears against the now-light bg and the row reads as if
-   no page is selected. */
-.cn-pagination-btn--active:hover {
-    background: var(--primary);
     color: var(--text-inverse);
-    border-color: var(--primary);
+    cursor: default;
 }
-.cn-pagination-btn--disabled {
+.cn-pagination-btn:disabled,
+.cn-pagination-btn:disabled:hover {
+    background: transparent;
     opacity: 0.5;
     cursor: not-allowed;
 }
-/* Match the active rule — disabled buttons (chevrons at first/last
-   page) shouldn't repaint to surface-elevated on hover; they keep
-   their dimmed look so the interactive affordance reads as 'not
-   available right now'. */
-.cn-pagination-btn--disabled:hover {
-    background: transparent;
-}
+.cn-pagination-ellipsis { color: var(--text-secondary); }
 
 /* ============================================================================
    Navigation Menu

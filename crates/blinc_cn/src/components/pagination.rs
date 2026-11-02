@@ -96,12 +96,6 @@ pub struct Pagination {
 
 impl Pagination {
     fn from_builder(builder: &PaginationBuilder) -> Self {
-        let theme = ThemeState::get();
-        let text_secondary = theme.color(ColorToken::TextSecondary);
-        let text_tertiary = theme.color(ColorToken::TextTertiary);
-        let border = theme.color(ColorToken::Border);
-        let radius = theme.radius(RadiusToken::Md);
-
         let button_size = builder.size.button_size();
         let font_size = builder.size.font_size();
         let icon_size = builder.size.icon_size();
@@ -114,8 +108,10 @@ impl Pagination {
         let page_state = builder.current_page;
 
         // The row is built once: a keyed list of slots worked out from the
-        // current page. A page that stays in view keeps its button; the
-        // active and disabled looks are classes bound to the page.
+        // current page. A page that stays in view keeps its button. The
+        // current page carries `aria-current="page"` and a button with
+        // nowhere to go `disabled`, both bound to the page; the looks are the
+        // `.cn-pagination-*` rules.
         let page = page_state;
         let slots = computed(move |g: &ReactiveGraph| {
             page_slots(page.read(g), total_pages, visible_pages, show_first_last)
@@ -162,40 +158,24 @@ impl Pagination {
                     };
                     match slot {
                         Slot::StartEllipsis | Slot::EndEllipsis => div()
+                            .class("cn-pagination-ellipsis")
                             .w(button_size)
                             .h(button_size)
                             .items_center()
                             .justify_center()
-                            .child(
-                                svg(ELLIPSIS_SVG)
-                                    .size(icon_size, icon_size)
-                                    .color(text_tertiary),
-                            ),
+                            .child(svg(ELLIPSIS_SVG).size(icon_size, icon_size)),
                         Slot::Page(n) => {
-                            let active = { computed(move |g: &ReactiveGraph| page.read(g) == n) };
-                            let text_color = {
-                                computed(move |g: &ReactiveGraph| {
-                                    if page.read(g) == n {
-                                        ThemeState::get().color(ColorToken::TextInverse)
-                                    } else {
-                                        text_secondary
-                                    }
-                                })
-                            };
+                            let current = computed(move |g: &ReactiveGraph| page.read(g) == n);
                             div()
                                 .class("cn-pagination-btn")
-                                .class_when("cn-pagination-btn--active", &active)
+                                .attr_when("aria-current", "page", &current)
                                 .w(button_size)
                                 .h(button_size)
-                                .rounded(radius)
                                 .items_center()
                                 .justify_center()
-                                .border(1.0, border)
-                                .cursor(CursorStyle::Pointer)
                                 .child(
                                     text(n.to_string())
                                         .size(font_size)
-                                        .color(&text_color)
                                         .medium()
                                         .pointer_events_none()
                                         .no_cursor(),
@@ -203,32 +183,18 @@ impl Pagination {
                                 .on_click(move |_| go())
                         }
                         _ => {
-                            let disabled = {
-                                computed(move |g: &ReactiveGraph| target(page.read(g)).is_none())
-                            };
-                            let icon_color = {
-                                computed(move |g: &ReactiveGraph| {
-                                    if target(page.read(g)).is_none() {
-                                        text_tertiary.with_alpha(0.5)
-                                    } else {
-                                        text_secondary
-                                    }
-                                })
-                            };
+                            let disabled =
+                                computed(move |g: &ReactiveGraph| target(page.read(g)).is_none());
                             div()
                                 .class("cn-pagination-btn")
-                                .class_when("cn-pagination-btn--disabled", &disabled)
+                                .attr_when("disabled", "", &disabled)
                                 .w(button_size)
                                 .h(button_size)
-                                .rounded(radius)
                                 .items_center()
                                 .justify_center()
-                                .border(1.0, border)
-                                .cursor(CursorStyle::Pointer)
                                 .child(
                                     svg(icon.unwrap_or(CHEVRON_LEFT_SVG))
-                                        .size(icon_size, icon_size)
-                                        .color(&icon_color),
+                                        .size(icon_size, icon_size),
                                 )
                                 .on_click(move |_| go())
                         }

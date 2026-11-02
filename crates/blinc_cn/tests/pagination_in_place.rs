@@ -13,8 +13,8 @@ use blinc_layout::renderer::{ElementType, RenderTree};
 use common::*;
 
 /// Marks the active and disabled buttons, as the theme's rules would.
-const RULES: &str = ".cn-pagination-btn--active { background: #123456 } \
-                     .cn-pagination-btn--disabled { background: #654321 }";
+const RULES: &str = ".cn-pagination-btn[aria-current=\"page\"] { background: #123456 } \
+                     .cn-pagination-btn[disabled] { background: #654321 }";
 
 struct Scene {
     tree: RenderTree,

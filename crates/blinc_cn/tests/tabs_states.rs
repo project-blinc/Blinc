@@ -46,10 +46,15 @@ fn describe_strip(tree: &RenderTree, widget: blinc_layout::LayoutNodeId, out: &m
 }
 
 fn scenario(name: &str, build: Build) -> String {
-    set_active_stylesheet(Arc::new(Stylesheet::parse("").expect("css")));
+    // The strip's look is cn's stylesheet.
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let sheet =
+        Stylesheet::parse_with_variables(blinc_cn::cn_styles::CN_STYLES, &vars).expect("css");
+    set_active_stylesheet(Arc::new(sheet.clone()));
     let selected = string_state("a");
     let widget = build(&selected);
     let mut h = Harness::new(widget, vec![selected.signal_id()], describe_strip);
+    h.style_with(sheet);
     h.in_place = true;
     // The second trigger.
     let at = h.center(&[0, 1]);

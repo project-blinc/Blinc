@@ -696,8 +696,6 @@ fn build_tab_trigger(
     on_change: Option<Arc<dyn Fn(&str) + Send + Sync>>,
 ) -> Div {
     let theme = ThemeState::get();
-    let text_primary = theme.color(ColorToken::TextPrimary);
-    let text_secondary = theme.color(ColorToken::TextSecondary);
     let value = menu_item.value.clone();
     let disabled = menu_item.disabled;
 
@@ -706,38 +704,12 @@ fn build_tab_trigger(
     let badge_text = menu_item.badge.clone();
 
     let interaction = Interaction::keyed(&format!("{}:{}", trigger_key, value));
-    let (selected, hovered) = (tab_state, interaction.hovered().signal());
-    // Each reads the selected tab itself, so each is woken by it.
-    let is_selected = move |g: &ReactiveGraph, selected_value: &str| {
-        g.get(selected).unwrap_or_default() == selected_value
-    };
-    // The active class is for a tab that can be used.
+    // The active class is for a tab that can be used. The text and icon take
+    // their colour and weight from the trigger's rules.
     let is_active = {
         let value = value.clone();
-        computed(move |g: &ReactiveGraph| !disabled && is_selected(g, &value))
-    };
-    let text_color = {
-        let value = value.clone();
         computed(move |g: &ReactiveGraph| {
-            if disabled {
-                text_secondary.with_alpha(0.5)
-            } else if is_selected(g, &value) {
-                text_primary
-            } else if g.get(hovered).unwrap_or(false) {
-                text_primary.with_alpha(0.8)
-            } else {
-                text_secondary
-            }
-        })
-    };
-    let weight = {
-        let value = value.clone();
-        computed(move |g: &ReactiveGraph| {
-            if is_selected(g, &value) {
-                FontWeight::Medium
-            } else {
-                FontWeight::Normal
-            }
+            !disabled && g.get(tab_state).unwrap_or_default() == value
         })
     };
 
@@ -751,22 +723,12 @@ fn build_tab_trigger(
 
     // Add icon if present
     if let Some(ref icon) = icon_svg {
-        content = content.child(
-            svg(icon)
-                .size(size.icon_size(), size.icon_size())
-                .color(&text_color),
-        );
+        content = content.child(svg(icon).size(size.icon_size(), size.icon_size()));
     }
 
     // Add label if present
     if let Some(ref label) = label_text {
-        content = content.child(
-            text(label)
-                .size(size.font_size())
-                .color(&text_color)
-                .weight(&weight)
-                .no_cursor(),
-        );
+        content = content.child(text(label).size(size.font_size()).no_cursor());
     }
 
     // Add badge if present. The shared widget rather than a pill of
