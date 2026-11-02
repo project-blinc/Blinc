@@ -145,6 +145,7 @@ impl RenderTree {
             half_leading: info.half_leading,
             strikethrough,
             underline,
+            built: None,
         }
     }
 }

@@ -94,3 +94,46 @@ fn without_a_rule_the_text_keeps_what_it_was_built_with() {
         .child(div().child(text("abc").size(13.0)));
     assert_eq!(text_data(&host, "").font_size, 13.0);
 }
+
+/// A container whose rule stops applying gives its text back the font it was
+/// built with.
+#[test]
+fn a_rule_that_stops_applying_gives_the_built_font_back() {
+    blinc_layout::text_measurer::init_text_measurer();
+    let on = blinc_core::reactive::signal(true);
+    let host = div()
+        .w(400.0)
+        .h(200.0)
+        .child(div().class_when("box", on).child(text("abc")));
+    let mut tree = RenderTree::from_element(&host);
+    tree.set_stylesheet(Stylesheet::parse(RULE).expect("css"));
+    tree.apply_stylesheet_layout_overrides();
+    tree.apply_stylesheet_base_styles();
+    tree.compute_layout(400.0, 200.0);
+    let text_node = || {
+        let mut stack = vec![tree.root().expect("root")];
+        while let Some(id) = stack.pop() {
+            if let Some(ElementType::Text(_)) = tree.get_render_node(id).map(|n| &n.element_type) {
+                return id;
+            }
+            stack.extend(tree.layout_tree.children(id));
+        }
+        panic!("no text node");
+    };
+    let id = text_node();
+    let weight = |tree: &RenderTree| match &tree.get_render_node(id).unwrap().element_type {
+        ElementType::Text(t) => (t.weight.weight(), t.font_size),
+        _ => unreachable!(),
+    };
+    assert_eq!(weight(&tree), (700, 20.0));
+
+    on.set(false);
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    tree.apply_partial_property_updates(updates);
+    tree.compute_layout(400.0, 200.0);
+    assert_eq!(
+        weight(&tree),
+        (400, 14.0),
+        "the text kept the font of a rule that no longer applies"
+    );
+}

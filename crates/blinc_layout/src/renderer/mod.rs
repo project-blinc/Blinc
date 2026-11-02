@@ -577,7 +577,7 @@ pub struct CompositeBindingMeta {
 
 /// The font properties a text node is measured and drawn at.
 #[derive(Clone, PartialEq)]
-struct TextLook {
+pub(crate) struct TextLook {
     font_size: f32,
     line_height: f32,
     weight: crate::div::FontWeight,
@@ -618,7 +618,9 @@ impl TextLook {
         inherited: &InheritedFont,
     ) -> Self {
         use crate::div::font_field as field;
-        let built = Self::of(text);
+        // What it was built with, not what it was last measured at: a value
+        // inherited from a rule that no longer applies falls back to it.
+        let built = text.built.clone().unwrap_or_else(|| Self::of(text));
         // The node's own rule beats the builder's call, which beats what a
         // container passes down.
         let inherit = |bit: u8| text.explicit_font & bit == 0;
@@ -2367,6 +2369,9 @@ impl RenderTree {
         let ElementType::Text(text) = &mut render_node.element_type else {
             return;
         };
+        if text.built.is_none() {
+            text.built = Some(TextLook::of(text));
+        }
 
         let mut options = crate::text_measure::TextLayoutOptions::new();
         options.font_name = look.family.name.clone();

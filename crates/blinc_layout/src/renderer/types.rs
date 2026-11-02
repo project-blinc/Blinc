@@ -112,6 +112,9 @@ pub struct TextData {
     pub strikethrough: bool,
     /// Whether text has underline decoration
     pub underline: bool,
+    /// The font it was built with, kept once a look from the rules replaces
+    /// it, so a rule that stops applying gives it back.
+    pub(crate) built: Option<crate::renderer::TextLook>,
 }
 
 /// A styled span within rich text
