@@ -152,18 +152,42 @@ let resampled = mono.resample(48000);
 
 ## CSS Classes
 
-| Class | Element |
-|-------|---------|
-| `.blinc-audio-player` | Audio container |
-| `.blinc-video-player` | Video container |
-| `.blinc-audio-waveform` | Waveform canvas |
-| `.blinc-media-controls` | Controls row |
-| `.blinc-media-play-btn` | Play/pause |
-| `.blinc-media-time` | Time display |
-| `.blinc-media-live-badge` | LIVE indicator |
-| `.blinc-media-seek-track` | Seek bar |
-| `.blinc-media-seek-fill` | Seek progress |
-| `.blinc-media-volume` | Volume |
+The controls take their colours from the default stylesheet's rules, so they
+follow the theme and a stylesheet restyles them:
+
+| Class | Element | Default |
+|-------|---------|---------|
+| `.blinc-audio-player` | Audio container | |
+| `.blinc-video-player` | Video container | |
+| `.blinc-audio-waveform`, `.blinc-waveform` | Waveform | see below |
+| `.blinc-media-controls` | Controls row | |
+| `.blinc-media-play-btn` | Play/pause | `--surface-elevated` fill, `--text-primary` icon |
+| `.blinc-media-time` | Time display | `--text-tertiary` |
+| `.blinc-media-live-badge` | LIVE indicator | `--error` fill, white text |
+| `.blinc-media-seek`, `.blinc-media-seek-track` | Seek bar | see below |
+| `.blinc-media-seek-rail` | Seek bar track | `--surface-elevated` |
+| `.blinc-media-seek-fill` | Seek progress | `--primary` |
+| `.blinc-media-volume` | Volume | `--text-tertiary` |
+| `.blinc-media-mute-btn` | Mute | `--text-secondary` |
+
+The video seek bar, the volume level and the waveform are drawn, in colours
+the stylesheet's variables give:
+
+| Variable | Draws | Default |
+|----------|-------|---------|
+| `--blinc-media-track` | the seek bar's track | `--surface-elevated` |
+| `--blinc-media-buffered` | what is buffered ahead | `--border` |
+| `--blinc-media-progress` | what has played | `--primary` |
+| `--blinc-media-level`, `--blinc-media-level-rest` | the volume columns at and above the level | `--surface-elevated`, `--text-secondary` |
+| `--blinc-waveform-played`, `--blinc-waveform-unplayed` | the waveform's bars | `--primary`, `--border-secondary` |
+
+```css
+:root { --blinc-media-progress: #22c55e; }
+.blinc-media-play-btn { background: var(--primary); color: var(--text-inverse); }
+```
+
+`waveform(..).played_color(..)` and `.unplayed_color(..)` set the waveform's
+colours over the variables.
 
 ## Licensing
 

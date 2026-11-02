@@ -47,7 +47,6 @@ use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 
 use blinc_core::{Brush, Color, CornerRadius, Rect};
-use blinc_theme::{ColorToken, ThemeState};
 
 use crate::canvas::canvas;
 use crate::div::{Div, ElementBuilder, ElementTypeId, div};
@@ -69,11 +68,8 @@ use crate::widgets::text_input::{
 };
 
 mod search;
-mod styles;
 
 use search::*;
-
-pub use styles::CODE_EDITOR_STYLES;
 
 // ============================================================================
 // Configuration
@@ -94,28 +90,26 @@ pub struct CodeConfig {
     pub padding: f32,
     /// Corner radius
     pub corner_radius: f32,
-    /// Background color
-    pub bg_color: Color,
-    /// Text color (default, when no syntax highlighting)
-    pub text_color: Color,
-    /// Line number color
-    pub line_number_color: Color,
-    /// Cursor color (when editable)
-    pub cursor_color: Color,
-    /// Selection color (when editable)
-    pub selection_color: Color,
-    /// Gutter background color
-    pub gutter_bg_color: Color,
-    /// Gutter separator color
-    pub gutter_separator_color: Color,
+    /// Background over the `.blinc-code` rule's, when set
+    pub bg_color: Option<Color>,
+    /// Text colour without syntax highlighting, over the `.blinc-code`
+    /// rule's, when set
+    pub text_color: Option<Color>,
+    /// Line number colour over the `.blinc-code-line-number` rule's, when set
+    pub line_number_color: Option<Color>,
+    /// Caret colour over `--blinc-code-caret`, when set
+    pub cursor_color: Option<Color>,
+    /// Selection colour over the `.blinc-code-selection` rule's, when set
+    pub selection_color: Option<Color>,
     /// Show minimap on the right side
     pub minimap: bool,
     /// Minimap width in pixels
     pub minimap_width: f32,
     /// Show indentation guides
     pub indent_guides: bool,
-    /// Indentation guide color
-    pub indent_guide_color: Color,
+    /// Indent guide and current line colour over the `.blinc-code-guide`
+    /// and `.blinc-code-active-line` rules', when set
+    pub indent_guide_color: Option<Color>,
     /// Enable code folding
     pub code_folding: bool,
     /// Enable the find / replace search overlay (Cmd+F to open,
@@ -132,7 +126,6 @@ pub struct CodeConfig {
 
 impl Default for CodeConfig {
     fn default() -> Self {
-        let theme = ThemeState::get();
         Self {
             font_size: 13.0,
             line_height: 1.5,
@@ -140,21 +133,35 @@ impl Default for CodeConfig {
             gutter_width: 48.0,
             padding: 16.0,
             corner_radius: 8.0,
-            bg_color: theme.color(ColorToken::Surface),
-            text_color: theme.color(ColorToken::TextPrimary),
-            line_number_color: theme.color(ColorToken::TextTertiary),
-            cursor_color: theme.color(ColorToken::Accent),
-            selection_color: theme.color(ColorToken::Selection),
-            gutter_bg_color: theme.color(ColorToken::SurfaceOverlay),
-            gutter_separator_color: theme.color(ColorToken::Border),
+            bg_color: None,
+            text_color: None,
+            line_number_color: None,
+            cursor_color: None,
+            selection_color: None,
             minimap: false,
             minimap_width: 60.0,
             indent_guides: false,
-            indent_guide_color: theme.color(ColorToken::Border).with_alpha(0.15),
+            indent_guide_color: None,
             code_folding: false,
             search_enabled: false,
         }
     }
+}
+
+impl CodeConfig {
+    /// The colour plain text is styled with. Without a configured one it is
+    /// a placeholder: [`build_styled_line`] leaves such text uncoloured.
+    fn plain_ink(&self) -> Color {
+        self.text_color.unwrap_or(Color::TRANSPARENT)
+    }
+}
+
+/// The caret's colour: `--blinc-code-caret`, else the accent.
+fn caret_ink() -> Color {
+    crate::ua_styles::stylesheet_color(
+        "var(--blinc-code-caret, var(--accent))",
+        blinc_theme::ColorToken::Accent,
+    )
 }
 
 // ============================================================================
@@ -1172,7 +1179,7 @@ impl CodeEditorData {
         if let Some(ref highlighter) = self.highlighter {
             highlighter.highlight(&self.value())
         } else {
-            StyledText::plain(&self.value(), self.config.text_color)
+            StyledText::plain(&self.value(), self.config.plain_ink())
         }
     }
 
@@ -1251,7 +1258,7 @@ impl CodeEditorData {
                 lines: styled_lines,
             }
         } else {
-            StyledText::plain(&self.value(), self.config.text_color)
+            StyledText::plain(&self.value(), self.config.plain_ink())
         }
     }
 }
@@ -1329,9 +1336,9 @@ impl Code {
         let text_color = config.highlighter().default_color();
         let line_number_color = config.highlighter().line_number_color();
         self.highlighter = Some(config.into_arc());
-        self.config.bg_color = bg_color;
-        self.config.text_color = text_color;
-        self.config.line_number_color = line_number_color;
+        self.config.bg_color = Some(bg_color);
+        self.config.text_color = Some(text_color);
+        self.config.line_number_color = Some(line_number_color);
         self.rebuild_inner();
         self
     }
@@ -1355,12 +1362,12 @@ impl Code {
     }
 
     pub fn code_bg(mut self, color: Color) -> Self {
-        self.config.bg_color = color;
+        self.config.bg_color = Some(color);
         self
     }
 
     pub fn text_color(mut self, color: Color) -> Self {
-        self.config.text_color = color;
+        self.config.text_color = Some(color);
         self
     }
 
@@ -1368,7 +1375,7 @@ impl Code {
         if let Some(ref highlighter) = self.highlighter {
             highlighter.highlight(&self.content)
         } else {
-            StyledText::plain(&self.content, self.config.text_color)
+            StyledText::plain(&self.content, self.config.plain_ink())
         }
     }
 
@@ -1378,10 +1385,13 @@ impl Code {
         let num_lines = styled.line_count().max(1);
 
         let mut container = div()
+            .class("blinc-code")
             .flex_row()
-            .bg(self.config.bg_color)
             .rounded(self.config.corner_radius)
             .overflow_clip();
+        if let Some(bg) = self.config.bg_color {
+            container = container.bg(bg);
+        }
 
         if self.config.line_numbers {
             let visible: Vec<usize> = (0..num_lines).collect();
@@ -1402,8 +1412,12 @@ impl Code {
             .padding_y_px(self.config.padding);
 
         for styled_line in &styled.lines {
-            code_area =
-                code_area.child(build_styled_line(styled_line, &self.config, line_height_px));
+            code_area = code_area.child(build_styled_line(
+                styled_line,
+                &self.config,
+                line_height_px,
+                self.highlighter.is_none(),
+            ));
         }
 
         container.child(code_area)
@@ -1465,6 +1479,12 @@ impl ElementBuilder for Code {
     }
     fn layout_style(&self) -> Option<&taffy::Style> {
         self.inner.layout_style()
+    }
+    fn element_classes(&self) -> &[std::sync::Arc<str>] {
+        ElementBuilder::element_classes(&self.inner)
+    }
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
     }
 }
 
@@ -2053,6 +2073,7 @@ impl CodeEditor {
             .on_blur(move |_ctx| {
                 // Blur handled by FSM transition
             })
+            .class("blinc-code")
             .overflow_y_scroll()
             .relative()
             .cursor_text();
@@ -2095,7 +2116,9 @@ impl CodeEditor {
                     );
 
                     // Apply visual styling
-                    container.set_bg(data.config.bg_color);
+                    if let Some(bg) = data.config.bg_color {
+                        container.set_bg(bg);
+                    }
                     container.set_rounded(data.config.corner_radius);
 
                     container.set_child(content);
@@ -2133,9 +2156,9 @@ impl CodeEditor {
         {
             let mut d = self.state.lock().unwrap();
             d.highlighter = Some(hl);
-            d.config.bg_color = bg;
-            d.config.text_color = text_col;
-            d.config.line_number_color = ln;
+            d.config.bg_color = Some(bg);
+            d.config.text_color = Some(text_col);
+            d.config.line_number_color = Some(ln);
         }
         self
     }
@@ -2188,12 +2211,12 @@ impl CodeEditor {
     }
 
     pub fn code_bg(self, color: Color) -> Self {
-        self.state.lock().unwrap().config.bg_color = color;
+        self.state.lock().unwrap().config.bg_color = Some(color);
         self
     }
 
     pub fn text_color(self, color: Color) -> Self {
-        self.state.lock().unwrap().config.text_color = color;
+        self.state.lock().unwrap().config.text_color = Some(color);
         self
     }
 
@@ -2294,6 +2317,12 @@ impl ElementBuilder for CodeEditor {
     fn layout_style(&self) -> Option<&taffy::Style> {
         self.inner.layout_style()
     }
+    fn element_classes(&self) -> &[std::sync::Arc<str>] {
+        ElementBuilder::element_classes(&self.inner)
+    }
+    fn element_id(&self) -> Option<&str> {
+        ElementBuilder::element_id(&self.inner)
+    }
 }
 
 // ============================================================================
@@ -2316,19 +2345,29 @@ fn build_gutter(
     let has_fold = config.code_folding;
 
     let mut col = div().flex_col().justify_start().padding_y_px(pad);
+    let number = |line_idx: usize| {
+        let txt = text(format!("{}", line_idx + 1))
+            .class("blinc-code-line-number")
+            .size(config.font_size)
+            .monospace()
+            .no_wrap();
+        match config.line_number_color {
+            Some(c) => txt.color(c),
+            None => txt,
+        }
+    };
 
     for &line_idx in visible_lines {
         let mut row = div().h(line_height_px).flex_row().items_center();
 
         // Line number — monospace, right-aligned, flex_grow to fill available space
         row = row.child(
-            div().flex_grow().flex_row().justify_end().pr(1.0).child(
-                text(format!("{}", line_idx + 1))
-                    .size(config.font_size)
-                    .color(config.line_number_color)
-                    .monospace()
-                    .no_wrap(),
-            ),
+            div()
+                .flex_grow()
+                .flex_row()
+                .justify_end()
+                .pr(1.0)
+                .child(number(line_idx)),
         );
 
         // Fold icon (SVG element)
@@ -2343,18 +2382,19 @@ fn build_gutter(
                 };
                 let icon_size = config.font_size;
                 let icon_w = config.font_size;
+                let mut icon = crate::svg::svg(svg_src).size(icon_size, icon_size);
+                if let Some(c) = config.line_number_color {
+                    icon = icon.tint(c);
+                }
                 row = row.child(
                     div()
+                        .class("blinc-code-fold")
                         .w(icon_w)
                         .h(line_height_px)
                         .flex_row()
                         .items_center()
                         .justify_center()
-                        .child(
-                            crate::svg::svg(svg_src)
-                                .size(icon_size, icon_size)
-                                .tint(config.line_number_color),
-                        ),
+                        .child(icon),
                 );
             } else {
                 row = row.child(div().w(config.font_size));
@@ -2365,6 +2405,7 @@ fn build_gutter(
     }
 
     div()
+        .class("blinc-code-gutter")
         .flex_col()
         .w(config.gutter_width)
         .flex_shrink_0()
@@ -2372,22 +2413,26 @@ fn build_gutter(
         .child(div().flex_grow()) // fill remaining height (no bg)
 }
 
+/// A line of code. `plain` text without a configured colour takes the
+/// container rule's by inheritance; highlighted spans keep their own.
 fn build_styled_line(
     styled_line: &crate::styled_text::StyledLine,
     config: &CodeConfig,
     line_height_px: f32,
+    plain: bool,
 ) -> Div {
     let mut line_div = div().h(line_height_px).flex_row().items_center();
+    let inherit = plain && config.text_color.is_none();
 
     if styled_line.spans.is_empty() {
-        line_div = line_div.child(text(" ").size(config.font_size).color(config.text_color));
+        line_div = line_div.child(text(" ").size(config.font_size));
     } else {
         for span in &styled_line.spans {
             let span_text = &styled_line.text[span.start..span.end];
-            let mut txt = text(span_text)
-                .size(config.font_size)
-                .color(span.color)
-                .no_wrap();
+            let mut txt = text(span_text).size(config.font_size).no_wrap();
+            if !inherit {
+                txt = txt.color(span.color);
+            }
             if span.bold {
                 txt = txt.bold();
             }
@@ -2415,9 +2460,9 @@ fn build_minimap(data: &CodeEditorData, line_height_px: f32) -> Div {
     let total_h = visible_lines.len() as f32 * minimap_line_h;
 
     let mut minimap = div()
+        .class("blinc-code-minimap")
         .flex_col()
         .w(config.minimap_width)
-        .bg(Color::rgba(0.0, 0.0, 0.0, 0.15))
         .padding_y_px(4.0)
         .padding_x_px(2.0);
 
@@ -2452,12 +2497,13 @@ fn build_minimap(data: &CodeEditorData, line_height_px: f32) -> Div {
             .top(indicator_top + 4.0)
             .w_full()
             .h(indicator_h)
-            .bg(Color::rgba(1.0, 1.0, 1.0, 0.1))
+            .class("blinc-code-minimap-slider")
             .rounded(1.0),
     );
 
     // Render each visible line as a thin colored bar
     let styled = data.get_styled_content_readonly();
+    let inherit = data.highlighter.is_none() && config.text_color.is_none();
     for &line_idx in &visible_lines {
         if line_idx >= styled.lines.len() {
             break;
@@ -2470,14 +2516,16 @@ fn build_minimap(data: &CodeEditorData, line_height_px: f32) -> Div {
         let width_ratio = (char_count as f32 / 80.0).min(1.0);
         let bar_w = (config.minimap_width - 4.0) * width_ratio;
 
-        // Use dominant color from first span, or default
-        let color = if let Some(span) = styled_line.spans.first() {
-            Color::rgba(span.color.r, span.color.g, span.color.b, 0.8)
-        } else {
-            Color::rgba(0.6, 0.6, 0.6, 0.4)
-        };
-
-        content = content.child(div().h(minimap_line_h).w(bar_w).bg(color).rounded(0.5));
+        // The first span's colour, or the `.blinc-code-minimap-line` rule's
+        let mut bar = div()
+            .class("blinc-code-minimap-line")
+            .h(minimap_line_h)
+            .w(bar_w)
+            .rounded(0.5);
+        if let Some(span) = styled_line.spans.first().filter(|_| !inherit) {
+            bar = bar.bg(span.color.with_alpha(0.8));
+        }
+        content = content.child(bar);
     }
 
     minimap.child(content)
@@ -2623,15 +2671,17 @@ fn build_indent_guides(
             let top = vis_start as f32 * line_height_px + pad;
             let h = (vis_end - vis_start + 1) as f32 * line_height_px;
             if h > 0.0 {
-                guides.push(
-                    div()
-                        .absolute()
-                        .left(x)
-                        .top(top)
-                        .w(1.0)
-                        .h(h)
-                        .bg(guide_color),
-                );
+                let guide = div()
+                    .class("blinc-code-guide")
+                    .absolute()
+                    .left(x)
+                    .top(top)
+                    .w(1.0)
+                    .h(h);
+                guides.push(match guide_color {
+                    Some(c) => guide.bg(c),
+                    None => guide,
+                });
             }
         }
     }
@@ -2663,15 +2713,17 @@ fn build_editor_content(
     // Current line highlight (subtle background behind active line)
     if is_focused && data.selection_start.is_none() {
         let line_top = data.cursor.line as f32 * line_height_px + pad;
-        code_area = code_area.child(
-            div()
-                .absolute()
-                .left(0.0)
-                .top(line_top)
-                .w_full()
-                .h(line_height_px)
-                .bg(config.indent_guide_color),
-        );
+        let line = div()
+            .class("blinc-code-active-line")
+            .absolute()
+            .left(0.0)
+            .top(line_top)
+            .w_full()
+            .h(line_height_px);
+        code_area = code_area.child(match config.indent_guide_color {
+            Some(c) => line.bg(c),
+            None => line,
+        });
     }
 
     // Selection highlights (behind text)
@@ -2716,16 +2768,18 @@ fn build_editor_content(
 
                 if width > 0.0 {
                     let sel_top = line_idx as f32 * line_height_px + pad;
-                    code_area = code_area.child(
-                        div()
-                            .absolute()
-                            .left(x_start + pad)
-                            .top(sel_top)
-                            .w(width)
-                            .h(line_height_px)
-                            .bg(sel_color)
-                            .rounded(2.0),
-                    );
+                    let sel = div()
+                        .class("blinc-code-selection")
+                        .absolute()
+                        .left(x_start + pad)
+                        .top(sel_top)
+                        .w(width)
+                        .h(line_height_px)
+                        .rounded(2.0);
+                    code_area = code_area.child(match sel_color {
+                        Some(c) => sel.bg(c),
+                        None => sel,
+                    });
                 }
             }
         }
@@ -2735,7 +2789,6 @@ fn build_editor_content(
     if is_focused {
         let bracket_positions = find_matching_brackets(data);
         if let Some((open, close)) = bracket_positions {
-            let bracket_bg = Color::rgba(1.0, 1.0, 0.3, 0.15);
             for pos in [open, close] {
                 // Find visible row for this line
                 if let Some(vis_row) = visible_lines.iter().position(|&l| l == pos.line) {
@@ -2753,12 +2806,12 @@ fn build_editor_content(
                         let y = vis_row as f32 * line_height_px + pad;
                         code_area = code_area.child(
                             div()
+                                .class("blinc-code-bracket")
                                 .absolute()
                                 .left(x)
                                 .top(y)
                                 .w(char_w.max(2.0))
                                 .h(line_height_px)
-                                .bg(bracket_bg)
                                 .rounded(2.0),
                         );
                     }
@@ -2776,8 +2829,6 @@ fn build_editor_content(
 
     // Search match highlights
     if data.search_active && !data.search_matches.is_empty() {
-        let match_bg = Color::rgba(1.0, 0.8, 0.0, 0.25);
-        let active_bg = Color::rgba(1.0, 0.6, 0.0, 0.5);
         for (match_idx, &(line_idx, col_start, col_end)) in data.search_matches.iter().enumerate() {
             if let Some(vis_row) = visible_lines.iter().position(|&l| l == line_idx) {
                 if line_idx < data.lines.len() {
@@ -2790,21 +2841,18 @@ fn build_editor_content(
                     let x = data.measure_mono(&before) + pad;
                     let w = data.measure_mono(&matched);
                     let y = vis_row as f32 * line_height_px + pad;
-                    let bg = if match_idx == data.search_match_idx {
-                        active_bg
-                    } else {
-                        match_bg
-                    };
-                    code_area = code_area.child(
-                        div()
-                            .absolute()
-                            .left(x)
-                            .top(y)
-                            .w(w)
-                            .h(line_height_px)
-                            .bg(bg)
-                            .rounded(2.0),
-                    );
+                    let mut mark = div()
+                        .class("blinc-code-find-match")
+                        .absolute()
+                        .left(x)
+                        .top(y)
+                        .w(w)
+                        .h(line_height_px)
+                        .rounded(2.0);
+                    if match_idx == data.search_match_idx {
+                        mark = mark.attr("data-active", "");
+                    }
+                    code_area = code_area.child(mark);
                 }
             }
         }
@@ -2818,15 +2866,22 @@ fn build_editor_content(
         .padding_y_px(pad);
     for &line_idx in &visible_lines {
         let line_div = if line_idx < styled.lines.len() {
-            let mut ld = build_styled_line(&styled.lines[line_idx], config, line_height_px);
+            let mut ld = build_styled_line(
+                &styled.lines[line_idx],
+                config,
+                line_height_px,
+                data.highlighter.is_none(),
+            );
             // Show fold indicator on fold start lines
             if config.code_folding && data.is_fold_start(line_idx) {
-                ld = ld.child(
-                    text(" ...")
-                        .size(config.font_size * 0.85)
-                        .color(config.line_number_color)
-                        .monospace(),
-                );
+                let hint = text(" ...")
+                    .class("blinc-code-fold-hint")
+                    .size(config.font_size * 0.85)
+                    .monospace();
+                ld = ld.child(match config.line_number_color {
+                    Some(c) => hint.color(c),
+                    None => hint,
+                });
             }
             ld
         } else {
@@ -2835,7 +2890,7 @@ fn build_editor_content(
                 .h(line_height_px)
                 .flex_row()
                 .items_center()
-                .child(text(" ").size(config.font_size).color(config.text_color))
+                .child(text(" ").size(config.font_size))
         };
         text_wrapper = text_wrapper.child(line_div);
     }
@@ -2858,7 +2913,7 @@ fn build_editor_content(
             (cursor_line as f32 * line_height_px) + (line_height_px - cursor_height) / 2.0 + pad;
 
         let cursor_state_clone = Arc::clone(&data.cursor_state);
-        let cursor_color = config.cursor_color;
+        let cursor_color = config.cursor_color.unwrap_or_else(caret_ink);
 
         {
             if let Ok(mut cs) = cursor_state_clone.lock() {
@@ -2951,7 +3006,7 @@ mod tests {
     static THEME_INIT: Once = Once::new();
 
     fn ensure_theme_initialized() {
-        THEME_INIT.call_once(ThemeState::init_default);
+        THEME_INIT.call_once(blinc_theme::ThemeState::init_default);
     }
 
     /// The search bar is built once: stepping through matches and opening

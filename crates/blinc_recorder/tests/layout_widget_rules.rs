@@ -245,3 +245,102 @@ fn a_hovered_link_turns_the_hover_colour() {
     let ((got, bg), want) = (ink(&mut ui, node, true), token(ColorToken::PrimaryHover));
     assert!(drawn_in(got, want, bg), "hovered link {got:?} over {bg:?}");
 }
+
+fn mount_code(ui: &mut Headless) {
+    ui.mount(|_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(12.0))
+            .flex_col()
+            .gap(2.0)
+            .child(
+                blinc_layout::widgets::code("let answer = 42;\nlet next = answer + 1;")
+                    .line_numbers(true)
+                    .font_size(22.0)
+                    .w_full(),
+            )
+    });
+    ui.leave().settle();
+}
+
+/// Plain code takes the code rules: the fill, the text by inheritance, the
+/// line numbers.
+#[test]
+fn plain_code_takes_the_code_rules_in_both_schemes() {
+    for (scheme, dark) in [(ColorScheme::Dark, true), (ColorScheme::Light, false)] {
+        let Some(mut ui) = session(scheme) else {
+            return;
+        };
+        mount_code(&mut ui);
+        let block = one(&ui, "blinc-code");
+        assert!(close(
+            background(&ui, block),
+            ThemeState::get().color(ColorToken::Surface)
+        ));
+        let number = one(&ui, "blinc-code-line-number");
+        for (what, node, want) in [
+            ("code", block, ColorToken::TextPrimary),
+            ("line number", number, ColorToken::TextTertiary),
+        ] {
+            let ((got, bg), want) = (ink(&mut ui, node, dark), token(want));
+            assert!(
+                drawn_in(got, want, bg),
+                "{scheme:?} {what} drawn {got:?} over {bg:?}, want {want:?}"
+            );
+        }
+    }
+}
+
+/// A selection in the editor is the `.blinc-code-selection` rule's fill; a
+/// syntax theme keeps its own background.
+#[test]
+fn the_editor_takes_selection_and_syntax_colours() {
+    use blinc_layout::syntax::{RustHighlighter, SyntaxConfig, SyntaxHighlighter};
+    use blinc_layout::widgets::code::{code_editor, code_editor_state};
+    use blinc_layout::widgets::text_area::TextPosition;
+
+    let Some(mut ui) = session(ColorScheme::Dark) else {
+        return;
+    };
+    let theme = ThemeState::get();
+    let plain = code_editor_state("hello world");
+    {
+        let mut d = plain.lock().unwrap();
+        d.selection_start = Some(TextPosition::new(0, 0));
+        d.cursor = TextPosition::new(0, 5);
+    }
+    let rust = code_editor_state("fn main() {}");
+    let (p, r) = (plain.clone(), rust.clone());
+    ui.mount(move |_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .flex_col()
+            .child(code_editor(&p).w(300.0).h(80.0))
+            .child(
+                code_editor(&r)
+                    .syntax(SyntaxConfig::new(RustHighlighter::new()))
+                    .w(300.0)
+                    .h(80.0),
+            )
+    });
+    ui.leave().settle();
+
+    let selection = one(&ui, "blinc-code-selection");
+    assert!(close(
+        background(&ui, selection),
+        theme.color(ColorToken::Selection)
+    ));
+    let editors = all(&ui, "blinc-code");
+    assert_eq!(editors.len(), 2);
+    assert!(close(
+        background(&ui, editors[0]),
+        theme.color(ColorToken::Surface)
+    ));
+    assert!(close(
+        background(&ui, editors[1]),
+        RustHighlighter::new().background_color()
+    ));
+    ui.assert_snapshot("layout_code_rules");
+}

@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 use blinc_core::Color;
 use blinc_media::{Frame, Player, VideoState};
-use blinc_theme::{ColorToken, ThemeState};
+use blinc_theme::ColorToken;
 
 use crate::div::{Div, ElementBuilder, ElementTypeId, div};
 use crate::element::RenderProps;
@@ -280,19 +280,40 @@ fn volume_level(volume: f32) -> usize {
     }
 }
 
+/// A colour the canvases draw with: a `--blinc-media-*` variable and the
+/// theme token it defaults to.
+type Ink = (&'static str, ColorToken);
+const TRACK: Ink = (
+    "var(--blinc-media-track, var(--surface-elevated))",
+    ColorToken::SurfaceElevated,
+);
+const BUFFERED: Ink = (
+    "var(--blinc-media-buffered, var(--border))",
+    ColorToken::Border,
+);
+const PROGRESS: Ink = (
+    "var(--blinc-media-progress, var(--primary))",
+    ColorToken::Primary,
+);
+const LEVEL: Ink = (
+    "var(--blinc-media-level, var(--surface-elevated))",
+    ColorToken::SurfaceElevated,
+);
+const LEVEL_REST: Ink = (
+    "var(--blinc-media-level-rest, var(--text-secondary))",
+    ColorToken::TextSecondary,
+);
+
+/// Resolved each paint, so a theme or stylesheet change shows.
+fn ink((css, token): Ink) -> Color {
+    crate::ua_styles::stylesheet_color(css, token)
+}
+
 /// The controls bar, built once: what changes with playback is bound to the
 /// player's signals, and the two bars are canvases that read them each paint.
 fn controls(player: &blinc_media::VideoPlayer, key: &str) -> Div {
     use crate::binding::IntoReactive;
     use blinc_core::reactive::{ReactiveGraph, computed};
-
-    let theme = ThemeState::get();
-    let fg = theme.color(ColorToken::TextPrimary);
-    let fg_secondary = theme.color(ColorToken::TextSecondary);
-    let fg_tertiary = theme.color(ColorToken::TextTertiary);
-    let surface = theme.color(ColorToken::SurfaceElevated);
-    let accent = theme.color(ColorToken::Primary);
-    let border = theme.color(ColorToken::Border);
 
     let player_click = player.clone();
     let play_btn = div()
@@ -301,14 +322,13 @@ fn controls(player: &blinc_media::VideoPlayer, key: &str) -> Div {
         .w(28.0)
         .h(28.0)
         .rounded(14.0)
-        .bg(surface)
         .items_center()
         .justify_center()
         .cursor_pointer()
         .show_or(
             &player.playing_signal,
-            move || crate::svg::svg(PAUSE_ICON).square(14.0).color(fg),
-            move || crate::svg::svg(PLAY_ICON).square(14.0).color(fg),
+            move || crate::svg::svg(PAUSE_ICON).square(14.0),
+            move || crate::svg::svg(PLAY_ICON).square(14.0),
         )
         .on_click(move |_| {
             if player_click.is_playing() {
@@ -332,7 +352,6 @@ fn controls(player: &blinc_media::VideoPlayer, key: &str) -> Div {
     let time_label = div().child(
         crate::text::Text::bound(time.into_reactive())
             .size(11.0)
-            .color(fg_tertiary)
             .monospace()
             .class("blinc-media-time"),
     );
@@ -360,12 +379,12 @@ fn controls(player: &blinc_media::VideoPlayer, key: &str) -> Div {
                 blinc_core::Brush::Solid(color),
             );
         };
-        bar(ctx, bounds.width, surface);
+        bar(ctx, bounds.width, ink(TRACK));
         if buffered > progress {
-            bar(ctx, bounds.width * buffered, border);
+            bar(ctx, bounds.width * buffered, ink(BUFFERED));
         }
         if progress > 0.0 {
-            bar(ctx, bounds.width * progress, accent);
+            bar(ctx, bounds.width * progress, ink(PROGRESS));
         }
     })
     .flex_grow()
@@ -401,11 +420,7 @@ fn controls(player: &blinc_media::VideoPlayer, key: &str) -> Div {
         .for_each(
             &level,
             |level| *level,
-            move |level| {
-                crate::svg::svg(VOLUME_ICONS[level])
-                    .square(16.0)
-                    .color(fg_secondary)
-            },
+            move |level| crate::svg::svg(VOLUME_ICONS[level]).square(16.0),
         )
         .on_click(move |_| {
             if player_mute.volume() < 0.01 {
@@ -418,16 +433,13 @@ fn controls(player: &blinc_media::VideoPlayer, key: &str) -> Div {
     let vol_sig = player.volume_signal.clone();
     let vol_canvas = crate::canvas::canvas(move |ctx: &mut dyn blinc_core::DrawContext, bounds| {
         let v = vol_sig.get();
+        let (level, rest) = (ink(LEVEL), ink(LEVEL_REST));
         let cols = 20u32;
         let col_w = bounds.width / cols as f32;
         for i in 0..cols {
             let frac = (i as f32 + 0.5) / cols as f32;
             let col_h = bounds.height * frac;
-            let color = if frac <= v + 0.025 {
-                surface
-            } else {
-                fg_secondary
-            };
+            let color = if frac <= v + 0.025 { level } else { rest };
             ctx.fill_rect(
                 blinc_core::Rect::new(i as f32 * col_w, bounds.height - col_h, col_w - 1.0, col_h),
                 0.0.into(),

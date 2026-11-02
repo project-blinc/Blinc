@@ -288,7 +288,7 @@ fn the_stylesheet_designs_the_bar() {
     let vars = blinc_theme::ThemeState::get().to_css_variable_map();
     let sheet = Arc::new(
         blinc_layout::css_parser::Stylesheet::parse_with_variables(
-            blinc_layout::widgets::CODE_EDITOR_STYLES,
+            blinc_layout::ua_styles::UA_STYLES,
             &vars,
         )
         .expect("the stylesheet parses with the theme's variables"),

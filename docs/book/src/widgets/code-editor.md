@@ -71,16 +71,9 @@ code_editor(&state)
 - Enter steps to the next match, Shift+Enter to the previous
 - Find and replace with replace all (Cmd+H opens the replace row)
 
-The bar is built from classed elements, and its design is a stylesheet. Add
-`CODE_EDITOR_STYLES` to your application's CSS to get it (the cn theme bundle,
-`blinc_cn::cn_bundle()`, already includes it):
-
-```rust
-ctx.add_css(blinc_layout::widgets::CODE_EDITOR_STYLES);
-```
-
-Without it the bar has a plain fallback look. Override any rule after it to
-restyle the bar, using the theme's tokens:
+The bar is built from classed elements, and its look is the default
+stylesheet's `.blinc-find` rules. Override any of them in your application's
+CSS, using the theme's tokens:
 
 ```css
 .blinc-find { background: var(--surface); border-radius: var(--radius-md); }
@@ -93,6 +86,34 @@ The classes are `blinc-find` (the panel), `blinc-find-row`, `blinc-find-field`,
 `blinc-find-input`, `blinc-find-button` (with `-chevron`, `-prev`, `-next`,
 `-close`, `-replace`, `-replace-all`), `blinc-find-toggle` and
 `blinc-find-toggle--on`, and `blinc-find-count` and `blinc-find-count--none`.
+
+### Colours
+
+A code block or editor without a syntax theme takes its colours from the
+default stylesheet's rules, so it follows the theme:
+
+| Class | Part | Default |
+|-------|------|---------|
+| `blinc-code` | the block or editor | `--surface` fill, `--text-primary` text |
+| `blinc-code-line-number` | a line number | `--text-tertiary` |
+| `blinc-code-fold`, `blinc-code-fold-hint` | a fold chevron, the `...` of a folded block | `--text-tertiary` |
+| `blinc-code-active-line` | the line the caret is on | `--primary` at 5% |
+| `blinc-code-selection` | the selection | `--selection` |
+| `blinc-code-guide` | an indent guide | `--border` at 55% |
+| `blinc-code-bracket` | a matching bracket | `--primary` at 15%, with a border |
+| `blinc-code-find-match` | a search match, `data-active` for the current one | `--warning` at 25%, 50% when current |
+| `blinc-code-minimap`, `-slider`, `-line` | the minimap, its viewport, a plain line | `--border` edge, `--text-primary` tints |
+
+The caret is drawn in `--blinc-code-caret`, the accent when unset:
+
+```css
+:root { --blinc-code-caret: #f59e0b; }
+.blinc-code-selection { background: rgba(245, 158, 11, 0.3); }
+```
+
+A syntax theme colours the text, fill and line numbers itself, and a colour
+given to the editor (`code_bg`, `text_color`, a `CodeConfig` colour) is set on
+the element; both win over the rules.
 
 ## Syntax Highlighters
 

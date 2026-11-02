@@ -144,8 +144,8 @@ pub use cursor::{
 
 // Re-export code widget
 pub use code::{
-    CODE_EDITOR_STYLES, Code, CodeConfig, CodeEditor, CodeEditorData, SharedCodeEditorState, code,
-    code_editor, code_editor_state, code_minimap, pre,
+    Code, CodeConfig, CodeEditor, CodeEditorData, SharedCodeEditorState, code, code_editor,
+    code_editor_state, code_minimap, pre,
 };
 
 // Re-export overlay widget

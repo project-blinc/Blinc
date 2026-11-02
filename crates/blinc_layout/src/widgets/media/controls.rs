@@ -16,37 +16,6 @@ use super::format_time::format_time_ms;
 const PLAY_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>"#;
 const PAUSE_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>"#;
 
-const ACCENT: Color = Color {
-    r: 0.3,
-    g: 0.6,
-    b: 1.0,
-    a: 1.0,
-};
-const TRACK_BG: Color = Color {
-    r: 0.2,
-    g: 0.2,
-    b: 0.25,
-    a: 1.0,
-};
-const BTN_BG: Color = Color {
-    r: 0.2,
-    g: 0.2,
-    b: 0.25,
-    a: 1.0,
-};
-const TIME_COLOR: Color = Color {
-    r: 0.6,
-    g: 0.6,
-    b: 0.7,
-    a: 1.0,
-};
-const VOL_COLOR: Color = Color {
-    r: 0.5,
-    g: 0.5,
-    b: 0.55,
-    a: 1.0,
-};
-
 /// Shared media controls driven by State signals.
 pub struct MediaControls {
     inner: Div,
@@ -76,12 +45,11 @@ impl MediaControls {
                     .w(28.0)
                     .h(28.0)
                     .rounded(14.0)
-                    .bg(BTN_BG)
                     .items_center()
                     .justify_center()
                     .cursor_pointer()
                     .class("blinc-media-play-btn")
-                    .child(svg(play_icon).square(14.0).color(Color::WHITE))
+                    .child(svg(play_icon).square(14.0))
                     .on_click(move |_| {
                         tracing::info!("play/pause clicked, is_playing={}", is_playing);
                         if is_playing {
@@ -95,11 +63,10 @@ impl MediaControls {
         if is_live {
             row = row.child(
                 div()
-                    .bg(Color::rgba(0.8, 0.2, 0.2, 1.0))
                     .rounded(3.0)
                     .p_px(4.0)
                     .class("blinc-media-live-badge")
-                    .child(text("LIVE").size(9.0).color(Color::WHITE).bold()),
+                    .child(text("LIVE").size(9.0).bold()),
             );
         } else {
             row = row.child(
@@ -109,7 +76,6 @@ impl MediaControls {
                     format_time_ms(duration)
                 ))
                 .size(11.0)
-                .color(TIME_COLOR)
                 .monospace()
                 .class("blinc-media-time"),
             );
@@ -127,7 +93,6 @@ impl MediaControls {
 
             let fill = div()
                 .h(4.0)
-                .bg(ACCENT)
                 .rounded(2.0)
                 .flex_grow_value(progress.max(0.001))
                 .class("blinc-media-seek-fill");
@@ -150,9 +115,9 @@ impl MediaControls {
                     })
                     .child(
                         div()
+                            .class("blinc-media-seek-rail")
                             .w_full()
                             .h(4.0)
-                            .bg(TRACK_BG)
                             .rounded(2.0)
                             .overflow_clip()
                             .flex_row()
@@ -165,7 +130,6 @@ impl MediaControls {
         row = row.child(
             text(format!("{}%", (volume * 100.0) as u32))
                 .size(10.0)
-                .color(VOL_COLOR)
                 .monospace()
                 .class("blinc-media-volume"),
         );

@@ -1,5 +1,5 @@
 //! The editor's find and replace bar: an overlay of classed elements whose
-//! look lives in [`super::CODE_EDITOR_STYLES`].
+//! look is the `.blinc-find` rules of the layout stylesheet.
 
 use super::*;
 
@@ -198,7 +198,6 @@ pub(super) fn build_search_bar(
     let small_font = config.font_size * 0.85;
     let icon_size = config.font_size + 2.0;
     let button = icon_size + 10.0;
-    let text_col = config.text_color;
     let input_w = FIELD_WIDTH;
 
     // Something read from the editor state, each revision.
@@ -237,11 +236,7 @@ pub(super) fn build_search_bar(
             notify_search(&state);
         }
     };
-    let icon = move |source: &'static str| {
-        crate::svg::svg(source)
-            .size(icon_size, icon_size)
-            .color(text_col)
-    };
+    let icon = move |source: &'static str| crate::svg::svg(source).size(icon_size, icon_size);
 
     // --- Chevron toggle (expand/collapse replace) ---
     let chevron = {
@@ -374,7 +369,6 @@ pub(super) fn build_search_bar(
         .class("blinc-find-row")
         .flex_row()
         .items_center()
-        .gap_px(4.0)
         .child(chevron)
         .child(field)
         .show(&has_query, move || {
@@ -434,7 +428,6 @@ pub(super) fn build_search_bar(
                 .class("blinc-find-row--replace")
                 .flex_row()
                 .items_center()
-                .gap_px(4.0)
                 .child(div().w(button))
                 .child(replace_input)
                 .child(replace_btn)
@@ -443,17 +436,11 @@ pub(super) fn build_search_bar(
     };
 
     // === CONTAINER (sized by content, not fixed) ===
-    // The plain look here is what the bar has without the stylesheet.
     div()
         .class("blinc-find")
         .w_fit()
         .flex_col()
         .gap_px(4.0)
-        .p_px(6.0)
-        .bg(config.bg_color)
-        .border(1.0, config.gutter_separator_color)
-        .rounded(4.0)
-        .shadow_md()
         .child(find_row)
         .show(&replace_open, replace_row)
 }
