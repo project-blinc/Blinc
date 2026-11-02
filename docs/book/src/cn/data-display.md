@@ -171,6 +171,45 @@ chart()
     .show_percentages(true)
 ```
 
+## Table
+
+Rows of cells under a header, with an optional footer and caption:
+
+```rust
+let chosen = ctx.use_signal(false);
+
+table()
+    .w_full()
+    .child(table_header().child(
+        table_row().child(table_head("Invoice")).child(table_head("Amount")),
+    ))
+    .child(table_body()
+        .child(table_row()
+            .child(table_cell().child(text("INV001")))
+            .child(table_cell().child(text("$250.00"))))
+        .child(table_row()
+            .selected(chosen)
+            .child(table_cell().child(text("INV002")))
+            .child(table_cell().child(text("$1,200.00")))))
+    .child(table_caption("Recent invoices"))
+```
+
+`.selected(..)` takes a bool, Signal or Computed and follows it in place.
+
+### Styling
+
+The look is the `.cn-table*` rules. `.cn-table` sets the text colour every
+cell inherits, the border and the radius; `.cn-table-header` and
+`.cn-table-footer` sit on `--surface-overlay`; `.cn-table-head` and
+`.cn-table-caption` text is muted. Body rows highlight on hover, and a
+selected row carries `data-state="selected"`. The variables
+`--cn-table-border`, `--cn-table-radius`, `--cn-table-row-hover` and
+`--cn-table-row-selected` adjust them:
+
+```css
+.cn-table-row[data-state="selected"] { background: color-mix(in srgb, var(--primary) 20%, transparent); }
+```
+
 ## Tree
 
 A selectable tree whose items open and close:

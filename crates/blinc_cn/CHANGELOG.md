@@ -5,6 +5,7 @@ All notable changes to `blinc_cn` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- `cn::table` text is readable in dark mode: the table sets `color: var(--text-primary)`, which cells inherit, where cell text used to fall back to black. Header and caption text are muted by the `.cn-table-head` and `.cn-table-caption` rules instead of a colour picked in Rust, header and footer sit on `--surface-overlay` by rule, and body rows highlight with a wash of the text colour. `TableRow::selected` takes a bool, Signal or Computed and shows it as `data-state="selected"`; `.cn-table-row--selected` is gone.
 - Turning a `cn::switch` off no longer snaps: the thumb keeps its place while the switch is held and eases back on release, and the track fades from its on colour to its off colour instead of jumping. Hovering an off track lightens it (a wash of the text colour over the idle fill), where it used to darken.
 - The combobox's option rows clip to the popup, so a long list no longer paints below it or over the search field while scrolled.
 - Clicking the trigger of an open `cn::dropdown_menu` or `cn::popover` closes it. The press counted as a click outside, which closed the menu, and the click that followed reopened it; the trigger is now inside the click-outside set.

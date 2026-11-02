@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- A table cell (`widgets::table::TableCell`) reports its size, classes, id, handlers and refs to the renderer. They were set on its inner element but never read, so `.w(..)` and `.class(..)` on a cell, and rules for its class, had no effect.
 - An attribute bound to two values at once (`data-state` set to `open` while `closed` is still listed) reads as the value set last. A child rule keyed on the new value (`.trigger[data-state="open"] > .chevron`) failed to apply when the new value landed first.
 - A class added in place no longer overrides a later rule the element already matched. A checked switch that was disabled from the start showed the `:checked` fill over the later `:disabled` one; one disabled through a signal showed the disabled fill. Both follow the cascade now.
 - An unfocused text field no longer keeps the window drawing. Every `TextInput`, `TextArea`, code editor and rich text editor mounts a caret canvas, and any visible canvas asked for a frame each vsync, so a form on screen held the CPU awake. Their carets now ask for frames only while they can show.

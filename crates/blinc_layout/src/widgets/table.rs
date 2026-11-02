@@ -345,6 +345,32 @@ impl crate::div::ElementBuilder for TableCell {
     fn semantic_type_name(&self) -> Option<&'static str> {
         Some("td")
     }
+
+    // What the setters wrote on the inner div: its size, classes, id and
+    // handlers.
+    fn layout_style(&self) -> Option<&taffy::Style> {
+        crate::div::ElementBuilder::layout_style(&self.inner)
+    }
+
+    fn event_handlers(&self) -> Option<&crate::event_handler::EventHandlers> {
+        crate::div::ElementBuilder::event_handlers(&self.inner)
+    }
+
+    fn element_classes(&self) -> &[std::sync::Arc<str>] {
+        crate::div::ElementBuilder::element_classes(&self.inner)
+    }
+
+    fn element_id(&self) -> Option<&str> {
+        crate::div::ElementBuilder::element_id(&self.inner)
+    }
+
+    fn bound_scroll_ref(&self) -> Option<&crate::selector::ScrollRef> {
+        crate::div::ElementBuilder::bound_scroll_ref(&self.inner)
+    }
+
+    fn bound_element_ref(&self) -> Option<&crate::selector::DivRef> {
+        crate::div::ElementBuilder::bound_element_ref(&self.inner)
+    }
 }
 
 /// Create a table header cell (th)
