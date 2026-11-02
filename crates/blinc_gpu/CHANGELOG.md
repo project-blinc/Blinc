@@ -4,6 +4,9 @@ All notable changes to `blinc_gpu` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `SdfBuilder::line(from, to, width)` draws a capsule, a segment with round ends, as one SDF primitive (a rotated rounded rect), so it is antialiased exactly on any target, multisampled or not. It was a stub that drew nothing.
+
 ### Fixed
 - Retained nested glass samples enclosing prior paint through owned foreground bakes while independent first-level panels keep the prepared frame backdrop. `GroupGlass::nested` records the CPU sampling scope; GPU layouts and shaders are unchanged.
 - Glass inside background isolation samples prior paint from pooled snapshots, including inherited translucent paint, images and GPU output. Background/backdrop dispatch shares the bake; ordinary foreground glass retains its prepared-backdrop path.
