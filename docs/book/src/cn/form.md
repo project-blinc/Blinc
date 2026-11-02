@@ -360,8 +360,9 @@ cn::calendar(picked)
 `CalendarDay` holds a year, a month from 1 to 12 and a day. `CalendarDay::today()`
 is the local date, and `add_days`, `add_months` and `weekday` do the date
 arithmetic. The month and year selects, or the buttons either side of them,
-turn the month, as does dragging or a two-finger swipe across the days
-(leftward for the next; scrolling up and down still moves the page);
+turn the month. Dragging or a two-finger swipe across the days moves the
+month with it; let go far enough and it turns (leftward for the next), or it
+springs back. Moving the pointer off the days cancels it. Scrolling up and down still moves the page;
 choosing a day of the month before or after turns to it.
 Once a day has been clicked, the arrows move by a day or a week, Page Up and
 Page Down by a month, Home and End to the ends of the week, and Enter or Space
@@ -392,7 +393,7 @@ calendar.
 
 The parts are `.cn-calendar`, `-header`, `-caption`, `-nav` (with
 `data-step="prev"` or `"next"`), `-body`, `-weekdays`, `-weekday`, `-months`,
-`-grid` and `-day`. A day carries `data-outside`, `data-today`,
+`-page`, `-grid` and `-day`. A day carries `data-outside`, `data-today`,
 `data-selected`, `data-events`, `data-focus-visible` while the keys are on it,
 and `disabled` outside the allowed years. A turning month's grid carries
 `data-enter` while it slides in and `data-leaving` while it slides out, each

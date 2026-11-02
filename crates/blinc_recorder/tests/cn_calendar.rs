@@ -17,11 +17,15 @@ const PAGE_DOWN: u32 = 34;
 const ENTER: u32 = 13;
 
 fn session() -> Option<Headless> {
+    session_sized(W, H)
+}
+
+fn session_sized(w: u32, h: u32) -> Option<Headless> {
     if !Headless::available() {
         eprintln!("no GPU adapter: skipped");
         return None;
     }
-    let mut ui = Headless::new(W, H).ok()?;
+    let mut ui = Headless::new(w, h).ok()?;
     ui.theme(
         HybridTheme::bundle().with_css(blinc_cn::cn_styles::CN_STYLES),
         ColorScheme::Dark,
@@ -373,4 +377,220 @@ fn a_swipe_turns_one_month_and_vertical_scroll_passes_on() {
         "the page did not scroll: {before} to {after}"
     );
     assert_eq!(first(&ui), 5, "vertical scroll turned the month");
+}
+
+/// The shown month's horizontal offset, from its page's transform.
+fn pulled(ui: &Headless) -> f32 {
+    let grid = all(ui, "cn-calendar-page")[0];
+    match ui
+        .tree()
+        .get_render_node(grid)
+        .and_then(|n| n.props.transform.clone())
+    {
+        Some(blinc_core::Transform::Affine2D(a)) => a.elements[4],
+        _ => 0.0,
+    }
+}
+
+/// A swipe moves the month with the fingers: short of the distance it
+/// springs back when they lift, past it the month turns.
+#[test]
+fn the_month_follows_a_swipe_and_turns_or_springs_back() {
+    let Some(mut ui) = session() else { return };
+    mount(&mut ui, signal(None), signal(Vec::new()));
+    let first = |ui: &Headless| {
+        all(ui, "cn-calendar-day")
+            .into_iter()
+            .position(|d| !has(ui, d, "data-outside"))
+            .unwrap()
+    };
+    let day = all(&ui, "cn-calendar-day")[17];
+    let b = ui.tree().get_absolute_bounds(day).unwrap();
+    ui.move_to(b.x + b.width / 2.0, b.y + b.height / 2.0);
+
+    ui.scroll(-15.0, 0.0).scroll(-15.0, 0.0);
+    assert!((pulled(&ui) + 30.0).abs() < 0.5, "follows: {}", pulled(&ui));
+    ui.scroll_end().settle();
+    assert_eq!(pulled(&ui), 0.0, "springs back");
+    assert_eq!(first(&ui), 0, "still November");
+
+    ui.scroll_start().scroll(-30.0, 0.0).scroll(-30.0, 0.0);
+    assert!((pulled(&ui) + 60.0).abs() < 0.5, "follows: {}", pulled(&ui));
+    ui.scroll_end().settle();
+    assert_eq!(all(&ui, "cn-calendar-grid").len(), 1);
+    assert_eq!(first(&ui), 2, "December");
+    assert_eq!(pulled(&ui), 0.0, "December sits in place");
+}
+
+/// A drag moves the month while the button is down.
+#[test]
+fn the_month_follows_a_drag() {
+    let Some(mut ui) = session() else { return };
+    mount(&mut ui, signal(None), signal(Vec::new()));
+    let day = all(&ui, "cn-calendar-day")[17];
+    let b = ui.tree().get_absolute_bounds(day).unwrap();
+    let (x, y) = (b.x + b.width / 2.0, b.y + b.height / 2.0);
+    ui.move_to(x, y).mouse_down().move_to(x + 25.0, y);
+    assert!((pulled(&ui) - 25.0).abs() < 0.5, "follows: {}", pulled(&ui));
+    ui.mouse_up().settle();
+    assert_eq!(pulled(&ui), 0.0, "springs back");
+}
+
+/// Swipes one after another, each followed by the platform's momentum, turn
+/// a month each with no pause between them; the momentum moves nothing.
+#[test]
+fn back_to_back_swipes_each_turn_a_month() {
+    let Some(mut ui) = session() else { return };
+    mount(&mut ui, signal(None), signal(Vec::new()));
+    let first = |ui: &Headless| {
+        all(ui, "cn-calendar-day")
+            .into_iter()
+            .position(|d| !has(ui, d, "data-outside"))
+            .unwrap()
+    };
+    let day = all(&ui, "cn-calendar-day")[17];
+    let b = ui.tree().get_absolute_bounds(day).unwrap();
+    ui.move_to(b.x + b.width / 2.0, b.y + b.height / 2.0);
+    // November, December, January: first in-month cells 0, 2, 5.
+    for expected in [2, 5] {
+        ui.scroll_start().scroll(-25.0, 0.0).scroll(-25.0, 0.0);
+        assert!(pulled(&ui) < -40.0, "follows the fingers: {}", pulled(&ui));
+        ui.scroll_end();
+        // Momentum after the lift.
+        for _ in 0..5 {
+            ui.scroll(-10.0, 0.0);
+        }
+        ui.settle();
+        assert_eq!(first(&ui), expected);
+        assert_eq!(pulled(&ui), 0.0, "momentum moved the month");
+    }
+}
+
+/// Two calendars side by side, 300px apart.
+fn mount_two(ui: &mut Headless) {
+    ui.mount(move |_| {
+        div()
+            .w(640.0)
+            .h(H as f32)
+            .flex_row()
+            .items_start()
+            .child(
+                div()
+                    .w(320.0)
+                    .child(blinc_cn::calendar(signal(None)).today(day(1))),
+            )
+            .child(
+                div()
+                    .w(320.0)
+                    .child(blinc_cn::calendar(signal(None)).today(day(1))),
+            )
+    });
+    ui.leave().settle();
+}
+
+/// Each calendar's first in-month cell: which month it shows.
+fn firsts(ui: &Headless) -> Vec<usize> {
+    all(ui, "cn-calendar")
+        .into_iter()
+        .map(|cal| {
+            let tree = ui.tree();
+            let mut stack = vec![cal];
+            let mut days = Vec::new();
+            while let Some(n) = stack.pop() {
+                if tree.element_registry().has_class(n, "cn-calendar-day") {
+                    days.push(n);
+                }
+                let mut c = tree.layout_tree.children(n);
+                c.reverse();
+                stack.extend(c);
+            }
+            days.iter()
+                .position(|d| !has(ui, *d, "data-outside"))
+                .unwrap()
+        })
+        .collect()
+}
+
+fn over_day(ui: &mut Headless, calendar: usize) {
+    let day = all(ui, "cn-calendar-day")[calendar * 42 + 17];
+    let b = ui.tree().get_absolute_bounds(day).unwrap();
+    ui.move_to(b.x + b.width / 2.0, b.y + b.height / 2.0);
+}
+
+/// A swipe belongs to the calendar it started on: its momentum, with the
+/// pointer moved onto the other calendar, moves neither.
+#[test]
+fn a_swipe_belongs_to_its_calendar() {
+    let Some(mut ui) = session_sized(640, H) else {
+        return;
+    };
+    mount_two(&mut ui);
+    assert_eq!(firsts(&ui), [0, 0]);
+    over_day(&mut ui, 0);
+    ui.scroll_start()
+        .scroll(-30.0, 0.0)
+        .scroll(-30.0, 0.0)
+        .scroll_end();
+    over_day(&mut ui, 1);
+    for _ in 0..6 {
+        ui.scroll(-20.0, 0.0);
+    }
+    ui.scroll_momentum_end().settle();
+    assert_eq!(
+        firsts(&ui),
+        [2, 0],
+        "the first turned once, the second not at all"
+    );
+}
+
+/// The pointer leaving mid-swipe cancels it: the month springs back, and
+/// what is left of the gesture moves neither calendar.
+#[test]
+fn leaving_cancels_a_swipe() {
+    let Some(mut ui) = session_sized(640, H) else {
+        return;
+    };
+    mount_two(&mut ui);
+    over_day(&mut ui, 0);
+    ui.scroll_start().scroll(-30.0, 0.0);
+    assert!(pulled(&ui) < -20.0, "follows: {}", pulled(&ui));
+    over_day(&mut ui, 1);
+    assert_eq!(pulled(&ui), 0.0, "leaving put the month back");
+    ui.scroll(-30.0, 0.0)
+        .scroll(-30.0, 0.0)
+        .scroll_end()
+        .settle();
+    assert_eq!(firsts(&ui), [0, 0], "neither turned");
+
+    // A new touch on the second is its own swipe.
+    ui.scroll_start()
+        .scroll(-30.0, 0.0)
+        .scroll(-30.0, 0.0)
+        .scroll_end()
+        .settle();
+    assert_eq!(firsts(&ui), [0, 2]);
+}
+
+/// A drag that leaves the days springs back and does not turn the month.
+#[test]
+fn a_drag_leaving_the_days_is_cancelled() {
+    let Some(mut ui) = session() else { return };
+    mount(&mut ui, signal(None), signal(Vec::new()));
+    let day = all(&ui, "cn-calendar-day")[17];
+    let b = ui.tree().get_absolute_bounds(day).unwrap();
+    let (x, y) = (b.x + b.width / 2.0, b.y + b.height / 2.0);
+    ui.move_to(x, y).mouse_down();
+    for step in 1..=4 {
+        ui.move_to(x - step as f32 * 15.0, y);
+    }
+    assert!(pulled(&ui) < -40.0);
+    // Off the bottom of the calendar.
+    ui.move_to(x - 60.0, y + 400.0);
+    assert_eq!(pulled(&ui), 0.0, "leaving put the month back");
+    ui.mouse_up().settle();
+    let first = all(&ui, "cn-calendar-day")
+        .into_iter()
+        .position(|d| !has(&ui, d, "data-outside"))
+        .unwrap();
+    assert_eq!(first, 0, "still November");
 }

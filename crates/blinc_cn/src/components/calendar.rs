@@ -14,8 +14,9 @@
 //! the `cn-calendar-*` keyframes. The navigation buttons carry `data-step`.
 //! The look is the `.cn-calendar*` rules.
 //!
-//! A horizontal drag or two-finger swipe across the days turns the month,
-//! leftward to the next; vertical scrolling passes on to the page.
+//! A horizontal drag or two-finger swipe across the days moves the shown
+//! month with it; let go far enough and the month turns, leftward to the
+//! next, or it springs back. Vertical scrolling passes on to the page.
 //! Once a day has been clicked, the arrows move by a day or a week, Page Up
 //! and Page Down by a month, Home and End to the ends of the week, and Enter
 //! or Space choose the day the keys are on.
@@ -86,11 +87,15 @@ const YEARS_LISTED: i32 = 201;
 const YEAR_ROW_HEIGHT: f32 = 32.0;
 /// How far a press moves before its release stops being a click, in px.
 const DRAG_SLOP: f32 = 8.0;
-/// How far a two-finger swipe scrolls before it turns the month, in px.
-const SWIPE_SCROLL: f32 = 60.0;
+/// How far a two-finger swipe runs before it turns the month without
+/// waiting for the fingers to lift, in px.
+const SWIPE_FAR: f32 = 120.0;
+/// The width of a month's grid, which a pull goes no further than.
+const GRID_WIDTH: f32 = 252.0;
 /// How long a swipe's scroll must pause before another can turn the month.
 const SWIPE_QUIET_MS: u32 = 150;
-/// How far a drag across the days goes before it turns the month, in px.
+/// How far a drag or swipe across the days goes for its release to turn the
+/// month, in px.
 const SWIPE_DISTANCE: f32 = 40.0;
 /// The most events a day shows.
 const MARKS_PER_DAY: usize = 3;
@@ -302,6 +307,13 @@ impl CalendarBuilder {
             week_start: self.week_start,
             day_size: typography.text_sm,
             swiped: Arc::default(),
+            glide: Glide {
+                nav,
+                pull: ctx.use_signal_keyed(&keyed("pull"), || 0.0f32),
+                released: ctx.use_signal_keyed(&keyed("released"), || 0.0f32),
+                outgoing: ctx.use_signal_keyed(&keyed("outgoing"), || None),
+                turns: ctx.use_signal_keyed(&keyed("turns"), || 0u64),
+            },
         };
 
         let mut weekdays = div().class("cn-calendar-weekdays").grid();
@@ -334,7 +346,7 @@ impl CalendarBuilder {
                 |page: &(Month, Option<Side>)| page.0,
                 move |(month, enter)| page(month, enter, &page_parts),
             );
-        let months = swipeable(months, nav, Arc::clone(&parts.swiped));
+        let months = swipeable(months, parts.glide, Arc::clone(&parts.swiped));
 
         let keys = parts.clone();
         let body = div()
@@ -454,6 +466,7 @@ struct Parts {
     /// Set by a drag across the days, so the click its release makes chooses
     /// nothing.
     swiped: Arc<std::sync::atomic::AtomicBool>,
+    glide: Glide,
 }
 
 impl Parts {
@@ -610,63 +623,153 @@ fn step(nav: Nav, side: Side) -> Div {
         })
 }
 
-/// A horizontal drag across the days turns the month: leftward to the next,
-/// rightward to the previous. Once a press has moved, its release chooses no
-/// day.
-fn swipeable(months: Div, nav: Nav, swiped: Arc<std::sync::atomic::AtomicBool>) -> Div {
+/// The shown month follows a horizontal drag or two-finger swipe across the
+/// days. Let go past [`SWIPE_DISTANCE`] and the month turns, leftward to the
+/// next; short of it, it springs back. The pointer leaving the days cancels
+/// the gesture: the month springs back and the rest of it moves nothing.
+/// Once a press has moved, its release chooses no day.
+fn swipeable(months: Div, glide: Glide, swiped: Arc<std::sync::atomic::AtomicBool>) -> Div {
     use std::sync::atomic::Ordering::Relaxed;
-    let dragged = Arc::new(Mutex::new(0.0f32));
-    let follow = Arc::clone(&dragged);
+    let drag = Arc::new(Mutex::new(Drag::default()));
+    let (pressed, dragging, released) = (Arc::clone(&drag), Arc::clone(&drag), drag);
     let moved = Arc::clone(&swiped);
     let swipe = Arc::new(Mutex::new(Swipe::default()));
+    let (lifted, left) = (Arc::clone(&swipe), Arc::clone(&swipe));
     months
-        .on_mouse_down(move |_| swiped.store(false, Relaxed))
+        .on_mouse_down(move |_| {
+            swiped.store(false, Relaxed);
+            *pressed.lock().unwrap() = Drag::default();
+        })
         .on_drag(move |ctx| {
-            *follow.lock().unwrap() = ctx.drag_delta_x;
+            let mut drag = dragging.lock().unwrap();
+            if drag.cancelled {
+                return;
+            }
+            if !inside(ctx) {
+                drag.cancelled = true;
+                glide.pull(0.0);
+                return;
+            }
+            drag.dx = ctx.drag_delta_x;
             if ctx.drag_delta_x.abs() >= DRAG_SLOP {
                 moved.store(true, Relaxed);
+                glide.pull(ctx.drag_delta_x);
             }
         })
         .on_drag_end(move |ctx| {
-            let dx = std::mem::take(&mut *dragged.lock().unwrap());
+            let drag = std::mem::take(&mut *released.lock().unwrap());
+            if drag.cancelled {
+                return;
+            }
             let dx = if ctx.drag_delta_x != 0.0 {
                 ctx.drag_delta_x
             } else {
-                dx
+                drag.dx
             };
-            if dx.abs() >= SWIPE_DISTANCE {
-                turn_toward(nav, dx);
-            }
+            glide.release(dx);
         })
-        .on_scroll_x(move |ctx| swipe.lock().unwrap().scroll(nav, ctx.scroll_delta_x))
+        .on_scroll_x(move |ctx| {
+            swipe.lock().unwrap().scroll(
+                glide,
+                ctx.scroll_delta_x,
+                ctx.scroll_gesture,
+                ctx.scroll_momentum,
+            )
+        })
+        .on_scroll_end(move |_| lifted.lock().unwrap().lift(glide))
+        .on_hover_leave(move |_| left.lock().unwrap().cancel(glide))
 }
 
-/// Turn the month away from a movement `dx`: leftward to the next.
-fn turn_toward(nav: Nav, dx: f32) {
-    if let Some(now) = nav.now() {
-        nav.turn(now.shift(if dx < 0.0 { 1 } else { -1 }));
+/// Whether the pointer is over the element an event reached, when the event
+/// says where that is.
+fn inside(ctx: &blinc_layout::event_handler::EventContext) -> bool {
+    ctx.bounds_width <= 0.0
+        || (ctx.mouse_x >= ctx.bounds_x
+            && ctx.mouse_x <= ctx.bounds_x + ctx.bounds_width
+            && ctx.mouse_y >= ctx.bounds_y
+            && ctx.mouse_y <= ctx.bounds_y + ctx.bounds_height)
+}
+
+/// A drag across the days: how far it has gone, and whether leaving them
+/// cancelled it.
+#[derive(Default)]
+struct Drag {
+    dx: f32,
+    cancelled: bool,
+}
+
+/// How far the shown month has been pulled, and where it was let go.
+#[derive(Clone, Copy)]
+struct Glide {
+    nav: Nav,
+    /// The shown month's offset while a gesture moves it.
+    pull: Signal<f32>,
+    /// The offset it was let go at, which a leaving month keeps.
+    released: Signal<f32>,
+    /// The page let go of to turn, by its month and the turn it was built
+    /// after, which reads `released` from then on.
+    outgoing: Signal<Option<(Month, u64)>>,
+    /// How many turns by release there have been; a page is built after the
+    /// count it reads, so a later page for the same month is not outgoing.
+    turns: Signal<u64>,
+}
+
+impl Glide {
+    fn pull(self, dx: f32) {
+        self.pull.set(dx.clamp(-GRID_WIDTH, GRID_WIDTH));
+    }
+
+    /// Let go after moving `dx`: turn the month away from it if it went far
+    /// enough, and put the shown month back where it belongs.
+    fn release(self, dx: f32) {
+        if dx.abs() >= SWIPE_DISTANCE {
+            if let Some(now) = self.nav.now() {
+                let to = now.shift(if dx < 0.0 { 1 } else { -1 });
+                if self.nav.years.allows(to.year) {
+                    // The month let go of holds its place before the pull
+                    // returns to rest, so it never moves back first.
+                    self.released.set(self.pull.try_get().unwrap_or(0.0));
+                    let turns = self.turns.try_get().unwrap_or(0);
+                    self.outgoing.set(Some((now, turns)));
+                    self.turns.set(turns + 1);
+                    self.pull.set(0.0);
+                    self.nav.turn(to);
+                    return;
+                }
+            }
+        }
+        self.pull.set(0.0);
     }
 }
 
-/// A two-finger swipe: its horizontal scroll adds up until it turns the
-/// month once; the rest of it, momentum included, is spent until the scroll
-/// has been quiet a moment. The gap is timed on the wall clock, as input
-/// events arrive, since nothing animates between two swipes.
+/// A two-finger swipe: the month follows its horizontal scroll and turns or
+/// springs back when the fingers lift. Each touch is a new swipe, told by the
+/// gesture number its scrolls carry; the momentum after a lift moves nothing.
+/// One that runs on past [`SWIPE_FAR`] turns at once. A wheel reports no
+/// gestures, so its swipes are told apart by a quiet moment between them,
+/// timed on the wall clock as input events arrive.
 #[derive(Default)]
 struct Swipe {
     travel: f32,
+    /// This swipe has turned, been let go or been cancelled; the rest of it
+    /// moves nothing.
     spent: bool,
+    gesture: u64,
     last: Option<web_time::Instant>,
 }
 
 impl Swipe {
-    fn scroll(&mut self, nav: Nav, dx: f32) {
+    fn scroll(&mut self, glide: Glide, dx: f32, gesture: u64, momentum: bool) {
+        if momentum {
+            return;
+        }
         let now = web_time::Instant::now();
         let quiet = self
             .last
             .is_none_or(|t| now.duration_since(t).as_millis() >= SWIPE_QUIET_MS as u128);
         self.last = Some(now);
-        if quiet {
+        if gesture != self.gesture || (gesture == 0 && quiet) {
+            self.gesture = gesture;
             self.travel = 0.0;
             self.spent = false;
         }
@@ -674,10 +777,26 @@ impl Swipe {
             return;
         }
         self.travel += dx;
-        if self.travel.abs() >= SWIPE_SCROLL {
+        glide.pull(self.travel);
+        if self.travel.abs() >= SWIPE_FAR {
             self.spent = true;
-            turn_toward(nav, self.travel);
+            glide.release(self.travel);
         }
+    }
+
+    fn lift(&mut self, glide: Glide) {
+        if !self.spent {
+            glide.release(self.travel);
+        }
+        self.spent = true;
+    }
+
+    /// The pointer left: put the month back and let the rest go by.
+    fn cancel(&mut self, glide: Glide) {
+        if !self.spent {
+            glide.pull(0.0);
+        }
+        self.spent = true;
     }
 }
 
@@ -688,25 +807,52 @@ fn page(month: Month, enter: Option<Side>, parts: &Parts) -> Row {
     let out_to =
         |side: Side| computed(move |g: &ReactiveGraph| g.get(leaving).flatten() == Some(side));
     let gone = computed(move |g: &ReactiveGraph| g.get(leaving).flatten().is_some());
+    // Shown, it follows the gesture's pull; leaving, it stays where it was let
+    // go, so its slide out starts there.
+    let glide = parts.glide;
+    let born = glide.turns.try_get().unwrap_or(0);
+    let kept = signal(0.0f32);
+    let offset = computed(move |g: &ReactiveGraph| {
+        if g.get(leaving).flatten().is_some() {
+            g.get(kept).unwrap_or(0.0)
+        } else if g.get(glide.outgoing).flatten() == Some((month, born)) {
+            g.get(glide.released).unwrap_or(0.0)
+        } else {
+            g.get(glide.pull).unwrap_or(0.0)
+        }
+    });
     let mut grid = div()
         .class("cn-calendar-grid")
         .grid()
         .attr_when("data-enter", "next", enter == Some(Side::Next))
         .attr_when("data-enter", "prev", enter == Some(Side::Prev))
         .attr_when("data-leaving", "next", out_to(Side::Next))
-        .attr_when("data-leaving", "prev", out_to(Side::Prev))
-        .absolute_when(&gone);
+        .attr_when("data-leaving", "prev", out_to(Side::Prev));
     for day in month.grid(parts.week_start) {
         grid = grid.child(day_cell(day, month, parts));
     }
+    // The offset sits on a page around the grid, so the grid's slide
+    // keyframes add to it rather than replace it.
+    let page = div()
+        .class("cn-calendar-page")
+        .absolute_when(&gone)
+        .bind_transform_from(&offset, |x: f32| Transform::translate(x, 0.0))
+        .child(grid);
 
     // Kept until its slide has played: the theme's normal duration, on the
     // animation clock.
     let side = parts.nav.side;
     let timer = Arc::new(Mutex::new(Timer::default()));
     let start = Arc::clone(&timer);
-    Row::new(grid).on_leave(
+    Row::new(page).on_leave(
         move || {
+            // A month let go of slides out from where it was let go; one
+            // turned by a button or key, from rest.
+            let outgoing = glide.outgoing.try_get().flatten() == Some((month, born));
+            kept.set(match outgoing {
+                true => glide.released.try_get().unwrap_or(0.0),
+                false => 0.0,
+            });
             leaving.set(Some(side.try_get().flatten().unwrap_or(Side::Next)));
             let ms = ThemeState::get().animations().duration_normal as u32;
             start.lock().unwrap().start(ms);
