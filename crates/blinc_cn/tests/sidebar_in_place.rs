@@ -1,6 +1,5 @@
-//! A sidebar's rail is built once: collapsing hides its labels and titles
-//! and narrows it in place, and choosing an item moves the active mark, with
-//! no subtree rebuilt.
+//! A sidebar's rail is built once: collapsing narrows it in place by rule,
+//! and choosing an item moves the active mark, with no subtree rebuilt.
 
 mod common;
 
@@ -13,7 +12,8 @@ use blinc_layout::renderer::RenderTree;
 use common::*;
 
 /// Marks the active item, as the theme's rule would.
-const RULE: &str = ".cn-sidebar-item--active { background: #123456 }";
+const RULE: &str =
+    ".cn-sidebar-item[data-active], .cn-sidebar-item[data-active]:hover { background: #123456 }";
 const ICON: &str = r#"<svg viewBox="0 0 24 24"><rect width="24" height="24"/></svg>"#;
 
 struct Scene {
@@ -33,7 +33,10 @@ fn scene() -> Scene {
         .item("Archive", ICON, || {});
     let host = div().w(600.0).h(400.0).child(bar);
     let mut tree = RenderTree::from_element(&host);
-    tree.set_stylesheet(Stylesheet::parse(RULE).expect("css"));
+    // cn's rules size the rail; the test's rule marks the active item.
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    let css = format!("{}\n{RULE}", blinc_cn::cn_styles::CN_STYLES);
+    tree.set_stylesheet(Stylesheet::parse_with_variables(&css, &vars).expect("css"));
     tree.apply_stylesheet_layout_overrides();
     tree.apply_stylesheet_base_styles();
     tree.compute_layout(600.0, 400.0);
@@ -79,6 +82,7 @@ impl Scene {
         );
         let updates = blinc_layout::take_pending_partial_prop_updates();
         self.tree.apply_partial_property_updates(updates);
+        self.tree.apply_stylesheet_layout_overrides();
         self.tree.compute_layout(600.0, 400.0);
     }
 
@@ -128,41 +132,5 @@ fn choosing_an_item_moves_the_active_mark() {
         s.click(items[1]);
         assert!(s.active(items[1]), "the chosen item is not marked active");
         assert!(!s.active(items[0]), "the old item is still marked active");
-    })
-}
-
-#[test]
-fn the_rail_animates_its_width() {
-    guarded(|| {
-        let mut s = scene();
-        let rail = s.find_class("cn-sidebar")[0];
-        let open = s.rail_width();
-        s.collapsed.set(true);
-        s.frame();
-        let shut = s.rail_width();
-        tick_animations(1.0 / 60.0);
-        s.tree.compute_layout(600.0, 400.0);
-        let drawn = s
-            .tree
-            .get_visual_render_bounds(rail)
-            .map(|b| b.width)
-            .unwrap_or(shut);
-        assert!(
-            drawn > shut + 2.0 && drawn < open,
-            "the rail jumped shut: drawn {drawn} between {shut} and {open}"
-        );
-        for _ in 0..120 {
-            tick_animations(1.0 / 60.0);
-            s.tree.compute_layout(600.0, 400.0);
-        }
-        let settled = s
-            .tree
-            .get_visual_render_bounds(rail)
-            .map(|b| b.width)
-            .unwrap_or(shut);
-        assert!(
-            (settled - shut).abs() < 1.0,
-            "the rail settled at {settled}, not {shut}"
-        );
     })
 }

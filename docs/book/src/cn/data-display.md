@@ -173,59 +173,43 @@ chart()
 
 ## Tree
 
-Hierarchical data display:
+A selectable tree whose items open and close:
 
 ```rust
-tree()
-    .child(tree_item("root")
-        .child(tree_item_content()
-            .child(icon(icons::FOLDER))
-            .child(text("Documents")))
-        .child(tree_item("doc1")
-            .child(tree_item_content()
-                .child(icon(icons::FILE))
-                .child(text("Report.pdf"))))
-        .child(tree_item("doc2")
-            .child(tree_item_content()
-                .child(icon(icons::FILE))
-                .child(text("Notes.txt")))))
-```
-
-### Expandable Tree
-
-```rust
-tree()
-    .child(tree_item("projects")
-        .expandable(true)
-        .expanded(true)
-        .child(tree_item_trigger()
-            .child(icon(icons::FOLDER))
-            .child(text("Projects")))
-        .child(tree_item_content()
-            .child(tree_item("project1")
-                .child(tree_item_trigger()
-                    .child(icon(icons::FOLDER))
-                    .child(text("Project A")))
-                .child(tree_item_content()
-                    .child(tree_item("file1")
-                        .child(tree_item_content()
-                            .child(icon(icons::FILE))
-                            .child(text("main.rs"))))))))
-```
-
-### Selectable Tree
-
-```rust
-let selected = use_state_keyed("tree_selected", || HashSet::new());
-
-tree()
-    .selectable(true)
-    .selected(&selected)
-    .on_select({
-        let selected = selected.clone();
-        move |ids| selected.set(ids)
+tree_view()
+    .node("src", "src", |n| {
+        n.expanded()
+            .child("main", "main.rs", |c| c.icon(to_svg(icons::FILE, 16.0)))
+            .child("ui", "ui", |c| c.child("button", "button.rs", |c| c.icon(to_svg(icons::FILE, 16.0))))
     })
-    .child(/* tree items */)
+    .node("cargo", "Cargo.toml", |n| n.icon(to_svg(icons::FILE, 16.0)))
+    .selected("main")
+    .on_select(|key| println!("selected {key}"))
+```
+
+Clicking a row selects it and opens or closes it. Once the tree has been
+clicked, Up and Down walk the shown rows, Right opens a row or enters its
+children, Left closes it or goes to its parent, Home and End jump to the ends,
+and Enter or Space selects.
+
+A node's `.diff(TreeNodeDiff::Added)` (or `Removed`, `Modified`) colours its
+row. Guide lines run beside open groups; `.guides(false)` hides them, and
+`.indent(px)` sets how far a group sits in (14px by default).
+
+### Styling
+
+Each `.cn-tree-item` holds a `.cn-tree-row` and, with children, a
+`.cn-tree-group`. A row carries `data-selected`, `data-diff` and, while the
+keys are on it, `data-focus-visible`; an item and its group carry
+`data-state="open"` or `"closed"`. A closed group is at no height by rule, and
+the change eases over the theme's normal duration with the rows below moving
+with it. The parts are `.cn-tree-chevron`, `.cn-tree-icon`, `.cn-tree-label`
+and `.cn-tree-guide`:
+
+```css
+.cn-tree-row[data-selected] { background: var(--accent-subtle); }
+.cn-tree-row[data-diff="added"] { color: #22c55e; }
+.cn-tree[data-guides] .cn-tree-guide { background: var(--text-tertiary); }
 ```
 
 ## Kbd

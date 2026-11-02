@@ -140,66 +140,45 @@ cn::pagination(10, page)
 
 ## Sidebar
 
-Application sidebar navigation:
+A navigation rail that collapses to its icons:
 
 ```rust
-sidebar()
-    .child(sidebar_header()
-        .child(
-            div().flex_row().items_center().gap(8.0)
-                .child(icon(icons::BOX).size(24.0))
-                .child(text("My App").weight(FontWeight::Bold))
-        ))
-    .child(sidebar_content()
-        .child(sidebar_group()
-            .child(sidebar_group_label("Main"))
-            .child(sidebar_menu()
-                .child(sidebar_menu_item("dashboard")
-                    .icon(icons::HOME)
-                    .active(current_route == "dashboard")
-                    .on_click(|| navigate("/dashboard"))
-                    .child(text("Dashboard")))
-                .child(sidebar_menu_item("projects")
-                    .icon(icons::FOLDER)
-                    .on_click(|| navigate("/projects"))
-                    .child(text("Projects")))
-                .child(sidebar_menu_item("tasks")
-                    .icon(icons::CHECK_SQUARE)
-                    .on_click(|| navigate("/tasks"))
-                    .child(text("Tasks")))))
-        .child(sidebar_group()
-            .child(sidebar_group_label("Settings"))
-            .child(sidebar_menu()
-                .child(sidebar_menu_item("settings")
-                    .icon(icons::SETTINGS)
-                    .on_click(|| navigate("/settings"))
-                    .child(text("Settings")))
-                .child(sidebar_menu_item("help")
-                    .icon(icons::HELP_CIRCLE)
-                    .on_click(|| navigate("/help"))
-                    .child(text("Help"))))))
-    .child(sidebar_footer()
-        .child(
-            div().flex_row().items_center().gap(8.0)
-                .child(avatar().src("user.jpg").size(AvatarSize::Sm))
-                .child(text("John Doe"))
-        ))
+let collapsed = ctx.use_signal(false);
+let page = ctx.use_signal(0usize);
+
+sidebar(collapsed)
+    .section("Main")
+    .item_active("Dashboard", to_svg(icons::HOUSE, 16.0), move || page.set(0))
+    .item("Projects", to_svg(icons::FOLDER, 16.0), move || page.set(1))
+    .section("Settings")
+    .item("Settings", to_svg(icons::SETTINGS, 16.0), move || page.set(2))
+    .content(|_| div().p(6.0).child(text("Page")))
 ```
 
-### Collapsible Sidebar
+The toggle at the top flips `collapsed`, and setting the signal from
+elsewhere collapses it the same way. Clicking an item marks it active.
+`.content(..)` places a page beside the rail that moves with it as it
+narrows; drive what the page shows from a signal the items write.
+
+### Styling
+
+The rail is `.cn-sidebar` with `data-state="expanded"` or `"collapsed"`. Its
+width is a rule, `var(--cn-sidebar-width, 200px)` open and
+`var(--cn-sidebar-collapsed-width, 41px)` collapsed, eased by a `width`
+transition over the theme's normal duration; the page beside it, a
+`.cn-sidebar-inset`, is laid out again each frame. Labels
+(`.cn-sidebar-label`) fade and group titles (`.cn-sidebar-group-label`) fold
+away while collapsed. An item is `.cn-sidebar-item`, `data-active` while it is
+the selection, with a `.cn-sidebar-icon`.
+
+```css
+.wide-nav.cn-sidebar { width: 280px; }
+.wide-nav.cn-sidebar[data-state="collapsed"] { width: 64px; }
+.wide-nav.cn-sidebar { transition: width 400ms var(--ease-state); }
+```
 
 ```rust
-let is_collapsed = use_state_keyed("sidebar_collapsed", || false);
-
-sidebar()
-    .collapsed(is_collapsed.clone())
-    .child(sidebar_header()
-        .child(sidebar_trigger()
-            .on_click({
-                let is_collapsed = is_collapsed.clone();
-                move |_| is_collapsed.set(!is_collapsed.get())
-            })))
-    .child(/* rest of sidebar */)
+sidebar(collapsed).class("wide-nav")
 ```
 
 ## Navigation Menu

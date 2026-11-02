@@ -81,12 +81,6 @@ impl CnSidebar {
 
         let collapsed = crate::bridge::bool_state(&self.collapsed);
         let mut b = blinc_cn::sidebar(collapsed.signal());
-        if self.expanded_w > 0.0 {
-            b = b.expanded_width(self.expanded_w as f32);
-        }
-        if self.collapsed_w > 0.0 {
-            b = b.collapsed_width(self.collapsed_w as f32);
-        }
         if self.hide_toggle {
             b = b.show_toggle(false);
         }

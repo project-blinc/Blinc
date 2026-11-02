@@ -11,7 +11,8 @@ use blinc_layout::renderer::RenderTree;
 use common::*;
 
 /// Marks the selected node, as the theme's rule would.
-const RULE: &str = ".cn-tree-node--selected { background: #123456 }";
+const RULE: &str =
+    ".cn-tree-row[data-selected], .cn-tree-row[data-selected]:hover { background: #123456 }";
 
 struct Scene {
     tree: RenderTree,
@@ -49,7 +50,7 @@ impl Scene {
         let mut found = Vec::new();
         let mut stack = vec![self.tree.root().unwrap()];
         while let Some(node) = stack.pop() {
-            if registry.has_class(node, "cn-tree-node") {
+            if registry.has_class(node, "cn-tree-row") {
                 found.push(node);
             }
             let mut children = self.tree.layout_tree.children(node);
@@ -59,7 +60,7 @@ impl Scene {
         found
     }
 
-    /// The container holding a node row's children: the row's next sibling.
+    /// The group holding a row's children: the row's next sibling.
     fn children_of(&self, row: LayoutNodeId) -> LayoutNodeId {
         let mut stack = vec![self.tree.root().unwrap()];
         while let Some(node) = stack.pop() {
@@ -69,7 +70,7 @@ impl Scene {
             }
             stack.extend(kids);
         }
-        panic!("the row has no children container");
+        panic!("the row has no group");
     }
 
     fn height(&self, node: LayoutNodeId) -> f32 {

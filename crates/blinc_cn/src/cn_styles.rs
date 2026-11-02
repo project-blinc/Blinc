@@ -55,7 +55,7 @@ pub const CN_STYLES: &str = concat!(
 .cn-context-menu, .cn-context-menu-item,
 .cn-menubar, .cn-menubar-trigger, .cn-menubar-content, .cn-menubar-item,
 .cn-popover-content, .cn-hover-card-content,
-.cn-tree-node, .cn-skeleton {
+.cn-tree, .cn-skeleton {
     font-family: var(--font-sans);
 }
 
@@ -1243,32 +1243,63 @@ pub const CN_STYLES: &str = concat!(
    Sidebar
    ============================================================================ */
 
-/* The toggle's chevron points left while the rail is open and turns right
-   while it is collapsed. */
-.cn-sidebar-chevron { transition: transform var(--duration-normal) var(--ease-state); }
-.cn-sidebar[data-state="collapsed"] .cn-sidebar-chevron { transform: rotate(180deg); }
+/* Collapsing eases the rail's width to its icons' and back; the content
+   beside it is laid out again each frame and moves with it. What the rail
+   holds stays laid out, clipped by the narrowing width: labels fade and
+   group titles fold away. */
+.cn-sidebar-layout { flex-direction: row; align-items: stretch; overflow: hidden; }
 .cn-sidebar {
+    flex-direction: column;
+    flex-shrink: 0;
+    gap: 2px;
+    padding: 8px 0;
+    overflow: hidden;
+    width: var(--cn-sidebar-width, 200px);
     background: var(--cn-sidebar-bg, var(--surface));
     border-right: 1px solid var(--border);
+    transition: width var(--duration-normal) var(--ease-state);
 }
-.cn-sidebar-item {
-    padding: var(--space-2) var(--space-3);
-    cursor: pointer;
+.cn-sidebar[data-state="collapsed"] { width: var(--cn-sidebar-collapsed-width, 41px); }
+.cn-sidebar-toggle {
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-state);
 }
-.cn-sidebar-item:hover:not(.cn-sidebar-item--active) {
-    /* Subtle accent feedback — matches the overlay-menu hover treatment
-       (dropdown / select / context). Previously this used
-       `--surface-elevated` (#FBFCFE in light), which is the same token
-       as the active state, so hover and active looked identical. */
-    background: var(--accent-subtle);
-    color: var(--text-primary);
+.cn-sidebar-toggle:hover { background: var(--accent-subtle); color: var(--text-primary); }
+/* Points left while the rail is open and turns right while it is collapsed. */
+.cn-sidebar-chevron { transition: transform var(--duration-normal) var(--ease-state); }
+.cn-sidebar[data-state="collapsed"] .cn-sidebar-chevron { transform: rotate(180deg); }
+.cn-sidebar-group { flex-direction: column; gap: 2px; }
+.cn-sidebar-group-label {
+    flex-shrink: 0;
+    height: 26px;
+    padding: 8px 12px 0;
+    overflow: hidden;
+    color: var(--text-tertiary);
+    transition: height var(--duration-normal) var(--ease-state),
+        padding-top var(--duration-normal) var(--ease-state),
+        opacity var(--duration-fast) var(--ease-state);
 }
-.cn-sidebar-item--active {
+.cn-sidebar[data-state="collapsed"] .cn-sidebar-group-label { height: 0; padding: 0 12px; opacity: 0; }
+.cn-sidebar-item {
+    padding: 8px 12px;
+    color: var(--text-secondary);
+    background: transparent;
+    cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-state),
+        color var(--duration-fast) var(--ease-state);
+}
+.cn-sidebar-item:hover { background: var(--accent-subtle); color: var(--text-primary); }
+.cn-sidebar-item[data-active], .cn-sidebar-item[data-active]:hover {
     background: var(--surface-elevated);
     color: var(--text-primary);
 }
+.cn-sidebar-item[data-active] > .cn-sidebar-icon { color: var(--primary); }
+.cn-sidebar-label { transition: opacity var(--duration-fast) var(--ease-state); }
+.cn-sidebar[data-state="collapsed"] .cn-sidebar-label { opacity: 0; }
+.cn-sidebar-inset { flex-grow: 1; flex-direction: column; min-width: 0; }
 
 /* ============================================================================
    Scroll Area
@@ -1466,29 +1497,40 @@ pub const CN_STYLES: &str = concat!(
    Tree View
    ============================================================================ */
 
-/* A node's children close to no height by rule while it is shut, the change
-   eased by their layout animation; its chevron turns down while it is open. */
-.cn-tree-children { overflow: hidden; }
-.cn-tree-children[data-state="closed"] { height: 0; }
-.cn-tree-chevron { transition: transform var(--duration-normal) var(--ease-state); }
-.cn-tree-node[data-state="open"] > .cn-tree-chevron { transform: rotate(90deg); }
-.cn-tree-node {
-    /* No `padding` here — Rust owns per-side padding so the left side
-       can encode tree-depth indent. CSS overriding `padding:` would
-       collapse all rows to the same x-offset. */
-    border-radius: var(--radius-sm);
+/* A closed group is at no height, the change eased by its layout animation,
+   and its item's chevron turns down while open. Guides show along groups
+   while the tree has `data-guides`. */
+.cn-tree { font-size: var(--text-sm); }
+.cn-tree-row {
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    background: transparent;
     cursor: pointer;
-    /* No CSS `transition` here — same rationale as cn-menubar-item /
-       cn-select-item: the bg transition leaves multiple rows
-       partially highlighted on a fast cursor sweep. */
+    outline: 0 solid var(--focus-ring);
+    outline-offset: -2px;
+    transition: background var(--duration-fast) var(--ease-state),
+        color var(--duration-fast) var(--ease-state);
 }
-.cn-tree-node:hover {
-    background: var(--surface-elevated);
+.cn-tree-row:hover { background: var(--accent-subtle); color: var(--text-primary); }
+.cn-tree-row[data-selected], .cn-tree-row[data-selected]:hover {
+    background: color-mix(in srgb, var(--primary) 24%, transparent);
+    color: var(--text-primary);
 }
-.cn-tree-node--selected {
-    background: var(--primary);
-    color: var(--text-inverse);
+.cn-tree-row[data-focus-visible] { outline-width: 2px; }
+.cn-tree-row[data-diff="added"] { color: var(--success); }
+.cn-tree-row[data-diff="removed"] { color: var(--error); }
+.cn-tree-row[data-diff="modified"] { color: var(--warning); }
+.cn-tree-chevron {
+    color: var(--text-tertiary);
+    transition: transform var(--duration-normal) var(--ease-state);
 }
+.cn-tree-item[data-state="open"] > .cn-tree-row > .cn-tree-chevron { transform: rotate(90deg); }
+.cn-tree-icon { color: var(--text-tertiary); }
+.cn-tree-row[data-selected] > .cn-tree-icon { color: var(--primary); }
+.cn-tree-group { overflow: hidden; }
+.cn-tree-group[data-state="closed"] { height: 0; }
+.cn-tree-guide { background: transparent; }
+.cn-tree[data-guides] .cn-tree-guide { background: var(--border); }
 
 /* ============================================================================
    Resizable

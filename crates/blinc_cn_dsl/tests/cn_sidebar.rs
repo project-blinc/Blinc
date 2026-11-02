@@ -33,12 +33,22 @@ fn compiled(src: &str, name: &str) -> BlincDsl {
 fn laid_out(dsl: &BlincDsl) -> RenderTree {
     let host = div().w(900.0).h(600.0).child_box(dsl.view_widget());
     let mut tree = RenderTree::from_element(&host);
+    // The rail's width is a cn rule.
+    let vars = blinc_theme::ThemeState::get().to_css_variable_map();
+    tree.set_stylesheet(
+        blinc_layout::css_parser::Stylesheet::parse_with_variables(
+            blinc_cn::cn_styles::CN_STYLES,
+            &vars,
+        )
+        .expect("css"),
+    );
+    tree.apply_all_stylesheet_styles();
     tree.compute_layout(900.0, 600.0);
     tree
 }
 
 /// The text the tree shows: what is under an element taken out of layout
-/// (`display: none`, as a collapsed rail's labels are) is not shown.
+/// (`display: none`) is not shown.
 fn texts(tree: &RenderTree) -> Vec<String> {
     let mut out = Vec::new();
     let mut stack = vec![tree.root().expect("root")];
@@ -60,32 +70,22 @@ fn texts(tree: &RenderTree) -> Vec<String> {
     out
 }
 
-/// Width of the narrowest node holding `label`: the navigation rail is
-/// what changes width on collapse, and the row sits inside it.
-fn rail_width(tree: &RenderTree, label: &str) -> f32 {
-    let mut stack = vec![(tree.root().expect("root"), Vec::new())];
-    while let Some((id, path)) = stack.pop() {
-        if let Some(node) = tree.get_render_node(id)
-            && let ElementType::Text(t) = &node.element_type
-            && t.content == label
-        {
-            // The row's own width tracks the rail, both being sized from
-            // the widest label.
-            let row = path.last().copied().unwrap_or(id);
+/// Width of the navigation rail, `.cn-sidebar`.
+fn rail_width(tree: &RenderTree) -> f32 {
+    let registry = tree.element_registry();
+    let mut stack = vec![tree.root().expect("root")];
+    while let Some(id) = stack.pop() {
+        if registry.has_class(id, "cn-sidebar") {
             return tree
                 .layout_tree
-                .get_layout(row)
+                .get_layout(id)
                 .expect("laid out")
                 .size
                 .width;
         }
-        let mut child_path = path.clone();
-        child_path.push(id);
-        for child in tree.layout_tree.children(id) {
-            stack.push((child, child_path.clone()));
-        }
+        stack.extend(tree.layout_tree.children(id).iter().copied());
     }
-    panic!("no row labelled {label}")
+    panic!("no rail")
 }
 
 const NAV: &str = r#"signal shut: bool = false
@@ -135,11 +135,11 @@ fn the_rail_navigates_and_collapses() {
 
     let tree = laid_out(&dsl);
     let found = texts(&tree);
-    for want in ["WIDGETS", "Forms", "Feedback", "the forms page"] {
+    for want in ["Widgets", "Forms", "Feedback", "the forms page"] {
         assert!(found.iter().any(|t| t == want), "{want} renders: {found:?}");
     }
-    let expanded = rail_width(&tree, "Forms");
-    assert!(expanded > 0.0, "the expanded row had width: {expanded}");
+    let expanded = rail_width(&tree);
+    assert!(expanded > 0.0, "the expanded rail had width: {expanded}");
 
     // The write an item's `on_click` makes.
     dsl.set_signal_i32("page", 1);
@@ -157,11 +157,13 @@ fn the_rail_navigates_and_collapses() {
     // modules own that name and an unqualified write has no single signal
     // to land on.
     dsl.set_signal_bool("nav_flow.shut", true);
-    let found = texts(&laid_out(&dsl));
+    let tree = laid_out(&dsl);
+    let collapsed = rail_width(&tree);
     assert!(
-        !found.iter().any(|t| t == "Forms" || t == "WIDGETS"),
-        "a collapsed rail shows icons only: {found:?}"
+        collapsed < expanded - 100.0,
+        "the rail narrows to its icons: {collapsed} from {expanded}"
     );
+    let found = texts(&tree);
     assert!(
         found.iter().any(|t| t == "the feedback page"),
         "and the content area stays: {found:?}"
