@@ -10,14 +10,14 @@
 //!   a snapshot stack capped at 200 entries.
 //!
 //! The factory wraps the renderer in a `Stateful` whose rebuild is
-//! triggered by a private `version: State<u32>` signal that the click
+//! triggered by a private `version: Signal<u32>` that the click
 //! and key handlers bump after every mutation. The Stateful's `on_state`
 //! callback re-walks the line geometry index against the current
 //! document and emits the cursor / selection overlay.
 
 use std::sync::Arc;
 
-use blinc_core::State;
+use blinc_core::Signal;
 use blinc_core::context_state::BlincContextState;
 
 use crate::div::{Div, div};
@@ -51,7 +51,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
     // Per-editor signal that bumps on every state mutation.
     let blinc = BlincContextState::get();
     let version_key = format!("rich_text_editor:{:p}", Arc::as_ptr(state));
-    let version: State<u32> = blinc.use_state_keyed(&version_key, || 0);
+    let version: Signal<u32> = blinc.use_signal_keyed(&version_key, || 0);
 
     // Pre-populate the line index so the very first frame can already
     // hit-test clicks before any state mutation has happened.
@@ -62,10 +62,10 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
     let state_for_drag = Arc::clone(state);
     let state_for_key = Arc::clone(state);
     let state_for_text = Arc::clone(state);
-    let version_for_click = version.clone();
-    let version_for_drag = version.clone();
-    let version_for_key = version.clone();
-    let version_for_text = version.clone();
+    let version_for_click = version;
+    let version_for_drag = version;
+    let version_for_key = version;
+    let version_for_text = version;
 
     let content = content(state, &version, &theme, content_width);
 
@@ -100,7 +100,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
             // (the global hook lives inside `RichTextEditorState::set_focus`).
             crate::widgets::text_input::bump_focus_tap_generation();
             let blur_state = Arc::clone(&state_for_click);
-            let blur_version = version_for_click.clone();
+            let blur_version = version_for_click;
             crate::widgets::text_input::set_focused_editable_node(
                 ctx.node_id,
                 Some(Box::new(move || {
@@ -183,7 +183,7 @@ pub fn rich_text_editor(state: &RichTextState, theme: RichTextTheme, content_wid
                     crate::widgets::text_edit::hide_edit_menu();
                     let captured_pos = pos;
                     let state_for_long_press = Arc::clone(&state_for_click);
-                    let version_for_long_press = version_for_click.clone();
+                    let version_for_long_press = version_for_click;
                     crate::widgets::text_input::arm_long_press_timer(
                         ctx.bounds_x + ctx.local_x,
                         ctx.bounds_y + ctx.local_y,

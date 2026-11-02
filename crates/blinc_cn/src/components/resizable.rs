@@ -48,9 +48,9 @@
 use std::cell::{OnceCell, RefCell};
 use std::sync::Arc;
 
-use blinc_core::State;
 use blinc_core::context_state::BlincContextState;
 use blinc_core::reactive::{ReactiveGraph, computed};
+use blinc_core::{Signal, State};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::{Div, ElementBuilder};
 use blinc_layout::element::{CursorStyle, RenderProps};
@@ -270,7 +270,7 @@ impl ResizableGroup {
             .collect();
 
         // Create persisted state for each panel's size
-        let panel_sizes: Vec<State<f32>> = config
+        let panel_sizes: Vec<Signal<f32>> = config
             .panels
             .iter()
             .enumerate()
@@ -281,14 +281,15 @@ impl ResizableGroup {
                     format!("{}_{}", key, panel.id)
                 };
                 let default = panel.default_size.unwrap_or(200.0);
-                ctx.use_state_keyed(&panel_key, || default)
+                ctx.use_signal_keyed(&panel_key, || default)
             })
             .collect();
 
         // Create drag state
-        let drag_index = ctx.use_state_keyed(&format!("{}_drag_idx", key), || -1i32);
-        let drag_start_pos = ctx.use_state_keyed(&format!("{}_drag_start", key), || 0.0f32);
-        let drag_start_sizes = ctx.use_state_keyed(&format!("{}_drag_sizes", key), Vec::<f32>::new);
+        let drag_index = ctx.use_signal_keyed(&format!("{}_drag_idx", key), || -1i32);
+        let drag_start_pos = ctx.use_signal_keyed(&format!("{}_drag_start", key), || 0.0f32);
+        let drag_start_sizes =
+            ctx.use_signal_keyed(&format!("{}_drag_sizes", key), Vec::<f32>::new);
 
         // Build container
         let mut container = div().w_full().h_full();
@@ -305,7 +306,7 @@ impl ResizableGroup {
         // Build panels with handles between them
         let panel_count = config.panels.len();
         for (i, panel_config) in config.panels.into_iter().enumerate() {
-            let size_state = panel_sizes[i].clone();
+            let size_state = panel_sizes[i];
             let is_flex = panel_config.is_flex;
             let flex_grow_factor = panel_config.flex_grow;
             let min_size = panel_config.min_size;
@@ -346,7 +347,7 @@ impl ResizableGroup {
                 let mut sized = div().overflow_clip().relative();
                 match direction {
                     ResizeDirection::Horizontal => {
-                        sized = sized.w(&size_state).h_full();
+                        sized = sized.w(size_state).h_full();
                         if min_size > 0.0 {
                             sized = sized.min_w(min_size);
                         }
@@ -355,7 +356,7 @@ impl ResizableGroup {
                         }
                     }
                     ResizeDirection::Vertical => {
-                        sized = sized.h(&size_state).w_full();
+                        sized = sized.h(size_state).w_full();
                         if min_size > 0.0 {
                             sized = sized.min_h(min_size);
                         }
@@ -394,9 +395,9 @@ impl ResizableGroup {
                     &panel_sizes,
                     left_constraints,
                     right_constraints,
-                    drag_index.clone(),
-                    drag_start_pos.clone(),
-                    drag_start_sizes.clone(),
+                    drag_index,
+                    drag_start_pos,
+                    drag_start_sizes,
                     config.on_resize.clone(),
                 );
                 container = container.child(handle);
@@ -419,12 +420,12 @@ impl ResizableGroup {
         index: usize,
         direction: ResizeDirection,
         handle_config: &ResizeHandleConfig,
-        panel_sizes: &[State<f32>],
+        panel_sizes: &[Signal<f32>],
         left_constraints: PanelConstraints,
         right_constraints: PanelConstraints,
-        drag_index: State<i32>,
-        drag_start_pos: State<f32>,
-        drag_start_sizes: State<Vec<f32>>,
+        drag_index: Signal<i32>,
+        drag_start_pos: Signal<f32>,
+        drag_start_sizes: Signal<Vec<f32>>,
         on_resize: Option<Arc<dyn Fn(&[f32]) + Send + Sync>>,
     ) -> Div {
         let thickness = handle_config.thickness;
@@ -434,7 +435,7 @@ impl ResizableGroup {
 
         // While this handle is dragged it carries `data-state="dragging"`;
         // the line's colour is the `.cn-resizable-*` rules.
-        let dragging = drag_index.signal();
+        let dragging = drag_index;
         let dragged = computed(move |g: &ReactiveGraph| g.get(dragging) == Some(idx as i32));
 
         let (cursor, bar, hit_area) = match direction {
@@ -450,15 +451,15 @@ impl ResizableGroup {
             ),
         };
 
-        let drag_index_for_down = drag_index.clone();
-        let drag_index_for_drag = drag_index.clone();
+        let drag_index_for_down = drag_index;
+        let drag_index_for_drag = drag_index;
         let drag_index_for_end = drag_index;
-        let drag_start_pos_for_down = drag_start_pos.clone();
+        let drag_start_pos_for_down = drag_start_pos;
         let drag_start_pos_for_drag = drag_start_pos;
-        let drag_start_sizes_for_down = drag_start_sizes.clone();
+        let drag_start_sizes_for_down = drag_start_sizes;
         let drag_start_sizes_for_drag = drag_start_sizes;
-        let panel_sizes_for_down: Vec<State<f32>> = panel_sizes.to_vec();
-        let panel_sizes_for_drag: Vec<State<f32>> = panel_sizes.to_vec();
+        let panel_sizes_for_down: Vec<Signal<f32>> = panel_sizes.to_vec();
+        let panel_sizes_for_drag: Vec<Signal<f32>> = panel_sizes.to_vec();
 
         let left_min = left_constraints.min_size;
         let left_max = left_constraints.max_size;

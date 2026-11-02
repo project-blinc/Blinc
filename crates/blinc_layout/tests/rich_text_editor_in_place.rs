@@ -140,7 +140,7 @@ impl Scene {
 
     fn bump(&self) {
         let key = format!("rich_text_editor:{:p}", Arc::as_ptr(&self.state));
-        let version = blinc_core::BlincContextState::get().use_state_keyed(&key, || 0u32);
+        let version = blinc_core::BlincContextState::get().use_signal_keyed(&key, || 0u32);
         version.set(version.get().wrapping_add(1));
     }
 

@@ -44,6 +44,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - `@layer name { ... }` in stylesheets: its class rules sit below every unlayered rule regardless of specificity. `CN_STYLES` is wrapped in one, so an app stylesheet themes cn components whichever was added first.
 
 ### Changed
+- **Breaking:** `widgets::rich_text_editor::selection_toolbar` takes the editor's version as a `&Signal<u32>`; it was a `&State<u32>`. The editor keeps its version in a keyed signal.
 - `typography::heading(level, ..)` takes a string or a signal; a signal replaces the text in place. `h1`..`h6` are unchanged.
 - **Breaking:** `widgets::checkbox`, `checkbox_labeled` and `widgets::toggle` take a `Signal<bool>` instead of a `&State<bool>`, `widgets::radio_group` a `Signal<String>`, `widgets::number_input` a `Signal<f64>`, and `widgets::input_otp` a `Signal<String>`. `TextInput::class_when` adds a class while a condition holds. `TextInput::disabled` and `TextArea::disabled` take a bool, Signal or Computed too. `.disabled(..)` and `.label(..)` take a value, Signal or Computed and follow it in place; the label's colour is the `.blinc-checkbox-label` rules, dimmed under `.blinc-checkbox-row:disabled`.
 - `TextInput::border_width` sets the field's configured border width too, so the content's height follows it; `TextInput` and `TextArea` default to the theme's `RadiusToken::Lg` rather than a literal 8px.

@@ -35,8 +35,8 @@
 use std::cell::OnceCell;
 use std::sync::Arc;
 
-use blinc_core::State;
 use blinc_core::context_state::BlincContextState;
+use blinc_core::{Signal, State};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
 use blinc_layout::overlay_state::overlay_stack;
@@ -198,8 +198,8 @@ impl HoverCardBuilder {
     /// Build the hover card component
     fn build_component(&self) -> HoverCard {
         // Per-instance handle state, survives rebuilds.
-        let overlay_handle_state: State<Option<u64>> =
-            BlincContextState::get().use_state_keyed(&self.key.derive("handle"), || None);
+        let overlay_handle_state: Signal<Option<u64>> =
+            BlincContextState::get().use_signal_keyed(&self.key.derive("handle"), || None);
 
         let side = self.side;
         let align = self.align;
@@ -208,9 +208,9 @@ impl HoverCardBuilder {
         let content_builder = self.content.clone();
         let trigger_builder = self.trigger.clone();
 
-        let stored_for_enter = overlay_handle_state.clone();
-        let stored_for_leave = overlay_handle_state.clone();
-        let stored_for_open = overlay_handle_state.clone();
+        let stored_for_enter = overlay_handle_state;
+        let stored_for_leave = overlay_handle_state;
+        let stored_for_open = overlay_handle_state;
 
         let trigger_content = (trigger_builder)();
 
@@ -257,16 +257,10 @@ impl HoverCardBuilder {
                 );
 
                 let content_fn = Arc::clone(content_fn);
-                let stored_close = stored_for_open.clone();
+                let stored_close = stored_for_open;
 
-                let handle = build_hover_card_overlay(
-                    x,
-                    y,
-                    side,
-                    content_fn,
-                    close_delay_ms,
-                    stored_close.clone(),
-                );
+                let handle =
+                    build_hover_card_overlay(x, y, side, content_fn, close_delay_ms, stored_close);
 
                 stored_for_open.set(Some(handle.raw()));
             })
@@ -367,7 +361,7 @@ fn build_hover_card_overlay(
     side: HoverCardSide,
     content_fn: ContentBuilderFn,
     close_delay_ms: u32,
-    overlay_handle_state: State<Option<u64>>,
+    overlay_handle_state: Signal<Option<u64>>,
 ) -> OverlayHandle {
     let padding = ThemeState::get().spacing_value(SpacingToken::Space4);
 
@@ -394,7 +388,7 @@ fn build_hover_card_overlay(
         .map(|s| s.peek_next_handle_id())
         .unwrap_or(0);
 
-    let stored_close = overlay_handle_state.clone();
+    let stored_close = overlay_handle_state;
     let next_id_for_card = next_handle_id;
 
     // max_w(320) + chrome (border, padding) and a generous-side

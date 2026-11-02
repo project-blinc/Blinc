@@ -49,7 +49,7 @@ use std::sync::Arc;
 
 use blinc_core::context_state::BlincContextState;
 use blinc_core::reactive::{ReactiveGraph, computed};
-use blinc_core::{Color, State};
+use blinc_core::{Color, Signal, State};
 use blinc_layout::click_outside;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, ElementBounds, RenderProps};
@@ -297,12 +297,12 @@ impl DropdownMenuBuilder {
         let theme = ThemeState::get();
 
         // Create open state using InstanceKey for unique identification
-        let open_state: State<bool> =
-            BlincContextState::get().use_state_keyed(self.key.get(), || false);
+        let open_state: Signal<bool> =
+            BlincContextState::get().use_signal_keyed(self.key.get(), || false);
 
         // Store overlay handle ID
-        let overlay_handle_state: State<Option<u64>> =
-            BlincContextState::get().use_state_keyed(&self.key.derive("handle"), || None);
+        let overlay_handle_state: Signal<Option<u64>> =
+            BlincContextState::get().use_signal_keyed(&self.key.derive("handle"), || None);
 
         // Clone values for closures
         let items = self.items.clone();
@@ -317,8 +317,8 @@ impl DropdownMenuBuilder {
         let menu_key = self.key.get().to_string();
 
         // Build trigger element
-        let open_state_for_trigger = open_state.clone();
-        let overlay_handle_for_trigger = overlay_handle_state.clone();
+        let open_state_for_trigger = open_state;
+        let overlay_handle_for_trigger = overlay_handle_state;
         let items_for_show = items.clone();
 
         // The trigger is built once. Its fill is the `.cn-dropdown-trigger`
@@ -326,11 +326,11 @@ impl DropdownMenuBuilder {
         // trigger is swapped for the open or closed one it builds.
         let trigger_content: Div = if let Some(builder) = trigger_builder {
             let closed = builder.clone();
-            div().show_or(&open_state, move || builder(true), move || closed(false))
+            div().show_or(open_state, move || builder(true), move || closed(false))
         } else if let Some(label) = trigger_label {
             div()
                 .class("cn-dropdown-trigger")
-                .attr_when("data-state", "open", &open_state)
+                .attr_when("data-state", "open", open_state)
                 .gap(8.0)
                 .flex_row()
                 .items_center()
@@ -381,8 +381,8 @@ impl DropdownMenuBuilder {
                         y,
                         &items_for_show,
                         min_width,
-                        overlay_handle_for_trigger.clone(),
-                        open_state_for_trigger.clone(),
+                        overlay_handle_for_trigger,
+                        open_state_for_trigger,
                         menu_key.clone(),
                     );
 
@@ -466,8 +466,8 @@ fn spawn_dropdown_menu(
     y: f32,
     items: &[ContextMenuItem],
     min_width: f32,
-    handle_state: State<Option<u64>>,
-    open_state: State<bool>,
+    handle_state: Signal<Option<u64>>,
+    open_state: Signal<bool>,
     key: String,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
@@ -476,8 +476,8 @@ fn spawn_dropdown_menu(
     let padding = 12.0;
 
     let items = items.to_vec();
-    let handle_state_for_close = handle_state.clone();
-    let open_state_for_close = open_state.clone();
+    let handle_state_for_close = handle_state;
+    let open_state_for_close = open_state;
 
     let next_handle_id = overlay_stack()
         .lock()
@@ -488,8 +488,8 @@ fn spawn_dropdown_menu(
     let menu_id = format!("cn-dropdown-menu-{}", next_handle_id);
     let click_outside_key = format!("dropdown_menu:{}", next_handle_id);
 
-    let id_chain: State<Vec<String>> = BlincContextState::get()
-        .use_state_keyed(&format!("dropdown_menu_chain_{}", next_handle_id), || {
+    let id_chain: Signal<Vec<String>> = BlincContextState::get()
+        .use_signal_keyed(&format!("dropdown_menu_chain_{}", next_handle_id), || {
             Vec::<String>::new()
         });
     // The trigger counts as inside, so pressing it is not a dismissal: the
@@ -498,7 +498,7 @@ fn spawn_dropdown_menu(
 
     let click_outside_key_for_close = click_outside_key.clone();
     let click_outside_key_for_content = click_outside_key.clone();
-    let id_chain_for_content = id_chain.clone();
+    let id_chain_for_content = id_chain;
     let menu_id_for_content = menu_id.clone();
 
     // Exact bounding box for the viewport-clamp in
@@ -562,8 +562,8 @@ fn spawn_dropdown_submenu(
     min_width: f32,
     root_handle: OverlayHandle,
     root_click_outside_key: String,
-    id_chain: State<Vec<String>>,
-    parent_submenu_state: State<Option<u64>>,
+    id_chain: Signal<Vec<String>>,
+    parent_submenu_state: Signal<Option<u64>>,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
     let radius = theme.radius(RadiusToken::Md);
@@ -589,12 +589,12 @@ fn spawn_dropdown_submenu(
         click_outside::update_click_outside_ids(&root_click_outside_key, &id_chain.get());
     }
 
-    let id_chain_for_close = id_chain.clone();
+    let id_chain_for_close = id_chain;
     let root_click_outside_key_for_close = root_click_outside_key.clone();
     let submenu_id_for_close = submenu_id.clone();
-    let parent_submenu_state_for_close = parent_submenu_state.clone();
+    let parent_submenu_state_for_close = parent_submenu_state;
 
-    let id_chain_for_content = id_chain.clone();
+    let id_chain_for_content = id_chain;
     let root_click_outside_key_for_content = root_click_outside_key.clone();
     let submenu_id_for_content = submenu_id.clone();
 
@@ -652,20 +652,20 @@ fn build_dropdown_menu_div(
     root_handle: OverlayHandle,
     self_id: &str,
     root_click_outside_key: &str,
-    id_chain: &State<Vec<String>>,
+    id_chain: &Signal<Vec<String>>,
     radius: f32,
     font_size: f32,
     padding: f32,
 ) -> Div {
-    let child_submenu_state: State<Option<u64>> = BlincContextState::get()
-        .use_state_keyed(&format!("dropdown_child_sub_{}", self_id), || None);
+    let child_submenu_state: Signal<Option<u64>> = BlincContextState::get()
+        .use_signal_keyed(&format!("dropdown_child_sub_{}", self_id), || None);
 
     // The row the arrow keys are on. The menu starts with none when it is
     // opened by a press.
-    let active: State<Option<usize>> =
-        BlincContextState::get().use_state_keyed(&format!("dropdown_active_{}", self_id), || None);
+    let active: Signal<Option<usize>> =
+        BlincContextState::get().use_signal_keyed(&format!("dropdown_active_{}", self_id), || None);
     active.set(None);
-    let active_signal = active.signal();
+    let active_signal = active;
     // The rows a key can land on, in order: their index, and what activating
     // one does (nothing for a row that opens a submenu).
     let mut navigable: Vec<(usize, Option<ItemAction>)> = Vec::new();
@@ -687,9 +687,9 @@ fn build_dropdown_menu_div(
             let has_submenu = item.has_submenu();
             let submenu_items = item.get_submenu().cloned();
 
-            let child_submenu_for_hover_open = child_submenu_state.clone();
-            let child_submenu_for_hover_close = child_submenu_state.clone();
-            let id_chain_for_open = id_chain.clone();
+            let child_submenu_for_hover_open = child_submenu_state;
+            let child_submenu_for_hover_close = child_submenu_state;
+            let id_chain_for_open = *id_chain;
             let root_click_outside_key_for_open = root_click_outside_key.to_string();
             let submenu_key = format!("{}_sub-{}", self_id, idx);
 
@@ -757,7 +757,7 @@ fn build_dropdown_menu_div(
 
             if has_submenu && !item_disabled {
                 let submenu_items_for_hover = submenu_items.clone();
-                let id_chain_for_hover = id_chain_for_open.clone();
+                let id_chain_for_hover = id_chain_for_open;
                 let root_key_for_hover = root_click_outside_key_for_open.clone();
 
                 row = row.on_hover_enter(move |ctx| {
@@ -776,8 +776,8 @@ fn build_dropdown_menu_div(
                             160.0,
                             root_handle,
                             root_key_for_hover.clone(),
-                            id_chain_for_hover.clone(),
-                            child_submenu_for_hover_open.clone(),
+                            id_chain_for_hover,
+                            child_submenu_for_hover_open,
                         );
                         child_submenu_for_hover_open.set(Some(handle.raw()));
                     }
@@ -798,7 +798,7 @@ fn build_dropdown_menu_div(
     // Arrows, Home and End move through the enabled rows, wrapping, and Enter
     // or Space activates the one they are on. Keys are broadcast to the whole
     // tree, so a menu with a submenu open leaves them to the submenu.
-    let child_submenu_for_keys = child_submenu_state.clone();
+    let child_submenu_for_keys = child_submenu_state;
     menu.on_key_down(move |ctx| {
         let count = navigable.len();
         if count == 0 || child_submenu_for_keys.get().is_some() {
@@ -970,7 +970,7 @@ mod tests {
     #[allow(clippy::type_complexity)]
     fn keyed_menu() -> (
         blinc_layout::renderer::RenderTree,
-        State<Option<usize>>,
+        Signal<Option<usize>>,
         Arc<std::sync::Mutex<Vec<&'static str>>>,
     ) {
         init_context();
@@ -985,8 +985,8 @@ mod tests {
             ContextMenuItem::new("B").on_click(record("B")).disabled(),
             ContextMenuItem::new("C").on_click(record("C")),
         ];
-        let chain: State<Vec<String>> =
-            BlincContextState::get().use_state_keyed("keyed_menu_chain", Vec::<String>::new);
+        let chain: Signal<Vec<String>> =
+            BlincContextState::get().use_signal_keyed("keyed_menu_chain", Vec::<String>::new);
         let menu = build_dropdown_menu_div(
             &items,
             160.0,
@@ -1000,7 +1000,7 @@ mod tests {
         );
         let tree = blinc_layout::renderer::RenderTree::from_element(&menu);
         let active = BlincContextState::get()
-            .use_state_keyed("dropdown_active_keyed-menu", || None::<usize>);
+            .use_signal_keyed("dropdown_active_keyed-menu", || None::<usize>);
         (tree, active, fired)
     }
 

@@ -52,7 +52,7 @@
 use std::sync::Arc;
 
 use blinc_core::context_state::BlincContextState;
-use blinc_core::{Color, State};
+use blinc_core::{Color, Signal, State};
 use blinc_layout::click_outside;
 use blinc_layout::element::CursorStyle;
 use blinc_layout::overlay_state::overlay_stack;
@@ -355,14 +355,14 @@ impl ContextMenuBuilder {
         // Track every menu+submenu id in the open chain — used by the root's
         // click_outside registration so clicks inside any open submenu don't
         // dismiss the parent.
-        let id_chain: State<Vec<String>> = BlincContextState::get()
-            .use_state_keyed(&format!("ctxmenu_chain_{}", next_handle_id), || {
+        let id_chain: Signal<Vec<String>> = BlincContextState::get()
+            .use_signal_keyed(&format!("ctxmenu_chain_{}", next_handle_id), || {
                 Vec::<String>::new()
             });
         id_chain.set(vec![menu_id.clone()]);
 
         let click_outside_key_for_close = click_outside_key.clone();
-        let id_chain_for_content = id_chain.clone();
+        let id_chain_for_content = id_chain;
         let menu_id_for_content = menu_id.clone();
         let click_outside_key_for_content = click_outside_key.clone();
 
@@ -537,8 +537,8 @@ fn spawn_submenu(
     min_width: f32,
     root_handle: OverlayHandle,
     root_click_outside_key: String,
-    id_chain: State<Vec<String>>,
-    parent_submenu_state: State<Option<u64>>,
+    id_chain: Signal<Vec<String>>,
+    parent_submenu_state: Signal<Option<u64>>,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
     let radius = theme.radius(RadiusToken::Md);
@@ -564,12 +564,12 @@ fn spawn_submenu(
         click_outside::update_click_outside_ids(&root_click_outside_key, &id_chain.get());
     }
 
-    let id_chain_for_close = id_chain.clone();
+    let id_chain_for_close = id_chain;
     let root_click_outside_key_for_close = root_click_outside_key.clone();
     let submenu_id_for_close = submenu_id.clone();
-    let parent_submenu_state_for_close = parent_submenu_state.clone();
+    let parent_submenu_state_for_close = parent_submenu_state;
 
-    let id_chain_for_content = id_chain.clone();
+    let id_chain_for_content = id_chain;
     let root_click_outside_key_for_content = root_click_outside_key.clone();
     let submenu_id_for_content = submenu_id.clone();
 
@@ -628,15 +628,15 @@ fn build_menu_content(
     root_handle: OverlayHandle,
     self_id: &str,
     root_click_outside_key: &str,
-    id_chain: &State<Vec<String>>,
+    id_chain: &Signal<Vec<String>>,
     radius: f32,
     font_size: f32,
     padding: f32,
 ) -> Div {
     // One slot for the submenu currently open at THIS level (LIFO closes the
     // tail). Keyed off this menu's stable id so reopening preserves identity.
-    let child_submenu_state: State<Option<u64>> = BlincContextState::get()
-        .use_state_keyed(&format!("ctxmenu_child_sub_{}", self_id), || None);
+    let child_submenu_state: Signal<Option<u64>> = BlincContextState::get()
+        .use_signal_keyed(&format!("ctxmenu_child_sub_{}", self_id), || None);
 
     let mut menu = super::menu::panel(radius)
         .class("cn-context-menu")
@@ -664,10 +664,10 @@ fn build_menu_content(
             let has_submenu = item.submenu.is_some();
             let submenu_items = item.submenu.clone();
 
-            let child_submenu_for_hover_open = child_submenu_state.clone();
-            let child_submenu_for_hover_close = child_submenu_state.clone();
+            let child_submenu_for_hover_open = child_submenu_state;
+            let child_submenu_for_hover_close = child_submenu_state;
 
-            let id_chain_for_open = id_chain.clone();
+            let id_chain_for_open = *id_chain;
             let root_click_outside_key_for_open = root_click_outside_key.to_string();
 
             // The row is a plain div with no Stateful wrapper: a rebuild
@@ -755,7 +755,7 @@ fn build_menu_content(
             // Submenu hover-to-open behaviour
             if has_submenu && !item_disabled {
                 let submenu_items_for_hover = submenu_items.clone();
-                let id_chain_for_hover = id_chain_for_open.clone();
+                let id_chain_for_hover = id_chain_for_open;
                 let root_key_for_hover = root_click_outside_key_for_open.clone();
 
                 row = row.on_hover_enter(move |ctx| {
@@ -775,8 +775,8 @@ fn build_menu_content(
                             160.0,
                             root_handle,
                             root_key_for_hover.clone(),
-                            id_chain_for_hover.clone(),
-                            child_submenu_for_hover_open.clone(),
+                            id_chain_for_hover,
+                            child_submenu_for_hover_open,
                         );
                         child_submenu_for_hover_open.set(Some(handle.raw()));
                     }

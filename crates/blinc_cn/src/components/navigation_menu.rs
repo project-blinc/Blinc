@@ -32,9 +32,9 @@ use std::cell::OnceCell;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-use blinc_core::State;
 use blinc_core::context_state::BlincContextState;
 use blinc_core::reactive::{ReactiveGraph, computed};
+use blinc_core::{Signal, State};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::{Div, ElementBuilder, ElementTypeId};
 use blinc_layout::element::CursorStyle;
@@ -76,11 +76,11 @@ impl NavigationMenu {
 
         // Centralized state management (following menubar pattern)
         // Track which trigger is currently open (None = none open)
-        let active_menu: State<Option<usize>> =
-            BlincContextState::get().use_state_keyed(&format!("{}_active", key_base), || None);
+        let active_menu: Signal<Option<usize>> =
+            BlincContextState::get().use_signal_keyed(&format!("{}_active", key_base), || None);
         // Track the current overlay handle
-        let overlay_handle_state: State<Option<u64>> =
-            BlincContextState::get().use_state_keyed(&format!("{}_handle", key_base), || None);
+        let overlay_handle_state: Signal<Option<u64>> =
+            BlincContextState::get().use_signal_keyed(&format!("{}_handle", key_base), || None);
 
         // The bar is built once. Which menu is open is a signal the items'
         // classes are bound to; their colours are `.cn-nav-link` rules.
@@ -100,7 +100,7 @@ impl NavigationMenu {
             };
             // A trigger is open while its menu is shown; a link never is.
             let is_trigger = matches!(item, NavMenuItem::Trigger { .. });
-            let active = active_menu.signal();
+            let active = active_menu;
             let open = computed(move |g: &ReactiveGraph| {
                 is_trigger && g.get(active).flatten() == Some(idx)
             });
@@ -128,8 +128,8 @@ impl NavigationMenu {
             match item {
                 NavMenuItem::Link { on_click, .. } => {
                     let on_click = on_click.clone();
-                    let active_menu_for_click = active_menu.clone();
-                    let overlay_handle_for_click = overlay_handle_state.clone();
+                    let active_menu_for_click = active_menu;
+                    let overlay_handle_for_click = overlay_handle_state;
                     entry = entry.on_click(move |_| {
                         if let Some(handle_id) = overlay_handle_for_click.get() {
                             OverlayHandle::from_raw(handle_id).close();
@@ -141,9 +141,9 @@ impl NavigationMenu {
                 NavMenuItem::Trigger { content, .. } => {
                     let content = content.clone();
                     let menu_key = format!("{}_menu_{}", key_base, idx);
-                    let active_menu_for_hover = active_menu.clone();
-                    let overlay_handle_for_hover = overlay_handle_state.clone();
-                    let overlay_handle_for_leave = overlay_handle_state.clone();
+                    let active_menu_for_hover = active_menu;
+                    let overlay_handle_for_hover = overlay_handle_state;
+                    let overlay_handle_for_leave = overlay_handle_state;
 
                     // Chevron down icon
                     let chevron = r#"<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>"#;
@@ -186,8 +186,8 @@ impl NavigationMenu {
                                 y,
                                 content.clone(),
                                 min_content_width,
-                                active_menu_for_hover.clone(),
-                                overlay_handle_for_hover.clone(),
+                                active_menu_for_hover,
+                                overlay_handle_for_hover,
                                 menu_key.clone(),
                             );
                             overlay_handle_for_hover.set(Some(handle.raw()));
@@ -228,12 +228,12 @@ fn show_navigation_dropdown(
     y: f32,
     content: Arc<dyn Fn() -> Div + Send + Sync>,
     min_width: f32,
-    active_menu_state: State<Option<usize>>,
-    overlay_handle_state: State<Option<u64>>,
+    active_menu_state: Signal<Option<usize>>,
+    overlay_handle_state: Signal<Option<u64>>,
     _key: String,
 ) -> OverlayHandle {
-    let active_menu_for_close = active_menu_state.clone();
-    let overlay_handle_for_close = overlay_handle_state.clone();
+    let active_menu_for_close = active_menu_state;
+    let overlay_handle_for_close = overlay_handle_state;
 
     // The content closure captures the handle so its own hover handlers can
     // cancel / restart the close-on-mouse-leave countdown. We pre-allocate.

@@ -23,7 +23,7 @@
 
 use std::sync::Arc;
 
-use blinc_core::{Color, State};
+use blinc_core::{Color, Signal};
 
 use crate::div::{Div, FontWeight, div};
 use crate::widgets::rich_text_editor::cursor::ActiveFormat;
@@ -37,7 +37,7 @@ use super::state::{PickerState, RichTextState};
 /// selection or it's collapsed.
 pub fn selection_toolbar(
     state: &RichTextState,
-    version: &State<u32>,
+    version: &Signal<u32>,
     theme: &RichTextTheme,
 ) -> Option<Div> {
     let mut data = state.lock().ok()?;
@@ -133,7 +133,7 @@ fn row_separator() -> Div {
 
 /// Build the row of mark buttons (B, I, U, S, code) plus the color
 /// and link triggers.
-fn mark_row(state: &RichTextState, version: &State<u32>, theme: &RichTextTheme) -> Div {
+fn mark_row(state: &RichTextState, version: &Signal<u32>, theme: &RichTextTheme) -> Div {
     div()
         .flex_row()
         .items_center()
@@ -212,9 +212,9 @@ fn mark_row(state: &RichTextState, version: &State<u32>, theme: &RichTextTheme) 
 /// color picker row beneath the toolbar. The swatch shows the
 /// currently active color (the text colour by default), so you can tell
 /// at a glance what the next typed character will look like.
-fn color_swatch_button(state: &RichTextState, version: &State<u32>) -> Div {
+fn color_swatch_button(state: &RichTextState, version: &Signal<u32>) -> Div {
     let state_for_click = Arc::clone(state);
-    let version_for_click = version.clone();
+    let version_for_click = *version;
     let current_color = state
         .lock()
         .ok()
@@ -244,7 +244,7 @@ fn color_swatch_button(state: &RichTextState, version: &State<u32>) -> Div {
 
 /// Heading picker row — applies the chosen heading level to the
 /// current block, or reverts to plain paragraph via the "P" button.
-fn heading_picker_row(state: &RichTextState, version: &State<u32>) -> Div {
+fn heading_picker_row(state: &RichTextState, version: &Signal<u32>) -> Div {
     let mut row = div().flex_row().items_center().gap_px(4.0);
     let levels: &[(Option<u8>, &str, f32, FontWeight)] = &[
         (None, "P", 12.0, FontWeight::Normal),
@@ -261,7 +261,7 @@ fn heading_picker_row(state: &RichTextState, version: &State<u32>) -> Div {
         let font_size = *font_size;
         let weight = *weight;
         let state_for_click = Arc::clone(state);
-        let version_for_click = version.clone();
+        let version_for_click = *version;
         row = row.child(
             div()
                 .class("blinc-rte-pill")
@@ -396,12 +396,12 @@ fn mark_button(
     _tooltip: &str,
     style: LabelStyle,
     state: &RichTextState,
-    version: &State<u32>,
+    version: &Signal<u32>,
     _theme: &RichTextTheme,
     on_click: impl Fn(&mut super::state::RichTextData) -> bool + Send + Sync + 'static,
 ) -> Div {
     let state_for_click = Arc::clone(state);
-    let version_for_click = version.clone();
+    let version_for_click = *version;
     // Keep the label passive so the parent button's pointer cursor
     // wins on hover. This only affects cursor style; hit-testing and
     // rendering are unchanged.
@@ -452,12 +452,12 @@ fn picker_button(
     label: &str,
     _tooltip: &str,
     state: &RichTextState,
-    version: &State<u32>,
+    version: &Signal<u32>,
     _theme: &RichTextTheme,
     on_click: impl Fn(&mut super::state::RichTextData) + Send + Sync + 'static,
 ) -> Div {
     let state_for_click = Arc::clone(state);
-    let version_for_click = version.clone();
+    let version_for_click = *version;
     div()
         .class("blinc-rte-button")
         .w(28.0)
@@ -576,11 +576,11 @@ fn color_palette() -> &'static [(Color, &'static str)] {
     PALETTE
 }
 
-fn color_picker_row(state: &RichTextState, version: &State<u32>) -> Div {
+fn color_picker_row(state: &RichTextState, version: &Signal<u32>) -> Div {
     let mut row = div().flex_row().items_center().gap_px(4.0);
     for (color, _label) in color_palette() {
         let state_for_click = Arc::clone(state);
-        let version_for_click = version.clone();
+        let version_for_click = *version;
         let c = *color;
         row = row.child(
             swatch(c)
@@ -622,7 +622,7 @@ fn color_picker_row(state: &RichTextState, version: &State<u32>) -> Div {
 /// so this widget is purely visual feedback for the in-flight URL.
 fn link_prompt_row(
     state: &RichTextState,
-    version: &State<u32>,
+    version: &Signal<u32>,
     _theme: &RichTextTheme,
     draft: &str,
 ) -> Div {
@@ -633,11 +633,11 @@ fn link_prompt_row(
     };
 
     let state_for_apply = Arc::clone(state);
-    let version_for_apply = version.clone();
+    let version_for_apply = *version;
     let state_for_remove = Arc::clone(state);
-    let version_for_remove = version.clone();
+    let version_for_remove = *version;
     let state_for_cancel = Arc::clone(state);
-    let version_for_cancel = version.clone();
+    let version_for_cancel = *version;
 
     // Even the input display needs to swallow clicks so the editor's
     // outer mouse_down handler doesn't collapse the underlying
@@ -726,7 +726,7 @@ fn link_prompt_row(
 fn prompt_button(
     label: &str,
     state: RichTextState,
-    version: State<u32>,
+    version: Signal<u32>,
     on_click: impl Fn(&mut super::state::RichTextData) + Send + Sync + 'static,
 ) -> Div {
     // Pick a fixed width per button so flex doesn't shrink them to 0

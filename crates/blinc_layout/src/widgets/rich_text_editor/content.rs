@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use blinc_core::reactive::{ReactiveGraph, computed};
-use blinc_core::{Brush, Color, CornerRadius, DrawContext, Rect, State};
+use blinc_core::{Brush, Color, CornerRadius, DrawContext, Rect, Signal};
 
 use crate::canvas::{Canvas, CanvasBounds, canvas};
 use crate::div::{Div, div};
@@ -81,11 +81,11 @@ fn digest(data: &RichTextData, index: usize) -> u64 {
 /// the cursor and the floating toolbar.
 pub(super) fn content(
     state: &RichTextState,
-    version: &State<u32>,
+    version: &Signal<u32>,
     theme: &RichTextTheme,
     content_width: f32,
 ) -> Div {
-    let signal = version.signal();
+    let signal = *version;
     // A value read from the editor, with its geometry current.
 
     let blocks = {
@@ -176,7 +176,7 @@ pub(super) fn content(
         })
     };
     let toolbar = {
-        let (state, version, theme) = (Arc::clone(state), version.clone(), theme.clone());
+        let (state, version, theme) = (Arc::clone(state), *version, theme.clone());
         anchor().for_each(
             &toolbars,
             |key| (key.bounds, key.picker.clone()),

@@ -29,8 +29,8 @@
 use std::cell::OnceCell;
 use std::sync::Arc;
 
-use blinc_core::State;
 use blinc_core::context_state::BlincContextState;
+use blinc_core::{Signal, State};
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::RenderProps;
 use blinc_layout::overlay_state::overlay_stack;
@@ -191,8 +191,8 @@ impl TooltipBuilder {
     fn build_component(&self) -> Tooltip {
         // Per-instance handle state — survives rebuilds because it's keyed by
         // the InstanceKey. Stores the raw u64 of an active OverlayHandle.
-        let overlay_handle_state: State<Option<u64>> =
-            BlincContextState::get().use_state_keyed(&self.key.derive("handle"), || None);
+        let overlay_handle_state: Signal<Option<u64>> =
+            BlincContextState::get().use_signal_keyed(&self.key.derive("handle"), || None);
 
         let side = self.side;
         let align = self.align;
@@ -201,10 +201,10 @@ impl TooltipBuilder {
         let tooltip_text = self.text.as_ref().map(clone_reactive);
         let trigger_builder = self.trigger.clone();
 
-        let stored_for_enter = overlay_handle_state.clone();
-        let stored_for_leave = overlay_handle_state.clone();
-        let stored_for_open = overlay_handle_state.clone();
-        let stored_for_close = overlay_handle_state.clone();
+        let stored_for_enter = overlay_handle_state;
+        let stored_for_leave = overlay_handle_state;
+        let stored_for_open = overlay_handle_state;
+        let stored_for_close = overlay_handle_state;
 
         let trigger_content = (trigger_builder)();
 
@@ -270,8 +270,8 @@ impl TooltipBuilder {
                 // that two tooltips can be visible briefly when the user
                 // moves between them faster than the close-delay.
 
-                let stored_close = stored_for_close.clone();
-                let stored_open = stored_for_open.clone();
+                let stored_close = stored_for_close;
+                let stored_open = stored_for_open;
                 // Tooltips are single-line `no_wrap`; the cap of
                 // ~40 chars at text_xs covers the documented use
                 // case (lightweight informational labels). Hosts

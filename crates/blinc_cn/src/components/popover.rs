@@ -35,8 +35,8 @@
 use std::cell::OnceCell;
 use std::sync::Arc;
 
-use blinc_core::State;
 use blinc_core::context_state::BlincContextState;
+use blinc_core::{Signal, State};
 use blinc_layout::InstanceKey;
 use blinc_layout::click_outside;
 use blinc_layout::div::ElementTypeId;
@@ -199,12 +199,12 @@ impl PopoverBuilder {
     /// Build the popover component
     fn build_component(&self) -> Popover {
         // Create open state
-        let open_state: State<bool> =
-            BlincContextState::get().use_state_keyed(self.key.get(), || false);
+        let open_state: Signal<bool> =
+            BlincContextState::get().use_signal_keyed(self.key.get(), || false);
 
         // Store overlay handle ID
-        let overlay_handle_state: State<Option<u64>> =
-            BlincContextState::get().use_state_keyed(&self.key.derive("handle"), || None);
+        let overlay_handle_state: Signal<Option<u64>> =
+            BlincContextState::get().use_signal_keyed(&self.key.derive("handle"), || None);
 
         // Clone values for closures
         let side = self.side;
@@ -214,11 +214,11 @@ impl PopoverBuilder {
         let trigger_builder = self.trigger.clone();
 
         // Clone states for closures
-        let open_state_for_click = open_state.clone();
-        let overlay_handle_for_click = overlay_handle_state.clone();
-        let overlay_handle_for_show = overlay_handle_state.clone();
-        let open_state_for_close = open_state.clone();
-        let overlay_handle_for_close = overlay_handle_state.clone();
+        let open_state_for_click = open_state;
+        let overlay_handle_for_click = overlay_handle_state;
+        let overlay_handle_for_show = overlay_handle_state;
+        let open_state_for_close = open_state;
+        let overlay_handle_for_close = overlay_handle_state;
 
         // The trigger is built once; what it shows is swapped for the open
         // or closed form its builder makes, in place.
@@ -233,7 +233,7 @@ impl PopoverBuilder {
             .w_fit()
             .cursor_pointer()
             .show_or(
-                &open_state,
+                open_state,
                 move || (trigger_builder)(true),
                 move || (closed_trigger)(false),
             )
@@ -263,8 +263,8 @@ impl PopoverBuilder {
                 };
                 let (x, y) = calculate_popover_position(&bounds, side, align, offset);
 
-                let stored_close_handle = overlay_handle_for_close.clone();
-                let stored_close_state = open_state_for_close.clone();
+                let stored_close_handle = overlay_handle_for_close;
+                let stored_close_state = open_state_for_close;
                 let content_fn = Arc::clone(content_fn);
 
                 let handle = build_popover_overlay(
@@ -359,8 +359,8 @@ fn build_popover_overlay(
     y: f32,
     side: PopoverSide,
     content_fn: ContentBuilderFn,
-    open_state: State<bool>,
-    overlay_handle_state: State<Option<u64>>,
+    open_state: Signal<bool>,
+    overlay_handle_state: Signal<Option<u64>>,
     trigger_id: String,
 ) -> OverlayHandle {
     let padding = ThemeState::get().spacing_value(SpacingToken::Space4);

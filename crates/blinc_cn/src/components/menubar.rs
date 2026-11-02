@@ -35,7 +35,7 @@ use std::cell::OnceCell;
 use std::sync::Arc;
 
 use blinc_core::context_state::BlincContextState;
-use blinc_core::{Color, State};
+use blinc_core::{Color, Signal, State};
 use blinc_layout::InstanceKey;
 use blinc_layout::div::ElementTypeId;
 use blinc_layout::element::{CursorStyle, RenderProps};
@@ -373,12 +373,12 @@ impl MenubarBuilder {
         let theme = ThemeState::get();
 
         // State for tracking which menu is currently open (None = none open)
-        let active_menu: State<Option<usize>> =
-            BlincContextState::get().use_state_keyed(self.key.get(), || None);
+        let active_menu: Signal<Option<usize>> =
+            BlincContextState::get().use_signal_keyed(self.key.get(), || None);
 
         // State for overlay handle
-        let overlay_handle_state: State<Option<u64>> =
-            BlincContextState::get().use_state_keyed(&self.key.derive("handle"), || None);
+        let overlay_handle_state: Signal<Option<u64>> =
+            BlincContextState::get().use_signal_keyed(&self.key.derive("handle"), || None);
 
         let menus = self.menus.clone();
         let key_base = self.key.get().to_string();
@@ -399,11 +399,11 @@ impl MenubarBuilder {
             let menu_items = menu.items.clone();
             let menu_key = format!("{}_{}", key_base, idx);
 
-            let active_menu_for_trigger = active_menu.clone();
-            let active_menu_for_hover = active_menu.clone();
-            let overlay_handle_for_trigger = overlay_handle_state.clone();
-            let overlay_handle_for_show = overlay_handle_state.clone();
-            let overlay_handle_for_hover = overlay_handle_state.clone();
+            let active_menu_for_trigger = active_menu;
+            let active_menu_for_hover = active_menu;
+            let overlay_handle_for_trigger = overlay_handle_state;
+            let overlay_handle_for_show = overlay_handle_state;
+            let overlay_handle_for_hover = overlay_handle_state;
 
             // Clone menu items and key for different handlers
             let menu_items_for_hover = menu_items.clone();
@@ -477,8 +477,8 @@ impl MenubarBuilder {
                     y,
                     &menu_items,
                     180.0,
-                    overlay_handle_for_show.clone(),
-                    active_menu_for_trigger.clone(),
+                    overlay_handle_for_show,
+                    active_menu_for_trigger,
                     menu_key_for_click.clone(),
                     idx,
                     /* hover_mode */ false,
@@ -490,7 +490,7 @@ impl MenubarBuilder {
             // Add hover handlers for Hover trigger mode
             if trigger_mode == MenuTriggerMode::Hover {
                 // Clone for hover leave handler
-                let overlay_handle_for_hover_leave = overlay_handle_state.clone();
+                let overlay_handle_for_hover_leave = overlay_handle_state;
 
                 trigger = trigger.on_hover_enter(move |ctx| {
                     let current_active = active_menu_for_hover.get();
@@ -529,8 +529,8 @@ impl MenubarBuilder {
                         y,
                         &menu_items_for_hover,
                         180.0,
-                        overlay_handle_for_hover.clone(),
-                        active_menu_for_hover.clone(),
+                        overlay_handle_for_hover,
+                        active_menu_for_hover,
                         menu_key_for_hover.clone(),
                         idx,
                         /* hover_mode */ true,
@@ -586,8 +586,8 @@ fn spawn_menubar_dropdown(
     y: f32,
     items: &[ContextMenuItem],
     min_width: f32,
-    handle_state: State<Option<u64>>,
-    active_menu_state: State<Option<usize>>,
+    handle_state: Signal<Option<u64>>,
+    active_menu_state: Signal<Option<usize>>,
     key: String,
     menu_idx: usize,
     hover_mode: bool,
@@ -598,8 +598,8 @@ fn spawn_menubar_dropdown(
     let padding = 12.0;
 
     let items = items.to_vec();
-    let handle_state_for_close = handle_state.clone();
-    let active_menu_for_close = active_menu_state.clone();
+    let handle_state_for_close = handle_state;
+    let active_menu_for_close = active_menu_state;
 
     let next_handle_id = overlay_stack()
         .lock()
@@ -609,9 +609,9 @@ fn spawn_menubar_dropdown(
     let menu_handle = OverlayHandle::from_raw(next_handle_id);
 
     // Per-menu submenu tracking (keyed off the dropdown's handle id).
-    let child_submenu_state: State<Option<u64>> = BlincContextState::get()
-        .use_state_keyed(&format!("menubar_child_sub_{}", next_handle_id), || None);
-    let child_submenu_for_content = child_submenu_state.clone();
+    let child_submenu_state: Signal<Option<u64>> = BlincContextState::get()
+        .use_signal_keyed(&format!("menubar_child_sub_{}", next_handle_id), || None);
+    let child_submenu_for_content = child_submenu_state;
     let menu_key_for_content = key.clone();
 
     let builder = if hover_mode {
@@ -677,7 +677,7 @@ fn spawn_menubar_submenu(
     items: &[ContextMenuItem],
     min_width: f32,
     root_handle: OverlayHandle,
-    parent_submenu_state: State<Option<u64>>,
+    parent_submenu_state: Signal<Option<u64>>,
     key: String,
 ) -> OverlayHandle {
     let theme = ThemeState::get();
@@ -694,12 +694,12 @@ fn spawn_menubar_submenu(
         .unwrap_or(0);
     let submenu_handle = OverlayHandle::from_raw(next_handle_id);
 
-    let child_submenu_state: State<Option<u64>> = BlincContextState::get()
-        .use_state_keyed(&format!("menubar_child_sub_{}", next_handle_id), || None);
-    let child_submenu_for_content = child_submenu_state.clone();
+    let child_submenu_state: Signal<Option<u64>> = BlincContextState::get()
+        .use_signal_keyed(&format!("menubar_child_sub_{}", next_handle_id), || None);
+    let child_submenu_for_content = child_submenu_state;
     let menu_key_for_content = key.clone();
 
-    let parent_submenu_for_close = parent_submenu_state.clone();
+    let parent_submenu_for_close = parent_submenu_state;
 
     // Submenus share `build_menubar_menu_div` so the row math
     // matches the top-level dropdown.
@@ -757,7 +757,7 @@ fn build_menubar_menu_div(
     is_root: bool,
     hover_mode: bool,
     key: &str,
-    child_submenu_state: &State<Option<u64>>,
+    child_submenu_state: &Signal<Option<u64>>,
     radius: f32,
     font_size: f32,
     padding: f32,
@@ -806,8 +806,8 @@ fn build_menubar_menu_div(
             let has_submenu = item.has_submenu();
             let submenu_items = item.get_submenu().cloned();
 
-            let child_submenu_for_hover_open = child_submenu_state.clone();
-            let child_submenu_for_hover_close = child_submenu_state.clone();
+            let child_submenu_for_hover_open = *child_submenu_state;
+            let child_submenu_for_hover_close = *child_submenu_state;
             let submenu_key = format!("{}_sub-{}", key, idx);
 
             let (left_side, right_side) = super::menu::item_parts(
@@ -886,7 +886,7 @@ fn build_menubar_menu_div(
                             items,
                             160.0,
                             root_handle,
-                            child_submenu_for_hover_open.clone(),
+                            child_submenu_for_hover_open,
                             submenu_key_for_hover.clone(),
                         );
                         child_submenu_for_hover_open.set(Some(handle.raw()));
