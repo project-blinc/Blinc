@@ -273,8 +273,11 @@ pub enum TabsTransition {
     None,
     /// Fade in/out
     Fade,
-    /// Slide from left (default)
+    /// Slide the way the active tab moved: from the right to a tab further
+    /// along, from the left to one before (default)
     #[default]
+    Slide,
+    /// Slide from left
     SlideLeft,
     /// Slide from right
     SlideRight,
@@ -291,6 +294,7 @@ impl TabsTransition {
         match self {
             TabsTransition::None => None,
             TabsTransition::Fade => Some("fade"),
+            TabsTransition::Slide => Some("slide"),
             TabsTransition::SlideLeft => Some("slide-left"),
             TabsTransition::SlideRight => Some("slide-right"),
             TabsTransition::SlideUp => Some("slide-up"),
@@ -571,6 +575,30 @@ impl TabsBuilder {
             let selected = config.state;
             let transition = config.transition;
             let motion_base_key = self.key.derive("motion");
+            // Whether the last switch went to a tab further along. It keeps
+            // the value it switched from, so it answers the same however
+            // often it is read.
+            let order: Vec<String> = config
+                .tabs
+                .iter()
+                .map(|t| t.menu_item.value().to_string())
+                .collect();
+            let last = Mutex::new((config.state.try_get().unwrap_or_default(), true));
+            let went_on = Arc::new(move |g: &ReactiveGraph| {
+                let value = g.get(selected).unwrap_or_default();
+                let mut last = last.lock().unwrap();
+                if value != last.0 {
+                    let at = |v: &str| order.iter().position(|o| o == v);
+                    last.1 = at(&value) >= at(&last.0);
+                    last.0 = value;
+                }
+                last.1
+            });
+            let forward = computed({
+                let went_on = Arc::clone(&went_on);
+                move |g: &ReactiveGraph| went_on(g)
+            });
+            let backward = computed(move |g: &ReactiveGraph| !went_on(g));
             // The selected value, if a tab has it: the one row.
             let shown = computed(move |g: &ReactiveGraph| {
                 let value = g.get(selected).unwrap_or_default();
@@ -612,6 +640,8 @@ impl TabsBuilder {
                             .lock()
                             .unwrap()
                             .element(div().attr("data-transition", name))
+                            .attr_when("data-direction", "next", &forward)
+                            .attr_when("data-direction", "prev", &backward)
                             .class_when("cn-tabs-panel--leaving", leaving)
                             .w_full()
                             .flex_grow()

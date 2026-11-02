@@ -26,6 +26,13 @@ struct Runner {
 }
 
 fn runner(selected: &blinc_core::reactive::State<String>) -> Runner {
+    runner_with(selected, TabsTransition::Fade)
+}
+
+fn runner_with(
+    selected: &blinc_core::reactive::State<String>,
+    transition: TabsTransition,
+) -> Runner {
     let vars = blinc_theme::ThemeState::get().to_css_variable_map();
     let css = Arc::new(Stylesheet::parse_with_variables(CN_STYLES, &vars).expect("cn styles"));
     set_active_stylesheet(Arc::clone(&css));
@@ -46,9 +53,10 @@ fn runner(selected: &blinc_core::reactive::State<String>) -> Runner {
 
     let host = div().w(400.0).h(300.0).child(
         tabs(selected.signal())
-            .transition(TabsTransition::Fade)
+            .transition(transition)
             .tab("a", "Alpha", || div().w(100.0).h(40.0).child(text("alpha")))
-            .tab("b", "Beta", || div().w(100.0).h(40.0).child(text("beta"))),
+            .tab("b", "Beta", || div().w(100.0).h(40.0).child(text("beta")))
+            .tab("c", "Gamma", || div().w(100.0).h(40.0).child(text("gamma"))),
     );
     let mut tree = RenderTree::from_element(&host);
     tree.set_stylesheet_arc(css);
@@ -101,6 +109,45 @@ impl Runner {
         let content = self.tree.layout_tree.children(widget)[1];
         self.tree.layout_tree.children(content)
     }
+
+    /// The `@keyframes` `node` plays now.
+    fn playing(&self, node: LayoutNodeId) -> Option<String> {
+        let id = self.tree.stable_id(node)?;
+        let store = self.tree.css_anim_store();
+        let store = store.lock().unwrap();
+        store.animations.get(&id)?.name.clone()
+    }
+}
+
+/// A panel slides the way the active tab moved: to a tab further along the
+/// new one comes from the right and the old leaves to the left, and back
+/// the other way.
+#[test]
+fn the_panels_slide_the_way_the_tab_moved() {
+    init();
+    guarded(|| {
+        let selected = string_state("a");
+        let mut r = runner_with(&selected, TabsTransition::Slide);
+        let switch = |r: &mut Runner, to: &str| {
+            let old = r.panels()[0];
+            selected.set(to.to_string());
+            r.frame();
+            r.frame();
+            let new = *r.panels().last().unwrap();
+            assert_ne!(old, new);
+            let played = (r.playing(new), r.playing(old));
+            for _ in 0..60 {
+                r.frame();
+            }
+            played
+        };
+        let (enter, exit) = switch(&mut r, "c");
+        assert_eq!(enter.as_deref(), Some("cn-tab-from-right"), "on to c");
+        assert_eq!(exit.as_deref(), Some("cn-tab-to-left"), "on to c");
+        let (enter, exit) = switch(&mut r, "b");
+        assert_eq!(enter.as_deref(), Some("cn-tab-from-left"), "back to b");
+        assert_eq!(exit.as_deref(), Some("cn-tab-to-right"), "back to b");
+    });
 }
 
 #[test]

@@ -750,7 +750,9 @@ pub const CN_STYLES: &str = concat!(
 }
 
 /* A panel enters and leaves by its `data-transition`: it fades, or slides a
-   little from a side as it fades. */
+   little from a side as it fades. `slide` goes the way the active tab moved,
+   by `data-direction`: to a tab further along, the new panel comes from the
+   right and the old one leaves to the left. */
 @keyframes cn-tab-from-left {
     from { opacity: 0; transform: translateX(-20px); }
     to { opacity: 1; transform: translateX(0); }
@@ -785,6 +787,10 @@ pub const CN_STYLES: &str = concat!(
 }
 .cn-tabs-panel[data-transition="fade"][data-motion="enter"] { animation: cn-fade-in var(--duration-normal) var(--ease-out); }
 .cn-tabs-panel[data-transition="fade"][data-motion="exit"] { animation: cn-fade-out var(--duration-fast) var(--ease-in) forwards; }
+.cn-tabs-panel[data-transition="slide"][data-direction="next"][data-motion="enter"] { animation: cn-tab-from-right var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="slide"][data-direction="next"][data-motion="exit"] { animation: cn-tab-to-left var(--duration-fast) var(--ease-in) forwards; }
+.cn-tabs-panel[data-transition="slide"][data-direction="prev"][data-motion="enter"] { animation: cn-tab-from-left var(--duration-normal) var(--ease-out); }
+.cn-tabs-panel[data-transition="slide"][data-direction="prev"][data-motion="exit"] { animation: cn-tab-to-right var(--duration-fast) var(--ease-in) forwards; }
 .cn-tabs-panel[data-transition="slide-left"][data-motion="enter"] { animation: cn-tab-from-left var(--duration-normal) var(--ease-out); }
 .cn-tabs-panel[data-transition="slide-left"][data-motion="exit"] { animation: cn-tab-to-left var(--duration-fast) var(--ease-in) forwards; }
 .cn-tabs-panel[data-transition="slide-right"][data-motion="enter"] { animation: cn-tab-from-right var(--duration-normal) var(--ease-out); }

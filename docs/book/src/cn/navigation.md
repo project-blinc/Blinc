@@ -27,10 +27,13 @@ next one, taking its width, over the theme's normal duration. Its fill, radius
 and shadow are that rule.
 
 The new panel enters and the old one leaves by the `.cn-tabs-panel` rules for
-its `data-transition` (`slide-left`, the default, `fade`, `slide-right`,
-`slide-up` or `slide-down`; `TabsTransition::None` switches at once). A panel
-carries `data-motion="enter"`, then `"exit"` while it leaves, overlaying the
-new one until its exit has played. A rule of your own changes the motion:
+its `data-transition` (`slide`, the default, `fade`, `slide-left`,
+`slide-right`, `slide-up` or `slide-down`; `TabsTransition::None` switches at
+once). A panel carries `data-motion="enter"`, then `"exit"` while it leaves,
+overlaying the new one until its exit has played. `slide` goes the way the pill
+does: each panel carries `data-direction="next"` when the new tab is further
+along, and the new panel comes from the right while the old one leaves to the
+left; `"prev"` reverses both. A rule of your own changes the motion:
 
 ```css
 .cn-tabs-panel[data-transition="fade"][data-motion="enter"] {

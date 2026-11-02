@@ -2162,7 +2162,6 @@ fn tabs_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                     .child(cn::label("Simple Tabs"))
                     .child(
                         cn::tabs(simple_tab)
-                            .transition(TabsTransition::SlideRight)
                             .tab("tab1", "Account", || {
                                 div()
                                     .px(10.0)
