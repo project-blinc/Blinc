@@ -63,7 +63,8 @@ pub mod cn {
     pub use crate::components::calendar::calendar;
     pub use crate::components::card::{card, card_content, card_footer, card_header};
     pub use crate::components::chart::{
-        bar_chart, comparison_bar_chart, histogram, line_chart, spark_line, threshold_line_chart,
+        area_chart, bar_chart, comparison_bar_chart, histogram, line_chart, spark_line,
+        threshold_line_chart,
     };
     pub use crate::components::checkbox::checkbox;
     pub use crate::components::collapsible::{collapsible, collapsible_section};
@@ -149,9 +150,9 @@ pub mod prelude {
         Card, CardContent, CardFooter, CardHeader, card, card_content, card_footer, card_header,
     };
     pub use crate::components::chart::{
-        BarChart, BarChartBuilder, ChartGrid, ComparisonBarChart, ComparisonBarChartBuilder,
-        DataPoint, DataSeries, Histogram, HistogramBuilder, LineChart, LineChartBuilder, SparkLine,
-        SparkLineBuilder, ThresholdBand, ThresholdLineChart, ThresholdLineChartBuilder, bar_chart,
+        BarChart, BarChartBuilder, ChartBuilder, ChartCurve, ChartSeries, ComparisonBarChart,
+        ComparisonBarChartBuilder, Histogram, HistogramBuilder, SparkLine, SparkLineBuilder,
+        ThresholdBand, ThresholdLineChart, ThresholdLineChartBuilder, area_chart, bar_chart,
         comparison_bar_chart, histogram, line_chart, spark_line, threshold_line_chart,
     };
     pub use crate::components::checkbox::{Checkbox, CheckboxSize, checkbox};

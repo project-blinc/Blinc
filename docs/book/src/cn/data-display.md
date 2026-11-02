@@ -94,82 +94,65 @@ popover()
 
 ## Chart
 
-Data visualization:
+Line and area charts draw on a canvas, with the value axis, category labels,
+legend and tooltip as ordinary elements. Moving the pointer across a chart
+marks the category under it and shows each series' value there.
 
 ```rust
-chart()
-    .chart_type(ChartType::Line)
-    .data(&[
-        DataPoint::new("Jan", 100.0),
-        DataPoint::new("Feb", 150.0),
-        DataPoint::new("Mar", 120.0),
-        DataPoint::new("Apr", 180.0),
-    ])
-    .x_label("Month")
-    .y_label("Sales")
+use blinc_cn::prelude::*;
+
+cn::line_chart()
+    .series("CPU", &[30.0, 45.0, 40.0, 60.0, 55.0])
+    .series("Memory", &[20.0, 25.0, 30.0, 35.0, 40.0])
+    .labels(vec!["Mon".into(), "Tue".into(), "Wed".into(), "Thu".into(), "Fri".into()])
+    .format(|v| format!("{v}%"))
+    .dots()
 ```
 
-### Chart Types
+`cn::area_chart()` fills down to the axis; `.stacked()` piles the series, each
+filling down to the one below. `.curve(ChartCurve::Linear)` or `Step` replace
+the smooth curve, `.height(..)` and `.width(..)` size it (it fills its parent's
+width unless set), `.min(..)` and `.max(..)` fix the value axis, and
+`.no_grid()`, `.no_axes()`, `.no_tooltip()` and `.legend(false)` leave parts
+out.
+
+### Live data
+
+`.data(..)` takes all the series as a list, Signal or Computed of
+`ChartSeries`, and `.labels(..)` likewise. The chart follows them in place,
+easing from the values it shows to the new ones:
 
 ```rust
-// Line chart
-chart().chart_type(ChartType::Line)
+let visitors = ctx.use_signal(vec![
+    ChartSeries::new("Desktop", vec![186.0, 305.0, 237.0]),
+    ChartSeries::new("Mobile", vec![80.0, 200.0, 120.0]),
+]);
 
-// Bar chart
-chart().chart_type(ChartType::Bar)
-
-// Area chart
-chart().chart_type(ChartType::Area)
-
-// Pie chart
-chart().chart_type(ChartType::Pie)
-
-// Histogram
-chart().chart_type(ChartType::Histogram)
-
-// Scatter plot
-chart().chart_type(ChartType::Scatter)
+cn::area_chart().data(visitors).stacked()
 ```
 
-### Multi-Series
+### Styling
 
-```rust
-chart()
-    .chart_type(ChartType::Line)
-    .series("Revenue", &revenue_data, Color::BLUE)
-    .series("Expenses", &expense_data, Color::RED)
-    .series("Profit", &profit_data, Color::GREEN)
-    .legend(true)
+Series take `--chart-1` to `--chart-5` in turn, from the theme (one palette per
+scheme); `ChartSeries::color(..)` takes any CSS colour for one. The grid, the
+pointer's cursor and the rings round dots are `--cn-chart-grid`,
+`--cn-chart-cursor` and `--cn-chart-surface`. Setting those variables restyles
+every chart:
+
+```css
+:root { --chart-1: #16a34a; --cn-chart-grid: transparent; }
 ```
 
-### Bar Chart
+The parts are `.cn-chart`, `.cn-chart-plot`, `.cn-chart-axis` (a crowded
+label carries `data-hidden`), `.cn-chart-legend` with `.cn-chart-legend-item`
+and `.cn-chart-swatch`, and `.cn-chart-tooltip` with its `-title`, `-row`,
+`-name` and `-value`.
 
-```rust
-chart()
-    .chart_type(ChartType::Bar)
-    .data(&[
-        DataPoint::new("Q1", 1200.0),
-        DataPoint::new("Q2", 1500.0),
-        DataPoint::new("Q3", 1800.0),
-        DataPoint::new("Q4", 2100.0),
-    ])
-    .color(Color::BLUE)
-    .show_values(true)
-```
+### Other charts
 
-### Pie Chart
-
-```rust
-chart()
-    .chart_type(ChartType::Pie)
-    .data(&[
-        DataPoint::new("Desktop", 45.0),
-        DataPoint::new("Mobile", 35.0),
-        DataPoint::new("Tablet", 20.0),
-    ])
-    .show_labels(true)
-    .show_percentages(true)
-```
+`cn::bar_chart()`, `cn::spark_line(..)`, `cn::threshold_line_chart()`,
+`cn::histogram(..)` and `cn::comparison_bar_chart()` are drawn as before, without
+the shared plot, until they move onto it.
 
 ## Table
 

@@ -144,7 +144,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                         .child(misc_section())
                         .child(tree_view_section())
                         .child(table_section())
-                        .child(charts_section()),
+                        .child(charts_section(ctx)),
                 ),
         )
 }
@@ -3749,9 +3749,19 @@ fn table_section() -> impl ElementBuilder + use<> {
 // Charts Section
 // ============================================================================
 
-fn charts_section() -> impl ElementBuilder + use<> {
+fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
     let theme = ThemeState::get();
     let text_secondary = theme.color(ColorToken::TextSecondary);
+    // Bound to the area chart: the button changes it and the chart eases to
+    // the new values.
+    let visitors = ctx.use_signal(vec![
+        ChartSeries::new("Desktop", vec![186.0, 305.0, 237.0, 73.0, 209.0, 214.0]),
+        ChartSeries::new("Mobile", vec![80.0, 200.0, 120.0, 190.0, 130.0, 140.0]),
+    ]);
+    let months: Vec<String> = ["January", "February", "March", "April", "May", "June"]
+        .iter()
+        .map(|m| m.to_string())
+        .collect();
 
     section_container().child(section_title("Charts")).child(
         div()
@@ -3769,18 +3779,52 @@ fn charts_section() -> impl ElementBuilder + use<> {
                     )
                     .child(
                         cn::line_chart()
-                            .width(400.0)
-                            .height(180.0)
+                            .width(440.0)
+                            .height(200.0)
                             .series(
                                 "CPU",
-                                &[0.3, 0.45, 0.4, 0.6, 0.55, 0.7, 0.65, 0.8, 0.75, 0.9],
+                                &[30.0, 45.0, 40.0, 60.0, 55.0, 70.0, 65.0, 80.0, 75.0, 90.0],
                             )
                             .series(
                                 "Memory",
-                                &[0.2, 0.25, 0.3, 0.35, 0.4, 0.42, 0.45, 0.48, 0.5, 0.52],
+                                &[20.0, 25.0, 30.0, 35.0, 40.0, 42.0, 45.0, 48.0, 50.0, 52.0],
                             )
-                            .with_dots()
-                            .build(),
+                            .format(|v| format!("{v}%"))
+                            .dots(),
+                    ),
+            )
+            // Stacked area chart over bound data
+            .child(
+                div()
+                    .flex_col()
+                    .gap(8.0)
+                    .child(
+                        text("Area Chart - Stacked, hover for values")
+                            .size(t_xs())
+                            .color(text_secondary),
+                    )
+                    .child(
+                        cn::area_chart()
+                            .width(440.0)
+                            .data(visitors)
+                            .labels(months)
+                            .stacked(),
+                    )
+                    .child(
+                        div()
+                            .w_fit()
+                            .child(cn::button("Shuffle data").on_click(move |_| {
+                                visitors.update(|series| {
+                                    series
+                                        .iter()
+                                        .map(|s| {
+                                            let mut values = s.values.clone();
+                                            values.rotate_left(1);
+                                            ChartSeries::new(s.name.clone(), values)
+                                        })
+                                        .collect()
+                                })
+                            })),
                     ),
             )
             // Bar charts row

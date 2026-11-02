@@ -32,6 +32,11 @@ pub const CN_STYLES: &str = concat!(
    as a page's root colour is. */
 :root {
     color: var(--text-primary);
+    /* What a chart's canvas draws its grid, pointer cursor and dot rings in;
+       series take --chart-1 to --chart-5 from the theme. */
+    --cn-chart-grid: var(--border);
+    --cn-chart-cursor: var(--text-secondary);
+    --cn-chart-surface: var(--surface);
 }
 
 /* ============================================================================
@@ -1011,6 +1016,42 @@ pub const CN_STYLES: &str = concat!(
 .cn-progress[data-indeterminate] > .cn-progress-bar {
     animation: cn-progress-pulse var(--duration-slowest) var(--ease-in-out) infinite alternate;
 }
+
+/* ============================================================================
+   Chart
+   ============================================================================ */
+
+/* A plot drawn on a canvas, with its labels, tooltip and legend as parts. */
+.cn-chart { gap: 12px; }
+.cn-chart-axis { font-size: var(--text-xs); color: var(--text-tertiary); }
+.cn-chart-axis[data-hidden] { opacity: 0; }
+.cn-chart-legend {
+    gap: 16px;
+    font-size: var(--text-xs);
+    color: var(--text-secondary);
+}
+.cn-chart-legend[data-hidden] { display: none; }
+.cn-chart-legend-item { gap: 6px; }
+.cn-chart-swatch { border-radius: 3px; }
+.cn-chart-c1 { background: var(--chart-1); }
+.cn-chart-c2 { background: var(--chart-2); }
+.cn-chart-c3 { background: var(--chart-3); }
+.cn-chart-c4 { background: var(--chart-4); }
+.cn-chart-c5 { background: var(--chart-5); }
+.cn-chart-tooltip {
+    gap: 6px;
+    padding: 8px 10px;
+    min-width: 128px;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    font-size: var(--text-xs);
+}
+.cn-chart-tooltip-title { font-weight: 500; color: var(--text-primary); }
+.cn-chart-tooltip-row { gap: 8px; }
+.cn-chart-tooltip-name { flex-grow: 1; color: var(--text-secondary); }
+.cn-chart-tooltip-value { margin-left: 12px; font-weight: 500; color: var(--text-primary); }
 
 /* ============================================================================
    Avatar
