@@ -874,6 +874,11 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
     let switch1 = ctx.use_signal(false);
     let switch2 = ctx.use_signal(true);
     let switch3 = ctx.use_signal(false);
+    let switch_sizes = [
+        ctx.use_signal(true),
+        ctx.use_signal(true),
+        ctx.use_signal(true),
+    ];
 
     // Toggle widget states. Each toggle gets its own keyed state so the
     // visual differences across variants / sizes can be observed
@@ -936,7 +941,20 @@ fn toggles_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                     .gap(12.0)
                     .child(cn::switch(switch1).label("Notifications"))
                     .child(cn::switch(switch2).label("Dark mode"))
-                    .child(cn::switch(switch3).label("Disabled").disabled(true)),
+                    .child(cn::switch(switch3).label("Disabled").disabled(true))
+                    .child(
+                        div()
+                            .flex_row()
+                            .items_center()
+                            .gap(4.0)
+                            .children(
+                                [SwitchSize::Small, SwitchSize::Medium, SwitchSize::Large]
+                                    .into_iter()
+                                    .zip(switch_sizes)
+                                    .map(|(size, on)| cn::switch(on).size(size)),
+                            )
+                            .child(row_caption("Sizes")),
+                    ),
             )
             // Toggle component: icon-only toolbar + variant / size matrix.
             .child(
