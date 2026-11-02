@@ -16,14 +16,18 @@ tabs(tab)
     .tab("account", "Account", || div().child(text("Account settings...")))
     .tab("password", "Password", || div().child(text("Password settings...")))
     .tab("settings", "Settings", || div().child(text("Other settings...")))
-    .transition(TabsTransition::SlideLeft)
+    .transition(TabsTransition::Fade)
     .on_change(|value| println!("now on {value}"))
 ```
 
 ### Switching
 
+A pill, `.cn-tabs-indicator`, sits behind the active trigger and slides to the
+next one, taking its width, over the theme's normal duration. Its fill, radius
+and shadow are that rule.
+
 The new panel enters and the old one leaves by the `.cn-tabs-panel` rules for
-its `data-transition` (`fade`, the default, `slide-left`, `slide-right`,
+its `data-transition` (`slide-left`, the default, `fade`, `slide-right`,
 `slide-up` or `slide-down`; `TabsTransition::None` switches at once). A panel
 carries `data-motion="enter"`, then `"exit"` while it leaves, overlaying the
 new one until its exit has played. A rule of your own changes the motion:

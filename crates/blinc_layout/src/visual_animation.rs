@@ -493,6 +493,11 @@ pub struct VisualAnimationConfig {
 
     /// Clipping behavior during animation
     pub clip_behavior: ClipBehavior,
+
+    /// Compare the element's bounds in window coordinates, not its parent's,
+    /// so an element with this key built under another parent moves from
+    /// where the last one was: see [`Self::shared`].
+    pub shared: bool,
 }
 
 impl Default for VisualAnimationConfig {
@@ -514,6 +519,7 @@ impl VisualAnimationConfig {
             timed: None,
             threshold: 1.0,
             clip_behavior: ClipBehavior::ClipToAnimated,
+            shared: false,
         }
     }
 
@@ -529,6 +535,7 @@ impl VisualAnimationConfig {
             timed: None,
             threshold: 1.0,
             clip_behavior: ClipBehavior::ClipToAnimated,
+            shared: false,
         }
     }
 
@@ -544,6 +551,7 @@ impl VisualAnimationConfig {
             timed: None,
             threshold: 1.0,
             clip_behavior: ClipBehavior::ClipToAnimated,
+            shared: false,
         }
     }
 
@@ -559,6 +567,7 @@ impl VisualAnimationConfig {
             timed: None,
             threshold: 1.0,
             clip_behavior: ClipBehavior::NoClip,
+            shared: false,
         }
     }
 
@@ -574,6 +583,7 @@ impl VisualAnimationConfig {
             timed: None,
             threshold: 1.0,
             clip_behavior: ClipBehavior::ClipToAnimated,
+            shared: false,
         }
     }
 
@@ -630,6 +640,14 @@ impl VisualAnimationConfig {
     /// Use a snappy spring (very responsive)
     pub fn snappy(self) -> Self {
         self.with_spring(SpringConfig::snappy())
+    }
+
+    /// Move from wherever the last element with this key was, even under
+    /// another parent: one element that is rebuilt where it is needed (an
+    /// indicator under the active tab) slides there from the old place.
+    pub fn shared(mut self) -> Self {
+        self.shared = true;
+        self
     }
 
     /// Clip to animated bounds during animation

@@ -222,8 +222,15 @@ impl RenderTree {
                 continue;
             };
 
-            // Get current layout bounds from taffy
-            let Some(layout_bounds) = self.layout_tree.get_bounds(node_id, (0.0, 0.0)) else {
+            // Get current layout bounds from taffy: in the window for a
+            // shared key, which may move between parents. The offset played
+            // back is a difference, the same in either.
+            let layout_bounds = if config.shared {
+                self.get_absolute_bounds(node_id)
+            } else {
+                self.layout_tree.get_bounds(node_id, (0.0, 0.0))
+            };
+            let Some(layout_bounds) = layout_bounds else {
                 continue;
             };
 

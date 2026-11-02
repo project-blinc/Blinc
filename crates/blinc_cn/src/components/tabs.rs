@@ -74,6 +74,7 @@ use blinc_layout::element::{CursorStyle, RenderProps};
 use blinc_layout::prelude::*;
 use blinc_layout::region::Row;
 use blinc_layout::tree::{LayoutNodeId, LayoutTree};
+use blinc_layout::visual_animation::VisualAnimationConfig;
 use blinc_layout::widgets::css_motion::CssMotion;
 use blinc_theme::{ColorScheme, ColorToken, RadiusToken, ThemeState};
 
@@ -270,10 +271,10 @@ impl std::fmt::Debug for TabItem {
 pub enum TabsTransition {
     /// No animation
     None,
-    /// Fade in/out (default)
-    #[default]
+    /// Fade in/out
     Fade,
-    /// Slide from left
+    /// Slide from left (default)
+    #[default]
     SlideLeft,
     /// Slide from right
     SlideRight,
@@ -754,10 +755,15 @@ fn build_tab_trigger(
         TabsSize::Large => "cn-tabs-trigger--lg",
     };
 
+    // One pill per tab list, built under whichever trigger is active. Its
+    // key is shared across the triggers, so a switch slides and resizes it
+    // from where the last trigger had it.
+    let indicator_key = format!("cn-tabs-indicator-{trigger_key}");
     let mut trigger = div()
         .class("cn-tabs-trigger")
         .class(trigger_size_class)
         .class_when("cn-tabs-trigger--active", &is_active)
+        .relative()
         .flex_row()
         .items_center()
         .justify_center()
@@ -767,6 +773,18 @@ fn build_tab_trigger(
             CursorStyle::Pointer
         })
         .track(&interaction)
+        .show(is_active, move || {
+            div()
+                .class("cn-tabs-indicator")
+                .absolute()
+                .inset(0.0)
+                .animate_bounds(
+                    VisualAnimationConfig::all()
+                        .with_key(indicator_key.clone())
+                        .shared()
+                        .theme_timed(),
+                )
+        })
         .child(content);
 
     // Add disabled class

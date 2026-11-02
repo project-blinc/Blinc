@@ -735,12 +735,13 @@ pub const CN_STYLES: &str = concat!(
     color: var(--text-primary);
 }
 .cn-tabs-trigger--active {
-    /* Active trigger lifts to --surface so it stands out from the
-       --surface-overlay tray underneath. Previously --background,
-       which made the active trigger MERGE with the canvas instead
-       of reading as raised. */
-    background: var(--cn-tabs-active-bg, var(--surface));
     color: var(--text-primary);
+}
+/* The pill behind the active trigger, raised to --surface over the
+   --surface-overlay tray. It slides to the next trigger on a switch. */
+.cn-tabs-indicator {
+    background: var(--cn-tabs-active-bg, var(--surface));
+    border-radius: var(--radius-default);
     box-shadow: theme(shadow-sm);
 }
 .cn-tabs-trigger--disabled {
