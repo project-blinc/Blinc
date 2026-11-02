@@ -5,6 +5,7 @@ All notable changes to `blinc_theme` will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- `--chart-1` to `--chart-5` and `--chart-baseline`: a palette for charts, one per scheme, in the CSS variable map (`chart_palette(scheme)`).
 - **Universal HID variants — `RestrainedTheme`, `HybridTheme`, `ExpressiveTheme`** plus `DefaultTheme` alias (= `HybridTheme`). Three considered cross-platform synthesis variants with per-variant `RadiusTokens` ladders, `ShapeTokens` (superellipse smoothing), and semantic-easing assignments. `cn_bundle()` defaults to `HybridTheme` when the platform doesn't match a built-in.
 - **`ShapeTokens`** (`corner_smoothing`, `corner_exponent`, `smoothing_threshold`). Theme-driven squircle smoothing applied per-corner at paint time via a new `resolve_corner_shape` helper. Defaults to `is_off()` so existing themes (BlincTheme, platform themes) keep circular corners unchanged.
 - **`--focus-ring`, `--focus-ring-error`, `--focus-ring-success` CSS variables** — alpha-tinted (35 %) variants of `BorderFocus` / `BorderError` / `Success`, derived at frame time so user-written CSS can reference the same soft halo colour the focus ring uses.

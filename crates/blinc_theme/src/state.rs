@@ -643,6 +643,9 @@ impl ThemeState {
             hex(self.color(ColorToken::SelectionText)),
         );
         vars.insert("accent".into(), hex(self.color(ColorToken::Accent)));
+        for (name, value) in crate::tokens::chart_palette(self.scheme()) {
+            vars.insert(name.into(), value.into());
+        }
         vars.insert(
             "accent-subtle".into(),
             hex(self.color(ColorToken::AccentSubtle)),
@@ -959,6 +962,9 @@ mod tests {
         assert!(vars.contains_key("duration-fast"));
         assert!(vars.contains_key("duration-slowest"));
         assert!(vars.contains_key("ease-default"));
+        // Chart palette
+        assert!(vars.contains_key("chart-1"));
+        assert!(vars.contains_key("chart-baseline"));
     }
 
     #[test]

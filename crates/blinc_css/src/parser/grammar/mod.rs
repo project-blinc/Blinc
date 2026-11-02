@@ -139,6 +139,32 @@ pub(crate) fn root_block(input: &str) -> ParseResult<Vec<(String, String)>> {
     Ok((input, declarations))
 }
 
+/// The custom properties a `:root { .. }` block declares among others, as
+/// `(name, value)` without the `--`.
+fn root_custom_properties(input: &str) -> Vec<(String, String)> {
+    let Some(open) = input.find('{') else {
+        return Vec::new();
+    };
+    let Some(close) = input[open..].find('}') else {
+        return Vec::new();
+    };
+    let mut body = input[open + 1..open + close].to_string();
+    // Comments between declarations.
+    while let Some(start) = body.find("/*") {
+        let Some(end) = body[start..].find("*/") else {
+            break;
+        };
+        body.replace_range(start..start + end + 2, "");
+    }
+    body.split(';')
+        .filter_map(|decl| {
+            let (name, value) = decl.trim().split_once(':')?;
+            let name = name.trim().strip_prefix("--")?;
+            Some((name.to_string(), value.trim().to_string()))
+        })
+        .collect()
+}
+
 /// Parse a complete rule: #id { ... } or #id:state { ... }
 pub(crate) fn css_rule(input: &str) -> ParseResult<(String, ElementStyle)> {
     let (input, _) = ws(input)?;
@@ -216,7 +242,11 @@ pub(crate) fn parse_stylesheet_with_errors<'a>(
                     continue;
                 }
                 Err(_) => {
-                    // Not a valid :root block, try as a rule
+                    // Ordinary properties beside the variables: keep the
+                    // variables, and parse the block as a rule for the rest.
+                    for (name, value) in root_custom_properties(trimmed) {
+                        parsed_variables.insert(name, value);
+                    }
                 }
             }
         }

@@ -691,6 +691,15 @@ impl Stylesheet {
         &self.variables
     }
 
+    /// A CSS colour, `#3b82f6`, `color-mix(..)` or `var(--chart-1)`,
+    /// resolved against the variables this stylesheet defines and was parsed
+    /// with. For drawing code, such as a canvas, that takes its colours from
+    /// the stylesheet.
+    pub fn resolve_color(&self, value: &str) -> Option<blinc_core::Color> {
+        let resolved = crate::parser::grammar::resolve_var_references(value, &self.variables);
+        crate::parser::value::parse_color(&resolved)
+    }
+
     // =========================================================================
     // Keyframe Animations
     // =========================================================================

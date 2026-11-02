@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- A `:root` block that sets ordinary properties beside its custom properties keeps the custom properties; they were dropped.
 - A class or attribute bound to a signal is recorded on the element when the tree has no stylesheet, so queries and selectors see it. It was dropped until a stylesheet was set.
 - Text that took its font size, weight, line height, letter spacing or family from a container's rule gets back the font it was built with when that rule stops applying. It kept the inherited value, so a tab that stopped being the active one stayed bold.
 - A CSS transition or animation of a layout property (`width`, `flex-grow`, `padding` and the rest) ends on its final value. The frame it finished on was never written, so it stopped a step short.
@@ -18,6 +19,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 - An element that keeps a pointer state across a restyle now eases to its new look. Unchecking a hovered switch changes the rule that applies from `:checked:hover` to `:hover`; that was applied without a transition, so the fill snapped.
 
 ### Added
+- `Stylesheet::resolve_color(value)` resolves a CSS colour, `var(..)` chains included, against the variables the stylesheet defines and was parsed with, so drawing code such as a canvas can take its colours from the stylesheet.
 - A CSS `animation` set by a rule keyed on more than a single class (an attribute such as `.grid[data-enter="next"]`, a compound, a descendant) plays. It starts when an element is built matching the rule, and when a bound attribute or class makes a different animation the one that applies; when none applies any more, the animation stops. Only single-class rules started before.
 - Scroll gestures: `RenderTree::on_scroll_gesture(ScrollGesturePhase)` follows the platform's phases. A SCROLL carries `EventContext::scroll_gesture`, a number that changes with each touch, and `scroll_momentum`, whether it is momentum after the fingers lifted. A gesture taken by a scroll handler with no physics of its own stays with that handler until it ends, wherever the pointer goes; scroll containers still take what is under the pointer.
 - A layout property bound to a signal (`.w(..)`, `.h(..)`, `.flex_grow_value(..)` and the rest) eases to each new value by the `transition` the element's rules give it, as a change of rule does.

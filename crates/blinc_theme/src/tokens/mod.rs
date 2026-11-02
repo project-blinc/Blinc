@@ -9,6 +9,7 @@
 //! - Animation durations and easings
 
 mod animation;
+mod chart;
 mod color;
 mod radius;
 mod shadow;
@@ -17,6 +18,7 @@ mod spacing;
 mod typography;
 
 pub use animation::*;
+pub use chart::*;
 pub use color::*;
 pub use radius::*;
 pub use shadow::*;
