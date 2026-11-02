@@ -107,8 +107,9 @@ pub fn h6(content: impl Into<String>) -> Text {
 
 /// Create a heading with a specific level (1-6) with `.class("cn-h{level}")`
 ///
-/// Levels outside 1-6 are clamped to the nearest valid level.
-pub fn heading(level: u8, content: impl Into<String>) -> Text {
+/// Levels outside 1-6 are clamped to the nearest valid level. A signal
+/// here replaces the text in place.
+pub fn heading(level: u8, content: impl blinc_layout::binding::IntoReactive<String>) -> Text {
     let clamped = level.clamp(1, 6);
     let class_name = format!("cn-h{}", clamped);
     blinc_layout::typography::heading(level, content).class(class_name)

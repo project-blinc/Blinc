@@ -87,7 +87,7 @@ enum HeadingWeight {
 /// h1("Page Title").color(Color::WHITE)
 /// ```
 pub fn h1(content: impl Into<String>) -> Text {
-    heading(1, content)
+    heading(1, content.into())
 }
 
 /// Create a level-2 heading (24px, bold)
@@ -98,7 +98,7 @@ pub fn h1(content: impl Into<String>) -> Text {
 /// h2("Section Title").color(Color::WHITE)
 /// ```
 pub fn h2(content: impl Into<String>) -> Text {
-    heading(2, content)
+    heading(2, content.into())
 }
 
 /// Create a level-3 heading (20px, semibold)
@@ -109,7 +109,7 @@ pub fn h2(content: impl Into<String>) -> Text {
 /// h3("Subsection").color(Color::WHITE)
 /// ```
 pub fn h3(content: impl Into<String>) -> Text {
-    heading(3, content)
+    heading(3, content.into())
 }
 
 /// Create a level-4 heading (18px, semibold)
@@ -120,7 +120,7 @@ pub fn h3(content: impl Into<String>) -> Text {
 /// h4("Minor Section").color(Color::WHITE)
 /// ```
 pub fn h4(content: impl Into<String>) -> Text {
-    heading(4, content)
+    heading(4, content.into())
 }
 
 /// Create a level-5 heading (16px, medium)
@@ -131,7 +131,7 @@ pub fn h4(content: impl Into<String>) -> Text {
 /// h5("Small Heading").color(Color::WHITE)
 /// ```
 pub fn h5(content: impl Into<String>) -> Text {
-    heading(5, content)
+    heading(5, content.into())
 }
 
 /// Create a level-6 heading (14px, medium)
@@ -142,7 +142,7 @@ pub fn h5(content: impl Into<String>) -> Text {
 /// h6("Smallest Heading").color(Color::WHITE)
 /// ```
 pub fn h6(content: impl Into<String>) -> Text {
-    heading(6, content)
+    heading(6, content.into())
 }
 
 /// Create a heading with a specific level (1-6)
@@ -158,8 +158,11 @@ pub fn h6(content: impl Into<String>) -> Text {
 ///
 /// // Equivalent to h2()
 /// heading(2, "Section Title")
+///
+/// // Follows a signal: a change replaces the text in place
+/// heading(2, &title)
 /// ```
-pub fn heading(level: u8, content: impl Into<String>) -> Text {
+pub fn heading(level: u8, content: impl crate::binding::IntoReactive<String>) -> Text {
     let idx = (level.saturating_sub(1).min(5)) as usize;
     let (size, weight) = HEADING_CONFIG[idx];
 
@@ -172,7 +175,9 @@ pub fn heading(level: u8, content: impl Into<String>) -> Text {
         _ => "h6",
     };
 
-    let t = text(content).size(size).semantic_type(semantic);
+    let t = Text::bound(content.into_reactive())
+        .size(size)
+        .semantic_type(semantic);
 
     match weight {
         HeadingWeight::Medium => t.medium(),

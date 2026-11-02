@@ -45,6 +45,9 @@ use blinc_layout::widgets::overlay::AnchorDirection;
 use blinc_layout::widgets::overlay_stack::{OverlayBuilder, OverlayHandle};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
+use crate::reactive_props::clone_reactive;
+use blinc_layout::binding::{IntoReactive, Reactive};
+
 /// Navigation menu item type
 #[derive(Clone)]
 enum NavMenuItem {
@@ -472,7 +475,7 @@ pub struct NavigationLink {
 impl NavigationLink {
     fn from_builder(builder: &NavigationLinkBuilder) -> Self {
         let label = builder.label.clone();
-        let description = builder.description.clone();
+        let description = builder.description.as_ref().map(clone_reactive);
         let on_click = builder.on_click.clone();
 
         let mut link = div()
@@ -491,7 +494,7 @@ impl NavigationLink {
             );
         if let Some(ref desc) = description {
             link = link.child(
-                text(desc)
+                blinc_layout::text::Text::bound(clone_reactive(desc))
                     .class("cn-nav-link-description")
                     .size(12.0)
                     .no_cursor()
@@ -566,7 +569,7 @@ impl ElementBuilder for NavigationLink {
 /// Builder for navigation link
 pub struct NavigationLinkBuilder {
     label: String,
-    description: Option<String>,
+    description: Option<Reactive<String>>,
     on_click: Option<Arc<dyn Fn() + Send + Sync>>,
     /// User-added CSS classes
     classes: Vec<std::sync::Arc<str>>,
@@ -606,9 +609,9 @@ impl NavigationLinkBuilder {
         ::blinc_layout::build_once::build_once(&self.built, || NavigationLink::from_builder(self))
     }
 
-    /// Set description text
-    pub fn description(mut self, desc: impl Into<String>) -> Self {
-        self.description = Some(desc.into());
+    /// Set description text. A signal here replaces the text in place.
+    pub fn description(mut self, desc: impl IntoReactive<String>) -> Self {
+        self.description = Some(desc.into_reactive());
         self
     }
 

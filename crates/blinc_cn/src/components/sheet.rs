@@ -43,6 +43,9 @@ use blinc_layout::widgets::overlay::EdgeSide;
 use blinc_layout::widgets::overlay_stack::{OverlayBuilder, OverlayHandle};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
+use crate::reactive_props::clone_reactive;
+use blinc_layout::binding::{IntoReactive, Reactive};
+
 /// Sheet side variants - which edge the sheet slides from
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SheetSide {
@@ -97,8 +100,8 @@ impl SheetSize {
 pub struct SheetBuilder {
     side: SheetSide,
     size: SheetSize,
-    title: Option<String>,
-    description: Option<String>,
+    title: Option<Reactive<String>>,
+    description: Option<Reactive<String>>,
     content: Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     footer: Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     show_close: bool,
@@ -137,14 +140,14 @@ impl SheetBuilder {
     }
 
     /// Set the sheet title
-    pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.title = Some(title.into());
+    pub fn title(mut self, title: impl IntoReactive<String>) -> Self {
+        self.title = Some(title.into_reactive());
         self
     }
 
     /// Set the sheet description
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        self.description = Some(description.into());
+    pub fn description(mut self, description: impl IntoReactive<String>) -> Self {
+        self.description = Some(description.into_reactive());
         self
     }
 
@@ -293,8 +296,8 @@ pub fn sheet() -> SheetBuilder {
 fn build_sheet_content(
     side: SheetSide,
     size: SheetSize,
-    title: &Option<String>,
-    description: &Option<String>,
+    title: &Option<Reactive<String>>,
+    description: &Option<Reactive<String>>,
     content: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     footer: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     show_close: bool,
@@ -386,7 +389,7 @@ fn build_sheet_content(
 
     if let Some(title_text) = title {
         header_text = header_text.child(
-            text(title_text)
+            blinc_layout::text::Text::bound(clone_reactive(title_text))
                 .size(theme.typography().text_lg)
                 .class("cn-sheet-title")
                 .medium(),
@@ -395,7 +398,7 @@ fn build_sheet_content(
 
     if let Some(desc_text) = description {
         header_text = header_text.child(
-            text(desc_text)
+            blinc_layout::text::Text::bound(clone_reactive(desc_text))
                 .size(theme.typography().text_sm)
                 .class("cn-sheet-description"),
         );
@@ -487,7 +490,7 @@ mod tests {
 
         assert_eq!(builder.side, SheetSide::Left);
         assert_eq!(builder.size, SheetSize::Large);
-        assert_eq!(builder.title, Some("Test".to_string()));
+        assert!(matches!(builder.title, Some(Reactive::Const(ref t)) if t == "Test"));
     }
 
     #[test]

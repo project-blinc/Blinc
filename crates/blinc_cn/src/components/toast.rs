@@ -76,6 +76,8 @@ use blinc_layout::widgets::toast_tray::{ToastBuilder as TrayBuilder, ToastHandle
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
 use super::button::{ButtonSize, ButtonVariant, button};
+use crate::reactive_props::clone_reactive;
+use blinc_layout::binding::{IntoReactive, Reactive};
 
 /// Toast visual variants
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -125,7 +127,7 @@ pub type ToastBodyFn = Arc<dyn Fn() -> Div + Send + Sync>;
 /// Builder for creating and showing toast notifications
 pub struct ToastBuilder {
     title: Option<String>,
-    description: Option<String>,
+    description: Option<Reactive<String>>,
     variant: ToastVariant,
     duration_ms: u32,
     corner: Corner,
@@ -174,9 +176,9 @@ impl ToastBuilder {
         }
     }
 
-    /// Set the toast description
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        self.description = Some(description.into());
+    /// Set the toast description. A signal here replaces the text in place.
+    pub fn description(mut self, description: impl IntoReactive<String>) -> Self {
+        self.description = Some(description.into_reactive());
         self
     }
 
@@ -308,7 +310,7 @@ impl ToastBuilder {
 #[allow(clippy::too_many_arguments)]
 fn build_toast_content(
     title: &Option<String>,
-    description: &Option<String>,
+    description: &Option<Reactive<String>>,
     icon_svg: &Option<String>,
     variant: ToastVariant,
     action_label: &Option<String>,
@@ -359,7 +361,7 @@ fn build_toast_content(
         content = content.child(body_fn());
     } else if let Some(desc) = description {
         content = content.child(
-            text(desc)
+            blinc_layout::text::Text::bound(clone_reactive(desc))
                 .class("cn-toast-description")
                 .size(theme.typography().text_sm),
         );
@@ -470,7 +472,7 @@ mod tests {
     #[test]
     fn test_toast_with_description() {
         let toast = ToastBuilder::new("Title").description("Description");
-        assert_eq!(toast.description, Some("Description".to_string()));
+        assert!(matches!(toast.description, Some(Reactive::Const(ref d)) if d == "Description"));
     }
 
     #[test]

@@ -219,11 +219,11 @@ impl CardHeader {
         Self { inner }
     }
 
-    /// Add a title
-    pub fn title(mut self, title: impl Into<String>) -> Self {
+    /// Add a title. A signal here replaces the text in place.
+    pub fn title(mut self, title: impl blinc_layout::binding::IntoReactive<String>) -> Self {
         let theme = ThemeState::get();
         self.inner = self.inner.child(
-            text(title)
+            blinc_layout::text::Text::bound(title.into_reactive())
                 .class("cn-card-title")
                 .size(theme.typography().text_lg)
                 .semibold(),
@@ -231,11 +231,11 @@ impl CardHeader {
         self
     }
 
-    /// Add a description
-    pub fn description(mut self, desc: impl Into<String>) -> Self {
+    /// Add a description. A signal here replaces the text in place.
+    pub fn description(mut self, desc: impl blinc_layout::binding::IntoReactive<String>) -> Self {
         let theme = ThemeState::get();
         self.inner = self.inner.child(
-            text(desc)
+            blinc_layout::text::Text::bound(desc.into_reactive())
                 .class("cn-card-description")
                 .size(theme.typography().text_sm),
         );

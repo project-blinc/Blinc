@@ -40,7 +40,9 @@ use blinc_layout::widgets::overlay::AnchorDirection;
 use blinc_layout::widgets::overlay_stack::{CloseReason, OverlayBuilder, OverlayHandle};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
+use crate::reactive_props::{clone_reactive, current};
 use blinc_layout::InstanceKey;
+use blinc_layout::binding::{IntoReactive, Reactive};
 
 /// Side where the tooltip appears relative to the trigger
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -76,7 +78,7 @@ pub struct TooltipBuilder {
     /// Trigger content (the element that triggers the tooltip)
     trigger: TriggerBuilderFn,
     /// Text to show in the tooltip
-    text: Option<String>,
+    text: Option<Reactive<String>>,
     /// Side where the tooltip appears
     side: TooltipSide,
     /// Alignment relative to trigger
@@ -100,7 +102,7 @@ pub struct TooltipBuilder {
 impl std::fmt::Debug for TooltipBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TooltipBuilder")
-            .field("text", &self.text)
+            .field("text", &self.text.as_ref().map(current))
             .field("side", &self.side)
             .field("align", &self.align)
             .field("open_delay_ms", &self.open_delay_ms)
@@ -131,9 +133,10 @@ impl TooltipBuilder {
         }
     }
 
-    /// Set the text to display in the tooltip
-    pub fn text(mut self, text: impl Into<String>) -> Self {
-        self.text = Some(text.into());
+    /// Set the text to display in the tooltip. A signal here replaces the
+    /// text in place while the tooltip shows.
+    pub fn text(mut self, text: impl IntoReactive<String>) -> Self {
+        self.text = Some(text.into_reactive());
         self
     }
 
@@ -195,7 +198,7 @@ impl TooltipBuilder {
         let align = self.align;
         let offset = self.offset;
         let close_delay_ms = self.close_delay_ms;
-        let tooltip_text = self.text.clone();
+        let tooltip_text = self.text.as_ref().map(clone_reactive);
         let trigger_builder = self.trigger.clone();
 
         let stored_for_enter = overlay_handle_state.clone();
@@ -241,7 +244,7 @@ impl TooltipBuilder {
                 let Some(ref text_str) = tooltip_text else {
                     return;
                 };
-                let text_owned = text_str.clone();
+                let text_owned = clone_reactive(text_str);
                 let font_size = ThemeState::get().typography().text_xs;
                 let anchor_dir = match side {
                     TooltipSide::Top => AnchorDirection::Top,
@@ -293,7 +296,11 @@ impl TooltipBuilder {
                             .class(side_class)
                             .flex_row()
                             .items_center()
-                            .child(text(&text_owned).size(font_size).no_wrap())
+                            .child(
+                                blinc_layout::text::Text::bound(clone_reactive(&text_owned))
+                                    .size(font_size)
+                                    .no_wrap(),
+                            )
                     })
                     .show();
                 stored_open.set(Some(handle.raw()));

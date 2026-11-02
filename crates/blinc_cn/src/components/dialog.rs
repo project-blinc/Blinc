@@ -39,6 +39,8 @@ use blinc_layout::widgets::overlay_stack::{OverlayBuilder, OverlayHandle};
 use blinc_theme::{ColorToken, RadiusToken, SpacingToken, ThemeState};
 
 use super::button::{ButtonVariant, button};
+use crate::reactive_props::clone_reactive;
+use blinc_layout::binding::{IntoReactive, Reactive};
 
 /// Dialog size variants
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -70,13 +72,13 @@ impl DialogSize {
 ///
 /// Use `cn::dialog()` to create a builder, configure it, then call `.show()`.
 pub struct DialogBuilder {
-    title: Option<String>,
-    description: Option<String>,
+    title: Option<Reactive<String>>,
+    description: Option<Reactive<String>>,
     content: Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     footer: Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     size: DialogSize,
-    confirm_text: String,
-    cancel_text: String,
+    confirm_text: Reactive<String>,
+    cancel_text: Reactive<String>,
     on_confirm: Option<Arc<dyn Fn() + Send + Sync>>,
     on_cancel: Option<Arc<dyn Fn() + Send + Sync>>,
     on_close: Option<Arc<dyn Fn() + Send + Sync>>,
@@ -100,8 +102,8 @@ impl DialogBuilder {
             content: None,
             footer: None,
             size: DialogSize::Medium,
-            confirm_text: "Confirm".to_string(),
-            cancel_text: "Cancel".to_string(),
+            confirm_text: Reactive::Const("Confirm".to_string()),
+            cancel_text: Reactive::Const("Cancel".to_string()),
             on_confirm: None,
             on_cancel: None,
             on_close: None,
@@ -113,15 +115,15 @@ impl DialogBuilder {
         }
     }
 
-    /// Set the dialog title
-    pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.title = Some(title.into());
+    /// Set the dialog title. A signal here replaces the text in place.
+    pub fn title(mut self, title: impl IntoReactive<String>) -> Self {
+        self.title = Some(title.into_reactive());
         self
     }
 
-    /// Set the dialog description
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        self.description = Some(description.into());
+    /// Set the dialog description. A signal here replaces the text in place.
+    pub fn description(mut self, description: impl IntoReactive<String>) -> Self {
+        self.description = Some(description.into_reactive());
         self
     }
 
@@ -150,14 +152,14 @@ impl DialogBuilder {
     }
 
     /// Set the confirm button text
-    pub fn confirm_text(mut self, text: impl Into<String>) -> Self {
-        self.confirm_text = text.into();
+    pub fn confirm_text(mut self, text: impl IntoReactive<String>) -> Self {
+        self.confirm_text = text.into_reactive();
         self
     }
 
     /// Set the cancel button text
-    pub fn cancel_text(mut self, text: impl Into<String>) -> Self {
-        self.cancel_text = text.into();
+    pub fn cancel_text(mut self, text: impl IntoReactive<String>) -> Self {
+        self.cancel_text = text.into_reactive();
         self
     }
 
@@ -337,19 +339,19 @@ impl AlertDialogBuilder {
     }
 
     /// Set the dialog title
-    pub fn title(mut self, title: impl Into<String>) -> Self {
+    pub fn title(mut self, title: impl IntoReactive<String>) -> Self {
         self.inner = self.inner.title(title);
         self
     }
 
     /// Set the dialog description
-    pub fn description(mut self, description: impl Into<String>) -> Self {
+    pub fn description(mut self, description: impl IntoReactive<String>) -> Self {
         self.inner = self.inner.description(description);
         self
     }
 
     /// Set the confirm button text (default: "OK")
-    pub fn confirm_text(mut self, text: impl Into<String>) -> Self {
+    pub fn confirm_text(mut self, text: impl IntoReactive<String>) -> Self {
         self.inner = self.inner.confirm_text(text);
         self
     }
@@ -402,14 +404,14 @@ pub fn alert_dialog() -> AlertDialogBuilder {
 /// the wrapping `motion_derived` lives at the `OverlayStack` layer.
 #[allow(clippy::too_many_arguments)]
 fn build_dialog_content(
-    title: &Option<String>,
-    description: &Option<String>,
+    title: &Option<Reactive<String>>,
+    description: &Option<Reactive<String>>,
     content: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     footer: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     max_width: f32,
     _spacing: f32,
-    confirm_text: &str,
-    _cancel_text: &str,
+    confirm_text: &Reactive<String>,
+    cancel_text: &Reactive<String>,
     on_confirm: &Option<Arc<dyn Fn() + Send + Sync>>,
     on_cancel: &Option<Arc<dyn Fn() + Send + Sync>>,
     confirm_destructive: bool,
@@ -427,12 +429,15 @@ fn build_dialog_content(
 
         // Their colours are `.cn-dialog-title` and `.cn-dialog-description`.
         if let Some(title_text) = title {
-            header = header.child(h3(title_text).class("cn-dialog-title"));
+            header = header.child(
+                blinc_layout::typography::heading(3, clone_reactive(title_text))
+                    .class("cn-dialog-title"),
+            );
         }
 
         if let Some(desc_text) = description {
             header = header.child(
-                text(desc_text)
+                blinc_layout::text::Text::bound(clone_reactive(desc_text))
                     .class("cn-dialog-description")
                     .size(theme.typography().text_sm),
             );
@@ -460,21 +465,21 @@ fn build_dialog_content(
 
         if show_cancel {
             let on_cancel = on_cancel.clone();
-            footer_div =
-                footer_div.child(button("Cancel").variant(ButtonVariant::Outline).on_click(
-                    move |_| {
+            footer_div = footer_div.child(
+                button(clone_reactive(cancel_text))
+                    .variant(ButtonVariant::Outline)
+                    .on_click(move |_| {
                         if let Some(ref cb) = on_cancel {
                             cb();
                         }
                         handle.close();
-                    },
-                ));
+                    }),
+            );
         }
 
         let on_confirm = on_confirm.clone();
-        let confirm_text = confirm_text.to_string();
         footer_div = footer_div.child(
-            button(confirm_text)
+            button(clone_reactive(confirm_text))
                 .variant(if confirm_destructive {
                     ButtonVariant::Destructive
                 } else {
@@ -522,17 +527,26 @@ mod tests {
             .description("Description")
             .confirm_text("OK");
 
-        assert_eq!(builder.title, Some("Test".to_string()));
-        assert_eq!(builder.description, Some("Description".to_string()));
-        assert_eq!(builder.confirm_text, "OK");
+        let read = |r: &Option<Reactive<String>>| r.as_ref().map(crate::reactive_props::current);
+        assert_eq!(read(&builder.title).as_deref(), Some("Test"));
+        assert_eq!(read(&builder.description).as_deref(), Some("Description"));
+        assert_eq!(crate::reactive_props::current(&builder.confirm_text), "OK");
     }
 
     #[test]
     fn test_alert_dialog_builder() {
         let builder = alert_dialog().title("Alert").confirm_text("Got it");
 
-        assert_eq!(builder.inner.title, Some("Alert".to_string()));
-        assert_eq!(builder.inner.confirm_text, "Got it");
+        let title = builder
+            .inner
+            .title
+            .as_ref()
+            .map(crate::reactive_props::current);
+        assert_eq!(title.as_deref(), Some("Alert"));
+        assert_eq!(
+            crate::reactive_props::current(&builder.inner.confirm_text),
+            "Got it"
+        );
         assert!(!builder.inner.show_cancel);
     }
 

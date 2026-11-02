@@ -212,15 +212,17 @@ impl AlertBox {
         self
     }
 
-    /// Set the alert title
-    pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.inner = self.inner.child(text(title).size(14.0).semibold());
+    /// Set the alert title. A signal here replaces the text in place.
+    pub fn title(mut self, title: impl blinc_layout::binding::IntoReactive<String>) -> Self {
+        let title = blinc_layout::text::Text::bound(title.into_reactive());
+        self.inner = self.inner.child(title.size(14.0).semibold());
         self
     }
 
-    /// Set the alert description
-    pub fn description(mut self, desc: impl Into<String>) -> Self {
-        self.inner = self.inner.child(text(desc).size(14.0));
+    /// Set the alert description. A signal here replaces the text in place.
+    pub fn description(mut self, desc: impl blinc_layout::binding::IntoReactive<String>) -> Self {
+        let desc = blinc_layout::text::Text::bound(desc.into_reactive());
+        self.inner = self.inner.child(desc.size(14.0));
         self
     }
 

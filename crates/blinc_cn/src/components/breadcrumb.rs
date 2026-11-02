@@ -35,25 +35,38 @@ use blinc_layout::prelude::*;
 use blinc_layout::{InstanceKey, Interaction};
 use blinc_theme::{ColorToken, ThemeState};
 
+use crate::reactive_props::clone_reactive;
+use blinc_layout::binding::{IntoReactive, Reactive};
+
 /// Default separator SVG (chevron right)
 const CHEVRON_RIGHT_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>"#;
 
 /// A single breadcrumb item
-#[derive(Clone)]
 pub struct BreadcrumbItem {
     /// Display label
-    label: String,
+    label: Reactive<String>,
     /// Optional icon SVG
     icon: Option<String>,
     /// Click handler (None for current page)
     on_click: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
-impl BreadcrumbItem {
-    /// Create a new breadcrumb item
-    pub fn new(label: impl Into<String>) -> Self {
+impl Clone for BreadcrumbItem {
+    fn clone(&self) -> Self {
         Self {
-            label: label.into(),
+            label: clone_reactive(&self.label),
+            icon: self.icon.clone(),
+            on_click: self.on_click.clone(),
+        }
+    }
+}
+
+impl BreadcrumbItem {
+    /// Create a new breadcrumb item. A signal here replaces the label in
+    /// place.
+    pub fn new(label: impl IntoReactive<String>) -> Self {
+        Self {
+            label: label.into_reactive(),
             icon: None,
             on_click: None,
         }
@@ -167,9 +180,12 @@ impl Breadcrumb {
                 );
             }
             item_div = item_div.child(
-                div()
-                    .self_center()
-                    .child(text(&item.label).size(font_size).no_cursor().no_wrap()),
+                div().self_center().child(
+                    blinc_layout::text::Text::bound(clone_reactive(&item.label))
+                        .size(font_size)
+                        .no_cursor()
+                        .no_wrap(),
+                ),
             );
             if is_last {
                 item_div = item_div.attr("aria-current", "page");
@@ -294,7 +310,7 @@ impl BreadcrumbBuilder {
     }
 
     /// Add a breadcrumb item
-    pub fn item<F>(mut self, label: impl Into<String>, on_click: F) -> Self
+    pub fn item<F>(mut self, label: impl IntoReactive<String>, on_click: F) -> Self
     where
         F: Fn() + Send + Sync + 'static,
     {
@@ -306,7 +322,7 @@ impl BreadcrumbBuilder {
     /// Add a breadcrumb item with an icon
     pub fn item_with_icon<F>(
         mut self,
-        label: impl Into<String>,
+        label: impl IntoReactive<String>,
         icon: impl Into<String>,
         on_click: F,
     ) -> Self
@@ -319,13 +335,17 @@ impl BreadcrumbBuilder {
     }
 
     /// Add a non-clickable item (typically the current page)
-    pub fn current(mut self, label: impl Into<String>) -> Self {
+    pub fn current(mut self, label: impl IntoReactive<String>) -> Self {
         self.items.push(BreadcrumbItem::new(label));
         self
     }
 
     /// Add a non-clickable item with icon (typically the current page)
-    pub fn current_with_icon(mut self, label: impl Into<String>, icon: impl Into<String>) -> Self {
+    pub fn current_with_icon(
+        mut self,
+        label: impl IntoReactive<String>,
+        icon: impl Into<String>,
+    ) -> Self {
         self.items.push(BreadcrumbItem::new(label).icon(icon));
         self
     }

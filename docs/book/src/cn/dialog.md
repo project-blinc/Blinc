@@ -186,6 +186,26 @@ the theme's motion tokens; a rule of your own changes it:
 }
 ```
 
+## Text that changes
+
+A dialog's title, description and button text, a sheet's title and
+description and a drawer's title each take a string or a signal. A signal
+replaces the text in place while the overlay is open:
+
+```rust
+let remaining = signal("3 files".to_string());
+
+cn::dialog()
+    .title("Delete files?")
+    .description(remaining)
+    .confirm_text("Delete")
+    .cancel_text("Keep")
+    .confirm_destructive(true)
+    .show();
+
+remaining.set("2 files".to_string());
+```
+
 ## Examples
 
 ### Form Dialog

@@ -40,7 +40,8 @@ card_header()
 ```
 
 The title is `.cn-card-title` and the description `.cn-card-description`;
-their colours are those rules.
+their colours are those rules. Either takes a string or a signal; a signal
+replaces the text in place when it changes.
 
 ### card_title()
 

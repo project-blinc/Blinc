@@ -45,6 +45,9 @@ use blinc_layout::widgets::overlay::EdgeSide;
 use blinc_layout::widgets::overlay_stack::{OverlayBuilder, OverlayHandle};
 use blinc_theme::{ColorToken, RadiusToken, ThemeState};
 
+use crate::reactive_props::clone_reactive;
+use blinc_layout::binding::{IntoReactive, Reactive};
+
 /// Drawer side variants
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DrawerSide {
@@ -82,7 +85,7 @@ impl DrawerSize {
 pub struct DrawerBuilder {
     side: DrawerSide,
     size: DrawerSize,
-    title: Option<String>,
+    title: Option<Reactive<String>>,
     header: Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     children: Vec<Arc<dyn Fn() -> Div + Send + Sync>>,
     footer: Option<Arc<dyn Fn() -> Div + Send + Sync>>,
@@ -127,9 +130,10 @@ impl DrawerBuilder {
         self
     }
 
-    /// Set the drawer title (shown in header)
-    pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.title = Some(title.into());
+    /// Set the drawer title (shown in header). A signal here replaces the
+    /// text in place.
+    pub fn title(mut self, title: impl IntoReactive<String>) -> Self {
+        self.title = Some(title.into_reactive());
         self
     }
 
@@ -314,7 +318,7 @@ pub fn drawer() -> DrawerBuilder {
 fn build_drawer_content(
     side: DrawerSide,
     size: DrawerSize,
-    title: &Option<String>,
+    title: &Option<Reactive<String>>,
     header: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
     children: &[Arc<dyn Fn() -> Div + Send + Sync>],
     footer: &Option<Arc<dyn Fn() -> Div + Send + Sync>>,
@@ -364,7 +368,7 @@ fn build_drawer_content(
             header_div = header_div.child(header_fn());
         } else if let Some(title_text) = title {
             header_div = header_div.child(
-                text(title_text)
+                blinc_layout::text::Text::bound(clone_reactive(title_text))
                     .size(theme.typography().text_lg)
                     .class("cn-drawer-title")
                     .semibold(),
@@ -459,7 +463,7 @@ mod tests {
 
         assert_eq!(builder.side, DrawerSide::Right);
         assert_eq!(builder.size, DrawerSize::Wide);
-        assert_eq!(builder.title, Some("Test".to_string()));
+        assert!(matches!(builder.title, Some(Reactive::Const(ref t)) if t == "Test"));
     }
 
     #[test]
