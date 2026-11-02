@@ -45,14 +45,18 @@ impl Separator {
     }
 
     fn with_orientation(orientation: SeparatorOrientation) -> Self {
-        let theme = ThemeState::get();
-        let color = theme.color(ColorToken::Border);
-
+        // The colour is the `.cn-separator` rule.
         let inner = match orientation {
-            SeparatorOrientation::Horizontal => {
-                div().class("cn-separator").h(1.0).w_full().bg(color)
-            }
-            SeparatorOrientation::Vertical => div().class("cn-separator").w(1.0).h_full().bg(color),
+            SeparatorOrientation::Horizontal => div()
+                .class("cn-separator")
+                .attr("data-orientation", "horizontal")
+                .h(1.0)
+                .w_full(),
+            SeparatorOrientation::Vertical => div()
+                .class("cn-separator")
+                .attr("data-orientation", "vertical")
+                .w(1.0)
+                .h_full(),
         };
 
         Self { inner }

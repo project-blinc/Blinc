@@ -105,43 +105,25 @@ impl KbdBuilder {
 
     /// Build the Kbd component
     fn build_component(&self) -> Kbd {
-        let theme = ThemeState::get();
-
-        // Get colors
-        let bg = theme.color(ColorToken::Surface);
-        let border_color = theme.color(ColorToken::Border);
-        let text_color = theme.color(ColorToken::TextSecondary);
-
-        // Size-based styling
-        let (font_size, px, py, radius) = match self.config.size {
-            KbdSize::Small => (10.0, 4.0, 2.0, theme.radius(RadiusToken::Sm)),
-            KbdSize::Medium => (12.0, 6.0, 2.0, theme.radius(RadiusToken::Sm)),
-            KbdSize::Large => (14.0, 8.0, 4.0, theme.radius(RadiusToken::Sm)),
+        // Sizes are layout; the fill, border, radius, shadow and text colour
+        // are the `.cn-kbd` rule.
+        let (font_size, px, py) = match self.config.size {
+            KbdSize::Small => (10.0, 4.0, 2.0),
+            KbdSize::Medium => (12.0, 6.0, 2.0),
+            KbdSize::Large => (14.0, 8.0, 4.0),
         };
 
-        // Build the Kbd element
         let inner = div()
             .class("cn-kbd")
             .items_center()
             .justify_center()
             .w_fit()
-            .bg(bg)
-            .border(1.0, border_color)
-            .border_bottom(3.0, border_color)
-            .rounded(radius)
             .padding_x_px(px)
             .padding_y_px(py)
-            // Subtle shadow for depth
-            .shadow_sm()
-            // The style closure runs on every rebuild and has to set
-            // everything: content built inside a stateful callback is
-            // created after the stylesheet pass has walked the tree, so
-            // it inherits nothing from an ancestor's class.
             .child_box(crate::reactive_props::reactive_text(
                 &self.config.text,
                 move |t| {
                     t.size(font_size)
-                        .color(text_color)
                         .font_family(FontFamily::generic(GenericFont::Monospace))
                         .weight(FontWeight::SemiBold)
                         .medium()

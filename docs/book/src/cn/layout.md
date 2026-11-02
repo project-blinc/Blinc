@@ -58,8 +58,11 @@ Visual divider:
 separator()
 
 // Vertical
-separator().orientation(Orientation::Vertical)
+separator().vertical()
 ```
+
+It carries `data-orientation`; its colour is `.cn-separator`, recoloured by
+`--cn-separator-color`.
 
 ### With Label
 
@@ -186,34 +189,35 @@ accordion()
 
 ## Resizable
 
-Resizable panels:
+Panels with handles between them that drag to resize. Sizes are pixels; a
+`flex_grow()` panel takes the rest:
 
 ```rust
-resizable()
-    .direction(ResizeDirection::Horizontal)
-    .child(resizable_panel()
-        .default_size(30.0)  // 30%
-        .min_size(20.0)
-        .child(text("Left Panel")))
-    .child(resizable_handle())
-    .child(resizable_panel()
-        .default_size(70.0)  // 70%
-        .child(text("Right Panel")))
+cn::resizable_group()
+    .horizontal()
+    .panel(
+        cn::resizable_panel()
+            .default_size(200.0)
+            .min_size(100.0)
+            .max_size(400.0)
+            .child(text("Left Panel")),
+    )
+    .panel(cn::resizable_panel().flex_grow().child(text("Right Panel")))
+    .on_resize(|sizes| println!("{sizes:?}"))
 ```
 
 ### Vertical Resizable
 
 ```rust
-resizable()
-    .direction(ResizeDirection::Vertical)
-    .child(resizable_panel()
-        .default_size(50.0)
-        .child(text("Top Panel")))
-    .child(resizable_handle())
-    .child(resizable_panel()
-        .default_size(50.0)
-        .child(text("Bottom Panel")))
+cn::resizable_group()
+    .vertical()
+    .panel(cn::resizable_panel().default_size(150.0).child(text("Top Panel")))
+    .panel(cn::resizable_panel().flex_grow().child(text("Bottom Panel")))
 ```
+
+Each handle is a `.cn-resizable-handle` around a `.cn-resizable-line`; the line
+turns `--primary` on hover and while its handle carries
+`data-state="dragging"`.
 
 ## Examples
 

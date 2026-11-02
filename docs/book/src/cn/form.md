@@ -96,7 +96,8 @@ cn::textarea(&description)
 ```
 
 `.error("msg")` shows the message and turns the border red; `.disabled(true)`
-dims the field. It is styled like [Input](#input): one element with the class
+dims the field. The message under a field is `.cn-field-error`, or
+`.cn-field-description` for `.description(..)`, coloured by those rules. It is styled like [Input](#input): one element with the class
 `cn-textarea`, whose border and fill per state are `:hover`, `:focus`,
 `.cn-textarea--error` and `:disabled` rules, eased by a `transition`.
 

@@ -427,24 +427,15 @@ impl ResizableGroup {
         drag_start_sizes: State<Vec<f32>>,
         on_resize: Option<Arc<dyn Fn(&[f32]) + Send + Sync>>,
     ) -> Div {
-        let theme = ThemeState::get();
-        let border_color = theme.color(ColorToken::Border);
-        let primary_color = theme.color(ColorToken::Primary);
-
         let thickness = handle_config.thickness;
         let hit_padding = handle_config.hit_area_padding;
         let total_hit_area = thickness + hit_padding * 2.0;
         let idx = index;
 
-        // The bar shows the primary colour while this handle is dragged.
+        // While this handle is dragged it carries `data-state="dragging"`;
+        // the line's colour is the `.cn-resizable-*` rules.
         let dragging = drag_index.signal();
-        let bar_color = computed(move |g: &ReactiveGraph| {
-            if g.get(dragging) == Some(idx as i32) {
-                primary_color
-            } else {
-                border_color
-            }
-        });
+        let dragged = computed(move |g: &ReactiveGraph| g.get(dragging) == Some(idx as i32));
 
         let (cursor, bar, hit_area) = match direction {
             ResizeDirection::Horizontal => (
@@ -476,10 +467,11 @@ impl ResizableGroup {
 
         hit_area
             .class("cn-resizable-handle")
+            .attr_when("data-state", "dragging", &dragged)
             .items_center()
             .justify_center()
             .cursor(cursor)
-            .child(bar.cursor(cursor).bg(&bar_color))
+            .child(bar.class("cn-resizable-line").cursor(cursor))
             .on_mouse_down(move |event| {
                 drag_index_for_down.set(idx as i32);
                 let pos = match direction {

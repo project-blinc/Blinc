@@ -240,13 +240,17 @@ impl Textarea {
 
                 // Error or description
                 if let Some(ref error_text) = config.error {
-                    let error_color = theme.color(ColorToken::Error);
-                    container = container
-                        .child(text(error_text).size(typography.text_xs).color(error_color));
+                    container = container.child(
+                        text(error_text)
+                            .class("cn-field-error")
+                            .size(typography.text_xs),
+                    );
                 } else if let Some(ref desc_text) = config.description {
-                    let desc_color = theme.color(ColorToken::TextTertiary);
-                    container =
-                        container.child(text(desc_text).size(typography.text_xs).color(desc_color));
+                    container = container.child(
+                        text(desc_text)
+                            .class("cn-field-description")
+                            .size(typography.text_xs),
+                    );
                 }
 
                 container

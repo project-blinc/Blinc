@@ -5,12 +5,10 @@
 mod common;
 
 use blinc_cn::{ResizeDirection, resizable_group, resizable_panel};
-use blinc_core::Color;
 use blinc_layout::LayoutNodeId;
 use blinc_layout::div::div;
 use blinc_layout::event_router::{EventRouter, MouseButton};
 use blinc_layout::renderer::RenderTree;
-use blinc_theme::{ColorToken, ThemeState};
 use common::*;
 
 struct Scene {
@@ -70,17 +68,11 @@ impl Scene {
         (b.x + b.width / 2.0, b.y + b.height / 2.0)
     }
 
-    fn bar_color(&self) -> Color {
-        match &self
-            .tree
-            .get_render_node(self.handle().1)
-            .unwrap()
-            .props
-            .background
-        {
-            Some(blinc_core::Brush::Solid(c)) => *c,
-            other => panic!("the bar has no solid fill: {other:?}"),
-        }
+    /// The handle's `data-state`, which its rules colour the line by.
+    fn handle_state(&self) -> Option<String> {
+        self.tree
+            .element_registry()
+            .attribute(self.handle().0, "data-state")
     }
 
     fn deliver(&mut self, events: Vec<(LayoutNodeId, u32)>, x: f32, y: f32) {
@@ -150,23 +142,18 @@ fn a_dragged_panel_stays_within_its_bounds() {
 }
 
 #[test]
-fn the_handle_shows_the_primary_colour_only_while_dragged() {
+fn the_handle_is_marked_dragging_only_while_dragged() {
     guarded(|| {
         let mut s = scene("rz_colour");
-        let theme = ThemeState::get();
-        let (rest, active) = (
-            theme.color(ColorToken::Border),
-            theme.color(ColorToken::Primary),
-        );
-        assert_eq!(s.bar_color(), rest);
+        assert_eq!(s.handle_state(), None);
 
         let (x, y) = s.handle_centre();
         s.move_to(x, y);
         s.press(x, y);
         s.move_to(x + 20.0, y);
-        assert_eq!(s.bar_color(), active, "not highlighted while dragged");
+        assert_eq!(s.handle_state().as_deref(), Some("dragging"));
         s.release(x + 20.0, y);
-        assert_eq!(s.bar_color(), rest, "still highlighted after the drag");
+        assert_eq!(s.handle_state(), None, "still marked after the drag");
     })
 }
 

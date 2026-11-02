@@ -274,6 +274,9 @@ div().flex_row().items_center().gap(8.0)
     )
 ```
 
+The key's fill, border (3px at the bottom), radius, shadow and text colour are
+the `.cn-kbd` rule; `--cn-kbd-bg` and `--cn-kbd-border` recolour it.
+
 ## Examples
 
 ### User Profile Card

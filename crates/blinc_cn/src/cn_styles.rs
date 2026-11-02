@@ -180,6 +180,8 @@ pub const CN_STYLES: &str = concat!(
 .cn-card-footer {
     gap: var(--space-2);
 }
+.cn-card-title { color: var(--text-primary); }
+.cn-card-description { color: var(--text-secondary); }
 
 /* ============================================================================
    Badge
@@ -389,6 +391,10 @@ pub const CN_STYLES: &str = concat!(
 /* ============================================================================
    Input
    ============================================================================ */
+
+/* The message under a field: an error, or a description. */
+.cn-field-error { color: var(--error); }
+.cn-field-description { color: var(--text-tertiary); }
 
 .cn-input {
     box-shadow: var(--shadow-sm);
@@ -628,8 +634,10 @@ pub const CN_STYLES: &str = concat!(
 
 .cn-kbd {
     background: var(--cn-kbd-bg, var(--surface));
-    border-color: var(--cn-kbd-border, var(--border));
+    border: 1px solid var(--cn-kbd-border, var(--border));
+    border-bottom-width: 3px;
     border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
     color: var(--text-secondary);
 }
 
@@ -1762,6 +1770,14 @@ pub const CN_STYLES: &str = concat!(
    visual stripe. Keep the wrapper transparent. */
 .cn-resizable-handle {
     background: transparent;
+}
+.cn-resizable-line {
+    background: var(--border);
+    transition: background var(--duration-fast) var(--ease-state);
+}
+.cn-resizable-handle:hover > .cn-resizable-line,
+.cn-resizable-handle[data-state="dragging"] > .cn-resizable-line {
+    background: var(--primary);
 }
 
 /* ============================================================================

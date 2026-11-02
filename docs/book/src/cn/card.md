@@ -35,9 +35,12 @@ Contains the title and description.
 
 ```rust
 card_header()
-    .child(card_title("Title"))
-    .child(card_description("Description"))
+    .title("Title")
+    .description("Description")
 ```
+
+The title is `.cn-card-title` and the description `.cn-card-description`;
+their colours are those rules.
 
 ### card_title()
 

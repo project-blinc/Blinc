@@ -168,12 +168,17 @@ impl Input {
 
         // Error or description
         if let Some(ref error_text) = config.error {
-            let error_color = theme.color(ColorToken::Error);
-            container =
-                container.child(text(error_text).size(typography.text_xs).color(error_color));
+            container = container.child(
+                text(error_text)
+                    .class("cn-field-error")
+                    .size(typography.text_xs),
+            );
         } else if let Some(ref desc_text) = config.description {
-            let desc_color = theme.color(ColorToken::TextTertiary);
-            container = container.child(text(desc_text).size(typography.text_xs).color(desc_color));
+            container = container.child(
+                text(desc_text)
+                    .class("cn-field-description")
+                    .size(typography.text_xs),
+            );
         }
 
         Self { inner: container }
@@ -185,12 +190,6 @@ impl Input {
         theme: &ThemeState,
         typography: &TypographyTokens,
     ) -> TextInput {
-        // Get default theme colors for fallbacks
-        let default_text = theme.color(ColorToken::TextPrimary);
-        let default_placeholder = theme.color(ColorToken::TextTertiary);
-        let default_cursor = theme.color(ColorToken::Primary);
-        let default_selection = theme.color(ColorToken::Selection);
-
         let radius = config
             .corner_radius
             .unwrap_or_else(|| theme.radius(RadiusToken::Md));
@@ -216,11 +215,19 @@ impl Input {
             input = input.idle_bg_color(color);
         }
 
-        // Apply text colors
-        input = input.text_color(config.text_color.unwrap_or(default_text));
-        input = input.placeholder_color(config.placeholder_color.unwrap_or(default_placeholder));
-        input = input.cursor_color(config.cursor_color.unwrap_or(default_cursor));
-        input = input.selection_color(config.selection_color.unwrap_or(default_selection));
+        // The field's own theme colours unless the caller set one.
+        if let Some(color) = config.text_color {
+            input = input.text_color(color);
+        }
+        if let Some(color) = config.placeholder_color {
+            input = input.placeholder_color(color);
+        }
+        if let Some(color) = config.cursor_color {
+            input = input.cursor_color(color);
+        }
+        if let Some(color) = config.selection_color {
+            input = input.selection_color(color);
+        }
 
         // Apply border width if specified
         if let Some(width) = config.border_width {
