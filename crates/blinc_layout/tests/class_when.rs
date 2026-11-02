@@ -447,3 +447,26 @@ fn an_attribute_with_two_bound_values_reaches_a_child_rule_either_way() {
         blinc_layout::binding::unregister_node(node);
     }
 }
+
+/// With no stylesheet there is nothing to apply, but a bound attribute is
+/// still the element's to query.
+#[test]
+fn a_bound_attribute_is_recorded_without_a_stylesheet() {
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let on = blinc_core::reactive::signal(false);
+    let host = div().child(div().attr_when("data-state", "open", on));
+    let mut tree = RenderTree::from_element(&host);
+    tree.compute_layout(100.0, 100.0);
+    let node = tree.layout_tree.children(tree.root().unwrap())[0];
+    assert_eq!(tree.element_registry().attribute(node, "data-state"), None);
+
+    on.set(true);
+    let updates = blinc_layout::take_pending_partial_prop_updates();
+    tree.apply_partial_property_updates(updates);
+    assert_eq!(
+        tree.element_registry()
+            .attribute(node, "data-state")
+            .as_deref(),
+        Some("open")
+    );
+}

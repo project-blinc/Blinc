@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- A class or attribute bound to a signal is recorded on the element when the tree has no stylesheet, so queries and selectors see it. It was dropped until a stylesheet was set.
 - Text that took its font size, weight, line height, letter spacing or family from a container's rule gets back the font it was built with when that rule stops applying. It kept the inherited value, so a tab that stopped being the active one stayed bold.
 - A CSS transition or animation of a layout property (`width`, `flex-grow`, `padding` and the rest) ends on its final value. The frame it finished on was never written, so it stopped a step short.
 - CSS animations of opacity or transform inside an overlay show. A subtree of plain elements was baked into a layer to be moved at composite time, which the overlay's own paint pass never did, so a popover, menu or overlay panel without text showed its base values for the whole animation.

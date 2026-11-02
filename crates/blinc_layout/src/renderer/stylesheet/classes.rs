@@ -93,9 +93,9 @@ impl RenderTree {
     /// `ease` is whether this is a change a viewer sees (a signal moved), as
     /// against the state a node is built in.
     fn reconcile_dynamic_classes(&mut self, node: LayoutNodeId, ease: bool) {
-        let Some(stylesheet) = self.stylesheet.clone() else {
-            return;
-        };
+        // With no stylesheet there are no rules to apply, but the classes and
+        // attributes are still the element's, for queries and selectors.
+        let stylesheet = self.stylesheet.clone().unwrap_or_default();
         let Some(entry) = self.dynamic_classes.get(&node) else {
             return;
         };
