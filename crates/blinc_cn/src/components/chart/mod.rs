@@ -24,7 +24,7 @@ mod plot;
 mod view;
 
 pub use legacy::*;
-pub use view::{ChartBuilder, area_chart, line_chart};
+pub use view::{ChartBuilder, area_chart, bar_chart, line_chart};
 
 /// A named series with one value per category label.
 #[derive(Clone, Debug, PartialEq)]

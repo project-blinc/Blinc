@@ -80,10 +80,10 @@ pub use card::{
     Card, CardContent, CardFooter, CardHeader, card, card_content, card_footer, card_header,
 };
 pub use chart::{
-    BarChart, BarChartBuilder, ChartBuilder, ChartCurve, ChartSeries, ComparisonBarChart,
-    ComparisonBarChartBuilder, Histogram, HistogramBuilder, SparkLine, SparkLineBuilder,
-    ThresholdBand, ThresholdLineChart, ThresholdLineChartBuilder, area_chart, bar_chart,
-    comparison_bar_chart, histogram, line_chart, spark_line, threshold_line_chart,
+    ChartBuilder, ChartCurve, ChartSeries, ComparisonBarChart, ComparisonBarChartBuilder,
+    Histogram, HistogramBuilder, SparkLine, SparkLineBuilder, ThresholdBand, ThresholdLineChart,
+    ThresholdLineChartBuilder, area_chart, bar_chart, comparison_bar_chart, histogram, line_chart,
+    spark_line, threshold_line_chart,
 };
 pub use checkbox::{Checkbox, CheckboxSize, checkbox};
 pub use combobox::{Combobox, ComboboxBuilder, ComboboxOption, ComboboxSize, combobox};

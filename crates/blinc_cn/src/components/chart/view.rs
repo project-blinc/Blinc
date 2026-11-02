@@ -33,10 +33,12 @@ pub struct ChartBuilder {
 }
 
 impl ChartBuilder {
-    fn new(area: bool) -> Self {
+    fn new(area: bool, bars: bool) -> Self {
         Self {
             opts: Options {
                 area,
+                bars,
+                horizontal: false,
                 height: 200.0,
                 curve: ChartCurve::Smooth,
                 dots: false,
@@ -114,6 +116,12 @@ impl ChartBuilder {
         self
     }
 
+    /// Bars along the width, with the categories down the side.
+    pub fn horizontal(mut self) -> Self {
+        self.opts.horizontal = true;
+        self
+    }
+
     /// Pile the series on one another.
     pub fn stacked(mut self) -> Self {
         self.opts.stacked = true;
@@ -178,7 +186,6 @@ impl ChartBuilder {
 
     fn build_chart(&self) -> (Div, Arc<Plot>) {
         let series = list_of(self.data.clone(), self.series.clone());
-        let plot = Plot::new(series.clone(), self.opts.clone());
         let labels = {
             let (source, series) = (self.labels.clone(), series.clone());
             computed(move |g: &ReactiveGraph| match &source {
@@ -190,11 +197,17 @@ impl ChartBuilder {
                     .collect(),
             })
         };
+        let plot = Plot::new(series.clone(), labels.clone(), self.opts.clone());
         let geometry = {
-            let (plot, series) = (Arc::clone(&plot), series.clone());
+            let plot = Arc::clone(&plot);
             computed(move |g: &ReactiveGraph| {
                 let width = g.get(plot.width).unwrap_or(0.0);
-                Geometry::of(&series.try_get().unwrap_or_default(), &plot.opts, width)
+                Geometry::of(
+                    &plot.series.try_get().unwrap_or_default(),
+                    &plot.labels.try_get().unwrap_or_default(),
+                    &plot.opts,
+                    width,
+                )
             })
         };
 
@@ -216,9 +229,13 @@ impl ChartBuilder {
             .flex_shrink_0()
             .child(canvas);
         if self.opts.axes {
-            area = area
-                .child(value_axis(&geometry, &self.opts))
-                .child(category_axis(&geometry, &labels));
+            area = if self.opts.bars && self.opts.horizontal {
+                area.child(value_axis_under(&geometry, &self.opts))
+                    .child(category_axis_beside(&geometry, &labels, &self.opts))
+            } else {
+                area.child(value_axis(&geometry, &self.opts))
+                    .child(category_axis(&geometry, &labels))
+            };
         }
         if self.opts.tooltip {
             area = with_hover(area, &plot, &geometry, &labels);
@@ -363,6 +380,109 @@ fn labels_row(labels: Computed<Vec<String>>, every: Computed<usize>) -> Div {
     )
 }
 
+/// Horizontal bars' value ticks under the plot, left to right, each centred
+/// on its grid line.
+fn value_axis_under(geometry: &Computed<Geometry>, opts: &Options) -> Div {
+    let (ticks, lead, span) = (geometry.clone(), geometry.clone(), geometry.clone());
+    let format = Arc::clone(&opts.format);
+    let row = div()
+        .class("cn-chart-ticks")
+        .flex_shrink_0()
+        .w(computed(move |_: &ReactiveGraph| {
+            span.try_get().map_or(0.0, |g| g.x1 - g.x0 + 60.0)
+        }))
+        .flex_row()
+        .justify_between()
+        .for_each(
+            computed(move |_: &ReactiveGraph| ticks.try_get().map(|g| g.ticks).unwrap_or_default()),
+            |t: &f64| t.to_bits(),
+            move |t: f64| {
+                let text = format(t);
+                div()
+                    .w(60.0)
+                    .flex_row()
+                    .justify_center()
+                    .child(label("cn-chart-axis", move |_| text.clone()))
+            },
+        );
+    div()
+        .absolute()
+        .left(0.0)
+        .top(0.0)
+        .w_full()
+        .h_full()
+        .flex_col()
+        .justify_end()
+        .pointer_events_none()
+        .child(
+            div()
+                .w_full()
+                .h(BOTTOM)
+                .flex_row()
+                .pt(1.5)
+                .child(div().flex_shrink_0().w(computed(move |_: &ReactiveGraph| {
+                    lead.try_get().map_or(0.0, |g| g.x0 - 30.0)
+                })))
+                .child(row),
+        )
+}
+
+/// Horizontal bars' categories beside the plot, one per slot, every few
+/// when they would crowd.
+fn category_axis_beside(
+    geometry: &Computed<Geometry>,
+    labels: &Computed<Vec<String>>,
+    opts: &Options,
+) -> Div {
+    let (width, slots) = (geometry.clone(), labels.clone());
+    let (geometry, labels) = (geometry.clone(), labels.clone());
+    let every = computed(move |_: &ReactiveGraph| {
+        let (Some(g), Some(l)) = (geometry.try_get(), labels.try_get()) else {
+            return 1usize;
+        };
+        (16.0 / g.slot(l.len()).max(1.0)).ceil().max(1.0) as usize
+    });
+    let indices = {
+        let slots = slots.clone();
+        computed(move |_: &ReactiveGraph| {
+            (0..slots.try_get().map_or(0, |l| l.len())).collect::<Vec<usize>>()
+        })
+    };
+    div()
+        .absolute()
+        .left(0.0)
+        .top(TOP)
+        .h(opts.height - TOP - BOTTOM)
+        .w(computed(move |_: &ReactiveGraph| {
+            width.try_get().map_or(0.0, |g| (g.x0 - 8.0).max(0.0))
+        }))
+        .flex_col()
+        .pointer_events_none()
+        .for_each(
+            indices,
+            |i: &usize| *i,
+            move |i: usize| {
+                let (text, every) = (slots.clone(), every.clone());
+                let hidden =
+                    computed(move |_: &ReactiveGraph| i % every.try_get().unwrap_or(1) != 0);
+                div()
+                    .flex_grow()
+                    .h(0.0)
+                    .flex_row()
+                    .items_center()
+                    .justify_end()
+                    .child(
+                        label("cn-chart-axis", move |_| {
+                            text.try_get()
+                                .and_then(|l| l.get(i).cloned())
+                                .unwrap_or_default()
+                        })
+                        .attr_when("data-hidden", "", hidden),
+                    )
+            },
+        )
+}
+
 /// The plot follows the pointer: the category under it is `hover`, and the
 /// tooltip shows each series' value there, on whichever side has room.
 fn with_hover(
@@ -385,65 +505,90 @@ fn with_hover(
         computed(move |_: &ReactiveGraph| at.try_get().flatten().is_some())
     };
     // Where the tooltip goes: right of the point, or left of it past 60% of
-    // the width, as spacer widths around it.
+    // the width, as spacer widths around it; for horizontal bars, against
+    // the plot's right edge level with the bar. Gives the point's x, whether
+    // the tooltip is left of it, the width, and how far down it starts.
     let side = {
         let (at, geometry, plot) = (at.clone(), geometry.clone(), Arc::clone(plot));
-        move |g: &ReactiveGraph| -> (f32, bool, f32) {
+        move |g: &ReactiveGraph| -> (f32, bool, f32, f32) {
             let width = g.get(plot.width).unwrap_or(0.0);
             let (Some(Some(i)), Some(geo)) = (at.try_get(), geometry.try_get()) else {
-                return (0.0, false, 0.0);
+                return (0.0, false, 0.0, TOP + 4.0);
             };
             let n = count(&plot.series.try_get().unwrap_or_default());
-            let x = geo.x(i, n);
-            (x, x > width * 0.6, width)
+            if geo.horizontal {
+                (geo.x1, true, width, geo.start(i, n))
+            } else {
+                let x = geo.centre(i, n);
+                (x, x > width * 0.6, width, TOP + 4.0)
+            }
         }
     };
     let tip = {
         let (plot, labels, at) = (Arc::clone(plot), labels.clone(), at.clone());
         move || tooltip(&plot, &labels, &at)
     };
-    let (lead, grow, trail) = (side.clone(), side.clone(), side);
+    let (lead, grow, trail, down) = (side.clone(), side.clone(), side.clone(), side);
+    // Above the canvas, whose paths are drawn after the elements beside it.
     let holder = div()
         .absolute()
         .left(0.0)
-        .top(TOP + 4.0)
+        .top(0.0)
         .w_full()
-        .flex_row()
-        .items_start()
+        .h_full()
+        .foreground()
+        .flex_col()
         .pointer_events_none()
         .show(hovered, move || {
-            let (lead, grow, trail) = (lead.clone(), grow.clone(), trail.clone());
+            let (lead, grow, trail, down) =
+                (lead.clone(), grow.clone(), trail.clone(), down.clone());
             div()
                 .w_full()
-                .flex_row()
-                .items_start()
+                .flex_col()
                 .child(
                     div()
                         .flex_shrink_0()
-                        .w(computed(move |g: &ReactiveGraph| {
-                            let (x, right, _) = lead(g);
-                            if right { 0.0 } else { x + 14.0 }
-                        }))
-                        .flex_grow_value(computed(
-                            move |g: &ReactiveGraph| {
-                                if grow(g).1 { 1.0 } else { 0.0 }
-                            },
-                        )),
+                        .h(computed(move |g: &ReactiveGraph| down(g).3)),
                 )
-                .child(tip())
-                .child(div().flex_shrink_0().w(computed(move |g: &ReactiveGraph| {
-                    let (x, right, width) = trail(g);
-                    if right { width - x + 14.0 } else { 0.0 }
-                })))
+                .child(
+                    div()
+                        .w_full()
+                        .flex_row()
+                        .items_start()
+                        .child(
+                            div()
+                                .flex_shrink_0()
+                                .w(computed(move |g: &ReactiveGraph| {
+                                    let (x, left, _, _) = lead(g);
+                                    if left { 0.0 } else { x + 14.0 }
+                                }))
+                                .flex_grow_value(computed(
+                                    move |g: &ReactiveGraph| {
+                                        if grow(g).1 { 1.0 } else { 0.0 }
+                                    },
+                                )),
+                        )
+                        .child(tip())
+                        .child(div().flex_shrink_0().w(computed(move |g: &ReactiveGraph| {
+                            let (x, left, width, _) = trail(g);
+                            if left { width - x + 14.0 } else { 0.0 }
+                        }))),
+                )
         });
 
     let (move_plot, leave) = (Arc::clone(plot), plot.hover);
     area.child(holder)
         .on_mouse_move(move |ctx| {
             let series = move_plot.series.try_get().unwrap_or_default();
-            let geo = Geometry::of(&series, &move_plot.opts, ctx.bounds_width);
+            let labels = move_plot.labels.try_get().unwrap_or_default();
+            let geo = Geometry::of(&series, &labels, &move_plot.opts, ctx.bounds_width);
+            let along = if geo.horizontal {
+                ctx.local_y
+            } else {
+                ctx.local_x
+            };
             let i = geo
-                .category_at(ctx.local_x, count(&series))
+                .category_at(along, count(&series))
                 .map_or(-1, |i| i as i32);
             if move_plot.hover.get() != i {
                 move_plot.hover.set(i);
@@ -613,11 +758,17 @@ impl ElementBuilder for ChartBuilder {
 
 /// A line chart. See the module docs.
 pub fn line_chart() -> ChartBuilder {
-    ChartBuilder::new(false)
+    ChartBuilder::new(false, false)
 }
 
 /// A line chart filled down to the axis, or to the series below when
 /// stacked.
 pub fn area_chart() -> ChartBuilder {
-    ChartBuilder::new(true)
+    ChartBuilder::new(true, false)
+}
+
+/// A bar chart: the series side by side in each category, or piled when
+/// stacked; `.horizontal()` lays the bars along the width.
+pub fn bar_chart() -> ChartBuilder {
+    ChartBuilder::new(false, true)
 }

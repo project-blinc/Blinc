@@ -1,14 +1,14 @@
-//! The plot every line and area chart is: its geometry, the values it shows
-//! while easing to new ones, and what it draws on its canvas.
+//! The plot every line, area and bar chart is: its geometry, the values it
+//! shows while easing to new ones, and what it draws on its canvas.
 
 use std::sync::{Arc, Mutex};
 
 use blinc_animation::{SharedAnimatedValue, SpringConfig};
 use blinc_core::reactive::{Computed, Signal};
-use blinc_core::{Brush, Color, DrawContext, Gradient, LineCap, LineJoin, Path, Point, Stroke};
+use blinc_core::{Brush, Color, CornerRadius, DrawContext, Gradient, Path, Point, Rect};
 use blinc_layout::text_measure::{TextLayoutOptions, measure_text_with_options};
 
-use super::math::{follow, nice_ticks};
+use super::math::{flatten, follow, nice_ticks};
 use super::{ChartCurve, ChartSeries};
 
 /// Room above the plot, and below it for the category labels.
@@ -26,6 +26,9 @@ pub(super) type Format = Arc<dyn Fn(f64) -> String + Send + Sync>;
 #[derive(Clone)]
 pub(super) struct Options {
     pub area: bool,
+    pub bars: bool,
+    /// Bars along the width, categories down the side.
+    pub horizontal: bool,
     pub height: f32,
     pub curve: ChartCurve,
     pub dots: bool,
@@ -39,9 +42,10 @@ pub(super) struct Options {
 }
 
 /// Where things are: the plot's box inside the canvas and the value range
-/// its height maps.
+/// it maps, along its height or, for horizontal bars, its width.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Geometry {
+    pub horizontal: bool,
     pub lo: f64,
     pub hi: f64,
     pub ticks: Vec<f64>,
@@ -52,22 +56,36 @@ pub(super) struct Geometry {
 }
 
 impl Geometry {
-    /// The plot's box in a canvas `width` wide, for `series` drawn by `opts`.
-    pub fn of(series: &[ChartSeries], opts: &Options, width: f32) -> Self {
+    /// The plot's box in a canvas `width` wide, for `series` under `labels`
+    /// drawn by `opts`.
+    pub fn of(series: &[ChartSeries], labels: &[String], opts: &Options, width: f32) -> Self {
+        let horizontal = opts.bars && opts.horizontal;
         let (d0, d1) = domain(series, opts);
-        let span = (opts.height - TOP - BOTTOM).max(1.0);
+        let span = if horizontal {
+            width
+        } else {
+            opts.height - TOP - BOTTOM
+        };
         let ticks = if opts.axes || opts.grid {
-            nice_ticks(d0, d1, ((span / 44.0) as usize).max(2))
+            let room = if horizontal { 80.0 } else { 44.0 };
+            nice_ticks(d0, d1, ((span.max(1.0) / room) as usize).max(2))
         } else {
             vec![d0, d1]
         };
         let lo = d0.min(ticks[0]);
         let hi = d1.max(*ticks.last().unwrap_or(&d1));
         let x0 = if opts.axes {
+            // Room for what is beside the plot: the value ticks, or the
+            // categories of horizontal bars.
             let options = TextLayoutOptions::new();
-            let widest = ticks
+            let texts: Vec<String> = if horizontal {
+                labels.to_vec()
+            } else {
+                ticks.iter().map(|t| (opts.format)(*t)).collect()
+            };
+            let widest = texts
                 .iter()
-                .map(|t| measure_text_with_options(&(opts.format)(*t), LABEL_SIZE, &options).width)
+                .map(|t| measure_text_with_options(t, LABEL_SIZE, &options).width)
                 .fold(0.0f32, f32::max);
             (widest + 12.0).min(140.0)
         } else {
@@ -75,6 +93,7 @@ impl Geometry {
         };
         let y1 = opts.height - if opts.axes { BOTTOM } else { 4.0 };
         Self {
+            horizontal,
             lo,
             hi,
             ticks,
@@ -85,28 +104,49 @@ impl Geometry {
         }
     }
 
-    /// A value's height on the plot.
-    pub fn y(&self, v: f64) -> f32 {
+    /// Where a value falls along the value axis: a height, or for
+    /// horizontal bars a distance across.
+    pub fn at(&self, v: f64) -> f32 {
         let f = ((v - self.lo) / (self.hi - self.lo)) as f32;
-        self.y1 - f * (self.y1 - self.y0)
+        if self.horizontal {
+            self.x0 + f * (self.x1 - self.x0)
+        } else {
+            self.y1 - f * (self.y1 - self.y0)
+        }
     }
 
-    /// The width of one of `n` category slots.
+    /// The category axis's start and end.
+    fn categories(&self) -> (f32, f32) {
+        if self.horizontal {
+            (self.y0, self.y1)
+        } else {
+            (self.x0, self.x1)
+        }
+    }
+
+    /// The length of one of `n` category slots.
     pub fn slot(&self, n: usize) -> f32 {
-        (self.x1 - self.x0) / n.max(1) as f32
+        let (a, b) = self.categories();
+        (b - a) / n.max(1) as f32
     }
 
-    /// The centre of category `i` of `n`.
-    pub fn x(&self, i: usize, n: usize) -> f32 {
-        self.x0 + (i as f32 + 0.5) * self.slot(n)
+    /// Where category `i` of `n` starts along the category axis.
+    pub fn start(&self, i: usize, n: usize) -> f32 {
+        self.categories().0 + i as f32 * self.slot(n)
     }
 
-    /// The category of `n` under `x`, if any.
-    pub fn category_at(&self, x: f32, n: usize) -> Option<usize> {
-        if n == 0 || x < self.x0 || x > self.x1 {
+    /// The centre of category `i` of `n` along the category axis.
+    pub fn centre(&self, i: usize, n: usize) -> f32 {
+        self.start(i, n) + self.slot(n) / 2.0
+    }
+
+    /// The category of `n` at `p` along the category axis, if any.
+    pub fn category_at(&self, p: f32, n: usize) -> Option<usize> {
+        let (a, b) = self.categories();
+        if n == 0 || p < a || p > b {
             return None;
         }
-        Some((((x - self.x0) / self.slot(n)) as usize).min(n - 1))
+        Some((((p - a) / self.slot(n)) as usize).min(n - 1))
     }
 }
 
@@ -133,7 +173,7 @@ fn domain(series: &[ChartSeries], opts: &Options) -> (f64, f64) {
     if !lo.is_finite() {
         (lo, hi) = (0.0, 1.0);
     }
-    if opts.area {
+    if opts.area || opts.bars {
         (lo, hi) = (lo.min(0.0), hi.max(0.0));
     }
     let (lo, hi) = (opts.min.unwrap_or(lo), opts.max.unwrap_or(hi));
@@ -182,6 +222,7 @@ struct Easing {
 /// and the easing between values.
 pub(super) struct Plot {
     pub series: Computed<Vec<ChartSeries>>,
+    pub labels: Computed<Vec<String>>,
     pub hover: Signal<i32>,
     pub width: Signal<f32>,
     pub opts: Options,
@@ -191,7 +232,11 @@ pub(super) struct Plot {
 }
 
 impl Plot {
-    pub fn new(series: Computed<Vec<ChartSeries>>, opts: Options) -> Arc<Self> {
+    pub fn new(
+        series: Computed<Vec<ChartSeries>>,
+        labels: Computed<Vec<String>>,
+        opts: Options,
+    ) -> Arc<Self> {
         let progress = blinc_layout::render_state::get_global_scheduler().map(|handle| {
             // Critically damped: it settles on the new values without
             // passing them.
@@ -203,6 +248,7 @@ impl Plot {
         });
         let plot = Arc::new(Self {
             series,
+            labels,
             hover: blinc_core::reactive::signal(-1),
             width: blinc_core::reactive::signal(400.0),
             opts,
@@ -275,36 +321,129 @@ impl Plot {
         };
         let values = self.shown(&series);
         let opts = &self.opts;
-        let g = Geometry::of(&series, opts, width);
+        let labels = self.labels.try_get().unwrap_or_default();
+        let g = Geometry::of(&series, &labels, opts, width);
         let n = count(&series);
         let hover = self.hover.try_get().unwrap_or(-1);
         let at = (hover >= 0 && (hover as usize) < n).then_some(hover as usize);
 
+        // Everything but the area fills is an SDF primitive, antialiased by
+        // its distance field on any target, multisampled or not.
         if opts.grid {
             let grid = ink("var(--cn-chart-grid)", Color::rgba(0.5, 0.5, 0.5, 0.4));
-            // Dashes as segments of one path: 3 on, 4 off.
-            let mut dashes = Path::new();
+            // Dashes 3 on, 4 off, across the plot at each tick, or down it
+            // for horizontal bars; a pixel wide on a pixel row.
             for t in &g.ticks {
-                let y = g.y(*t).round() + 0.5;
-                let mut x = g.x0;
-                while x < g.x1 {
-                    dashes = dashes.move_to(x, y).line_to((x + 3.0).min(g.x1), y);
-                    x += 7.0;
+                let p = g.at(*t).round();
+                let (from, to) = if g.horizontal {
+                    (g.y0, g.y1)
+                } else {
+                    (g.x0, g.x1)
+                };
+                let mut q = from;
+                while q < to {
+                    let len = (to - q).min(3.0);
+                    let dash = if g.horizontal {
+                        Rect::new(p, q, 1.0, len)
+                    } else {
+                        Rect::new(q, p, len, 1.0)
+                    };
+                    ctx.fill_rect(dash, CornerRadius::ZERO, Brush::Solid(grid));
+                    q += 7.0;
                 }
             }
-            ctx.stroke_path(&dashes, &Stroke::new(1.0), Brush::Solid(grid));
         }
+        // The category under the pointer: a band behind its bars, a line
+        // through its points.
         if let (Some(i), true) = (at, opts.tooltip) {
             let cursor = ink("var(--cn-chart-cursor)", Color::rgb(0.6, 0.6, 0.6));
-            let x = g.x(i, n);
-            let line = Path::new().move_to(x, g.y0).line_to(x, g.y1);
-            ctx.stroke_path(
-                &line,
-                &Stroke::new(1.0),
-                Brush::Solid(cursor.with_alpha(0.5)),
+            let (mark, alpha) = if opts.bars {
+                let (s, size) = (g.start(i, n), g.slot(n));
+                let band = if g.horizontal {
+                    Rect::new(g.x0, s, g.x1 - g.x0, size)
+                } else {
+                    Rect::new(s, g.y0, size, g.y1 - g.y0)
+                };
+                (band, 0.08)
+            } else {
+                let x = g.centre(i, n).round();
+                (Rect::new(x, g.y0, 1.0, g.y1 - g.y0), 0.5)
+            };
+            ctx.fill_rect(
+                mark,
+                CornerRadius::ZERO,
+                Brush::Solid(cursor.with_alpha(alpha)),
             );
         }
-        self.draw_lines(ctx, &g, &series, &values, at);
+        if opts.bars {
+            self.draw_bars(ctx, &g, &series, &values);
+        } else {
+            self.draw_lines(ctx, &g, &series, &values, at);
+        }
+    }
+
+    /// Bars side by side in each slot, or piled when stacked, rounded at
+    /// the end away from the axis; in a pile only the outermost on its side
+    /// of the axis is.
+    fn draw_bars(
+        &self,
+        ctx: &mut dyn DrawContext,
+        g: &Geometry,
+        series: &[ChartSeries],
+        values: &[Vec<f64>],
+    ) {
+        let n = count(series);
+        let stacked = self.opts.stacked;
+        let groups = if stacked { 1 } else { series.len().max(1) };
+        let value =
+            |k: usize, i: usize| values.get(k).and_then(|v| v.get(i)).copied().unwrap_or(0.0);
+        for i in 0..n {
+            let (s, size) = (g.start(i, n), g.slot(n));
+            let pad = size * if groups > 1 { 0.12 } else { 0.18 };
+            let inner = size - pad * 2.0;
+            let gap = if groups > 1 {
+                (inner * 0.08).min(4.0)
+            } else {
+                0.0
+            };
+            let thick = ((inner - gap * (groups - 1) as f32) / groups as f32).max(1.0);
+            let (mut up, mut down) = (0.0, 0.0);
+            for (k, s_k) in series.iter().enumerate() {
+                let v = value(k, i);
+                let mut base = 0.0;
+                if stacked {
+                    base = if v >= 0.0 { up } else { down };
+                    if v >= 0.0 { up += v } else { down += v }
+                }
+                let (a, b) = (g.at(base), g.at(base + v));
+                let along = s
+                    + pad
+                    + if stacked {
+                        0.0
+                    } else {
+                        k as f32 * (thick + gap)
+                    };
+                let outermost = !stacked
+                    || (k + 1..series.len()).all(|j| {
+                        let w = value(j, i);
+                        w == 0.0 || (w >= 0.0) != (v >= 0.0)
+                    });
+                let r = if outermost {
+                    (thick / 2.0).min(4.0)
+                } else {
+                    0.0
+                };
+                let (rect, end) = if g.horizontal {
+                    let rect = Rect::new(a.min(b), along, (b - a).abs(), thick);
+                    (rect, if b >= a { End::Right } else { End::Left })
+                } else {
+                    let rect = Rect::new(along, a.min(b), thick, (b - a).abs());
+                    (rect, if b <= a { End::Top } else { End::Bottom })
+                };
+                let r = r.min(rect.size.width / 2.0).min(rect.size.height / 2.0);
+                ctx.fill_rect(rect, end.rounded(r), Brush::Solid(series_ink(s_k, k)));
+            }
+        }
     }
 
     fn draw_lines(
@@ -329,9 +468,9 @@ impl Plot {
                 if opts.stacked {
                     below[i] = top;
                 }
-                xs.push(g.x(i, n));
-                ys.push(g.y(top));
-                bases.push(g.y(base.clamp(g.lo, g.hi)));
+                xs.push(g.centre(i, n));
+                ys.push(g.at(top));
+                bases.push(g.at(base.clamp(g.lo, g.hi)));
             }
             if xs.is_empty() {
                 continue;
@@ -359,11 +498,19 @@ impl Plot {
                 );
                 ctx.fill_path(&fill.close(), Brush::Gradient(fade));
             }
-            let line = follow(Path::new(), &xs, &ys, opts.curve, true);
-            let stroke = Stroke::new(2.0)
-                .with_cap(LineCap::Round)
-                .with_join(LineJoin::Round);
-            ctx.stroke_path(&line, &stroke, Brush::Solid(c));
+            // The line as capsules along the flattened curve: their round
+            // ends make the joins.
+            let points = flatten(&xs, &ys, opts.curve);
+            ctx.sdf_build(&mut |b| {
+                for pair in points.windows(2) {
+                    let (p, q) = (
+                        Point::new(pair[0].0, pair[0].1),
+                        Point::new(pair[1].0, pair[1].1),
+                    );
+                    let segment = b.line(p, q, 2.0);
+                    b.fill(segment, Brush::Solid(c));
+                }
+            });
             for i in 0..xs.len() {
                 let big = Some(i) == at;
                 if !(opts.dots || big) {
@@ -371,9 +518,36 @@ impl Plot {
                 }
                 let centre = Point::new(xs[i], ys[i]);
                 let (ring, dot) = if big { (5.0, 3.5) } else { (3.5, 2.5) };
-                ctx.fill_path(&Path::circle(centre, ring), Brush::Solid(surface));
-                ctx.fill_path(&Path::circle(centre, dot), Brush::Solid(c));
+                ctx.fill_circle(centre, ring, Brush::Solid(surface));
+                ctx.fill_circle(centre, dot, Brush::Solid(c));
             }
+        }
+    }
+}
+
+/// The end of a bar away from the axis, the one that is rounded.
+#[derive(Clone, Copy)]
+enum End {
+    Top,
+    Right,
+    Bottom,
+    Left,
+}
+
+impl End {
+    /// Corner radii rounding this end by `r` and leaving the other square.
+    fn rounded(self, r: f32) -> CornerRadius {
+        let (tl, tr, br, bl) = match self {
+            End::Top => (r, r, 0.0, 0.0),
+            End::Right => (0.0, r, r, 0.0),
+            End::Bottom => (0.0, 0.0, r, r),
+            End::Left => (r, 0.0, 0.0, r),
+        };
+        CornerRadius {
+            top_left: tl,
+            top_right: tr,
+            bottom_right: br,
+            bottom_left: bl,
         }
     }
 }
@@ -402,6 +576,8 @@ mod tests {
     fn opts() -> Options {
         Options {
             area: false,
+            bars: false,
+            horizontal: false,
             height: 200.0,
             curve: ChartCurve::Smooth,
             dots: false,
@@ -433,11 +609,11 @@ mod tests {
     #[test]
     fn the_pointer_finds_its_category() {
         let s = [ChartSeries::new("a", vec![1.0, 2.0, 3.0, 4.0])];
-        let g = Geometry::of(&s, &opts(), 400.0);
+        let g = Geometry::of(&s, &[], &opts(), 400.0);
         let n = 4;
         assert_eq!(g.category_at(g.x0 - 1.0, n), None);
-        assert_eq!(g.category_at(g.x(0, n), n), Some(0));
-        assert_eq!(g.category_at(g.x(3, n), n), Some(3));
+        assert_eq!(g.category_at(g.centre(0, n), n), Some(0));
+        assert_eq!(g.category_at(g.centre(3, n), n), Some(3));
         assert_eq!(g.category_at(g.x1, n), Some(3));
     }
 

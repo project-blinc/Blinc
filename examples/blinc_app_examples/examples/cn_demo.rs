@@ -3843,16 +3843,15 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             )
                             .child(
                                 cn::bar_chart()
-                                    .width(200.0)
-                                    .height(150.0)
-                                    .data(&[
-                                        ("Jan", 120.0),
-                                        ("Feb", 180.0),
-                                        ("Mar", 150.0),
-                                        ("Apr", 210.0),
-                                        ("May", 190.0),
-                                    ])
-                                    .build(),
+                                    .width(300.0)
+                                    .height(180.0)
+                                    .series("Desktop", &[120.0, 180.0, 150.0, 210.0, 190.0])
+                                    .series("Mobile", &[80.0, 110.0, 130.0, 90.0, 150.0])
+                                    .labels(
+                                        ["Jan", "Feb", "Mar", "Apr", "May"]
+                                            .map(String::from)
+                                            .to_vec(),
+                                    ),
                             ),
                     )
                     .child(
@@ -3866,17 +3865,15 @@ fn charts_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             )
                             .child(
                                 cn::bar_chart()
-                                    .width(250.0)
-                                    .height(150.0)
-                                    .data(&[
-                                        ("React", 85.0),
-                                        ("Vue", 65.0),
-                                        ("Svelte", 45.0),
-                                        ("Angular", 40.0),
-                                    ])
-                                    .horizontal()
-                                    .color(theme.color(ColorToken::Secondary))
-                                    .build(),
+                                    .width(300.0)
+                                    .height(180.0)
+                                    .series("Popularity", &[85.0, 65.0, 45.0, 40.0])
+                                    .labels(
+                                        ["React", "Vue", "Svelte", "Angular"]
+                                            .map(String::from)
+                                            .to_vec(),
+                                    )
+                                    .horizontal(),
                             ),
                     ),
             )

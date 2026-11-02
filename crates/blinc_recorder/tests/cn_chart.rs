@@ -2,7 +2,7 @@
 //! A line or area chart draws its series in the palette, marks the category
 //! under the pointer with a tooltip of its values, and eases to new data.
 
-use blinc_cn::{ChartSeries, area_chart, line_chart};
+use blinc_cn::{ChartSeries, area_chart, bar_chart, line_chart};
 use blinc_core::reactive::signal;
 use blinc_layout::LayoutNodeId;
 use blinc_layout::div::div;
@@ -255,4 +255,112 @@ fn crowded_labels_thin_out() {
         .count();
     assert!(hidden > 20, "only {hidden} of 40 labels hidden in 480px");
     assert!(hidden < 40);
+}
+
+#[test]
+fn grouped_bars_mark_the_category_under_the_pointer() {
+    let Some(mut ui) = session() else { return };
+    ui.mount(|_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(16.0))
+            .child(
+                bar_chart()
+                    .series("Desktop", &[186.0, 305.0, 237.0, 73.0, 209.0, 214.0])
+                    .series("Mobile", &[80.0, 200.0, 120.0, 190.0, 130.0, 140.0])
+                    .labels(months()),
+            )
+    });
+    ui.leave().settle();
+    // Side by side: in Feb's slot, the Desktop bar then the Mobile bar.
+    let x = category_x(&ui, 1);
+    let desktop = top_of(&mut ui, (x - 8.0) as u32, token("chart-1")).expect("a Desktop bar");
+    let mobile = top_of(&mut ui, (x + 8.0) as u32, token("chart-2")).expect("a Mobile bar");
+    assert!(
+        desktop < mobile,
+        "305 is taller than 200: {desktop} vs {mobile}"
+    );
+    // Bars start at zero.
+    assert!(texts(&ui, "cn-chart-ticks")[0].ends_with('0'));
+    let plot = ui
+        .tree()
+        .get_absolute_bounds(all(&ui, "cn-chart-plot")[0])
+        .unwrap();
+    ui.move_to(x, plot.y + 40.0).settle();
+    assert_eq!(texts(&ui, "cn-chart-tooltip-title"), ["Feb"]);
+    assert_eq!(texts(&ui, "cn-chart-tooltip-value"), ["305", "200"]);
+    ui.assert_snapshot("cn_chart_bars_hover");
+}
+
+#[test]
+fn horizontal_bars_put_the_categories_beside() {
+    let Some(mut ui) = session() else { return };
+    let names: Vec<String> = ["React", "Vue", "Svelte", "Angular"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    ui.mount(move |_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(16.0))
+            .child(
+                bar_chart()
+                    .series("Popularity", &[85.0, 65.0, 45.0, 40.0])
+                    .labels(names.clone())
+                    .horizontal(),
+            )
+    });
+    ui.leave().settle();
+    let react = all(&ui, "cn-chart-axis")
+        .into_iter()
+        .find(|n| texts_of(&ui, *n) == "React")
+        .expect("the React label");
+    let label = ui.tree().get_absolute_bounds(react).unwrap();
+    let plot = ui
+        .tree()
+        .get_absolute_bounds(all(&ui, "cn-chart-plot")[0])
+        .unwrap();
+    assert!(label.x < plot.x + 80.0, "the category is beside the plot");
+    // The React bar runs right from the axis, level with its label.
+    let y = (label.y + label.height / 2.0) as u32;
+    let frame = ui.snapshot().unwrap();
+    let painted = (0..frame.width)
+        .filter(|x| {
+            let p = frame.get_pixel(*x, y).unwrap();
+            near([p[0], p[1], p[2]], token("chart-1"), 24)
+        })
+        .count();
+    assert!(painted > 150, "the React bar is {painted}px long");
+    ui.move_to(plot.x + 200.0, label.y + label.height / 2.0)
+        .settle();
+    assert_eq!(texts(&ui, "cn-chart-tooltip-title"), ["React"]);
+    ui.assert_snapshot("cn_chart_bars_horizontal");
+}
+
+#[test]
+fn stacked_bars_pile() {
+    let Some(mut ui) = session() else { return };
+    ui.mount(|_| {
+        div()
+            .w(W as f32)
+            .h(H as f32)
+            .padding(blinc_layout::units::px(16.0))
+            .child(
+                bar_chart()
+                    .series("Desktop", &[186.0, 305.0, 237.0, 73.0, 209.0, 214.0])
+                    .series("Mobile", &[80.0, 200.0, 120.0, 190.0, 130.0, 140.0])
+                    .labels(months())
+                    .stacked(),
+            )
+    });
+    ui.leave().settle();
+    // Feb piles to 505, so the axis reaches 600; Mobile sits on Desktop.
+    assert!(texts(&ui, "cn-chart-ticks")[0].starts_with("600"));
+    let x = category_x(&ui, 1) as u32;
+    let mobile = top_of(&mut ui, x, token("chart-2")).expect("Mobile");
+    let desktop = top_of(&mut ui, x, token("chart-1")).expect("Desktop");
+    assert!(mobile < desktop, "Mobile is on top: {mobile} vs {desktop}");
+    ui.assert_snapshot("cn_chart_bars_stacked");
 }

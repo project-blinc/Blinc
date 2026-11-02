@@ -94,9 +94,10 @@ popover()
 
 ## Chart
 
-Line and area charts draw on a canvas, with the value axis, category labels,
-legend and tooltip as ordinary elements. Moving the pointer across a chart
-marks the category under it and shows each series' value there.
+Line, area and bar charts draw on a canvas, with the value axis, category
+labels, legend and tooltip as ordinary elements. Moving the pointer across a
+chart marks the category under it (a line through its points, a band behind
+its bars) and shows each series' value there.
 
 ```rust
 use blinc_cn::prelude::*;
@@ -110,7 +111,18 @@ cn::line_chart()
 ```
 
 `cn::area_chart()` fills down to the axis; `.stacked()` piles the series, each
-filling down to the one below. `.curve(ChartCurve::Linear)` or `Step` replace
+filling down to the one below. `cn::bar_chart()` sets the series side by side
+in each category, or piles them when `.stacked()`; `.horizontal()` lays the
+bars along the width with the categories down the side. Bars are rounded at
+the end away from the axis.
+
+```rust
+cn::bar_chart()
+    .series("Desktop", &[186.0, 305.0, 237.0])
+    .series("Mobile", &[80.0, 200.0, 120.0])
+    .labels(vec!["Jan".into(), "Feb".into(), "Mar".into()])
+```
+ `.curve(ChartCurve::Linear)` or `Step` replace
 the smooth curve, `.height(..)` and `.width(..)` size it (it fills its parent's
 width unless set), `.min(..)` and `.max(..)` fix the value axis, and
 `.no_grid()`, `.no_axes()`, `.no_tooltip()` and `.legend(false)` leave parts
@@ -150,9 +162,9 @@ and `.cn-chart-swatch`, and `.cn-chart-tooltip` with its `-title`, `-row`,
 
 ### Other charts
 
-`cn::bar_chart()`, `cn::spark_line(..)`, `cn::threshold_line_chart()`,
-`cn::histogram(..)` and `cn::comparison_bar_chart()` are drawn as before, without
-the shared plot, until they move onto it.
+`cn::spark_line(..)`, `cn::threshold_line_chart()`, `cn::histogram(..)` and
+`cn::comparison_bar_chart()` are drawn as before, without the shared plot,
+until they move onto it.
 
 ## Table
 

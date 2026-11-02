@@ -56,6 +56,87 @@ pub fn nice_ticks(lo: f64, hi: f64, count: usize) -> Vec<f64> {
     ticks
 }
 
+/// The slope at each point of a monotone cubic through `(xs, ys)` (Fritsch
+/// and Carlson): no bump past a value that is not there.
+fn tangents(xs: &[f32], ys: &[f32]) -> Vec<f32> {
+    let n = xs.len();
+    let d: Vec<f32> = (0..n - 1)
+        .map(|i| (ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]))
+        .collect();
+    let mut m: Vec<f32> = (0..n)
+        .map(|i| {
+            if i == 0 {
+                d[0]
+            } else if i == n - 1 {
+                d[n - 2]
+            } else if d[i - 1] * d[i] <= 0.0 {
+                0.0
+            } else {
+                (d[i - 1] + d[i]) / 2.0
+            }
+        })
+        .collect();
+    for i in 0..n - 1 {
+        if d[i] == 0.0 {
+            m[i] = 0.0;
+            m[i + 1] = 0.0;
+            continue;
+        }
+        let (a, b) = (m[i] / d[i], m[i + 1] / d[i]);
+        let s = a * a + b * b;
+        if s > 9.0 {
+            let t = 3.0 / s.sqrt();
+            m[i] = t * a * d[i];
+            m[i + 1] = t * b * d[i];
+        }
+    }
+    m
+}
+
+/// The points along the curve through `(xs, ys)`, close enough together
+/// that straight segments between them look curved.
+pub fn flatten(xs: &[f32], ys: &[f32], curve: ChartCurve) -> Vec<(f32, f32)> {
+    let n = xs.len();
+    if n < 2 {
+        return xs.iter().copied().zip(ys.iter().copied()).collect();
+    }
+    let mut out = vec![(xs[0], ys[0])];
+    match curve {
+        ChartCurve::Linear => out.extend(xs[1..].iter().copied().zip(ys[1..].iter().copied())),
+        ChartCurve::Step => {
+            for i in 1..n {
+                let mid = (xs[i - 1] + xs[i]) / 2.0;
+                out.extend([(mid, ys[i - 1]), (mid, ys[i]), (xs[i], ys[i])]);
+            }
+        }
+        ChartCurve::Smooth => {
+            let m = tangents(xs, ys);
+            for i in 0..n - 1 {
+                let h = (xs[i + 1] - xs[i]) / 3.0;
+                let p = [
+                    (xs[i], ys[i]),
+                    (xs[i] + h, ys[i] + m[i] * h),
+                    (xs[i + 1] - h, ys[i + 1] - m[i + 1] * h),
+                    (xs[i + 1], ys[i + 1]),
+                ];
+                // About one point every 4px along the chord.
+                let chord = ((p[3].0 - p[0].0).powi(2) + (p[3].1 - p[0].1).powi(2)).sqrt();
+                let steps = ((chord / 4.0).ceil() as usize).clamp(2, 64);
+                for k in 1..=steps {
+                    let t = k as f32 / steps as f32;
+                    let u = 1.0 - t;
+                    let (a, b, c, d) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
+                    out.push((
+                        a * p[0].0 + b * p[1].0 + c * p[2].0 + d * p[3].0,
+                        a * p[0].1 + b * p[1].1 + c * p[2].1 + d * p[3].1,
+                    ));
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Adds the segments through `(xs, ys)` to `path`: a move to the first point
 /// when `start`, otherwise a line to it.
 pub fn follow(mut path: Path, xs: &[f32], ys: &[f32], curve: ChartCurve, start: bool) -> Path {
@@ -87,38 +168,7 @@ pub fn follow(mut path: Path, xs: &[f32], ys: &[f32], curve: ChartCurve, start: 
             }
         }
         ChartCurve::Smooth => {
-            // Monotone cubic (Fritsch and Carlson): no bump past a value that
-            // is not there.
-            let d: Vec<f32> = (0..n - 1)
-                .map(|i| (ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]))
-                .collect();
-            let mut m: Vec<f32> = (0..n)
-                .map(|i| {
-                    if i == 0 {
-                        d[0]
-                    } else if i == n - 1 {
-                        d[n - 2]
-                    } else if d[i - 1] * d[i] <= 0.0 {
-                        0.0
-                    } else {
-                        (d[i - 1] + d[i]) / 2.0
-                    }
-                })
-                .collect();
-            for i in 0..n - 1 {
-                if d[i] == 0.0 {
-                    m[i] = 0.0;
-                    m[i + 1] = 0.0;
-                    continue;
-                }
-                let (a, b) = (m[i] / d[i], m[i + 1] / d[i]);
-                let s = a * a + b * b;
-                if s > 9.0 {
-                    let t = 3.0 / s.sqrt();
-                    m[i] = t * a * d[i];
-                    m[i + 1] = t * b * d[i];
-                }
-            }
+            let m = tangents(xs, ys);
             for i in 0..n - 1 {
                 let h = (xs[i + 1] - xs[i]) / 3.0;
                 path = path.cubic_to(
@@ -146,6 +196,21 @@ mod tests {
         assert_eq!(compact(1500.0), "1.5k");
         assert_eq!(compact(-2_400_000.0), "-2.4M");
         assert_eq!(compact(40.0), "40");
+    }
+
+    #[test]
+    fn a_flattened_curve_passes_through_every_value() {
+        let (xs, ys) = ([0.0, 40.0, 80.0], [10.0, 50.0, 20.0]);
+        let points = flatten(&xs, &ys, ChartCurve::Smooth);
+        for (x, y) in xs.iter().zip(ys.iter()) {
+            assert!(
+                points
+                    .iter()
+                    .any(|p| (p.0 - x).abs() < 1e-3 && (p.1 - y).abs() < 1e-3)
+            );
+        }
+        assert!(points.len() > 10);
+        assert_eq!(flatten(&xs, &ys, ChartCurve::Linear).len(), 3);
     }
 
     #[test]

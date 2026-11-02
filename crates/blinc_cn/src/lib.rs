@@ -150,10 +150,10 @@ pub mod prelude {
         Card, CardContent, CardFooter, CardHeader, card, card_content, card_footer, card_header,
     };
     pub use crate::components::chart::{
-        BarChart, BarChartBuilder, ChartBuilder, ChartCurve, ChartSeries, ComparisonBarChart,
-        ComparisonBarChartBuilder, Histogram, HistogramBuilder, SparkLine, SparkLineBuilder,
-        ThresholdBand, ThresholdLineChart, ThresholdLineChartBuilder, area_chart, bar_chart,
-        comparison_bar_chart, histogram, line_chart, spark_line, threshold_line_chart,
+        ChartBuilder, ChartCurve, ChartSeries, ComparisonBarChart, ComparisonBarChartBuilder,
+        Histogram, HistogramBuilder, SparkLine, SparkLineBuilder, ThresholdBand,
+        ThresholdLineChart, ThresholdLineChartBuilder, area_chart, bar_chart, comparison_bar_chart,
+        histogram, line_chart, spark_line, threshold_line_chart,
     };
     pub use crate::components::checkbox::{Checkbox, CheckboxSize, checkbox};
     pub use crate::components::collapsible::{
