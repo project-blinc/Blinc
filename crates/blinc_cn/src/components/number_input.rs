@@ -43,7 +43,7 @@ struct Config {
     step: f64,
     precision: usize,
     size: InputSize,
-    placeholder: Option<String>,
+    placeholder: Option<blinc_layout::binding::Reactive<String>>,
     disabled: Reactive<bool>,
     /// Explicit total width (steppers + field). `None` = auto-derive
     /// from precision + min / max bounds.
@@ -119,8 +119,10 @@ impl NumberInputBuilder {
         self
     }
 
-    pub fn placeholder(mut self, text: impl Into<String>) -> Self {
-        self.config.placeholder = Some(text.into());
+    /// The text shown while the field is empty. A signal here replaces the
+    /// text in place.
+    pub fn placeholder(mut self, text: impl blinc_layout::binding::IntoReactive<String>) -> Self {
+        self.config.placeholder = Some(text.into_reactive());
         self
     }
 

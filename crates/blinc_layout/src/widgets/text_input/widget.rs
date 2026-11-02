@@ -110,11 +110,38 @@ impl TextInput {
         self
     }
 
-    pub fn placeholder(self, text: impl Into<String>) -> Self {
-        let placeholder = text.into();
-        self.config.lock().unwrap().placeholder = placeholder.clone();
-        if let Ok(mut d) = self.data.lock() {
-            d.placeholder = placeholder;
+    /// The text shown while the field is empty: a string, Signal or
+    /// Computed. A bound value is followed in place.
+    pub fn placeholder(self, text: impl crate::binding::IntoReactive<String>) -> Self {
+        match text.into_reactive() {
+            crate::binding::Reactive::Const(p) => {
+                self.config.lock().unwrap().placeholder = p.clone();
+                if let Ok(mut d) = self.data.lock() {
+                    d.placeholder = p;
+                }
+            }
+            bound => {
+                let data = Arc::clone(&self.data);
+                blinc_core::reactive::effect(move |g| {
+                    set_placeholder(&data, bound.read(g).unwrap_or_default());
+                });
+            }
+        }
+        self
+    }
+
+    /// Whether the field shows as invalid whatever its value, as a field
+    /// with an error does: a bool, Signal or Computed. The box carries
+    /// `data-invalid` while it is.
+    pub fn invalid(self, invalid: impl crate::binding::IntoReactive<bool>) -> Self {
+        match invalid.into_reactive() {
+            crate::binding::Reactive::Const(on) => set_invalid(&self.data, on),
+            bound => {
+                let data = Arc::clone(&self.data);
+                blinc_core::reactive::effect(move |g| {
+                    set_invalid(&data, bound.read(g).unwrap_or(false));
+                });
+            }
         }
         self
     }
@@ -460,6 +487,32 @@ impl ElementBuilder for TextInput {
 }
 
 /// Disable or enable a field and have what it shows follow.
+fn set_placeholder(data: &SharedTextInputData, text: String) {
+    let changed = match data.lock() {
+        Ok(mut d) if d.placeholder != text => {
+            d.placeholder = text;
+            true
+        }
+        _ => false,
+    };
+    if changed {
+        super::focus::notify_text_input(data);
+    }
+}
+
+fn set_invalid(data: &SharedTextInputData, on: bool) {
+    let changed = match data.lock() {
+        Ok(mut d) if d.invalid != on => {
+            d.invalid = on;
+            true
+        }
+        _ => false,
+    };
+    if changed {
+        super::focus::notify_text_input(data);
+    }
+}
+
 fn set_disabled(data: &SharedTextInputData, on: bool) {
     let changed = match data.lock() {
         Ok(mut d) if d.disabled != on => {

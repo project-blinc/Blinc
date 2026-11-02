@@ -37,14 +37,26 @@ cn::input(&name).disabled(true)
 
 // With an error message; the border turns red, also while hovered or focused
 cn::input(&name).error("Name is required")
+
+// Text that follows signals: an empty error clears it
+let placeholder = signal("you@example.com".to_string());
+let error = signal(String::new());
+cn::input(&email)
+    .placeholder(placeholder)
+    .description("We never share it")
+    .error(error)
 ```
+
+The placeholder, description and error each take a string or a signal and
+change in place. While the error is non-empty it shows in place of the
+description.
 
 ### Styling
 
 The field is one element with the class `cn-input`. Its border and fill while
 hovered, focused, invalid or disabled are rules, eased by a CSS `transition`:
-`:hover`, `:focus`, `.cn-input--error` (added by `.error(..)`; a value that
-fails validation also sets a `data-invalid` attribute) and `:disabled`.
+`:hover`, `:focus`, `[data-invalid]` (set while the error is non-empty, and
+while a value fails validation) and `:disabled`.
 Restyle it with rules of your own:
 
 ```css
@@ -99,7 +111,8 @@ cn::textarea(&description)
 dims the field. The message under a field is `.cn-field-error`, or
 `.cn-field-description` for `.description(..)`, coloured by those rules. It is styled like [Input](#input): one element with the class
 `cn-textarea`, whose border and fill per state are `:hover`, `:focus`,
-`.cn-textarea--error` and `:disabled` rules, eased by a `transition`.
+`[data-invalid]` and `:disabled` rules, eased by a `transition`. Its
+placeholder, description and error follow signals as an input's do.
 
 ## Number Input
 

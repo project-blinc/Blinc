@@ -281,3 +281,22 @@ fn escape_blurs_an_empty_search_and_other_fields() {
     assert_eq!(d.value, "rust", "Escape cleared a plain text field");
     assert!(!d.visual.is_focused());
 }
+
+/// A bound placeholder and invalid flag land in the field's data when their
+/// signals move.
+#[test]
+fn a_bound_placeholder_and_invalid_follow_their_signals() {
+    ensure_theme_initialized();
+    let data = text_input_data();
+    let placeholder = blinc_core::reactive::signal("Name".to_string());
+    let invalid = blinc_core::reactive::signal(false);
+    let _input = text_input(&data).placeholder(placeholder).invalid(invalid);
+    assert_eq!(data.lock().unwrap().placeholder, "Name");
+    assert!(!data.lock().unwrap().invalid);
+
+    placeholder.set("Full name".to_string());
+    invalid.set(true);
+    let d = data.lock().unwrap();
+    assert_eq!(d.placeholder, "Full name");
+    assert!(d.invalid);
+}

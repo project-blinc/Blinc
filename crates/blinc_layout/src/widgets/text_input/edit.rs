@@ -14,6 +14,7 @@ impl TextInputData {
             disabled: false,
             masked: false,
             is_valid: true,
+            invalid: false,
             visual: TextFieldState::Idle,
             focus_time_ms: 0,
             cursor_state: cursor_state(),

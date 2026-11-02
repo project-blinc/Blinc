@@ -60,6 +60,8 @@ pub struct TextAreaState {
     pub placeholder: String,
     /// Whether disabled
     pub disabled: bool,
+    /// Marked invalid by its owner, such as a field showing an error
+    pub invalid: bool,
     /// Time when focus was gained (for cursor blinking)
     /// Stored as milliseconds since some epoch (e.g., app start)
     pub focus_time_ms: u64,
@@ -137,6 +139,7 @@ impl Default for TextAreaState {
             visual: TextFieldState::Idle,
             placeholder: String::new(),
             disabled: false,
+            invalid: false,
             focus_time_ms: 0,
             cursor_blink_interval_ms: 530, // Standard cursor blink rate (~530ms)
             cursor_state: cursor_state(),

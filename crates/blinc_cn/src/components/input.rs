@@ -103,13 +103,6 @@ impl Input {
         let theme = ThemeState::get();
         let typography = theme.typography();
 
-        // Sync error state to underlying data's is_valid field
-        if config.error.is_some() {
-            if let Ok(mut data) = config.data.lock() {
-                data.is_valid = false;
-            }
-        }
-
         // Build the text input element
         let text_input = Self::build_text_input(&config, theme, &typography);
 
@@ -122,8 +115,9 @@ impl Input {
 
         // Add CSS classes directly to the TextInput (it supports .class())
         let mut text_input = text_input.class("cn-input").class(size_class);
-        if config.error.is_some() {
-            text_input = text_input.class("cn-input--error");
+        // An error marks the box `data-invalid` while it is non-empty.
+        if let Some(ref error) = config.error {
+            text_input = text_input.invalid(crate::reactive_props::non_empty(error));
         }
 
         // If no label, description, or error, return the input directly in a minimal container
@@ -166,19 +160,13 @@ impl Input {
         // Input added directly (no wrapper div — TextInput has the cn-input class)
         container = container.child(text_input);
 
-        // Error or description
-        if let Some(ref error_text) = config.error {
-            container = container.child(
-                text(error_text)
-                    .class("cn-field-error")
-                    .size(typography.text_xs),
-            );
-        } else if let Some(ref desc_text) = config.description {
-            container = container.child(
-                text(desc_text)
-                    .class("cn-field-description")
-                    .size(typography.text_xs),
-            );
+        // The error while it is non-empty, else the description.
+        if let Some(message) = crate::reactive_props::field_message(
+            &config.error,
+            &config.description,
+            typography.text_xs,
+        ) {
+            container = container.child(message);
         }
 
         Self { inner: container }
@@ -332,12 +320,12 @@ struct InputConfig {
     input_ref: Option<blinc_layout::selector::InputRef>,
     size: InputSize,
     label: Option<blinc_layout::binding::Reactive<String>>,
-    description: Option<String>,
-    error: Option<String>,
+    description: Option<blinc_layout::binding::Reactive<String>>,
+    error: Option<blinc_layout::binding::Reactive<String>>,
     disabled: blinc_layout::binding::Reactive<bool>,
     required: bool,
     input_type: InputType,
-    placeholder: Option<String>,
+    placeholder: Option<blinc_layout::binding::Reactive<String>>,
     password: bool,
     width: Option<f32>,
     full_width: bool,
@@ -421,15 +409,21 @@ impl InputBuilder {
         self
     }
 
-    /// Set a description/helper text below the input
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        self.config.description = Some(description.into());
+    /// Set a description/helper text below the input. A signal here
+    /// replaces the text in place.
+    pub fn description(
+        mut self,
+        description: impl blinc_layout::binding::IntoReactive<String>,
+    ) -> Self {
+        self.config.description = Some(description.into_reactive());
         self
     }
 
-    /// Set an error message (shows in red, replaces description)
-    pub fn error(mut self, error: impl Into<String>) -> Self {
-        self.config.error = Some(error.into());
+    /// Set an error message: shown in place of the description, and the box
+    /// carries `data-invalid`, while it is non-empty. A signal here is
+    /// followed in place, so an empty one clears the error.
+    pub fn error(mut self, error: impl blinc_layout::binding::IntoReactive<String>) -> Self {
+        self.config.error = Some(error.into_reactive());
         self
     }
 
@@ -448,9 +442,12 @@ impl InputBuilder {
         self
     }
 
-    /// Set placeholder text
-    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
-        self.config.placeholder = Some(placeholder.into());
+    /// Set placeholder text. A signal here replaces the text in place.
+    pub fn placeholder(
+        mut self,
+        placeholder: impl blinc_layout::binding::IntoReactive<String>,
+    ) -> Self {
+        self.config.placeholder = Some(placeholder.into_reactive());
         self
     }
 

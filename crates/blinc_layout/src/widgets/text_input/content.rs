@@ -77,7 +77,7 @@ pub(super) fn assemble(mut outer: Div, data: &SharedTextInputData, base: &TextIn
         computed(move |g: &ReactiveGraph| {
             g.get(revision);
             let d = data.lock().unwrap();
-            !d.is_valid && !d.value.is_empty()
+            d.invalid || (!d.is_valid && !d.value.is_empty())
         })
     };
     let disabled = {

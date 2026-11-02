@@ -138,7 +138,7 @@ pub struct NumberInputBuilder {
     // text_input setter.
     width: Option<f32>,
     height: Option<f32>,
-    placeholder: Option<String>,
+    placeholder: Option<Reactive<String>>,
     disabled: Reactive<bool>,
     rounded: Option<f32>,
     css_element_id: Option<String>,
@@ -231,8 +231,10 @@ impl NumberInputBuilder {
         self
     }
 
-    pub fn placeholder(mut self, text: impl Into<String>) -> Self {
-        self.placeholder = Some(text.into());
+    /// The text shown while the field is empty: a string, Signal or
+    /// Computed. A bound value is followed in place.
+    pub fn placeholder(mut self, text: impl crate::binding::IntoReactive<String>) -> Self {
+        self.placeholder = Some(text.into_reactive());
         self
     }
 

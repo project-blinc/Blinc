@@ -82,11 +82,11 @@ struct TextareaConfig {
     rows: Option<usize>,
     cols: Option<usize>,
     label: Option<blinc_layout::binding::Reactive<String>>,
-    description: Option<String>,
-    error: Option<String>,
+    description: Option<blinc_layout::binding::Reactive<String>>,
+    error: Option<blinc_layout::binding::Reactive<String>>,
     disabled: blinc_layout::binding::Reactive<bool>,
     required: bool,
-    placeholder: Option<String>,
+    placeholder: Option<blinc_layout::binding::Reactive<String>>,
     max_length: Option<usize>,
     wrap: bool,
     width: Option<f32>,
@@ -192,8 +192,9 @@ impl Textarea {
 
         // Add CSS class directly to the TextArea widget (it supports .class())
         let mut ta = ta.class("cn-textarea");
-        if config.error.is_some() {
-            ta = ta.class("cn-textarea--error");
+        // An error marks the box `data-invalid` while it is non-empty.
+        if let Some(ref error) = config.error {
+            ta = ta.invalid(crate::reactive_props::non_empty(error));
         }
 
         // If no label, description, or error, wrap in a minimal container
@@ -238,19 +239,13 @@ impl Textarea {
                 // Textarea (added directly — TextArea has the cn-textarea class)
                 container = container.child(ta);
 
-                // Error or description
-                if let Some(ref error_text) = config.error {
-                    container = container.child(
-                        text(error_text)
-                            .class("cn-field-error")
-                            .size(typography.text_xs),
-                    );
-                } else if let Some(ref desc_text) = config.description {
-                    container = container.child(
-                        text(desc_text)
-                            .class("cn-field-description")
-                            .size(typography.text_xs),
-                    );
+                // The error while it is non-empty, else the description.
+                if let Some(message) = crate::reactive_props::field_message(
+                    &config.error,
+                    &config.description,
+                    typography.text_xs,
+                ) {
+                    container = container.child(message);
                 }
 
                 container
@@ -362,21 +357,30 @@ impl TextareaBuilder {
         self
     }
 
-    /// Set a description/helper text below the textarea
-    pub fn description(mut self, description: impl Into<String>) -> Self {
-        self.config.description = Some(description.into());
+    /// Set a description/helper text below the textarea. A signal here
+    /// replaces the text in place.
+    pub fn description(
+        mut self,
+        description: impl blinc_layout::binding::IntoReactive<String>,
+    ) -> Self {
+        self.config.description = Some(description.into_reactive());
         self
     }
 
-    /// Set an error message (shows in red, replaces description)
-    pub fn error(mut self, error: impl Into<String>) -> Self {
-        self.config.error = Some(error.into());
+    /// Set an error message: shown in place of the description, and the box
+    /// carries `data-invalid`, while it is non-empty. A signal here is
+    /// followed in place, so an empty one clears the error.
+    pub fn error(mut self, error: impl blinc_layout::binding::IntoReactive<String>) -> Self {
+        self.config.error = Some(error.into_reactive());
         self
     }
 
-    /// Set placeholder text
-    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
-        self.config.placeholder = Some(placeholder.into());
+    /// Set placeholder text. A signal here replaces the text in place.
+    pub fn placeholder(
+        mut self,
+        placeholder: impl blinc_layout::binding::IntoReactive<String>,
+    ) -> Self {
+        self.config.placeholder = Some(placeholder.into_reactive());
         self
     }
 

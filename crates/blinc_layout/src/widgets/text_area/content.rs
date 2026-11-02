@@ -94,9 +94,17 @@ pub(super) fn assemble(mut outer: Div, state: &SharedTextAreaState, base: &TextA
             state.lock().unwrap().disabled
         })
     };
+    let invalid = {
+        let state = Arc::clone(state);
+        computed(move |g: &ReactiveGraph| {
+            g.get(revision);
+            state.lock().unwrap().invalid
+        })
+    };
     let cfg = resolved_config(base, &state.lock().unwrap());
     outer = outer
         .attr_when("disabled", "", &disabled)
+        .attr_when("data-invalid", "", &invalid)
         .border_width(cfg.border_width)
         .rounded(cfg.corner_radius);
 

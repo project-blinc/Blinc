@@ -70,6 +70,9 @@ pub struct TextInputData {
     pub disabled: bool,
     pub masked: bool,
     pub is_valid: bool,
+    /// Marked invalid by its owner, such as a field showing an error,
+    /// whatever the value.
+    pub invalid: bool,
     pub visual: TextFieldState,
     pub focus_time_ms: u64,
     pub cursor_state: SharedCursorState,

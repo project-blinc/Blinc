@@ -262,3 +262,42 @@ impl From<blinc_core::reactive::Signal<f64>> for NumberValue {
         Self::F64(s)
     }
 }
+
+/// Whether a reactive string is non-empty, following it when it is bound.
+pub(crate) fn non_empty(src: &Reactive<String>) -> Reactive<bool> {
+    match src {
+        Reactive::Const(s) => Reactive::Const(!s.is_empty()),
+        bound => {
+            let bound = bound.clone();
+            Reactive::Computed(blinc_core::reactive::computed(move |g| {
+                !bound.read(g).unwrap_or_default().is_empty()
+            }))
+        }
+    }
+}
+
+/// A field's message: its error while that is non-empty, else its
+/// description, each following its source in place. `None` when it has
+/// neither.
+pub(crate) fn field_message(
+    error: &Option<Reactive<String>>,
+    description: &Option<Reactive<String>>,
+    size: f32,
+) -> Option<blinc_layout::div::Div> {
+    use blinc_layout::text::Text;
+    let text = |src: &Reactive<String>, class: &'static str| {
+        let src = src.clone();
+        move || Text::bound(src.clone()).class(class).size(size)
+    };
+    let row = blinc_layout::div::div().class("cn-field-message");
+    match (error, description) {
+        (None, None) => None,
+        (None, Some(desc)) => Some(row.child(text(desc, "cn-field-description")())),
+        (Some(err), None) => Some(row.show(non_empty(err), text(err, "cn-field-error"))),
+        (Some(err), Some(desc)) => Some(row.show_or(
+            non_empty(err),
+            text(err, "cn-field-error"),
+            text(desc, "cn-field-description"),
+        )),
+    }
+}

@@ -78,12 +78,43 @@ impl TextArea {
         })
     }
 
-    /// Set placeholder text
-    pub fn placeholder(mut self, text: impl Into<String>) -> Self {
-        let placeholder = text.into();
-        self.config.lock().unwrap().placeholder = placeholder.clone();
-        if let Ok(mut s) = self.state.lock() {
-            s.placeholder = placeholder;
+    /// The text shown while the field is empty: a string, Signal or
+    /// Computed. A bound value is followed in place.
+    pub fn placeholder(self, text: impl crate::binding::IntoReactive<String>) -> Self {
+        match text.into_reactive() {
+            crate::binding::Reactive::Const(p) => {
+                self.config.lock().unwrap().placeholder = p.clone();
+                if let Ok(mut s) = self.state.lock() {
+                    s.placeholder = p;
+                }
+            }
+            bound => {
+                let state = Arc::clone(&self.state);
+                blinc_core::reactive::effect(move |g| {
+                    let text = bound.read(g).unwrap_or_default();
+                    set_flag(&state, |s| {
+                        std::mem::replace(&mut s.placeholder, text) != s.placeholder
+                    });
+                });
+            }
+        }
+        self
+    }
+
+    /// Whether the field shows as invalid, as a field with an error does: a
+    /// bool, Signal or Computed. The box carries `data-invalid` while it is.
+    pub fn invalid(self, invalid: impl crate::binding::IntoReactive<bool>) -> Self {
+        match invalid.into_reactive() {
+            crate::binding::Reactive::Const(on) => {
+                set_flag(&self.state, |s| std::mem::replace(&mut s.invalid, on) != on)
+            }
+            bound => {
+                let state = Arc::clone(&self.state);
+                blinc_core::reactive::effect(move |g| {
+                    let on = bound.read(g).unwrap_or(false);
+                    set_flag(&state, |s| std::mem::replace(&mut s.invalid, on) != on);
+                });
+            }
         }
         self
     }
@@ -675,6 +706,15 @@ impl ElementBuilder for TextArea {
 }
 
 /// Disable or enable a field and have what it shows follow.
+/// Applies `change` to the state and repaints the field when it reports a
+/// change.
+fn set_flag(state: &SharedTextAreaState, change: impl FnOnce(&mut TextAreaState) -> bool) {
+    let changed = state.lock().map(|mut s| change(&mut s)).unwrap_or(false);
+    if changed {
+        super::focus::notify_text_area(state);
+    }
+}
+
 fn set_disabled(state: &SharedTextAreaState, config: &Mutex<TextAreaConfig>, on: bool) {
     config.lock().unwrap().disabled = on;
     let changed = match state.lock() {

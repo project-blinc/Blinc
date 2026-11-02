@@ -195,7 +195,7 @@ impl Select {
         let placeholder = config
             .placeholder
             .clone()
-            .unwrap_or_else(|| "Select...".to_string());
+            .unwrap_or_else(|| blinc_layout::binding::Reactive::Const("Select...".to_string()));
         let content_wrapper = div().overflow_clip().flex_1().for_each(
             shown,
             |value: &String| value.clone(),
@@ -209,10 +209,12 @@ impl Select {
                             .overflow_clip()
                             .child(text(&opt.label).size(font_size).no_wrap().no_cursor()),
                     },
-                    None => div()
-                        .h_fit()
-                        .overflow_clip()
-                        .child(text(&placeholder).size(font_size).no_wrap().no_cursor()),
+                    None => div().h_fit().overflow_clip().child(
+                        blinc_layout::text::Text::bound(placeholder.clone())
+                            .size(font_size)
+                            .no_wrap()
+                            .no_cursor(),
+                    ),
                 }
             },
         );
@@ -357,7 +359,7 @@ impl ElementBuilder for Select {
 struct SelectConfig {
     value: Signal<String>,
     options: Vec<SelectOption>,
-    placeholder: Option<String>,
+    placeholder: Option<blinc_layout::binding::Reactive<String>>,
     label: Option<Reactive<String>>,
     size: SelectSize,
     disabled: Reactive<bool>,
@@ -441,9 +443,12 @@ impl SelectBuilder {
         self
     }
 
-    /// Set the placeholder text
-    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
-        self.config.placeholder = Some(placeholder.into());
+    /// Set the placeholder text. A signal here replaces the text in place.
+    pub fn placeholder(
+        mut self,
+        placeholder: impl blinc_layout::binding::IntoReactive<String>,
+    ) -> Self {
+        self.config.placeholder = Some(placeholder.into_reactive());
         self
     }
 

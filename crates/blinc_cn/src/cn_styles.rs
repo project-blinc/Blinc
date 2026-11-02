@@ -440,12 +440,12 @@ pub const CN_STYLES: &str = concat!(
 .cn-input-otp-slot:disabled {
     box-shadow: none;
 }
-.cn-input.cn-input--error:not(:disabled),
-.cn-input.cn-input--error:hover:not(:disabled),
-.cn-input.cn-input--error:focus:not(:disabled) {
+.cn-input[data-invalid]:not(:disabled),
+.cn-input[data-invalid]:hover:not(:disabled),
+.cn-input[data-invalid]:focus:not(:disabled) {
     border-color: var(--border-error);
 }
-.cn-input.cn-input--error:focus:not(:disabled) {
+.cn-input[data-invalid]:focus:not(:disabled) {
     outline: 2px solid var(--focus-ring-error);
 }
 .cn-input.cn-input--success:not(:disabled),
@@ -531,12 +531,12 @@ pub const CN_STYLES: &str = concat!(
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
 }
-.cn-textarea.cn-textarea--error:not(:disabled),
-.cn-textarea.cn-textarea--error:hover:not(:disabled),
-.cn-textarea.cn-textarea--error:focus:not(:disabled) {
+.cn-textarea[data-invalid]:not(:disabled),
+.cn-textarea[data-invalid]:hover:not(:disabled),
+.cn-textarea[data-invalid]:focus:not(:disabled) {
     border-color: var(--border-error);
 }
-.cn-textarea.cn-textarea--error:focus:not(:disabled) {
+.cn-textarea[data-invalid]:focus:not(:disabled) {
     outline: 2px solid var(--focus-ring-error);
 }
 .cn-textarea.cn-textarea--success:not(:disabled),

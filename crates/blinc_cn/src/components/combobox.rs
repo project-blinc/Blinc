@@ -214,7 +214,7 @@ impl Combobox {
         let placeholder = config
             .placeholder
             .clone()
-            .unwrap_or_else(|| "Search...".to_string());
+            .unwrap_or_else(|| blinc_layout::binding::Reactive::Const("Search...".to_string()));
         let display_text = computed(move |g: &ReactiveGraph| {
             let current = g.get(value).unwrap_or_default();
             if let Some(opt) = options_for_display.iter().find(|o| o.value == current) {
@@ -227,7 +227,7 @@ impl Combobox {
             if !search.is_empty() && g.get(open).unwrap_or(false) {
                 search
             } else {
-                placeholder.clone()
+                placeholder.read(g).unwrap_or_default()
             }
         });
         // Nothing chosen: the trigger carries `data-placeholder`, and its rule
@@ -427,7 +427,7 @@ impl ElementBuilder for Combobox {
 struct ComboboxConfig {
     value: Signal<String>,
     options: Vec<ComboboxOption>,
-    placeholder: Option<String>,
+    placeholder: Option<blinc_layout::binding::Reactive<String>>,
     label: Option<Reactive<String>>,
     size: ComboboxSize,
     disabled: Reactive<bool>,
@@ -511,9 +511,12 @@ impl ComboboxBuilder {
         self
     }
 
-    /// Set the placeholder text
-    pub fn placeholder(mut self, placeholder: impl Into<String>) -> Self {
-        self.config.placeholder = Some(placeholder.into());
+    /// Set the placeholder text. A signal here replaces the text in place.
+    pub fn placeholder(
+        mut self,
+        placeholder: impl blinc_layout::binding::IntoReactive<String>,
+    ) -> Self {
+        self.config.placeholder = Some(placeholder.into_reactive());
         self
     }
 
@@ -641,7 +644,7 @@ fn build_dropdown_content(
     text_color: blinc_core::Color,
     text_tertiary: blinc_core::Color,
     allow_custom: bool,
-    placeholder: &Option<String>,
+    placeholder: &Option<blinc_layout::binding::Reactive<String>>,
 ) -> Div {
     let theme = ThemeState::get();
     let dropdown_id = key;
@@ -665,7 +668,7 @@ fn build_dropdown_content(
     // Search input at the top
     let search_placeholder = placeholder
         .clone()
-        .unwrap_or_else(|| "Type to search...".to_string());
+        .unwrap_or_else(|| blinc_layout::binding::Reactive::Const("Type to search...".to_string()));
 
     let search_query_for_sync = search_query_state;
 
