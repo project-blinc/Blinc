@@ -61,6 +61,9 @@ pub struct ToastEntry {
     pub on_close: Option<Arc<dyn Fn() + Send + Sync>>,
     pub motion_enter: Option<ElementAnimation>,
     pub motion_exit: Option<ElementAnimation>,
+    /// Enter and exit run by CSS rules instead of `motion_enter` /
+    /// `motion_exit`; see [`ToastBuilder::motion_class`].
+    pub css_motion: Option<super::css_motion::CssMotion>,
 }
 
 impl ToastEntry {
@@ -160,7 +163,10 @@ impl ToastTray {
                 return;
             }
             entry.exiting = true;
-            crate::queue_global_motion_exit_start(entry.motion_stable_key());
+            match &entry.css_motion {
+                Some(css) => css.exit(),
+                None => crate::queue_global_motion_exit_start(entry.motion_stable_key()),
+            }
             if let Some(cb) = &entry.on_close {
                 cb();
             }
@@ -208,7 +214,16 @@ impl ToastTray {
 
         // 2. Reap exited toasts.
         let before = self.toasts.len();
-        self.toasts.retain(|e| !(e.exiting && e.motion_done()));
+        self.toasts.retain_mut(|e| {
+            if !e.exiting {
+                return true;
+            }
+            let done = match e.css_motion.as_mut() {
+                Some(css) => css.exit_done(current_time_ms),
+                None => e.motion_done(),
+            };
+            !done
+        });
         if self.toasts.len() != before {
             self.dirty.store(true, Ordering::Release);
         }
@@ -279,9 +294,11 @@ impl ToastTray {
         let Some(ctx) = BlincContextState::try_get() else {
             return false;
         };
-        self.toasts
-            .iter()
-            .any(|e| ctx.query_motion(&e.motion_stable_key()).is_animating())
+        self.toasts.iter().any(|e| match e.css_motion {
+            // A CSS-run exit is under way until the toast is reaped.
+            Some(_) => e.exiting,
+            None => ctx.query_motion(&e.motion_stable_key()).is_animating(),
+        })
     }
 
     // ----- Render -----
@@ -383,6 +400,16 @@ impl ToastTray {
             };
 
             let content = (toast.content_fn)();
+            if let Some(css) = &toast.css_motion {
+                let positioned = Div::new()
+                    .absolute()
+                    .top(toast_top)
+                    .left(toast_left)
+                    .w(TOAST_WIDTH)
+                    .child(css.element(Div::new().flex_col()).child(content));
+                layer = layer.child(positioned);
+                continue;
+            }
             let mut motion_wrapper = motion_derived(&toast.motion_key).fit_content();
             if let Some(ref enter) = toast.motion_enter {
                 motion_wrapper = motion_wrapper.enter_animation(enter.clone());
@@ -448,6 +475,7 @@ pub struct ToastBuilder {
     motion_key: Option<String>,
     motion_enter: Option<ElementAnimation>,
     motion_exit: Option<ElementAnimation>,
+    motion_class: Option<Arc<str>>,
 }
 
 impl Default for ToastBuilder {
@@ -467,7 +495,17 @@ impl ToastBuilder {
             motion_key: None,
             motion_enter: None,
             motion_exit: None,
+            motion_class: None,
         }
+    }
+
+    /// Run enter and exit by CSS rules: the toast's wrapper carries `class`
+    /// and `data-motion="enter"`, then `"exit"` while it leaves; rules name
+    /// the `@keyframes`, and the toast stays until its exit has played.
+    /// Takes the place of `motion_enter` / `motion_exit`.
+    pub fn motion_class(mut self, class: impl AsRef<str>) -> Self {
+        self.motion_class = Some(blinc_core::intern::intern(class.as_ref()));
+        self
     }
 
     /// Configure the enter animation. Defaults to slide-in from the corner
@@ -617,6 +655,13 @@ impl ToastBuilder {
                 .into()
         });
 
+        let css_motion = self.motion_class.map(|class| {
+            super::css_motion::CssMotion::new(class, format!("blinc-toast-motion-{}", handle.raw()))
+        });
+        let (motion_enter, motion_exit) = match css_motion {
+            Some(_) => (None, None),
+            None => (Some(motion_enter), Some(motion_exit)),
+        };
         let entry = ToastEntry {
             handle,
             motion_key,
@@ -626,8 +671,9 @@ impl ToastBuilder {
             dismiss_on_click: self.dismiss_on_click,
             content_fn: self.content_fn.unwrap_or_else(|| Arc::new(Div::new)),
             on_close: self.on_close,
-            motion_enter: Some(motion_enter),
-            motion_exit: Some(motion_exit),
+            motion_enter,
+            motion_exit,
+            css_motion,
         };
         tray.push(entry)
     }
@@ -664,6 +710,7 @@ mod tests {
             on_close: None,
             motion_enter: None,
             motion_exit: None,
+            css_motion: None,
         }
     }
 

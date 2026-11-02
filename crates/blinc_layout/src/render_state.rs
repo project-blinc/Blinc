@@ -308,6 +308,9 @@ pub struct ActiveCssAnimation {
     pub is_playing: bool,
     /// Current interpolated properties (cached each tick)
     pub current_properties: blinc_animation::KeyframeProperties,
+    /// The `@keyframes` it plays, when a rule named one; a rule naming
+    /// another restarts the node's animation, as CSS does.
+    pub name: Option<String>,
 }
 
 impl ActiveCssAnimation {
@@ -329,6 +332,7 @@ impl ActiveCssAnimation {
             lanes: animations.collect(),
             is_playing: true,
             current_properties: Default::default(),
+            name: None,
         };
         this.current_properties = this.sample();
         this

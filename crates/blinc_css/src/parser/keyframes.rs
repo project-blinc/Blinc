@@ -160,6 +160,26 @@ impl CssKeyframes {
         animation
     }
 
+    /// As [`Self::to_multi_keyframe_animation`], for an element of `size`
+    /// (width, height): a `translate` in percent becomes pixels of it.
+    pub fn to_multi_keyframe_animation_sized(
+        &self,
+        duration_ms: u32,
+        easing: blinc_animation::Easing,
+        size: (f32, f32),
+    ) -> blinc_animation::MultiKeyframeAnimation {
+        let mut animation = blinc_animation::MultiKeyframeAnimation::new(duration_ms);
+        for kf in &self.keyframes {
+            let mut props = Self::style_to_keyframe_properties(&kf.style);
+            if let Some((px, py)) = kf.style.translate_pct {
+                props.translate_x = Some(props.translate_x.unwrap_or(0.0) + px * size.0);
+                props.translate_y = Some(props.translate_y.unwrap_or(0.0) + py * size.1);
+            }
+            animation = animation.keyframe(kf.position, props, easing);
+        }
+        animation
+    }
+
     /// Convert ElementStyle to KeyframeProperties for MultiKeyframeAnimation
     fn style_to_keyframe_properties(style: &ElementStyle) -> blinc_animation::KeyframeProperties {
         use blinc_animation::KeyframeProperties;

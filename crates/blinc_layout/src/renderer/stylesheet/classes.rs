@@ -175,18 +175,24 @@ impl RenderTree {
             let Some(stable) = self.stable_id(node) else {
                 continue;
             };
-            if self
+            let Some(animation) = self.matching_animation(node, &stylesheet) else {
+                continue;
+            };
+            // One the node plays already stays, unless a rule now names
+            // another (a rebuilt node whose attribute changed meanwhile).
+            let playing = self
                 .css_anim_store
                 .lock()
                 .unwrap()
                 .animations
-                .contains_key(&stable)
-            {
-                continue;
+                .get(&stable)
+                .map(|a| a.name.clone());
+            match playing {
+                Some(Some(name)) if name != animation.name => {}
+                Some(_) => continue,
+                None => {}
             }
-            if let Some(animation) = self.matching_animation(node, &stylesheet) {
-                self.start_css_animation_from(node, &animation);
-            }
+            self.start_css_animation_from(node, &animation);
         }
     }
 

@@ -25,6 +25,7 @@
 //! while its motion plays the exit animation. It is NOT an animation FSM —
 //! the motion system already has one and this stack just observes it.
 
+use super::css_motion::CssMotion;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -202,7 +203,14 @@ pub struct OverlayEntry {
     /// `None` when not in the pending-close window.
     pub pending_close_deadline_ms: Option<u64>,
     pub on_close: Option<Arc<dyn Fn(CloseReason) + Send + Sync>>,
+    /// Enter and exit run by CSS rules instead of `motion_enter` /
+    /// `motion_exit`; see [`OverlayBuilder::motion_class`].
+    pub css_motion: Option<super::css_motion::CssMotion>,
 }
+
+/// The class every CSS-motion entry's backdrop carries, beside
+/// `{class}-backdrop`, so one rule can fade them all.
+pub const OVERLAY_BACKDROP_CLASS: &str = "overlay-backdrop";
 
 impl OverlayEntry {
     /// The FSM stable key for this entry's motion. `motion_derived(parent_key)`
@@ -562,8 +570,11 @@ impl OverlayStack {
         if entry.exiting {
             return;
         }
-        let has_exit_motion = entry.motion_exit.is_some();
+        let has_exit_motion = entry.motion_exit.is_some() || entry.css_motion.is_some();
         entry.exiting = true;
+        if let Some(css) = &entry.css_motion {
+            css.exit();
+        }
         entry.pending_close_deadline_ms = None;
         // Trigger the motion exit via the FSM-keyed queue. If the entry has
         // no motion wrapper (motion FSM was never registered for the key),
@@ -744,7 +755,16 @@ impl OverlayStack {
         // 3. Reap exiting entries whose motion has finished. We retain in
         // place so the index-stability of `entries` isn't disturbed mid-frame.
         let before_len = self.entries.len();
-        self.entries.retain(|e| !(e.exiting && e.motion_done()));
+        self.entries.retain_mut(|e| {
+            if !e.exiting {
+                return true;
+            }
+            let done = match e.css_motion.as_mut() {
+                Some(css) => css.exit_done(current_time_ms),
+                None => e.motion_done(),
+            };
+            !done
+        });
         if self.entries.len() != before_len {
             self.dirty.store(true, Ordering::Release);
         }
@@ -775,6 +795,10 @@ impl OverlayStack {
             return false;
         };
         self.entries.iter().any(|e| {
+            // A CSS-run exit is under way until the entry is reaped.
+            if e.css_motion.is_some() {
+                return e.exiting;
+            }
             // MUST query via the FSM-prefixed key — see `motion_stable_key`.
             let state = ctx.query_motion(&e.motion_stable_key());
             state.is_animating()
@@ -933,10 +957,22 @@ impl OverlayStack {
                     .as_ref()
                     .map(|e| e.animation.duration_ms())
                     .unwrap_or(150);
+                if let Some(css) = &entry.css_motion {
+                    let class = format!("{}-backdrop", css.class());
+                    let backdrop_div = backdrop_div.class(OVERLAY_BACKDROP_CLASS).class(class);
+                    layer = layer.child(css.state(backdrop_div));
+                    continue_content(&mut layer, entry, self.viewport);
+                    continue;
+                }
                 let backdrop_motion = motion_derived(&backdrop_key)
                     .enter_animation(AnimationPreset::fade_in(backdrop_enter_ms))
                     .exit_animation(AnimationPreset::fade_out(backdrop_exit_ms));
                 layer = layer.child(backdrop_motion.child(backdrop_div));
+            }
+
+            if entry.css_motion.is_some() {
+                continue_content(&mut layer, entry, self.viewport);
+                continue;
             }
 
             // Structure: positioned wrapper > motion > content_fn().
@@ -982,6 +1018,24 @@ impl OverlayStack {
 
         layer
     }
+}
+
+/// Add a CSS-motion entry's content: positioned wrapper > the motion element
+/// (its class, id and `data-motion`) > `content_fn()`.
+fn continue_content(layer: &mut Div, entry: &OverlayEntry, viewport: (f32, f32)) {
+    let Some(css) = &entry.css_motion else {
+        return;
+    };
+    let mut motion = css.element(Div::new().flex_col());
+    // As `motion()` does: content-sized where the position centres or
+    // anchors the panel by its own size, filling along an edge.
+    motion = match entry.position {
+        OverlayPosition::Edge(_) => motion.w_full().flex_grow(),
+        _ => motion,
+    };
+    let motion = motion.child((entry.content_fn)());
+    let positioned = position_wrapper(motion, &entry.position, entry.size, viewport);
+    *layer = std::mem::take(layer).child(positioned);
 }
 
 /// Wrap a child element in a positioned outer Div according to the entry's
@@ -1132,6 +1186,7 @@ pub struct OverlayBuilder {
     motion_key: Option<String>,
     motion_enter: Option<ElementAnimation>,
     motion_exit: Option<ElementAnimation>,
+    motion_class: Option<Arc<str>>,
 }
 
 impl OverlayBuilder {
@@ -1155,6 +1210,7 @@ impl OverlayBuilder {
             motion_key: None,
             motion_enter: None,
             motion_exit: None,
+            motion_class: None,
         }
     }
 
@@ -1282,6 +1338,19 @@ impl OverlayBuilder {
         self
     }
 
+    /// Run enter and exit by CSS rules: the content's wrapper carries `class`
+    /// and the backdrop `overlay-backdrop` and `{class}-backdrop`, each with
+    /// `data-motion="enter"`,
+    /// then `"exit"` while closing. Rules name the `@keyframes`, e.g.
+    /// `.cn-dialog[data-motion="exit"] { animation: cn-rise-out
+    /// var(--duration-fast) var(--ease-in) forwards }`; the entry stays until
+    /// the exit has played. Takes the place of `motion_enter` /
+    /// `motion_exit`.
+    pub fn motion_class(mut self, class: impl AsRef<str>) -> Self {
+        self.motion_class = Some(blinc_core::intern::intern(class.as_ref()));
+        self
+    }
+
     /// Configure the exit animation. The stack waits for this to complete
     /// before reaping the entry (observed via `query_motion(key).is_exited()`).
     /// `None` means instant eviction.
@@ -1321,6 +1390,9 @@ impl OverlayBuilder {
             exiting: false,
             pending_close_deadline_ms: None,
             on_close: self.on_close,
+            css_motion: self.motion_class.map(|class| {
+                CssMotion::new(class, format!("blinc-overlay-motion-{}", handle.raw()))
+            }),
         };
         let h = stack.push(entry);
         drop(stack);
@@ -1414,6 +1486,7 @@ mod tests {
             exiting: false,
             pending_close_deadline_ms: None,
             on_close: None,
+            css_motion: None,
         }
     }
 

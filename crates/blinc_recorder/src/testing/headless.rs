@@ -288,6 +288,18 @@ impl Headless {
         if blinc_layout::has_animating_statefuls() {
             blinc_layout::check_stateful_animations();
         }
+        // The overlay stack and toast tray run their timers and reap what has
+        // finished leaving, as the window ticks them each frame.
+        {
+            use blinc_layout::overlay_state::{overlay_stack, toast_tray};
+            if let Ok(mut stack) = overlay_stack().lock() {
+                stack.update(self.now_ms);
+            }
+            if let Ok(mut tray) = toast_tray().lock() {
+                tray.update(self.now_ms);
+            }
+        }
+        blinc_layout::widgets::overlay_stack::drain_close_callbacks();
         self.apply_queued_updates();
 
         blinc_layout::widgets::process_pending_input_focus();
@@ -353,6 +365,12 @@ impl Headless {
         store.has_active_animations()
             || store.has_active_transitions()
             || self.ctx.animations.lock().unwrap().has_active_animations()
+            || blinc_layout::overlay_state::overlay_stack()
+                .lock()
+                .is_ok_and(|s| s.has_animating_overlays())
+            || blinc_layout::overlay_state::toast_tray()
+                .lock()
+                .is_ok_and(|t| t.has_animating())
     }
 
     fn drain_queued_css(&mut self) {
@@ -460,6 +478,19 @@ impl Headless {
                         .lock()
                         .ok()
                         .map(|s| s.build_overlay_layer())
+                        .unwrap_or_default()
+                },
+            );
+            use blinc_layout::overlay_state::toast_tray;
+            rebuild_overlay_subtree_if_dirty(
+                tree.element_registry(),
+                blinc_layout::widgets::toast_tray::TOAST_TRAY_LAYER_ID,
+                toast_tray().lock().is_ok_and(|t| t.take_dirty()),
+                || {
+                    toast_tray()
+                        .lock()
+                        .ok()
+                        .map(|t| t.build_tray_layer((w, h)))
                         .unwrap_or_default()
                 },
             );

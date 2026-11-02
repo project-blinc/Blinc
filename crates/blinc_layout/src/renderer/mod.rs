@@ -43,6 +43,7 @@ use crate::visual_animation::{AnimatedRenderBounds, VisualAnimation, VisualAnima
 // are unaffected.
 
 mod animation;
+pub use animation::css::css_animation_playing;
 mod build;
 mod cursor;
 mod events;

@@ -95,6 +95,10 @@ pub(crate) fn parse_transform_with_3d(value: &str, style: &mut ElementStyle) -> 
             if let Transform::Affine2D(ref a) = t {
                 affine = affine.then(a);
             }
+            if let Some((px, py)) = translate_percent(func) {
+                let (x, y) = style.translate_pct.unwrap_or((0.0, 0.0));
+                style.translate_pct = Some((x + px, y + py));
+            }
             has_2d = true;
             parsed_any = true;
         }
@@ -284,6 +288,30 @@ pub(crate) fn parse_scale_values<'a, E: NomParseError<&'a str>>(
     let (input, _) = char(')')(input)?;
     let sy = sy.unwrap_or(sx);
     Ok((input, (sx, sy)))
+}
+
+/// The percentage parts of `translate(x, y)`, `translateX(x)` or
+/// `translateY(y)`, as fractions of the element's size; `None` when there
+/// are none. The length parts are in the transform matrix.
+fn translate_percent(func: &str) -> Option<(f32, f32)> {
+    let (name, args) = func.trim().split_once('(')?;
+    let args = args.trim().strip_suffix(')')?;
+    let pct = |s: &str| {
+        s.trim()
+            .strip_suffix('%')
+            .and_then(|v| v.trim().parse::<f32>().ok())
+            .map(|v| v / 100.0)
+    };
+    let (x, y) = match name.trim().to_ascii_lowercase().as_str() {
+        "translatex" => (pct(args), None),
+        "translatey" => (None, pct(args)),
+        "translate" => {
+            let mut parts = args.split(',');
+            (parts.next().and_then(pct), parts.next().and_then(pct))
+        }
+        _ => return None,
+    };
+    (x.is_some() || y.is_some()).then(|| (x.unwrap_or(0.0), y.unwrap_or(0.0)))
 }
 
 /// Parse translate(x, y), translateX(x), or translateY(y)

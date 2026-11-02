@@ -32,6 +32,18 @@ use crate::tree::LayoutNodeId;
 
 use super::super::RenderTree;
 
+/// The ids of the elements whose CSS animation was playing as of the last
+/// frame.
+static PLAYING_ANIMATIONS: std::sync::LazyLock<std::sync::Mutex<HashSet<String>>> =
+    std::sync::LazyLock::new(Default::default);
+
+/// Whether the element with `id` had a CSS animation playing as of the last
+/// frame: for code that must wait out an animation a rule started, such as
+/// an overlay's exit.
+pub fn css_animation_playing(id: &str) -> bool {
+    PLAYING_ANIMATIONS.lock().unwrap().contains(id)
+}
+
 impl RenderTree {
     pub fn start_css_animation_for_element(&mut self, node_id: LayoutNodeId) -> bool {
         let stylesheet = match &self.stylesheet {
@@ -94,8 +106,17 @@ impl RenderTree {
             return false;
         };
 
-        let mut animation = keyframes
-            .to_multi_keyframe_animation(anim_config.duration_ms, anim_config.timing.to_easing());
+        // A translate in percent is of this element's size.
+        let size = self
+            .layout_tree
+            .get_bounds(node_id, (0.0, 0.0))
+            .map(|b| (b.width, b.height))
+            .unwrap_or_default();
+        let mut animation = keyframes.to_multi_keyframe_animation_sized(
+            anim_config.duration_ms,
+            anim_config.timing.to_easing(),
+            size,
+        );
         let iterations = if anim_config.iteration_count == 0 {
             -1
         } else {
@@ -110,10 +131,13 @@ impl RenderTree {
         }
 
         let stable_id = self.stable_id_or_warn(node_id);
-        self.css_anim_store.lock().unwrap().animations.insert(
-            stable_id,
-            crate::render_state::ActiveCssAnimation::new(animation),
-        );
+        let mut active = crate::render_state::ActiveCssAnimation::new(animation);
+        active.name = Some(anim_config.name.clone());
+        self.css_anim_store
+            .lock()
+            .unwrap()
+            .animations
+            .insert(stable_id, active);
         true
     }
 
@@ -297,7 +321,21 @@ impl RenderTree {
         node: LayoutNodeId,
         props: &blinc_animation::KeyframeProperties,
     ) -> bool {
-        props.is_composite_promotable() && !self.subtree_draws_outside_layer(node)
+        props.is_composite_promotable()
+            && !self.subtree_draws_outside_layer(node)
+            && !self.inside_overlay_root(node)
+    }
+
+    /// Whether `node` is in an overlay root's subtree, which paints in a pass
+    /// of its own that baked layers are not composited into.
+    fn inside_overlay_root(&self, node: LayoutNodeId) -> bool {
+        std::iter::once(node)
+            .chain(self.layout_tree.ancestors(node))
+            .any(|n| {
+                self.render_nodes
+                    .get(&n)
+                    .is_some_and(|r| r.props.is_overlay_root)
+            })
     }
 
     /// [`Self::css_layer_bakeable`] for a transition. A transition's node
@@ -554,6 +592,23 @@ impl RenderTree {
     pub fn apply_all_css_animation_props(&mut self) {
         let written = std::mem::take(&mut self.css_anim_written);
         self.css_anim_written = self.apply_css_driven_props(written, false);
+        self.publish_playing_animations();
+    }
+
+    /// Record which elements with an id have a CSS animation playing, for
+    /// [`css_animation_playing`].
+    fn publish_playing_animations(&self) {
+        let playing: HashSet<String> = {
+            let store = self.css_anim_store.lock().unwrap();
+            store
+                .animations
+                .iter()
+                .filter(|(_, a)| a.is_playing)
+                .filter_map(|(stable, _)| self.stable_to_layout.get(stable).copied())
+                .filter_map(|node| self.element_registry.get_id(node))
+                .collect()
+        };
+        *PLAYING_ANIMATIONS.lock().unwrap() = playing;
     }
 
     /// Write the values of the store's animations (or, with `transitions`,

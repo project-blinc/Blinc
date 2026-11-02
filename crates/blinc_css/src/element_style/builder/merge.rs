@@ -50,6 +50,7 @@ impl ElementStyle {
             scale_y: other.scale_y.or(self.scale_y),
             skew_x: other.skew_x.or(self.skew_x),
             skew_y: other.skew_y.or(self.skew_y),
+            translate_pct: other.translate_pct.or(self.translate_pct),
             transform_origin: other.transform_origin.or(self.transform_origin),
             animation: other.animation.clone().or_else(|| self.animation.clone()),
             transition: other.transition.clone().or_else(|| self.transition.clone()),

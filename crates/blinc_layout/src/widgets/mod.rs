@@ -45,6 +45,7 @@ pub mod blockquote;
 pub mod button;
 pub mod checkbox;
 pub mod code;
+pub mod css_motion;
 pub mod cursor;
 pub mod gesture;
 pub mod hr;

@@ -105,6 +105,10 @@ pub struct ElementStyle {
     pub skew_x: Option<f32>,
     /// Skew Y angle in degrees
     pub skew_y: Option<f32>,
+    /// The part of a `translate` given in percent of the element's own size,
+    /// as fractions (x, y). An animation resolves it against the size of the
+    /// element it plays on.
+    pub translate_pct: Option<(f32, f32)>,
     /// Transform origin as percentages [x%, y%] (default 50%, 50% = center)
     pub transform_origin: Option<[f32; 2]>,
     /// CSS animation configuration (animation: name duration timing delay iteration-count direction fill-mode)
