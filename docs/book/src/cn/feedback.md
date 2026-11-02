@@ -111,7 +111,8 @@ progress(75.0)
 ### Bound to a signal
 
 The value is an `f32`, a `Signal<f32>` or a `Computed<f32>`. A bound
-value moves the bar in place, without a rebuild:
+value moves the bar in place, without a rebuild, easing to each new value
+by the `transition` on `.cn-progress-bar`:
 
 ```rust
 let pct = ctx.use_signal(0.0_f32);
@@ -126,9 +127,19 @@ div()
 
 ### Indeterminate
 
+For work of unknown length, part of the track pulses:
+
 ```rust
-progress(0.0).indeterminate(true)
+progress_indeterminate().w(300.0)
 ```
+
+### Styling
+
+The track is `.cn-progress` (with `data-size` and, when indeterminate,
+`data-indeterminate`) and the bar `.cn-progress-bar`. `--cn-progress-track`
+and `--cn-progress-bar` recolour them; the bar's `flex-grow` transition and
+the `cn-progress-pulse` keyframes are the motion. `.indicator_color(..)`,
+`.track_color(..)` and `.rounded(..)` override the rules for one bar.
 
 ### With Label
 

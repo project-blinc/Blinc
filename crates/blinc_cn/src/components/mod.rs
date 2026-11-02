@@ -112,7 +112,7 @@ pub use number_input::{NumberInput, NumberInputBuilder, number_input};
 pub use number_range_gauge::{NumberRangeGauge, NumberRangeGaugeBuilder, number_range_gauge};
 pub use pagination::{PageValue, Pagination, PaginationBuilder, PaginationSize, pagination};
 pub use popover::{Popover, PopoverAlign, PopoverBuilder, PopoverSide, popover};
-pub use progress::{AnimatedProgress, Progress, ProgressSize, progress, progress_animated};
+pub use progress::{Progress, ProgressSize, progress, progress_indeterminate};
 pub use radio::{RadioGroup, RadioGroupBuilder, RadioLayout, RadioSize, radio_group};
 pub use resizable::{
     ResizableGroup, ResizableGroupBuilder, ResizablePanelBuilder, ResizeDirection, resizable_group,

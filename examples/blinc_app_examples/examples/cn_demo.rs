@@ -4,7 +4,6 @@
 //!
 //! Run with: cargo run -p blinc_app_examples --example cn_demo --features cn
 
-use blinc_animation::SpringConfig;
 use blinc_app::prelude::*;
 use blinc_app::windowed::WindowedApp;
 use blinc_app::windowed::WindowedContext;
@@ -1091,10 +1090,11 @@ fn slider_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
             // The switch disables the slider in place.
             .child(cn::switch(locked).label("Locked"))
             .child(
-                div()
-                    .h_fit()
-                    .w(300.0)
-                    .child(cn::slider(disabled_slider).label("Disabled").disabled(locked)),
+                div().h_fit().w(300.0).child(
+                    cn::slider(disabled_slider)
+                        .label("Disabled")
+                        .disabled(locked),
+                ),
             ),
     )
 }
@@ -2060,19 +2060,9 @@ fn loading_section(_ctx: &WindowedContext) -> impl ElementBuilder + use<> {
 fn progress_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
     const PROGRESS_WIDTH: f32 = 300.0;
 
-    // Create animated progress - start at 0. Critically damped (damping ==
-    // 2*sqrt(stiffness*mass) for stiffness=400, mass=1) so the bar settles
-    // on target without bouncing back over the rest position.
-    let animated_progress = ctx.use_animated_value_for(
-        "animated_progress_v10",
-        0.0,
-        SpringConfig::new(400.0, 40.0, 1.0),
-    );
-
-    let progress_for_ready = animated_progress.clone();
-
-    // Clone for replay button
-    let progress_for_replay = animated_progress.clone();
+    // Bound to the bar, which eases to each value by its CSS transition.
+    let done = ctx.use_signal(0.0f32);
+    let done_for_ready = done;
 
     let section = section_container().child(section_title("Progress")).child(
         div()
@@ -2109,40 +2099,37 @@ fn progress_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
                             .child(cn::label("75% (large)").size(LabelSize::Small)),
                     ),
             )
-            // Animated progress bar - auto-triggers on load
+            // A bound value: the buttons set it and the bar eases there.
             .child(
                 div()
                     .w_fit()
                     .flex_col()
                     .gap(12.0)
-                    .child(cn::label("Animated Progress (auto-animates to 75%)"))
-                    .child(cn::progress_animated(animated_progress).w(PROGRESS_WIDTH))
-                    .child({
-                        cn::button("Replay Animation")
-                            .size(ButtonSize::Large)
-                            .variant(ButtonVariant::Primary)
-                            // Click → snap to 0 (no animation) then re-target
-                            // 75%, so the bar visibly plays the 0→75% animation
-                            // again. set_immediate clears any active spring so
-                            // the snap is truly instant; the subsequent
-                            // set_target builds a fresh spring from 0 → 75%.
-                            .on_click(move |_| {
-                                if let Ok(mut value) = progress_for_replay.lock() {
-                                    value.set_immediate(0.0);
-                                    value.set_target(PROGRESS_WIDTH * 0.75);
-                                }
-                            })
-                    }),
+                    .child(cn::label("Bound Progress"))
+                    .child(cn::progress(done).w(PROGRESS_WIDTH))
+                    .child(
+                        div()
+                            .flex_row()
+                            .gap(8.0)
+                            .child(cn::button("0%").on_click(move |_| done.set(0.0)))
+                            .child(cn::button("40%").on_click(move |_| done.set(40.0)))
+                            .child(cn::button("100%").on_click(move |_| done.set(100.0))),
+                    ),
+            )
+            .child(
+                div()
+                    .w_fit()
+                    .flex_col()
+                    .gap(12.0)
+                    .child(cn::label("Indeterminate"))
+                    .child(cn::progress_indeterminate().w(PROGRESS_WIDTH)),
             )
             .id("progress-section"),
     );
 
-    // Register on_ready callback (fires once with stable ID tracking)
+    // Fills to three quarters once shown.
     ctx.query("progress-section").on_ready(move |_| {
-        if let Ok(mut value) = progress_for_ready.lock() {
-            value.set_target(PROGRESS_WIDTH * 0.75);
-            tracing::info!("on_ready: animation triggered to 75%");
-        }
+        done_for_ready.set(75.0);
     });
 
     section

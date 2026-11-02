@@ -978,25 +978,24 @@ pub const CN_STYLES: &str = concat!(
    Progress
    ============================================================================ */
 
+/* A track with a bar grown to the value, easing to each new one. An
+   indeterminate bar covers part of the track and pulses. */
 .cn-progress {
-    /* Subtle gray track — matches typical HID expectations (Material /
-       Apple HIG / shadcn). `--secondary` was the dark slate Secondary-
-       button tone, which competed visually with the primary fill and
-       made the track read as a second-tier button rather than chrome.
-       `--border` is the same token used for switch tracks and reads as
-       light contained chrome. */
     background: var(--cn-progress-track, var(--border));
     border-radius: var(--radius-full);
-    overflow: hidden;
 }
 .cn-progress-bar {
     background: var(--cn-progress-bar, var(--primary));
     border-radius: var(--radius-full);
-    transition: width var(--duration-slow) var(--ease-nav);
+    transition: flex-grow var(--duration-slow) var(--ease-nav);
 }
-.cn-progress--sm { height: var(--space-1); }
-.cn-progress--md { height: var(--space-2); }
-.cn-progress--lg { height: var(--space-3); }
+@keyframes cn-progress-pulse {
+    from { opacity: 0.35; }
+    to { opacity: 1; }
+}
+.cn-progress[data-indeterminate] > .cn-progress-bar {
+    animation: cn-progress-pulse var(--duration-slowest) var(--ease-in-out) infinite alternate;
+}
 
 /* ============================================================================
    Avatar

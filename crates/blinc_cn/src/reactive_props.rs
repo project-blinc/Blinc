@@ -8,7 +8,7 @@
 //!   forward the `Reactive<T>` straight into the matching
 //!   [`blinc_layout::div::Div`] setter, which registers a property
 //!   binding. The signal patches `RenderProps` in place; no rebuild,
-//!   no `compute_layout`. `cn::progress` takes this path.
+//!   no `compute_layout`.
 //! * **Structural property** (`disabled`, `variant`, `checked`) — the
 //!   value gates branches that pick different colours, borders,
 //!   shadows, or FSM start states, so it can't be a single property

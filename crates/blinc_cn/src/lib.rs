@@ -85,7 +85,7 @@ pub mod cn {
     pub use crate::components::number_range_gauge::number_range_gauge;
     pub use crate::components::pagination::pagination;
     pub use crate::components::popover::{PopoverAlign, PopoverSide, popover};
-    pub use crate::components::progress::{progress, progress_animated};
+    pub use crate::components::progress::{progress, progress_indeterminate};
     pub use crate::components::radio::radio_group;
     pub use crate::components::resizable::{resizable_group, resizable_panel};
     pub use crate::components::select::select;
@@ -199,7 +199,7 @@ pub mod prelude {
         Popover, PopoverAlign, PopoverBuilder, PopoverSide, popover,
     };
     pub use crate::components::progress::{
-        AnimatedProgress, Progress, ProgressSize, progress, progress_animated,
+        Progress, ProgressSize, progress, progress_indeterminate,
     };
     pub use crate::components::radio::{
         RadioGroup, RadioGroupBuilder, RadioLayout, RadioSize, radio_group,
