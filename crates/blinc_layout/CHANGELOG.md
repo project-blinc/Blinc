@@ -5,6 +5,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- A CSS transition or animation of a layout property (`width`, `flex-grow`, `padding` and the rest) ends on its final value. The frame it finished on was never written, so it stopped a step short.
 - CSS animations of opacity or transform inside an overlay show. A subtree of plain elements was baked into a layer to be moved at composite time, which the overlay's own paint pass never did, so a popover, menu or overlay panel without text showed its base values for the whole animation.
 - An element whose rule names a different `@keyframes` after a rebuild starts that animation, as CSS restarts an animation whose name changes; one still playing the same animation keeps it.
 - A table cell (`widgets::table::TableCell`) reports its size, classes, id, handlers and refs to the renderer. They were set on its inner element but never read, so `.w(..)` and `.class(..)` on a cell, and rules for its class, had no effect.
@@ -17,6 +18,7 @@ All notable changes to `blinc_layout` will be documented in this file.
 ### Added
 - A CSS `animation` set by a rule keyed on more than a single class (an attribute such as `.grid[data-enter="next"]`, a compound, a descendant) plays. It starts when an element is built matching the rule, and when a bound attribute or class makes a different animation the one that applies; when none applies any more, the animation stops. Only single-class rules started before.
 - Scroll gestures: `RenderTree::on_scroll_gesture(ScrollGesturePhase)` follows the platform's phases. A SCROLL carries `EventContext::scroll_gesture`, a number that changes with each touch, and `scroll_momentum`, whether it is momentum after the fingers lifted. A gesture taken by a scroll handler with no physics of its own stays with that handler until it ends, wherever the pointer goes; scroll containers still take what is under the pointer.
+- A layout property bound to a signal (`.w(..)`, `.h(..)`, `.flex_grow_value(..)` and the rest) eases to each new value by the `transition` the element's rules give it, as a change of rule does.
 - `VisualAnimationConfig::shared()`: an element rebuilt under another parent with the same key moves from where the last one was. It plays only when the key lands on another element; scrolling, or an ancestor moving, carries it along.
 - Overlays and toasts can enter and leave by CSS rules: `OverlayBuilder::motion_class(class)` and `ToastBuilder::motion_class(class)` put the content in a wrapper of that class with `data-motion="enter"`, then `"exit"` while it closes, and keep it until its exit animation has played (`widgets::css_motion::CssMotion`). An overlay's backdrop carries `overlay-backdrop` and `{class}-backdrop`. `css_animation_playing(id)` says whether an element's CSS animation is playing.
 - A `translate` in a `@keyframes` rule can be a percentage of the element's own size, `translateX(100%)`, resolved when the animation starts on it.

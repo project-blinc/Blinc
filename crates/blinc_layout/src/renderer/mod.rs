@@ -865,6 +865,9 @@ pub struct RenderTree {
     css_anim_written: HashSet<crate::tree::StableNodeId>,
     /// The same for CSS transitions.
     css_trans_written: HashSet<crate::tree::StableNodeId>,
+    /// Sources whose layout values were written last frame, so one that
+    /// stops has its final value written once.
+    css_layout_written: HashSet<crate::tree::StableNodeId>,
     /// Subtree-as-texture candidates — Phase 4.1 of the unified property
     /// channel ([[project-reactive-architecture-v2]]).
     ///
@@ -1146,6 +1149,7 @@ impl RenderTree {
             composite_promotion: RefCell::new(std::collections::HashSet::new()),
             css_anim_written: HashSet::new(),
             css_trans_written: HashSet::new(),
+            css_layout_written: HashSet::new(),
             subtree_texture_candidates: RefCell::new(std::collections::HashSet::new()),
             motion_subtree_bake_registry: RefCell::new(
                 crate::motion_texture_cache::MotionSubtreeBakeRegistry::empty(),
@@ -3138,10 +3142,7 @@ impl RenderTree {
                 self.update_render_props(update.node_id, |p| write(p));
             }
             if let Some(write) = update.layout_write {
-                if let Some(mut style) = self.layout_tree.get_style(update.node_id) {
-                    write(&mut style);
-                    self.layout_tree.set_style(update.node_id, style);
-                }
+                self.eased_layout_write(update.node_id, write);
             }
             if let Some((class, on)) = update.class_toggle {
                 self.set_dynamic_class(update.node_id, class, on);

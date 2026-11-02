@@ -196,6 +196,34 @@ impl RenderTree {
         }
     }
 
+    /// Apply a bound write to a node's layout style, easing what it changes
+    /// by the `transition` the node's rules give it, as a change of rule is.
+    pub(crate) fn eased_layout_write(
+        &mut self,
+        node: LayoutNodeId,
+        write: crate::stateful::TaffyStyleWrite,
+    ) {
+        let apply = |tree: &mut Self| {
+            if let Some(mut style) = tree.layout_tree.get_style(node) {
+                write(&mut style);
+                tree.layout_tree.set_style(node, style);
+            }
+        };
+        let spec = self
+            .stylesheet
+            .clone()
+            .and_then(|sheet| self.matching_transition(node, &sheet));
+        let Some(spec) = spec else {
+            apply(self);
+            return;
+        };
+        let before = self.snapshot_before_keyframe_properties(node);
+        apply(self);
+        if let (Some(before), Some(after)) = (before, self.snapshot_keyframe_properties(node)) {
+            self.detect_and_start_transitions(node, &before, &after, &spec);
+        }
+    }
+
     /// Run `change` on a node, and start the transitions its `transition`
     /// asks for between what it was and what it is, and the animation the
     /// change gives it.

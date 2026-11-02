@@ -548,6 +548,7 @@ Behaves as it does on the web:
 - The last entry that names a property governs it, so `all 100ms, opacity 400ms` gives `opacity` 400ms.
 - A shorthand or per-side name covers what it animates: `background-color`, `border-top-color`, `padding-left`, `translate`, `inset`, `outline`.
 - A transition that is running keeps going when a different property changes.
+- A layout property bound to a signal (`.w(..)`, `.h(..)`, `.flex_grow_value(..)`) eases to each new value by the element's `transition`, as a change of rule does. Without one it lands at once.
 
 ### Animatable Properties
 

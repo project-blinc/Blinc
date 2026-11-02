@@ -692,28 +692,26 @@ impl RenderTree {
         // potentially triggers `compute_layout()` whenever `changed`
         // flips true, which would happen every frame for any settled
         // size / padding / margin / inset value reapplied on top of
-        // the base style. Filter on `is_playing` to skip them.
+        // the base style. Filter on `is_playing` to skip them; one written
+        // last frame that has just stopped is written once more, with its
+        // final value.
+        let written = std::mem::take(&mut self.css_layout_written);
         let anim_nodes: Vec<(
             crate::tree::StableNodeId,
             blinc_animation::KeyframeProperties,
+            bool,
         )> = {
             let store = self.css_anim_store.lock().unwrap();
             store
                 .animations
                 .iter()
-                .filter(|(_, anim)| anim.is_playing)
-                .map(|(sid, anim)| (*sid, anim.current_properties.clone()))
-                .chain(
-                    store
-                        .transitions
-                        .iter()
-                        .filter(|(_, anim)| anim.is_playing)
-                        .map(|(sid, anim)| (*sid, anim.current_properties.clone())),
-                )
+                .chain(store.transitions.iter())
+                .filter(|(sid, anim)| anim.is_playing || written.contains(sid))
+                .map(|(sid, anim)| (*sid, anim.current_properties.clone(), anim.is_playing))
                 .collect()
         };
 
-        for (stable_id, anim_props) in anim_nodes {
+        for (stable_id, anim_props, playing) in anim_nodes {
             let Some(node_id) = self.layout_id(stable_id) else {
                 continue;
             };
@@ -735,6 +733,9 @@ impl RenderTree {
 
             if !has_layout_props {
                 continue;
+            }
+            if playing {
+                self.css_layout_written.insert(stable_id);
             }
 
             if let Some(mut style) = self.layout_tree.get_style(node_id) {
@@ -964,7 +965,7 @@ impl RenderTree {
         check_transition!(max_width, "max-width");
         check_transition!(min_height, "min-height");
         check_transition!(max_height, "max-height");
-        check_transition!(flex_grow, "flex-grow");
+        check_transition!(flex_grow, "flex-grow", default 0.0);
         check_transition!(flex_shrink, "flex-shrink");
         check_transition!(inset_top, "top");
         check_transition!(inset_right, "right");
