@@ -1008,6 +1008,9 @@ pub struct RenderTree {
     /// Stable key to node ID mapping for visual animations
     /// Updated each frame when nodes register; key→node ensures we always have current node
     visual_animation_key_to_node: HashMap<String, LayoutNodeId>,
+    /// The node each shared key's bounds were last read from, to tell a key
+    /// that moved to another element from one whose element moved.
+    visual_animation_last_node: HashMap<String, LayoutNodeId>,
     /// Active visual animations (by stable key)
     /// These track visual offsets from layout, never modify taffy
     visual_animations: HashMap<String, VisualAnimation>,
@@ -1176,6 +1179,7 @@ impl RenderTree {
             // Visual animation system (FLIP-style)
             visual_animation_configs: HashMap::new(),
             visual_animation_key_to_node: HashMap::new(),
+            visual_animation_last_node: HashMap::new(),
             visual_animations: HashMap::new(),
             previous_visual_bounds: HashMap::new(),
             animated_render_bounds: HashMap::new(),

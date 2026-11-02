@@ -222,17 +222,24 @@ impl RenderTree {
                 continue;
             };
 
-            // Get current layout bounds from taffy: in the window for a
-            // shared key, which may move between parents. The offset played
-            // back is a difference, the same in either.
+            // Get current layout bounds from taffy: from the root, scroll
+            // aside, for a shared key, which may move between parents. The
+            // offset played back is a difference, the same in either. A
+            // shared key plays only when it lands on another element; its
+            // element carried along by an ancestor moving does not.
             let layout_bounds = if config.shared {
-                self.get_absolute_bounds(node_id)
+                self.layout_tree.get_absolute_bounds(node_id)
             } else {
                 self.layout_tree.get_bounds(node_id, (0.0, 0.0))
             };
             let Some(layout_bounds) = layout_bounds else {
                 continue;
             };
+            let may_play = !config.shared
+                || self
+                    .visual_animation_last_node
+                    .insert(key.clone(), node_id)
+                    .is_some_and(|last| last != node_id);
 
             // Get previous visual bounds (what was rendered last frame)
             let prev_visual = self.previous_visual_bounds.get(key).copied();
@@ -240,7 +247,7 @@ impl RenderTree {
             // Check if we have an existing animation
             if let Some(existing_anim) = self.visual_animations.get_mut(key) {
                 // Animation in progress - update target if layout changed
-                if (existing_anim.to_bounds.width - layout_bounds.width).abs() > 0.5
+                if may_play && (existing_anim.to_bounds.width - layout_bounds.width).abs() > 0.5
                     || (existing_anim.to_bounds.height - layout_bounds.height).abs() > 0.5
                     || (existing_anim.to_bounds.x - layout_bounds.x).abs() > 0.5
                     || (existing_anim.to_bounds.y - layout_bounds.y).abs() > 0.5
@@ -263,7 +270,7 @@ impl RenderTree {
                     || (prev.x - layout_bounds.x).abs() > config.threshold
                     || (prev.y - layout_bounds.y).abs() > config.threshold;
 
-                if bounds_changed {
+                if bounds_changed && may_play {
                     // Create new FLIP animation: from prev visual, to current layout
                     if let Some(anim) = VisualAnimation::from_bounds_change(
                         key.clone(),
