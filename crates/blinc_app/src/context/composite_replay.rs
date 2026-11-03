@@ -112,6 +112,10 @@ impl RenderContext {
 
             // Restore the captured ancestor scissor and rounded clip radius for the blit.
             let blit_clip = job.ambient_clip;
+            // Ancestor clips that do not overlap hide the whole layer.
+            if blit_clip.is_some_and(|(aabb, _)| aabb[2] <= 0.0 || aabb[3] <= 0.0) {
+                continue;
+            }
 
             // Use the allocated texture extent for source UVs, including any pool padding.
             self.renderer.blit_tight_texture_to_target(
@@ -299,6 +303,10 @@ impl RenderContext {
 
             // Apply the captured ancestor scissor and rounded outline.
             let blit_clip = job.ambient_clip;
+            // Ancestor clips that do not overlap hide the whole layer.
+            if blit_clip.is_some_and(|(aabb, _)| aabb[2] <= 0.0 || aabb[3] <= 0.0) {
+                continue;
+            }
 
             // Use the allocated texture extent for source UVs, including pool padding.
             self.renderer.blit_tight_texture_to_target(

@@ -636,7 +636,8 @@ impl<'a> GpuPaintContext<'a> {
     /// switch thumb inside a rounded pill) gets its corners squared
     /// off by an AABB scissor.
     ///
-    /// Returns `(aabb_xywh, corner_radius_tl_tr_br_bl)`. The radius
+    /// Returns `(aabb_xywh, corner_radius_tl_tr_br_bl)`; clips that do not overlap give a
+    /// zero-size AABB, which hides everything. The radius
     /// is `[0; 4]` when no rounded-rect clip is present in the
     /// ancestor chain (plain rects, polygons, no clip) — semantically
     /// "square corners," which the blit shader handles as a normal
@@ -693,8 +694,13 @@ impl<'a> GpuPaintContext<'a> {
             max_y = max_y.min(y1);
             any = true;
         }
-        if !any || max_x <= min_x || max_y <= min_y {
+        if !any {
             return None;
+        }
+        // Clips that do not overlap leave nothing visible: a zero-size rect, which callers skip,
+        // and not `None`, which means no clip and would draw everything.
+        if max_x <= min_x || max_y <= min_y {
+            return Some(([min_x, min_y, 0.0, 0.0], [0.0; 4]));
         }
         let aabb = [min_x, min_y, max_x - min_x, max_y - min_y];
         // If a rounded-rect exists in the ancestor chain AND the

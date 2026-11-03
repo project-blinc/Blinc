@@ -806,6 +806,17 @@ impl Headless {
 
     /// Paint the current frame and read it back.
     pub fn snapshot(&mut self) -> Result<CapturedFrame> {
+        self.snapshot_with(false)
+    }
+
+    /// Paint the current frame the way a window paints a frame in which only animated values
+    /// changed: patching the batch of the last full paint instead of walking the tree. The first
+    /// frame after a mount or rebuild is a full paint whatever is asked, as in a window.
+    pub fn snapshot_fast(&mut self) -> Result<CapturedFrame> {
+        self.snapshot_with(true)
+    }
+
+    fn snapshot_with(&mut self, try_fast_paint: bool) -> Result<CapturedFrame> {
         self.frame(0);
         let tree = self.tree.as_ref().expect("nothing is mounted");
         self.app.render_tree_with_motion_opt(
@@ -815,7 +826,7 @@ impl Headless {
             Some(&self.texture),
             self.width,
             self.height,
-            false,
+            try_fast_paint,
         )?;
         let rgba = self
             .app

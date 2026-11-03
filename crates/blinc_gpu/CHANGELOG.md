@@ -14,6 +14,7 @@ All notable changes to `blinc_gpu` will be documented in this file.
 - `SdfBuilder::line(from, to, width)` draws a capsule, a segment with round ends, as one SDF primitive (a rotated rounded rect), so it is antialiased exactly on any target, multisampled or not. It was a stub that drew nothing.
 
 ### Fixed
+- `GpuPaintContext::ambient_clip_rounded` returns a zero-size clip when the ancestor clips do not overlap; it returned `None`, which means no clip.
 - `render_flow` takes the element's visible clip. A flow shader is scissored to its bounds within the target and within that clip, so it stops at a scroll container or clip an ancestor sets. Its viewport is the whole element, so a flow partly off the target or clipped keeps its proportions; it was squeezed into the visible part.
 - Retained nested glass samples enclosing prior paint through owned foreground bakes while independent first-level panels keep the prepared frame backdrop. `GroupGlass::nested` records the CPU sampling scope; GPU layouts and shaders are unchanged.
 - Glass inside background isolation samples prior paint from pooled snapshots, including inherited translucent paint, images and GPU output. Background/backdrop dispatch shares the bake; ordinary foreground glass retains its prepared-backdrop path.
