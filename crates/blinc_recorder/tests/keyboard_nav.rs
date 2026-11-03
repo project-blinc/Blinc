@@ -245,3 +245,28 @@ fn arrows_move_a_slider_focused_by_tab() {
     ui.key(39);
     assert_eq!(value.get(), 45.0, "Tab moved focus away");
 }
+
+#[test]
+fn tab_stays_inside_an_open_dialog() {
+    let Some(mut ui) = session() else { return };
+    let (a, b) = counter();
+    mount_two_buttons(&mut ui, &a, &b);
+    let outside = ui.tree().tab_stops();
+    blinc_cn::dialog()
+        .title("Sure?")
+        .confirm_text("Yes")
+        .cancel_text("No")
+        .show();
+    ui.settle();
+    let stops = ui.tree().tab_stops();
+    assert!(
+        stops.iter().all(|s| !outside.contains(s)),
+        "only the dialog's stops remain"
+    );
+    assert!(stops.len() >= 2);
+    for _ in 0..(stops.len() * 2) {
+        ui.key(TAB);
+        let focused = ui.focused().expect("focused");
+        assert!(stops.contains(&focused), "Tab left the dialog");
+    }
+}

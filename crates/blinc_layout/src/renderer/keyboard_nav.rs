@@ -53,6 +53,27 @@ impl RenderTree {
             }
             stack.extend(self.layout_tree.children(node).into_iter().rev());
         }
+        // While an overlay holds tab stops (a dialog, a sheet), Tab stays in it.
+        let layers: Vec<LayoutNodeId> = [
+            crate::widgets::overlay::OVERLAY_LAYER_ID,
+            crate::widgets::overlay_stack::OVERLAY_STACK_LAYER_ID,
+        ]
+        .into_iter()
+        .filter_map(|id| self.query_by_id(id))
+        .collect();
+        if !layers.is_empty() {
+            let inside = |n: LayoutNodeId| {
+                self.layout_tree
+                    .ancestors(n)
+                    .iter()
+                    .any(|a| layers.contains(a))
+            };
+            let kept: Vec<LayoutNodeId> = stops.iter().copied().filter(|n| inside(*n)).collect();
+            if !kept.is_empty() {
+                before = stops[..before].iter().filter(|n| inside(**n)).count();
+                stops = kept;
+            }
+        }
         (stops, before)
     }
 
