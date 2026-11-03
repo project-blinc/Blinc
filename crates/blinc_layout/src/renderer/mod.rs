@@ -153,6 +153,10 @@ pub struct AmbientPaintState {
     pub clip_aabb: Option<[f32; 4]>,
     /// Z-layer in effect at paint time.
     pub z_layer: u32,
+    /// Whether the region sits inside an `is_overlay_root` subtree (popover, dialog, toast).
+    /// Promoted layers of the main tree composite below the overlay's content and those of an
+    /// overlay subtree above it.
+    pub in_overlay_subtree: bool,
 }
 
 /// Routing payload identifying what dynamic-region kind a record

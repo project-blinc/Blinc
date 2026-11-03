@@ -1710,6 +1710,7 @@ impl RenderTree {
                                     opacity: saved_opacity,
                                     clip_aabb: region_clip_aabb,
                                     z_layer: saved_z_layer,
+                                    in_overlay_subtree: nested_overlay,
                                 },
                                 kind: super::super::DynamicKind::Canvas {
                                     render_fn: render_fn.clone(),
@@ -2332,6 +2333,7 @@ impl RenderTree {
                                 opacity: amb_opacity,
                                 clip_aabb: amb_clip,
                                 z_layer: amb_z,
+                                in_overlay_subtree: ctx.in_overlay_subtree(),
                             },
                             kind,
                             visit_seq,
@@ -2492,6 +2494,7 @@ impl RenderTree {
                             opacity: ctx.current_opacity(),
                             clip_aabb: ctx.current_clip_aabb(),
                             z_layer: ctx.z_layer(),
+                            in_overlay_subtree: ctx.in_overlay_subtree(),
                         };
                         let visit_seq = self.dynamic_regions.borrow().len() as u32;
                         self.record_dynamic_region(
@@ -2531,6 +2534,7 @@ impl RenderTree {
                 opacity: ctx.current_opacity(),
                 clip_aabb: ctx.current_clip_aabb(),
                 z_layer: ctx.z_layer(),
+                in_overlay_subtree: ctx.in_overlay_subtree(),
             };
             let visit_seq = self.dynamic_regions.borrow().len() as u32;
             self.record_dynamic_region(

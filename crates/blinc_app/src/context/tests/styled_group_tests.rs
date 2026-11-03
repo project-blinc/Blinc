@@ -269,6 +269,7 @@ fn styled_group_capability_and_unsupported_owners_preserve_fallback() {
                 opacity: 1.0,
                 clip_aabb: None,
                 z_layer: 0,
+                in_overlay_subtree: false,
             },
             kind: DynamicKind::MotionSubtree,
         };

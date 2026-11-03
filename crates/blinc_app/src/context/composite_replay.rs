@@ -5,6 +5,21 @@ use super::{
     cached_text, composite_scratch, text_clip, to_gpu_generic_font,
 };
 
+/// Which promoted layers a composite step draws. Layers of the main tree composite below the
+/// overlay content the dynamic batch holds (a toast, a popover), and layers inside an overlay
+/// subtree above it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum LayerScope {
+    Main,
+    Overlay,
+}
+
+impl LayerScope {
+    fn includes(self, in_overlay_subtree: bool) -> bool {
+        (self == Self::Overlay) == in_overlay_subtree
+    }
+}
+
 impl RenderContext {
     /// Fingerprint intrinsic subtree content and group operations for bake reuse.
     pub(super) fn hash_composite_scratch(batch: &blinc_gpu::primitives::PrimitiveBatch) -> u64 {
@@ -16,6 +31,7 @@ impl RenderContext {
         &mut self,
         tree: &blinc_layout::RenderTree,
         target_view: &wgpu::TextureView,
+        scope: LayerScope,
     ) {
         use slotmap::Key as _;
 
@@ -34,6 +50,7 @@ impl RenderContext {
             let regions = tree.dynamic_regions();
             regions
                 .iter()
+                .filter(|(_, region)| scope.includes(region.ambient.in_overlay_subtree))
                 .filter_map(|(node, region)| match region.kind {
                     blinc_layout::renderer::DynamicKind::CssAnimated {
                         natural_size,
@@ -225,6 +242,7 @@ impl RenderContext {
         &mut self,
         tree: &blinc_layout::RenderTree,
         target_view: &wgpu::TextureView,
+        scope: LayerScope,
     ) {
         use slotmap::Key as _;
 
@@ -240,6 +258,7 @@ impl RenderContext {
             let regions = tree.dynamic_regions();
             regions
                 .iter()
+                .filter(|(_, region)| scope.includes(region.ambient.in_overlay_subtree))
                 .filter_map(|(node, region)| match region.kind {
                     blinc_layout::renderer::DynamicKind::MotionSubtreeTexture {
                         natural_size,

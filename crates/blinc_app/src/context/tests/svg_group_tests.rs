@@ -321,6 +321,7 @@ fn svg_group_capabilities_and_unsupported_boundaries_keep_fallback() {
                 opacity: 1.0,
                 clip_aabb: None,
                 z_layer: 0,
+                in_overlay_subtree: false,
             },
             kind: DynamicKind::MotionSubtree,
         };

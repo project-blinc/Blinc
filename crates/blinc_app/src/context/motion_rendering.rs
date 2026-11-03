@@ -1,4 +1,5 @@
 //! Coordinate collection and ordered dispatch with optional entry/exit animation state.
+use super::composite_replay::LayerScope;
 use super::frame_dispatch::FrameContent;
 use super::frame_text::PreparedFrameText;
 use super::{
@@ -447,8 +448,11 @@ impl RenderContext {
         self.renderer.poll();
 
         // Draw the dynamic owner after static content. The outer compositor owns this
-        // dispatch during inner cache paints.
+        // dispatch during inner cache paints. Layers of the main tree sit below the overlay
+        // content the dynamic batch holds.
         if !self.in_compositor_inner_call {
+            self.composite_css_layers_overlay(tree, target, LayerScope::Main);
+            self.composite_motion_layers_overlay(tree, target, LayerScope::Main);
             if let Some(ref dynamic_batch) = self.cached_dynamic_batch {
                 if !dynamic_batch.primitives.is_empty()
                     || dynamic_batch.has_paths()
@@ -473,9 +477,9 @@ impl RenderContext {
 
         // Draw promoted backgrounds before separately dispatched motion text and SVG.
         if !self.in_compositor_inner_call {
-            self.composite_css_layers_overlay(tree, target);
+            self.composite_css_layers_overlay(tree, target, LayerScope::Overlay);
             // Replay promoted motion textures.
-            self.composite_motion_layers_overlay(tree, target);
+            self.composite_motion_layers_overlay(tree, target, LayerScope::Overlay);
         }
 
         // Dispatch captured mesh output after 2D content, using each mesh's camera,

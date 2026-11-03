@@ -8,6 +8,7 @@ All notable changes to `blinc_app` will be documented in this file.
 - Flow shaders are drawn by canvases (`Canvas::flow`, `DrawContext::draw_shader`) as canvas GPU passes, and no longer collected from elements. The element path, its caches and `FlowElement` are removed.
 
 ### Fixed
+- A CSS-animated element under an overlay is drawn below it. Promoted layers (a spinner's rotating arc, a pulsing bar) were composited after the dynamic batch that holds a toast or popover, so they drew over it; layers of the main tree now composite before the batch and those inside an overlay subtree after it. Their text and SVG still draw after it.
 - A CSS-animated element scrolled wholly out of its ancestors' clips is hidden. Its composited layer was blitted with no clip when the clips left nothing visible, so an indeterminate progress bar scrolled under a fixed header drew over the header. Ancestor clips that do not overlap now give an empty clip, and the layer is skipped.
 - Styled text (`RichText`) without a colour of its own takes the CSS colour it inherits. It took only a colour set on its own node, so text under a coloured container drew in the element's default.
 - A bound value a scroll or drag handler writes is drawn at once. The window drew after input only when something called `request_redraw()` or queued a rebuild, so a signal written from a scroll handler waited for an unrelated frame, such as the pointer leaving and re-entering.

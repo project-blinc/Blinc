@@ -1,3 +1,4 @@
+use super::composite_replay::LayerScope;
 use super::*;
 use crate::app::{BlincApp, BlincConfig};
 use crate::tests::{create_test_texture, read_rendered_pixels};
@@ -224,7 +225,7 @@ fn composite_layers_promoted_walker_bakes_base_groups_and_blits_live_opacity_onc
         context
             .renderer
             .render_with_clear(&view, &PrimitiveBatch::new(), [0.0, 0.0, 1.0, 1.0]);
-        context.composite_motion_layers_overlay(&tree, &view);
+        context.composite_motion_layers_overlay(&tree, &view, LayerScope::Main);
         let page = read_rendered_pixels(context.device(), context.queue(), &texture, 160, 120);
         let alpha = value * 0.5;
         pixel(
@@ -392,7 +393,7 @@ fn composite_layers_css_promoted_root_opacity_stays_on_live_blit() {
         context
             .renderer
             .render_with_clear(&view, &PrimitiveBatch::new(), [0.0, 0.0, 1.0, 1.0]);
-        context.composite_css_layers_overlay(&tree, &view);
+        context.composite_css_layers_overlay(&tree, &view, LayerScope::Main);
         let page = read_rendered_pixels(context.device(), context.queue(), &texture, 160, 120);
         let alpha = value * 0.5;
         pixel(
@@ -549,7 +550,7 @@ fn composite_layers_promoted_region_preserves_nested_blur_halo() {
     context
         .renderer
         .render_with_clear(&view, &PrimitiveBatch::new(), [0.0, 0.0, 1.0, 1.0]);
-    context.composite_css_layers_overlay(&tree, &view);
+    context.composite_css_layers_overlay(&tree, &view, LayerScope::Main);
     let page = read_rendered_pixels(context.device(), context.queue(), &texture, 160, 120);
     let halo = page.get_pixel(38, 55).0;
     assert!(halo[0] > 0 && halo[2] < 255, "blur halo cropped: {halo:?}");

@@ -332,6 +332,7 @@ fn grouped_text_capability_and_unsupported_boundaries_keep_collection_fallback()
                     opacity: 1.0,
                     clip_aabb: None,
                     z_layer: 0,
+                    in_overlay_subtree: false,
                 },
                 kind: DynamicKind::MotionSubtree,
             };
