@@ -143,8 +143,18 @@ impl Golden {
         match std::env::var("BLINC_SNAPSHOT").as_deref() {
             Ok("off") => true,
             Ok("bless") => false,
-            _ => !self.dir.is_dir(),
+            _ => !self.has_goldens(),
         }
+    }
+
+    /// Whether any golden image is recorded for this platform. The `failed/` directory beside
+    /// them is not one: a failing run writes it, which must not make parallel tests expect goldens.
+    fn has_goldens(&self) -> bool {
+        std::fs::read_dir(&self.dir).is_ok_and(|entries| {
+            entries
+                .flatten()
+                .any(|entry| entry.path().extension().is_some_and(|ext| ext == "png"))
+        })
     }
 
     /// Channel difference allowed per pixel (default 2).
@@ -171,10 +181,14 @@ impl Golden {
     }
 
     /// Compare `frame` with the golden `name`, or write it when
-    /// `BLINC_SNAPSHOT=bless`. A missing golden fails. With
+    /// `BLINC_SNAPSHOT=bless`; nothing is compared when [`Self::skipped`]. Once goldens are
+    /// recorded for the platform, a missing one fails. With
     /// `BLINC_SNAPSHOT=report` a difference is logged and its images written,
     /// and the test goes on, to see every change in one run.
     pub fn check(&self, name: &str, frame: &CapturedFrame) {
+        if self.skipped() {
+            return;
+        }
         let path = self.path(name);
         if std::env::var("BLINC_SNAPSHOT").is_ok_and(|v| v == "bless") {
             Self::save(frame, &path);

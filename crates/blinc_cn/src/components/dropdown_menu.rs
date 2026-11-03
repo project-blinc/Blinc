@@ -966,9 +966,18 @@ mod tests {
         });
     }
 
+    /// Key events reach every menu built in the process, so the tests that send them run one at a
+    /// time.
+    fn serial() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     /// A menu of A, a separator, a disabled B and C, with the keys sent to it.
     #[allow(clippy::type_complexity)]
-    fn keyed_menu() -> (
+    fn keyed_menu(
+        id: &str,
+    ) -> (
         blinc_layout::renderer::RenderTree,
         Signal<Option<usize>>,
         Arc<std::sync::Mutex<Vec<&'static str>>>,
@@ -985,14 +994,14 @@ mod tests {
             ContextMenuItem::new("B").on_click(record("B")).disabled(),
             ContextMenuItem::new("C").on_click(record("C")),
         ];
-        let chain: Signal<Vec<String>> =
-            BlincContextState::get().use_signal_keyed("keyed_menu_chain", Vec::<String>::new);
+        let chain: Signal<Vec<String>> = BlincContextState::get()
+            .use_signal_keyed(&format!("keyed_menu_chain_{id}"), Vec::<String>::new);
         let menu = build_dropdown_menu_div(
             &items,
             160.0,
             OverlayHandle::from_raw(u64::MAX),
-            "keyed-menu",
-            "keyed-menu-key",
+            id,
+            &format!("{id}-key"),
             &chain,
             4.0,
             14.0,
@@ -1000,7 +1009,7 @@ mod tests {
         );
         let tree = blinc_layout::renderer::RenderTree::from_element(&menu);
         let active = BlincContextState::get()
-            .use_signal_keyed("dropdown_active_keyed-menu", || None::<usize>);
+            .use_signal_keyed(&format!("dropdown_active_{id}"), || None::<usize>);
         (tree, active, fired)
     }
 
@@ -1017,7 +1026,8 @@ mod tests {
 
     #[test]
     fn arrows_walk_the_enabled_rows_and_wrap() {
-        let (mut tree, active, _) = keyed_menu();
+        let _serial = serial();
+        let (mut tree, active, _) = keyed_menu("keyed-menu-arrows");
         assert_eq!(
             active.get(),
             None,
@@ -1042,14 +1052,16 @@ mod tests {
 
     #[test]
     fn up_from_nothing_is_the_last_row() {
-        let (mut tree, active, _) = keyed_menu();
+        let _serial = serial();
+        let (mut tree, active, _) = keyed_menu("keyed-menu-up");
         press(&mut tree, 38);
         assert_eq!(active.get(), Some(3));
     }
 
     #[test]
     fn enter_and_space_activate_the_active_row_only() {
-        let (mut tree, active, fired) = keyed_menu();
+        let _serial = serial();
+        let (mut tree, active, fired) = keyed_menu("keyed-menu-enter");
         press(&mut tree, 13);
         assert!(
             fired.lock().unwrap().is_empty(),

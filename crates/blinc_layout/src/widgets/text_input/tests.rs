@@ -239,6 +239,13 @@ fn a_placeholder_rule_does_not_colour_the_field_itself() {
     assert_eq!(cfg.text_color, TextInputConfig::default().text_color);
 }
 
+/// Focus is process-wide and `escape_in` blurs every field, so the tests that read focus back run
+/// one at a time.
+fn focus_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 fn escape_in(input_type: InputType, value: &str) -> SharedTextInputData {
     ensure_theme_initialized();
     blur_all_text_inputs();
@@ -266,6 +273,7 @@ fn escape_in(input_type: InputType, value: &str) -> SharedTextInputData {
 
 #[test]
 fn escape_clears_a_search_field() {
+    let _focus = focus_lock();
     let data = escape_in(InputType::Search, "rust");
     let d = data.lock().unwrap();
     assert_eq!(d.value, "");
@@ -274,6 +282,7 @@ fn escape_clears_a_search_field() {
 
 #[test]
 fn escape_blurs_an_empty_search_and_other_fields() {
+    let _focus = focus_lock();
     let empty = escape_in(InputType::Search, "");
     assert!(!empty.lock().unwrap().visual.is_focused());
     let text = escape_in(InputType::Text, "rust");

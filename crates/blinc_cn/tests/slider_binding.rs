@@ -15,7 +15,11 @@ const WIDTH: f32 = 300.0;
 const THUMB: f32 = 16.0;
 const TRAVEL: f32 = WIDTH - THUMB;
 
-fn init() {
+/// Sets the process up and holds the lock for the test: the queue of bound writes is shared, so
+/// tests that drain it cannot run side by side.
+fn init() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     static I: std::sync::Once = std::sync::Once::new();
     I.call_once(|| {
         blinc_theme::ThemeState::init_default();
@@ -34,6 +38,7 @@ fn init() {
             );
         }
     });
+    guard
 }
 
 fn build(value: impl Into<blinc_cn::NumberValue>) -> RenderTree {
@@ -78,7 +83,7 @@ fn thumb_along(tree: &mut RenderTree) -> f32 {
 /// typed into, and the slider has to follow it.
 #[test]
 fn a_write_from_elsewhere_moves_the_thumb() {
-    init();
+    let _guard = init();
     let value = signal::<f64>(0.0);
     let mut tree = build(value);
     assert_eq!(thumb_along(&mut tree), 0.0, "starts at the floor");
@@ -96,7 +101,7 @@ fn a_write_from_elsewhere_moves_the_thumb() {
 /// An `f32` state works the same, which is what Rust callers pass.
 #[test]
 fn either_precision_drives_the_thumb() {
-    init();
+    let _guard = init();
     let value = signal::<f32>(0.0);
     let mut tree = build(value);
 
@@ -113,7 +118,7 @@ fn either_precision_drives_the_thumb() {
 /// follows it after.
 #[test]
 fn a_rebuilt_slider_follows_the_number() {
-    init();
+    let _guard = init();
     let value = signal::<f64>(20.0);
     let _ = build(value);
     let mut tree = build(value);
@@ -149,7 +154,7 @@ fn texts(tree: &RenderTree) -> Vec<String> {
 /// write changes it in place and queues no rebuild of anything.
 #[test]
 fn the_shown_value_follows_the_state_in_place() {
-    init();
+    let _guard = init();
     let _ = blinc_layout::stateful::take_pending_subtree_rebuilds();
     let _ = blinc_layout::take_pending_partial_prop_updates();
 

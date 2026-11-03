@@ -613,12 +613,16 @@ mod tests {
             ThemeState::get()
         });
 
+        // The process-wide graph, as every other test module initialises it: one that
+        // builds its own would leave signals made elsewhere in this process on a different graph.
         INIT_CONTEXT.call_once(|| {
-            BlincContextState::init(
-                Arc::new(std::sync::Mutex::new(ReactiveGraph::new())),
-                Arc::new(std::sync::Mutex::new(HookState::new())),
-                Arc::new(AtomicBool::new(false)),
-            );
+            if !BlincContextState::is_initialized() {
+                BlincContextState::init(
+                    blinc_core::reactive::global_graph(),
+                    Arc::new(std::sync::Mutex::new(HookState::new())),
+                    Arc::new(AtomicBool::new(false)),
+                );
+            }
         });
     }
 
