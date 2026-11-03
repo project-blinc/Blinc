@@ -20,6 +20,8 @@ pub mod card;
 pub mod chart;
 pub mod checkbox;
 pub mod collapsible;
+pub mod color_picker;
+mod color_picker_controls;
 pub mod combobox;
 pub mod context_menu;
 pub mod dialog;
@@ -55,6 +57,7 @@ pub mod switch;
 pub mod table;
 pub mod tabs;
 pub mod textarea;
+pub mod time_picker;
 pub mod toast;
 pub mod toggle;
 pub mod toggle_group;
@@ -85,6 +88,7 @@ pub use chart::{
     comparison_bar_chart, histogram, line_chart, pie_chart, spark_line, threshold_line_chart,
 };
 pub use checkbox::{Checkbox, CheckboxSize, checkbox};
+pub use color_picker::{ColorPickerBuilder, color_picker};
 pub use combobox::{Combobox, ComboboxBuilder, ComboboxOption, ComboboxSize, combobox};
 pub use context_menu::{ContextMenuBuilder, ContextMenuItem, SubmenuBuilder, context_menu};
 pub use dialog::{AlertDialogBuilder, DialogBuilder, DialogSize, alert_dialog, dialog};
@@ -133,6 +137,7 @@ pub use table::{
 };
 pub use tabs::{TabMenuItem, Tabs, TabsBuilder, TabsSize, TabsTransition, tab_item, tabs};
 pub use textarea::{Textarea, TextareaSize, textarea};
+pub use time_picker::{TimeFormat, TimeOfDay, TimePickerBuilder, time_picker};
 pub use toast::{
     ToastBuilder, ToastVariant, toast, toast_custom, toast_error, toast_success, toast_warning,
 };

@@ -109,6 +109,7 @@
 - [Card](./cn/card.md)
 - [Dialog](./cn/dialog.md)
 - [Form Components](./cn/form.md)
+- [Time and Colour Pickers](./cn/pickers.md)
 - [Navigation](./cn/navigation.md)
 - [Feedback](./cn/feedback.md)
 - [Layout](./cn/layout.md)

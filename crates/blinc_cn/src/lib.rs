@@ -68,6 +68,7 @@ pub mod cn {
     };
     pub use crate::components::checkbox::checkbox;
     pub use crate::components::collapsible::{collapsible, collapsible_section};
+    pub use crate::components::color_picker::color_picker;
     pub use crate::components::combobox::combobox;
     pub use crate::components::context_menu::context_menu;
     pub use crate::components::dialog::{alert_dialog, dialog};
@@ -103,6 +104,7 @@ pub mod cn {
     };
     pub use crate::components::tabs::{TabsSize, TabsTransition, tab_item, tabs};
     pub use crate::components::textarea::textarea;
+    pub use crate::components::time_picker::time_picker;
     pub use crate::components::toast::{
         toast, toast_custom, toast_error, toast_success, toast_warning,
     };
@@ -131,6 +133,10 @@ pub mod cn {
 /// Prelude for convenient imports
 pub mod prelude {
     pub use crate::cn;
+    pub use crate::components::color_picker::{ColorPickerBuilder, color_picker};
+    pub use crate::components::time_picker::{
+        TimeFormat, TimeOfDay, TimePickerBuilder, time_picker,
+    };
     // Components
     pub use crate::components::accordion::{Accordion, AccordionBuilder, AccordionMode, accordion};
     pub use crate::components::alert::{Alert, AlertBox, AlertVariant, alert, alert_box};

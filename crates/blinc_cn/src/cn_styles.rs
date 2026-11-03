@@ -2005,6 +2005,115 @@ pub const CN_STYLES: &str = concat!(
     color: var(--text-secondary);
     font-size: var(--text-sm);
 }
+
+/* Time and colour pickers */
+:root {
+    --cn-color-picker-checker-light: #ffffff;
+    --cn-color-picker-checker-dark: #b8b8b8;
+}
+.cn-time-picker, .cn-color-picker-trigger, .cn-color-picker-panel {
+    font-family: var(--font-sans);
+    color: var(--text-primary);
+}
+.cn-time-picker {
+    gap: 2px;
+    border: 1px solid var(--cn-time-picker-border, var(--border));
+    border-radius: var(--cn-time-picker-radius, var(--radius-md));
+    background: var(--cn-time-picker-bg, var(--input-bg));
+    padding: 2px;
+}
+.cn-time-picker-segment {
+    width: 40px; height: 36px; padding: 0 4px;
+    border: 0; border-radius: var(--radius-sm);
+    background: transparent; color: var(--text-primary);
+    font-family: var(--font-mono); font-size: 14px;
+    transition: background var(--duration-fast) var(--ease-state);
+}
+.cn-time-picker-segment:hover,
+.cn-time-picker-segment:focus {
+    background: var(--cn-time-picker-field-hover, var(--surface-overlay));
+}
+.cn-time-picker-segment:focus {
+    outline: 2px solid var(--ring); outline-offset: -2px;
+}
+.cn-time-picker-segment--sm { width: 36px; height: 28px; font-size: 12px; }
+.cn-time-picker-segment--lg { width: 48px; height: 44px; font-size: 16px; }
+.cn-time-picker-separator { color: var(--text-secondary); }
+.cn-time-picker-period {
+    padding: 6px; border-radius: var(--radius-sm); cursor: pointer;
+    font-size: 13px; color: var(--text-primary);
+    transition: background var(--duration-fast) var(--ease-state);
+}
+.cn-time-picker-period:hover { background: var(--surface-overlay); }
+.cn-time-picker-period:focus-visible { outline: 2px solid var(--ring); }
+.cn-time-picker:disabled { opacity: 0.5; }
+.cn-time-picker-segment:disabled,
+.cn-time-picker-period:disabled { cursor: not-allowed; background: transparent; opacity: 1; }
+
+.cn-color-picker-trigger {
+    gap: 8px; padding: 6px 10px;
+    border: 1px solid var(--cn-color-picker-border, var(--border));
+    border-radius: var(--cn-color-picker-radius, var(--radius-md));
+    background: var(--cn-color-picker-bg, var(--input-bg)); cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-state), border-color var(--duration-fast) var(--ease-state);
+}
+.cn-color-picker-trigger:hover { background: var(--surface-overlay); }
+.cn-color-picker-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.cn-color-picker-trigger:disabled { opacity: 0.5; cursor: not-allowed; background: var(--input-bg); }
+.cn-color-picker-value { font-family: var(--font-mono); font-size: 13px; }
+.cn-color-picker-swatch {
+    width: 24px; height: 24px; flex-shrink: 0;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.cn-color-picker-panel {
+    width: 256px; padding: 16px; gap: 8px;
+    border: 1px solid var(--cn-color-picker-border, var(--border));
+    border-radius: var(--cn-color-picker-radius, var(--radius-md));
+    background: var(--cn-color-picker-panel-bg, var(--surface-elevated));
+    box-shadow: var(--shadow-md);
+}
+.cn-color-picker-panel:disabled { opacity: 0.5; }
+.cn-color-picker-sv { height: 160px; cursor: crosshair; border-radius: var(--radius-sm); }
+.cn-color-picker-white { background: linear-gradient(to right, #ffffff, #ffffff00); border-radius: var(--radius-sm); }
+.cn-color-picker-black { background: linear-gradient(to bottom, #00000000, #000000); border-radius: var(--radius-sm); }
+.cn-color-picker-hue {
+    height: 16px; cursor: pointer; border-radius: 999px;
+}
+.cn-color-picker-hue-segment[data-sector="0"] { background: linear-gradient(to right, #ff0000, #ffff00); border-radius: 999px 0 0 999px; }
+.cn-color-picker-hue-segment[data-sector="1"] { background: linear-gradient(to right, #ffff00, #00ff00); }
+.cn-color-picker-hue-segment[data-sector="2"] { background: linear-gradient(to right, #00ff00, #00ffff); }
+.cn-color-picker-hue-segment[data-sector="3"] { background: linear-gradient(to right, #00ffff, #0000ff); }
+.cn-color-picker-hue-segment[data-sector="4"] { background: linear-gradient(to right, #0000ff, #ff00ff); }
+.cn-color-picker-hue-segment[data-sector="5"] { background: linear-gradient(to right, #ff00ff, #ff0000); border-radius: 0 999px 999px 0; }
+.cn-color-picker-alpha { height: 16px; cursor: pointer; background: var(--surface-overlay); border-radius: 999px; }
+.cn-color-picker-alpha > div { border-radius: 999px; }
+.cn-color-picker-sv:focus-visible, .cn-color-picker-hue:focus-visible, .cn-color-picker-alpha:focus-visible,
+.cn-color-picker-sv[data-focus-visible], .cn-color-picker-hue[data-focus-visible], .cn-color-picker-alpha[data-focus-visible] {
+    outline: 2px solid var(--ring); outline-offset: 3px;
+}
+.cn-color-picker-sv:disabled, .cn-color-picker-hue:disabled, .cn-color-picker-alpha:disabled { cursor: not-allowed; }
+.cn-color-picker-marker {
+    width: 10px; height: 10px; border: 2px solid var(--cn-color-picker-marker, #ffffff);
+    border-radius: 999px; box-shadow: 0 0 2px 1px #00000080;
+    left: -5px; top: -5px;
+}
+.cn-color-picker-label { font-size: 12px; color: var(--text-secondary); }
+.cn-color-picker-entry { gap: 8px; }
+.cn-color-picker-hex {
+    width: 100%; height: 32px; font-family: var(--font-mono); font-size: 13px;
+    color: var(--text-primary); background: var(--input-bg);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.cn-color-picker-hex:focus { border-color: var(--ring); outline: 2px solid var(--ring); outline-offset: -2px; }
+.cn-color-picker-hex--invalid { border-color: var(--error); }
+.cn-color-picker-swatches { gap: 8px; }
+.cn-color-picker-preset {
+    width: 24px; height: 24px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border);
+}
+.cn-color-picker-preset[data-state="selected"] { outline: 2px solid var(--ring); outline-offset: 2px; }
+.cn-color-picker-preset:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.cn-color-picker-preset:disabled { cursor: not-allowed; }
 "#,
     "\n}\n"
 );

@@ -115,6 +115,7 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
                         .child(form_inputs_section(ctx))
                         .child(toggles_section(ctx))
                         .child(slider_section(ctx))
+                        .child(picker_examples::color_picker_section(ctx))
                         .child(gauges_section(ctx))
                         .child(radio_section(ctx))
                         .child(select_section(ctx))
@@ -247,6 +248,94 @@ pub fn build_ui(ctx: &mut WindowedContext) -> impl ElementBuilder + use<> {
 //                 }),
 //         )
 // }
+
+mod picker_examples {
+    use super::{section_container, section_title};
+    use blinc_app::windowed::WindowedContext;
+    use blinc_cn::{LabelSize, cn};
+    use blinc_core::{Color, reactive::computed};
+    use blinc_layout::div::{ElementBuilder, div};
+
+    pub(super) fn color_picker_section(ctx: &WindowedContext) -> impl ElementBuilder + use<> {
+        let color = ctx.use_signal(Color::from_hex(0x6366f1));
+        let disabled = ctx.use_signal(false);
+        let swatches = ctx.use_signal(
+            [0xef4444, 0xf59e0b, 0x22c55e, 0x14b8a6, 0x3b82f6, 0x6366f1]
+                .into_iter()
+                .map(Color::from_hex)
+                .collect::<Vec<_>>(),
+        );
+        let selected = computed(move |g| {
+            format!(
+                "Selected: {}",
+                g.get(color).unwrap_or_default().to_hex_string(true)
+            )
+        });
+
+        section_container()
+            .id("color-picker-examples")
+            .child(section_title("Colour Picker"))
+            .child(
+                cn::label("The inline editor and popover share one colour.").size(LabelSize::Small),
+            )
+            .child(
+                div()
+                    .flex_row()
+                    .flex_wrap()
+                    .items_start()
+                    .gap_px(24.0)
+                    .child(
+                        div()
+                            .flex_col()
+                            .h_fit()
+                            .gap_px(8.0)
+                            .child(cn::label("Inline with opacity"))
+                            .child(
+                                cn::color_picker(color)
+                                    .inline()
+                                    .alpha(true)
+                                    .swatches(swatches)
+                                    .disabled(disabled),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex_col()
+                            .h_fit()
+                            .gap_px(12.0)
+                            .child(cn::label("Popover"))
+                            .child(
+                                cn::color_picker(color)
+                                    .alpha(true)
+                                    .swatches(swatches)
+                                    .disabled(disabled),
+                            )
+                            .child(cn::label(selected).size(LabelSize::Small))
+                            .child(cn::switch(disabled).label("Disable pickers"))
+                            .child(
+                                cn::button("Save current colour")
+                                    .disabled(disabled)
+                                    .on_click(move |_| {
+                                        let picked = color.get();
+                                        swatches.update(move |mut colors| {
+                                            if !colors.iter().any(|c| {
+                                                c.to_hex_string(true) == picked.to_hex_string(true)
+                                            }) {
+                                                colors.push(picked);
+                                            }
+                                            colors
+                                        });
+                                    }),
+                            )
+                            .child(cn::button("Reset colour").disabled(disabled).on_click(
+                                move |_| {
+                                    color.set(Color::from_hex(0x6366f1));
+                                },
+                            )),
+                    ),
+            )
+    }
+}
 
 // ============================================================================
 // MENUBAR DEMO

@@ -1,0 +1,159 @@
+# Time and Colour Pickers
+
+Both pickers read and write a supplied `Signal`. External writes update the
+existing fields; `on_change` runs only for changed user edits. Install
+`CN_STYLES` through `cn_bundle()` or your theme bundle before using them.
+
+## Time Picker
+
+```rust
+use blinc_cn::prelude::*;
+use blinc_core::reactive::{computed, signal};
+
+let time = signal(TimeOfDay::new(14, 30, 0).unwrap());
+let disabled = signal(false);
+let picker = cn::time_picker(time)
+    .format(TimeFormat::TwelveHour)
+    .seconds(true)
+    .minute_step(5)
+    .size(InputSize::Medium)
+    .disabled(disabled)
+    .on_change(|time| tracing::info!(%time, "Time selected"));
+
+let caption = computed(move |g| {
+    g.get(time).unwrap_or_default().format(TimeFormat::TwelveHour, true)
+});
+```
+
+`TimeOfDay::new(hour, minute, second)` validates a 24-hour time and returns
+`None` for out-of-range parts. The value has `hour()`, `minute()` and
+`second()` accessors, implements `Display` as `HH:MM:SS`, and carries no
+date or time zone. The default picker shows hours and minutes in 24-hour form.
+Hiding seconds preserves their stored value. Midnight is `12 AM`; noon is
+`12 PM`. Clicking the period toggles AM/PM.
+
+Type up to two digits per field, or use Up/Down and the mouse wheel to step.
+Stepping wraps within that field without carrying into neighbouring fields.
+`minute_step` and `second_step` affect stepping; typing accepts any valid
+value. Enter restores the field's two-digit presentation. Invalid or partial
+text leaves the selected time unchanged.
+
+### Time styling
+
+`.class(...)` and `.id(...)` apply to the outer `.cn-time-picker`, which
+exposes `data-size="sm|md|lg"`, `data-format="12|24"` and `disabled`.
+
+| Class | Part |
+|---|---|
+| `.cn-time-picker-part` | Field wrapper |
+| `.cn-time-picker-segment` | Editable field; `:hover`, `:focus`, `:disabled` |
+| `.cn-time-picker-segment--sm`, `--md`, `--lg` | Field size classes |
+| `.cn-time-picker-hour`, `.cn-time-picker-minute`, `.cn-time-picker-second` | Individual fields |
+| `.cn-time-picker-separator` | Colon |
+| `.cn-time-picker-period` | AM/PM button; `:focus-visible`, `:disabled` |
+
+Override `--cn-time-picker-bg`, `--cn-time-picker-border`,
+`--cn-time-picker-radius` and `--cn-time-picker-field-hover`, or write rules:
+
+```css
+.appointment .cn-time-picker-segment { width: 48px; }
+.appointment .cn-time-picker-segment:focus { outline-color: #6366f1; }
+```
+
+## Colour Picker
+
+```rust
+use blinc_cn::prelude::*;
+use blinc_core::{Color, reactive::signal};
+
+let color = signal(Color::from_hex(0x6366f1));
+let disabled = signal(false);
+let favorites = signal(vec![Color::RED, Color::GREEN, Color::BLUE]);
+
+let picker = cn::color_picker(color)
+    .alpha(true)
+    .swatches(favorites)
+    .disabled(disabled)
+    .on_change(|color| tracing::info!(hex = %color.to_hex_string(true), "Colour selected"));
+
+// The same editor embedded directly into a settings panel.
+let inline = cn::color_picker(color).alpha(true).inline();
+```
+
+The default trigger shows a swatch and hex value. It opens a popover with a
+saturation/brightness field, hue strip and hex editor. `.inline()` shows the
+panel directly. `.alpha(true)` adds an opacity strip. With alpha hidden,
+editing RGB or selecting a swatch preserves the bound opacity.
+
+Drag the selection ring or press anywhere on a field to select a value.
+Arrow keys adjust saturation/brightness by 1%, hue by 1 degree, or opacity
+by 1%; Shift increases the step to 10. Home/End select the endpoints of a
+strip, or the saturation endpoints in the two-dimensional field.
+The hue and saturation selection survives moving through grey or black.
+
+Hex entry is a draft until **Enter**. It accepts `#RGB`, `#RGBA`, `#RRGGBB`
+and `#RRGGBBAA`, with an optional `#`. Invalid input keeps the selected colour
+and shows an error border. RGB-only input preserves opacity; an alpha-bearing
+form changes opacity when `.alpha(true)` is enabled. An external colour write
+replaces the draft with the new canonical hex value.
+
+`swatches` takes a `Vec<Color>`, Signal or Computed. It supplies selectable
+presets; the application owns persistence. No palette is imposed by default.
+Disabled pickers reject pointer, keyboard and hex edits. Disabling an open
+picker closes its popover. Clicking outside dismisses the panel.
+
+### Colour styling
+
+The selected colour and coordinate gradients visualize the value. Widget
+chrome, focus, disabled appearance and motion follow CSS rules and theme tokens.
+
+| Class | Part |
+|---|---|
+| `.cn-color-picker-trigger` | Swatch trigger; `data-state="open"`, `:focus-visible`, `:disabled` |
+| `.cn-color-picker-panel` | Inline or detached popup panel; `disabled` |
+| `.cn-color-picker-swatch`, `.cn-color-picker-value` | Preview swatch and trigger hex label |
+| `.cn-color-picker-sv` | Saturation/brightness field |
+| `.cn-color-picker-white`, `.cn-color-picker-black` | Field gradient layers |
+| `.cn-color-picker-hue`, `.cn-color-picker-alpha` | Hue and opacity strips |
+| `.cn-color-picker-hue-segment` | Hue spectrum sectors, `data-sector="0"` through `"5"` |
+| `.cn-color-picker-marker` | Selection rings |
+| `.cn-color-picker-label` | Strip labels |
+| `.cn-color-picker-entry`, `.cn-color-picker-hex-wrap` | Hex row and field wrapper |
+| `.cn-color-picker-hex`, `.cn-color-picker-hex--invalid` | Hex editor and invalid draft |
+| `.cn-color-picker-swatches`, `.cn-color-picker-preset` | Palette and swatches; `data-state="selected"` |
+
+The coordinate fields expose `disabled`, `tabindex="0"` and
+`data-focus-visible`. Presets expose `disabled` and `tabindex="0"` too.
+The fields and hex entry retain their node identities during value updates.
+
+`.class(...)` and `.id(...)` apply to the trigger, or to the panel in inline
+mode. A popup is mounted in the overlay layer, so style it using its own part
+classes rather than a descendant selector from the trigger.
+
+```css
+.cn-color-picker-panel {
+    --cn-color-picker-border: var(--border-secondary);
+    border-radius: 16px;
+    width: 280px;
+}
+.cn-color-picker-sv { height: 180px; }
+.cn-color-picker-marker { border-color: white; }
+```
+
+Variables are `--cn-color-picker-bg`, `--cn-color-picker-panel-bg`,
+`--cn-color-picker-border`, `--cn-color-picker-radius` and
+`--cn-color-picker-marker`. The checker canvas reads the global
+`--cn-color-picker-checker-light` and `--cn-color-picker-checker-dark` colours.
+Use `--duration-fast` and `--ease-state` to change interaction transitions.
+
+Run the native example with
+`cargo run -p blinc_app_examples --features cn --example cn_pickers_demo`.
+The **Colour Picker** section in `cn_demo` also shows linked inline and popover
+editors, a bound disabled switch and a reactive palette with a save button.
+
+## Calendar and Date Picker composition
+
+`cn::calendar(selected)` already reads and writes a
+`Signal<Option<CalendarDay>>` and accepts `on_change`. A date picker can reuse
+this selection model inside a popover with a formatted trigger, rather than
+introducing another calendar implementation. See [Data Display](data-display.md#calendar).
