@@ -4,6 +4,8 @@ All notable changes to `blinc_app` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-03
+
 ### Changed
 - Flow shaders are drawn by canvases (`Canvas::flow`, `DrawContext::draw_shader`) as canvas GPU passes, and no longer collected from elements. The element path, its caches and `FlowElement` are removed.
 

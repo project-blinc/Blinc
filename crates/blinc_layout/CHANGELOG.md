@@ -4,6 +4,8 @@ All notable changes to `blinc_layout` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-03
+
 ### Fixed
 - A canvas paints in tree order under a box that comes after it. An independent canvas is replayed over the static cache, so a panel or HUD declared after it, overlapping it, was drawn under it, for a rectangle and for a path alike. A canvas with such a box after it now paints with its batch in tree order, which repaints the static cache with it each frame. Boxes only: text, SVG and images after a canvas still draw over it as before, and the foreground layer and overlays are drawn after canvases as ever.
 - A rule keyed on a bound class or attribute applies `display`. `.x[data-hidden] { display: none }` hid a box built with the attribute, but one whose attribute followed a signal (`attr_when`, `class_when`) kept its box: the layer that applies a class's rules to the layout style left `display` out, so the visual properties changed and the display did not. The same holds for the state rules (`:hover`, `:checked`) that go through it.

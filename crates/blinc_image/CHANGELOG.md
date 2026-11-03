@@ -4,6 +4,8 @@ All notable changes to `blinc_image` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-03
+
 ### Added
 - **Pluggable `ImageDecoder` trait + `DecoderRegistry`** for BYO format support. Apps can register a custom decoder (zune-image, libvips, a WebGPU compute decoder, a stub for headless tests) via `decoder::set_global_registry`; the loader picks it up. Built-in decoders ship as `PngDecoder`, `JpegDecoder`, etc., each gated by its matching cargo feature.
 - Per-format cargo features: `png`, `jpeg`, `gif`, `webp`, `bmp`, `tiff`, `avif` — each turns on the matching `image` crate codec and registers its built-in `ImageDecoder`. The `all-formats` umbrella enables every previously-bundled format.

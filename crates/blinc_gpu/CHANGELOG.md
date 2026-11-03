@@ -4,6 +4,8 @@ All notable changes to `blinc_gpu` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-03
+
 ### Added
 - `GpuPaintContext::draw_shader` queues a flow draw as a canvas GPU pass (`PendingGpuPass::flow`), so it follows the clip, groups and overlays like other passes. `GpuRenderer::render_pending_flow` draws it and `set_flow_cursor` supplies the cursor for a shader whose pointer is not given; `flow_pipeline::app_clock_secs` is the clock for one whose time is not.
 

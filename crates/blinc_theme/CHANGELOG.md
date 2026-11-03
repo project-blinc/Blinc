@@ -4,6 +4,8 @@ All notable changes to `blinc_theme` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-03
+
 ### Added
 - `--chart-1` to `--chart-5` and `--chart-baseline`: a palette for charts, one per scheme, in the CSS variable map (`chart_palette(scheme)`).
 - **Universal HID variants — `RestrainedTheme`, `HybridTheme`, `ExpressiveTheme`** plus `DefaultTheme` alias (= `HybridTheme`). Three considered cross-platform synthesis variants with per-variant `RadiusTokens` ladders, `ShapeTokens` (superellipse smoothing), and semantic-easing assignments. `cn_bundle()` defaults to `HybridTheme` when the platform doesn't match a built-in.

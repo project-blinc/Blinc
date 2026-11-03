@@ -4,6 +4,8 @@ All notable changes to `blinc_cn` will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-03
+
 ### Fixed
 - `cn::button` shows the pointer cursor on hover, and not-allowed while disabled; the cursor is a `.cn-button` rule, which the rule-based restyle had dropped.
 - A dialog's `cancel_text` labels its cancel button; the button always read "Cancel".
