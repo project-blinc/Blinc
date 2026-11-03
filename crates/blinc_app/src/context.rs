@@ -357,7 +357,6 @@ pub struct RenderContext {
     cached_texts: Option<Vec<TextElement>>,
     cached_svgs: Option<Vec<SvgElement>>,
     cached_images: Option<Vec<ImageElement>>,
-    cached_flows: Option<Vec<FlowElement>>,
 }
 
 struct CachedTexture {
@@ -551,23 +550,6 @@ struct SvgElement {
     composite_ancestor: Option<blinc_layout::tree::StableNodeId>,
 }
 
-/// A flow shader drawn over an element's bounds by a custom GPU pipeline (`Canvas::flow`).
-#[derive(Clone)]
-struct FlowElement {
-    flow_shader: std::sync::Arc<blinc_core::FlowShader>,
-    /// Bounds in physical pixels (DPI-scaled)
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-    /// Z-layer for rendering order
-    z_index: u32,
-    /// Corner radius in physical pixels
-    corner_radius: f32,
-    /// What the element's ancestors leave visible, in physical pixels
-    clip: Option<[f32; 4]>,
-}
-
 /// Debug bounds element for layout visualization
 #[derive(Clone)]
 struct DebugBoundsElement {
@@ -649,7 +631,6 @@ impl RenderContext {
             cached_texts: None,
             cached_svgs: None,
             cached_images: None,
-            cached_flows: None,
         }
     }
 
@@ -669,6 +650,7 @@ impl RenderContext {
 
     pub fn set_cursor_position(&mut self, x: f32, y: f32) {
         self.cursor_pos = [x, y];
+        self.renderer.set_flow_cursor(self.cursor_pos);
     }
 
     /// Whether the last render frame contained @flow shader elements.

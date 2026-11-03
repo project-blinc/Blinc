@@ -40,6 +40,10 @@ pub(super) fn dispatch_pending_gpu_passes(
             }
             None => None,
         };
+        if let Some(flow) = &pending.flow {
+            renderer.render_pending_flow(target, flow, clamped_viewport);
+            continue;
+        }
         let ctx = blinc_gpu::custom_pass::RenderPassContext {
             device: &device,
             queue: &queue,

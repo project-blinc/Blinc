@@ -1,8 +1,8 @@
 //! Collect the content channels of a node using its resolved inherited state.
 use super::{
-    Arc, ElementType, FlowElement, FontWeight, ImageElement, LayoutNodeId, RenderContext,
-    RenderLayer, RenderTree, SvgElement, TextAlign, TextElement, Transform3DLayerInfo,
-    effective_single_clip, text_clip,
+    Arc, ElementType, FontWeight, ImageElement, LayoutNodeId, RenderContext, RenderLayer,
+    RenderTree, SvgElement, TextAlign, TextElement, Transform3DLayerInfo, effective_single_clip,
+    text_clip,
 };
 use blinc_layout::ElementBounds;
 
@@ -43,7 +43,6 @@ impl RenderContext {
         texts: &mut Vec<TextElement>,
         svgs: &mut Vec<SvgElement>,
         images: &mut Vec<ImageElement>,
-        flows: &mut Vec<FlowElement>,
     ) {
         let NodeContent {
             tree,
@@ -893,21 +892,6 @@ impl RenderContext {
                         }
                     }
                 }
-            }
-
-            // A flow shader renders over the node's bounds through its own GPU pipeline.
-            if let Some(ref flow_shader) = render_node.props.flow_shader {
-                flows.push(FlowElement {
-                    flow_shader: flow_shader.clone(),
-                    x: abs_x * scale,
-                    y: abs_y * scale,
-                    width: bounds.width * scale,
-                    height: bounds.height * scale,
-                    z_index: *z_layer,
-                    corner_radius: render_node.props.border_radius.top_left * scale,
-                    clip: effective_single_clip(current_clip, current_scroll_clip)
-                        .map(|[cx, cy, cw, ch]| [cx * scale, cy * scale, cw * scale, ch * scale]),
-                });
             }
         }
     }

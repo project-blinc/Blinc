@@ -189,14 +189,12 @@ impl RenderContext {
             && !any_motion_active
             && self.cached_texts.is_some()
             && self.cached_svgs.is_some()
-            && self.cached_images.is_some()
-            && self.cached_flows.is_some();
-        let (all_texts, all_svgs, all_images, flow_elements) = if cache_hit {
+            && self.cached_images.is_some();
+        let (all_texts, all_svgs, all_images) = if cache_hit {
             (
                 self.cached_texts.as_ref().unwrap().clone(),
                 self.cached_svgs.as_ref().unwrap().clone(),
                 self.cached_images.as_ref().unwrap().clone(),
-                self.cached_flows.as_ref().unwrap().clone(),
             )
         } else {
             self.collect_render_elements_with_state(tree, render_state)
@@ -208,7 +206,6 @@ impl RenderContext {
             self.cached_texts = Some(all_texts.clone());
             self.cached_svgs = Some(all_svgs.clone());
             self.cached_images = Some(all_images.clone());
-            self.cached_flows = Some(flow_elements.clone());
         }
 
         // Separate normal content, 3D bakes and motion overlay content before dispatch.
@@ -444,49 +441,7 @@ impl RenderContext {
             }
         }
 
-        // Render @flow shader elements on top of their SDF base
-        self.has_active_flows = !flow_elements.is_empty() || captured_skeleton;
-        if !flow_elements.is_empty() {
-            // Use monotonic time for smooth animation
-            static START_TIME: std::sync::OnceLock<web_time::Instant> = std::sync::OnceLock::new();
-            let start = START_TIME.get_or_init(web_time::Instant::now);
-            let elapsed_secs = start.elapsed().as_secs_f32();
-
-            for flow_el in &flow_elements {
-                {
-                    let shader = &*flow_el.flow_shader;
-                    // Compile on first use (no-op if already cached)
-                    if let Err(e) = self.renderer.flow_pipeline_cache().compile(shader) {
-                        tracing::warn!("flow '{}' compile error: {}", shader.name, e);
-                        continue;
-                    }
-
-                    let uniforms = blinc_gpu::FlowUniformData {
-                        viewport_size: [width as f32, height as f32],
-                        time: elapsed_secs,
-                        frame_index: 0.0, // TODO: track frame counter
-                        element_bounds: [flow_el.x, flow_el.y, flow_el.width, flow_el.height],
-                        pointer: [
-                            (self.cursor_pos[0] - flow_el.x) / flow_el.width.max(1.0),
-                            (self.cursor_pos[1] - flow_el.y) / flow_el.height.max(1.0),
-                        ],
-                        corner_radius: flow_el.corner_radius,
-                        _padding: 0.0,
-                    };
-
-                    let viewport = [flow_el.x, flow_el.y, flow_el.width, flow_el.height];
-                    if !self.renderer.render_flow(
-                        target,
-                        &shader.name,
-                        &uniforms,
-                        Some(viewport),
-                        flow_el.clip,
-                    ) {
-                        tracing::warn!("flow '{}' render failed", shader.name);
-                    }
-                }
-            }
-        }
+        self.has_active_flows = captured_skeleton;
 
         // Poll the device to free completed command buffers
         self.renderer.poll();

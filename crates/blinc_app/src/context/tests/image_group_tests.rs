@@ -1,6 +1,5 @@
 use super::grouped_text_tests::frame;
 use super::opacity_group_tests::{CssSource, css_value, pixel};
-use super::separate_pass_flow;
 use super::*;
 use blinc_animation::{AnimatedValue, AnimationScheduler};
 use blinc_layout::{image, svg};
@@ -333,7 +332,7 @@ fn image_group_capability_and_unsupported_owners_keep_fallback() {
                 tree.update_render_props(tree.query_by_id("group").unwrap(), |p| {
                     p.opacity = 0.5;
                     if unsupported {
-                        p.flow_shader = Some(separate_pass_flow());
+                        p.rotate_x = Some(20.0);
                     }
                 });
                 let state = RenderState::new(Arc::new(Mutex::new(AnimationScheduler::new())));

@@ -452,8 +452,6 @@ pub struct RenderProps {
     pub mask_image: Option<blinc_core::MaskImage>,
     /// CSS mask-mode
     pub mask_mode: Option<blinc_core::MaskMode>,
-    /// A flow shader drawn over the element's bounds: set by `Canvas::flow`.
-    pub flow_shader: Option<Arc<blinc_core::FlowShader>>,
 }
 
 impl Default for RenderProps {
@@ -547,7 +545,6 @@ impl Default for RenderProps {
             white_space: None,
             mask_image: None,
             mask_mode: None,
-            flow_shader: None,
         }
     }
 }

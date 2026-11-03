@@ -1,6 +1,5 @@
 use super::grouped_text_tests::frame;
 use super::opacity_group_tests::{CssSource, css_value, pixel};
-use super::separate_pass_flow;
 use super::*;
 use blinc_animation::{AnimatedValue, AnimationScheduler, SharedAnimatedValue};
 use blinc_core::{BlendMode, LayerEffect, MaskMode};
@@ -415,7 +414,7 @@ fn effect_group_capabilities_preserve_owner_and_unsupported_fallback() {
                 p.layer_effects = vec![LayerEffect::brightness(0.5)];
                 p.mix_blend_mode = Some(BlendMode::Screen);
                 match boundary {
-                    1 => p.flow_shader = Some(separate_pass_flow()),
+                    1 => p.rotate_x = Some(20.0),
                     2 => p.is_overlay_root = true,
                     3 => p.shape_3d = Some(1.0),
                     4 => p.layer = RenderLayer::Glass,

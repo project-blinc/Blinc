@@ -175,6 +175,20 @@ pub struct PendingGpuPass {
     pub pass: crate::custom_pass::GpuPass,
     /// Physical `[x, y, width, height]` passed to the callback; None means full frame.
     pub viewport: Option<[f32; 4]>,
+    /// A flow shader the renderer draws itself, with `pass` inert. `viewport` is then the part of
+    /// `flow.bounds` the clip leaves visible.
+    pub flow: Option<PendingFlow>,
+}
+
+/// A flow shader drawn by `DrawContext::draw_shader`.
+#[derive(Clone)]
+pub struct PendingFlow {
+    pub shader: std::sync::Arc<blinc_core::FlowShader>,
+    /// Physical `[x, y, width, height]` the shader's `uv` covers.
+    pub bounds: [f32; 4],
+    pub inputs: blinc_core::ShaderInputs,
+    /// Physical corner radius.
+    pub corner_radius: f32,
 }
 
 /// A mesh scene retained by a native visual group.
@@ -4593,8 +4607,53 @@ impl<'a> DrawContext for GpuPaintContext<'a> {
         let pending = PendingGpuPass {
             pass: pass.clone(),
             viewport: pixel_viewport,
+            flow: None,
         };
         if !self.capture_group_gpu_pass(pending.clone(), viewport.is_none()) {
+            self.pending_gpu_passes.push(pending);
+        }
+    }
+
+    fn draw_shader(
+        &mut self,
+        shader: &std::sync::Arc<blinc_core::FlowShader>,
+        rect: blinc_core::Rect,
+        inputs: &blinc_core::ShaderInputs,
+    ) {
+        self.last_group_mesh = None;
+        let tl = self.transform_point(rect.origin);
+        let br = self.transform_point(blinc_core::Point::new(
+            rect.origin.x + rect.size.width,
+            rect.origin.y + rect.size.height,
+        ));
+        let (left, top) = (tl.x.min(br.x), tl.y.min(br.y));
+        let (width, height) = ((br.x - tl.x).abs(), (br.y - tl.y).abs());
+        let mut visible = [left, top, width, height];
+        // The clip leaves part of the bounds visible; the shader still maps `uv` over all of them.
+        if let Some([cx, cy, cw, ch]) = self.current_clip_aabb() {
+            let (x0, y0) = (left.max(cx), top.max(cy));
+            let (x1, y1) = ((left + width).min(cx + cw), (top + height).min(cy + ch));
+            visible = [x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0)];
+        }
+        if visible[2] < 1.0 || visible[3] < 1.0 {
+            return;
+        }
+        let scale = if rect.size.width > f32::EPSILON {
+            width / rect.size.width
+        } else {
+            1.0
+        };
+        let pending = PendingGpuPass {
+            pass: crate::custom_pass::GpuPass::none(),
+            viewport: Some(visible),
+            flow: Some(PendingFlow {
+                shader: shader.clone(),
+                bounds: [left, top, width, height],
+                inputs: *inputs,
+                corner_radius: inputs.corner_radius * scale,
+            }),
+        };
+        if !self.capture_group_gpu_pass(pending.clone(), false) {
             self.pending_gpu_passes.push(pending);
         }
     }

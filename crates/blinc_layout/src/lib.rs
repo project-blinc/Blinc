@@ -36,6 +36,7 @@ pub mod diff;
 pub mod div;
 pub mod dynamic_style;
 pub mod element;
+pub mod flow_clock;
 pub mod notch;
 
 // Layout animation systems
@@ -187,7 +188,8 @@ pub use renderer::{
 };
 
 // Canvas element
-pub use canvas::{Canvas, CanvasBounds, CanvasData, CanvasRenderFn, canvas};
+pub use canvas::{Canvas, CanvasBounds, CanvasData, CanvasRenderFn, FlowLoop, canvas};
+pub use flow_clock::FlowClock;
 
 // Render state (dynamic properties separate from tree structure)
 pub use render_state::{
@@ -415,7 +417,8 @@ pub mod prelude {
     };
 
     // Canvas element
-    pub use crate::canvas::{Canvas, CanvasBounds, canvas};
+    pub use crate::canvas::{Canvas, CanvasBounds, FlowLoop, canvas};
+    pub use crate::flow_clock::FlowClock;
 
     // Notch element (shapes with concave curves or sharp steps)
     pub use crate::notch::{CornerConfig, CornerStyle, CornersConfig, Notch, notch};

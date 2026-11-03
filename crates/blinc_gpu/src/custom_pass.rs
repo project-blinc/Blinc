@@ -293,7 +293,27 @@ pub(crate) struct GpuPassInner {
     pub initialized: bool,
 }
 
+/// A pass that draws nothing: the handle of a pending draw whose work the renderer does itself,
+/// such as a flow shader.
+struct NoPass;
+
+impl CustomRenderPass for NoPass {
+    fn label(&self) -> &str {
+        "none"
+    }
+    fn stage(&self) -> RenderStage {
+        RenderStage::PostProcess
+    }
+    fn initialize(&mut self, _: &wgpu::Device, _: &wgpu::Queue, _: wgpu::TextureFormat) {}
+    fn render(&mut self, _: &RenderPassContext) {}
+}
+
 impl GpuPass {
+    /// A pass that draws nothing.
+    pub(crate) fn none() -> Self {
+        Self::new(NoPass)
+    }
+
     /// Identity of this shared callback, for retained paint fingerprints.
     #[doc(hidden)]
     pub fn identity(&self) -> usize {

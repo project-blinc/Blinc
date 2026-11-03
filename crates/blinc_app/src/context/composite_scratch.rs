@@ -177,7 +177,19 @@ pub(super) fn hash(batch: &PrimitiveBatch) -> u64 {
                 floats(&pass.pending.viewport.unwrap_or([0.0; 4]), h);
                 pass.frame_size.hash(h);
                 pass.scale_factor.to_bits().hash(h);
-                pass.pending.pass.identity().hash(h);
+                match &pass.pending.flow {
+                    Some(flow) => {
+                        // A flow that follows the clock or the cursor changes every frame.
+                        (std::sync::Arc::as_ptr(&flow.shader) as usize).hash(h);
+                        floats(&flow.bounds, h);
+                        let live = flow.inputs.time.is_none() || flow.inputs.pointer.is_none();
+                        live.then(blinc_gpu::flow_pipeline::app_clock_secs)
+                            .unwrap_or_default()
+                            .to_bits()
+                            .hash(h);
+                    }
+                    None => pass.pending.pass.identity().hash(h),
+                }
             }
             LayerCommand::Push { config: c } => config(c, h),
             LayerCommand::Pop => {}

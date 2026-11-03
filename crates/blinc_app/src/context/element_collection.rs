@@ -1,9 +1,9 @@
 //! Walk inherited transforms, clips and motion state before collecting node content.
 use super::node_content::NodeContent;
 use super::{
-    ATLAS_GC_MAX_AGE, ATLAS_GC_PRESSURE, Arc, FlowElement, ImageElement, LayoutNodeId,
-    RenderContext, RenderLayer, RenderTree, SvgElement, TextElement, Transform3DLayerInfo,
-    merge_scroll_clip, text_clip,
+    ATLAS_GC_MAX_AGE, ATLAS_GC_PRESSURE, Arc, ImageElement, LayoutNodeId, RenderContext,
+    RenderLayer, RenderTree, SvgElement, TextElement, Transform3DLayerInfo, merge_scroll_clip,
+    text_clip,
 };
 
 impl RenderContext {
@@ -11,12 +11,7 @@ impl RenderContext {
     pub(super) fn collect_render_elements(
         &mut self,
         tree: &RenderTree,
-    ) -> (
-        Vec<TextElement>,
-        Vec<SvgElement>,
-        Vec<ImageElement>,
-        Vec<FlowElement>,
-    ) {
+    ) -> (Vec<TextElement>, Vec<SvgElement>, Vec<ImageElement>) {
         self.collect_render_elements_with_state(tree, None)
     }
 
@@ -25,12 +20,7 @@ impl RenderContext {
         &mut self,
         tree: &RenderTree,
         render_state: Option<&blinc_layout::RenderState>,
-    ) -> (
-        Vec<TextElement>,
-        Vec<SvgElement>,
-        Vec<ImageElement>,
-        Vec<FlowElement>,
-    ) {
+    ) -> (Vec<TextElement>, Vec<SvgElement>, Vec<ImageElement>) {
         // One atlas epoch per walk, bumped before anything is drawn so
         // this walk's glyphs land in the new epoch. Reclaim first, while
         // nothing from this walk has been touched yet: a glyph the last
@@ -51,7 +41,6 @@ impl RenderContext {
         let mut texts = std::mem::take(&mut self.scratch_texts);
         let mut svgs = std::mem::take(&mut self.scratch_svgs);
         let mut images = std::mem::take(&mut self.scratch_images);
-        let mut flows = Vec::new();
         texts.clear();
         svgs.clear();
         images.clear();
@@ -119,7 +108,6 @@ impl RenderContext {
                 &mut texts,
                 &mut svgs,
                 &mut images,
-                &mut flows,
                 None,  // No initial CSS transform
                 1.0,   // Initial inherited CSS opacity
                 None,  // No inherited text colour at the root
@@ -138,7 +126,7 @@ impl RenderContext {
         // Sort texts by z_index (z_layer) to ensure correct rendering order with primitives
         texts.sort_by_key(|t| t.z_index);
 
-        (texts, svgs, images, flows)
+        (texts, svgs, images)
     }
 
     #[allow(clippy::too_many_arguments, clippy::only_used_in_recursion)]
@@ -163,7 +151,6 @@ impl RenderContext {
         texts: &mut Vec<TextElement>,
         svgs: &mut Vec<SvgElement>,
         images: &mut Vec<ImageElement>,
-        flows: &mut Vec<FlowElement>,
         // Accumulated CSS transform from ancestors as a 6-element affine [a,b,c,d,tx,ty]
         // in layout coordinates. Maps pre-transform coords to post-transform visual coords.
         inherited_css_affine: Option<[f32; 6]>,
@@ -612,7 +599,6 @@ impl RenderContext {
             texts,
             svgs,
             images,
-            flows,
         );
 
         // Include scroll offset and motion offset when calculating child positions
@@ -691,7 +677,6 @@ impl RenderContext {
                 texts,
                 svgs,
                 images,
-                flows,
                 node_css_affine,
                 child_css_opacity,
                 effective_text_color,

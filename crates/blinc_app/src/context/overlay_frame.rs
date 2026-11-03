@@ -24,7 +24,6 @@ struct FrameCache {
     cached_texts: Option<Vec<TextElement>>,
     cached_svgs: Option<Vec<SvgElement>>,
     cached_images: Option<Vec<ImageElement>>,
-    cached_flows: Option<Vec<FlowElement>>,
     captured_images_need_repaint: bool,
     has_active_flows: bool,
 }
@@ -80,7 +79,6 @@ impl FrameCache {
         std::mem::swap(&mut self.cached_texts, &mut context.cached_texts);
         std::mem::swap(&mut self.cached_svgs, &mut context.cached_svgs);
         std::mem::swap(&mut self.cached_images, &mut context.cached_images);
-        std::mem::swap(&mut self.cached_flows, &mut context.cached_flows);
         std::mem::swap(
             &mut self.captured_images_need_repaint,
             &mut context.captured_images_need_repaint,

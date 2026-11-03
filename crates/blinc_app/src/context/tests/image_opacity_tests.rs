@@ -446,7 +446,7 @@ fn image_opacity_independent_collection_uses_the_resolved_node_value() {
     let node = image_node(&tree);
     for opacity in [0.5, 0.25, 0.0, 1.0, 0.5] {
         tree.update_render_props(node, |p| p.opacity = opacity);
-        let (texts, svgs, images, _) = context.collect_render_elements(&tree);
+        let (texts, svgs, images) = context.collect_render_elements(&tree);
         let (texture, target) = super::gpu_pass_group_tests::target(&context, 1);
         context.renderer.resize(160, 120);
         context.renderer.clear_target(&target, wgpu::Color::BLUE);

@@ -1307,6 +1307,8 @@ pub struct GpuRenderer {
     blend_target_ptr: Option<*const wgpu::Texture>,
     /// Cached @flow GPU pipelines (built lazily from a flow's WGSL)
     flow_pipeline_cache: crate::flow_pipeline::FlowPipelineCache,
+    /// The window cursor in physical pixels: the `pointer` builtin of a flow that is not given one.
+    flow_cursor: [f32; 2],
     /// Staging texture for scene capture (used by flow shaders with sample_scene()).
     /// Lazily created/resized to match the render target.
     scene_copy_texture: Option<(wgpu::Texture, wgpu::TextureView, u32, u32)>,
@@ -2739,6 +2741,7 @@ impl GpuRenderer {
             dummy_blend_dest_texture: dummy_blend_dest,
             blend_target_ptr: None,
             flow_pipeline_cache,
+            flow_cursor: [0.0; 2],
             scene_copy_texture: None,
             has_vertex_storage,
             has_storage_buffers,
@@ -4813,6 +4816,53 @@ impl GpuRenderer {
     /// Get a mutable reference to the @flow pipeline cache
     pub fn flow_pipeline_cache(&mut self) -> &mut crate::flow_pipeline::FlowPipelineCache {
         &mut self.flow_pipeline_cache
+    }
+
+    /// Set the window cursor, in physical pixels, for flows that follow it.
+    pub fn set_flow_cursor(&mut self, cursor: [f32; 2]) {
+        self.flow_cursor = cursor;
+    }
+
+    /// Draw a flow from `DrawContext::draw_shader` into `target`, within `visible` (the part of
+    /// its bounds the clip leaves).
+    pub fn render_pending_flow(
+        &mut self,
+        target: &wgpu::TextureView,
+        flow: &crate::paint::PendingFlow,
+        visible: Option<[f32; 4]>,
+    ) -> bool {
+        if let Err(e) = self.flow_pipeline_cache.compile(&flow.shader) {
+            tracing::warn!("flow '{}' compile error: {}", flow.shader.name, e);
+            return false;
+        }
+        let [x, y, w, h] = flow.bounds;
+        let (tw, th) = self.viewport_size;
+        let uniforms = crate::flow_pipeline::FlowUniformData {
+            viewport_size: [tw as f32, th as f32],
+            time: flow
+                .inputs
+                .time
+                .unwrap_or_else(crate::flow_pipeline::app_clock_secs),
+            frame_index: 0.0,
+            element_bounds: flow.bounds,
+            pointer: flow.inputs.pointer.unwrap_or([
+                (self.flow_cursor[0] - x) / w.max(1.0),
+                (self.flow_cursor[1] - y) / h.max(1.0),
+            ]),
+            corner_radius: flow.corner_radius,
+            _padding: 0.0,
+        };
+        let drawn = self.render_flow(
+            target,
+            &flow.shader.name,
+            &uniforms,
+            Some(flow.bounds),
+            visible,
+        );
+        if !drawn {
+            tracing::warn!("flow '{}' render failed", flow.shader.name);
+        }
+        drawn
     }
 
     /// Render a @flow fragment shader into a target texture.

@@ -26,6 +26,15 @@ const MAX_CACHED_PIPELINES: usize = 24;
 /// Default storage buffer element count (1K instead of 64K).
 const DEFAULT_BUFFER_ELEMENTS: u64 = 1024;
 
+/// Seconds since the first flow draw: the `time` builtin of a shader that is not given one.
+pub fn app_clock_secs() -> f32 {
+    static START: std::sync::OnceLock<web_time::Instant> = std::sync::OnceLock::new();
+    START
+        .get_or_init(web_time::Instant::now)
+        .elapsed()
+        .as_secs_f32()
+}
+
 // ==========================================================================
 // Uniform Data
 // ==========================================================================

@@ -347,6 +347,40 @@ let shader = flow!(my_effect, fragment, {
 canvas(|_, _| {}).flow(shader).w(300.0).h(300.0)
 ```
 
+A canvas draws its shader through `DrawContext::draw_shader`, which a canvas callback can call itself to place a shader over any rect:
+
+```rust
+canvas(|ctx, bounds| {
+    ctx.draw_shader(
+        &shader,
+        Rect::new(0.0, 0.0, bounds.width, bounds.height),
+        &ShaderInputs { pointer: Some([0.5, 0.5]), ..Default::default() },
+    );
+})
+```
+
+`ShaderInputs` sets what the shader reads besides `uv`: `pointer` (0 to 1 across the rect; `None` follows the cursor), `time` (`None` is the app clock) and `corner_radius`. The shader's `uv` covers the whole rect even where a clip or the window edge hides part of it, so a ring stays round.
+
+### Driving the loop
+
+`Canvas::flow_loop` drives the shader's `time`: the canvas renders every frame with vsync, so the shader animates. It does so by default for a shader that reads `time`, and `flow_loop` changes it:
+
+```rust
+canvas(|_, _| {}).flow(RIPPLE).flow_loop(FlowLoop::Never)           // draws when something else repaints
+canvas(|_, _| {}).flow(RIPPLE).flow_loop(FlowLoop::while_(|| busy())) // runs while the closure says so
+```
+
+To step a shader from code, give the canvas a `FlowClock` and play, pause, seek or step it:
+
+```rust
+let clock = FlowClock::paused();
+let view = canvas(|_, _| {}).flow(RIPPLE).flow_loop(FlowLoop::Clock(clock.clone()));
+
+clock.step(1.0 / 60.0); // one frame forward, drawn once
+clock.seek(2.5);        // jump to 2.5 s
+clock.play();           // run from here, at clock.set_rate(0.5) for half speed
+```
+
 The shader carries its own name, and the GPU pipeline cache keys on it. A flow that does not parse or generate is a compile error at the `flow!` call. The expansion names `::blinc_core`, so the calling crate depends on it.
 
 ### Steps and colours

@@ -223,7 +223,7 @@ fn layer_text_clip_mixed_runs_rebase_each_owner() {
     let state = RenderState::new(Arc::new(Mutex::new(
         blinc_animation::AnimationScheduler::new(),
     )));
-    let (texts, _, _, _) = c.collect_render_elements_with_state(&t, Some(&state));
+    let (texts, _, _) = c.collect_render_elements_with_state(&t, Some(&state));
     assert_eq!(texts.len(), 2);
     assert!(texts[0].css_affine.is_none());
     assert!(texts[1].css_affine.is_some());

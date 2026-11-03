@@ -69,7 +69,6 @@ impl RenderTree {
                         None | Some(blinc_core::Brush::Solid(_) | blinc_core::Brush::Gradient(_))
                     ))
                 && (props.layer != RenderLayer::Glass || is_glass)
-                && props.flow_shader.is_none()
                 && props.rotate_x.is_none()
                 && props.rotate_y.is_none()
                 && props.depth.unwrap_or(0.0) == 0.0

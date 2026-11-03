@@ -14,8 +14,8 @@ use std::collections::HashSet;
 use std::fmt::Write;
 
 use blinc_core::{
-    FlowBuffer, FlowError, FlowExpr, FlowFunc, FlowGraph, FlowInputSource, FlowOutputTarget,
-    FlowShader, FlowTarget, FlowType,
+    BuiltinVar, FlowBuffer, FlowError, FlowExpr, FlowFunc, FlowGraph, FlowInputSource,
+    FlowOutputTarget, FlowShader, FlowTarget, FlowType,
 };
 
 // ==========================================================================
@@ -82,6 +82,12 @@ pub fn compile_flow(graph: &FlowGraph) -> Result<FlowShader, FlowError> {
         target: graph.target,
         wgsl: wgsl.into(),
         needs_scene: flow_needs_scene_texture(graph),
+        animated: graph.inputs.iter().any(|i| {
+            matches!(
+                i.source,
+                FlowInputSource::Builtin(BuiltinVar::Time | BuiltinVar::FrameIndex)
+            )
+        }),
         dynamic_fields,
         buffers: buffers.into(),
     })

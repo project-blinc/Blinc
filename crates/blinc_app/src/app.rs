@@ -648,7 +648,7 @@ impl BlincApp {
         self.ctx.clear_blend_target();
     }
 
-    /// Whether the last render frame contained @flow shader elements.
+    /// Whether the last render frame asked for another one: a captured skeleton is animating.
     pub fn has_active_flows(&self) -> bool {
         self.ctx.has_active_flows()
     }

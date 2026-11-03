@@ -62,6 +62,7 @@ fn emit(shader: &FlowShader) -> TokenStream {
         FlowTarget::Material => quote!(Material),
     };
     let needs_scene = shader.needs_scene;
+    let animated = shader.animated;
     let dynamic_fields = shader.dynamic_fields;
     let buffers = shader.buffers.iter().map(|b| {
         let (name, size, rw) = (&*b.name, b.element_size, b.read_write);
@@ -79,6 +80,7 @@ fn emit(shader: &FlowShader) -> TokenStream {
             target: ::blinc_core::FlowTarget::#target,
             wgsl: ::std::borrow::Cow::Borrowed(#wgsl),
             needs_scene: #needs_scene,
+            animated: #animated,
             dynamic_fields: #dynamic_fields,
             buffers: ::std::borrow::Cow::Borrowed(&[#(#buffers),*]),
         }

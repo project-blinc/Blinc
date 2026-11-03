@@ -1,6 +1,5 @@
 use super::grouped_text_tests::frame;
 use super::opacity_group_tests::pixel;
-use super::separate_pass_flow;
 use super::*;
 use blinc_animation::AnimationScheduler;
 use blinc_layout::svg;
@@ -291,7 +290,7 @@ fn svg_group_capabilities_and_unsupported_boundaries_keep_fallback() {
             if unsupported == 1 {
                 p.background = Some(blinc_core::ImageBrush::new("placeholder").into());
             } else if unsupported == 2 {
-                p.flow_shader = Some(separate_pass_flow());
+                p.rotate_x = Some(20.0);
             }
         });
         let state = RenderState::new(Arc::new(Mutex::new(AnimationScheduler::new())));

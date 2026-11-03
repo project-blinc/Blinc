@@ -3509,6 +3509,9 @@ pub struct FlowShader {
     pub wgsl: Cow<'static, str>,
     /// Whether the WGSL samples the scene texture.
     pub needs_scene: bool,
+    /// Whether the shader reads `time` or `frame_index`, so its output changes from frame to
+    /// frame even when nothing else does.
+    pub animated: bool,
     /// Per-element values bound from CSS properties or environment variables, 4 bytes each, after
     /// the base uniforms.
     pub dynamic_fields: u32,

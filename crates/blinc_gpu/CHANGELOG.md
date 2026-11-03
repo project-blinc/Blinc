@@ -4,6 +4,9 @@ All notable changes to `blinc_gpu` will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `GpuPaintContext::draw_shader` queues a flow draw as a canvas GPU pass (`PendingGpuPass::flow`), so it follows the clip, groups and overlays like other passes. `GpuRenderer::render_pending_flow` draws it and `set_flow_cursor` supplies the cursor for a shader whose pointer is not given; `flow_pipeline::app_clock_secs` is the clock for one whose time is not.
+
 ### Changed
 - **Breaking:** `FlowPipelineCache::compile` takes a `blinc_core::FlowShader` (WGSL and bindings) and builds the pipeline from its WGSL. The WGSL generator moved to `blinc_flow`, which `blinc_gpu` re-exports as `flow_to_wgsl`; the `flow_codegen` module is gone.
 

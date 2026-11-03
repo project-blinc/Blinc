@@ -62,6 +62,10 @@ impl GpuRenderer {
                     camera_pos: None,
                     viewport,
                 };
+                if let Some(flow) = &pass.pending.flow {
+                    renderer.render_pending_flow(edit, flow, context.viewport);
+                    return;
+                }
                 pass.pending.pass.initialize_and_render(
                     &renderer.device,
                     &renderer.queue,

@@ -39,7 +39,6 @@ impl RenderContext {
         self.cached_texts = None;
         self.cached_svgs = None;
         self.cached_images = None;
-        self.cached_flows = None;
         self.cached_glyphs_by_layer = None;
         self.cached_fg_glyphs = None;
         self.cached_motion_subtree_text_prims = None;

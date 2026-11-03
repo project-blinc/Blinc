@@ -32,6 +32,9 @@
 //! }
 //! ```
 
+use std::sync::Arc;
+
+use crate::flow::FlowShader;
 use crate::layer::{
     Affine2D, BillboardFacing, BlendMode, Brush, Camera, ClipShape, Color, CornerRadius,
     CubemapData, Environment, LayerId, Light, Mat4, ParticleSystemData, Point, Rect, Sdf3DViewport,
@@ -2333,6 +2336,14 @@ pub trait DrawContext {
     /// pattern.
     fn run_gpu_pass(&mut self, _pass: &dyn GpuPassHook, _viewport: Option<Rect>) {}
 
+    /// Draw a flow shader over `rect`, in the current transform and clipped to the current
+    /// clip.
+    ///
+    /// The shader's `uv` covers `rect`, so a rect partly clipped or off the target keeps its
+    /// proportions. Contexts without a GPU ignore it. See [`ShaderInputs`] for what the shader
+    /// reads besides `uv`.
+    fn draw_shader(&mut self, _shader: &Arc<FlowShader>, _rect: Rect, _inputs: &ShaderInputs) {}
+
     // ─────────────────────────────────────────────────────────────────────────
     // State Queries
     // ─────────────────────────────────────────────────────────────────────────
@@ -2348,6 +2359,18 @@ pub trait DrawContext {
 
     /// Get the current blend mode
     fn current_blend_mode(&self) -> BlendMode;
+}
+
+/// What a flow shader reads when [`DrawContext::draw_shader`] draws it, besides `uv`.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ShaderInputs {
+    /// The `pointer` builtin: the pointer's position in the rect, 0 to 1 on each axis. `None`
+    /// follows the window's cursor.
+    pub pointer: Option<[f32; 2]>,
+    /// The `time` builtin in seconds. `None` is the app clock, which starts with the app.
+    pub time: Option<f32>,
+    /// Corner radius of the rectangle the shader fills, in the context's units.
+    pub corner_radius: f32,
 }
 
 /// Opaque hook for user-defined GPU work scheduled through

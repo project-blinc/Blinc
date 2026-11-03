@@ -5,7 +5,7 @@ All notable changes to `blinc_app` will be documented in this file.
 ## [Unreleased]
 
 ### Changed
-- Flow shaders are collected from canvases (`Canvas::flow`) and no longer from stylesheet `flow:` references.
+- Flow shaders are drawn by canvases (`Canvas::flow`, `DrawContext::draw_shader`) as canvas GPU passes, and no longer collected from elements. The element path, its caches and `FlowElement` are removed.
 
 ### Fixed
 - Styled text (`RichText`) without a colour of its own takes the CSS colour it inherits. It took only a colour set on its own node, so text under a coloured container drew in the element's default.

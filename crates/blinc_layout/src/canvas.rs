@@ -68,6 +68,44 @@ pub struct CanvasBounds {
     pub height: f32,
 }
 
+/// What drives a canvas's flow shader from frame to frame.
+///
+/// A flow reads the app clock, so one that reads `time` changes every frame and needs a frame
+/// each vsync to animate; one that does not changes only when its inputs do.
+#[derive(Clone, Default)]
+pub enum FlowLoop {
+    /// A frame every vsync while the canvas is painted, if the shader reads `time` or
+    /// `frame_index`; otherwise none.
+    #[default]
+    Auto,
+    /// A frame every vsync while the canvas is painted.
+    Always,
+    /// No frames of its own: the flow draws when something else repaints the canvas.
+    Never,
+    /// A frame every vsync while the closure returns true.
+    While(Rc<dyn Fn() -> bool>),
+    /// The shader's `time` is the clock's, and the canvas runs every frame only while the clock
+    /// plays. Paused, it draws again when the clock is stepped or sought.
+    Clock(crate::flow_clock::FlowClock),
+}
+
+impl FlowLoop {
+    /// A loop that runs while `wants` returns true.
+    pub fn while_<F: Fn() -> bool + 'static>(wants: F) -> Self {
+        Self::While(Rc::new(wants))
+    }
+
+    fn wants_frames(&self, shader: &blinc_core::FlowShader) -> bool {
+        match self {
+            Self::Auto => shader.animated,
+            Self::Always => true,
+            Self::Never => false,
+            Self::While(wants) => wants(),
+            Self::Clock(clock) => clock.is_playing(),
+        }
+    }
+}
+
 /// Canvas render callback type
 ///
 /// The callback receives:
@@ -110,6 +148,8 @@ pub struct Canvas {
     redraw_while: Option<CanvasRedrawFn>,
     /// A flow shader drawn over the canvas's bounds.
     flow: Option<std::sync::Arc<blinc_core::FlowShader>>,
+    /// When the flow asks for frames.
+    flow_loop: FlowLoop,
     /// Corner radius of the flow shader's rounded rectangle.
     flow_radius: f32,
 }
@@ -124,6 +164,7 @@ impl Canvas {
             layer: RenderLayer::default(),
             redraw_while: None,
             flow: None,
+            flow_loop: FlowLoop::default(),
             flow_radius: 0.0,
         }
     }
@@ -140,6 +181,7 @@ impl Canvas {
             layer: RenderLayer::default(),
             redraw_while: None,
             flow: None,
+            flow_loop: FlowLoop::default(),
             flow_radius: 0.0,
         }
     }
@@ -170,8 +212,10 @@ impl Canvas {
 
     /// Draws a flow shader over the canvas's bounds, after its render callback.
     ///
-    /// The shader is what `flow!` builds, at compile time. The shader's `uv` covers the canvas, `time` runs from the
-    /// first frame, and `pointer` is the pointer's position in the canvas, 0 to 1.
+    /// The shader is what `flow!` builds at compile time. Its `uv` covers the canvas, `time` is
+    /// the app clock, and `pointer` follows the cursor, 0 to 1 across the canvas. It is clipped
+    /// by the canvas's ancestors. A shader that reads `time` asks for a frame every vsync while
+    /// the canvas is painted; [`Canvas::flow_loop`] changes that.
     ///
     /// ```rust,ignore
     /// canvas(|_, _| {}).w(200.0).h(200.0).flow(flow!(ripple, fragment, {
@@ -184,6 +228,13 @@ impl Canvas {
     /// ```
     pub fn flow(mut self, shader: impl Into<std::sync::Arc<blinc_core::FlowShader>>) -> Self {
         self.flow = Some(shader.into());
+        self
+    }
+
+    /// Sets what drives the flow from frame to frame. The default, [`FlowLoop::Auto`], runs the
+    /// loop while the shader reads `time`.
+    pub fn flow_loop(mut self, flow_loop: FlowLoop) -> Self {
+        self.flow_loop = flow_loop;
         self
     }
 
@@ -293,8 +344,6 @@ impl ElementBuilder for Canvas {
         RenderProps {
             opacity: self.opacity,
             layer: self.layer,
-            flow_shader: self.flow.clone(),
-            border_radius: blinc_core::CornerRadius::uniform(self.flow_radius),
             ..Default::default()
         }
     }
@@ -309,7 +358,36 @@ impl ElementBuilder for Canvas {
     }
 
     fn canvas_render_info(&self) -> Option<CanvasRenderFn> {
-        self.render_fn.clone()
+        let Some(shader) = self.flow.clone() else {
+            return self.render_fn.clone();
+        };
+        // The shader draws over the canvas's bounds after the callback, through the same
+        // context, so the canvas's transform, clips and opacity apply to it.
+        let callback = self.render_fn.clone();
+        let corner_radius = self.flow_radius;
+        let flow_loop = self.flow_loop.clone();
+        Some(Rc::new(move |ctx, bounds| {
+            let inputs = blinc_core::ShaderInputs {
+                corner_radius,
+                time: match &flow_loop {
+                    FlowLoop::Clock(clock) => Some(clock.time()),
+                    _ => None,
+                },
+                ..Default::default()
+            };
+            if let Some(callback) = &callback {
+                callback(ctx, bounds);
+            }
+            ctx.draw_shader(
+                &shader,
+                blinc_core::Rect::new(bounds.x, bounds.y, bounds.width, bounds.height),
+                &inputs,
+            );
+            // The window asks for the next frame only while a driver re-asks on each paint.
+            if flow_loop.wants_frames(&shader) {
+                crate::request_animation_tick();
+            }
+        }))
     }
 
     fn canvas_redraw_while(&self) -> Option<CanvasRedrawFn> {

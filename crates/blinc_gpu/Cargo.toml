@@ -38,6 +38,7 @@ bc-encode = ["dep:tbc"]
 [dependencies]
 blinc_core = { path = "../blinc_core", version = "0.6.0" }
 blinc_flow = { path = "../blinc_flow", version = "0.6.0" }
+web-time = "1.1"
 blinc_paint = { path = "../blinc_paint", version = "0.6.0" }
 blinc_text = { path = "../blinc_text", version = "0.6.0" }
 

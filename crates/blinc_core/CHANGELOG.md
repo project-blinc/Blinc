@@ -5,7 +5,8 @@ All notable changes to `blinc_core` will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- `FlowShader` and `FlowBuffer`: a flow compiled to WGSL with what a pipeline binds for it (target, scene sampling, dynamic uniform fields, storage buffers). `flow!` builds one at compile time as a constant.
+- `DrawContext::draw_shader(shader, rect, inputs)` draws a flow shader over a rect in the current transform and clip, and `ShaderInputs` holds what it reads besides `uv`: `pointer`, `time` and `corner_radius`. Contexts without a GPU ignore it.
+- `FlowShader` and `FlowBuffer`: a flow compiled to WGSL with what a pipeline binds for it (target, scene sampling, whether it reads `time`, dynamic uniform fields, storage buffers). `flow!` builds one at compile time as a constant.
 
 ### Changed
 - `DrawContext::set_clip_fill_rule` documents path clips as well as polygons when supported by the drawing context.
