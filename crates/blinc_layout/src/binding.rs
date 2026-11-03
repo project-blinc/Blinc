@@ -1073,7 +1073,33 @@ impl PropertyBindingRegistry {
         Self::dispatch_subscribers(subs);
     }
 
+    /// Queue an update for every binding of `node_id` from its source's current value.
+    ///
+    /// A binding learns of a change when its source fires, and one registered after the change
+    /// has missed it: a node built, then mounted a moment later, after something wrote a source
+    /// in between, keeps the value it was built with.
+    pub fn refresh_node(&self, node_id: LayoutNodeId) {
+        for signal_id in self.by_node.get(&node_id).into_iter().flatten() {
+            if let Some(subs) = self.bindings.get(signal_id) {
+                let own: Vec<&Subscriber> =
+                    subs.iter().filter(|sub| sub.node_id == node_id).collect();
+                Self::dispatch_subscriber_refs(&own);
+            }
+        }
+        for derived_id in self.derived_by_node.get(&node_id).into_iter().flatten() {
+            if let Some(subs) = self.derived_bindings.get(derived_id) {
+                let own: Vec<&Subscriber> =
+                    subs.iter().filter(|sub| sub.node_id == node_id).collect();
+                Self::dispatch_subscriber_refs(&own);
+            }
+        }
+    }
+
     fn dispatch_subscribers(subs: &[Subscriber]) {
+        Self::dispatch_subscriber_refs(&subs.iter().collect::<Vec<_>>());
+    }
+
+    fn dispatch_subscriber_refs(subs: &[&Subscriber]) {
         for sub in subs {
             let Some(value) = (sub.read)() else {
                 continue;
@@ -1333,6 +1359,12 @@ pub fn register_typed_layout<T>(
         })
     };
     with_registry(|reg| reg.register_layout(signal_id, node_id, property, read, write_dyn));
+}
+
+/// Queue an update for every binding of `node_id` from its source's current value; see
+/// [`PropertyBindingRegistry::refresh_node`].
+pub fn refresh_node(node_id: LayoutNodeId) {
+    with_registry(|reg| reg.refresh_node(node_id));
 }
 
 /// Convenience: unregister all bindings for a node. Called by

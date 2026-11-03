@@ -686,6 +686,14 @@ impl DeferredContent {
     }
 }
 
+/// The properties a running batch of property updates has written, and those written by batches
+/// applied from inside it.
+#[derive(Default)]
+struct PropertyWriteLog {
+    own: HashSet<(LayoutNodeId, crate::property::PropertyId)>,
+    deeper: HashSet<(LayoutNodeId, crate::property::PropertyId)>,
+}
+
 /// RenderTree - bridges layout computation and rendering
 pub struct RenderTree {
     /// The underlying layout tree
@@ -696,6 +704,10 @@ pub struct RenderTree {
     root: Option<LayoutNodeId>,
     /// Event handlers registry for dispatching events
     handler_registry: crate::event_handler::HandlerRegistry,
+    /// What the batches of `apply_partial_property_updates` that are running, outermost first,
+    /// have written: a batch applied from inside another (a region's reconcile applying what a
+    /// leaving row's start queued) holds newer values than the rest of the outer batch.
+    property_write_logs: Vec<PropertyWriteLog>,
     /// Dirty tracker for incremental rebuilds
     dirty_tracker: crate::interactive::DirtyTracker,
     /// Per-node state storage (survives across rebuilds if tree is reused)
@@ -1128,6 +1140,7 @@ impl RenderTree {
             render_nodes: IndexMap::new(),
             root: None,
             handler_registry: crate::event_handler::HandlerRegistry::new(),
+            property_write_logs: Vec::new(),
             dirty_tracker: crate::interactive::DirtyTracker::new(),
             node_states: HashMap::new(),
             scroll_offsets: HashMap::new(),
@@ -3146,6 +3159,8 @@ impl RenderTree {
     ) -> crate::property::SideEffects {
         let _tree_scope = self.layout_tree.enter_scope();
         let mut effects = crate::property::SideEffects::default();
+        self.property_write_logs.push(PropertyWriteLog::default());
+        let level = self.property_write_logs.len() - 1;
         // A region is brought up to date once per batch, however many times
         // it was queued.
         let mut regions_seen: HashSet<(LayoutNodeId, u64)> = HashSet::new();
@@ -3158,17 +3173,24 @@ impl RenderTree {
                 continue;
             }
             effects = effects.or(update.effects);
-            if let Some(write) = update.render_write {
-                self.update_render_props(update.node_id, |p| write(p));
-            }
-            if let Some(write) = update.layout_write {
-                self.eased_layout_write(update.node_id, write);
+            // A batch applied from inside this one has already written this property, and
+            // its value is the newer.
+            let key = (update.node_id, update.property);
+            let overtaken = self.property_write_logs[level].deeper.contains(&key);
+            if !overtaken {
+                if let Some(write) = update.render_write {
+                    self.update_render_props(update.node_id, |p| write(p));
+                }
+                if let Some(write) = update.layout_write {
+                    self.eased_layout_write(update.node_id, write);
+                }
+                if let Some(beneath) = update.beneath_write {
+                    self.write_beneath_state_layers(update.node_id, beneath);
+                }
+                self.property_write_logs[level].own.insert(key);
             }
             if let Some((class, on)) = update.class_toggle {
                 self.set_dynamic_class(update.node_id, class, on);
-            }
-            if let Some(beneath) = update.beneath_write {
-                self.write_beneath_state_layers(update.node_id, beneath);
             }
             if let Some(content) = update.text_content {
                 self.set_text_content(update.node_id, content);
@@ -3180,6 +3202,12 @@ impl RenderTree {
             }
         }
         crate::stateful::requeue_partial_updates(foreign);
+        if let Some(done) = self.property_write_logs.pop()
+            && let Some(outer) = self.property_write_logs.last_mut()
+        {
+            outer.deeper.extend(done.own);
+            outer.deeper.extend(done.deeper);
+        }
         effects
     }
 

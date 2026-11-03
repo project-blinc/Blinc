@@ -5,6 +5,8 @@ All notable changes to `blinc_layout` will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
+- Property writes land in the order the values were produced. A batch of queued writes applied from inside another (a region reconciling while a drain runs, applying what a leaving row's `start` queued) holds the newer values, and the rest of the outer batch no longer overwrites them: a plain write queued before the region update used to land after the row's start write.
+- A row built in a reconcile where another row's `start` ran reads its bound sources again once mounted. A computed made while the row was built, over a signal that start wrote, kept the value it was built with and never followed its sources: the write reached no binding, because none was registered yet.
 - `Div::on_unmount` and `Stateful::on_unmount` handlers run. They were registered but nothing sent them the event in a running app. A node a rebuild, a region or an incremental update removes now runs its unmount handlers once, with its stable id and no live node, after the registry has dropped it; a node built again under the same stable id is a survivor and does not.
 - An incremental update sees a change of class. Classes were in no diff hash, so an element whose only change was a class was reported unchanged: its classes stayed registered as they were and the stylesheet kept applying the old rules. A change of class now counts as a change, and is treated as one that may change layout, since the rules it selects can.
 - `AmbientPaintState::in_overlay_subtree` records whether a dynamic region sits inside an overlay subtree, so the compositor can order promoted layers around overlay content.

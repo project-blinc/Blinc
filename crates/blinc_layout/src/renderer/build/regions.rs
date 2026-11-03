@@ -149,5 +149,19 @@ impl RenderTree {
             self.apply_stylesheet_base_styles_for_subtree(*node, None);
             self.apply_stylesheet_layout_overrides_for_subtree(*node);
         }
+        // A row's `start` ran while these were being built, and what it wrote reached no binding
+        // that was not registered yet: read the sources again.
+        if evaluation.started {
+            for (_, node, _) in &built {
+                self.refresh_bindings_in_subtree(*node);
+            }
+        }
+    }
+
+    fn refresh_bindings_in_subtree(&self, node: LayoutNodeId) {
+        crate::binding::refresh_node(node);
+        for child in self.layout_tree.children(node) {
+            self.refresh_bindings_in_subtree(child);
+        }
     }
 }

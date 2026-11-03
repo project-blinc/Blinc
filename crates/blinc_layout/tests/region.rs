@@ -413,3 +413,83 @@ fn a_row_that_goes_runs_its_unmount_handler_and_the_ones_that_stay_do_not() {
     gone.sort();
     assert_eq!(gone, vec![1, 2, 3, 4]);
 }
+
+/// A write queued before a region reconciles, and made again by the start of a row that leaves in
+/// that reconcile, lands in the order the values were produced: the start's is the newer.
+#[test]
+fn a_departing_rows_start_write_wins_over_an_older_queued_value() {
+    use blinc_layout::region::Row;
+    let _g = serial();
+    let items = signal(vec![1_u32, 2]);
+    let opacity = signal(1.0_f32);
+    let ui = div()
+        .w(200.0)
+        .flex_col()
+        .child(div().id("target").h(10.0).opacity(opacity))
+        .for_each(
+            items,
+            |item| *item,
+            move |item| Row::new(row(&item)).on_leave(move || opacity.set(0.25), || true),
+        );
+    let (mut tree, _root) = mount(&ui);
+    let target = tree.query_by_id("target").expect("target");
+
+    // The region is queued first; then a plain write, which the row's start overtakes.
+    items.set(vec![1]);
+    opacity.set(0.75);
+    frame(&mut tree);
+
+    assert_eq!(opacity.get(), 0.25, "the start ran");
+    assert_eq!(
+        tree.get_render_node(target).unwrap().props.opacity,
+        0.25,
+        "the older write landed after the newer one"
+    );
+}
+
+/// A computed made while a row is built, over a signal another row's start writes in the same
+/// reconcile, keeps following its sources.
+#[test]
+fn a_computed_built_beside_a_departing_start_keeps_following_its_sources() {
+    use blinc_core::reactive::computed;
+    use blinc_layout::region::Row;
+    let _g = serial();
+    let items = signal(vec![1_u32]);
+    let gone = signal(false);
+    let pull = signal(0.5_f32);
+    let ui = div().w(200.0).flex_col().for_each(
+        items,
+        |item| *item,
+        move |item| {
+            let id = item;
+            let shown = computed(move |g: &blinc_core::reactive::ReactiveGraph| {
+                if g.get(gone).unwrap_or(false) {
+                    0.1
+                } else {
+                    g.get(pull).unwrap_or(0.0)
+                }
+            });
+            Row::new(div().id(format!("row{id}")).h(10.0).opacity(shown))
+                .on_leave(move || gone.set(true), || true)
+        },
+    );
+    let (mut tree, _root) = mount(&ui);
+
+    // Row 1 leaves (its start writes `gone`) while row 2 is built in the same reconcile.
+    items.set(vec![2]);
+    frame(&mut tree);
+    // The re-read the reconcile queued lands in the next drain.
+    frame(&mut tree);
+    let two = tree.query_by_id("row2").expect("row 2");
+    let opacity = |tree: &RenderTree| tree.get_render_node(two).unwrap().props.opacity;
+    assert_eq!(opacity(&tree), 0.1, "built after the start wrote");
+
+    gone.set(false);
+    pull.set(0.9);
+    frame(&mut tree);
+    assert_eq!(
+        opacity(&tree),
+        0.9,
+        "the computed stopped following its sources"
+    );
+}
