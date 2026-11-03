@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1793715477,"nonce":"Qx4tXuXhoGknXqVFUy36hykbMDs=","message":"Owner, 2026-11-03: animations no longer stall until the mouse moves. Closing; later motion problems get their own issues with a trace.","files":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":4,"timestamp":1793715477,"nonce":"WZBrIqXIyTYpYTl44HWXx2jCkpc=","status":2}]}
