@@ -1,1 +1,1 @@
-{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":5,"timestamp":1793715477,"nonce":"j4TsB3t/vx2lWUaheSMGyKCw3xg=","added":["milestone:0.6.1"],"removed":null}]}
+{"author":{"id":"dec876858d28babbadcead4137861bf586626b8518cbce9c5f4fc52ac3b424b8"},"ops":[{"type":3,"timestamp":1793715478,"nonce":"R/6tAjIlPNQzUK+ozHaEKDxLQms=","message":"Owner, 2026-11-03: mobile issues are prioritised towards the 0.6.1 release (label milestone:0.6.1 on af473a1, 4e110cb, e864f0c, 4477494, 883ead2, 982879f).","files":null}]}
