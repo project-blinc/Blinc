@@ -470,3 +470,41 @@ fn a_bound_attribute_is_recorded_without_a_stylesheet() {
         Some("open")
     );
 }
+
+#[test]
+fn a_bound_attribute_that_sets_display_none_takes_the_box_out_and_back() {
+    let hidden = flag(false);
+    let mut s = scene(Some(".t[data-hidden] { display: none }"), |d| {
+        d.attr_when("data-hidden", "", &hidden)
+    });
+    let top = |s: &Scene, node| s.tree.get_absolute_bounds(node).unwrap().y;
+    assert!(!s.tree.layout_tree.is_display_none(s.node));
+    assert_eq!(top(&s, s.other), 50.0, "the second box is below the first");
+
+    hidden.set(true);
+    s.frame();
+    assert!(
+        s.tree.layout_tree.is_display_none(s.node),
+        "the rule's display was not applied"
+    );
+    assert_eq!(top(&s, s.other), 0.0, "a hidden box takes no space");
+
+    hidden.set(false);
+    s.frame();
+    assert!(!s.tree.layout_tree.is_display_none(s.node));
+    assert_eq!(top(&s, s.other), 50.0, "the box did not come back");
+}
+
+#[test]
+fn a_bound_class_that_sets_display_none_takes_the_box_out_and_back() {
+    let hidden = flag(false);
+    let mut s = scene(Some(".gone { display: none }"), |d| {
+        d.class_when("gone", &hidden)
+    });
+    hidden.set(true);
+    s.frame();
+    assert!(s.tree.layout_tree.is_display_none(s.node));
+    hidden.set(false);
+    s.frame();
+    assert!(!s.tree.layout_tree.is_display_none(s.node));
+}

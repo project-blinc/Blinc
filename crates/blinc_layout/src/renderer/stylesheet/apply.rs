@@ -642,6 +642,15 @@ impl RenderTree {
         if let Some(v) = es.left {
             taffy_style.inset.left = LengthPercentageAuto::length(v);
         }
+        if let Some(display) = es.display {
+            use crate::element_style::StyleDisplay;
+            taffy_style.display = match display {
+                StyleDisplay::Flex => Display::Flex,
+                StyleDisplay::Block => Display::Block,
+                StyleDisplay::Grid => Display::Grid,
+                StyleDisplay::None => Display::None,
+            };
+        }
         // visibility: hidden collapses element from layout (Blinc is always flex)
         if let Some(vis) = es.visibility {
             use crate::element_style::StyleVisibility;
